@@ -58,9 +58,9 @@ enum class Tag : __u8 {
 struct segment_t {
   // TODO: this will be dropped with support for `allocation policies`.
   // We need them because of the rx_buffers zero-copy optimization.
-  static constexpr __le16 PAGE_SIZE_ALIGNMENT{4096};
+  static constexpr __u16 PAGE_SIZE_ALIGNMENT = 4096;
 
-  static constexpr __le16 DEFAULT_ALIGNMENT = sizeof(void *);
+  static constexpr __u16 DEFAULT_ALIGNMENT = sizeof(void *);
 
   ceph_le32 length;
   ceph_le16 alignment;
