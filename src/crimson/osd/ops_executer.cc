@@ -26,7 +26,7 @@ namespace {
 
 namespace crimson::osd {
 
-seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
+OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 {
   std::string cname, mname;
   ceph::bufferlist indata;
@@ -96,9 +96,13 @@ seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
       osd_op.op.extent.length = outdata.length();
       osd_op.outdata.claim_append(outdata);
     }
+    return ret;
+  }).then([] (const int ret) {
     if (ret < 0) {
-      throw crimson::osd::make_error(ret);
+      return call_errorator::make_plain_exception_future<>(
+        ceph::stateful_errint{ ret });
     }
+    return seastar::now();
   });
 }
 
@@ -407,7 +411,12 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       return backend.remove(os, txn);
     });
   case CEPH_OSD_OP_CALL:
-    return this->do_op_call(osd_op);
+    return this->do_op_call(osd_op).safe_then(
+      [] {
+        return seastar::now();
+      }, ceph::stateful_errint::handle([] (int err) {
+        // TODO: implement the handler. NOP for now.
+      }));
   case CEPH_OSD_OP_STAT:
     // note: stat does not require RD
     return do_const_op([&osd_op] (/* const */auto& backend, const auto& os) {

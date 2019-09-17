@@ -19,6 +19,7 @@
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
+#include "crimson/common/errorator.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
@@ -64,7 +65,8 @@ class OpsExecuter {
   template <class Context, class MainFunc, class EffectFunc>
   auto with_effect(Context&& ctx, MainFunc&& main_func, EffectFunc&& effect_func);
 
-  seastar::future<> do_op_call(class OSDOp& osd_op);
+  using call_errorator = ceph::errorator<ceph::stateful_errint>;
+  call_errorator::future<> do_op_call(class OSDOp& osd_op);
 
   template <class Func>
   auto do_const_op(Func&& f) {
