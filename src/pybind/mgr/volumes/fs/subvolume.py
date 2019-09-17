@@ -189,6 +189,27 @@ class SubVolume(object):
             raise VolumeException(-e.args[0], e.args[1])
         return path
 
+    def get_dir_entries(self, path):
+        """
+        Get the directory names in a given path
+        :param path: the given path
+        :return: the list of directory names
+        """
+        dirs = []
+        try:
+            with self.fs.opendir(path) as dir_handle:
+                d = self.fs.readdir(dir_handle)
+                while d:
+                    if (d.d_name not in (b".", b"..")) and d.is_dir():
+                        dirs.append(d.d_name)
+                    d = self.fs.readdir(dir_handle)
+        except cephfs.ObjectNotFound:
+            # When the given path is not found, we just return an empty list
+            return []
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+        return dirs
+
     ### group operations
 
     def create_group(self, spec, mode=0o755, pool=None):
