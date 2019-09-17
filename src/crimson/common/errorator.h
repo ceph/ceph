@@ -99,6 +99,47 @@ std::exception_ptr unthrowable_wrapper<ErrorT, ErrorV>::carrier_instance = \
   std::make_exception_ptr<
     unthrowable_wrapper<ErrorT, ErrorV>::throwable_carrier>({});
 
+
+template <class ErrorT>
+struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
+  template <class... Args>
+  explicit stateful_error_t(Args&&... args)
+    : ep(std::make_exception_ptr<ErrorT>(std::forward<Args>(args)...)) {
+  }
+
+  template<class Func>
+  static auto handle(Func&& func) {
+    static_assert(std::is_invocable_v<Func, ErrorT>);
+    return [
+      func = std::forward<Func>(func)
+    ] (stateful_error_t<ErrorT>&& e) mutable -> decltype(auto) {
+      try {
+        std::rethrow_exception(e.ep);
+      } catch (const ErrorT& obj) {
+        return std::invoke(std::forward<Func>(func), obj);
+      }
+      assert("exception type mismatch – impossible!" == nullptr);
+    };
+  }
+
+private:
+  std::exception_ptr ep;
+
+  explicit stateful_error_t(std::exception_ptr ep) : ep(std::move(ep)) {}
+
+  static constexpr const std::type_info& exception_ptr_type_info() {
+    return typeid(ErrorT);
+  }
+  auto to_exception_ptr() const {
+    return ep;
+  }
+  static stateful_error_t<ErrorT> from_exception_ptr(std::exception_ptr ep) {
+    return stateful_error_t<ErrorT>(std::move(ep));
+  }
+
+  friend class error_t<stateful_error_t<ErrorT>>;
+};
+
 namespace _impl {
   template <class T> struct always_false : std::false_type {};
 };
@@ -541,5 +582,8 @@ namespace ct_error {
   using input_output_error = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::input_output_error>;
   using object_corrupted = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::object_corrupted>;
 }
+
+using stateful_errc = stateful_error_t<std::errc>;
+using stateful_errint = stateful_error_t<int>;
 
 } // namespace crimson
