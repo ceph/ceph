@@ -200,18 +200,6 @@ def configure(ctx, config, run_stages):
             continue
 
         ragweed_conf = config['ragweed_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
-            host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-                log.info('roles: ' + str(roles))
-                log.info('target: ' + str(target))
-                if properties['rgw_server'] in roles:
-                    _, host = split_user(target)
-            assert host is not None, "Invalid client specified as the rgw_server"
-            ragweed_conf['rgw']['host'] = host
-        else:
-            ragweed_conf['rgw']['host'] = 'localhost'
-
         if properties is not None and 'slow_backend' in properties:
 	    ragweed_conf['fixtures']['slow backend'] = properties['slow_backend']
 
@@ -347,14 +335,18 @@ def task(ctx, config):
 
     ragweed_conf = {}
     for client in clients:
-        endpoint = ctx.rgw.role_endpoints.get(client)
-        assert endpoint, 'ragweed: no rgw endpoint for {}'.format(client)
+        # use rgw_server endpoint if given, or default to same client
+        target = config[client].get('rgw_server', client)
+
+        endpoint = ctx.rgw.role_endpoints.get(target)
+        assert endpoint, 'ragweed: no rgw endpoint for {}'.format(target)
 
         ragweed_conf[client] = ConfigObj(
             indent_type='',
             infile={
                 'rgw':
                     {
+                    'host'      : endpoint.dns_name,
                     'port'      : endpoint.port,
                     'is_secure' : endpoint.cert is not None,
                     },
