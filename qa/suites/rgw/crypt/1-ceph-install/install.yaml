@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    wait-for-scrub: false
+
+tasks:
+- install:
+- ceph:

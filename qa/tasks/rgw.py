@@ -88,7 +88,7 @@ def start_rgw(ctx, config, clients):
             '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster),
             '--rgw_ops_log_socket_path',
             '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,
-                                                     client_with_cluster=client_with_cluster)
+                                                     client_with_cluster=client_with_cluster),
 	    ])
 
         keystone_role = client_config.get('use-keystone-role', None)
@@ -107,10 +107,34 @@ def start_rgw(ctx, config, clients):
                                                 kport=keystone_port),
                 ])
 
+
         if client_config.get('dns-name'):
             rgw_cmd.extend(['--rgw-dns-name', endpoint.dns_name])
         if client_config.get('dns-s3website-name'):
             rgw_cmd.extend(['--rgw-dns-s3website-name', endpoint.website_dns_name])
+
+        barbican_role = client_config.get('use-barbican-role', None)
+        if barbican_role is not None:
+            if not hasattr(ctx, 'barbican'):
+                raise ConfigError('rgw must run after the barbican task')
+
+            barbican_host, barbican_port = \
+                ctx.barbican.endpoints[barbican_role]
+            log.info("Use barbican url=%s:%s", barbican_host, barbican_port)
+
+            rgw_cmd.extend([
+                '--rgw_barbican_url',
+                'http://{bhost}:{bport}'.format(bhost=barbican_host,
+                                                bport=barbican_port),
+                ])
+
+            log.info("Barbican access data: %s",ctx.barbican.token[barbican_role])
+            access_data = ctx.barbican.token[barbican_role]
+            rgw_cmd.extend([
+                '--rgw_keystone_barbican_user', access_data['username'],
+                '--rgw_keystone_barbican_password', access_data['password'],
+                '--rgw_keystone_barbican_tenant', access_data['tenant'],
+                ])
 
         rgw_cmd.extend([
             '--foreground',
