@@ -3115,7 +3115,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   string iter;
   bool more;
   bool found = false;
-#define MAX_USAGE_TRIM_ENTRIES 128
+#define MAX_USAGE_TRIM_ENTRIES 1000
   ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
   if (ret < 0)
     return ret;
