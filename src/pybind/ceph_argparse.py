@@ -694,7 +694,7 @@ class argdesc(object):
         else:
             s = '{0}({1})'.format(self.name, str(self.instance))
             if self.N:
-                s += ' [' + str(self.instance) + '...]'
+                s += '...'
         if not self.req:
             s = '[' + s + ']'
         return s
@@ -712,7 +712,7 @@ class argdesc(object):
             chunk = str(self.instance)
         s = chunk
         if self.N:
-            s += ' [' + chunk + '...]'
+            s += '...'
         if not self.req:
             s = '[' + s + ']'
         return s
