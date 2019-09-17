@@ -318,7 +318,7 @@ class LocalRemote(object):
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None, env=None, timeout=None, omit_sudo=True):
+            logger=None, label=None, env=None, timeout=None, omit_sudo=False):
         args = self._perform_checks_and_return_list_of_args(args, omit_sudo)
 
         # We have to use shell=True if any run.Raw was present, e.g. &&
@@ -507,7 +507,8 @@ class LocalKernelMount(KernelMount):
         else:
             return keyring_path
 
-    def run_shell(self, args, wait=True, stdin=None, check_status=True, omit_sudo=True):
+    def run_shell(self, args, wait=True, stdin=None, check_status=True,
+                  omit_sudo=False):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
         # the "cd foo && bar" shenanigans isn't needed to begin with and
         # then we wouldn't have to special case this
@@ -546,7 +547,7 @@ class LocalKernelMount(KernelMount):
                                       check_status=check_status,
                                       omit_sudo=False)
 
-    def testcmd(self, args, wait=True, stdin=None, omit_sudo=True):
+    def testcmd(self, args, wait=True, stdin=None, omit_sudo=False):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
         # the "cd foo && bar" shenanigans isn't needed to begin with and
         # then we wouldn't have to special case this
