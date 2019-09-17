@@ -27,8 +27,8 @@ class PublicAccessConfiguration {
   bool RestrictPublicBuckets;
  public:
  PublicAccessConfiguration():
-  BlockPublicAcls(true), IgnorePublicAcls(false),
-  BlockPublicPolicy(true), RestrictPublicBuckets(false)
+   BlockPublicAcls(false), IgnorePublicAcls(false),
+  BlockPublicPolicy(false), RestrictPublicBuckets(false)
     {}
 
   auto block_public_acls() const {

@@ -5509,16 +5509,33 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  new_policy.encode(bl);
   map<string, bufferlist> attrs;
+  attrs = s->bucket_attrs;
+  if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+      aiter != attrs.end())
+  {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      rgw::IAM::PublicAccessConfiguration access_conf;
+      access_conf.decode(iter);
+      if (access_conf.block_public_acls() && new_policy.IsPublic()) {
+	op_ret = -EACCES;
+	return;
+      }
+    } catch (const buffer::error& e) {
+      ldpp_dout(this, 0) << __func__ <<  "decode access conf failed" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
 
+  new_policy.encode(bl);
   if (!s->object.empty()) {
     obj = rgw_obj(s->bucket, s->object);
     store->getRados()->set_atomic(s->obj_ctx, obj);
     //if instance is empty, we should modify the latest object
     op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_ACL, bl);
   } else {
-    attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							  &s->bucket_info.objv_tracker,
