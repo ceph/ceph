@@ -130,3 +130,12 @@ add_ceph_unittest(unittest_mclock_client_queue)
 target_link_libraries(unittest_mclock_client_queue
   global osd dmclock os
 )
+
+# unittest_mclock_scheduler
+add_executable(unittest_mclock_scheduler
+  TestMClockScheduler.cc
+)
+add_ceph_unittest(unittest_mclock_scheduler)
+target_link_libraries(unittest_mclock_scheduler
+  global osd dmclock os
+)
