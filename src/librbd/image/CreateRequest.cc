@@ -71,11 +71,9 @@ int validate_striping(CephContext *cct, uint8_t order, uint64_t stripe_unit,
     lderr(cct) << "must specify both (or neither) of stripe-unit and "
                << "stripe-count" << dendl;
     return -EINVAL;
-  } else if (stripe_unit || stripe_count) {
-    if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
-      lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
-      return -EINVAL;
-    }
+  } else if (stripe_unit && ((1ull << order) % stripe_unit || stripe_unit > (1ull << order))) {
+    lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
+    return -EINVAL;
   }
   return 0;
 }
