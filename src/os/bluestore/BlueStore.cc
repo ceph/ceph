@@ -2843,7 +2843,7 @@ bool BlueStore::ExtentMap::encode_some(
     }
   }
   /*derr << __func__ << bl << dendl;
-  derr << __func__ << ":";
+  derr << __func__ << ":\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
   */
@@ -2853,7 +2853,7 @@ bool BlueStore::ExtentMap::encode_some(
 unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
 {
   /*
-  derr << __func__ << ":";
+  derr << __func__ << ":\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
   */

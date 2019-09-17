@@ -1944,7 +1944,7 @@ int BlueFS::_read_random(
       memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
       out += r;
 
-      dout(30) << __func__ << " result chunk (0x"
+      dout(40) << __func__ << " result chunk (0x"
 	       << std::hex << r << std::dec << " bytes):\n";
       bufferlist t;
       t.substr_of(buf->bl, off - buf->bl_off, r);
@@ -2049,7 +2049,7 @@ int BlueFS::_read(
       out += r;
     }
 
-    dout(30) << __func__ << " result chunk (0x"
+    dout(40) << __func__ << " result chunk (0x"
              << std::hex << r << std::dec << " bytes):\n";
     bufferlist t;
     t.substr_of(buf->bl, off - buf->bl_off, r);
@@ -2824,7 +2824,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     break;
   }
 
-  dout(30) << "dump:\n";
+  dout(40) << "dump:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 

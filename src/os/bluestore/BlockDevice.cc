@@ -40,7 +40,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
-#define dout_prefix *_dout << "bdev "
+#define dout_prefix *_dout << "bdev:bd:" << __LINE__ << " "
 
 using std::string;
 
@@ -50,8 +50,9 @@ void IOContext::aio_wait()
   // see _aio_thread for waker logic
   while (num_running.load() > 0) {
     dout(10) << __func__ << " " << this
-	     << " waiting for " << num_running.load() << " aios to complete"
-	     << dendl;
+            << " waiting for " << num_running.load() << " aios to complete"
+            << " and there are " << num_pending.load() << " aios pending"
+            << dendl;
     cond.wait(l);
   }
   dout(20) << __func__ << " " << this << " done" << dendl;
@@ -86,11 +87,15 @@ void IOContext::release_running_aios()
 }
 
 BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
-				 aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+				 aio_callback_t cb, void *cbpriv, 
+				 aio_callback_t d_cb, void *d_cbpriv)
 {
   string type = "kernel";
   char buf[PATH_MAX + 1];
   int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
+
+  dout(1) << __func__ << " path " << path << " type " << type << dendl;
+
   if (r >= 0) {
     buf[r] = '\0';
 #if defined(HAVE_SPDK)

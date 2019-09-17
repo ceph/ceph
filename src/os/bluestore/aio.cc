@@ -17,7 +17,7 @@
 std::ostream& operator<<(std::ostream& os, const aio_t& aio)
 {
   unsigned i = 0;
-  os << "aio: ";
+  os << "aio@ " << &aio << ": ";
   for (auto& iov : aio.iov) {
     os << "\n [" << i++ << "] 0x"
        << std::hex << iov.iov_base << "~" << iov.iov_len << std::dec;
