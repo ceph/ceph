@@ -472,6 +472,7 @@ class Module(MgrModule):
 
         all_modules = {module.get('name'):module.get('can_run') for module in mgr_map['available_modules']}
 
+        ceph_release = None
         for mgr in all_mgrs:
             host_version = servers.get((mgr, 'mgr'), ('', ''))
             if mgr == active:
@@ -487,7 +488,7 @@ class Module(MgrModule):
             self.metrics['mgr_status'].set(_state, (
                 'mgr.{}'.format(mgr), 
             ))
-        always_on_modules = mgr_map['always_on_modules'][ceph_release]
+        always_on_modules = mgr_map['always_on_modules'].get(ceph_release, [])
         active_modules = list(always_on_modules)
         active_modules.extend(mgr_map['modules'])
 
