@@ -341,7 +341,7 @@ static seastar::future<> do_pgnls_filtered(
 }
 
 seastar::future<>
-OpsExecuter::do_osd_op(OSDOp& osd_op)
+OpsExecuter::execute_osd_op(OSDOp& osd_op)
 {
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output

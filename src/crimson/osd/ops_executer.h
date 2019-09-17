@@ -104,7 +104,7 @@ public:
       msg(std::move(msg)) {
   }
 
-  seastar::future<> do_osd_op(class OSDOp& osd_op);
+  seastar::future<> execute_osd_op(class OSDOp& osd_op);
 
   template <typename Func>
   seastar::future<> submit_changes(Func&& f) &&;
