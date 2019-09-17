@@ -807,7 +807,8 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
         if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK) {
           // best-effort try to restore the image if the removal
           // failed for possible expected reasons
-          Trash<I>::restore(io_ctx, trash_image_source, image_id, image_name);
+          Trash<I>::restore(io_ctx, {cls::rbd::TRASH_IMAGE_SOURCE_REMOVING},
+                            image_id, image_name);
         }
       }
       return r;
