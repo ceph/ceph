@@ -365,7 +365,6 @@ Requires:      grep
 Requires:      logrotate
 Requires:      parted
 Requires:      psmisc
-Requires:      python%{_python_buildid}-requests
 Requires:      python%{_python_buildid}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
@@ -396,7 +395,6 @@ Requires:	python%{_python_buildid}-rbd = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-cephfs = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rgw = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{_python_buildid}-requests
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	python%{_python_buildid}-prettytable
 %endif
@@ -446,6 +444,7 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{_python_buildid}-bcrypt
 Requires:       python%{_python_buildid}-pecan
+Requires:       python%{_python_buildid}-requests
 Requires:       python%{_python_buildid}-six
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
