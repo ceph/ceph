@@ -580,7 +580,7 @@ scope of this document. Instead, we focus on the mechanics of the process
 in the context of the Ceph project.
 
 A detailed discussion of the tools available for validating your bugfixes,
-see the `Testing`_ chapter.
+see the `Testing`_ chapters.
 
 For now, let us just assume that you have finished work on the bugfix and
 that you have tested it and believe it works. Commit the changes to your local
@@ -638,7 +638,7 @@ Integration (CI) team. When the tests complete, the result will be shown
 on GitHub in the pull request itself.
 
 You can (and should) also test your modifications before you open a PR.
-Refer to the `Testing`_ chapter for details.
+Refer to the `Testing`_ chapters for details.
 
 Notes on PR make check test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -675,20 +675,16 @@ sub-directory`_ and are run via the `teuthology framework`_.
 .. _`teuthology repository`: https://github.com/ceph/teuthology
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
-If you have access to an OpenStack tenant, you are encouraged to run the
-integration tests yourself using `ceph-workbench ceph-qa-suite`_,
-and to post the test results to the PR.
-
-.. _`ceph-workbench ceph-qa-suite`: http://ceph-workbench.readthedocs.org/
-
 The Ceph community has access to the `Sepia lab
-<https://wiki.sepia.ceph.com/doku.php>`_ where integration tests can be run on
+<https://wiki.sepia.ceph.com/doku.php>`_ where `integration tests`_ can be run on
 real hardware. Other developers may add tags like "needs-qa" to your PR.
 This allows PRs that need testing to be merged into a single branch and
 tested all at the same time. Since teuthology suites can take hours
 (even days in some cases) to run, this can save a lot of time.
 
-Integration testing is discussed in more detail in the `Testing`_ chapter.
+To request access to the Sepia lab, start `here <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
+
+Integration testing is discussed in more detail in the `integration testing`_ chapter.
 
 Code review
 -----------
@@ -730,18 +726,21 @@ flagged for backporting, in which case the status should be changed to
 "Pending Backport" (see the `Backporting`_ chapter for details).
 
 
-Testing
-=======
-
-Ceph has two types of tests: `make check`_ tests and integration tests.
-The former are run via `GNU Make <https://www.gnu.org/software/make/>`,
-and the latter are run via the `teuthology framework`_. The following two
-chapters examine the `make check`_ and integration tests in detail.
-
+.. _`testing`:
 .. _`make check`:
+.. _`unit tests`:
 
-Unit tests - make check
------------------------
+Testing - unit tests
+====================
+
+Ceph has two types of tests: unit tests (also called `make check`_ tests) and
+integration tests. Strictly speaking, the `make check`_ tests are not "unit
+tests", but rather tests that can be run easily on a single build machine after
+compiling Ceph from source, whereas integration tests require packages and
+multi-machine clusters to run.
+
+What does "make check" mean?
+----------------------------
 
 After compiling Ceph, the code can be run through a battery of tests covering
 various aspects of Ceph. For historical reasons, this battery of tests is often
@@ -770,7 +769,7 @@ different constraints). Depending on your hardware, it can take from 20
 minutes to three hours to complete, but it's worth the wait.
 
 How unit tests are declared
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------
 
 Unit tests are declared in the ``CMakeLists.txt`` files (multiple files under
 ``./src``) using the ``add_ceph_test`` or ``add_ceph_unittest`` CMake functions,
@@ -780,7 +779,7 @@ build process.  The ``add_ceph_test`` function is used to declare unit test
 scripts, while ``add_ceph_unittest`` is used for unit test binaries.
 
 Unit testing of CLI tools
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 Some of the CLI tools are tested using special files ending with the extension
 ``.t`` and stored under ``./src/test/cli``. These tests are run using a tool
@@ -791,17 +790,21 @@ the `cram task`_.
 .. _`cram`: https://bitheap.org/cram/
 .. _`cram task`: https://github.com/ceph/ceph/blob/master/qa/tasks/cram.py
 
-Caveats
-^^^^^^^
+Unit test caveats
+-----------------
 
 1. Unlike the various Ceph daemons and ``ceph-fuse``, the unit tests
    are linked against the default memory allocator (glibc) unless explicitly
    linked against something else. This enables tools like valgrind to be used
    in the tests.
 
-Integration tests
------------------
+.. _`integration testing`:
+.. _`integration tests`:
 
+Testing - integration tests
+===========================
+
+Ceph has two types of tests: `make check`_ tests and integration tests.
 When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
 is deemed to be an integration test. Integration tests are organized into
@@ -813,7 +816,7 @@ In the sections that follow we attempt to provide a detailed introduction
 to that framework from the perspective of a beginning Ceph developer.
 
 Teuthology consumes packages
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----------------------------
 
 It may take some time to understand the significance of this fact, but it
 is `very` significant. It means that automated tests can be conducted on
@@ -829,7 +832,7 @@ cloud-provisioned), installs the packages on them, and deploys Ceph
 clusters on them - all as called for by the test.
 
 The nightlies
-^^^^^^^^^^^^^
+-------------
 
 A number of integration tests are run on a regular basis in the `Sepia
 lab`_ against the official Ceph repositories (on the ``master`` development
@@ -842,7 +845,7 @@ test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.
 
-Testing Priority
+Testing priority
 ----------------
 
 The ``teuthology-suite`` command includes an almost mandatory option ``-p <N>``
@@ -871,9 +874,8 @@ the following recommendations should be followed:
 
 * **200 <= Priority < 1000:** Use this priority for large test runs that can be done over the course of a week.
 
-
 Suites inventory
-^^^^^^^^^^^^^^^^
+----------------
 
 The ``suites`` directory of the `ceph/qa sub-directory`_ contains
 all the integration tests, for all the Ceph components.
@@ -883,7 +885,7 @@ all the integration tests, for all the Ceph components.
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
-  verify the integration testing infrastructure works as expected)
+  verify the `integration testing`_ infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
   test CephFS
@@ -921,7 +923,7 @@ all the integration tests, for all the Ceph components.
 .. _`ceph-deploy man page`: ../../man/8/ceph-deploy
 
 teuthology-describe-tests
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 In February 2016, a new feature called ``teuthology-describe-tests`` was
 added to the `teuthology framework`_ to facilitate documentation and better
@@ -938,7 +940,7 @@ Developers are encouraged to improve the documentation, in terms of both
 coverage and quality.
 
 How integration tests are run
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 
 Given that - as a new Ceph developer - you will typically not have access
 to the `Sepia lab`_, you may rightly ask how you can run the integration
@@ -955,7 +957,7 @@ If you have access to an OpenStack tenant, you have another option: the
 This OpenStack backend can build packages from a given git commit or
 branch, provision VMs, install the packages and run integration tests
 on those VMs. This process is controlled using a tool called
-`ceph-workbench ceph-qa-suite`_. This tool also automates publishing of
+``ceph-workbench ceph-qa-suite``. This tool also automates publishing of
 test results at http://teuthology-logs.public.ceph.com.
 
 Running integration tests on your code contributions and publishing the
@@ -974,7 +976,7 @@ available by running the following command on the teuthology machine::
 .. _teuthology-suite: http://docs.ceph.com/teuthology/docs/teuthology.suite.html
 
 How integration tests are defined
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------
 
 Integration tests are defined by yaml files found in the ``suites``
 subdirectory of the `ceph/qa sub-directory`_ and implemented by python
@@ -984,7 +986,7 @@ directory tree containing yaml files that are combined, at runtime, into a
 larger yaml file.
 
 Reading a standalone test
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 Let us first examine a standalone test, or "singleton".
 
@@ -1054,7 +1056,7 @@ This test can be run with::
     $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
 
 Test descriptions
-^^^^^^^^^^^^^^^^^
+-----------------
 
 Each test has a "test description", which is similar to a directory path,
 but not the same. In the case of a standalone test, like the one in
@@ -1082,8 +1084,8 @@ signifies the concatenation of two files:
 * ceph-deploy/basic/distros/centos_7.0.yaml
 * ceph-deploy/basic/tasks/ceph-deploy.yaml
 
-How are tests built from directories?
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+How tests are built from directories
+------------------------------------
 
 As noted in the previous section, most tests are not defined in a single
 yaml file, but rather as a `combination` of files collected from a
@@ -1216,7 +1218,7 @@ A single test from the rbd/thrash suite can be run by adding the
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
 
 Filtering tests by their description
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------
 
 When a few jobs fail and need to be run again, the ``--filter`` option
 can be used to select tests with a matching description. For instance, if the
@@ -1243,22 +1245,22 @@ Each string is looked up anywhere in the test description and has to
 be an exact match: they are not regular expressions.
 
 Reducing the number of tests
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----------------------------
 
-The ``rados`` suite generates thousands of tests out of a few hundred
-files. This happens because teuthology constructs test matrices from
-subdirectories wherever it encounters a file named ``%``. For instance,
-all tests in the `rados/basic suite
-<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic>`_
-run with different messenger types: ``simple``, ``async`` and
-``random``, because they are combined (via the special file ``%``) with
-the `msgr directory
+The ``rados`` suite generates tens or even hundreds of thousands of tests out
+of a few hundred files. This happens because teuthology constructs test
+matrices from subdirectories wherever it encounters a file named ``%``. For
+instance, all tests in the `rados/basic suite
+<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic>`_ run with
+different messenger types: ``simple``, ``async`` and ``random``, because they
+are combined (via the special file ``%``) with the `msgr directory
 <https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic/msgr>`_
 
 All integration tests are required to be run before a Ceph release is published.
 When merely verifying whether a contribution can be merged without
-risking a trivial regression, it is enough to run a subset. The ``--subset`` option can be used to
-reduce the number of tests that are triggered. For instance::
+risking a trivial regression, it is enough to run a subset. The ``--subset``
+option can be used to reduce the number of tests that are triggered. For
+instance::
 
   teuthology-suite --suite rados --subset 0/4000
 
@@ -1277,7 +1279,7 @@ Testing in the cloud
 ====================
 
 In this chapter, we will explain in detail how use an OpenStack
-tenant as an environment for Ceph integration testing.
+tenant as an environment for Ceph `integration testing`_.
 
 Assumptions and caveat
 ----------------------
@@ -1313,8 +1315,8 @@ trying to schedule suites.
 Getting ceph-workbench
 ----------------------
 
-Since testing in the cloud is done using the `ceph-workbench
-ceph-qa-suite`_ tool, you will need to install that first. It is designed
+Since testing in the cloud is done using the ``ceph-workbench ceph-qa-suite``
+tool, you will need to install that first. It is designed
 to be installed via Docker, so if you don't have Docker running on your
 development machine, take care of that first. You can follow `the official
 tutorial <https://docs.docker.com/engine/installation/>`_ to install if
@@ -1344,12 +1346,12 @@ something like::
 
     export OS_PASSWORD="aiVeth0aejee3eep8rogho3eep7Pha6ek"
 
-When `ceph-workbench ceph-qa-suite`_ connects to your OpenStack tenant for
+When ``ceph-workbench ceph-qa-suite`` connects to your OpenStack tenant for
 the first time, it will generate two keypairs: ``teuthology-myself`` and
 ``teuthology``.
 
 .. If this is not the first time you have tried to use
-.. `ceph-workbench ceph-qa-suite`_ with this tenant, make sure to delete any
+.. ``ceph-workbench ceph-qa-suite`` with this tenant, make sure to delete any
 .. stale keypairs with these names!
 
 Run the dummy suite
@@ -1360,7 +1362,7 @@ drive::
 
     $ ceph-workbench ceph-qa-suite --suite dummy
 
-Be forewarned that the first run of `ceph-workbench ceph-qa-suite`_ on a
+Be forewarned that the first run of ``ceph-workbench ceph-qa-suite`` on a
 pristine tenant will take a long time to complete because it downloads a VM
 image and during this time the command may not produce any output.
 
@@ -1376,7 +1378,7 @@ The last bit of output should look something like this::
   pulpito web interface: http://149.202.168.201:8081/
   ssh access           : ssh -i /home/smithfarm/.ceph-workbench/teuthology-myself.pem ubuntu@149.202.168.201 # logs in /usr/share/nginx/html
 
-What this means is that `ceph-workbench ceph-qa-suite`_ triggered the test
+What this means is that ``ceph-workbench ceph-qa-suite`` triggered the test
 suite run. It does not mean that the suite run has completed. To monitor
 progress of the run, check the Pulpito web interface URL periodically, or
 if you are impatient, ssh to the teuthology machine using the ssh command
@@ -1386,7 +1388,7 @@ shown and do::
 
 The `/usr/share/nginx/html` directory contains the complete logs of the
 test suite. If we had provided the ``--upload`` option to the
-`ceph-workbench ceph-qa-suite`_ command, these logs would have been
+``ceph-workbench ceph-qa-suite`` command, these logs would have been
 uploaded to http://teuthology-logs.public.ceph.com.
 
 Run a standalone test
@@ -1405,7 +1407,7 @@ options.)
 
 The first run of a suite will also take a long time, because ceph packages
 have to be built, first. Again, the packages so built are cached and
-`ceph-workbench ceph-qa-suite`_ will not build identical packages a second
+``ceph-workbench ceph-qa-suite`` will not build identical packages a second
 time.
 
 Interrupt a running suite
@@ -1416,7 +1418,7 @@ interrupt a running suite. One obvious way to do this is::
 
     ceph-workbench ceph-qa-suite --teardown
 
-This destroys all VMs created by `ceph-workbench ceph-qa-suite`_ and
+This destroys all VMs created by ``ceph-workbench ceph-qa-suite`` and
 returns the OpenStack tenant to a "clean slate".
 
 Sometimes you may wish to interrupt the running suite, but keep the logs,
@@ -1479,7 +1481,7 @@ to determine the name or ID, and then terminate it with::
 Deploy a cluster for manual testing
 -----------------------------------
 
-The `teuthology framework`_ and `ceph-workbench ceph-qa-suite`_ are
+The `teuthology framework`_ and ``ceph-workbench ceph-qa-suite`` are
 versatile tools that automatically provision Ceph clusters in the cloud and
 run various tests on them in an automated fashion. This enables a single
 engineer, in a matter of hours, to perform thousands of tests that would
@@ -1512,7 +1514,7 @@ machine and from there to one of the target VMs (OpenStack) or teuthology
 worker machines machine (Sepia) where the test cluster is running.
 
 The VMs (or "instances" in OpenStack terminology) created by
-`ceph-workbench ceph-qa-suite`_ are named as follows:
+``ceph-workbench ceph-qa-suite`` are named as follows:
 
 ``teuthology`` - the teuthology machine
 
