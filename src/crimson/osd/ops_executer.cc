@@ -159,7 +159,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   return filter;
 }
 
-static seastar::future<bool, hobject_t> pgls_filter(
+static seastar::future<hobject_t> pgls_filter(
   const PGLSFilter& filter,
   const PGBackend& backend,
   const hobject_t& sobj)
@@ -175,15 +175,15 @@ static seastar::future<bool, hobject_t> pgls_filter(
         if (!futval.failed()) {
           val.push_back(std::move(futval).get0());
         } else if (filter.reject_empty_xattr()) {
-          return seastar::make_ready_future<bool, hobject_t>(false, sobj);
+          return seastar::make_ready_future<hobject_t>(hobject_t{});
         }
         const bool filtered = filter.filter(sobj, val);
-        return seastar::make_ready_future<bool, hobject_t>(filtered, sobj);
+        return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
     });
   } else {
     ceph::bufferlist empty_lvalue_bl;
     const bool filtered = filter.filter(sobj, empty_lvalue_bl);
-    return seastar::make_ready_future<bool, hobject_t>(filtered, sobj);
+    return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
   }
 }
 
@@ -227,7 +227,7 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
         if (filter) {
           return pgls_filter(*filter, backend, obj);
         } else {
-          return seastar::make_ready_future<bool, hobject_t>(true, obj);
+          return seastar::make_ready_future<hobject_t>(obj);
         }
       };
 
@@ -244,13 +244,11 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
             std::move(items), std::move(next));
       });
   }).then(
-    [pg_end, filter] (const std::vector<std::tuple<bool,
-                                hobject_t>>& items, auto next) {
-      auto is_matched = [] (const auto& item) {
-        return std::get<bool>(item);
+    [pg_end, filter] (const std::vector<hobject_t>& items, auto next) {
+      auto is_matched = [] (const auto& obj) {
+        return !obj.is_min();
       };
-      auto to_entry = [] (const auto& item) {
-        const auto& obj = std::get<hobject_t>(item);
+      auto to_entry = [] (const auto& obj) {
         return librados::ListObjectImpl{
           obj.get_namespace(), obj.oid.name, obj.get_key()
         };
