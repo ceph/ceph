@@ -362,7 +362,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
                             [this, m] (auto& ox) {
       return seastar::do_for_each(m->ops, [this, &ox](OSDOp& osd_op) {
         logger().debug("will be handling op {}", ceph_osd_op_name(osd_op.op.op));
-        return ox.do_osd_op(osd_op);
+        return ox.execute_osd_op(osd_op);
       }).then([this, m, &ox] {
         logger().debug("all operations have been executed successfully");
         return std::move(ox).submit_changes([this, m] (auto&& txn, auto&& os) {
