@@ -419,7 +419,7 @@ class VolumeClient(object):
                 if not path:
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume '{0}' not found".format(subvolname))
-                ret = 0, path, ""
+                ret = 0, path.decode("utf-8"), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -520,7 +520,7 @@ class VolumeClient(object):
                 if path is None:
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
-                return 0, path, ""
+                return 0, path.decode("utf-8"), ""
         except VolumeException as ve:
             return self.volume_exception_to_retval(ve)
 
