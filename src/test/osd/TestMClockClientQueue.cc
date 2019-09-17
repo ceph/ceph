@@ -38,9 +38,8 @@ public:
   {}
 
   struct MockDmclockItem : public PGOpQueueable {
-    ceph::qos::dmclock_request_t request;
-    MockDmclockItem(decltype(request) _request) :
-      PGOpQueueable(spg_t()), request(_request) {}
+    MockDmclockItem() :
+      PGOpQueueable(spg_t()) {}
 
 public:
     op_type_t get_op_type() const final {
@@ -55,11 +54,6 @@ public:
 
     op_scheduler_class get_scheduler_class() const final {
       return op_scheduler_class::client;
-    }
-
-    std::optional<ceph::qos::dmclock_request_t>
-    get_dmclock_request_state() const final {
-      return request;
     }
 
     void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final {}
@@ -169,9 +163,9 @@ TEST_F(MClockClientQueueTest, TestDistributedEnqueue) {
   Request r1 = create_snaptrim(100, client1);
   Request r2 = create_snaptrim(101, client2);
   Request r3 = create_snaptrim(102, client3);
-  Request r4 = create_dmclock(103, client1, dmc::ReqParams(50,1));
-  Request r5 = create_dmclock(104, client2, dmc::ReqParams(30,1));
-  Request r6 = create_dmclock(105, client3, dmc::ReqParams(10,1));
+  Request r4 = create_dmclock(103, client1);
+  Request r5 = create_dmclock(104, client2);
+  Request r6 = create_dmclock(105, client3);
 
   q.enqueue(client1, 12, 0, std::move(r1));
   q.enqueue(client2, 12, 0, std::move(r2));

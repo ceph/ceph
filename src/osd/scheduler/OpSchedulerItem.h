@@ -21,7 +21,6 @@
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
 #include "osd/PGPeeringEvent.h"
-#include "common/mClockCommon.h"
 #include "messages/MOSDOp.h"
 
 
@@ -91,16 +90,6 @@ public:
     virtual void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
     virtual op_scheduler_class get_scheduler_class() const = 0;
 
-    virtual std::optional<ceph::qos::mclock_profile_params_t>
-    get_mclock_profile_params() const {
-      return std::nullopt;
-    }
-
-    virtual std::optional<ceph::qos::dmclock_request_t>
-    get_dmclock_request_state() const {
-      return std::nullopt;
-    }
-
     virtual ~OpQueueable() {}
     friend ostream& operator<<(ostream& out, const OpQueueable& q) {
       return q.print(out);
@@ -163,13 +152,6 @@ public:
   utime_t get_start_time() const { return start_time; }
   uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
-
-  auto get_mclock_profile_params() const {
-    return qitem->get_mclock_profile_params();
-  }
-  auto get_dmclock_request_state() const {
-    return qitem->get_dmclock_request_state();
-  }
 
   bool is_peering() const {
     return qitem->is_peering();
@@ -267,24 +249,6 @@ public:
     } else {
       return op_scheduler_class::immediate;
     }
-  }
-
-  std::optional<ceph::qos::mclock_profile_params_t>
-  get_mclock_profile_params() const final {
-    auto op = maybe_get_mosd_op();
-    if (!op)
-      return std::nullopt;
-
-    return op->get_mclock_profile_params();
-  }
-
-  std::optional<ceph::qos::dmclock_request_t>
-  get_dmclock_request_state() const final {
-    auto op = maybe_get_mosd_op();
-    if (!op)
-      return std::nullopt;
-
-    return op->get_dmclock_request_state();
   }
 
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
