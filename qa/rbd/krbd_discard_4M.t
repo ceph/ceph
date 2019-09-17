@@ -6,28 +6,28 @@ Zero, < 1 block:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 156672 -l 512 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131584 -l 64512 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131584 -l 65024 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131072 -l 65024 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
@@ -36,28 +36,28 @@ Zero, 1 block:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131072 -l 65536 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131072 -l 66048 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 130560 -l 66048 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 130560 -l 66560 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
@@ -66,28 +66,28 @@ Zero, < 2 blocks:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 163840 -l 65536 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131584 -l 130048 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131584 -l 130560 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131072 -l 130560 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
@@ -96,28 +96,28 @@ Zero, 2 blocks:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131072 -l 131072 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 131072 -l 131584 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 130560 -l 131584 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 130560 -l 132096 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
@@ -126,21 +126,21 @@ Zero, 37 blocks:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 589824 -l 2424832 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 589312 -l 2424832 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 590336 -l 2424832 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
@@ -149,7 +149,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 4193792 -l 512 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   03ffe00 0000 0000 0000 0000 0000 0000 0000 0000
@@ -158,7 +158,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 4129280 -l 65024 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   03f0200 0000 0000 0000 0000 0000 0000 0000 0000
@@ -167,7 +167,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 4128768 -l 65536 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   03f0000 0000 0000 0000 0000 0000 0000 0000 0000
@@ -176,7 +176,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 4128256 -l 66048 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   03efe00 0000 0000 0000 0000 0000 0000 0000 0000
@@ -185,7 +185,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 4063744 -l 130560 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   03e0200 0000 0000 0000 0000 0000 0000 0000 0000
@@ -194,7 +194,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 4063232 -l 131072 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   03e0000 0000 0000 0000 0000 0000 0000 0000 0000
@@ -203,7 +203,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 4062720 -l 131584 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   03dfe00 0000 0000 0000 0000 0000 0000 0000 0000
@@ -212,7 +212,7 @@ Truncate:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 512 -l 4193792 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0000200 0000 0000 0000 0000 0000 0000 0000 0000
@@ -223,7 +223,7 @@ Delete:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 0 -l 4194304 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 0000 0000 0000 0000 0000 0000 0000 0000
   *
   0400000
@@ -238,7 +238,7 @@ Empty clone:
   $ rbd clone img@snap cloneimg1
   $ DEV=$(sudo rbd map -o alloc_size=4194304 cloneimg1)
   $ blkdiscard -o 720896 -l 2719744 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 abab abab abab abab abab abab abab abab
   *
   0400000
@@ -247,7 +247,7 @@ Empty clone:
   $ rbd clone img@snap cloneimg2
   $ DEV=$(sudo rbd map -o alloc_size=4194304 cloneimg2)
   $ blkdiscard -o 1474560 -l 2719744 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 abab abab abab abab abab abab abab abab
   *
   0400000
@@ -256,7 +256,7 @@ Empty clone:
   $ rbd clone img@snap cloneimg3
   $ DEV=$(sudo rbd map -o alloc_size=4194304 cloneimg3)
   $ blkdiscard -o 0 -l 4194304 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 abab abab abab abab abab abab abab abab
   *
   0400000
@@ -269,14 +269,14 @@ Full clone:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 720896 -l 2719744 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0400000
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 1474560 -l 2719744 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0168000 0000 0000 0000 0000 0000 0000 0000 0000
@@ -285,7 +285,7 @@ Full clone:
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 0 -l 4194304 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 0000 0000 0000 0000 0000 0000 0000 0000
   *
   0400000
@@ -299,21 +299,21 @@ Multiple object requests:
 
   $ xfs_io -c 'pwrite -b 4M -w 0 50M' $DEV >/dev/null
   $ blkdiscard -o 0 -l 143360 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   3200000
 
   $ xfs_io -c 'pwrite -b 4M -w 0 50M' $DEV >/dev/null
   $ blkdiscard -o 0 -l 286720 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   3200000
 
   $ xfs_io -c 'pwrite -b 4M -w 0 50M' $DEV >/dev/null
   $ blkdiscard -o 0 -l 573440 $DEV
-  $ hexdump $DEV
+  $ dd if=$DEV iflag=direct bs=4M status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   3200000
