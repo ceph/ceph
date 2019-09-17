@@ -433,6 +433,15 @@ struct errorator {
     }
   };
 
+  template <class... ValuesT, class ErrorT>
+  static auto make_plain_exception_future(ErrorT&& e) noexcept {
+    using decayed_t = std::decay_t<ErrorT>;
+    static_assert((... || std::is_same_v<AllowedErrors, decayed_t>),
+                  "passing further disallowed ErrorT");
+    return ::seastar::make_exception_future<ValuesT...>(
+      make_exception_ptr(std::forward<ErrorT>(e)));
+  }
+
   // the visitor that forwards handling of all errors to next continuation
   struct pass_further {
     template <class ErrorT>
