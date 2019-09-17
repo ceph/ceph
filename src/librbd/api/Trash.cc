@@ -31,6 +31,13 @@
 namespace librbd {
 namespace api {
 
+template <typename I>
+const typename Trash<I>::TrashImageSources Trash<I>::RESTORE_SOURCE_WHITELIST {
+    cls::rbd::TRASH_IMAGE_SOURCE_USER,
+    cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING,
+    cls::rbd::TRASH_IMAGE_SOURCE_USER_PARENT
+  };
+
 namespace {
 
 template <typename I>
@@ -545,7 +552,8 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
 }
 
 template <typename I>
-int Trash<I>::restore(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+int Trash<I>::restore(librados::IoCtx &io_ctx,
+                      const TrashImageSources& trash_image_sources,
                       const std::string &image_id,
                       const std::string &image_new_name) {
   CephContext *cct((CephContext *)io_ctx.cct());
@@ -560,10 +568,10 @@ int Trash<I>::restore(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     return r;
   }
 
-  if (trash_spec.source !=  static_cast<cls::rbd::TrashImageSource>(source)) {
-    lderr(cct) << "Current trash source: " << trash_spec.source
-               << " does not match expected: "
-               << static_cast<cls::rbd::TrashImageSource>(source) << dendl;
+  if (trash_image_sources.count(trash_spec.source) == 0) {
+    lderr(cct) << "Current trash source '" << trash_spec.source << "' "
+               << "does not match expected: "
+               << trash_image_sources << dendl;
     return -EINVAL;
   }
 
