@@ -93,9 +93,11 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
   int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
   if (r >= 0) {
     buf[r] = '\0';
+#if defined(HAVE_SPDK)
     char *bname = ::basename(buf);
     if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0)
       type = "ust-nvme";
+#endif
   }
 
 #if defined(HAVE_BLUESTORE_PMEM)
