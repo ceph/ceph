@@ -3,6 +3,7 @@
 High level status display commands
 """
 
+from sys import maxint
 from collections import defaultdict
 from prettytable import PrettyTable
 import errno
@@ -10,6 +11,7 @@ import fnmatch
 import mgr_util
 import prettytable
 import six
+import json
 
 from mgr_module import MgrModule
 
@@ -26,6 +28,12 @@ class Module(MgrModule):
             "cmd": "osd status "
                    "name=bucket,type=CephString,req=false",
             "desc": "Show the status of OSDs within a bucket, or all",
+            "perm": "r"
+        },
+        {
+            "cmd": "pg osd-df-by-pool "
+                   "name=poolstr,type=CephString, ",
+            "desc": "Show pg distribution by pool",
             "perm": "r"
         },
     ]
@@ -244,6 +252,65 @@ class Module(MgrModule):
 
         return 0, osd_table.get_string(), ""
 
+    def handle_osd_df_by_pool(self, cmd):
+        pool = cmd['poolstr']
+        osdmap = self.get("osd_map")
+        pools = osdmap.get('pools',[])
+        poolid = None
+        for p in pools:
+            if p['pool_name'] == pool:
+                poolid = p['pool']
+
+        if poolid is None:
+            return -errno.ENOENT, '', 'pool not found'
+
+        pgs = self.get_osdmap().map_pool_pgs_up(poolid)
+
+        osd2pgnums = {}
+        for osds in pgs.values():
+            for osd in osds:
+                if osd in osd2pgnums:
+                    osd2pgnums[int(osd)] += 1
+                else:
+                    osd2pgnums[int(osd)] = 1
+
+        max = 0
+        min = maxint
+        sum = 0
+        rows = []
+        for osd, num in osd2pgnums.items():
+            rows.append([osd, num])
+            if num > max:
+                max = num
+            if num < min:
+                min = num
+            sum += num
+
+        avg = float(sum) / len(osd2pgnums)
+
+        jsformat = 'format' in cmd and cmd['format'] == 'json'
+        if jsformat:
+            tbl = {
+                'osd_pg' : rows,
+                'summary' : {
+                    'MAX' : max,
+                    'MIN' : min,
+                    'AVG' : avg
+                }
+            }
+            output = json.dumps(tbl)
+        else:
+            tbl = PrettyTable(['OSD', 'PGS'])
+            for r in rows:
+                tbl.add_row(r)
+
+            sum_tbl = PrettyTable(['MAX', 'MIN', 'AVG'])
+            sum_tbl.add_row([max, min, avg])
+
+            output = tbl.get_string() + '\n' + sum_tbl.get_string()
+
+        return 0, output, ''
+
     def handle_command(self, inbuf, cmd):
         self.log.error("handle_command")
 
@@ -251,6 +318,8 @@ class Module(MgrModule):
             return self.handle_fs_status(cmd)
         elif cmd['prefix'] == "osd status":
             return self.handle_osd_status(cmd)
+        elif cmd['prefix'] == "pg osd-df-by-pool":
+            return self.handle_osd_df_by_pool(cmd)
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
