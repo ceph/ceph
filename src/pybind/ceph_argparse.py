@@ -696,7 +696,7 @@ class argdesc(object):
             if self.N:
                 s += ' [' + str(self.instance) + '...]'
         if not self.req:
-            s = '{' + s + '}'
+            s = '[' + s + ']'
         return s
 
     def helpstr(self):
@@ -714,7 +714,7 @@ class argdesc(object):
         if self.N:
             s += ' [' + chunk + '...]'
         if not self.req:
-            s = '{' + s + '}'
+            s = '[' + s + ']'
         return s
 
     def complete(self, s):
