@@ -89,7 +89,7 @@ class OpsExecuter {
   template <class Func>
   auto do_pg_op(Func&& f) {
     return std::forward<Func>(f)(std::as_const(pg),
-                                 std::as_const(os->oi.soid.get_namespace()));
+                                 std::as_const(msg->get_hobj().nspace));
   }
 
   seastar::future<> dont_do_legacy_op() {
