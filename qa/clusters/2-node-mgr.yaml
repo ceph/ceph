@@ -1,0 +1,10 @@
+roles:
+- [mgr.x, mon.a, mon.c, mds.a, mds.c, osd.0, client.0]
+- [mgr.y, mgr.z, mon.b, mds.b, osd.1, osd.2, osd.3, client.1]
+log-rotate:
+  ceph-mds: 10G
+  ceph-osd: 10G
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 30 # GB
