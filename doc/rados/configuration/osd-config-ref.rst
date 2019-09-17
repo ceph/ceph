@@ -395,7 +395,7 @@ recovery operations to ensure optimal performance during recovery.
 
 :Type: String
 :Valid Choices: prio, wpq, mclock_opclass, mclock_client
-:Default: ``prio``
+:Default: ``wpq``
 
 
 ``osd op queue cut off``
@@ -412,7 +412,7 @@ recovery operations to ensure optimal performance during recovery.
 
 :Type: String
 :Valid Choices: low, high
-:Default: ``low``
+:Default: ``high``
 
 
 ``osd client op priority``
