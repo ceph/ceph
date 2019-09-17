@@ -120,6 +120,7 @@ authentication keyring.
     Scrub <scrub>
     LazyIO <lazyio>
     Distributed Metadata Cache <mdcache>
+    FS volume and subvolumes <fs-volumes>
 
 .. toctree:: 
    :hidden:
