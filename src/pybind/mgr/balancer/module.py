@@ -141,6 +141,8 @@ class Eval:
         for t in ('pgs', 'objects', 'bytes'):
             if total[t] == 0:
                 r[t] = {
+                    'max': 0,
+                    'min': 0,
                     'avg': 0,
                     'stddev': 0,
                     'sum_weight': 0,
@@ -189,6 +191,8 @@ class Eval:
             stddev = math.sqrt(dev / float(max(num - 1, 1)))
             score = score / max(sum_weight, 1)
             r[t] = {
+                'max': max(count[t].values()),
+                'min': min(count[t].values()),
                 'avg': avg,
                 'stddev': stddev,
                 'sum_weight': sum_weight,
