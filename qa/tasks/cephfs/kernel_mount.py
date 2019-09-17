@@ -18,45 +18,20 @@ UMOUNT_TIMEOUT = 300
 
 
 class KernelMount(CephFSMount):
-    def __init__(self, ctx, mons, test_dir, client_id, client_remote,
+    def __init__(self, ctx, test_dir, client_id, client_remote,
                  ipmi_user, ipmi_password, ipmi_domain):
         super(KernelMount, self).__init__(ctx, test_dir, client_id, client_remote)
-        self.mons = mons
 
         self.mounted = False
         self.ipmi_user = ipmi_user
         self.ipmi_password = ipmi_password
         self.ipmi_domain = ipmi_domain
 
-    def write_secret_file(self, remote, role, keyring, filename):
-        """
-        Stash the keyring in the filename specified.
-        """
-        remote.run(
-            args=[
-                'adjust-ulimits',
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=self.test_dir),
-                'ceph-authtool',
-                '--name={role}'.format(role=role),
-                '--print-key',
-                keyring,
-                run.Raw('>'),
-                filename,
-            ],
-            timeout=(5*60),
-        )
-
     def mount(self, mount_path=None, mount_fs_name=None):
         self.setupfs(name=mount_fs_name)
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
-
-        keyring = self.get_keyring_path()
-        secret = '{tdir}/ceph.data/client.{id}.secret'.format(tdir=self.test_dir, id=self.client_id)
-        self.write_secret_file(self.client_remote, 'client.{id}'.format(id=self.client_id),
-                               keyring, secret)
 
         self.client_remote.run(
             args=[
@@ -70,8 +45,8 @@ class KernelMount(CephFSMount):
         if mount_path is None:
             mount_path = "/"
 
-        opts = 'name={id},secretfile={secret},norequire_active_mds'.format(id=self.client_id,
-                                                      secret=secret)
+        opts = 'name={id},norequire_active_mds,conf={conf}'.format(id=self.client_id,
+                                                        conf=self.config_path)
 
         if mount_fs_name is not None:
             opts += ",mds_namespace={0}".format(mount_fs_name)
@@ -82,8 +57,10 @@ class KernelMount(CephFSMount):
                 'adjust-ulimits',
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=self.test_dir),
-                '/sbin/mount.ceph',
-                '{mons}:{mount_path}'.format(mons=','.join(self.mons), mount_path=mount_path),
+                '/bin/mount',
+                '-t',
+                'ceph',
+                ':{mount_path}'.format(mount_path=mount_path),
                 self.mountpoint,
                 '-v',
                 '-o',
