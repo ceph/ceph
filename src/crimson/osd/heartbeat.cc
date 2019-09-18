@@ -29,7 +29,8 @@ Heartbeat::Heartbeat(const ceph::osd::ShardServices& service,
     monc{monc},
     front_msgr{front_msgr},
     back_msgr{back_msgr},
-    timer{[this] {send_heartbeats();}}
+    // do this in background
+    timer{[this] { (void)send_heartbeats(); }}
 {}
 
 seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
