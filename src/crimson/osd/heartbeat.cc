@@ -29,7 +29,7 @@ Heartbeat::Heartbeat(const ceph::osd::ShardServices& service,
     monc{monc},
     front_msgr{front_msgr},
     back_msgr{back_msgr},
-    timer{[this] {send_heartbeats();}}
+    timer{[this] { (void)send_heartbeats(); }}
 {}
 
 seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
@@ -159,7 +159,7 @@ void Heartbeat::add_reporter_peers(int whoami)
   osdmap->get_random_up_osds_by_subtree(
     whoami, subtree, min_down, want, &want);
   for (auto osd : want) {
-    add_peer(osd, osdmap->get_epoch());
+    (void)add_peer(osd, osdmap->get_epoch());
   }
 }
 
@@ -189,7 +189,7 @@ seastar::future<> Heartbeat::update_peers(int whoami)
     for (auto next = osdmap->get_next_up_osd_after(whoami);
       peers.size() < min_peers && next >= 0 && next != whoami;
       next = osdmap->get_next_up_osd_after(next)) {
-      add_peer(next, osdmap->get_epoch());
+      (void)add_peer(next, osdmap->get_epoch());
     }
     return seastar::now();
   });

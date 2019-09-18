@@ -169,7 +169,7 @@ void ShardServices::send_pg_temp()
   }
   for (auto &m : ms) {
     if (m) {
-      monc.send_message(m);
+      (void)monc.send_message(m);
     }
   }
   _sent_pg_temp();

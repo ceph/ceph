@@ -60,7 +60,7 @@ OSD::OSD(int id, uint32_t nonce,
          ceph::net::Messenger& hb_back_msgr)
   : whoami{id},
     nonce{nonce},
-    beacon_timer{[this] { send_beacon(); }},
+    beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr, *this}},
@@ -264,7 +264,7 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr.get_myaddrs(),
                               public_msgr.get_myaddrs()); changed) {
-      cluster_msgr.set_myaddrs(addrs);
+      (void)cluster_msgr.set_myaddrs(addrs);
     }
     return heartbeat->start(public_msgr.get_myaddrs(),
                             cluster_msgr.get_myaddrs());
@@ -972,11 +972,11 @@ void OSD::update_heartbeat_peers()
                                  &acting, nullptr);
     for (auto osd : boost::join(up, acting)) {
       if (osd != CRUSH_ITEM_NONE && osd != whoami) {
-        heartbeat->add_peer(osd, osdmap->get_epoch());
+        (void)heartbeat->add_peer(osd, osdmap->get_epoch());
       }
     }
   }
-  heartbeat->update_peers(whoami);
+  (void)heartbeat->update_peers(whoami);
 }
 
 seastar::future<> OSD::handle_peering_op(
@@ -1024,7 +1024,7 @@ OSD::get_or_create_pg(
   auto [fut, creating] = pg_map.get_pg(pgid, bool(info));
   if (!creating && info) {
     pg_map.set_creating(pgid);
-    handle_pg_create_info(std::move(info));
+    (void)handle_pg_create_info(std::move(info));
   }
   return std::move(fut);
 }

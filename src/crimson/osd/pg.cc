@@ -113,7 +113,7 @@ PG::PG(
 PG::~PG() {}
 
 bool PG::try_flush_or_schedule_async() {
-  shard_services.get_store().do_transaction(
+  (void)shard_services.get_store().do_transaction(
     coll_ref,
     ObjectStore::Transaction()).then(
       [this, epoch=get_osdmap_epoch()]() {
@@ -385,7 +385,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
     logger().debug("got ceph::osd::error while handling object {}: {} ({})",
                    oid, e.code(), e.what());
 
-    backend->evict_object_state(oid);
+    (void)backend->evict_object_state(oid);
     auto reply = make_message<MOSDOpReply>(
       m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
     reply->set_enoent_reply_versions(peering_state.get_info().last_update,
