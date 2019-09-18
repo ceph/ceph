@@ -386,14 +386,6 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.setxattr(os, osd_op, txn);
     });
-  case CEPH_OSD_OP_PGNLS_FILTER:
-    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
-      return do_pgnls_filtered(pg, nspace, osd_op);
-    });
-  case CEPH_OSD_OP_PGNLS:
-    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
-      return do_pgnls(pg, nspace, osd_op);
-    });
   case CEPH_OSD_OP_DELETE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.remove(os, txn);
@@ -439,6 +431,26 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       return seastar::now();
     });
 
+  default:
+    logger().warn("unknown op {}", ceph_osd_op_name(op.op));
+    throw std::runtime_error(
+      fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
+  }
+}
+
+seastar::future<>
+OpsExecuter::execute_pg_op(OSDOp& osd_op)
+{
+  logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));
+  switch (const ceph_osd_op& op = osd_op.op; op.op) {
+  case CEPH_OSD_OP_PGNLS:
+    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
+      return do_pgnls(pg, nspace, osd_op);
+    });
+  case CEPH_OSD_OP_PGNLS_FILTER:
+    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
+      return do_pgnls_filtered(pg, nspace, osd_op);
+    });
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
