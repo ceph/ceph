@@ -7551,8 +7551,12 @@ int RGWRados::get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, R
   return r;
 }
 
-int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info,
-                                       real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y)
+int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx,
+				       const string& meta_key,
+				       RGWBucketInfo& info,
+                                       real_time *pmtime,
+				       map<string, bufferlist> *pattrs,
+				       optional_yield y)
 {
   rgw_bucket bucket;
   rgw_bucket_parse_bucket_key(cct, meta_key, &bucket, nullptr);
