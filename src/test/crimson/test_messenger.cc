@@ -425,8 +425,9 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
                                       entity_name_t::TYPE_OSD);
         }).then([](ceph::net::ConnectionXRef conn) {
           // send two messages
-          (*conn)->send(make_message<MPing>());
-          (*conn)->send(make_message<MPing>());
+          return (*conn)->send(make_message<MPing>()).then([conn] {
+            return (*conn)->send(make_message<MPing>());
+          });
         }).then([server] {
           return server->wait();
         }).finally([client] {
@@ -520,7 +521,8 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       seastar::future<> send_pings(const entity_addr_t& addr) {
         return msgr->connect(addr, entity_name_t::TYPE_OSD
         ).then([this](ceph::net::ConnectionXRef conn) {
-          seastar::do_until(
+          // forwarded to stopped_send_promise
+          (void) seastar::do_until(
             [this] { return stop_send; },
             [this, conn = &**conn] {
               return conn->send(make_message<MPing>()).then([] {
@@ -581,6 +583,8 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
 }
 
 using ceph::msgr::v2::Tag;
+using ceph::net::bp_action_t;
+using ceph::net::bp_type_t;
 using ceph::net::Breakpoint;
 using ceph::net::Connection;
 using ceph::net::ConnectionRef;
@@ -615,20 +619,6 @@ std::ostream& operator<<(std::ostream& out, const conn_state_t& state) {
   }
 }
 
-template <typename T>
-void _assert_eq(ConnectionRef conn,
-                unsigned index,
-                const char* expr_actual, T actual,
-                const char* expr_expected, T expected) {
-  if (actual != expected) {
-    throw std::runtime_error(fmt::format(
-          "[{}] {} '{}' is actually {}, not the expected '{}' {}",
-          index, *conn, expr_actual, actual, expr_expected, expected));
-  }
-}
-#define ASSERT_EQUAL(conn, index, actual, expected) \
-  _assert_eq(conn, index, #actual, actual, #expected, expected)
-
 struct ConnResult {
   ConnectionRef conn;
   unsigned index;
@@ -650,41 +640,58 @@ struct ConnResult {
   ConnResult(Connection& conn, unsigned index)
     : conn(conn.shared_from_this()), index(index) {}
 
+  template <typename T>
+  void _assert_eq(const char* expr_actual, T actual,
+                  const char* expr_expected, T expected) const {
+    if (actual != expected) {
+      throw std::runtime_error(fmt::format(
+            "[{}] {} '{}' is actually {}, not the expected '{}' {}",
+            index, *conn, expr_actual, actual, expr_expected, expected));
+    }
+  }
+
+#define ASSERT_EQUAL(actual, expected) \
+  _assert_eq(#actual, actual, #expected, expected)
+
   void assert_state_at(conn_state_t expected) const {
-    ASSERT_EQUAL(conn, index, state, expected);
+    ASSERT_EQUAL(state, expected);
   }
 
   void assert_connect(unsigned attempts,
                       unsigned connects,
                       unsigned reconnects,
                       unsigned dispatched) const {
-    ASSERT_EQUAL(conn, index, connect_attempts, attempts);
-    ASSERT_EQUAL(conn, index, client_connect_attempts, connects);
-    ASSERT_EQUAL(conn, index, client_reconnect_attempts, reconnects);
-    ASSERT_EQUAL(conn, index, cnt_connect_dispatched, dispatched);
+    ASSERT_EQUAL(connect_attempts, attempts);
+    ASSERT_EQUAL(client_connect_attempts, connects);
+    ASSERT_EQUAL(client_reconnect_attempts, reconnects);
+    ASSERT_EQUAL(cnt_connect_dispatched, dispatched);
+  }
+
+  void assert_connect(unsigned attempts,
+                      unsigned dispatched) const {
+    ASSERT_EQUAL(connect_attempts, attempts);
+    ASSERT_EQUAL(cnt_connect_dispatched, dispatched);
   }
 
   void assert_accept(unsigned attempts,
                      unsigned accepts,
                      unsigned reaccepts,
                      unsigned dispatched) const {
-    ASSERT_EQUAL(conn, index, accept_attempts, attempts);
-    ASSERT_EQUAL(conn, index, server_connect_attempts, accepts);
-    ASSERT_EQUAL(conn, index, server_reconnect_attempts, reaccepts);
-    ASSERT_EQUAL(conn, index, cnt_accept_dispatched, dispatched);
+    ASSERT_EQUAL(accept_attempts, attempts);
+    ASSERT_EQUAL(server_connect_attempts, accepts);
+    ASSERT_EQUAL(server_reconnect_attempts, reaccepts);
+    ASSERT_EQUAL(cnt_accept_dispatched, dispatched);
   }
 
   void assert_accept(unsigned attempts,
-                     unsigned total_accepts,
                      unsigned dispatched) const {
-    ASSERT_EQUAL(conn, index, accept_attempts, attempts);
-    ASSERT_EQUAL(conn, index, server_connect_attempts + server_reconnect_attempts, total_accepts);
-    ASSERT_EQUAL(conn, index, cnt_accept_dispatched, dispatched);
+    ASSERT_EQUAL(accept_attempts, attempts);
+    ASSERT_EQUAL(cnt_accept_dispatched, dispatched);
   }
 
   void assert_reset(unsigned local, unsigned remote) const {
-    ASSERT_EQUAL(conn, index, cnt_reset_dispatched, local);
-    ASSERT_EQUAL(conn, index, cnt_remote_reset_dispatched, remote);
+    ASSERT_EQUAL(cnt_reset_dispatched, local);
+    ASSERT_EQUAL(cnt_remote_reset_dispatched, remote);
   }
 
   void dump() const {
@@ -719,11 +726,11 @@ struct ConnResult {
 using ConnResults = std::vector<ConnResult>;
 
 struct TestInterceptor : public Interceptor {
-  std::map<Breakpoint, std::set<unsigned>> breakpoints;
+  std::map<Breakpoint, std::map<unsigned, bp_action_t>> breakpoints;
   std::map<Breakpoint, counter_t> breakpoints_counter;
   std::map<ConnectionRef, unsigned> conns;
   ConnResults results;
-  std::optional<seastar::promise<>> signal;
+  std::optional<seastar::abort_source> signal;
 
   TestInterceptor() = default;
   // only used for copy breakpoint configurations
@@ -737,7 +744,17 @@ struct TestInterceptor : public Interceptor {
 
   void make_fault(Breakpoint bp, unsigned round = 1) {
     assert(round >= 1);
-    breakpoints[bp].insert(round);
+    breakpoints[bp][round] = bp_action_t::FAULT;
+  }
+
+  void make_block(Breakpoint bp, unsigned round = 1) {
+    assert(round >= 1);
+    breakpoints[bp][round] = bp_action_t::BLOCK;
+  }
+
+  void make_stall(Breakpoint bp, unsigned round = 1) {
+    assert(round >= 1);
+    breakpoints[bp][round] = bp_action_t::STALL;
   }
 
   ConnResult* find_result(ConnectionRef conn) {
@@ -751,13 +768,17 @@ struct TestInterceptor : public Interceptor {
 
   seastar::future<> wait() {
     assert(!signal);
-    signal = seastar::promise<>();
-    return signal->get_future();
+    signal = seastar::abort_source();
+    return seastar::sleep_abortable(10s, *signal).then([this] {
+      throw std::runtime_error("Timeout (10s) in TestInterceptor::wait()");
+    }).handle_exception_type([] (const seastar::sleep_aborted& e) {
+      // wait done!
+    });
   }
 
   void notify() {
     if (signal) {
-      signal->set_value();
+      signal->request_abort();
       signal = std::nullopt;
     }
   }
@@ -808,39 +829,49 @@ struct TestInterceptor : public Interceptor {
     logger().info("[{}] {} {}", result->index, conn, result->state);
   }
 
-  bool intercept(Connection& conn, Breakpoint bp) override {
+  bp_action_t intercept(Connection& conn, Breakpoint bp) override {
     ++breakpoints_counter[bp].counter;
 
     auto result = find_result(conn.shared_from_this());
     if (result == nullptr) {
-      logger().error("Untracked intercepted connection: {}, at breakpoint {}",
-                     conn, bp);
+      logger().error("Untracked intercepted connection: {}, at breakpoint {}({})",
+                     conn, bp, breakpoints_counter[bp].counter);
       ceph_abort();
     }
-    logger().info("[{}] {} intercepted {}", result->index, conn, bp);
 
     if (bp == custom_bp_t::SOCKET_CONNECTING) {
       ++result->connect_attempts;
-    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, true}) {
+      logger().info("[Test] connect_attempts={}", result->connect_attempts);
+    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::WRITE}) {
       ++result->client_connect_attempts;
-    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, true}) {
+      logger().info("[Test] client_connect_attempts={}", result->client_connect_attempts);
+    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::WRITE}) {
       ++result->client_reconnect_attempts;
+      logger().info("[Test] client_reconnect_attempts={}", result->client_reconnect_attempts);
     } else if (bp == custom_bp_t::SOCKET_ACCEPTED) {
       ++result->accept_attempts;
-    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, false}) {
+      logger().info("[Test] accept_attempts={}", result->accept_attempts);
+    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::READ}) {
       ++result->server_connect_attempts;
-    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, false}) {
+      logger().info("[Test] server_connect_attemps={}", result->server_connect_attempts);
+    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
       ++result->server_reconnect_attempts;
+      logger().info("[Test] server_reconnect_attempts={}", result->server_reconnect_attempts);
     }
 
     auto it_bp = breakpoints.find(bp);
     if (it_bp != breakpoints.end()) {
       auto it_cnt = it_bp->second.find(breakpoints_counter[bp].counter);
       if (it_cnt != it_bp->second.end()) {
-        return true;
+        logger().info("[{}] {} intercepted {}({}) => {}",
+                      result->index, conn, bp,
+                      breakpoints_counter[bp].counter, it_cnt->second);
+        return it_cnt->second;
       }
     }
-    return false;
+    logger().info("[{}] {} intercepted {}({})",
+                  result->index, conn, bp, breakpoints_counter[bp].counter);
+    return bp_action_t::CONTINUE;
   }
 };
 
@@ -916,7 +947,8 @@ class FailoverSuite : public Dispatcher {
     if (pending_receive == 0) {
       interceptor.notify();
     }
-    logger().info("[{}] {} got op, pending {} ops", result->index, *c, pending_receive);
+    logger().info("[Test] got op, left {} ops -- [{}] {}",
+                  pending_receive, result->index, *c);
     return seastar::now();
   }
 
@@ -927,7 +959,7 @@ class FailoverSuite : public Dispatcher {
       ceph_abort();
     }
 
-    if (tracked_conn) {
+    if (tracked_conn && tracked_conn != conn) {
       logger().error("[{}] {} got accepted, but there's already traced_conn [{}] {}",
                      result->index, *conn, tracked_index, *tracked_conn);
       ceph_abort();
@@ -936,8 +968,8 @@ class FailoverSuite : public Dispatcher {
     tracked_index = result->index;
     tracked_conn = conn;
     ++result->cnt_accept_dispatched;
-    logger().info("[{}] {} got accepted and tracked, start to send {} ops",
-                  result->index, *conn, pending_send);
+    logger().info("[Test] got accept (cnt_accept_dispatched={}), track [{}] {}",
+                  result->cnt_accept_dispatched, result->index, *conn);
     return flush_pending_send();
   }
 
@@ -956,7 +988,8 @@ class FailoverSuite : public Dispatcher {
     ceph_assert(result->index == tracked_index);
 
     ++result->cnt_connect_dispatched;
-    logger().info("[{}] {} got connected", result->index, *conn);
+    logger().info("[Test] got connected (cnt_connect_dispatched={}) -- [{}] {}",
+                  result->cnt_connect_dispatched, result->index, *conn);
     return seastar::now();
   }
 
@@ -977,7 +1010,8 @@ class FailoverSuite : public Dispatcher {
     tracked_index = 0;
     tracked_conn = nullptr;
     ++result->cnt_reset_dispatched;
-    logger().info("[{}] {} got reset and untracked", result->index, *conn);
+    logger().info("[Test] got reset (cnt_reset_dispatched={}), untrack [{}] {}",
+                  result->cnt_reset_dispatched, result->index, *conn);
     return seastar::now();
   }
 
@@ -995,8 +1029,9 @@ class FailoverSuite : public Dispatcher {
     }
     ceph_assert(result->index == tracked_index);
 
-    logger().info("[{}] {} got remotely reset", result->index, *conn);
     ++result->cnt_remote_reset_dispatched;
+    logger().info("[Test] got remote reset (cnt_remote_reset_dispatched={}) -- [{}] {}",
+                  result->cnt_remote_reset_dispatched, result->index, *conn);
     return seastar::now();
   }
 
@@ -1023,6 +1058,9 @@ class FailoverSuite : public Dispatcher {
   }
 
   seastar::future<> flush_pending_send() {
+    if (pending_send != 0) {
+      logger().info("[Test] flush sending {} ops", pending_send);
+    }
     ceph_assert(tracked_conn);
     return seastar::do_until(
         [this] { return pending_send == 0; },
@@ -1032,57 +1070,81 @@ class FailoverSuite : public Dispatcher {
     });
   }
 
-  seastar::future<> wait_ready(unsigned num_conns) {
-    assert(num_conns > 0);
-    if (interceptor.results.size() > num_conns) {
-      throw std::runtime_error(fmt::format(
-            "{} connections, more than expected: {}",
-            interceptor.results.size(), num_conns));
-    }
-
+  seastar::future<> wait_ready(unsigned num_ready_conns,
+                               unsigned num_replaced,
+                               bool wait_received) {
+    unsigned pending_conns = 0;
+    unsigned pending_establish = 0;
+    unsigned replaced_conns = 0;
     for (auto& result : interceptor.results) {
       if (result.conn->is_closed()) {
-        continue;
-      }
-
-      if (result.conn->is_connected()) {
+        if (result.state == conn_state_t::replaced) {
+          ++replaced_conns;
+        }
+      } else if (result.conn->is_connected()) {
         if (tracked_conn != result.conn || tracked_index != result.index) {
           throw std::runtime_error(fmt::format(
                 "The connected connection [{}] {} doesn't"
                 " match the tracked connection [{}] {}",
                 result.index, *result.conn, tracked_index, tracked_conn));
         }
-
-        if (pending_send || pending_peer_receive || pending_receive) {
-          logger().info("Waiting for pending_send={} pending_peer_receive={}"
-                        " pending_receive={} from [{}] {}",
-                        pending_send, pending_peer_receive, pending_receive,
-                        result.index, *result.conn);
-          return interceptor.wait().then([this, num_conns] {
-            return wait_ready(num_conns);
-          });
-        } else {
+        if (pending_send == 0 && pending_peer_receive == 0 && pending_receive == 0) {
           result.state = conn_state_t::established;
+        } else {
+          ++pending_establish;
         }
       } else {
-        logger().info("Waiting for connection [{}] {} connected/closed",
-                      result.index, *result.conn);
-        return interceptor.wait().then([this, num_conns] {
-          return wait_ready(num_conns);
-        });
+        ++pending_conns;
       }
     }
 
-    if (interceptor.results.size() < num_conns) {
-      logger().info("Waiting for incoming connection, currently {}, expected {}",
-                    interceptor.results.size(), num_conns);
-      return interceptor.wait().then([this, num_conns] {
-        return wait_ready(num_conns);
-      });
+    bool do_wait = false;
+    if (num_ready_conns > 0) {
+      if (interceptor.results.size() > num_ready_conns) {
+        throw std::runtime_error(fmt::format(
+              "{} connections, more than expected: {}",
+              interceptor.results.size(), num_ready_conns));
+      } else if (interceptor.results.size() < num_ready_conns || pending_conns > 0) {
+        logger().info("[Test] wait_ready(): wait for connections,"
+                      " currently {} out of {}, pending {} ready ...",
+                      interceptor.results.size(), num_ready_conns, pending_conns);
+        do_wait = true;
+      }
+    }
+    if (wait_received &&
+        (pending_send || pending_peer_receive || pending_receive)) {
+      if (pending_conns || pending_establish) {
+        logger().info("[Test] wait_ready(): wait for pending_send={},"
+                      " pending_peer_receive={}, pending_receive={},"
+                      " pending {}/{} ready/establish connections ...",
+                      pending_send, pending_peer_receive, pending_receive,
+                      pending_conns, pending_establish);
+        do_wait = true;
+      }
+    }
+    if (num_replaced > 0) {
+      if (replaced_conns > num_replaced) {
+        throw std::runtime_error(fmt::format(
+            "{} replaced connections, more than expected: {}",
+            replaced_conns, num_replaced));
+      }
+      if (replaced_conns < num_replaced) {
+        logger().info("[Test] wait_ready(): wait for {} replaced connections,"
+                      " currently {} ...",
+                      num_replaced, replaced_conns);
+        do_wait = true;
+      }
     }
 
-    logger().debug("Wait done!");
-    return seastar::now();
+    if (do_wait) {
+      return interceptor.wait(
+      ).then([this, num_ready_conns, num_replaced, wait_received] {
+        return wait_ready(num_ready_conns, num_replaced, wait_received);
+      });
+    } else {
+      logger().info("[Test] wait_ready(): wait done!");
+      return seastar::now();
+    }
   }
 
  // called by FailoverTest
@@ -1105,7 +1167,7 @@ class FailoverSuite : public Dispatcher {
   void notify_peer_reply() {
     ceph_assert(pending_peer_receive > 0);
     --pending_peer_receive;
-    logger().info("TestPeer received op, pending {} peer receive ops",
+    logger().info("[Test] TestPeer said got op, left {} ops",
                   pending_peer_receive);
     if (pending_peer_receive == 0) {
       interceptor.notify();
@@ -1119,12 +1181,18 @@ class FailoverSuite : public Dispatcher {
       if (it == interceptor.breakpoints_counter.end()) {
         throw std::runtime_error(fmt::format("{} was missed", kv.first));
       }
-      auto expected = *std::max_element(kv.second.begin(), kv.second.end());
+      auto expected = kv.second.rbegin()->first;
       if (expected > it->second.counter) {
         throw std::runtime_error(fmt::format(
               "{} only triggered {} times, not the expected {}",
               kv.first, it->second.counter, expected));
       }
+    }
+  }
+
+  void dump_results() const {
+    for (auto& result : interceptor.results) {
+      result.dump();
     }
   }
 
@@ -1150,6 +1218,7 @@ class FailoverSuite : public Dispatcher {
  // called by tests
  public:
   seastar::future<> connect_peer() {
+    logger().info("[Test] connect_peer({})", test_peer_addr);
     ceph_assert(!tracked_conn);
     return test_msgr.connect(test_peer_addr, entity_name_t::TYPE_OSD
     ).then([this] (auto xconn) {
@@ -1167,17 +1236,40 @@ class FailoverSuite : public Dispatcher {
 
   seastar::future<> send_peer() {
     if (tracked_conn) {
+      logger().info("[Test] send_peer()");
       ceph_assert(!pending_send);
       return send_op();
     } else {
       ++pending_send;
+      logger().info("[Test] send_peer() (pending {})", pending_send);
       return seastar::now();
     }
   }
 
+  seastar::future<> wait_blocked() {
+    logger().info("[Test] wait_blocked() ...");
+    return interceptor.blocker.wait_blocked();
+  }
+
+  void unblock() {
+    logger().info("[Test] unblock()");
+    return interceptor.blocker.unblock();
+  }
+
+  seastar::future<> wait_replaced(unsigned count) {
+    logger().info("[Test] wait_replaced({}) ...", count);
+    return wait_ready(0, count, false);
+  }
+
+  seastar::future<> wait_established() {
+    logger().info("[Test] wait_established() ...");
+    return wait_ready(0, 0, true);
+  }
+
   seastar::future<std::reference_wrapper<ConnResults>>
-  wait_results(unsigned num_conns) {
-    return wait_ready(num_conns).then([this] {
+  wait_results(unsigned count) {
+    logger().info("[Test] wait_result({}) ...", count);
+    return wait_ready(count, 0, true).then([this] {
       return std::reference_wrapper<ConnResults>(interceptor.results);
     });
   }
@@ -1326,8 +1418,9 @@ class FailoverTest : public Dispatcher {
       }).then([this] {
         test_suite->post_check();
         logger().info("\n[SUCCESS]");
-      }).handle_exception([] (auto eptr) {
+      }).handle_exception([this] (auto eptr) {
         logger().info("\n[FAIL: {}]", eptr);
+        test_suite->dump_results();
         throw;
       }).finally([this] {
         return stop_peer();
@@ -1340,6 +1433,7 @@ class FailoverTest : public Dispatcher {
   }
 
   seastar::future<> peer_connect_me() {
+    logger().info("[Test] peer_connect_me({})", test_addr);
     return prepare_cmd(cmd_t::suite_connect_me,
         [this] (auto m) {
       m->cmd.emplace_back(fmt::format("{}", test_addr));
@@ -1347,6 +1441,7 @@ class FailoverTest : public Dispatcher {
   }
 
   seastar::future<> peer_send_me() {
+    logger().info("[Test] peer_send_me()");
     ceph_assert(test_suite);
     test_suite->needs_receive();
     return prepare_cmd(cmd_t::suite_send_me);
@@ -1370,13 +1465,14 @@ class FailoverSuitePeer : public Dispatcher {
   unsigned pending_send = 0;
 
   seastar::future<> ms_dispatch(Connection* c, MessageRef m) override {
+    logger().info("[TestPeer] got op from Test");
     ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
     ceph_assert(tracked_conn == c->shared_from_this());
     return op_callback();
   }
 
   seastar::future<> ms_handle_accept(ConnectionRef conn) override {
-    ceph_assert(!tracked_conn);
+    ceph_assert(!tracked_conn || tracked_conn == conn);
     tracked_conn = conn;
     return flush_pending_send();
   }
@@ -1408,6 +1504,9 @@ class FailoverSuitePeer : public Dispatcher {
   }
 
   seastar::future<> flush_pending_send() {
+    if (pending_send != 0) {
+      logger().info("[TestPeer] flush sending {} ops", pending_send);
+    }
     ceph_assert(tracked_conn);
     return seastar::do_until(
         [this] { return pending_send == 0; },
@@ -1425,7 +1524,8 @@ class FailoverSuitePeer : public Dispatcher {
     return peer_msgr.shutdown();
   }
 
-  seastar::future<> connect(entity_addr_t addr) {
+  seastar::future<> connect_peer(entity_addr_t addr) {
+    logger().info("[TestPeer] connect_peer({})", addr);
     ceph_assert(!tracked_conn);
     return peer_msgr.connect(addr, entity_name_t::TYPE_OSD
     ).then([this] (auto xconn) {
@@ -1437,9 +1537,11 @@ class FailoverSuitePeer : public Dispatcher {
 
   seastar::future<> send_peer() {
     if (tracked_conn) {
+      logger().info("[TestPeer] send_peer()");
       return send_op();
     } else {
       ++pending_send;
+      logger().info("[TestPeer] send_peer() (pending {})", pending_send);
       return seastar::now();
     }
   }
@@ -1473,7 +1575,8 @@ class FailoverTestPeer : public Dispatcher {
       auto cmd = static_cast<cmd_t>(m_cmd->cmd[0][0]);
       if (cmd == cmd_t::shutdown) {
         logger().info("CmdSrv shutdown...");
-        cmd_msgr.shutdown();
+        // forwarded to FailoverTestPeer::wait()
+        (void) cmd_msgr.shutdown();
         return seastar::now();
       }
       return handle_cmd(cmd, m_cmd).then([c] {
@@ -1522,7 +1625,7 @@ class FailoverTestPeer : public Dispatcher {
       ceph_assert(test_suite);
       entity_addr_t test_addr = entity_addr_t();
       test_addr.parse(m_cmd->cmd[1].c_str(), nullptr);
-      return test_suite->connect(test_addr);
+      return test_suite->connect_peer(test_addr);
      }
      case cmd_t::suite_send_me:
       ceph_assert(test_suite);
@@ -1577,12 +1680,12 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
       {custom_bp_t::BANNER_READ},
       {custom_bp_t::BANNER_PAYLOAD_READ},
       {custom_bp_t::SOCKET_CONNECTING},
-      {Tag::HELLO, true},
-      {Tag::HELLO, false},
-      {Tag::AUTH_REQUEST, true},
-      {Tag::AUTH_DONE, false},
-      {Tag::AUTH_SIGNATURE, true},
-      {Tag::AUTH_SIGNATURE, false},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::WRITE},
+      {Tag::AUTH_DONE, bp_type_t::READ},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1593,8 +1696,8 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
           policy_t::lossy_client,
           policy_t::stateless_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
+        return seastar::futurize_apply([&suite] {
+          return suite.send_peer();
         }).then([&suite] {
           return suite.connect_peer();
         }).then([&suite] {
@@ -1613,8 +1716,8 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossy_connect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, true},
-      {Tag::SERVER_IDENT, false},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+      {Tag::SERVER_IDENT, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1645,8 +1748,8 @@ test_v2_lossy_connect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossy_connected_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1680,12 +1783,12 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
       {custom_bp_t::BANNER_WRITE},
       {custom_bp_t::BANNER_READ},
       {custom_bp_t::BANNER_PAYLOAD_READ},
-      {Tag::HELLO, true},
-      {Tag::HELLO, false},
-      {Tag::AUTH_REQUEST, false},
-      {Tag::AUTH_DONE, true},
-      {Tag::AUTH_SIGNATURE, true},
-      {Tag::AUTH_SIGNATURE, false},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::READ},
+      {Tag::AUTH_DONE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1697,7 +1800,7 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
           policy_t::lossy_client,
           [&test] (FailoverSuite& suite) {
         return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
+          return test.peer_send_me();
         }).then([&test] {
           return test.peer_connect_me();
         }).then([&suite] {
@@ -1719,36 +1822,60 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_lossy_accept_fault(FailoverTest& test) {
-  return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, false},
-      {Tag::SERVER_IDENT, true},
-  }, [&test] (auto& failure_cases) {
-    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
-      TestInterceptor interceptor;
-      interceptor.make_fault(bp);
-      return test.run_suite(
-          fmt::format("test_v2_lossy_accept_fault -- {}", bp),
-          interceptor,
-          policy_t::stateless_server,
-          policy_t::lossy_client,
-          [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
-        }).then([&test] {
-          return test.peer_connect_me();
-        }).then([&suite] {
-          return suite.wait_results(2);
-        }).then([] (ConnResults& results) {
-          results[0].assert_state_at(conn_state_t::closed);
-          results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 0);
-          results[0].assert_reset(0, 0);
-          results[1].assert_state_at(conn_state_t::established);
-          results[1].assert_connect(0, 0, 0, 0);
-          results[1].assert_accept(1, 1, 0, 1);
-          results[1].assert_reset(0, 0);
-        });
-      });
+  auto bp = Breakpoint{Tag::CLIENT_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossy_accept_fault -- {}", bp),
+      interceptor,
+      policy_t::stateless_server,
+      policy_t::lossy_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_lossy_establishing_fault(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossy_establishing_fault -- {}", bp),
+      interceptor,
+      policy_t::stateless_server,
+      policy_t::lossy_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(1, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
     });
   });
 }
@@ -1756,8 +1883,8 @@ test_v2_lossy_accept_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossy_accepted_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1788,8 +1915,8 @@ test_v2_lossy_accepted_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_connect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, true},
-      {Tag::SERVER_IDENT, false},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+      {Tag::SERVER_IDENT, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1820,8 +1947,8 @@ test_v2_lossless_connect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_connected_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1852,8 +1979,10 @@ test_v2_lossless_connected_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_reconnect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<std::pair<Breakpoint, Breakpoint>>{
-      {{Tag::MESSAGE, true}, {Tag::SESSION_RECONNECT, true}},
-      {{Tag::MESSAGE, true}, {Tag::SESSION_RECONNECT_OK, false}},
+      {{Tag::MESSAGE, bp_type_t::WRITE},
+       {Tag::SESSION_RECONNECT, bp_type_t::WRITE}},
+      {{Tag::MESSAGE, bp_type_t::WRITE},
+       {Tag::SESSION_RECONNECT_OK, bp_type_t::READ}},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp_pair) {
       TestInterceptor interceptor;
@@ -1885,36 +2014,60 @@ test_v2_lossless_reconnect_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_lossless_accept_fault(FailoverTest& test) {
-  return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, false},
-      {Tag::SERVER_IDENT, true},
-  }, [&test] (auto& failure_cases) {
-    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
-      TestInterceptor interceptor;
-      interceptor.make_fault(bp);
-      return test.run_suite(
-          fmt::format("test_v2_lossless_accept_fault -- {}", bp),
-          interceptor,
-          policy_t::stateful_server,
-          policy_t::lossless_client,
-          [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
-        }).then([&test] {
-          return test.peer_connect_me();
-        }).then([&suite] {
-          return suite.wait_results(2);
-        }).then([] (ConnResults& results) {
-          results[0].assert_state_at(conn_state_t::closed);
-          results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 0);
-          results[0].assert_reset(0, 0);
-          results[1].assert_state_at(conn_state_t::established);
-          results[1].assert_connect(0, 0, 0, 0);
-          results[1].assert_accept(1, 1, 0, 1);
-          results[1].assert_reset(0, 0);
-        });
-      });
+  auto bp = Breakpoint{Tag::CLIENT_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossless_accept_fault -- {}", bp),
+      interceptor,
+      policy_t::stateful_server,
+      policy_t::lossless_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.send_bidirectional();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_lossless_establishing_fault(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossless_establishing_fault -- {}", bp),
+      interceptor,
+      policy_t::stateful_server,
+      policy_t::lossless_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.send_bidirectional();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
     });
   });
 }
@@ -1922,8 +2075,8 @@ test_v2_lossless_accept_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_accepted_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1943,11 +2096,11 @@ test_v2_lossless_accepted_fault(FailoverTest& test) {
         }).then([] (ConnResults& results) {
           results[0].assert_state_at(conn_state_t::established);
           results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 1);
+          results[0].assert_accept(1, 1, 0, 2);
           results[0].assert_reset(0, 0);
           results[1].assert_state_at(conn_state_t::replaced);
           results[1].assert_connect(0, 0, 0, 0);
-          results[1].assert_accept(1, 1, 0);
+          results[1].assert_accept(1, 0);
           results[1].assert_reset(0, 0);
         });
       });
@@ -1958,8 +2111,10 @@ test_v2_lossless_accepted_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_reaccept_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<std::pair<Breakpoint, Breakpoint>>{
-      {{Tag::MESSAGE, false}, {Tag::SESSION_RECONNECT, false}},
-      {{Tag::MESSAGE, false}, {Tag::SESSION_RECONNECT_OK, true}},
+      {{Tag::MESSAGE, bp_type_t::READ},
+       {Tag::SESSION_RECONNECT, bp_type_t::READ}},
+      {{Tag::MESSAGE, bp_type_t::READ},
+       {Tag::SESSION_RECONNECT_OK, bp_type_t::WRITE}},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp_pair) {
       TestInterceptor interceptor;
@@ -1981,9 +2136,13 @@ test_v2_lossless_reaccept_fault(FailoverTest& test) {
         }).then([bp] (ConnResults& results) {
           results[0].assert_state_at(conn_state_t::established);
           results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 1);
+          if (bp == Breakpoint{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
+            results[0].assert_accept(1, 1, 0, 2);
+          } else {
+            results[0].assert_accept(1, 1, 0, 3);
+          }
           results[0].assert_reset(0, 0);
-          if (bp == Breakpoint{Tag::SESSION_RECONNECT, false}) {
+          if (bp == Breakpoint{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
             results[1].assert_state_at(conn_state_t::closed);
           } else {
             results[1].assert_state_at(conn_state_t::replaced);
@@ -2004,8 +2163,8 @@ test_v2_lossless_reaccept_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_peer_connect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, true},
-      {Tag::SERVER_IDENT, false},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+      {Tag::SERVER_IDENT, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -2035,43 +2194,67 @@ test_v2_peer_connect_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_peer_accept_fault(FailoverTest& test) {
-  return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, false},
-      {Tag::SERVER_IDENT, true},
-  }, [&test] (auto& failure_cases) {
-    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
-      TestInterceptor interceptor;
-      interceptor.make_fault(bp);
-      return test.run_suite(
-          fmt::format("test_v2_peer_accept_fault -- {}", bp),
-          interceptor,
-          policy_t::lossless_peer,
-          policy_t::lossless_peer,
-          [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.peer_send_me();
-        }).then([&test] {
-          return test.peer_connect_me();
-        }).then([&suite] {
-          return suite.wait_results(2);
-        }).then([] (ConnResults& results) {
-          results[0].assert_state_at(conn_state_t::closed);
-          results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 0);
-          results[0].assert_reset(0, 0);
-          results[1].assert_state_at(conn_state_t::established);
-          results[1].assert_connect(0, 0, 0, 0);
-          results[1].assert_accept(1, 1, 0, 1);
-          results[1].assert_reset(0, 0);
-        });
-      });
+  auto bp = Breakpoint{Tag::CLIENT_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_peer_accept_fault -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_peer_establishing_fault(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_peer_establishing_fault -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
     });
   });
 }
 
 seastar::future<>
 test_v2_peer_connected_fault_reconnect(FailoverTest& test) {
-  auto bp = Breakpoint{Tag::MESSAGE, true};
+  auto bp = Breakpoint{Tag::MESSAGE, bp_type_t::WRITE};
   TestInterceptor interceptor;
   interceptor.make_fault(bp);
   return test.run_suite(
@@ -2097,7 +2280,7 @@ test_v2_peer_connected_fault_reconnect(FailoverTest& test) {
 
 seastar::future<>
 test_v2_peer_connected_fault_reaccept(FailoverTest& test) {
-  auto bp = Breakpoint{Tag::MESSAGE, false};
+  auto bp = Breakpoint{Tag::MESSAGE, bp_type_t::READ};
   TestInterceptor interceptor;
   interceptor.make_fault(bp);
   return test.run_suite(
@@ -2115,7 +2298,385 @@ test_v2_peer_connected_fault_reaccept(FailoverTest& test) {
     }).then([] (ConnResults& results) {
       results[0].assert_state_at(conn_state_t::established);
       results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 1);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 0, 1, 0);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<bool>
+peer_wins(FailoverTest& test) {
+  return seastar::do_with(bool(), [&test] (auto& ret) {
+    return test.run_suite("peer_wins",
+                          TestInterceptor(),
+                          policy_t::lossy_client,
+                          policy_t::stateless_server,
+                          [&test, &ret] (FailoverSuite& suite) {
+      return suite.connect_peer().then([&suite] {
+        return suite.wait_results(1);
+      }).then([&ret] (ConnResults& results) {
+        results[0].assert_state_at(conn_state_t::established);
+        ret = results[0].conn->peer_wins();
+        logger().info("peer_wins: {}", ret);
+      });
+    }).then([&ret] {
+      return ret;
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_reconnect_win(FailoverTest& test) {
+  return seastar::do_with(std::vector<std::pair<unsigned, Breakpoint>>{
+      {2, {custom_bp_t::BANNER_WRITE}},
+      {2, {custom_bp_t::BANNER_READ}},
+      {2, {custom_bp_t::BANNER_PAYLOAD_READ}},
+      {2, {Tag::HELLO, bp_type_t::WRITE}},
+      {2, {Tag::HELLO, bp_type_t::READ}},
+      {2, {Tag::AUTH_REQUEST, bp_type_t::READ}},
+      {2, {Tag::AUTH_DONE, bp_type_t::WRITE}},
+      {2, {Tag::AUTH_SIGNATURE, bp_type_t::WRITE}},
+      {2, {Tag::AUTH_SIGNATURE, bp_type_t::READ}},
+      {1, {Tag::SESSION_RECONNECT, bp_type_t::READ}},
+  }, [&test] (auto& failure_cases) {
+    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+      TestInterceptor interceptor;
+      interceptor.make_fault({Tag::MESSAGE, bp_type_t::READ});
+      interceptor.make_block(bp.second, bp.first);
+      return test.run_suite(
+          fmt::format("test_v2_racing_reconnect_win -- {}({})",
+                      bp.second, bp.first),
+          interceptor,
+          policy_t::lossless_peer,
+          policy_t::lossless_peer,
+          [&test] (FailoverSuite& suite) {
+        return seastar::futurize_apply([&test] {
+          return test.peer_send_me();
+        }).then([&test] {
+          return test.peer_connect_me();
+        }).then([&suite] {
+          return suite.wait_blocked();
+        }).then([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&suite] {
+          suite.unblock();
+          return suite.wait_results(2);
+        }).then([] (ConnResults& results) {
+          results[0].assert_state_at(conn_state_t::established);
+          results[0].assert_connect(1, 0, 1, 1);
+          results[0].assert_accept(1, 1, 0, 1);
+          results[0].assert_reset(0, 0);
+          results[1].assert_state_at(conn_state_t::closed);
+          results[1].assert_connect(0, 0, 0, 0);
+          results[1].assert_accept(1, 0);
+          results[1].assert_reset(0, 0);
+        });
+      });
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_reconnect_lose(FailoverTest& test) {
+  return seastar::do_with(std::vector<std::pair<unsigned, Breakpoint>>{
+      {2, {custom_bp_t::BANNER_WRITE}},
+      {2, {custom_bp_t::BANNER_READ}},
+      {2, {custom_bp_t::BANNER_PAYLOAD_READ}},
+      {2, {Tag::HELLO, bp_type_t::WRITE}},
+      {2, {Tag::HELLO, bp_type_t::READ}},
+      {2, {Tag::AUTH_REQUEST, bp_type_t::WRITE}},
+      {2, {Tag::AUTH_DONE, bp_type_t::READ}},
+      {2, {Tag::AUTH_SIGNATURE, bp_type_t::WRITE}},
+      {2, {Tag::AUTH_SIGNATURE, bp_type_t::READ}},
+      {1, {Tag::SESSION_RECONNECT, bp_type_t::WRITE}},
+  }, [&test] (auto& failure_cases) {
+    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+      TestInterceptor interceptor;
+      interceptor.make_fault({Tag::MESSAGE, bp_type_t::WRITE});
+      interceptor.make_block(bp.second, bp.first);
+      return test.run_suite(
+          fmt::format("test_v2_racing_reconnect_lose -- {}({})",
+                      bp.second, bp.first),
+          interceptor,
+          policy_t::lossless_peer,
+          policy_t::lossless_peer,
+          [&test] (FailoverSuite& suite) {
+        return seastar::futurize_apply([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.connect_peer();
+        }).then([&suite] {
+          return suite.wait_blocked();
+        }).then([&test] {
+          return test.peer_send_me();
+        }).then([&suite] {
+          return suite.wait_replaced(1);
+        }).then([&suite] {
+          suite.unblock();
+          return suite.wait_results(2);
+        }).then([] (ConnResults& results) {
+          results[0].assert_state_at(conn_state_t::established);
+          results[0].assert_connect(2, 1);
+          results[0].assert_accept(0, 0, 0, 1);
+          results[0].assert_reset(0, 0);
+          results[1].assert_state_at(conn_state_t::replaced);
+          results[1].assert_connect(0, 0, 0, 0);
+          results[1].assert_accept(1, 0, 1, 0);
+          results[1].assert_reset(0, 0);
+        });
+      });
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_connect_win(FailoverTest& test) {
+  return seastar::do_with(std::vector<Breakpoint>{
+      {custom_bp_t::BANNER_WRITE},
+      {custom_bp_t::BANNER_READ},
+      {custom_bp_t::BANNER_PAYLOAD_READ},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::READ},
+      {Tag::AUTH_DONE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
+      {Tag::CLIENT_IDENT, bp_type_t::READ},
+  }, [&test] (auto& failure_cases) {
+    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+      TestInterceptor interceptor;
+      interceptor.make_block(bp);
+      return test.run_suite(
+          fmt::format("test_v2_racing_connect_win -- {}", bp),
+          interceptor,
+          policy_t::lossless_peer,
+          policy_t::lossless_peer,
+          [&test] (FailoverSuite& suite) {
+        return seastar::futurize_apply([&test] {
+          return test.peer_send_me();
+        }).then([&test] {
+          return test.peer_connect_me();
+        }).then([&suite] {
+          return suite.wait_blocked();
+        }).then([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.connect_peer();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&suite] {
+          suite.unblock();
+          return suite.wait_results(2);
+        }).then([] (ConnResults& results) {
+          results[0].assert_state_at(conn_state_t::closed);
+          results[0].assert_connect(0, 0, 0, 0);
+          results[0].assert_accept(1, 0);
+          results[0].assert_reset(0, 0);
+          results[1].assert_state_at(conn_state_t::established);
+          results[1].assert_connect(1, 1, 0, 1);
+          results[1].assert_accept(0, 0, 0, 0);
+          results[1].assert_reset(0, 0);
+        });
+      });
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_connect_lose(FailoverTest& test) {
+  return seastar::do_with(std::vector<Breakpoint>{
+      {custom_bp_t::BANNER_WRITE},
+      {custom_bp_t::BANNER_READ},
+      {custom_bp_t::BANNER_PAYLOAD_READ},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::WRITE},
+      {Tag::AUTH_DONE, bp_type_t::READ},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+  }, [&test] (auto& failure_cases) {
+    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+      TestInterceptor interceptor;
+      interceptor.make_block(bp);
+      return test.run_suite(
+          fmt::format("test_v2_racing_connect_lose -- {}", bp),
+          interceptor,
+          policy_t::lossless_peer,
+          policy_t::lossless_peer,
+          [&test] (FailoverSuite& suite) {
+        return seastar::futurize_apply([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.connect_peer();
+        }).then([&suite] {
+          return suite.wait_blocked();
+        }).then([&test] {
+          return test.peer_send_me();
+        }).then([&test] {
+          return test.peer_connect_me();
+        }).then([&suite] {
+          return suite.wait_replaced(1);
+        }).then([&suite] {
+          suite.unblock();
+          return suite.wait_results(2);
+        }).then([] (ConnResults& results) {
+          results[0].assert_state_at(conn_state_t::established);
+          results[0].assert_connect(1, 0);
+          results[0].assert_accept(0, 0, 0, 1);
+          results[0].assert_reset(0, 0);
+          results[1].assert_state_at(conn_state_t::replaced);
+          results[1].assert_connect(0, 0, 0, 0);
+          results[1].assert_accept(1, 1, 0, 0);
+          results[1].assert_reset(0, 0);
+        });
+      });
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_connect_reconnect_lose(FailoverTest& test) {
+  TestInterceptor interceptor;
+  interceptor.make_fault({Tag::SERVER_IDENT, bp_type_t::READ});
+  interceptor.make_block({Tag::CLIENT_IDENT, bp_type_t::WRITE}, 2);
+  return test.run_suite("test_v2_racing_connect_reconnect_lose",
+                        interceptor,
+                        policy_t::lossless_peer,
+                        policy_t::lossless_peer,
+                        [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_replaced(1);
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(2, 2, 0, 0);
+      results[0].assert_accept(0, 0, 0, 1);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 1, 0);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_connect_reconnect_win(FailoverTest& test) {
+  TestInterceptor interceptor;
+  interceptor.make_fault({Tag::SERVER_IDENT, bp_type_t::READ});
+  interceptor.make_block({Tag::SESSION_RECONNECT, bp_type_t::READ});
+  return test.run_suite("test_v2_racing_connect_reconnect_win",
+                        interceptor,
+                        policy_t::lossless_peer,
+                        policy_t::lossless_peer,
+                        [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_established();
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(2, 2, 0, 1);
       results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 0, 1, 0);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_stale_connect(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_stall(bp);
+  return test.run_suite(
+      fmt::format("test_v2_stale_connect -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_replaced(1);
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(1, 1, 0, 0);
+      results[0].assert_accept(0, 0, 0, 1);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 1, 0);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_stale_reconnect(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SESSION_RECONNECT_OK, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_fault({Tag::MESSAGE, bp_type_t::WRITE});
+  interceptor.make_stall(bp);
+  return test.run_suite(
+      fmt::format("test_v2_stale_reconnect -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_replaced(1);
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(2, 1, 1, 1);
+      results[0].assert_accept(0, 0, 0, 1);
       results[0].assert_reset(0, 0);
       results[1].assert_state_at(conn_state_t::replaced);
       results[1].assert_connect(0, 0, 0, 0);
@@ -2126,15 +2687,127 @@ test_v2_peer_connected_fault_reaccept(FailoverTest& test) {
 }
 
 seastar::future<>
-test_v2_failover(entity_addr_t test_addr = entity_addr_t(),
+test_v2_stale_accept(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::CLIENT_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_stall(bp);
+  return test.run_suite(
+      fmt::format("test_v2_stale_accept -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_established();
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_stale_establishing(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_stall(bp);
+  return test.run_suite(
+      fmt::format("test_v2_stale_establishing -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_replaced(1);
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 0);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_stale_reaccept(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SESSION_RECONNECT_OK, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_fault({Tag::MESSAGE, bp_type_t::READ});
+  interceptor.make_stall(bp);
+  return test.run_suite(
+      fmt::format("test_v2_stale_reaccept -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&suite] {
+      logger().info("[Test] block the broken REPLACING for 210ms...");
+      return seastar::sleep(210ms);
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 3);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 0, 1, 0);
+      results[1].assert_reset(0, 0);
+      results[2].assert_state_at(conn_state_t::replaced);
+      results[2].assert_connect(0, 0, 0, 0);
+      results[2].assert_accept(1, 0);
+      results[2].assert_reset(0, 0);
+      ceph_assert(results[2].server_reconnect_attempts >= 1);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
                  entity_addr_t cmd_peer_addr = entity_addr_t()) {
   if (test_addr == entity_addr_t() || cmd_peer_addr == entity_addr_t()) {
     // initiate crimson test peer locally
-    logger().info("test_v2_failover: start local TestPeer...");
+    logger().info("test_v2_protocol: start local TestPeer...");
     return FailoverTestPeer::create().then([] (auto peer) {
       entity_addr_t test_addr_;
       test_addr_.parse("v2:127.0.0.1:9010");
-      return test_v2_failover(test_addr_, peer->get_addr()
+      return test_v2_protocol(test_addr_, peer->get_addr()
       ).finally([peer = std::move(peer)] () mutable {
         return peer->wait().then([peer = std::move(peer)] {});
       });
@@ -2157,6 +2830,8 @@ test_v2_failover(entity_addr_t test_addr = entity_addr_t(),
     }).then([test] {
       return test_v2_lossy_accept_fault(*test);
     }).then([test] {
+      return test_v2_lossy_establishing_fault(*test);
+    }).then([test] {
       return test_v2_lossy_accepted_fault(*test);
     }).then([test] {
       return test_v2_lossless_connect_fault(*test);
@@ -2167,6 +2842,8 @@ test_v2_failover(entity_addr_t test_addr = entity_addr_t(),
     }).then([test] {
       return test_v2_lossless_accept_fault(*test);
     }).then([test] {
+      return test_v2_lossless_establishing_fault(*test);
+    }).then([test] {
       return test_v2_lossless_accepted_fault(*test);
     }).then([test] {
       return test_v2_lossless_reaccept_fault(*test);
@@ -2175,9 +2852,41 @@ test_v2_failover(entity_addr_t test_addr = entity_addr_t(),
     }).then([test] {
       return test_v2_peer_accept_fault(*test);
     }).then([test] {
+      return test_v2_peer_establishing_fault(*test);
+    }).then([test] {
       return test_v2_peer_connected_fault_reconnect(*test);
     }).then([test] {
       return test_v2_peer_connected_fault_reaccept(*test);
+    }).then([test] {
+      return peer_wins(*test);
+    }).then([test] (bool peer_wins) {
+      if (peer_wins) {
+        return seastar::futurize_apply([test] {
+          return test_v2_racing_connect_lose(*test);
+        }).then([test] {
+          return test_v2_racing_reconnect_lose(*test);
+        });
+      } else {
+        return seastar::futurize_apply([test] {
+          return test_v2_racing_connect_win(*test);
+        }).then([test] {
+          return test_v2_racing_reconnect_win(*test);
+        });
+      }
+    }).then([test] {
+      return test_v2_racing_connect_reconnect_win(*test);
+    }).then([test] {
+      return test_v2_racing_connect_reconnect_lose(*test);
+    }).then([test] {
+      return test_v2_stale_connect(*test);
+    }).then([test] {
+      return test_v2_stale_reconnect(*test);
+    }).then([test] {
+      return test_v2_stale_accept(*test);
+    }).then([test] {
+      return test_v2_stale_establishing(*test);
+    }).then([test] {
+      return test_v2_stale_reaccept(*test);
     }).finally([test] {
       return test->shutdown().then([test] {});
     });
@@ -2216,7 +2925,7 @@ int main(int argc, char** argv)
     }).then([] {
       return test_preemptive_shutdown(true);
     }).then([] {
-      return test_v2_failover();
+      return test_v2_protocol();
     }).then([] {
       std::cout << "All tests succeeded" << std::endl;
     }).handle_exception([] (auto eptr) {

@@ -43,6 +43,7 @@ class ProtocolV2 final : public Protocol {
     NONE = 0,
     ACCEPTING,
     SERVER_WAIT,
+    ESTABLISHING,
     CONNECTING,
     READY,
     STANDBY,
@@ -56,6 +57,7 @@ class ProtocolV2 final : public Protocol {
     const char *const statenames[] = {"NONE",
                                       "ACCEPTING",
                                       "SERVER_WAIT",
+                                      "ESTABLISHING",
                                       "CONNECTING",
                                       "READY",
                                       "STANDBY",
@@ -121,7 +123,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> write_frame(F &frame, bool flush=true);
 
  private:
-  void fault(bool backoff);
+  void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
   void dispatch_reset();
   void reset_session(bool full);
   seastar::future<entity_type_t, entity_addr_t> banner_exchange();
@@ -171,8 +173,11 @@ class ProtocolV2 final : public Protocol {
   // CONNECTING/ACCEPTING
   seastar::future<> finish_auth();
 
-  // ACCEPTING/REPLACING (server)
-  seastar::future<next_step_t> send_server_ident();
+  // ESTABLISHING
+  void execute_establishing();
+
+  // ESTABLISHING/REPLACING (server)
+  seastar::future<> send_server_ident();
 
   // REPLACING (server)
   void trigger_replacing(bool reconnect,

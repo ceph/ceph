@@ -601,7 +601,8 @@ static seastar::future<> run(
         ceph_assert(seastar::engine().cpu_id() == sid);
         ceph_assert(sent_count == 0);
         conn_stats.start_time = mono_clock::now();
-        seastar::do_until(
+        // forwarded to stopped_send_promise
+        (void) seastar::do_until(
           [this] { return stop_send; },
           [this, conn] {
             sent_count += 1;
