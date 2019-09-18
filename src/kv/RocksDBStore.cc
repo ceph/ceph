@@ -1135,8 +1135,9 @@ RocksDBStore::~RocksDBStore()
 
   // Ensure db is destroyed before dependent db_cache and filterpolicy
   for (auto& p : column_families) {
-    db->DestroyColumnFamilyHandle(
-      static_cast<rocksdb::ColumnFamilyHandle*>(p.second.handle.priv));
+    if (p.second.handle)
+      db->DestroyColumnFamilyHandle(
+        static_cast<rocksdb::ColumnFamilyHandle*>(p.second.handle.priv));
   }
   default_cf = nullptr;
   delete db;
