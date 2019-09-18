@@ -438,11 +438,79 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
   }
 }
 
+static seastar::future<ceph::bufferlist> do_pgls_common(
+  const hobject_t& pg_start,
+  const hobject_t& pg_end,
+  const PGBackend& backend,
+  const hobject_t& lower_bound,
+  const std::string& nspace,
+  const uint64_t limit)
+{
+  if (!(lower_bound.is_min() ||
+        lower_bound.is_max() ||
+        (lower_bound >= pg_start && lower_bound < pg_end))) {
+    // this should only happen with a buggy client.
+    throw std::invalid_argument("outside of PG bounds");
+  }
+
+  return backend.list_objects(lower_bound, limit).then(
+    [pg_end, nspace, &backend](auto objects, auto next) {
+      pg_ls_response_t response;
+      response.handle = next.is_max() ? pg_end : next;
+      auto in_my_namespace = [&nspace](const hobject_t& obj) {
+        return obj.get_namespace() == nspace;
+      };
+      auto to_entry = [] (const hobject_t& hobj) {
+	return make_pair(hobj.oid, hobj.get_key());
+      };
+      boost::push_back(response.entries,
+		       objects |
+		       boost::adaptors::filtered(in_my_namespace) |
+		       boost::adaptors::transformed(to_entry));
+      ceph::bufferlist out;
+      encode(response, out);
+      logger().debug("{}: response.entries.size()=",
+                     __func__, response.entries.size());
+      return seastar::make_ready_future<ceph::bufferlist>(std::move(out));
+  });
+}
+
+static seastar::future<> do_pgls(
+   const PG& pg,
+   const std::string& nspace,
+   OSDOp& osd_op)
+{
+  hobject_t lower_bound;
+  auto bp = osd_op.indata.cbegin();
+  try {
+    lower_bound.decode(bp);
+  } catch (const buffer::error&) {
+    throw std::invalid_argument{"unable to decode PGLS handle"};
+  }
+  const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
+  const auto pg_end =
+    pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+  return do_pgls_common(pg_start,
+			pg_end,
+			pg.get_backend(),
+			lower_bound,
+			nspace,
+			osd_op.op.pgls.count)
+    .then([&osd_op](bufferlist bl) {
+      osd_op.outdata = std::move(bl);
+      return seastar::now();
+    });
+}
+
 seastar::future<>
 OpsExecuter::execute_pg_op(OSDOp& osd_op)
 {
   logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
+  case CEPH_OSD_OP_PGLS:
+    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
+      return do_pgls(pg, nspace, osd_op);
+    });
   case CEPH_OSD_OP_PGNLS:
     return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
       return do_pgnls(pg, nspace, osd_op);
