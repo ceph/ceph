@@ -9,12 +9,31 @@
           <cd-alert-panel type="warning">{{ device.value.userMessage }}</cd-alert-panel>
         </ng-container>
         <ng-template #noError>
+          <div class="btn-group mb-3" role="group" aria-label="Report Actions">
+            <button class="btn btn-primary"
+                    title="Copy to Clipboard"
+                    i18n-title
+                    cdToClipboard
+                    [data]="device.value.report">
+              <i class="fa fa-files-o" aria-hidden="true"></i>
+            </button>
+            <button class="btn btn-primary"
+                    title="Download"
+                    i18n-title
+                    [cdTextToDownload]="device.value.report"
+                    [filename]="device.value.reportFilename">
+              <i class="fa fa-download" aria-hidden="true"></i>
+            </button>
+          </div>
+
           <ng-container *ngIf="device.value.smart.data.self_test.status.passed; else selfTestFailed">
             <cd-alert-panel
               [showIcon]="false"
               size="slim"
               type="info"
-              title="SMART overall-health self-assessment test result">{{ device.value.smart.data.self_test.status.string }}</cd-alert-panel>
+              title="SMART overall-health self-assessment test result">
+              {{ device.value.smart.data.self_test.status.string }}
+            </cd-alert-panel>
           </ng-container>
           <ng-template #selfTestFailed>
             <cd-alert-panel
@@ -23,6 +42,7 @@
               type="warning"
               title="SMART overall-health self-assessment test result">{{ device.value.smart.data.self_test.status.string }}</cd-alert-panel>
           </ng-template>
+
           <tabset>
             <tab i18n-heading
                  heading="Device Information">

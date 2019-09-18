@@ -79,7 +79,10 @@ export interface SmartDataV1 {
   in_smartctl_database: boolean;
   interface_speed: object;
   json_format_version: number[];
-  local_time: object;
+  local_time: {
+    asctime: string;
+    time_t: number;
+  };
   logical_block_size: number;
   model_family: string;
   model_name: string;
@@ -93,7 +96,15 @@ export interface SmartDataV1 {
   sata_version: object;
   serial_number: string;
   smart_status: object;
-  smartctl: object;
+  smartctl: {
+    argv: string[];
+    build_info: string;
+    exit_status: number;
+    platform_info: string;
+    svn_revision: number;
+    version: number[];
+    output: string[];
+  };
   temperature: object;
   user_capacity: object;
   wwn: object;

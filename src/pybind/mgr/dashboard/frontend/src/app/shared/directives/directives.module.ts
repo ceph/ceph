@@ -7,6 +7,8 @@ import { DimlessBinaryDirective } from './dimless-binary.directive';
 import { IopsDirective } from './iops.directive';
 import { MillisecondsDirective } from './milliseconds.directive';
 import { PasswordButtonDirective } from './password-button.directive';
+import { TextToDownloadDirective } from './text-to-download.directive';
+import { ToClipboardDirective } from './to-clipboard.directive';
 
 @NgModule({
   imports: [],
@@ -17,7 +19,9 @@ import { PasswordButtonDirective } from './password-button.directive';
     DimlessBinaryPerSecondDirective,
     PasswordButtonDirective,
     MillisecondsDirective,
-    IopsDirective
+    IopsDirective,
+    TextToDownloadDirective,
+    ToClipboardDirective
   ],
   exports: [
     AutofocusDirective,
@@ -26,7 +30,9 @@ import { PasswordButtonDirective } from './password-button.directive';
     DimlessBinaryPerSecondDirective,
     PasswordButtonDirective,
     MillisecondsDirective,
-    IopsDirective
+    IopsDirective,
+    ToClipboardDirective,
+    TextToDownloadDirective
   ],
   providers: []
 })

@@ -70,12 +70,13 @@ export class OsdSmartListComponent implements OnInit, OnChanges {
         // Prepare S.M.A.R.T data
         if (smartData.json_format_version[0] === 1) {
           // Version 1.x
-          const excludes = [
+          const info = _.omit(smartData, [
             'ata_smart_attributes',
             'ata_smart_selective_self_test_log',
-            'ata_smart_data'
-          ];
-          const info = _.pickBy(smartData, (_value, key) => !excludes.includes(key));
+            'ata_smart_data',
+            'smartctl.output'
+          ]);
+          const isoDate = new Date(smartData.local_time.time_t * 1000).toISOString();
           // Build result
           result[deviceId] = {
             info: info,
@@ -84,7 +85,9 @@ export class OsdSmartListComponent implements OnInit, OnChanges {
               data: smartData.ata_smart_data
             },
             device: info.device.name,
-            identifier: info.serial_number
+            identifier: info.serial_number,
+            report: smartData.smartctl.output.join('\n'),
+            reportFilename: `${deviceId}-${isoDate}.txt`
           };
         } else {
           this.incompatible = true;

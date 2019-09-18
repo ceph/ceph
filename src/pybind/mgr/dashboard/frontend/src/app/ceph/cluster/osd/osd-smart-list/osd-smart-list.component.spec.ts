@@ -3,6 +3,7 @@ import { SimpleChange, SimpleChanges } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 
 import _ = require('lodash');
 import { of } from 'rxjs';
@@ -62,7 +63,7 @@ describe('OsdSmartListComponent', () => {
 
   configureTestBed({
     declarations: [OsdSmartListComponent],
-    imports: [TabsModule, SharedModule, HttpClientTestingModule],
+    imports: [TabsModule, SharedModule, HttpClientTestingModule, ToastrModule.forRoot()],
     providers: [i18nProviders, TabsetComponent, TabsetConfig]
   });
 
@@ -83,7 +84,14 @@ describe('OsdSmartListComponent', () => {
 
     it('should return with proper keys', () => {
       _.each(component.data, (smartData, _deviceId) => {
-        expect(_.keys(smartData)).toEqual(['info', 'smart', 'device', 'identifier']);
+        expect(_.keys(smartData)).toEqual([
+          'info',
+          'smart',
+          'device',
+          'identifier',
+          'report',
+          'reportFilename'
+        ]);
       });
     });
 
