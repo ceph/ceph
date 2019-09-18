@@ -708,6 +708,14 @@ class argdesc(object):
             chunk = "--{0}".format(self.name.replace("_", "-"))
         elif self.t == CephPrefix or self.t == CephChoices:
             chunk = str(self.instance)
+        elif self.t == CephOsdName:
+            # it just so happens all CephOsdName commands are named 'id' anyway,
+            # so <id|osd.id> is perfect.
+            chunk = '<id|osd.id>'
+        elif self.t == CephName:
+            # CephName commands similarly only have one arg of the
+            # type, so <type.id> is good.
+            chunk = '<type.id>'
         else:
             chunk = '<{0}>'.format(self.name)
         s = chunk
