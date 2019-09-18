@@ -1391,6 +1391,7 @@ public:
 
   void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
   int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag);
+  void delete_objs_inline(cls_rgw_obj_chain& chain, const string& tag);
   int gc_operate(string& oid, librados::ObjectWriteOperation *op);
   int gc_aio_operate(const std::string& oid, librados::AioCompletion *c,
                      librados::ObjectWriteOperation *op);
