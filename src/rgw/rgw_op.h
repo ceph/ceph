@@ -1829,6 +1829,13 @@ public:
 struct RGWMultipartUploadEntry {
   rgw_bucket_dir_entry obj;
   RGWMPObj mp;
+
+  friend std::ostream& operator<<(std::ostream& out,
+				  const RGWMultipartUploadEntry& e) {
+    constexpr char quote = '"';
+    return out << "RGWMultipartUploadEntry{ obj.key=" <<
+      quote << e.obj.key << quote << " mp=" << e.mp << " }";
+  }
 };
 
 class RGWListBucketMultiparts : public RGWOp {

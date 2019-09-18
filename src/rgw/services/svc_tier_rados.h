@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <iomanip>
+
 #include "rgw/rgw_service.h"
 
 #include "svc_rados.h"
@@ -83,6 +85,10 @@ public:
     prefix = "";
     meta = "";
     upload_id = "";
+  }
+  friend std::ostream& operator<<(std::ostream& out, const RGWMPObj& obj) {
+    return out << "RGWMPObj:{ prefix=" << std::quoted(obj.prefix) <<
+      ", meta=" << std::quoted(obj.meta) << " }";
   }
 }; // class RGWMPObj
 
