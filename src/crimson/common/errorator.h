@@ -13,7 +13,9 @@ namespace _impl {
     invarg,
     enodata,
     input_output_error,
-    object_corrupted
+    object_corrupted,
+    permission_denied,
+    operation_not_supported
   };
 }
 
@@ -590,6 +592,8 @@ namespace ct_error {
   using invarg = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::invarg>;
   using input_output_error = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::input_output_error>;
   using object_corrupted = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::object_corrupted>;
+  using permission_denied = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::permission_denied>;
+  using operation_not_supported = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::operation_not_supported>;
 }
 
 using stateful_errc = stateful_error_t<std::errc>;

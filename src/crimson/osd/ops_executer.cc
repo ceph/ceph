@@ -37,7 +37,7 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
     bp.copy(osd_op.op.cls.indata_len, indata);
   } catch (buffer::error&) {
     logger().warn("call unable to decode class + method + indata");
-    throw crimson::osd::invalid_argument{};
+    return crimson::ct_error::invarg::make();
   }
 
   // NOTE: opening a class can actually result in dlopen(), and thus
@@ -48,23 +48,23 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   if (r) {
     logger().warn("class {} open got {}", cname, cpp_strerror(r));
     if (r == -ENOENT) {
-      throw crimson::osd::operation_not_supported{};
+      return crimson::ct_error::operation_not_supported::make();
     } else if (r == -EPERM) {
       // propagate permission errors
-      throw crimson::osd::permission_denied{};
+      return crimson::ct_error::permission_denied::make();
     }
-    throw crimson::osd::input_output_error{};
+    return crimson::ct_error::input_output_error::make();
   }
 
   ClassHandler::ClassMethod* method = cls->get_method(mname);
   if (!method) {
     logger().warn("call method {}.{} does not exist", cname, mname);
-    throw crimson::osd::operation_not_supported{};
+    return crimson::ct_error::operation_not_supported::make();
   }
 
   const auto flags = method->get_flags();
   if (!os->exists && (flags & CLS_METHOD_WR) == 0) {
-    throw crimson::osd::object_not_found{};
+    return crimson::ct_error::enoent::make();
   }
 
 #if 0
@@ -74,36 +74,43 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 #endif
 
   logger().debug("calling method {}.{}", cname, mname);
-  return seastar::async([this, &osd_op, flags, method, indata=std::move(indata)]() mutable {
-    ceph::bufferlist outdata;
-    const auto prev_rd = num_read;
-    const auto prev_wr = num_write;
-    const auto ret = method->exec(reinterpret_cast<cls_method_context_t>(this),
-                                  indata, outdata);
-    if (num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
-      logger().error("method tried to read object but is not marked RD");
-      throw crimson::osd::input_output_error{};
+  return seastar::async(
+    [this, method, indata=std::move(indata)]() mutable {
+      ceph::bufferlist outdata;
+      auto cls_context = reinterpret_cast<cls_method_context_t>(this);
+      const auto ret = method->exec(cls_context, indata, outdata);
+      return std::make_pair(ret, std::move(outdata));
     }
-    if (num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
-      logger().error("method tried to update object but is not marked WR");
-      throw crimson::osd::input_output_error{};
-    }
+  ).then(
+    [prev_rd = num_read, prev_wr = num_write, this, &osd_op, flags]
+    (auto outcome) {
+      auto& [ret, outdata] = outcome;
 
-    // for write calls we never return data expect errors. For details refer
-    // to cls/cls_hello.cc.
-    if (ret < 0 || (flags & CLS_METHOD_WR) == 0) {
-      logger().debug("method called response length={}", outdata.length());
-      osd_op.op.extent.length = outdata.length();
-      osd_op.outdata.claim_append(outdata);
+      if (num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
+        logger().error("method tried to read object but is not marked RD");
+        return call_errorator::make_plain_exception_future<>(
+          crimson::ct_error::input_output_error::make());
+      }
+      if (num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
+        logger().error("method tried to update object but is not marked WR");
+        return call_errorator::make_plain_exception_future<>(
+          crimson::ct_error::input_output_error::make());
+      }
+
+      // for write calls we never return data expect errors. For details refer
+      // to cls/cls_hello.cc.
+      if (ret < 0 || (flags & CLS_METHOD_WR) == 0) {
+        logger().debug("method called response length={}", outdata.length());
+        osd_op.op.extent.length = outdata.length();
+        osd_op.outdata.claim_append(outdata);
+      }
+      if (ret < 0) {
+        return call_errorator::make_plain_exception_future<>(
+          crimson::stateful_errint{ ret });
+      }
+      return seastar::now();
     }
-    return ret;
-  }).then([] (const int ret) {
-    if (ret < 0) {
-      return call_errorator::make_plain_exception_future<>(
-        ceph::stateful_errint{ ret });
-    }
-    return seastar::now();
-  });
+  );
 }
 
 static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
@@ -416,7 +423,15 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
         return seastar::now();
       }, ceph::stateful_errint::handle([] (int err) {
         // TODO: implement the handler. NOP for now.
-      }));
+      }), crimson::ct_error::input_output_error::handle([] {
+        // TODO: implement the handler. NOP for now.
+      }),
+      crimson::errorator<crimson::ct_error::enoent,
+                         crimson::ct_error::input_output_error,
+                         crimson::ct_error::operation_not_supported,
+                         crimson::ct_error::permission_denied,
+                         crimson::ct_error::invarg>::discard_all{}
+      );
   case CEPH_OSD_OP_STAT:
     // note: stat does not require RD
     return do_const_op([&osd_op] (/* const */auto& backend, const auto& os) {
