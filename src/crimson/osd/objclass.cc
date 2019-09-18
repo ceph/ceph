@@ -70,7 +70,7 @@ int cls_cxx_create(cls_method_context_t hctx, const bool exclusive)
   OSDOp op{CEPH_OSD_OP_CREATE};
   op.op.flags = (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0);
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -83,7 +83,7 @@ int cls_cxx_remove(cls_method_context_t hctx)
 
   // we're blocking here which presumes execution in Seastar's thread.
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -96,7 +96,7 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
 
   // we're blocking here which presumes execution in Seastar's thread.
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
   } catch (ceph::osd::error& e) {
     return -e.code().value();
   }
@@ -137,7 +137,7 @@ int cls_cxx_read2(cls_method_context_t hctx,
   op.op.extent.length = len;
   op.op.flags = op_flags;
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
   } catch (ceph::osd::error& e) {
     return -e.code().value();
   }
@@ -157,7 +157,7 @@ int cls_cxx_write2(cls_method_context_t hctx,
   op.op.flags = op_flags;
   op.indata = *inbl;
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -171,7 +171,7 @@ int cls_cxx_write_full(cls_method_context_t hctx, bufferlist * const inbl)
   op.op.extent.length = inbl->length();
   op.indata = *inbl;
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -188,7 +188,7 @@ int cls_cxx_replace(cls_method_context_t hctx,
     top.op.extent.offset = 0;
     top.op.extent.length = 0;
     try {
-      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(top).get();
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(top).get();
       return 0;
     } catch (ceph::osd::error& e) {
       return -e.code().value();
@@ -202,7 +202,7 @@ int cls_cxx_replace(cls_method_context_t hctx,
     wop.indata = *inbl;
 
     try {
-      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(wop).get();
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(wop).get();
       return 0;
     } catch (ceph::osd::error& e) {
       return -e.code().value();
@@ -216,7 +216,7 @@ int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
   op.op.extent.offset = ofs;
   op.op.extent.length = 0;
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -231,7 +231,7 @@ int cls_cxx_getxattr(cls_method_context_t hctx,
   op.op.xattr.name_len = strlen(name);
   op.indata.append(name, op.op.xattr.name_len);
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     outbl->claim(op.outdata);
     return outbl->length();
   } catch (ceph::osd::error& e) {
@@ -255,7 +255,7 @@ int cls_cxx_setxattr(cls_method_context_t hctx,
   op.indata.append(name, op.op.xattr.name_len);
   op.indata.append(*inbl);
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -267,7 +267,7 @@ int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
   OSDOp op{op = CEPH_OSD_OP_ROLLBACK};
   op.op.snap.snapid = snapid;
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -291,7 +291,7 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx,
   encode(start_obj, op.indata);
   encode(max_to_get, op.indata);
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
   } catch (ceph::osd::error& e) {
     return -e.code().value();
   }
@@ -317,7 +317,7 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
   encode(max_to_get, op.indata);
   encode(filter_prefix, op.indata);
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
   } catch (ceph::osd::error& e) {
     return -e.code().value();
   }
@@ -346,7 +346,7 @@ int cls_cxx_map_get_val(cls_method_context_t hctx,
     encode(k, op.indata);
   }
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
   } catch (ceph::osd::error& e) {
     return -e.code().value();
   }
@@ -377,7 +377,7 @@ int cls_cxx_map_set_val(cls_method_context_t hctx,
   }
 
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
@@ -391,7 +391,7 @@ int cls_cxx_map_set_vals(cls_method_context_t hctx,
   encode(*map, op.indata);
 
   try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
     return 0;
   } catch (ceph::osd::error& e) {
     return -e.code().value();
