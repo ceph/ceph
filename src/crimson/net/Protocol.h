@@ -82,16 +82,21 @@ class Protocol {
     open,
     drop
   };
+
+  static const char* get_state_name(write_state_t state) {
+    static const char *const state_names[] = {"none",
+                                              "delay",
+                                              "open",
+                                              "drop"};
+    assert(static_cast<int>(state) < std::size(state_names));
+    return state_names[static_cast<int>(state)];
+  }
+
   void set_write_state(const write_state_t& state) {
     if (write_state == write_state_t::open &&
-        state == write_state_t::delay) {
-      if (open_write) {
-        exit_open = seastar::shared_promise<>();
-      }
-    }
-    if (state == write_state_t::drop && exit_open) {
-      exit_open->set_value();
-      exit_open = std::nullopt;
+        state != write_state_t::open &&
+        write_dispatching) {
+      exit_open = seastar::shared_promise<>();
     }
     write_state = state;
     state_changed.set_value();
@@ -133,11 +138,9 @@ class Protocol {
   std::optional<utime_t> keepalive_ack = std::nullopt;
   uint64_t ack_left = 0;
   bool write_dispatching = false;
-  // Indicate if we are in the middle of writing.
-  bool open_write = false;
   // If another continuation is trying to close or replace socket when
-  // open_write is true, it needs to wait for exit_open until writing is
-  // stopped or failed.
+  // write_dispatching is true and write_state is open,
+  // it needs to wait for exit_open until writing is stopped or failed.
   std::optional<seastar::shared_promise<>> exit_open;
 
   seastar::future<> do_write_dispatch_sweep();

@@ -179,9 +179,6 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
       size_t num_msgs = conn.out_q.size();
       // we must have something to write...
       ceph_assert(is_queued());
-      assert(!open_write);
-      open_write = true;
-
       conn.pending_q.clear();
       conn.pending_q.swap(conn.out_q);
       if (!conn.policy.lossy) {
@@ -209,31 +206,46 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
               // the dispatching can ONLY stop now
               ceph_assert(write_dispatching);
               write_dispatching = false;
-              assert(open_write);
-              open_write = false;
+              if (unlikely(exit_open.has_value())) {
+                exit_open->set_value();
+                exit_open = std::nullopt;
+                logger().info("{} write_event: nothing queued at {},"
+                              " set exit_open",
+                              conn, get_state_name(write_state));
+              }
               return seastar::make_ready_future<stop_t>(stop_t::yes);
             } else {
               // something is pending to send during flushing
-              assert(open_write);
-              open_write = false;
               return seastar::make_ready_future<stop_t>(stop_t::no);
             }
           });
         } else {
           // messages were enqueued during socket write
-          assert(open_write);
-          open_write = false;
           return seastar::make_ready_future<stop_t>(stop_t::no);
         }
       });
      }
      case write_state_t::delay:
       // delay dispatching writes until open
+      if (exit_open) {
+        exit_open->set_value();
+        exit_open = std::nullopt;
+        logger().info("{} write_event: delay and set exit_open ...", conn);
+      } else {
+        logger().info("{} write_event: delay ...", conn);
+      }
       return state_changed.get_shared_future()
       .then([] { return stop_t::no; });
      case write_state_t::drop:
       ceph_assert(write_dispatching);
       write_dispatching = false;
+      if (exit_open) {
+        exit_open->set_value();
+        exit_open = std::nullopt;
+        logger().info("{} write_event: dropped and set exit_open", conn);
+      } else {
+        logger().info("{} write_event: dropped", conn);
+      }
       return seastar::make_ready_future<stop_t>(stop_t::yes);
      default:
       ceph_assert(false);
@@ -242,20 +254,18 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
     if (e.code() != error::broken_pipe &&
         e.code() != error::connection_reset &&
         e.code() != error::negotiation_failure) {
-      logger().error("{} do_write_dispatch_sweep(): unexpected error {}",
-                     conn, e);
+      logger().error("{} write_event(): unexpected error at {} -- {}",
+                     conn, get_state_name(write_state), e);
       ceph_abort();
-    }
-    logger().debug("{} do_write_dispatch_sweep() fault: {}", conn, e);
-    assert(open_write);
-    open_write = false;
-    if (exit_open) {
-      exit_open->set_value();
-      exit_open = std::nullopt;
     }
     socket->shutdown();
     if (write_state == write_state_t::open) {
+      logger().info("{} write_event(): fault at {}, going to delay -- {}",
+                    conn, get_state_name(write_state), e);
       write_state = write_state_t::delay;
+    } else {
+      logger().info("{} write_event(): fault at {} -- {}",
+                    conn, get_state_name(write_state), e);
     }
     return do_write_dispatch_sweep();
   });
@@ -273,7 +283,7 @@ void Protocol::write_event()
    case write_state_t::open:
      [[fallthrough]];
    case write_state_t::delay:
-    seastar::with_gate(pending_dispatch, [this] {
+    (void) seastar::with_gate(pending_dispatch, [this] {
       return do_write_dispatch_sweep(
       ).handle_exception([this] (std::exception_ptr eptr) {
         logger().error("{} do_write_dispatch_sweep(): unexpected exception {}",

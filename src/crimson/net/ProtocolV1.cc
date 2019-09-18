@@ -318,7 +318,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
       return Socket::connect(conn.peer_addr)
         .then([this](SocketFRef sock) {
           socket = std::move(sock);
@@ -377,7 +377,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", conn, eptr);
-          close();
+          (void) close();
         });
     });
 }
@@ -466,11 +466,7 @@ seastar::future<stop_t> ProtocolV1::replace_existing(
     // will all be performed using v2 protocol.
     ceph_abort("lossless policy not supported for v1");
   }
-  seastar::do_with(
-    std::move(existing),
-    [](auto existing) {
-      return existing->close();
-    });
+  (void) existing->close();
   return send_connect_reply_ready(reply_tag, std::move(authorizer_reply));
 }
 
@@ -503,9 +499,7 @@ seastar::future<stop_t> ProtocolV1::handle_connect_with_existing(
         h.reply.connect_seq = exproto->connect_seq() + 1;
         return send_connect_reply(CEPH_MSGR_TAG_RETRY_SESSION);
       }
-    } else if (conn.peer_addr < messenger.get_myaddr() ||
-               existing->is_server_side()) {
-      // incoming wins
+    } else if (existing->peer_wins()) {
       return replace_existing(existing, std::move(authorizer_reply));
     } else {
       return send_connect_reply(CEPH_MSGR_TAG_WAIT);
@@ -589,7 +583,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
           logger().warn("{} existing {} proto version is {} not 1, close existing",
                         conn, *existing,
                         static_cast<int>(existing->protocol->proto_type));
-          existing->close();
+          (void) existing->close();
         } else {
           return handle_connect_with_existing(existing, std::move(authorizer_reply));
         }
@@ -623,7 +617,7 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
       // stop learning my_addr before sending it out, so it won't change
       return messenger.learned_addr(messenger.get_myaddr(), conn).then([this] {
           // encode/send server's handshake header
@@ -669,7 +663,7 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
           logger().warn("{} accepting fault: {}", conn, eptr);
-          close();
+          (void) close();
         });
     });
 }
@@ -853,7 +847,7 @@ seastar::future<> ProtocolV1::read_message()
       }
 
       // start dispatch, ignoring exceptions from the application layer
-      seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
+      (void) seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
           logger().debug("{} <== #{} === {} ({})",
                          conn, msg->get_seq(), *msg, msg->get_type());
           return dispatcher.ms_dispatch(&conn, std::move(msg))
@@ -900,7 +894,7 @@ void ProtocolV1::execute_open()
   state = state_t::open;
   set_write_state(write_state_t::open);
 
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
       // start background processing of tags
       return handle_tags()
         .handle_exception_type([this] (const std::system_error& e) {
@@ -910,13 +904,13 @@ void ProtocolV1::execute_open()
             return dispatcher.ms_handle_reset(
                 seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
               .then([this] {
-                close();
+                (void) close();
               });
           } else if (e.code() == error::read_eof) {
             return dispatcher.ms_handle_remote_reset(
                 seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
               .then([this] {
-                close();
+                (void) close();
               });
           } else {
             throw e;
@@ -924,7 +918,7 @@ void ProtocolV1::execute_open()
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the open state
           logger().warn("{} open fault: {}", conn, eptr);
-          close();
+          (void) close();
         });
     });
 }

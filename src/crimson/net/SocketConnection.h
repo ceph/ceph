@@ -76,6 +76,10 @@ class SocketConnection : public Connection {
 
 #ifdef UNIT_TESTS_BUILT
   bool is_closed() const override;
+
+  bool peer_wins() const override;
+#else
+  bool peer_wins() const;
 #endif
 
   seastar::future<> send(MessageRef msg) override;
