@@ -127,7 +127,7 @@ if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
     if ! which virtualenv > /dev/null; then
         pip install virtualenv
     fi
-    virtualenv --setuptools virtualenv
+    virtualenv --python=python2 --setuptools virtualenv
 fi
 
 # Upgrade pip first
