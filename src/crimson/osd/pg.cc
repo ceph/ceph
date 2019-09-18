@@ -113,7 +113,7 @@ PG::PG(
 PG::~PG() {}
 
 bool PG::try_flush_or_schedule_async() {
-  shard_services.get_store().do_transaction(
+  (void)shard_services.get_store().do_transaction(
     coll_ref,
     ObjectStore::Transaction()).then(
       [this, epoch=get_osdmap_epoch()]() {

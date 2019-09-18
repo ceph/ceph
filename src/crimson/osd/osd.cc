@@ -60,7 +60,8 @@ OSD::OSD(int id, uint32_t nonce,
          ceph::net::Messenger& hb_back_msgr)
   : whoami{id},
     nonce{nonce},
-    beacon_timer{[this] { send_beacon(); }},
+    // do this in background
+    beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr, *this}},
@@ -70,7 +71,8 @@ OSD::OSD(int id, uint32_t nonce,
       local_conf().get_val<std::string>("osd_data"))},
     shard_services{*this, cluster_msgr, public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
-    heartbeat_timer{[this] { update_heartbeat_peers(); }},
+    // do this in background
+    heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -1034,7 +1036,7 @@ OSD::get_or_create_pg(
   auto [fut, creating] = pg_map.get_pg(pgid, bool(info));
   if (!creating && info) {
     pg_map.set_creating(pgid);
-    handle_pg_create_info(std::move(info));
+    (void)handle_pg_create_info(std::move(info));
   }
   return std::move(fut);
 }
