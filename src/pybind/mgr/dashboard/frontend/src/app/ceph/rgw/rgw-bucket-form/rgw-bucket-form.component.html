@@ -48,7 +48,7 @@
                    placeholder="Name..."
                    formControlName="bid"
                    [readonly]="editing"
-                   autofocus>
+                   [autofocus]="!editing">
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'required')"
                   i18n>This field is required.</span>
@@ -72,7 +72,8 @@
             <select id="owner"
                     name="owner"
                     class="form-control custom-select"
-                    formControlName="owner">
+                    formControlName="owner"
+                    [autofocus]="editing">
               <option i18n
                       *ngIf="owners === null"
                       [ngValue]="null">Loading...</option>

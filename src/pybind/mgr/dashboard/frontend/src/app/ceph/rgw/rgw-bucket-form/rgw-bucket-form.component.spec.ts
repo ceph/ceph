@@ -4,6 +4,7 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
@@ -134,6 +135,20 @@ describe('RgwBucketFormComponent', () => {
       spyOn(TestBed.get(Router), 'navigate').and.stub();
       notificationService = TestBed.get(NotificationService);
       spyOn(notificationService, 'show');
+    });
+
+    it('should validate name', () => {
+      component.editing = false;
+      component.createForm();
+      const control = component.bucketForm.get('bid');
+      expect(_.isFunction(control.asyncValidator)).toBeTruthy();
+    });
+
+    it('should not validate name', () => {
+      component.editing = true;
+      component.createForm();
+      const control = component.bucketForm.get('bid');
+      expect(control.asyncValidator).toBeNull();
     });
 
     it('tests create success notification', () => {
