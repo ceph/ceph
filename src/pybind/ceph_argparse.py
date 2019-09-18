@@ -716,6 +716,10 @@ class argdesc(object):
             # CephName commands similarly only have one arg of the
             # type, so <type.id> is good.
             chunk = '<type.id>'
+        elif self.t == CephInt:
+            chunk = '<{0}:int>'.format(self.name)
+        elif self.t == CephFloat:
+            chunk = '<{0}:float>'.format(self.name)
         else:
             chunk = '<{0}>'.format(self.name)
         s = chunk
