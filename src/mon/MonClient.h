@@ -14,8 +14,13 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
+#include <functional>
+#include <list>
+#include <map>
 #include <memory>
 #include <set>
+#include <string>
+#include <vector>
 
 #include "msg/Messenger.h"
 
