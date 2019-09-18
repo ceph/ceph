@@ -1530,8 +1530,8 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
     // last_update *before* activation. This is relatively inexpensive
     // compared to recovery, since it is purely local, so treat shards
     // past the authoritative last_update the same as those equal to it.
-    version_t auth_version = auth_info.last_update.version;
-    version_t candidate_version = shard_info.last_update.version;
+    version_t auth_version = auth_info.last_complete.version;
+    version_t candidate_version = shard_info.last_complete.version;
     if (auth_version > candidate_version &&
         (auth_version - candidate_version) > cct->_conf->get_val<uint64_t>("osd_async_recovery_min_pg_log_entries")) {
       candidates_by_cost.insert(make_pair(auth_version - candidate_version, shard_i));
@@ -1576,8 +1576,8 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
     auto shard_info = all_info.find(shard_i)->second;
     // use the approximate magnitude of the difference in length of
     // logs as the cost of recovery
-    version_t auth_version = auth_info.last_update.version;
-    version_t candidate_version = shard_info.last_update.version;
+    version_t auth_version = auth_info.last_complete.version;
+    version_t candidate_version = shard_info.last_complete.version;
     size_t approx_entries;
     if (auth_version > candidate_version) {
       approx_entries = auth_version - candidate_version;
@@ -1627,13 +1627,11 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
  *  3) remove the assertion in PG::RecoveryState::Active::react(const AdvMap)
  * TODO!
  */
-bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
+bool PG::choose_acting(map<pg_shard_t, pg_info_t> &all_info,
+                      pg_shard_t &auth_log_shard_id,
 		       bool restrict_to_up_acting,
 		       bool *history_les_bound)
 {
-  map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
-  all_info[pg_whoami] = info;
-
   if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
     for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
          p != all_info.end();
@@ -7833,13 +7831,21 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
     pg->publish_stats_to_osd();
   }
 
+  map<pg_shard_t, pg_info_t> all_info(pg->peer_info.begin(), pg->peer_info.end());
+  all_info[pg->pg_whoami] = pg->info;
+
+  for(map<pg_shard_t, pg_info_t>::iterator pi = all_info.begin(); pi != all_info.end(); pi++) {
+    if(pg->async_recovery_targets.count(pi->first))
+      pi->second.last_complete = pg->info.last_update;
+  }
+
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
-  if (pg->acting != pg->up && !pg->choose_acting(auth_log_shard,
+  if (pg->acting != pg->up && !pg->choose_acting(all_info, auth_log_shard,
 						 true, &history_les_bound)) {
     assert(pg->want_acting.size());
   } else if (!pg->async_recovery_targets.empty()) {
-    pg->choose_acting(auth_log_shard, true, &history_les_bound);
+    pg->choose_acting(all_info, auth_log_shard, true, &history_les_bound);
   }
 
   if (context< Active >().all_replicas_activated  &&
@@ -8767,8 +8773,11 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
 
+  map<pg_shard_t, pg_info_t> all_info(pg->peer_info.begin(), pg->peer_info.end());
+  all_info[pg->pg_whoami] = pg->info;
+
   // adjust acting?
-  if (!pg->choose_acting(auth_log_shard, false,
+  if (!pg->choose_acting(all_info, auth_log_shard, false,
 			 &context< Peering >().history_les_bound)) {
     if (!pg->want_acting.empty()) {
       post_event(NeedActingChange());

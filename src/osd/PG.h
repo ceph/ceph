@@ -1477,7 +1477,8 @@ protected:
                                         set<pg_shard_t> *async_recovery) const;
 
   bool recoverable_and_ge_min_size(const vector<int> &want) const;
-  bool choose_acting(pg_shard_t &auth_log_shard,
+  bool choose_acting(map<pg_shard_t, pg_info_t> &all_info,
+                     pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound);
   void build_might_have_unfound();
