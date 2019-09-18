@@ -17,8 +17,9 @@
 
 #include <atomic>
 #include "common/LogEntry.h"
-#include "common/ostream_temp.h"
 #include "common/ceph_mutex.h"
+#include "common/ostream_temp.h"
+#include "common/ref.h"
 #include "include/health.h"
 
 class LogClient;
@@ -201,7 +202,7 @@ public:
   }
 
   bool handle_log_ack(MLogAck *m);
-  Message *get_mon_log_message(bool flush);
+  ceph::ref_t<Message> get_mon_log_message(bool flush);
   bool are_pending();
 
   LogChannelRef create_channel() {
@@ -235,7 +236,7 @@ public:
   version_t queue(LogEntry &entry);
 
 private:
-  Message *_get_mon_log_message();
+  ceph::ref_t<Message> _get_mon_log_message();
   void _send_to_mon();
 
   CephContext *cct;

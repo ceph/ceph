@@ -347,9 +347,9 @@ bool MonClient::ms_dispatch(Message *m)
 void MonClient::send_log(bool flush)
 {
   if (log_client) {
-    Message *lm = log_client->get_mon_log_message(flush);
+    auto lm = log_client->get_mon_log_message(flush);
     if (lm)
-      _send_mon_message(lm);
+      _send_mon_message(std::move(lm));
     more_log_pending = log_client->are_pending();
   }
 }
@@ -483,11 +483,9 @@ void MonClient::shutdown()
     auto tid = mon_commands.begin()->first;
     _cancel_mon_command(tid);
   }
-  while (!waiting_for_session.empty()) {
-    ldout(cct, 20) << __func__ << " discarding pending message " << *waiting_for_session.front() << dendl;
-    waiting_for_session.front()->put();
-    waiting_for_session.pop_front();
-  }
+  ldout(cct, 20) << __func__ << " discarding " << waiting_for_session.size()
+		 << " pending message(s)" << dendl;
+  waiting_for_session.clear();
 
   active_con.reset();
   pending_cons.clear();
@@ -623,7 +621,13 @@ void MonClient::_finish_auth(int auth_err)
 
 // ---------
 
-void MonClient::_send_mon_message(Message *m)
+void MonClient::send_mon_message(MessageRef m)
+{
+  std::lock_guard l{monc_lock};
+  _send_mon_message(std::move(m));
+}
+
+void MonClient::_send_mon_message(MessageRef m)
 {
   ceph_assert(ceph_mutex_is_locked(monc_lock));
   if (active_con) {
@@ -631,9 +635,9 @@ void MonClient::_send_mon_message(Message *m)
     ldout(cct, 10) << "_send_mon_message to mon."
 		   << monmap.get_name(cur_con->get_peer_addr())
 		   << " at " << cur_con->get_peer_addr() << dendl;
-    cur_con->send_message(m);
+    cur_con->send_message2(std::move(m));
   } else {
-    waiting_for_session.push_back(m);
+    waiting_for_session.push_back(std::move(m));
   }
 }
 
@@ -654,10 +658,7 @@ void MonClient::_reopen_session(int rank)
   }
 
   // throw out old queued messages
-  while (!waiting_for_session.empty()) {
-    waiting_for_session.front()->put();
-    waiting_for_session.pop_front();
-  }
+  waiting_for_session.clear();
 
   // throw out version check requests
   while (!version_requests.empty()) {
@@ -822,7 +823,7 @@ void MonClient::_finish_hunting(int auth_err)
   if (!auth_err) {
     last_rotating_renew_sent = utime_t();
     while (!waiting_for_session.empty()) {
-      _send_mon_message(waiting_for_session.front());
+      _send_mon_message(std::move(waiting_for_session.front()));
       waiting_for_session.pop_front();
     }
     _resend_mon_commands();
@@ -919,10 +920,10 @@ void MonClient::_renew_subs()
   if (!_opened())
     _reopen_session();
   else {
-    MMonSubscribe *m = new MMonSubscribe;
+    auto m = ceph::make_message<MMonSubscribe>();
     m->what = sub.get_subs();
     m->hostname = ceph_get_short_hostname();
-    _send_mon_message(m);
+    _send_mon_message(std::move(m));
     sub.renewed();
   }
 }
@@ -939,7 +940,7 @@ int MonClient::_check_auth_tickets()
   if (active_con && auth) {
     if (auth->need_tickets()) {
       ldout(cct, 10) << __func__ << " getting new tickets!" << dendl;
-      MAuth *m = new MAuth;
+      auto m = ceph::make_message<MAuth>();
       m->protocol = auth->get_protocol();
       auth->prepare_build_request();
       auth->build_request(m->auth_payload);
@@ -989,13 +990,11 @@ int MonClient::_check_auth_rotating()
                    << last_rotating_renew_sent << "), skipping refresh" << dendl;
     return 0;
   }
-  MAuth *m = new MAuth;
+  auto m = ceph::make_message<MAuth>();
   m->protocol = auth->get_protocol();
   if (auth->build_rotating_request(m->auth_payload)) {
     last_rotating_renew_sent = now;
-    _send_mon_message(m);
-  } else {
-    m->put();
+    _send_mon_message(std::move(m));
   }
   return 0;
 }
@@ -1077,11 +1076,11 @@ void MonClient::_send_command(MonCommand *r)
   }
 
   ldout(cct, 10) << __func__ << " " << r->tid << " " << r->cmd << dendl;
-  MMonCommand *m = new MMonCommand(monmap.fsid);
+  auto m = ceph::make_message<MMonCommand>(monmap.fsid);
   m->set_tid(r->tid);
   m->cmd = r->cmd;
   m->set_data(r->inbl);
-  _send_mon_message(m);
+  _send_mon_message(std::move(m));
   return;
 }
 
@@ -1245,11 +1244,11 @@ void MonClient::get_version(string map, version_t *newest, version_t *oldest, Co
   version_req_d *req = new version_req_d(onfinish, newest, oldest);
   ldout(cct, 10) << "get_version " << map << " req " << req << dendl;
   std::lock_guard l(monc_lock);
-  MMonGetVersion *m = new MMonGetVersion();
+  auto m = ceph::make_message<MMonGetVersion>();
   m->what = map;
   m->handle = ++version_req_id;
   version_requests[m->handle] = req;
-  _send_mon_message(m);
+  _send_mon_message(std::move(m));
 }
 
 void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
