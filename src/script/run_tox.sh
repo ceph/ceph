@@ -101,12 +101,6 @@ function main() {
         esac
     done
 
-    # normalize options
-    [ "$with_python2" = "ON" ] && with_python2=true || with_python2=false
-    # WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
-    # prevailing on the system - e.g. "3", "36"
-    [[ "$with_python3" =~ (^3|^ON) ]] && with_python3=true || with_python3=false
-
     local test_name
     if [ -z "$tox_path" ]; then
         # try harder
