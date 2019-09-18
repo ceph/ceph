@@ -704,12 +704,12 @@ class argdesc(object):
         like str(), but omit parameter names (except for CephString,
         which really needs them)
         """
-        if self.t == CephString:
-            chunk = '<{0}>'.format(self.name)
-        elif self.t == CephBool:
+        if self.t == CephBool:
             chunk = "--{0}".format(self.name.replace("_", "-"))
-        else:
+        elif self.t == CephPrefix or self.t == CephChoices:
             chunk = str(self.instance)
+        else:
+            chunk = '<{0}>'.format(self.name)
         s = chunk
         if self.N:
             s += '...'
