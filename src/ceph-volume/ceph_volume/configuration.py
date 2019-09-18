@@ -1,7 +1,3 @@
-try:
-    import configparser
-except ImportError:
-    import ConfigParser as configparser
 import contextlib
 import logging
 import os
@@ -11,8 +7,10 @@ from ceph_volume import exceptions
 from sys import version_info as sys_version_info
 
 if sys_version_info.major >= 3:
+    import configparser
     conf_parentclass = configparser.ConfigParser
 elif sys_version_info.major < 3:
+    import ConfigParser as configparser
     conf_parentclass = configparser.SafeConfigParser
 else:
     raise RuntimeError('Not expecting python version > 3 yet.')
