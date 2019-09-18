@@ -89,7 +89,7 @@ class OpsExecuter {
   template <class Func>
   auto do_pg_op(Func&& f) {
     return std::forward<Func>(f)(std::as_const(pg),
-                                 std::as_const(os->oi.soid.get_namespace()));
+                                 std::as_const(msg->get_hobj().nspace));
   }
 
   seastar::future<> dont_do_legacy_op() {
@@ -103,8 +103,12 @@ public:
       backend(pg.get_backend()),
       msg(std::move(msg)) {
   }
+  OpsExecuter(PG& pg, Ref<MOSDOp> msg)
+    : OpsExecuter{PGBackend::cached_os_t{}, pg, std::move(msg)}
+  {}
 
-  seastar::future<> do_osd_op(class OSDOp& osd_op);
+  seastar::future<> execute_osd_op(class OSDOp& osd_op);
+  seastar::future<> execute_pg_op(class OSDOp& osd_op);
 
   template <typename Func>
   seastar::future<> submit_changes(Func&& f) &&;

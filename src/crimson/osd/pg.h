@@ -443,6 +443,7 @@ private:
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
+  seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,
     OSDOp& op,
