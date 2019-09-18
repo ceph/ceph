@@ -181,6 +181,10 @@ class DaemonState
 	}
       }
     }
+    p = m.find("hostname");
+    if (p != m.end()) {
+      hostname = p->second;
+    }
   }
 
   const std::map<std::string,std::string>& _get_config_defaults() {
