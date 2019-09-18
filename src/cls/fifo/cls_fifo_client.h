@@ -189,6 +189,34 @@ namespace rados {
 
         static int trim_part(librados::ObjectWriteOperation *op,
                              const TrimPartParams& params);
+	/* list part */
+
+        struct ListPartParams {
+          struct State {
+            std::optional<string> tag;
+            uint64_t ofs;
+            int max_entries{100};
+          } state;
+
+          ListPartParams& tag(const std::string& tag) {
+            state.tag = tag;
+            return *this;
+          }
+          ListPartParams& ofs(uint64_t ofs) {
+            state.ofs = ofs;
+            return *this;
+          }
+          ListPartParams& max_entries(int _max_entries) {
+            state.max_entries = _max_entries;
+            return *this;
+          }
+        };
+
+        static int list_part(librados::IoCtx& ioctx,
+                             const string& oid,
+                             const ListPartParams& params,
+                             std::vector<cls_fifo_part_list_op_reply::entry> *pentries,
+                             string *ptag = nullptr);
       };
     } // namespace fifo
   }  // namespace cls

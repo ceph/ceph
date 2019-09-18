@@ -94,7 +94,7 @@ namespace rados {
       }
 
       int FIFO::meta_update(librados::ObjectWriteOperation *rados_op,
-                             const MetaUpdateParams& params) {
+                            const MetaUpdateParams& params) {
         cls_fifo_meta_update_op op;
 
         auto& state = params.state;
@@ -172,6 +172,55 @@ namespace rados {
         return 0;
       }
 
+      int FIFO::list_part(librados::IoCtx& ioctx,
+                          const string& oid,
+                          const ListPartParams& params,
+                          std::vector<cls_fifo_part_list_op_reply::entry> *pentries,
+                          string *ptag)
+      {
+        cls_fifo_part_list_op op;
+
+        auto& state = params.state;
+
+        op.tag = state.tag;
+        op.ofs = state.ofs;
+        op.max_entries = state.max_entries;
+
+        librados::ObjectReadOperation rop;
+
+        bufferlist in;
+        bufferlist out;
+        int op_ret;
+        encode(op, in);
+        rop.exec("fifo", "fifo_part_list", in, &out, &op_ret);
+
+        int r = ioctx.operate(oid, &rop, nullptr);
+        if (r < 0) {
+          return r;
+        }
+
+        if (op_ret < 0) {
+          return op_ret;
+        }
+
+        cls_fifo_part_list_op_reply reply;
+        auto iter = out.cbegin();
+        try {
+          decode(reply, iter);
+        } catch (buffer::error& err) {
+          return -EIO;
+        }
+
+        if (pentries) {
+          *pentries = std::move(reply.entries);
+        }
+
+        if (ptag) {
+          *ptag = reply.tag;
+        }
+
+        return 0;
+      }
     } // namespace fifo
   } // namespace cls
 } // namespace rados

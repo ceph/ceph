@@ -700,9 +700,17 @@ static int fifo_part_list_op(cls_method_context_t hctx,
     return r;
   }
 
+  if (op.tag &&
+      !(part_header.tag == *op.tag)) {
+    CLS_LOG(10, "%s(): bad tag", __func__);
+    return -EINVAL;
+  }
+
   EntryReader reader(hctx, part_header, op.ofs);
 
   cls_fifo_part_list_op_reply reply;
+
+  reply.tag = part_header.tag;
 
   for (int i = 0; i < op.max_entries && !reader.end(); ++i) {
     bufferlist data;

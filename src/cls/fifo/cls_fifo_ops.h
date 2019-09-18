@@ -188,17 +188,20 @@ WRITE_CLASS_ENCODER(cls_fifo_part_trim_op)
 
 struct cls_fifo_part_list_op
 {
+  std::optional<string> tag;
   uint64_t ofs{0};
   int max_entries{100};
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
+    encode(tag, bl);
     encode(ofs, bl);
     encode(max_entries, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
+    decode(tag, bl);
     decode(ofs, bl);
     decode(max_entries, bl);
     DECODE_FINISH(bl);
@@ -235,15 +238,18 @@ struct cls_fifo_part_list_op_reply
     }
   };
 
+  string tag;
   vector<entry> entries;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
+    encode(tag, bl);
     encode(entries, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
+    decode(tag, bl);
     decode(entries, bl);
     DECODE_FINISH(bl);
   }
