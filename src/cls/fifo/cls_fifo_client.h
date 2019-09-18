@@ -169,6 +169,26 @@ namespace rados {
 
         static int push_part(librados::ObjectWriteOperation *op,
                              const PushPartParams& params);
+	/* trim part */
+
+        struct TrimPartParams {
+          struct State {
+            std::optional<string> tag;
+            uint64_t ofs;
+          } state;
+
+          TrimPartParams& tag(const std::string& tag) {
+            state.tag = tag;
+            return *this;
+          }
+          TrimPartParams& ofs(uint64_t ofs) {
+            state.ofs = ofs;
+            return *this;
+          }
+        };
+
+        static int trim_part(librados::ObjectWriteOperation *op,
+                             const TrimPartParams& params);
       };
     } // namespace fifo
   }  // namespace cls

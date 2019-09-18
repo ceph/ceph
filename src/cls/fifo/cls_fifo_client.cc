@@ -151,7 +151,23 @@ namespace rados {
 
         bufferlist in;
         encode(op, in);
-        rados_op->exec("fifo", "fifo_push_part", in);
+        rados_op->exec("fifo", "fifo_part_push", in);
+
+        return 0;
+      }
+
+      int FIFO::trim_part(librados::ObjectWriteOperation *rados_op,
+                          const TrimPartParams& params) {
+        cls_fifo_part_trim_op op;
+
+        auto& state = params.state;
+
+        op.tag = state.tag;
+        op.ofs = state.ofs;
+
+        bufferlist in;
+        encode(op, in);
+        rados_op->exec("fifo", "fifo_part_trim", in);
 
         return 0;
       }

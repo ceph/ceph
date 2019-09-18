@@ -500,6 +500,7 @@ public:
     return (ofs >= part_header.max_ofs);
   }
 
+  int peek_pre_header(cls_fifo_entry_header_pre *pre_header);
   int get_next_entry(bufferlist *pbl,
                      uint64_t *pofs,
                      ceph::real_time *pmtime);
@@ -558,25 +559,36 @@ int EntryReader::seek(uint64_t num_bytes)
   return read(num_bytes, &bl);
 }
 
-int EntryReader::get_next_entry(bufferlist *pbl,
-                                uint64_t *pofs,
-                                ceph::real_time *pmtime)
+int EntryReader::peek_pre_header(cls_fifo_entry_header_pre *pre_header)
 {
   if (end()) {
     return -ENOENT;
   }
 
-  *pofs = ofs;
-
-  cls_fifo_entry_header_pre pre_header;
-  int r = peek(sizeof(pre_header), (char *)&pre_header);
+  int r = peek(sizeof(*pre_header), (char *)pre_header);
   if (r < 0) {
     return r;
   }
 
-  if (pre_header.magic != part_header.magic) {
+  if (pre_header->magic != part_header.magic) {
     return -ERANGE;
   }
+
+  return 0;
+}
+
+
+int EntryReader::get_next_entry(bufferlist *pbl,
+                                uint64_t *pofs,
+                                ceph::real_time *pmtime)
+{
+  cls_fifo_entry_header_pre pre_header;
+  int r = peek_pre_header(&pre_header);
+  if (r < 0) {
+    return r;
+  }
+
+  *pofs = ofs;
 
   r = seek(pre_header.pre_size);
   if (r < 0) {
@@ -605,6 +617,62 @@ int EntryReader::get_next_entry(bufferlist *pbl,
   r = read(pre_header.data_size, pbl);
   if (r < 0) {
     CLS_ERR("%s(): failed reading data: r=%d", __func__, r);
+    return r;
+  }
+
+  return 0;
+}
+
+static int fifo_part_trim_op(cls_method_context_t hctx,
+                             bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+
+  cls_fifo_part_trim_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  cls_fifo_part_header part_header;
+  int r = read_part_header(hctx, &part_header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to read part header", __func__);
+    return r;
+  }
+
+  if (op.tag &&
+      !(part_header.tag == *op.tag)) {
+    CLS_LOG(10, "%s(): bad tag", __func__);
+    return -EINVAL;
+  }
+
+  if (op.ofs < part_header.min_ofs) {
+    return 0;
+  }
+
+  if (op.ofs >= part_header.max_ofs) {
+    part_header.min_ofs = part_header.max_ofs;
+    part_header.min_index = part_header.max_index;
+  } else {
+    EntryReader reader(hctx, part_header, op.ofs);
+
+    cls_fifo_entry_header_pre pre_header;
+    int r = reader.peek_pre_header(&pre_header);
+    if (r < 0) {
+      return r;
+    }
+
+    part_header.min_ofs = op.ofs;
+    part_header.min_index = pre_header.index;
+  }
+
+  r = write_part_header(hctx, part_header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to write heaader: r=%d", __func__, r);
     return r;
   }
 
@@ -664,8 +732,9 @@ CLS_INIT(fifo)
   cls_method_handle_t h_fifo_meta_get_op;
   cls_method_handle_t h_fifo_meta_update_op;
   cls_method_handle_t h_fifo_part_init_op;
-  cls_method_handle_t h_fifo_part_push_op;;
-  cls_method_handle_t h_fifo_part_list_op;;
+  cls_method_handle_t h_fifo_part_push_op;
+  cls_method_handle_t h_fifo_part_trim_op;
+  cls_method_handle_t h_fifo_part_list_op;
 
   cls_register("fifo", &h_class);
   cls_register_cxx_method(h_class, "fifo_meta_create",
@@ -687,6 +756,10 @@ CLS_INIT(fifo)
   cls_register_cxx_method(h_class, "fifo_part_push",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           fifo_part_push_op, &h_fifo_part_push_op);
+
+  cls_register_cxx_method(h_class, "fifo_part_trim",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          fifo_part_trim_op, &h_fifo_part_trim_op);
 
   cls_register_cxx_method(h_class, "fifo_part_list",
                           CLS_METHOD_RD,

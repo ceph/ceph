@@ -166,6 +166,26 @@ struct cls_fifo_part_push_op
 };
 WRITE_CLASS_ENCODER(cls_fifo_part_push_op)
 
+struct cls_fifo_part_trim_op
+{
+  std::optional<string> tag;
+  uint64_t ofs{0};
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(tag, bl);
+    encode(ofs, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(tag, bl);
+    decode(ofs, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_fifo_part_trim_op)
+
 struct cls_fifo_part_list_op
 {
   uint64_t ofs{0};
