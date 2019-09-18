@@ -209,5 +209,42 @@ public:
 };
 
 
+class RGWRadosList {
+  RGWRados *store;
+
+  std::ostream& out;
+
+  uint16_t max_concurrent_ios;
+  uint64_t stale_secs;
+
+  int handle_stat_result(RGWRados::Object::Stat::Result& result,
+			 std::set<string>& obj_oids);
+  int pop_and_handle_stat_op(map<int, list<string> >& oids,
+			     std::deque<RGWRados::Object::Stat>& ops);
+
+public:
+
+  RGWRadosList(RGWRados *_store,
+	    int _max_ios,
+	    uint64_t _stale_secs,
+	    std::ostream& _out = std::cout) :
+    store(_store),
+    out(_out),
+    max_concurrent_ios(_max_ios),
+    stale_secs(_stale_secs)
+  {}
+
+#if 0
+  // possible future expansion -- have it find all bucket....
+  int RGWRadosList::build_buckets_instance_index()
+#endif
+
+  int build_linked_oids_for_bucket(const string& bucket_instance_id,
+				   map<int, list<string>>& oids);
+
+  int build_linked_oids_index();
+
+  int run(const std::string& bucket_id);
+}; // class RGWRadosList
 
 #endif

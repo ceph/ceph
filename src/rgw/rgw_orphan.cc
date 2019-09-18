@@ -54,6 +54,30 @@ static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
   return s.substr(0, i + 1);
 }
 
+
+static string obj_force_ns(const string& oid, const char *force_ns)
+{
+  ssize_t pos = oid.find('_');
+  if (pos < 0) {
+    cerr << "ERROR: object does not have a bucket marker: " << oid << std::endl;
+  }
+
+  string obj_marker = oid.substr(0, pos);
+
+  rgw_obj_key obj;
+  rgw_obj_key::parse_raw_oid(oid.substr(pos + 1), &obj);
+
+  if (obj.ns.empty()) {
+    return oid;
+  }
+
+  obj.set_ns(force_ns);
+
+  string s = obj_marker + new_obj.get_oid();
+
+  return s;
+}
+
 int RGWOrphanStore::read_job(const string& job_name, RGWOrphanSearchState & state)
 {
   set<string> keys;
@@ -915,4 +939,287 @@ int RGWOrphanSearch::finish()
   }
 
   return r;
+}
+
+
+int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
+				  set<string>& obj_oids)
+{
+  obj_oids.clear();
+
+  rgw_bucket& bucket = result.obj.bucket;
+  if (!result.has_manifest) {
+    /* a very very old object, or part of a multipart upload during upload */
+    const string loc = bucket.bucket_id + "_" + result.obj.get_object();
+    obj_oids.insert(loc);
+
+    /*
+     * multipart parts don't have manifest on them, it's in the meta
+     * object. Instead of reading the meta object, just add a "shadow"
+     * object to the mix
+     */
+    obj_oids.insert(obj_force_ns(loc, "shadow"));
+  } else {
+    RGWObjManifest& manifest = result.manifest;
+
+    if (0 == manifest.get_max_head_size()) {
+      // in multipart, the head object contains no data and just has
+      // the manifest
+      string s = bucket.bucket_id + "_" + result.obj.get_object();
+      obj_oids.insert(s);
+    }
+
+    RGWObjManifest::obj_iterator miter;
+    for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
+      const rgw_obj& loc = miter.get_location();
+      string s = bucket.bucket_id + "_" + loc.get_object();
+      obj_oids.insert(s);
+    }
+  }
+
+  return 0;
+}
+
+int RGWRadosList::pop_and_handle_stat_op(
+  map<int, list<string> >& oids,
+  std::deque<RGWRados::Object::Stat>& ops)
+{
+  set<string> obj_oids;
+  RGWRados::Object::Stat& front_op = ops.front();
+
+  int ret = front_op.wait();
+  if (ret < 0) {
+    if (ret != -ENOENT) {
+      lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
+	cpp_strerror(-ret) << dendl;
+    }
+    goto done;
+  }
+
+  ret = handle_stat_result(front_op.result, obj_oids);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: handle_stat_result() returned error: " <<
+      cpp_strerror(-ret) << dendl;
+  }
+
+  for (const auto& o : obj_oids) {
+    std::cout << o << std::endl;
+  }
+
+done:
+
+  ops.pop_front();
+  return ret;
+}
+
+
+#if 0 // code that may be the basis for expansion
+int RGWRadosList::build_buckets_instance_index()
+{
+  void *handle;
+  int max = 1000;
+  string section = "bucket.instance";
+  int ret = store->meta_mgr->list_keys_init(section, &handle);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
+    return -ret;
+  }
+
+  map<int, list<string> > instances;
+
+  bool truncated;
+
+  RGWObjectCtx obj_ctx(store);
+
+  int count = 0;
+  uint64_t total = 0;
+
+  do {
+    list<string> keys;
+    ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    if (ret < 0) {
+      lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+
+    for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+      ++total;
+      ldout(store->ctx(), 10) << "bucket_instance=" << *iter << " total=" << total << dendl;
+      int shard = orphan_shard(*iter);
+      instances[shard].push_back(*iter);
+
+      if (++count >= COUNT_BEFORE_FLUSH) {
+        ret = log_oids(buckets_instance_index, instances);
+        if (ret < 0) {
+          lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
+          return ret;
+        }
+        count = 0;
+        instances.clear();
+      }
+    }
+  } while (truncated);
+
+  ret = log_oids(buckets_instance_index, instances);
+  if (ret < 0) {
+    lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
+    return ret;
+  }
+  store->meta_mgr->list_keys_complete(handle);
+
+  return 0;
+}
+#endif
+
+
+int RGWRadosList::build_linked_oids_for_bucket(
+  const string& bucket_instance_id,
+  map<int, list<string> >& oids)
+{
+  ldout(store->ctx(), 10) << "building linked oids for bucket instance: " <<
+    bucket_instance_id << dendl;
+  RGWBucketInfo bucket_info;
+  RGWObjectCtx obj_ctx(store);
+  int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id,
+					    bucket_info, NULL, NULL);
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      /* probably raced with bucket removal */
+      return 0;
+    }
+    lderr(store->ctx()) << __func__ <<
+      ": ERROR: RGWRados::get_bucket_instance_info() returned ret=" <<
+      ret << dendl;
+    return ret;
+  }
+
+  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket::List list_op(&target);
+
+  string marker;
+  list_op.params.marker = rgw_obj_key(marker);
+  list_op.params.list_versions = true;
+  list_op.params.enforce_ns = false;
+  list_op.params.allow_unordered = true;
+
+  bool truncated;
+
+  deque<RGWRados::Object::Stat> stat_ops;
+  string prev_versioned_key_name = "";
+
+  do {
+    vector<RGWObjEnt> result;
+
+#define MAX_LIST_OBJS_ENTRIES 100
+    ret = list_op.list_objects(MAX_LIST_OBJS_ENTRIES, &result, NULL, &truncated);
+    if (ret < 0) {
+      cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    for (vector<RGWObjEnt>::iterator iter = result.begin();
+	 iter != result.end();
+	 ++iter) {
+      RGWObjEnt& entry = *iter;
+
+      if (entry.key.instance.empty()) {
+        ldout(store->ctx(), 20) << "obj entry: " << entry.key.name << dendl;
+      } else {
+        ldout(store->ctx(), 20) << "obj entry: " << entry.key.name <<
+	  " [" << entry.key.instance << "]" << dendl;
+      }
+
+      ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" <<
+	entry.key.name << " entry.key.instance=" << entry.key.instance << dendl;
+
+      // we need to do this in two cases below, so use a lambda
+      auto do_stat_key =
+	[&](const rgw_obj_key& key) -> int {
+	  int ret;
+
+	  rgw_obj obj(bucket_info.bucket, key);
+          obj.set_ns(entry.ns);
+
+	  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
+
+	  stat_ops.push_back(RGWRados::Object::Stat(&op_target));
+	  RGWRados::Object::Stat& op = stat_ops.back();
+
+	  ret = op.stat_async();
+	  if (ret < 0) {
+	    lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
+	      cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
+
+	  if (stat_ops.size() >= max_concurrent_ios) {
+	    ret = pop_and_handle_stat_op(oids, stat_ops);
+	    if (ret < 0) {
+	      if (ret != -ENOENT) {
+		lderr(store->ctx()) <<
+		  "ERROR: pop_and_handle_stat_op() returned error: " <<
+		  cpp_strerror(-ret) << dendl;
+	      }
+
+	      // clear error, so we'll continue processing directory
+	      ret = 0;
+	    }
+	  }
+
+	  return ret;
+	}; // do_stat_key lambda
+
+      // for versioned objects, make sure the head object is handled
+      // as well by ignoring the instance identifier
+      if (!entry.key.instance.empty() &&
+	  entry.key.name != prev_versioned_key_name) {
+	// don't do the same key twice; even though out bucket index
+	// listing allows unordered, since all versions of an object
+	// use the same bucket index key, they'll all end up together
+	// and sorted
+	prev_versioned_key_name = entry.key.name;
+
+	rgw_obj_key uninstanced(entry.key.name);
+
+	ret = do_stat_key(uninstanced);
+	if (ret < 0) {
+	  return ret;
+	}
+      }
+
+      ret = do_stat_key(entry.key);
+      if (ret < 0) {
+	return ret;
+      }
+    } // for iter loop
+  } while (truncated);
+
+  while (!stat_ops.empty()) {
+    ret = pop_and_handle_stat_op(oids, stat_ops);
+    if (ret < 0) {
+      if (ret != -ENOENT) {
+        lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
+	  cpp_strerror(-ret) << dendl;
+      }
+    }
+  }
+
+  return 0;
+}
+
+
+int RGWRadosList::run(const std::string& bucket_id)
+{
+  int ret;
+  map<int, list<string> > oids;
+
+  ret = build_linked_oids_for_bucket(bucket_id, oids);
+  if (ret < 0) {
+    lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
+      ": ERROR: build_linked_oids_for_bucket() indexed entry=" <<
+      bucket_id << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
 }
