@@ -88,6 +88,10 @@ add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
+set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
+add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})
+install(TARGETS ceph-diff-sorted DESTINATION bin)
+
 if(WITH_TESTS)
 set(ceph_psim_srcs psim.cc)
 add_executable(ceph_psim ${ceph_psim_srcs})

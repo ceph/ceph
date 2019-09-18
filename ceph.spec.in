@@ -1847,10 +1847,12 @@ fi
 %{_mandir}/man8/rbd-nbd.8*
 
 %files radosgw
+%{_bindir}/ceph-diff-sorted
 %{_bindir}/radosgw
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
+%{_bindir}/rgw-orphan-list
 %{_mandir}/man8/radosgw.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service

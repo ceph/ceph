@@ -108,6 +108,7 @@ void usage()
   cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
+  cout << "  bucket radoslist           list rados objects backing bucket's objects\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
   cout << "  bi put                     store bucket index object entries\n";
   cout << "  bi list                    list raw bucket index entries\n";
@@ -413,6 +414,8 @@ enum {
   OPT_BUCKET_RM,
   OPT_BUCKET_REWRITE,
   OPT_BUCKET_RESHARD,
+  OPT_BUCKET_CHOWN,
+  OPT_BUCKET_RADOS_LIST,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -686,6 +689,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BUCKET_RESHARD;
     if (strcmp(cmd, "check") == 0)
       return OPT_BUCKET_CHECK;
+    if (strcmp(cmd, "radoslist") == 0)
+      return OPT_BUCKET_RADOS_LIST;
     if (strcmp(cmd, "sync") == 0) {
       *need_more = true;
       return 0;
@@ -1187,8 +1192,12 @@ public:
   }
 };
 
-static int init_bucket(const string& tenant_name, const string& bucket_name, const string& bucket_id,
-                       RGWBucketInfo& bucket_info, rgw_bucket& bucket, map<string, bufferlist> *pattrs = nullptr)
+static int init_bucket(const string& tenant_name,
+		       const string& bucket_name,
+		       const string& bucket_id,
+                       RGWBucketInfo& bucket_info,
+		       rgw_bucket& bucket,
+		       map<string, bufferlist> *pattrs = nullptr)
 {
   if (!bucket_name.empty()) {
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
@@ -5592,6 +5601,29 @@ int main(int argc, const char **argv)
       formatter->flush(cout);
     } /* have bucket_name */
   } /* OPT_BUCKETS_LIST */
+
+  if (opt_cmd == OPT_BUCKET_RADOS_LIST) {
+    RGWRadosList lister(store,
+			max_concurrent_ios, orphan_stale_secs, tenant);
+    if (bucket_name.empty()) {
+      ret = lister.run();
+    } else {
+      ret = lister.run(bucket_name);
+    }
+
+    if (ret < 0) {
+      std::cerr <<
+	"ERROR: bucket radoslist failed to finish before " <<
+	"encountering error: " << cpp_strerror(-ret) << std::endl;
+      std::cerr << "************************************"
+	"************************************" << std::endl;
+      std::cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
+	"BE USED IN DELETING ORPHANS" << std::endl;
+      std::cerr << "************************************"
+	"************************************" << std::endl;
+      return -ret;
+    }
+  }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
     if (bucket_name.empty() && !bucket_id.empty()) {
