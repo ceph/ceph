@@ -1,5 +1,5 @@
 import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { async, ComponentFixture, TestBed, TestModuleMetadata } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
@@ -20,7 +20,7 @@ import {
 } from '../app/shared/models/prometheus-alerts';
 import { _DEV_ } from '../unit-test-configuration';
 
-export function configureTestBed(configuration, useOldMethod?) {
+export function configureTestBed(configuration: TestModuleMetadata, useOldMethod?) {
   if (_DEV_ && !useOldMethod) {
     const resetTestingModule = TestBed.resetTestingModule;
     beforeAll((done) =>
