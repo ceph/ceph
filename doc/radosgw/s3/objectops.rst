@@ -411,6 +411,7 @@ It is used to upload files in appending mode. The type of the objects created by
 operation is Appendable Object, and the type of the objects uploaded with the Put Object operation is Normal Object.
 **Append Object can't be used if bucket versioning is enabled or suspended.**
 **Synced object will become normal in multisite, but you can still append to the original object.**
+**Compression and encryption features are disabled for Appendable objects.**
 
 Syntax
 ~~~~~~
