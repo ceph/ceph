@@ -105,6 +105,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Input()
   autoSave = true;
 
+  // Enable this in order to search through the JSON of any used object.
+  @Input()
+  searchableObjects = false;
+
   // Only needed to set if the classAddingTpl is used
   @Input()
   customCss?: { [css: string]: number | string | ((any) => boolean) };
@@ -537,6 +541,15 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
           } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
             cellValue = cellValue.toString();
           }
+
+          if (_.isObjectLike(cellValue)) {
+            if (this.searchableObjects) {
+              cellValue = JSON.stringify(cellValue);
+            } else {
+              return false;
+            }
+          }
+
           return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
         }).length > 0
       );
