@@ -149,7 +149,8 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   }
 
   getDeleteDisableDesc(): string | undefined {
-    if (this.selection.first() && this.selection.first()['info']['num_sessions']) {
+    const first = this.selection.first();
+    if (first && first['info'] && first['info']['num_sessions']) {
       return this.i18n('Target has active sessions');
     }
   }
