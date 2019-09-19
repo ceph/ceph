@@ -132,7 +132,7 @@ public:
 			  bool forced = false);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
-  void send_pg_temp();
+  seastar::future<> send_pg_temp();
 
   // Shard-local OSDMap
 private:
