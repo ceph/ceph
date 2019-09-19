@@ -1017,7 +1017,7 @@ COMMAND("osd pool ls " \
 	"list pools", "osd", "r")
 COMMAND("osd pool create " \
 	"name=pool,type=CephPoolname " \
-	"name=pg_num,type=CephInt,range=0 " \
+	"name=pg_num,type=CephInt,range=0,req=false " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
 	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] " \
