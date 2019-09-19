@@ -51,7 +51,7 @@ module  (see :doc:`/mgr/orchestrator_cli`) , e.g., rook.
 
 Remove a volume using::
 
-    $ ceph fs volume rm <vol_name>
+    $ ceph fs volume rm <vol_name> [--yes-i-really-mean-it]
 
 This removes a file system and its data and metadata pools. It also tries to
 remove MDSes using the enabled ceph-mgr orchestrator module.
