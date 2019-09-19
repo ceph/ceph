@@ -139,7 +139,7 @@ seastar::future<Heartbeat::osds_t> Heartbeat::remove_down_peers()
     });
 }
 
-void Heartbeat::add_reporter_peers(int whoami)
+seastar::future<> Heartbeat::add_reporter_peers(int whoami)
 {
   auto osdmap = service.get_osdmap_service().get_map();
   // include next and previous up osds to ensure we have a fully-connected set
@@ -156,17 +156,20 @@ void Heartbeat::add_reporter_peers(int whoami)
   auto subtree = local_conf().get_val<string>("mon_osd_reporter_subtree_level");
   osdmap->get_random_up_osds_by_subtree(
     whoami, subtree, min_down, want, &want);
-  for (auto osd : want) {
-    add_peer(osd, osdmap->get_epoch());
-  }
+  return seastar::parallel_for_each(
+    std::move(want),
+    [epoch=osdmap->get_epoch(), this](int osd) {
+      return add_peer(osd, epoch);
+  });
 }
 
 seastar::future<> Heartbeat::update_peers(int whoami)
 {
   const auto min_peers = static_cast<size_t>(
     local_conf().get_val<int64_t>("osd_heartbeat_min_peers"));
-  return remove_down_peers().then([=](osds_t&& extra) {
-    add_reporter_peers(whoami);
+  return add_reporter_peers(whoami).then([this] {
+    return remove_down_peers();
+  }).then([=](osds_t&& extra) {
     // too many?
     struct iteration_state {
       osds_t::const_iterator where;
