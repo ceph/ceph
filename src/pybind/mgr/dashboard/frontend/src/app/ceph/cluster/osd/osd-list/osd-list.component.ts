@@ -132,7 +132,10 @@ export class OsdListComponent implements OnInit {
             this.i18n('Purge'),
             this.i18n('OSD'),
             this.i18n('purged'),
-            this.osdService.purge
+            (id) => {
+              this.selection = new CdTableSelection();
+              return this.osdService.purge(id);
+            }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: Icons.erase
@@ -145,7 +148,10 @@ export class OsdListComponent implements OnInit {
             this.i18n('destroy'),
             this.i18n('OSD'),
             this.i18n('destroyed'),
-            this.osdService.destroy
+            (id) => {
+              this.selection = new CdTableSelection();
+              return this.osdService.destroy(id);
+            }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: Icons.destroy
@@ -338,6 +344,7 @@ export class OsdListComponent implements OnInit {
               this.getSelectedIds().map((osd: any) => action.call(this.osdService, osd))
             ).subscribe(
               () => {
+                this.getOsdList();
                 modalRef.hide();
               },
               () => modalRef.hide()
