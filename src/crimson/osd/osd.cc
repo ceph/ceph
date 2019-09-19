@@ -264,8 +264,11 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr.get_myaddrs(),
                               public_msgr.get_myaddrs()); changed) {
-      cluster_msgr.set_myaddrs(addrs);
+      return cluster_msgr.set_myaddrs(addrs);
+    } else {
+      return seastar::now();
     }
+  }).then([this] {
     return heartbeat->start(public_msgr.get_myaddrs(),
                             cluster_msgr.get_myaddrs());
   }).then([this] {
