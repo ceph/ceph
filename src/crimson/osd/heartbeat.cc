@@ -90,8 +90,10 @@ void Heartbeat::set_require_authorizer(bool require_authorizer)
 
 seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
 {
-  auto found = peers.find(peer);
-  if (found == peers.end()) {
+  auto [peer_info, added] = peers.try_emplace(peer);
+  auto& info = peer_info->second;
+  info.epoch = epoch;
+  if (added) {
     logger().info("add_peer({})", peer);
     auto osdmap = service.get_osdmap_service().get_map();
     // TODO: use addrs
@@ -100,16 +102,12 @@ seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
                            CEPH_ENTITY_TYPE_OSD),
         back_msgr.connect(osdmap->get_hb_back_addrs(peer).front(),
                           CEPH_ENTITY_TYPE_OSD))
-      .then([this, peer, epoch] (auto xcon_front, auto xcon_back) {
-        PeerInfo info;
+      .then([this, &info=peer_info->second] (auto xcon_front, auto xcon_back) {
         // sharded-messenger compatible mode
         info.con_front = xcon_front->release();
         info.con_back = xcon_back->release();
-        info.epoch = epoch;
-        peers.emplace(peer, std::move(info));
       });
   } else {
-    found->second.epoch = epoch;
     return seastar::now();
   }
 }
