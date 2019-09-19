@@ -267,22 +267,24 @@ class AdminHook : public AdminSocketHook {
 public:
   explicit AdminHook(Monitor *m) : mon(m) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     stringstream outss;
-    mon->do_admin_command(command, cmdmap, format, outss);
+    mon->do_admin_command(command, cmdmap, f, errss, outss);
     out.append(outss);
     return 0;
   }
 };
 
-void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
-			       std::string_view format, std::ostream& ss)
+void Monitor::do_admin_command(
+  std::string_view command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  std::ostream& err,
+  std::ostream& out)
 {
   std::lock_guard l(lock);
-
-  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string args;
   for (auto p = cmdmap.begin();
@@ -306,68 +308,52 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
     << "cmd='" << command << "' args=" << args << ": dispatch";
 
   if (command == "mon_status") {
-    get_mon_status(f.get(), ss);
-    if (f)
-      f->flush(ss);
+    get_mon_status(f, out);
   } else if (command == "quorum_status") {
-    _quorum_status(f.get(), ss);
+    _quorum_status(f, out);
   } else if (command == "sync_force") {
     string validate;
     if ((!cmd_getval(g_ceph_context, cmdmap, "validate", validate)) ||
 	(validate != "--yes-i-really-mean-it")) {
-      ss << "are you SURE? this will mean the monitor store will be erased "
-            "the next time the monitor is restarted.  pass "
-            "'--yes-i-really-mean-it' if you really do.";
+      err << "are you SURE? this will mean the monitor store will be erased "
+	"the next time the monitor is restarted.  pass "
+	"'--yes-i-really-mean-it' if you really do.";
       goto abort;
     }
-    sync_force(f.get(), ss);
+    sync_force(f, out);
   } else if (command.compare(0, 23, "add_bootstrap_peer_hint") == 0 ||
 	     command.compare(0, 24, "add_bootstrap_peer_hintv") == 0) {
-    if (!_add_bootstrap_peer_hint(command, cmdmap, ss))
+    if (!_add_bootstrap_peer_hint(command, cmdmap, out))
       goto abort;
   } else if (command == "quorum enter") {
     elector.start_participating();
     start_election();
-    ss << "started responding to quorum, initiated new election";
+    out << "started responding to quorum, initiated new election";
   } else if (command == "quorum exit") {
     start_election();
     elector.stop_participating();
-    ss << "stopped responding to quorum, initiated new election";
+    out << "stopped responding to quorum, initiated new election";
   } else if (command == "ops") {
-    (void)op_tracker.dump_ops_in_flight(f.get());
-    if (f) {
-      f->flush(ss);
-    }
+    (void)op_tracker.dump_ops_in_flight(f);
   } else if (command == "sessions") {
-
-    if (f) {
-      f->open_array_section("sessions");
-      for (auto p : session_map.sessions) {
-        f->dump_stream("session") << *p;
-      }
-      f->close_section();
-      f->flush(ss);
+    f->open_array_section("sessions");
+    for (auto p : session_map.sessions) {
+      f->dump_stream("session") << *p;
     }
-
+    f->close_section();
   } else if (command == "dump_historic_ops") {
-    if (op_tracker.dump_historic_ops(f.get())) {
-      f->flush(ss);
-    } else {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+    if (!op_tracker.dump_historic_ops(f)) {
+      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_ops_by_duration" ) {
-    if (op_tracker.dump_historic_ops(f.get(), true)) {
-      f->flush(ss);
-    } else {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+    if (op_tracker.dump_historic_ops(f, true)) {
+      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_slow_ops") {
-    if (op_tracker.dump_historic_slow_ops(f.get(), {})) {
-      f->flush(ss);
-    } else {
-      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+    if (op_tracker.dump_historic_slow_ops(f, {})) {
+      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else {

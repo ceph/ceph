@@ -16,6 +16,7 @@
 #include "tools/rbd_mirror/PoolReplayer.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "common/Formatter.h"
 
 namespace librbd {
 
@@ -116,7 +117,7 @@ struct Throttler<librbd::MockTestImageCtx> {
     s_instance = nullptr;
   }
 
-  MOCK_METHOD2(print_status, void(Formatter*, std::stringstream*));
+  MOCK_METHOD1(print_status, void(Formatter*));
 };
 
 Throttler<librbd::MockTestImageCtx>* Throttler<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -154,7 +155,7 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD1(handle_instances_added, void(const std::vector<std::string> &));
   MOCK_METHOD1(handle_instances_removed, void(const std::vector<std::string> &));
 
-  MOCK_METHOD2(print_status, void(Formatter*, std::stringstream*));
+  MOCK_METHOD1(print_status, void(Formatter*));
   MOCK_METHOD0(start, void());
   MOCK_METHOD0(stop, void());
   MOCK_METHOD0(restart, void());

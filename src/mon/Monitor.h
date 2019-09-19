@@ -989,7 +989,9 @@ private:
   int write_fsid(MonitorDBStore::TransactionRef t);
 
   void do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
-			std::string_view format, std::ostream& ss);
+			Formatter *f,
+			std::ostream& err,
+			std::ostream& out);
 
 private:
   // don't allow copying

@@ -90,7 +90,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD2(stop, void(Context *, bool));
   MOCK_METHOD0(restart, void());
   MOCK_METHOD0(flush, void());
-  MOCK_METHOD2(print_status, void(Formatter *, stringstream *));
+  MOCK_METHOD1(print_status, void(Formatter *));
   MOCK_METHOD2(add_peer, void(const std::string &, librados::IoCtx &));
   MOCK_METHOD0(get_global_image_id, const std::string &());
   MOCK_METHOD0(get_local_image_id, const std::string &());

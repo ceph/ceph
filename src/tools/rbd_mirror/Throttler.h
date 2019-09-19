@@ -46,7 +46,7 @@ public:
   void finish_op(const std::string &ns, const std::string &id);
   void drain(const std::string &ns, int r);
 
-  void print_status(ceph::Formatter *f, std::stringstream *ss);
+  void print_status(ceph::Formatter *f);
 
 private:
   typedef std::pair<std::string, std::string> Id;
