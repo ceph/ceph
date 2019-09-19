@@ -241,13 +241,14 @@ export class OsdListComponent implements OnInit {
       return true;
     }
 
-    const validOsds = [];
+    let validOsds = [];
     if (this.selection.hasSelection) {
       for (const osdId of this.getSelectedIds()) {
         validOsds.push(this.osds.filter((o) => o.id === osdId).pop());
       }
     }
 
+    validOsds = validOsds.filter((osd) => !_.isUndefined(osd));
     if (validOsds.length === 0) {
       // `osd` is undefined if the selected OSD has been removed.
       return true;
