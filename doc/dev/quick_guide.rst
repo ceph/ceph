@@ -66,7 +66,7 @@ Make a pool and run some benchmarks against it:
 
 .. code::
 
-	$ bin/ceph osd pool create mypool 8
+	$ bin/ceph osd pool create mypool
 	$ bin/rados -p mypool bench 10 write -b 123
 
 Place a file into the new pool:

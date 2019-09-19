@@ -28,7 +28,7 @@ observed.::
              plugin=lrc \
              k=4 m=2 l=3 \
              crush-failure-domain=host
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 Reduce recovery bandwidth between racks
@@ -42,7 +42,7 @@ OSD is in the same rack as the lost chunk.::
              k=4 m=2 l=3 \
              crush-locality=rack \
              crush-failure-domain=host
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 Create an lrc profile
@@ -196,7 +196,7 @@ by default.::
              plugin=lrc \
              mapping=DD_ \
              layers='[ [ "DDc", "" ] ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 Reduce recovery bandwidth between hosts
 ---------------------------------------
@@ -214,7 +214,7 @@ the layout of the chunks is different::
                        [ "cDDD____", "" ],
                        [ "____cDDD", "" ],
                      ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 Reduce recovery bandwidth between racks
@@ -235,7 +235,7 @@ OSD is in the same rack as the lost chunk.::
                              [ "choose", "rack", 2 ],
                              [ "chooseleaf", "host", 4 ],
                             ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 Testing with different Erasure Code backends
 --------------------------------------------
@@ -251,7 +251,7 @@ be used in the lrcpool.::
              plugin=lrc \
              mapping=DD_ \
              layers='[ [ "DDc", "plugin=isa technique=cauchy" ] ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 You could also use a different erasure code profile for for each
 layer.::
@@ -264,7 +264,7 @@ layer.::
                        [ "cDDD____", "plugin=isa" ],
                        [ "____cDDD", "plugin=jerasure" ],
                      ]'
-        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+        $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 
