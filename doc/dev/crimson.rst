@@ -110,7 +110,7 @@ We can use `cbt`_ for performing perf tests::
   $ git checkout yet-another-pr
   $ make crimson-osd
   $ ../src/script/run-cbt.sh --cbt ~/dev/cbt -a /tmp/yap ../src/test/crimson/cbt/radosbench_4K_read.yaml
-  $ ~/dev/cbt/compare.py -a /tmp/baseline -b /tmp/yap -v
+  $ ~/dev/cbt/compare.py -b /tmp/baseline -a /tmp/yap -v
   19:48:23 - INFO     - cbt      - prefill/gen8/0: bandwidth: (or (greater) (near 0.05)):: 0.183165/0.186155  => accepted
   19:48:23 - INFO     - cbt      - prefill/gen8/0: iops_avg: (or (greater) (near 0.05)):: 46.0/47.0  => accepted
   19:48:23 - WARNING  - cbt      - prefill/gen8/0: iops_stddev: (or (less) (near 0.05)):: 10.4403/6.65833  => rejected
