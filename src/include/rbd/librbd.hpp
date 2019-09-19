@@ -732,6 +732,7 @@ public:
   int mirror_image_promote(bool force);
   int mirror_image_demote();
   int mirror_image_resync();
+  int mirror_image_create_snapshot(uint64_t *snap_id);
   int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                             size_t info_size);
   int mirror_image_get_global_status(

@@ -583,6 +583,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_promote(rbd_image_t image, bint force)
     int rbd_mirror_image_demote(rbd_image_t image)
     int rbd_mirror_image_resync(rbd_image_t image)
+    int rbd_mirror_image_create_snapshot(rbd_image_t image, uint64_t *snap_id)
     int rbd_mirror_image_get_info(rbd_image_t image,
                                   rbd_mirror_image_info_t *mirror_image_info,
                                   size_t info_size)
@@ -4551,6 +4552,23 @@ written." % (self.name, ret, length))
             ret = rbd_mirror_image_resync(self.image)
         if ret < 0:
             raise make_ex(ret, 'error to resync image %s' % self.name)
+
+    def mirror_image_create_snapshot(self):
+        """
+        Create mirror snapshot.
+
+        :param force: ignore mirror snapshot limit
+        :type force: bool
+        :returns: int - the snapshot Id
+        """
+        cdef:
+            uint64_t snap_id
+        with nogil:
+            ret = rbd_mirror_image_create_snapshot(self.image, &snap_id)
+        if ret < 0:
+            raise make_ex(ret, 'error creating mirror snapshot for image %s' %
+                          self.name)
+        return snap_id
 
     def mirror_image_get_info(self):
         """
