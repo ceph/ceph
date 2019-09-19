@@ -1122,7 +1122,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   rgw_pool pool;
 
   uint32_t shard_id;
-  rgw_data_sync_marker sync_marker;
+  rgw_data_sync_marker& sync_marker;
 
   RGWRadosGetOmapKeysCR::ResultPtr omapkeys;
   std::set<std::string> entries;
@@ -1179,7 +1179,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 public:
   RGWDataSyncShardCR(RGWDataSyncEnv *_sync_env,
                      rgw_pool& _pool,
-		     uint32_t _shard_id, const rgw_data_sync_marker& _marker,
+                     uint32_t _shard_id, rgw_data_sync_marker& _marker,
                      RGWSyncTraceNodeRef& _tn,
                      bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
