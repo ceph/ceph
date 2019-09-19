@@ -203,7 +203,7 @@ public:
   seastar::future<> shutdown();
 
   seastar::future<> send_beacon();
-  void update_heartbeat_peers();
+  seastar::future<> update_heartbeat_peers();
 
   friend class PGAdvanceMap;
 };
