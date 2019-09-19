@@ -40,19 +40,20 @@ public:
   virtual int call(
     std::string_view command,
     const cmdmap_t& cmdmap,
-    std::string_view format,
+    Formatter *f,
     std::ostream& errss,
     ceph::buffer::list& out) = 0;
+
   virtual void call_async(
     std::string_view command,
     const cmdmap_t& cmdmap,
-    std::string_view format,
+    Formatter *f,
     const bufferlist& inbl,
     std::function<void(int,const std::string&,bufferlist&)> on_finish) {
     // by default, call the synchronous handler and then finish
     bufferlist out;
     std::ostringstream errss;
-    int r = call(command, cmdmap, format, errss, out);
+    int r = call(command, cmdmap, f, errss, out);
     on_finish(r, errss.str(), out);
   }
   virtual ~AdminSocketHook() {}

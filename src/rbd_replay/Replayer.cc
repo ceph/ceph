@@ -300,11 +300,11 @@ void Replayer::erase_image(imagectx_id_t imagectx_id) {
   if (m_dump_perf_counters) {
     string command = "perf dump";
     cmdmap_t cmdmap;
-    string format = "json-pretty";
+    JSONFormatter jf(true);
     bufferlist out;
     stringstream ss;
-    g_ceph_context->do_command(command, cmdmap, format, ss, &out);
-    out.write_stream(cout);
+    g_ceph_context->do_command(command, cmdmap, &jf, ss, &out);
+    jf.flush(cout);
     cout << std::endl;
     cout.flush();
   }
@@ -370,12 +370,13 @@ void Replayer::clear_images() {
   if (m_dump_perf_counters && !m_images.empty()) {
     string command = "perf dump";
     cmdmap_t cmdmap;
-    string format = "json-pretty";
+    JSONFormatter jf(true);
     bufferlist out;
     stringstream ss;
-    g_ceph_context->do_command(command, cmdmap, format, ss, &out);
-    out.write_stream(cout);
+    g_ceph_context->do_command(command, cmdmap, &jf, ss, &out);
+    jf.flush(cout);
     cout << std::endl;
+    cout.flush();
   }
   for (auto& p : m_images) {
     delete p.second;

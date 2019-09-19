@@ -18,7 +18,7 @@ namespace librbd {
     ~LibrbdAdminSocketHook() override;
 
     int call(std::string_view command, const cmdmap_t& cmdmap,
-	     std::string_view format,
+	     Formatter *f,
 	     std::ostream& errss,
 	     bufferlist& out) override;
 

@@ -182,13 +182,13 @@ class ClusterSocketHook : public AdminSocketHook {
 public:
   explicit ClusterSocketHook(ClusterState *o) : cluster_state(o) {}
   int call(std::string_view admin_command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     stringstream outss;
     int r = 0;
     try {
-      r = cluster_state->asok_command(admin_command, cmdmap, format, outss);
+      r = cluster_state->asok_command(admin_command, cmdmap, f, outss);
       out.append(outss);
     } catch (const bad_cmd_get& e) {
       errss << e.what();
@@ -216,11 +216,13 @@ void ClusterState::shutdown()
   asok_hook = NULL;
 }
 
-bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
-		       std::string_view format, ostream& ss)
+bool ClusterState::asok_command(
+  std::string_view admin_command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  ostream& ss)
 {
   std::lock_guard l(lock);
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (admin_command == "dump_osd_network") {
     int64_t value = 0;
     // Default to health warning level if nothing specified
@@ -367,7 +369,5 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
   } else {
     ceph_abort_msg("broken asok registration");
   }
-  f->flush(ss);
-  delete f;
   return true;
 }

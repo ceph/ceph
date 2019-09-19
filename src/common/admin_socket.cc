@@ -448,9 +448,8 @@ void AdminSocket::execute_command(
     return on_finish(-EINVAL, "invalid json, missing format and/or prefix",
 		     empty);
   }
-  if (format != "json" && format != "json-pretty" &&
-      format != "xml" && format != "xml-pretty")
-    format = "json-pretty";
+
+  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
 
   std::unique_lock l(lock);
   decltype(hooks)::iterator p;
@@ -458,6 +457,7 @@ void AdminSocket::execute_command(
   if (p == hooks.cend()) {
     lderr(m_cct) << "AdminSocket: request '" << cmdvec
 		 << "' not defined" << dendl;
+    delete f;
     return on_finish(-EINVAL, "unknown command prefix "s + prefix, empty);
   }
 
@@ -465,6 +465,7 @@ void AdminSocket::execute_command(
   while (!validate_cmd(m_cct, p->second.desc, cmdmap, errss)) {
     ++p;
     if (p->first != prefix) {
+      delete f;
       return on_finish(-EINVAL, "invalid command json", empty);
     }
   }
@@ -476,7 +477,16 @@ void AdminSocket::execute_command(
   in_hook = true;
   auto hook = p->second.hook;
   l.unlock();
-  hook->call_async(prefix, cmdmap, format, inbl, on_finish);
+  hook->call_async(
+    prefix, cmdmap, f, inbl,
+    [f, on_finish](int r, const std::string& err, bufferlist& out) {
+      // handle either existing output in bufferlist *or* via formatter
+      if (r >= 0 && out.length() == 0) {
+	f->flush(out);
+      }
+      delete f;
+      on_finish(r, err, out);
+    });
 
   l.lock();
   in_hook = false;
@@ -539,26 +549,22 @@ void AdminSocket::unregister_commands(const AdminSocketHook *hook)
 class VersionHook : public AdminSocketHook {
 public:
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     if (command == "0"sv) {
       out.append(CEPH_ADMIN_SOCK_VERSION);
     } else {
-      JSONFormatter jf;
-      jf.open_object_section("version");
+      f->open_object_section("version");
       if (command == "version") {
-	jf.dump_string("version", ceph_version_to_str());
-	jf.dump_string("release", ceph_release_to_str());
-	jf.dump_string("release_type", ceph_release_type());
+	f->dump_string("version", ceph_version_to_str());
+	f->dump_string("release", ceph_release_to_str());
+	f->dump_string("release_type", ceph_release_type());
       } else if (command == "git_version") {
-	jf.dump_string("git_version", git_version_to_str());
+	f->dump_string("git_version", git_version_to_str());
       }
       ostringstream ss;
-      jf.close_section();
-      jf.enable_line_break();
-      jf.flush(ss);
-      out.append(ss.str());
+      f->close_section();
     }
     return 0;
   }
@@ -569,20 +575,15 @@ class HelpHook : public AdminSocketHook {
 public:
   explicit HelpHook(AdminSocket *as) : m_as(as) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
-    std::unique_ptr<Formatter> f(Formatter::create(format, "json-pretty"sv,
-						   "json-pretty"sv));
     f->open_object_section("help");
     for (const auto& [command, info] : m_as->hooks) {
       if (info.help.length())
 	f->dump_string(command.c_str(), info.help);
     }
     f->close_section();
-    ostringstream ss;
-    f->flush(ss);
-    out.append(ss.str());
     return 0;
   }
 };
@@ -592,30 +593,25 @@ class GetdescsHook : public AdminSocketHook {
 public:
   explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     int cmdnum = 0;
-    JSONFormatter jf;
-    jf.open_object_section("command_descriptions");
+    f->open_object_section("command_descriptions");
     for (const auto& [command, info] : m_as->hooks) {
       // GCC 8 actually has [[maybe_unused]] on a structured binding
       // do what you'd expect. GCC 7 does not.
       (void)command;
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmd_and_help_to_json(&jf,
+      dump_cmd_and_help_to_json(f,
                                 CEPH_FEATURES_ALL,
 				secname.str().c_str(),
 				info.desc,
 				info.help);
       cmdnum++;
     }
-    jf.close_section(); // command_descriptions
-    jf.enable_line_break();
-    ostringstream ss;
-    jf.flush(ss);
-    out.append(ss.str());
+    f->close_section(); // command_descriptions
     return 0;
   }
 };

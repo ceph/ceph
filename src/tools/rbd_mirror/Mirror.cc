@@ -37,16 +37,16 @@ namespace {
 class MirrorAdminSocketCommand {
 public:
   virtual ~MirrorAdminSocketCommand() {}
-  virtual bool call(Formatter *f, stringstream *ss) = 0;
+  virtual int call(Formatter *f) = 0;
 };
 
 class StatusCommand : public MirrorAdminSocketCommand {
 public:
   explicit StatusCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
-    mirror->print_status(f, ss);
-    return true;
+  int call(Formatter *f) override {
+    mirror->print_status(f);
+    return 0;
   }
 
 private:
@@ -57,9 +57,9 @@ class StartCommand : public MirrorAdminSocketCommand {
 public:
   explicit StartCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->start();
-    return true;
+    return 0;
   }
 
 private:
@@ -70,9 +70,9 @@ class StopCommand : public MirrorAdminSocketCommand {
 public:
   explicit StopCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->stop();
-    return true;
+    return 0;
   }
 
 private:
@@ -83,9 +83,9 @@ class RestartCommand : public MirrorAdminSocketCommand {
 public:
   explicit RestartCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->restart();
-    return true;
+    return 0;
   }
 
 private:
@@ -96,9 +96,9 @@ class FlushCommand : public MirrorAdminSocketCommand {
 public:
   explicit FlushCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->flush();
-    return true;
+    return 0;
   }
 
 private:
@@ -109,9 +109,9 @@ class LeaderReleaseCommand : public MirrorAdminSocketCommand {
 public:
   explicit LeaderReleaseCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->release_leader();
-    return true;
+    return 0;
   }
 
 private:
@@ -322,17 +322,12 @@ public:
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     ceph_assert(i != commands.end());
-    Formatter *f = Formatter::create(format);
-    stringstream dss;
-    int r = i->second->call(f, &dss);
-    delete f;
-    out.append(dss);
-    return r;
+    return i->second->call(f);
   }
 
 private:
@@ -568,7 +563,7 @@ void Mirror::run()
   dout(20) << "return" << dendl;
 }
 
-void Mirror::print_status(Formatter *f, stringstream *ss)
+void Mirror::print_status(Formatter *f)
 {
   dout(20) << "enter" << dendl;
 
@@ -578,18 +573,13 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
     return;
   }
 
-  if (f) {
-    f->open_object_section("mirror_status");
-    f->open_array_section("pool_replayers");
-  };
-
+  f->open_object_section("mirror_status");
+  f->open_array_section("pool_replayers");
   for (auto &pool_replayer : m_pool_replayers) {
-    pool_replayer.second->print_status(f, ss);
+    pool_replayer.second->print_status(f);
   }
-
-  if (f) {
-    f->close_section();
-  }
+  f->close_section();
+  f->close_section();
 }
 
 void Mirror::start()

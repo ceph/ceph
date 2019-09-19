@@ -74,7 +74,7 @@ private:
   SocketHook(BlueFS* bluefs) :
     bluefs(bluefs) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override {
     if (command == "bluestore bluefs available") {
@@ -86,7 +86,6 @@ private:
       }
       if (alloc_size == 0)
 	alloc_size = bluefs->cct->_conf->bluefs_alloc_size;
-      Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
       f->open_object_section("bluefs_available_space");
       for (unsigned dev = BDEV_WAL; dev <= BDEV_SLOW; dev++) {
 	if (bluefs->bdev[dev]) {
@@ -103,8 +102,6 @@ private:
       }
       f->dump_int("available_from_bluestore", extra_space);
       f->close_section();
-      f->flush(out);
-      delete f;
     } else {
       ss << "Invalid command" << std::endl;
       return -ENOSYS;

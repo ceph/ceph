@@ -109,7 +109,7 @@ void NamespaceReplayer<I>::shut_down(Context *on_finish) {
 }
 
 template <typename I>
-void NamespaceReplayer<I>::print_status(Formatter *f, stringstream *ss)
+void NamespaceReplayer<I>::print_status(Formatter *f)
 {
   dout(20) << dendl;
 
@@ -117,11 +117,11 @@ void NamespaceReplayer<I>::print_status(Formatter *f, stringstream *ss)
 
   std::lock_guard locker{m_lock};
 
-  m_instance_replayer->print_status(f, ss);
+  m_instance_replayer->print_status(f);
 
   if (m_image_deleter) {
     f->open_object_section("image_deleter");
-    m_image_deleter->print_status(f, ss);
+    m_image_deleter->print_status(f);
     f->close_section();
   }
 }

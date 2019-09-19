@@ -141,8 +141,10 @@ public:
   }
   void final_init();
   void shutdown();
-  bool asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
-		       std::string_view format, ostream& ss);
+  bool asok_command(std::string_view admin_command,
+		    const cmdmap_t& cmdmap,
+		    Formatter *f,
+		    ostream& ss);
 };
 
 #endif
