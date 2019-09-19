@@ -300,10 +300,8 @@ export class OsdListComponent implements OnInit {
         },
         onSubmit: () => {
           observableForkJoin(
-            this.getSelectedIds().map((osd: any) => {
-              onSubmit.call(this.osdService, osd).subscribe(() => this.bsModalRef.hide());
-            })
-          );
+            this.getSelectedIds().map((osd: any) => onSubmit.call(this.osdService, osd))
+          ).subscribe(() => this.bsModalRef.hide());
         }
       }
     });
@@ -337,9 +335,12 @@ export class OsdListComponent implements OnInit {
           },
           submitAction: () => {
             observableForkJoin(
-              this.getSelectedIds().map((osd: any) => {
-                action.call(this.osdService, osd).subscribe(() => modalRef.hide());
-              })
+              this.getSelectedIds().map((osd: any) => action.call(this.osdService, osd))
+            ).subscribe(
+              () => {
+                modalRef.hide();
+              },
+              () => modalRef.hide()
             );
           }
         }
