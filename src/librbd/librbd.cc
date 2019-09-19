@@ -6785,7 +6785,6 @@ extern "C" int rbd_snap_get_group_namespace(rbd_image_t image, uint64_t snap_id,
 extern "C" int rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_snap,
                                                 size_t snap_group_namespace_size) {
   if (snap_group_namespace_size != sizeof(rbd_snap_group_namespace_t)) {
-    tracepoint(librbd, snap_get_group_namespace_exit, -ERANGE);
     return -ERANGE;
   }
 
