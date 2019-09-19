@@ -1454,7 +1454,7 @@ int RGWBucketAdminOp::limit_check(RGWRadosStore *store,
     do {
       RGWUserBuckets buckets;
 
-      ret = rgw_read_user_buckets(store, user_id, buckets,
+      ret = rgw_read_user_buckets(store, rgw_user(user_id), buckets,
 				  marker, string(), max_entries, false,
 				  &is_truncated);
       if (ret < 0)

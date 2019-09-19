@@ -477,3 +477,211 @@ Response Entities
 | ``Years``                   | Integer     | The number of years specified for the default retention period.                        |   No     |
 +-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
 
+Create Notification
+-------------------
+
+Create a publisher for a specific bucket into a topic.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /<bucket name>?notification HTTP/1.1
+
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
+Parameters are XML encoded in the body of the request, in the following format:
+
+::
+
+   <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+       <TopicConfiguration>
+           <Id></Id>
+           <Topic></Topic>
+           <Event></Event>
+           <Filter>
+               <S3Key>
+                   <FilterRule>
+                       <Name></Name>
+                       <Value></Value>
+                   </FilterRule>
+        	    </S3Key>
+                <S3Metadata>
+                    <FilterRule>
+                        <Name></Name>
+                        <Value></Value>
+                    </FilterRule>
+                </s3Metadata>
+            </Filter>
+       </TopicConfiguration>
+   </NotificationConfiguration>
+
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| Name                          | Type      | Description                                                                          | Required |
++===============================+===========+======================================================================================+==========+
+| ``NotificationConfiguration`` | Container | Holding list of ``TopicConfiguration`` entities                                      | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TopicConfiguration``        | Container | Holding ``Id``, ``Topic`` and list of ``Event`` entities                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Id``                        | String    | Name of the notification                                                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Topic``                     | String    | Topic ARN. Topic must be created beforehand                                          | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Event``                     | String    | List of supported events see: `S3 Notification Compatibility`_.  Multiple ``Event``  | No       |
+|                               |           | entities can be used. If omitted, all events are handled                             |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Filter``                    | Container | Holding ``S3Key`` and ``S3Metadata`` entities                                        | No       |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Key``                     | Container | Holding a list of ``FilterRule`` entities, for filtering based on object key.        | No       |
+|                               |           | At most, 3 entities may be in the list, with ``Name`` be ``prefix``, ``suffix`` or   |          |
+|                               |           | ``regex``. All filter rules in the list must match for the filter to match.          |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Metadata``                | Container | Holding a list of ``FilterRule`` entities, for filtering based on object metadata.   | No       |
+|                               |           | All filter rules in the list must match the ones defined on the object. The object,  |          |
+|                               |           | have other metadata entitied not listed in the filter.                               |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Key.FilterRule``          | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would  be: ``prefix``, ``suffix``  | Yes      |
+|                               |           | or ``regex``. The ``Value`` would hold the key prefix, key suffix or a regular       |          |
+|                               |           | expression for matching the key, accordingly.                                        |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Metadata.FilterRule``     | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the name of the metadata  | Yes      |
+|                               |           | attribute (e.g. ``x-amz-meta-xxx``). The ``Value`` would be the expected value for   |          | 
+|                               |           | this attribute                                                                       |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``400``       | MalformedXML          | The XML is not well-formed                               |
++---------------+-----------------------+----------------------------------------------------------+
+| ``400``       | InvalidArgument       | Missing Id; Missing/Invalid Topic ARN; Invalid Event     |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchKey             | The topic does not exist                                 |
++---------------+-----------------------+----------------------------------------------------------+
+
+
+Delete Notification
+-------------------
+
+Delete a specific, or all, notifications from a bucket.
+
+.. note:: 
+
+    - Notification deletion is an extension to the S3 notification API
+    - When the bucket is deleted, any notification defined on it is also deleted 
+    - Deleting an unkown notification (e.g. double delete) is not considered an error
+
+Syntax
+~~~~~~
+
+::
+
+    DELETE /bucket?notification[=<notification-id>] HTTP/1.1
+
+
+Parameters
+~~~~~~~~~~
+
++------------------------+-----------+----------------------------------------------------------------------------------------+
+| Name                   | Type      | Description                                                                            |
++========================+===========+========================================================================================+
+| ``notification-id``    | String    | Name of the notification. If not provided, all notifications on the bucket are deleted |
++------------------------+-----------+----------------------------------------------------------------------------------------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+
+Get/List Notification
+---------------------
+
+Get a specific notification, or list all notifications configured on a bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    GET /bucket?notification[=<notification-id>] HTTP/1.1 
+
+
+Parameters
+~~~~~~~~~~
+
++------------------------+-----------+----------------------------------------------------------------------------------------+
+| Name                   | Type      | Description                                                                            |
++========================+===========+========================================================================================+
+| ``notification-id``    | String    | Name of the notification. If not provided, all notifications on the bucket are listed  |
++------------------------+-----------+----------------------------------------------------------------------------------------+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+Response is XML encoded in the body of the request, in the following format:
+
+::
+
+   <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+       <TopicConfiguration>
+           <Id></Id>
+           <Topic></Topic>
+           <Event></Event>
+           <Filter>
+               <S3Key>
+                   <FilterRule>
+                       <Name></Name>
+                       <Value></Value>
+                   </FilterRule>
+        	    </S3Key>
+                <S3Metadata>
+                    <FilterRule>
+                        <Name></Name>
+                        <Value></Value>
+                    </FilterRule>
+                </s3Metadata>
+            </Filter>
+       </TopicConfiguration>
+   </NotificationConfiguration>
+
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| Name                          | Type      | Description                                                                          | Required |
++===============================+===========+======================================================================================+==========+
+| ``NotificationConfiguration`` | Container | Holding list of ``TopicConfiguration`` entities                                      | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TopicConfiguration``        | Container | Holding ``Id``, ``Topic`` and list of ``Event`` entities                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Id``                        | String    | Name of the notification                                                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Topic``                     | String    | Topic ARN                                                                            | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Event``                     | String    | Handled event. Multiple ``Event`` entities may exist                                 | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Filter``                    | Container | Holding the filters configured for this notification                                 | No       |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchKey             | The notification does not exist (if provided)            |
++---------------+-----------------------+----------------------------------------------------------+
+
+.. _S3 Notification Compatibility: ../s3-notification-compatibility
