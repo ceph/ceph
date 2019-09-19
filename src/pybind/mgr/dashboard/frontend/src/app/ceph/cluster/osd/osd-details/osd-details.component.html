@@ -1,10 +1,12 @@
 <tabset *ngIf="selection.hasSingleSelection">
+
   <tab heading="Attributes (OSD map)"
        i18n-heading>
     <cd-table-key-value *ngIf="osd.loaded"
                         [data]="osd.details.osd_map">
     </cd-table-key-value>
   </tab>
+
   <tab heading="Metadata"
        i18n-heading>
     <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
@@ -15,6 +17,12 @@
       <cd-warning-panel i18n>Metadata not available</cd-warning-panel>
     </ng-template>
   </tab>
+
+  <tab heading="Device health"
+       i18n-heading>
+    <cd-osd-smart-list [osdId]="osd.id"></cd-osd-smart-list>
+  </tab>
+
   <tab heading="Performance counter"
        i18n-heading>
     <cd-table-performance-counter *ngIf="osd.loaded"
@@ -22,6 +30,7 @@
                                   [serviceId]="osd.id">
     </cd-table-performance-counter>
   </tab>
+
   <tab heading="Histogram"
        i18n-heading>
     <cd-warning-panel *ngIf="osd.loaded && osd.histogram_failed"
@@ -41,6 +50,7 @@
       </div>
     </div>
   </tab>
+
   <tab i18n-heading
        *ngIf="grafanaPermission.read"
        heading="Performance Details">
@@ -49,4 +59,5 @@
                 grafanaStyle="GrafanaStyles.two">
     </cd-grafana>
   </tab>
+
 </tabset>
