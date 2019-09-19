@@ -1195,7 +1195,7 @@ done
 if [ "$ec" -eq 1 ]; then
     ceph_adm <<EOF
 osd erasure-code-profile set ec-profile m=2 k=2
-osd pool create ec 8 8 erasure ec-profile
+osd pool create ec erasure ec-profile
 EOF
 fi
 
@@ -1205,7 +1205,7 @@ do_cache() {
         shift
         echo "creating cache for pool $p ..."
         ceph_adm <<EOF
-osd pool create ${p}-cache 8
+osd pool create ${p}-cache
 osd tier add $p ${p}-cache
 osd tier cache-mode ${p}-cache writeback
 osd tier set-overlay $p ${p}-cache
