@@ -943,14 +943,14 @@ int RGWOrphanSearch::finish()
 
 
 int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
-				  set<string>& obj_oids)
+                                     set<string>& obj_oids)
 {
   obj_oids.clear();
 
   rgw_bucket& bucket = result.obj.bucket;
   if (!result.has_manifest) {
     /* a very very old object, or part of a multipart upload during upload */
-    const string loc = bucket.bucket_id + "_" + result.obj.get_object();
+    const string loc = bucket.marker + "_" + result.obj.get_object();
     obj_oids.insert(loc);
 
     /*
@@ -958,6 +958,15 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
      * object. Instead of reading the meta object, just add a "shadow"
      * object to the mix
      */
+
+    /* Because we're not reading the meta object, in the case of an
+     * incomplete multipart upload, this will produce bogus output
+     * oids that do not exist and would not appear in a `rados ls`
+     * command. But for those users interested in producing a list of
+     * rados objects that should not be deleted, this will have no
+     * impact. Perhaps a future version can consult the meta object
+     * and produce an absolutely correct output. */
+
     obj_oids.insert(obj_force_ns(loc, "shadow"));
   } else {
     RGWObjManifest& manifest = result.manifest;
@@ -965,15 +974,27 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
     if (0 == manifest.get_max_head_size()) {
       // in multipart, the head object contains no data and just has
       // the manifest
-      string s = bucket.bucket_id + "_" + result.obj.get_object();
+      string s = bucket.marker + "_" + result.obj.get_object();
       obj_oids.insert(s);
     }
 
     RGWObjManifest::obj_iterator miter;
+
+    rgw_bucket* bucket_cursor = &bucket;
+    bool tail_checked = false;
+
+    // first time through the loop bucket_cursor is initial bucket,
+    // thereafter tail_bucket, if it exists
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
       const rgw_obj& loc = miter.get_location();
-      string s = bucket.bucket_id + "_" + loc.get_object();
+      string s = bucket_cursor->marker + "_" + loc.get_object();
       obj_oids.insert(s);
+
+      // after doing this once, use tail bucket for test
+      if (!tail_checked && !manifest.get_tail_bucket().name.empty()) {
+        bucket_cursor = &manifest.get_tail_bucket();
+      }
+      tail_checked = true;
     }
   }
 
