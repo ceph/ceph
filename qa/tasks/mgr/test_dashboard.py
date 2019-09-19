@@ -49,8 +49,15 @@ class TestDashboard(MgrTestCase):
         self.assertNotEqual(original_uri, failed_over_uri)
 
         # The original active daemon should have come back up as a standby
-        # and be doing redirects to the new active daemon
+        # and be doing redirects to the new active daemon.
         r = requests.get(original_uri, allow_redirects=False, verify=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers['Location'], failed_over_uri)
+
+        # Ensure that every URL redirects to the active daemon.
+        r = requests.get("{}/runtime.js".format(original_uri),
+                         allow_redirects=False,
+                         verify=False)
         self.assertEqual(r.status_code, 303)
         self.assertEqual(r.headers['Location'], failed_over_uri)
 
