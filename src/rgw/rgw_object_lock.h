@@ -109,7 +109,10 @@ public:
   }
 
   bool retention_period_valid() const {
-    return (get_years() > 0 || get_days() > 0);
+    // DefaultRetention requires either Days or Years.
+    // You can't specify both at the same time.
+    // see https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTObjectLockConfiguration.html
+    return get_years() > 0 != get_days() > 0;
   }
 
   bool has_rule() const {
