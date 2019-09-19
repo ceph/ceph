@@ -963,23 +963,30 @@ seastar::future<> OSD::send_beacon()
   return monc->send_message(m);
 }
 
-void OSD::update_heartbeat_peers()
+seastar::future<> OSD::update_heartbeat_peers()
 {
   if (!state.is_active()) {
-    return;
+    return seastar::now();
   }
-  for (auto& pg : pg_map.get_pgs()) {
-    vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(pg.first.pgid,
-                                 &up, nullptr,
-                                 &acting, nullptr);
-    for (auto osd : boost::join(up, acting)) {
-      if (osd != CRUSH_ITEM_NONE && osd != whoami) {
-        heartbeat->add_peer(osd, osdmap->get_epoch());
-      }
-    }
-  }
-  heartbeat->update_peers(whoami);
+  return seastar::parallel_for_each(
+    pg_map.get_pgs(),
+    [this](auto& pg) {
+      vector<int> up, acting;
+      osdmap->pg_to_up_acting_osds(pg.first.pgid,
+				   &up, nullptr,
+				   &acting, nullptr);
+      return seastar::parallel_for_each(
+        boost::join(up, acting),
+        [this](int osd) {
+          if (osd == CRUSH_ITEM_NONE || osd == whoami) {
+            return seastar::now();
+          } else {
+            return heartbeat->add_peer(osd, osdmap->get_epoch());
+          }
+        });
+    }).then([this] {
+      return heartbeat->update_peers(whoami);
+    });
 }
 
 seastar::future<> OSD::handle_peering_op(
