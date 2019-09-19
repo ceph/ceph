@@ -83,7 +83,7 @@ public:
   void handle_instances_added(const std::vector<std::string> &instance_ids);
   void handle_instances_removed(const std::vector<std::string> &instance_ids);
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
   void start();
   void stop();
   void restart();

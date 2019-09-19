@@ -168,15 +168,13 @@ public:
 
   // AdminSocketHook
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     if (command == "dump_mempools") {
-      std::unique_ptr<Formatter> f(Formatter::create(format));
       f->open_object_section("mempools");
-      mempool::dump(f.get());
+      mempool::dump(f);
       f->close_section();
-      f->flush(out);
       return 0;
     }
     return -ENOSYS;
@@ -441,11 +439,11 @@ public:
   explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     try {
-      return m_cct->do_command(command, cmdmap, format, errss, &out);
+      return m_cct->do_command(command, cmdmap, f, errss, &out);
     } catch (const bad_cmd_get& e) {
       return -EINVAL;
     }
@@ -453,12 +451,12 @@ public:
 };
 
 int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
-			    std::string_view format,
+			    Formatter *f,
 			    std::ostream& ss,
 			    bufferlist *out)
 {
   try {
-    return _do_command(command, cmdmap, format, ss, out);
+    return _do_command(command, cmdmap, f, ss, out);
   } catch (const bad_cmd_get& e) {
     ss << e.what();
     return -EINVAL;
@@ -467,11 +465,10 @@ int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 
 int CephContext::_do_command(
   std::string_view command, const cmdmap_t& cmdmap,
-  std::string_view format,
+  Formatter *f,
   std::ostream& ss,
   bufferlist *out)
 {
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   int r = 0;
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << cmdmap << "'"
 			 << dendl;
@@ -631,10 +628,6 @@ int CephContext::_do_command(
     }
     f->close_section();
   }
-  if (r >= 0) {
-    f->flush(*out);
-  }
-  delete f;
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << cmdmap
 		         << "' result is " << out->length() << " bytes" << dendl;
   return r;

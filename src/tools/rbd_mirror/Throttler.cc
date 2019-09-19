@@ -211,22 +211,14 @@ void Throttler<I>::set_max_concurrent_ops(uint32_t max) {
 }
 
 template <typename I>
-void Throttler<I>::print_status(ceph::Formatter *f, std::stringstream *ss) {
+void Throttler<I>::print_status(ceph::Formatter *f) {
   dout(20) << dendl;
 
   std::lock_guard locker{m_lock};
 
-  if (f) {
-    f->dump_int("max_parallel_requests", m_max_concurrent_ops);
-    f->dump_int("running_requests", m_inflight_ops.size());
-    f->dump_int("waiting_requests", m_queue.size());
-    f->flush(*ss);
-  } else {
-    *ss << "[ ";
-    *ss << "max_parallel_requests=" << m_max_concurrent_ops << ", ";
-    *ss << "running_requests=" << m_inflight_ops.size() << ", ";
-    *ss << "waiting_requests=" << m_queue.size() << " ]";
-  }
+  f->dump_int("max_parallel_requests", m_max_concurrent_ops);
+  f->dump_int("running_requests", m_inflight_ops.size());
+  f->dump_int("waiting_requests", m_queue.size());
 }
 
 template <typename I>

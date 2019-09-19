@@ -114,22 +114,21 @@ class MDSSocketHook : public AdminSocketHook {
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override {
     stringstream outss;
-    int r = mds->asok_command(command, cmdmap, format, outss);
+    int r = mds->asok_command(command, cmdmap, f, outss);
     out.append(outss);
     return r;
   }
 };
 
 int MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
-			    std::string_view format, std::ostream& ss)
+			    Formatter *f, std::ostream& ss)
 {
   dout(1) << "asok_command: " << command << " (starting...)" << dendl;
 
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   int r = -ENOSYS;
   if (command == "status") {
     dump_status(f);
@@ -147,11 +146,7 @@ int MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
       }
     }
   }
-  f->flush(ss);
-  delete f;
-
   dout(1) << "asok_command: " << command << " (complete)" << dendl;
-
   return r;
 }
 

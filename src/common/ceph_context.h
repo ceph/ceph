@@ -162,11 +162,11 @@ public:
    * process an admin socket command
    */
   int do_command(std::string_view command, const cmdmap_t& cmdmap,
-		 std::string_view format,
+		 Formatter *f,
 		 std::ostream& errss,
 		 ceph::bufferlist *out);
   int _do_command(std::string_view command, const cmdmap_t& cmdmap,
-		  std::string_view format,
+		  Formatter *f,
 		  std::ostream& errss,
 		  ceph::bufferlist *out);
 

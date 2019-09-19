@@ -155,18 +155,18 @@ int RGWSyncTraceManager::hook_to_admin_command()
   return 0;
 }
 
-static void dump_node(RGWSyncTraceNode *entry, bool show_history, JSONFormatter& f)
+static void dump_node(RGWSyncTraceNode *entry, bool show_history, Formatter *f)
 {
-  f.open_object_section("entry");
-  ::encode_json("status", entry->to_str(), &f);
+  f->open_object_section("entry");
+  ::encode_json("status", entry->to_str(), f);
   if (show_history) {
-    f.open_array_section("history");
+    f->open_array_section("history");
     for (auto h : entry->get_history()) {
-      ::encode_json("entry", h, &f);
+      ::encode_json("entry", h, f);
     }
-    f.close_section();
+    f->close_section();
   }
-  f.close_section();
+  f->close_section();
 }
 
 string RGWSyncTraceManager::get_active_names()
@@ -196,7 +196,7 @@ string RGWSyncTraceManager::get_active_names()
 }
 
 int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
-			      std::string_view format,
+			      Formatter *f,
 			      std::ostream& ss,
 			      bufferlist& out) {
 
@@ -213,10 +213,8 @@ int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
 
   shunique_lock rl(lock, ceph::acquire_shared);
 
-  JSONFormatter f(true);
-
-  f.open_object_section("result");
-  f.open_array_section("running");
+  f->open_object_section("result");
+  f->open_array_section("running");
   for (auto n : nodes) {
     auto& entry = n.second;
 
@@ -229,16 +227,16 @@ int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
     if (show_short) {
       const string& name = entry->get_resource_name();
       if (!name.empty()) {
-        ::encode_json("entry", name, &f);
+        ::encode_json("entry", name, f);
       }
     } else {
       dump_node(entry.get(), show_history, f);
     }
-    f.flush(out);
+    f->flush(out);
   }
-  f.close_section();
+  f->close_section();
 
-  f.open_array_section("complete");
+  f->open_array_section("complete");
   for (auto& entry : complete_nodes) {
     if (!search.empty() && !entry->match(search, show_history)) {
       continue;
@@ -247,12 +245,11 @@ int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
       continue;
     }
     dump_node(entry.get(), show_history, f);
-    f.flush(out);
+    f->flush(out);
   }
-  f.close_section();
+  f->close_section();
 
-  f.close_section();
-  f.flush(out);
+  f->close_section();
 
   return 0;
 }

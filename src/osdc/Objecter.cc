@@ -177,7 +177,7 @@ class Objecter::RequestStateHook : public AdminSocketHook {
 public:
   explicit RequestStateHook(Objecter *objecter);
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& ss,
 	   ceph::buffer::list& out) override;
 };
@@ -4711,15 +4711,12 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 
 int Objecter::RequestStateHook::call(std::string_view command,
 				     const cmdmap_t& cmdmap,
-				     std::string_view format,
+				     Formatter *f,
 				     std::ostream& ss,
 				     ceph::buffer::list& out)
 {
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   shared_lock rl(m_objecter->rwlock);
   m_objecter->dump_requests(f);
-  f->flush(out);
-  delete f;
   return 0;
 }
 

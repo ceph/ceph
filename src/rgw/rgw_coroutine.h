@@ -560,7 +560,7 @@ public:
 
   int hook_to_admin_command(const string& command);
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override;
 

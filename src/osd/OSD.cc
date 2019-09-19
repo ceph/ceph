@@ -2324,7 +2324,7 @@ class OSDSocketHook : public AdminSocketHook {
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
   int call(std::string_view prefix, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override {
     ceph_abort("should use async hook");
@@ -2332,11 +2332,11 @@ public:
   void call_async(
     std::string_view prefix,
     const cmdmap_t& cmdmap,
-    std::string_view format,
+    Formatter *f,
     const bufferlist& inbl,
     std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
     try {
-      osd->asok_command(prefix, cmdmap, format, inbl, on_finish);
+      osd->asok_command(prefix, cmdmap, f, inbl, on_finish);
     } catch (const bad_cmd_get& e) {
       bufferlist empty;
       on_finish(-EINVAL, e.what(), empty);
@@ -2357,12 +2357,10 @@ std::set<int64_t> OSD::get_mapped_pools()
 
 void OSD::asok_command(
   std::string_view prefix, const cmdmap_t& cmdmap,
-  std::string_view format,
+  Formatter *f,
   const bufferlist& inbl,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
-  std::unique_ptr<Formatter> f(Formatter::create(
-				 format, "json-pretty", "json-pretty"));
   int ret = 0;
   stringstream ss;   // stderr error message stream
   bufferlist outbl;  // if empty at end, we'll dump formatter as output
@@ -2452,35 +2450,35 @@ will start to track new ops received afterwards.";
 
     if (prefix == "dump_ops_in_flight" ||
         prefix == "ops") {
-      if (!op_tracker.dump_ops_in_flight(f.get(), false, filters)) {
+      if (!op_tracker.dump_ops_in_flight(f, false, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_blocked_ops") {
-      if (!op_tracker.dump_ops_in_flight(f.get(), true, filters)) {
+      if (!op_tracker.dump_ops_in_flight(f, true, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_historic_ops") {
-      if (!op_tracker.dump_historic_ops(f.get(), false, filters)) {
+      if (!op_tracker.dump_historic_ops(f, false, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_historic_ops_by_duration") {
-      if (!op_tracker.dump_historic_ops(f.get(), true, filters)) {
+      if (!op_tracker.dump_historic_ops(f, true, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_historic_slow_ops") {
-      if (!op_tracker.dump_historic_slow_ops(f.get(), filters)) {
+      if (!op_tracker.dump_historic_slow_ops(f, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
@@ -2488,7 +2486,7 @@ will start to track new ops received afterwards.";
     }
   } else if (prefix == "dump_op_pq_state") {
     f->open_object_section("pq");
-    op_shardedwq.dump(f.get());
+    op_shardedwq.dump(f);
     f->close_section();
   } else if (prefix == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
@@ -2500,7 +2498,7 @@ will start to track new ops received afterwards.";
 	it != bl.end(); ++it) {
       f->open_object_section("entry");
       f->open_object_section("entity_addr_t");
-      it->first.dump(f.get());
+      it->first.dump(f);
       f->close_section(); //entity_addr_t
       it->second.localtime(f->dump_stream("expire_time"));
       f->close_section(); //entry
@@ -2527,14 +2525,14 @@ will start to track new ops received afterwards.";
       f->dump_string("object", it->obj.oid.name);
 
       f->open_object_section("entity_name");
-      it->wi.name.dump(f.get());
+      it->wi.name.dump(f);
       f->close_section(); //entity_name_t
 
       f->dump_unsigned("cookie", it->wi.cookie);
       f->dump_unsigned("timeout", it->wi.timeout_seconds);
 
       f->open_object_section("entity_addr_t");
-      it->wi.addr.dump(f.get());
+      it->wi.addr.dump(f);
       f->close_section(); //entity_addr_t
 
       f->close_section(); //watch
@@ -2544,10 +2542,10 @@ will start to track new ops received afterwards.";
   } else if (prefix == "dump_recovery_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
-    service.local_reserver.dump(f.get());
+    service.local_reserver.dump(f);
     f->close_section();
     f->open_object_section("remote_reservations");
-    service.remote_reserver.dump(f.get());
+    service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
   } else if (prefix == "dump_scrub_reservations") {
@@ -2600,11 +2598,11 @@ will start to track new ops received afterwards.";
     f->dump_int("value", value);
     f->close_section();
   } else if (prefix == "dump_objectstore_kv_stats") {
-    store->get_db_statistics(f.get());
+    store->get_db_statistics(f);
   } else if (prefix == "dump_scrubs") {
-    service.dumps_scrub(f.get());
+    service.dumps_scrub(f);
   } else if (prefix == "calc_objectstore_db_histogram") {
-    store->generate_db_histogram(f.get());
+    store->generate_db_histogram(f);
   } else if (prefix == "flush_store_cache") {
     store->flush_cache(&ss);
   } else if (prefix == "dump_pgstate_history") {
@@ -2616,7 +2614,7 @@ will start to track new ops received afterwards.";
       f->open_object_section("pg");
       f->dump_stream("pg") << pg->pg_id;
       f->dump_string("currently", pg->get_current_state());
-      pg->dump_pgstate_history(f.get());
+      pg->dump_pgstate_history(f);
       f->close_section();
     }
     f->close_section();
@@ -2857,7 +2855,7 @@ will start to track new ops received afterwards.";
       string s = stringify(pg->pg_id);
       f->open_array_section(s.c_str());
       pg->lock();
-      pg->dump_missing(f.get());
+      pg->dump_missing(f);
       pg->unlock();
       f->close_section();
     }
@@ -2893,7 +2891,7 @@ will start to track new ops received afterwards.";
 
   else if (prefix == "dump_pg_recovery_stats") {
     lock_guard l(osd_lock);
-    pg_recovery_stats.dump_formatted(f.get());
+    pg_recovery_stats.dump_formatted(f);
   }
 
   else if (prefix == "reset_pg_recovery_stats") {
@@ -2907,7 +2905,7 @@ will start to track new ops received afterwards.";
     cmd_getval(cct, cmdmap, "logger", logger);
     cmd_getval(cct, cmdmap, "counter", counter);
     cct->get_perfcounters_collection()->dump_formatted_histograms(
-      f.get(), false, logger, counter);
+      f, false, logger, counter);
   }
 
   else if (prefix == "cache drop") {
@@ -2938,7 +2936,7 @@ will start to track new ops received afterwards.";
     }
     f->open_object_section("cache_status");
     f->dump_int("object_ctx", obj_ctx_count);
-    store->dump_cache_stats(f.get());
+    store->dump_cache_stats(f);
     f->close_section();
   }
 
@@ -3080,9 +3078,6 @@ will start to track new ops received afterwards.";
   }
 
  out:
-  if (ret >= 0 && outbl.length() == 0) {
-    f->flush(outbl);
-  }
   on_finish(ret, ss.str(), outbl);
 }
 
@@ -3092,7 +3087,7 @@ class TestOpsSocketHook : public AdminSocketHook {
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
     int r = 0;

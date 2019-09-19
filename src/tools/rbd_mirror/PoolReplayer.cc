@@ -43,7 +43,7 @@ public:
     : pool_replayer(pool_replayer) {
   }
   virtual ~PoolReplayerAdminSocketCommand() {}
-  virtual bool call(Formatter *f, stringstream *ss) = 0;
+  virtual int call(Formatter *f) = 0;
 protected:
   PoolReplayer<I> *pool_replayer;
 };
@@ -55,9 +55,9 @@ public:
     : PoolReplayerAdminSocketCommand<I>(pool_replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
-    this->pool_replayer->print_status(f, ss);
-    return true;
+  int call(Formatter *f) override {
+    this->pool_replayer->print_status(f);
+    return 0;
   }
 };
 
@@ -68,9 +68,9 @@ public:
     : PoolReplayerAdminSocketCommand<I>(pool_replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->pool_replayer->start();
-    return true;
+    return 0;
   }
 };
 
@@ -81,9 +81,9 @@ public:
     : PoolReplayerAdminSocketCommand<I>(pool_replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->pool_replayer->stop(true);
-    return true;
+    return 0;
   }
 };
 
@@ -94,9 +94,9 @@ public:
     : PoolReplayerAdminSocketCommand<I>(pool_replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->pool_replayer->restart();
-    return true;
+    return 0;
   }
 };
 
@@ -107,9 +107,9 @@ public:
     : PoolReplayerAdminSocketCommand<I>(pool_replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->pool_replayer->flush();
-    return true;
+    return 0;
   }
 };
 
@@ -120,9 +120,9 @@ public:
     : PoolReplayerAdminSocketCommand<I>(pool_replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->pool_replayer->release_leader();
-    return true;
+    return 0;
   }
 };
 
@@ -186,17 +186,12 @@ public:
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format,
+	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override {
     auto i = commands.find(command);
     ceph_assert(i != commands.end());
-    Formatter *f = Formatter::create(format);
-    stringstream dss;
-    int r = i->second->call(f, &dss);
-    delete f;
-    out.append(dss);
-    return r;
+    return i->second->call(f);
   }
 
 private:
@@ -729,12 +724,10 @@ void PoolReplayer<I>::namespace_replayer_acquire_leader(const std::string &name,
 }
 
 template <typename I>
-void PoolReplayer<I>::print_status(Formatter *f, stringstream *ss) {
+void PoolReplayer<I>::print_status(Formatter *f) {
   dout(20) << dendl;
 
-  if (!f) {
-    return;
-  }
+  assert(f);
 
   std::lock_guard l{m_lock};
 
@@ -776,29 +769,28 @@ void PoolReplayer<I>::print_status(Formatter *f, stringstream *ss) {
 
   if (m_image_sync_throttler) {
     f->open_object_section("sync_throttler");
-    m_image_sync_throttler->print_status(f, ss);
+    m_image_sync_throttler->print_status(f);
     f->close_section(); // sync_throttler
   }
 
   if (m_image_deletion_throttler) {
     f->open_object_section("deletion_throttler");
-    m_image_deletion_throttler->print_status(f, ss);
+    m_image_deletion_throttler->print_status(f);
     f->close_section(); // deletion_throttler
   }
 
-  m_default_namespace_replayer->print_status(f, ss);
+  m_default_namespace_replayer->print_status(f);
 
   f->open_array_section("namespaces");
   for (auto &it : m_namespace_replayers) {
     f->open_object_section("namespace");
     f->dump_string("name", it.first);
-    it.second->print_status(f, ss);
+    it.second->print_status(f);
     f->close_section(); // namespace
   }
   f->close_section(); // namespaces
 
   f->close_section(); // pool_replayer_status
-  f->flush(*ss);
 }
 
 template <typename I>

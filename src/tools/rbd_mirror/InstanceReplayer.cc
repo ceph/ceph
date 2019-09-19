@@ -219,19 +219,15 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
 }
 
 template <typename I>
-void InstanceReplayer<I>::print_status(Formatter *f, stringstream *ss) {
+void InstanceReplayer<I>::print_status(Formatter *f) {
   dout(10) << dendl;
-
-  if (!f) {
-    return;
-  }
 
   std::lock_guard locker{m_lock};
 
   f->open_array_section("image_replayers");
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
-    image_replayer->print_status(f, ss);
+    image_replayer->print_status(f);
   }
   f->close_section();
 }

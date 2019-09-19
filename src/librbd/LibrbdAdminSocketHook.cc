@@ -17,20 +17,15 @@ namespace librbd {
 class LibrbdAdminSocketCommand {
 public:
   virtual ~LibrbdAdminSocketCommand() {}
-  virtual bool call(stringstream *ss) = 0;
+  virtual int call(Formatter *f) = 0;
 };
 
 class FlushCacheCommand : public LibrbdAdminSocketCommand {
 public:
   explicit FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
-  bool call(stringstream *ss) override {
-    int r = ictx->io_work_queue->flush();
-    if (r < 0) {
-      *ss << "flush: " << cpp_strerror(r);
-      return false;
-    }
-    return true;
+  int call(Formatter *f) override {
+    return ictx->io_work_queue->flush();
   }
 
 private:
@@ -41,13 +36,8 @@ struct InvalidateCacheCommand : public LibrbdAdminSocketCommand {
 public:
   explicit InvalidateCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
-  bool call(stringstream *ss) override {
-    int r = invalidate_cache(ictx);
-    if (r < 0) {
-      *ss << "invalidate_cache: " << cpp_strerror(r);
-      return false;
-    }
-    return true;
+  int call(Formatter *f) override {
+    return invalidate_cache(ictx);
   }
 
 private:
@@ -90,15 +80,12 @@ LibrbdAdminSocketHook::~LibrbdAdminSocketHook() {
 
 int LibrbdAdminSocketHook::call(std::string_view command,
 				const cmdmap_t& cmdmap,
-				std::string_view format,
+				Formatter *f,
 				std::ostream& errss,
 				bufferlist& out) {
   Commands::const_iterator i = commands.find(command);
   ceph_assert(i != commands.end());
-  stringstream outss;
-  int r = i->second->call(&outss);
-  out.append(outss);
-  return r;
+  return i->second->call(f);
 }
 
 } // namespace librbd

@@ -518,7 +518,7 @@ public:
     void shutdown();
 
     int call(std::string_view command, const cmdmap_t& cmdmap,
-	     std::string_view format,
+	     Formatter *f,
 	     std::ostream& ss,
 	     bufferlist& out) override;
 };
@@ -545,7 +545,7 @@ void RGWSI_SysObj_Cache_ASocketHook::shutdown()
 
 int RGWSI_SysObj_Cache_ASocketHook::call(
   std::string_view command, const cmdmap_t& cmdmap,
-  std::string_view format,
+  Formatter *f,
   std::ostream& ss,
   bufferlist& out)
 {
@@ -554,31 +554,17 @@ int RGWSI_SysObj_Cache_ASocketHook::call(
     if (auto i = cmdmap.find("filter"); i != cmdmap.cend()) {
       filter = boost::get<std::string>(i->second);
     }
-    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "table"));
-    if (f) {
-      f->open_array_section("cache_entries");
-      svc->asocket.call_list(filter, f.get());
-      f->close_section();
-      f->flush(out);
+    f->open_array_section("cache_entries");
+    svc->asocket.call_list(filter, f);
+    f->close_section();
+    return 0;
+  } else if (command == "cache inspect"sv) {
+    const auto& target = boost::get<std::string>(cmdmap.at("target"));
+    if (svc->asocket.call_inspect(target, f)) {
       return 0;
     } else {
-      ss << "Unable to create Formatter.\n";
-      return -EINVAL;
-    }
-  } else if (command == "cache inspect"sv) {
-    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "json-pretty"));
-    if (f) {
-      const auto& target = boost::get<std::string>(cmdmap.at("target"));
-      if (svc->asocket.call_inspect(target, f.get())) {
-        f->flush(out);
-        return 0;
-      } else {
-        ss << "Unable to find entry "s + target + ".\n";
-        return -ENOENT;
-      }
-    } else {
-      ss << "Unable to create Formatter.\n";
-      return -EINVAL;
+      ss << "Unable to find entry "s + target + ".\n";
+      return -ENOENT;
     }
   } else if (command == "cache erase"sv) {
     const auto& target = boost::get<std::string>(cmdmap.at("target"));

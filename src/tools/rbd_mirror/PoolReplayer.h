@@ -58,7 +58,7 @@ public:
 
   void run();
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
   void start();
   void stop(bool manual);
   void restart();
