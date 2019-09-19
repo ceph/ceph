@@ -34,9 +34,10 @@ struct rgw_log_entry {
   string referrer;
   string bucket_id;
   headers_map x_headers;
+  string trans_id;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(9, 5, bl);
+    ENCODE_START(10, 5, bl);
     encode(object_owner.id, bl);
     encode(bucket_owner.id, bl);
     encode(bucket, bl);
@@ -59,10 +60,11 @@ struct rgw_log_entry {
     encode(object_owner, bl);
     encode(bucket_owner, bl);
     encode(x_headers, bl);
+    encode(trans_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, p);
     decode(object_owner.id, p);
     if (struct_v > 3)
       decode(bucket_owner.id, p);
@@ -107,6 +109,9 @@ struct rgw_log_entry {
     }
     if (struct_v >= 9) {
       decode(x_headers, p);
+    }
+    if (struct_v >= 10) {
+      decode(trans_id, p);
     }
     DECODE_FINISH(p);
   }
