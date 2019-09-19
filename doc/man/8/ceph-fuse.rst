@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-**ceph-fuse** is a FUSE (File system in USErspace) client for Ceph
+**ceph-fuse** is a FUSE ("Filesystem in USErspace") client for Ceph
 distributed file system. It will mount a ceph file system specified
 via the -m option or described by ceph.conf (see below) at the
 specific mount point. See `Mount CephFS using FUSE`_ for detailed
