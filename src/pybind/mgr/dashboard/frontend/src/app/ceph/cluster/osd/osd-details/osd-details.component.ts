@@ -16,7 +16,13 @@ export class OsdDetailsComponent implements OnChanges {
   @Input()
   selection: CdTableSelection;
 
-  osd: any;
+  osd: {
+    id?: number;
+    loaded?: boolean;
+    details?: any;
+    histogram_failed?: string;
+    tree?: any;
+  };
   grafanaPermission: Permission;
 
   constructor(private osdService: OsdService, private authStorageService: AuthStorageService) {
@@ -34,7 +40,7 @@ export class OsdDetailsComponent implements OnChanges {
   }
 
   refresh() {
-    this.osdService.getDetails(this.osd.id).subscribe((data: any) => {
+    this.osdService.getDetails(this.osd.id).subscribe((data) => {
       this.osd.details = data;
       this.osd.histogram_failed = '';
       if (!_.isObject(data.histogram)) {
