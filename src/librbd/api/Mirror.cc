@@ -11,6 +11,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
+#include "librbd/MirroringWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Image.h"
@@ -22,11 +23,14 @@
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
-#include "librbd/mirror_snapshot/UnlinkPeerRequest.h"
+#include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
+#include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/scope_exit.hpp>
 #include "json_spirit/json_spirit.h"
+
+#include <algorithm>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -1611,6 +1615,18 @@ int Mirror<I>::image_instance_id_list(
   }
 
   return 0;
+}
+
+template <typename I>
+int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
+
+  C_SaferCond on_finish;
+  auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
+    ictx, false, false, snap_id, &on_finish);
+  req->send();
+  return on_finish.wait();
 }
 
 } // namespace api

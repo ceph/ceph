@@ -87,6 +87,8 @@ struct Mirror {
                                       mirror_image_global_status_t *status,
                                       Context *on_finish);
   static int image_get_instance_id(ImageCtxT *ictx, std::string *instance_id);
+
+  static int image_snapshot_create(ImageCtxT *ictx, uint64_t *snap_id);
 };
 
 } // namespace api

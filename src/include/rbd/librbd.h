@@ -1180,6 +1180,8 @@ CEPH_RBD_API int rbd_mirror_image_disable(rbd_image_t image, bool force);
 CEPH_RBD_API int rbd_mirror_image_promote(rbd_image_t image, bool force);
 CEPH_RBD_API int rbd_mirror_image_demote(rbd_image_t image);
 CEPH_RBD_API int rbd_mirror_image_resync(rbd_image_t image);
+CEPH_RBD_API int rbd_mirror_image_create_snapshot(rbd_image_t image,
+                                                  uint64_t *snap_id);
 CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
                                            rbd_mirror_image_info_t *mirror_image_info,
                                            size_t info_size);
