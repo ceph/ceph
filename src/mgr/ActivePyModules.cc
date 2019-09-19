@@ -608,6 +608,8 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
 void ActivePyModules::set_store(const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
+  PyThreadState *tstate = PyEval_SaveThread();
+
   const std::string global_key = PyModule::config_prefix
                                    + module_name + "/" + key;
   
@@ -645,6 +647,7 @@ void ActivePyModules::set_store(const std::string &module_name,
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }
+  PyEval_RestoreThread(tstate);
 }
 
 void ActivePyModules::set_config(const std::string &module_name,
