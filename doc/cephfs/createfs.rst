@@ -28,8 +28,8 @@ might run the following commands:
 
 .. code:: bash
 
-    $ ceph osd pool create cephfs_data <pg_num>
-    $ ceph osd pool create cephfs_metadata <pg_num>
+    $ ceph osd pool create cephfs_data
+    $ ceph osd pool create cephfs_metadata
 
 Generally, the metadata pool will have at most a few gigabytes of data. For
 this reason, a smaller PG count is usually recommended. 64 or 128 is commonly

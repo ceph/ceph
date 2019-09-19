@@ -59,9 +59,9 @@ Configuring Ceph
 To configure Ceph for use with ``libvirt``, perform the following steps:
 
 #. `Create a pool`_. The following example uses the 
-   pool name ``libvirt-pool`` with 128 placement groups. ::
+   pool name ``libvirt-pool``.::
 
-	ceph osd pool create libvirt-pool 128 128
+	ceph osd pool create libvirt-pool
 
    Verify the pool exists. :: 
 

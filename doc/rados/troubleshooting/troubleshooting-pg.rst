@@ -476,7 +476,7 @@ If the Ceph cluster only has 8 OSDs and the erasure coded pool needs
 coded pool that requires less OSDs::
 
      ceph osd erasure-code-profile set myprofile k=5 m=3
-     ceph osd pool create erasurepool 16 16 erasure myprofile
+     ceph osd pool create erasurepool erasure myprofile
 
 or add a new OSDs and the PG will automatically use them.
 
@@ -515,7 +515,7 @@ You can resolve the problem by creating a new pool in which PGs are allowed
 to have OSDs residing on the same host with::
 
      ceph osd erasure-code-profile set myprofile crush-failure-domain=osd
-     ceph osd pool create erasurepool 16 16 erasure myprofile
+     ceph osd pool create erasurepool erasure myprofile
 
 CRUSH gives up too soon
 -----------------------

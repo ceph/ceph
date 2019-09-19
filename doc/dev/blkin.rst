@@ -111,7 +111,7 @@ You may want to check that ceph is up.::
 
 Now put something in using rados, check that it made it, get it back, and remove it.::
 
-  ./ceph osd pool create test-blkin 8
+  ./ceph osd pool create test-blkin
   ./rados put test-object-1 ./vstart.sh --pool=test-blkin
   ./rados -p test-blkin ls
   ./ceph osd map test-blkin test-object-1

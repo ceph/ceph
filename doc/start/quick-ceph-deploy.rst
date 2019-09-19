@@ -299,7 +299,7 @@ example::
    ``rados put`` command on the command line. For example::
 
      echo {Test-data} > testfile.txt
-     ceph osd pool create mytest 8
+     ceph osd pool create mytest
      rados put {object-name} {file-path} --pool=mytest
      rados put test-object-1 testfile.txt --pool=mytest
 

@@ -44,7 +44,7 @@ By default, Ceph block devices use the ``rbd`` pool. Create a pool for
 Kubernetes volume storage. Ensure your Ceph cluster is running, then create
 the pool. ::
 
-        $ ceph osd pool create kubernetes 128
+        $ ceph osd pool create kubernetes
 
 See `Create a Pool`_ for details on specifying the number of placement groups
 for your pools, and `Placement Groups`_ for details on the number of placement
