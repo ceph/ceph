@@ -3,6 +3,7 @@ import { FormGroup } from '@angular/forms';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef } from 'ngx-bootstrap/modal';
+import { forkJoin } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
@@ -32,24 +33,21 @@ export class OsdScrubModalComponent implements OnInit {
   }
 
   scrub() {
-    for (const id of this.selected) {
-      this.osdService.scrub(id, this.deep).subscribe(
-        () => {
-          const operation = this.deep ? 'Deep scrub' : 'Scrub';
+    forkJoin(this.selected.map((id: any) => this.osdService.scrub(id, this.deep))).subscribe(
+      () => {
+        const operation = this.deep ? 'Deep scrub' : 'Scrub';
 
-          this.notificationService.show(
-            NotificationType.success,
-            this.i18n('{{operation}} was initialized in the following OSD(s): {{id}}', {
-              operation: operation,
-              id: this.listPipe.transform(this.selected)
-            })
-          );
-          this.bsModalRef.hide();
-        },
-        () => {
-          this.bsModalRef.hide();
-        }
-      );
-    }
+        this.notificationService.show(
+          NotificationType.success,
+          this.i18n('{{operation}} was initialized in the following OSD(s): {{id}}', {
+            operation: operation,
+            id: this.listPipe.transform(this.selected)
+          })
+        );
+
+        this.bsModalRef.hide();
+      },
+      () => this.bsModalRef.hide()
+    );
   }
 }
