@@ -291,36 +291,38 @@ struct rgw_err {
   std::string message;
 };
 
-
-
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
 {
-   string str;
-   string name;
-   string val;
+   const std::string str;
+   std::string name;
+   std::string val;
  public:
-    explicit NameVal(string nv) : str(nv) {}
+    explicit NameVal(const std::string& nv) : str(nv) {}
 
     int parse();
 
-    string& get_name() { return name; }
-    string& get_val() { return val; }
+    std::string& get_name() { return name; }
+    std::string& get_val() { return val; }
 };
 
 /** Stores the XML arguments associated with the HTTP request in req_state*/
 class RGWHTTPArgs {
-  string str, empty_str;
-  map<string, string> val_map;
-  map<string, string> sys_val_map;
-  map<string, string> sub_resources;
-  bool has_resp_modifier;
-  bool admin_subresource_added;
+  std::string str, empty_str;
+  std::map<std::string, std::string> val_map;
+  std::map<std::string, std::string> sys_val_map;
+  std::map<std::string, std::string> sub_resources;
+  bool has_resp_modifier = false;
+  bool admin_subresource_added = false;
  public:
-  RGWHTTPArgs() : has_resp_modifier(false), admin_subresource_added(false) {}
+  RGWHTTPArgs() = default;
+  explicit RGWHTTPArgs(const std::string& s) {
+      set(s);
+      parse();
+  }
 
   /** Set the arguments; as received */
-  void set(string s) {
+  void set(const std::string& s) {
     has_resp_modifier = false;
     val_map.clear();
     sub_resources.clear();
@@ -328,18 +330,18 @@ class RGWHTTPArgs {
   }
   /** parse the received arguments */
   int parse();
-  void append(const string& name, const string& val);
+  void append(const std::string& name, const string& val);
   /** Get the value for a specific argument parameter */
-  const string& get(const string& name, bool *exists = NULL) const;
+  const string& get(const std::string& name, bool *exists = NULL) const;
   boost::optional<const std::string&>
   get_optional(const std::string& name) const;
-  int get_bool(const string& name, bool *val, bool *exists);
+  int get_bool(const std::string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
   int get_int(const char *name, int *val, int def_val);
 
   /** Get the value for specific system argument parameter */
-  std::string sys_get(const string& name, bool *exists = nullptr) const;
+  std::string sys_get(const std::string& name, bool *exists = nullptr) const;
 
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) const {
@@ -348,7 +350,7 @@ class RGWHTTPArgs {
   bool sub_resource_exists(const char *name) const {
     return (sub_resources.find(name) != std::end(sub_resources));
   }
-  map<string, string>& get_params() {
+  std::map<std::string, std::string>& get_params() {
     return val_map;
   }
   const std::map<std::string, std::string>& get_sub_resources() const {
@@ -361,12 +363,12 @@ class RGWHTTPArgs {
     return has_resp_modifier;
   }
   void set_system() { /* make all system params visible */
-    map<string, string>::iterator iter;
+    std::map<std::string, std::string>::iterator iter;
     for (iter = sys_val_map.begin(); iter != sys_val_map.end(); ++iter) {
       val_map[iter->first] = iter->second;
     }
   }
-  const string& get_str() {
+  const std::string& get_str() {
     return str;
   }
 }; // RGWHTTPArgs

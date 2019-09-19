@@ -61,6 +61,7 @@ you may write data with one API and retrieve it with the other.
    Dynamic bucket index resharding <dynamicresharding>
    Multi factor authentication <mfa>
    Sync Modules <sync-modules>
+   Bucket Notifications <notifications>
    Data Layout in RADOS <layout>
    STS Lite <STSLite>
    Role <role>

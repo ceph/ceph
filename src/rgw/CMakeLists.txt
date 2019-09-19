@@ -87,6 +87,8 @@ set(librgw_common_srcs
   rgw_sync_module_log.cc
   rgw_sync_module_pubsub.cc
   rgw_pubsub_push.cc
+  rgw_notify.cc
+  rgw_notify_event_type.cc
   rgw_sync_module_pubsub_rest.cc
   rgw_sync_trace.cc
   rgw_trim_bilog.cc
@@ -113,6 +115,8 @@ set(librgw_common_srcs
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
+  rgw_rest_pubsub.cc
+  rgw_rest_pubsub_common.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc

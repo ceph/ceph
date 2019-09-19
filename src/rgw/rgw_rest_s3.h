@@ -603,8 +603,9 @@ public:
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
-    bool isSTSenabled;
-    bool isIAMenabled;
+    const bool isSTSEnabled;
+    const bool isIAMEnabled;
+    const bool isPSEnabled;
     bool is_usage_op() {
     return s->info.args.exists("usage");
   }
@@ -613,12 +614,13 @@ protected:
   RGWOp *op_post() override;
 public:
    RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
-                              bool isSTSenabled, bool isIAMenabled) :
-      RGWHandler_REST_S3(auth_registry), isSTSenabled(isSTSenabled), isIAMenabled(isIAMenabled) {}
+                              bool _isSTSEnabled, bool _isIAMEnabled, bool _isPSEnabled) :
+      RGWHandler_REST_S3(auth_registry), isSTSEnabled(_isSTSEnabled), isIAMEnabled(_isIAMEnabled), isPSEnabled(_isPSEnabled) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 
 class RGWHandler_REST_Bucket_S3 : public RGWHandler_REST_S3 {
+  const bool enable_pubsub;
 protected:
   bool is_acl_op() {
     return s->info.args.exists("acl");
@@ -649,6 +651,12 @@ protected:
   bool is_object_lock_op() {
     return s->info.args.exists("object-lock");
   }
+  bool is_notification_op() const {
+    if (enable_pubsub) {
+        return s->info.args.exists("notification");
+    }
+    return false;
+  }
   RGWOp *get_obj_op(bool get_data);
 
   RGWOp *op_get() override;
@@ -658,7 +666,8 @@ protected:
   RGWOp *op_post() override;
   RGWOp *op_options() override;
 public:
-  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+  RGWHandler_REST_Bucket_S3(const rgw::auth::StrategyRegistry& auth_registry, bool _enable_pubsub) :
+      RGWHandler_REST_S3(auth_registry), enable_pubsub(_enable_pubsub) {}
   ~RGWHandler_REST_Bucket_S3() override = default;
 };
 
@@ -695,14 +704,16 @@ public:
 
 class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
-  bool enable_s3website;
-  bool enable_sts;
-  bool enable_iam;
+  const bool enable_s3website;
+  const bool enable_sts;
+  const bool enable_iam;
+  const bool enable_pubsub;
 public:
-  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false, bool enable_iam = false)
-    : enable_s3website(enable_s3website),
-      enable_sts(enable_sts),
-      enable_iam(enable_iam) {
+  explicit RGWRESTMgr_S3(bool _enable_s3website=false, bool _enable_sts=false, bool _enable_iam=false, bool _enable_pubsub=false)
+    : enable_s3website(_enable_s3website),
+      enable_sts(_enable_sts),
+      enable_iam(_enable_iam),
+      enable_pubsub(_enable_pubsub) {
   }
 
   ~RGWRESTMgr_S3() override = default;
