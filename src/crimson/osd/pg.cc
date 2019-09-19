@@ -384,13 +384,13 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
   }).handle_exception_type([=,&oid](const ceph::osd::error& e) {
     logger().debug("got ceph::osd::error while handling object {}: {} ({})",
                    oid, e.code(), e.what());
-
-    backend->evict_object_state(oid);
-    auto reply = make_message<MOSDOpReply>(
-      m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-                                       peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    return backend->evict_object_state(oid).then([=] {
+      auto reply = make_message<MOSDOpReply>(
+        m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
+      reply->set_enoent_reply_versions(peering_state.get_info().last_update,
+                                         peering_state.get_info().last_user_version);
+      return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    });
   });
 }
 
