@@ -158,11 +158,11 @@ public:
   void send_cluster_message(
     int osd, Message *m,
     epoch_t epoch, bool share_map_update=false) final {
-    shard_services.send_to_osd(osd, m, epoch);
+    (void)shard_services.send_to_osd(osd, m, epoch);
   }
 
   void send_pg_created(pg_t pgid) final {
-    shard_services.send_pg_created(pgid);
+    (void)shard_services.send_pg_created(pgid);
   }
 
   bool try_flush_or_schedule_async() final;

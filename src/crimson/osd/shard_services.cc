@@ -153,10 +153,10 @@ std::ostream& operator<<(
   return out;
 }
 
-void ShardServices::send_pg_temp()
+seastar::future<> ShardServices::send_pg_temp()
 {
   if (pg_temp_wanted.empty())
-    return;
+    return seastar::now();
   logger().debug("{}: {}", __func__, pg_temp_wanted);
   boost::intrusive_ptr<MOSDPGTemp> ms[2] = {nullptr, nullptr};
   for (auto& [pgid, pg_temp] : pg_temp_wanted) {
@@ -167,12 +167,16 @@ void ShardServices::send_pg_temp()
     }
     m->pg_temp.emplace(pgid, pg_temp.acting);
   }
-  for (auto &m : ms) {
-    if (m) {
-      monc.send_message(m);
-    }
-  }
-  _sent_pg_temp();
+  return seastar::parallel_for_each(std::begin(ms), std::end(ms),
+    [this](auto m) {
+      if (m) {
+	return monc.send_message(m);
+      } else {
+	return seastar::now();
+      }
+    }).then([this] {
+      _sent_pg_temp();
+    });
 }
 
 void ShardServices::update_map(cached_map_t new_osdmap)

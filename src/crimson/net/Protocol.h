@@ -76,7 +76,7 @@ class Protocol {
  protected:
   // write_state is changed with state atomically, indicating the write
   // behavior of the according state.
-  enum class write_state_t {
+  enum class write_state_t : uint8_t {
     none,
     delay,
     open,
@@ -84,12 +84,13 @@ class Protocol {
   };
 
   static const char* get_state_name(write_state_t state) {
+    uint8_t index = static_cast<uint8_t>(state);
     static const char *const state_names[] = {"none",
                                               "delay",
                                               "open",
                                               "drop"};
-    assert(static_cast<int>(state) < std::size(state_names));
-    return state_names[static_cast<int>(state)];
+    assert(index < std::size(state_names));
+    return state_names[index];
   }
 
   void set_write_state(const write_state_t& state) {
