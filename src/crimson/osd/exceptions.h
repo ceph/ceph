@@ -25,7 +25,7 @@ private:
 };
 
 inline error make_error(const int ret) {
-  return error{-ret};
+  return error{ret};
 }
 
 struct object_not_found : public error {

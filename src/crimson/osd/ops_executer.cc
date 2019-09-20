@@ -106,7 +106,11 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
       }
       if (ret < 0) {
         return call_errorator::make_plain_exception_future<>(
+<<<<<<< HEAD
           crimson::stateful_errint{ ret });
+=======
+          ceph::stateful_ec{ std::error_code(-ret, std::generic_category()) });
+>>>>>>> 520100f... crimson: use std::error_code instances for errors.
       }
       return seastar::now();
     }
@@ -421,17 +425,10 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
     return this->do_op_call(osd_op).safe_then(
       [] {
         return seastar::now();
-      }, ceph::stateful_errint::handle([] (int err) {
-        // TODO: implement the handler. NOP for now.
-      }), crimson::ct_error::input_output_error::handle([] {
-        // TODO: implement the handler. NOP for now.
-      }),
-      crimson::errorator<crimson::ct_error::enoent,
-                         crimson::ct_error::input_output_error,
-                         crimson::ct_error::operation_not_supported,
-                         crimson::ct_error::permission_denied,
-                         crimson::ct_error::invarg>::discard_all{}
-      );
+      }, call_errorator::all_same_way([] (const std::error_code& err) {
+        assert(err.value() > 0);
+        throw crimson::osd::make_error(err.value());
+      }));
   case CEPH_OSD_OP_STAT:
     // note: stat does not require RD
     return do_const_op([&osd_op] (/* const */auto& backend, const auto& os) {
