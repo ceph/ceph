@@ -3659,7 +3659,10 @@ void PeeringState::recover_got(
 
   psdout(10) << "got missing " << oid << " v " << v << dendl;
   pg_log.recover_got(oid, v, info);
-  if (pg_log.get_log().complete_to != pg_log.get_log().log.end()) {
+  if (pg_log.get_log().log.empty()) {
+    psdout(10) << "last_complete now " << info.last_complete
+               << " while log is empty" << dendl;
+  } else if (pg_log.get_log().complete_to != pg_log.get_log().log.end()) {
     psdout(10) << "last_complete now " << info.last_complete
 	       << " log.complete_to " << pg_log.get_log().complete_to->version
 	       << dendl;
