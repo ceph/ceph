@@ -65,7 +65,11 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     return [
       func = std::forward<Func>(func)
     ] (const unthrowable_wrapper&) mutable -> decltype(auto) {
-      return std::invoke(std::forward<Func>(func));
+      if constexpr (std::is_invocable_v<Func, ErrorT>) {
+        return std::invoke(std::forward<Func>(func), ErrorV);
+      } else {
+        return std::invoke(std::forward<Func>(func));
+      }
     };
   }
 
