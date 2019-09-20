@@ -10,6 +10,7 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
+#include <seastar/core/sleep.hh>
 
 #include "common/dout.h"
 #include "crimson/net/Fwd.h"
@@ -174,51 +175,85 @@ public:
     // will be needed for unblocking IO operations/peering
   }
 
+  template <typename T>
+  void start_peering_event_operation(T &&evt) {
+    shard_services.start_operation<LocalPeeringEvent>(
+      this,
+      shard_services,
+      pg_whoami,
+      pgid,
+      std::forward<T>(evt));
+  }
+
   void schedule_event_after(
     PGPeeringEventRef event,
     float delay) final {
-    ceph_assert(0 == "Not implemented yet");
+    // TODO: this is kind of a hack -- once the start_operation call
+    // happens, the operation will be registered, but during the delay
+    // it's just a dangling future.  It would be nice for the
+    // operation machinery to have something to take care of this.
+    (void)seastar::sleep(std::chrono::milliseconds(std::lround(delay*1000))).then(
+      [this, event=std::move(event)]() {
+	start_peering_event_operation(std::move(*event));
+      });
   }
 
   void request_local_background_io_reservation(
     unsigned priority,
     PGPeeringEventRef on_grant,
     PGPeeringEventRef on_preempt) final {
-    ceph_assert(0 == "Not implemented yet");
+    shard_services.local_reserver.request_reservation(
+      pgid,
+      on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
+	start_peering_event_operation(std::move(*on_grant));
+      }) : nullptr,
+      priority,
+      on_preempt ? make_lambda_context(
+	[this, on_preempt=std::move(on_preempt)] (int) {
+	start_peering_event_operation(std::move(*on_preempt));
+      }) : nullptr);
   }
 
   void update_local_background_io_priority(
     unsigned priority) final {
-    ceph_assert(0 == "Not implemented yet");
+    shard_services.local_reserver.update_priority(
+      pgid,
+      priority);
   }
 
   void cancel_local_background_io_reservation() final {
-    // Not implemented yet, but gets called on exit() from some states
+    shard_services.local_reserver.cancel_reservation(
+      pgid);
   }
 
   void request_remote_recovery_reservation(
     unsigned priority,
     PGPeeringEventRef on_grant,
     PGPeeringEventRef on_preempt) final {
-    ceph_assert(0 == "Not implemented yet");
+    shard_services.remote_reserver.request_reservation(
+      pgid,
+      on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
+	start_peering_event_operation(std::move(*on_grant));
+      }) : nullptr,
+      priority,
+      on_preempt ? make_lambda_context(
+	[this, on_preempt=std::move(on_preempt)] (int) {
+	start_peering_event_operation(std::move(*on_preempt));
+      }) : nullptr);
   }
 
   void cancel_remote_recovery_reservation() final {
-    // Not implemented yet, but gets called on exit() from some states
+    shard_services.remote_reserver.cancel_reservation(
+      pgid);
   }
 
   void schedule_event_on_commit(
     ceph::os::Transaction &t,
     PGPeeringEventRef on_commit) final {
     t.register_on_commit(
-      new LambdaContext(
-	[this, on_commit=std::move(on_commit)](int r){
-	  shard_services.start_operation<LocalPeeringEvent>(
-	    this,
-	    shard_services,
-	    pg_whoami,
-	    pgid,
-	    std::move(*on_commit));
+      make_lambda_context(
+	[this, on_commit=std::move(on_commit)](int) {
+	  start_peering_event_operation(std::move(*on_commit));
 	}));
   }
 
