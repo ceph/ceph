@@ -6,11 +6,12 @@ import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { ChartsModule } from 'ng2-charts';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { PopoverModule } from 'ngx-bootstrap/popover';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { ErrorPanelComponent } from '../../../shared/components/error-panel/error-panel.component';
-import { SparklineComponent } from '../../../shared/components/sparkline/sparkline.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+
+import { ComponentsModule } from '../../../shared/components/components.module';
 import { RbdConfigurationEntry } from '../../../shared/models/configuration';
 import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { FormatterService } from '../../../shared/services/formatter.service';
@@ -26,17 +27,14 @@ describe('RbdConfigurationListComponent', () => {
       FormsModule,
       NgxDatatableModule,
       RouterTestingModule,
+      ComponentsModule,
       AlertModule,
       BsDropdownModule.forRoot(),
       ChartsModule,
-      PipesModule
+      PipesModule,
+      PopoverModule
     ],
-    declarations: [
-      RbdConfigurationListComponent,
-      TableComponent,
-      ErrorPanelComponent,
-      SparklineComponent
-    ],
+    declarations: [RbdConfigurationListComponent, TableComponent],
     providers: [FormatterService, RbdConfigurationService, i18nProviders]
   });
 

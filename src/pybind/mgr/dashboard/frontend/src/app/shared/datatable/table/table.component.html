@@ -118,6 +118,9 @@
                    let-offset="offset"
                    let-isVisible="isVisible">
         <div class="page-count">
+          <span *ngIf="selectionType == 'multi'">
+            <cd-helper i18n>Press and hold control button to select multiple rows to execute a common action on.</cd-helper>
+          </span>
           <span *ngIf="selectionType">
             {{ selectedCount }} <ng-container i18n="X selected">selected</ng-container> /
           </span>
