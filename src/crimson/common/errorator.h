@@ -7,18 +7,6 @@
 
 namespace crimson {
 
-namespace _impl {
-  enum class ct_error {
-    enoent,
-    invarg,
-    enodata,
-    input_output_error,
-    object_corrupted,
-    permission_denied,
-    operation_not_supported
-  };
-}
-
 // define the interface between error types and errorator
 template <class ConcreteErrorT>
 class error_t {
@@ -590,17 +578,29 @@ public:
   using futurize = ::seastar::futurize<T>;
 }; // class errorator, <> specialization
 
+
+// this is conjunction of two nasty features: C++14's variable template
+// and inline global variable of C++17. The latter is crucial to ensure
+// the variable will get the same address across all translation units.
+template <std::errc ErrorV>
+inline std::error_code ec = std::make_error_code(ErrorV);
+
+template <std::errc ErrorV>
+using ct_error_code = unthrowable_wrapper<const std::error_code&, ec<ErrorV>>;
+
 namespace ct_error {
-  using enoent = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::enoent>;
-  using enodata = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::enodata>;
-  using invarg = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::invarg>;
-  using input_output_error = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::input_output_error>;
-  using object_corrupted = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::object_corrupted>;
-  using permission_denied = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::permission_denied>;
-  using operation_not_supported = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::operation_not_supported>;
+  using enoent = ct_error_code<std::errc::no_such_file_or_directory>;
+  using enodata = ct_error_code<std::errc::no_message_available>;
+  using invarg =  ct_error_code<std::errc::invalid_argument>;
+  using input_output_error = ct_error_code<std::errc::io_error>;
+  using object_corrupted = ct_error_code<std::errc::illegal_byte_sequence>;
+  using permission_denied = ct_error_code<std::errc::permission_denied>;
+  using operation_not_supported =
+    ct_error_code<std::errc::operation_not_supported>;
 }
 
 using stateful_errc = stateful_error_t<std::errc>;
 using stateful_errint = stateful_error_t<int>;
+using stateful_ec = stateful_error_t<std::error_code>;
 
 } // namespace crimson

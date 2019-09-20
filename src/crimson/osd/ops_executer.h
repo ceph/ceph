@@ -66,7 +66,7 @@ class OpsExecuter {
   auto with_effect(Context&& ctx, MainFunc&& main_func, EffectFunc&& effect_func);
 
   using call_errorator = crimson::errorator<
-    crimson::stateful_errint,
+    crimson::stateful_ec,
     crimson::ct_error::enoent,
     crimson::ct_error::invarg,
     crimson::ct_error::permission_denied,
