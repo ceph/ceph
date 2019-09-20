@@ -12,7 +12,7 @@
 
 namespace ceph::net {
 
-enum class custom_bp_t {
+enum class custom_bp_t : uint8_t {
   BANNER_WRITE = 0,
   BANNER_READ,
   BANNER_PAYLOAD_READ,
@@ -20,13 +20,14 @@ enum class custom_bp_t {
   SOCKET_ACCEPTED
 };
 inline const char* get_bp_name(custom_bp_t bp) {
+  uint8_t index = static_cast<uint8_t>(bp);
   static const char *const bp_names[] = {"BANNER_WRITE",
                                          "BANNER_READ",
                                          "BANNER_PAYLOAD_READ",
                                          "SOCKET_CONNECTING",
                                          "SOCKET_ACCEPTED"};
-  assert(static_cast<int>(bp) < std::size(bp_names));
-  return bp_names[static_cast<int>(bp)];
+  assert(index < std::size(bp_names));
+  return bp_names[index];
 }
 
 enum class bp_type_t {

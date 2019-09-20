@@ -60,7 +60,8 @@ OSD::OSD(int id, uint32_t nonce,
          ceph::net::Messenger& hb_back_msgr)
   : whoami{id},
     nonce{nonce},
-    beacon_timer{[this] { send_beacon(); }},
+    // do this in background
+    beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr, *this}},
@@ -70,7 +71,8 @@ OSD::OSD(int id, uint32_t nonce,
       local_conf().get_val<std::string>("osd_data"))},
     shard_services{*this, cluster_msgr, public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
-    heartbeat_timer{[this] { update_heartbeat_peers(); }},
+    // do this in background
+    heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -264,8 +266,11 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr.get_myaddrs(),
                               public_msgr.get_myaddrs()); changed) {
-      cluster_msgr.set_myaddrs(addrs);
+      return cluster_msgr.set_myaddrs(addrs);
+    } else {
+      return seastar::now();
     }
+  }).then([this] {
     return heartbeat->start(public_msgr.get_myaddrs(),
                             cluster_msgr.get_myaddrs());
   }).then([this] {
@@ -960,23 +965,30 @@ seastar::future<> OSD::send_beacon()
   return monc->send_message(m);
 }
 
-void OSD::update_heartbeat_peers()
+seastar::future<> OSD::update_heartbeat_peers()
 {
   if (!state.is_active()) {
-    return;
+    return seastar::now();
   }
-  for (auto& pg : pg_map.get_pgs()) {
-    vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(pg.first.pgid,
-                                 &up, nullptr,
-                                 &acting, nullptr);
-    for (auto osd : boost::join(up, acting)) {
-      if (osd != CRUSH_ITEM_NONE && osd != whoami) {
-        heartbeat->add_peer(osd, osdmap->get_epoch());
-      }
-    }
-  }
-  heartbeat->update_peers(whoami);
+  return seastar::parallel_for_each(
+    pg_map.get_pgs(),
+    [this](auto& pg) {
+      vector<int> up, acting;
+      osdmap->pg_to_up_acting_osds(pg.first.pgid,
+				   &up, nullptr,
+				   &acting, nullptr);
+      return seastar::parallel_for_each(
+        boost::join(up, acting),
+        [this](int osd) {
+          if (osd == CRUSH_ITEM_NONE || osd == whoami) {
+            return seastar::now();
+          } else {
+            return heartbeat->add_peer(osd, osdmap->get_epoch());
+          }
+        });
+    }).then([this] {
+      return heartbeat->update_peers(whoami);
+    });
 }
 
 seastar::future<> OSD::handle_peering_op(
@@ -1024,7 +1036,7 @@ OSD::get_or_create_pg(
   auto [fut, creating] = pg_map.get_pg(pgid, bool(info));
   if (!creating && info) {
     pg_map.set_creating(pgid);
-    handle_pg_create_info(std::move(info));
+    (void)handle_pg_create_info(std::move(info));
   }
   return std::move(fut);
 }
