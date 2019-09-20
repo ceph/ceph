@@ -234,6 +234,17 @@ struct errorator {
   static_assert((... && is_error_v<AllowedErrors>),
                 "errorator expects presence of ::is_error in all error types");
 
+  template <class ErrorT>
+  struct contains_once {
+    static constexpr bool value =
+      (0 + ... + std::is_same_v<ErrorT, AllowedErrors>) == 1;
+  };
+  template <class T>
+  static constexpr bool contains_once_v = contains_once<T>::value;
+
+  static_assert((... && contains_once_v<AllowedErrors>),
+                "no error type in errorator can be duplicated");
+
   template <class... ValuesT>
   class future : private seastar::future<ValuesT...> {
     using base_t = seastar::future<ValuesT...>;
@@ -268,12 +279,21 @@ struct errorator {
     struct make_errorator<errorator<ValueFuncAllowedErrors...>,
                           ErrorVisitorRetsHeadT,
                           ErrorVisitorRetsTailT...> {
+    private:
+      using step_errorator = errorator<ValueFuncAllowedErrors>;
+
+    public:
       using type = std::conditional_t<
-        is_error_v<ErrorVisitorRetsHeadT>,
+        // add ErrorVisitorRetsHeadT only if 1) it's an error type and
+        // 2) isn't already included in the errorator's error set.
+        // It's enough to negate contains_once_v as any errorator<...>
+        // type is already guaranteed to be free of duplications.
+        is_error_v<ErrorVisitorRetsHeadT> &&
+          !step_errorator::template contains_once_v<ErrorVisitorRetsT>,
         typename make_errorator<errorator<ValueFuncAllowedErrors...,
                                           ErrorVisitorRetsHeadT>,
                                 ErrorVisitorRetsTailT...>::type,
-        typename make_errorator<errorator<ValueFuncAllowedErrors...>,
+        typename make_errorator<step_errorator,
                                 ErrorVisitorRetsTailT...>::type>;
     };
     // finish the recursion
