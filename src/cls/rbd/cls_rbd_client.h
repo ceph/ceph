@@ -438,10 +438,6 @@ int mirror_image_status_set(librados::IoCtx *ioctx,
 void mirror_image_status_set(librados::ObjectWriteOperation *op,
                              const std::string &global_image_id,
                              const cls::rbd::MirrorImageStatus &status);
-int mirror_image_status_remove(librados::IoCtx *ioctx,
-                               const std::string &global_image_id);
-void mirror_image_status_remove(librados::ObjectWriteOperation *op,
-                                const std::string &global_image_id);
 int mirror_image_status_get(librados::IoCtx *ioctx,
                             const std::string &global_image_id,
                             cls::rbd::MirrorImageStatus *status);
