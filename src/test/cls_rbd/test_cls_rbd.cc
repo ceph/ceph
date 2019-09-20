@@ -1939,24 +1939,6 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING]);
 
-  // Test remove
-
-  ASSERT_EQ(0, mirror_image_status_remove(&ioctx, "uuid3"));
-  ASSERT_EQ(-ENOENT, mirror_image_status_get(&ioctx, "uuid3", &read_status));
-  images.clear();
-  statuses.clear();
-  ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
-  ASSERT_EQ(3U, images.size());
-  ASSERT_EQ(2U, statuses.size());
-  ASSERT_EQ(statuses["image_id1"], status1);
-  ASSERT_EQ(statuses["image_id2"], status2);
-
-  states.clear();
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
-  ASSERT_EQ(2U, states.size());
-  ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
-  ASSERT_EQ(2, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING]);
-
   // Test statuses are down after removing watcher
 
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid1", status1));
