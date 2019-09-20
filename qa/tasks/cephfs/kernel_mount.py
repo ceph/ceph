@@ -184,6 +184,7 @@ class KernelMount(CephFSMount):
                 self.mountpoint,
             ],
             timeout=(5*60),
+            check_status=False,
         )
 
     def _find_debug_dir(self):
