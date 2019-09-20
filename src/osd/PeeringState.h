@@ -2126,8 +2126,8 @@ public:
   bool have_missing() const {
     return pg_log.get_missing().num_missing() > 0;
   }
-  bool get_num_missing() const {
-    return pg_log.get_missing().num_missing() > 0;
+  int get_num_missing() const {
+    return pg_log.get_missing().num_missing();
   }
 
   const MissingLoc &get_missing_loc() const {
