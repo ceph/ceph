@@ -21,8 +21,16 @@ echo "My IP: $my_ip"
 echo "Other gateways: ${other_ips[@]}"
 echo "RBD pool: $rbd_pool"
 
+if cat /etc/ceph/iscsi-gateway.cfg | grep api_secure | grep -q true; then
+  CURL_EXTRA_OPTS="--insecure"
+  CURL_HTTP_PROT="https"
+else
+  CURL_EXTRA_OPTS=""
+  CURL_HTTP_PROT="http"
+fi
+
 gwcli /iscsi-targets create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
-HOST=`curl -s --user admin:admin -X GET http://$my_ip:5000/api/sysinfo/hostname | jq -r .data`
+HOST=`curl -s ${CURL_EXTRA_OPTS} --user admin:admin -X GET ${CURL_HTTP_PROT}://$my_ip:5000/api/sysinfo/hostname | jq -r .data`
 if [ ! -n "$HOST" ]; then
   echo "ERROR: rbd-target-api is not running on ${my_ip}:5000"
   false
@@ -30,7 +38,7 @@ fi
 gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create $HOST $my_ip skipchecks=true
 
 for ip in "${other_ips[@]}"; do
-    HOST=`curl -s --user admin:admin -X GET http://$ip:5000/api/sysinfo/hostname | jq -r .data`
+    HOST=`curl -s ${CURL_EXTRA_OPTS} --user admin:admin -X GET ${CURL_HTTP_PROT}://$ip:5000/api/sysinfo/hostname | jq -r .data`
     if [ -n "$HOST" ]; then
       gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create $HOST $ip skipchecks=true
     fi
