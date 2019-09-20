@@ -59,7 +59,7 @@
 
 <ng-template #markOsdConfirmationTpl
              let-markActionDescription="markActionDescription">
-  <ng-container i18n><strong>OSD(s) {{  getSelectedIds() | list }}</strong> will be marked
+  <ng-container i18n><strong>OSD(s) {{  getSelectedOsdIds() | list }}</strong> will be marked
 <strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
 
@@ -70,6 +70,6 @@
        class="danger">
   <cd-warning-panel i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to destroy!</cd-warning-panel>
   </div>
-  <ng-container i18n><strong>OSD {{ getSelectedIds() | list }}</strong> will be
+  <ng-container i18n><strong>OSD {{ getSelectedOsdIds() | list }}</strong> will be
 <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
