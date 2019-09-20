@@ -24,18 +24,18 @@ Write to first and last sectors and make sure we hit the right objects:
 Dump first and last megabytes:
 
   $ DEV=$(sudo rbd map hugeimg/img)
-  $ hexdump -n 1048576 $DEV
+  $ dd if=$DEV bs=1M count=1 status=none | hexdump
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   0000200 0000 0000 0000 0000 0000 0000 0000 0000
   *
   0100000
-  $ hexdump -s 4611686018426339328 $DEV
-  3ffffffffff00000 0000 0000 0000 0000 0000 0000 0000 0000
+  $ dd if=$DEV bs=1M skip=4398046511103 status=none | hexdump
+  0000000 0000 0000 0000 0000 0000 0000 0000 0000
   *
-  3ffffffffffffe00 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
+  00ffe00 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
-  4000000000000000
+  0100000
   $ sudo rbd unmap $DEV
 
   $ ceph osd pool delete hugeimg hugeimg --yes-i-really-really-mean-it >/dev/null 2>&1
