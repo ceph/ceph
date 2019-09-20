@@ -349,7 +349,8 @@ class FuseMount(CephFSMount):
                 ],
                 cwd=self.test_dir,
                 stderr=stderr,
-                timeout=(60*5)
+                timeout=(60*5),
+                check_status=False,
             )
         except CommandFailedError:
             if "No such file or directory" in stderr.getvalue():
