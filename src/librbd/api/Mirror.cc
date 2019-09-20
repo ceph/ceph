@@ -333,12 +333,20 @@ struct C_ImageGetStatus : public C_ImageGetInfo {
     }
 
     mirror_image_status->name = image_name;
+
+    cls::rbd::MirrorImageSiteStatus local_status;
+    r = mirror_image_status_internal.get_local_mirror_image_site_status(
+      &local_status);
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
     mirror_image_status->state = static_cast<mirror_image_status_state_t>(
-      mirror_image_status_internal.state);
-    mirror_image_status->description = mirror_image_status_internal.description;
-    mirror_image_status->last_update =
-      mirror_image_status_internal.last_update.sec();
-    mirror_image_status->up = mirror_image_status_internal.up;
+      local_status.state);
+    mirror_image_status->description = local_status.description;
+    mirror_image_status->last_update = local_status.last_update.sec();
+    mirror_image_status->up = local_status.up;
     C_ImageGetInfo::finish(0);
   }
 };
@@ -1446,7 +1454,8 @@ int Mirror<I>::image_status_list(librados::IoCtx& io_ctx,
     return r;
   }
 
-  cls::rbd::MirrorImageStatus unknown_status(
+  cls::rbd::MirrorImageSiteStatus unknown_status(
+    cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
     cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
 
   for (auto it = images_.begin(); it != images_.end(); ++it) {
@@ -1462,8 +1471,13 @@ int Mirror<I>::image_status_list(librados::IoCtx& io_ctx,
       	         << "using image id as name" << dendl;
       image_name = image_id;
     }
+
+    auto s = unknown_status;
     auto s_it = statuses_.find(image_id);
-    auto &s = s_it != statuses_.end() ? s_it->second : unknown_status;
+    if (s_it != statuses_.end()) {
+      s_it->second.get_local_mirror_image_site_status(&s);
+    }
+
     (*images)[image_id] = mirror_image_status_t{
       image_name,
       mirror_image_info_t{

@@ -208,83 +208,252 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
-void MirrorImageStatus::encode(bufferlist &bl) const {
-  ENCODE_START(1, 1, bl);
-  encode(state, bl);
-  encode(description, bl);
-  encode(last_update, bl);
-  encode(up, bl);
+const std::string MirrorImageSiteStatus::LOCAL_FSID(""); // empty fsid
+
+void MirrorImageSiteStatus::encode_meta(uint8_t version, bufferlist &bl) const {
+  if (version >= 2) {
+    ceph::encode(fsid, bl);
+  }
+  cls::rbd::encode(state, bl);
+  ceph::encode(description, bl);
+  ceph::encode(last_update, bl);
+  ceph::encode(up, bl);
+}
+
+void MirrorImageSiteStatus::decode_meta(uint8_t version,
+                                        bufferlist::const_iterator &it) {
+  if (version < 2) {
+    fsid = LOCAL_FSID;
+  } else {
+    ceph::decode(fsid, it);
+  }
+
+  cls::rbd::decode(state, it);
+  ceph::decode(description, it);
+  ::decode(last_update, it);
+  ceph::decode(up, it);
+}
+
+void MirrorImageSiteStatus::encode(bufferlist &bl) const {
+  // break compatibility when site-name is provided
+  uint8_t version = (fsid == LOCAL_FSID ? 1 : 2);
+  ENCODE_START(version, version, bl);
+  encode_meta(version, bl);
   ENCODE_FINISH(bl);
 }
 
-void MirrorImageStatus::decode(bufferlist::const_iterator &it) {
-  DECODE_START(1, it);
-  decode(state, it);
-  decode(description, it);
-  decode(last_update, it);
-  decode(up, it);
+void MirrorImageSiteStatus::decode(bufferlist::const_iterator &it) {
+  DECODE_START(2, it);
+  decode_meta(struct_v, it);
   DECODE_FINISH(it);
 }
 
-void MirrorImageStatus::dump(Formatter *f) const {
+void MirrorImageSiteStatus::dump(Formatter *f) const {
   f->dump_string("state", state_to_string());
   f->dump_string("description", description);
   f->dump_stream("last_update") << last_update;
 }
 
-std::string MirrorImageStatus::state_to_string() const {
+std::string MirrorImageSiteStatus::state_to_string() const {
   std::stringstream ss;
   ss << (up ? "up+" : "down+") << state;
   return ss.str();
 }
 
-void MirrorImageStatus::generate_test_instances(
-  std::list<MirrorImageStatus*> &o) {
-  o.push_back(new MirrorImageStatus());
-  o.push_back(new MirrorImageStatus(MIRROR_IMAGE_STATUS_STATE_REPLAYING));
-  o.push_back(new MirrorImageStatus(MIRROR_IMAGE_STATUS_STATE_ERROR, "error"));
+void MirrorImageSiteStatus::generate_test_instances(
+  std::list<MirrorImageSiteStatus*> &o) {
+  o.push_back(new MirrorImageSiteStatus());
+  o.push_back(new MirrorImageSiteStatus("", MIRROR_IMAGE_STATUS_STATE_REPLAYING,
+                                        ""));
+  o.push_back(new MirrorImageSiteStatus("", MIRROR_IMAGE_STATUS_STATE_ERROR,
+                                        "error"));
+  o.push_back(new MirrorImageSiteStatus("2fb68ca9-1ba0-43b3-8cdf-8c5a9db71e65",
+                                        MIRROR_IMAGE_STATUS_STATE_STOPPED, ""));
 }
 
-bool MirrorImageStatus::operator==(const MirrorImageStatus &rhs) const {
+bool MirrorImageSiteStatus::operator==(const MirrorImageSiteStatus &rhs) const {
   return state == rhs.state && description == rhs.description && up == rhs.up;
 }
 
-std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status) {
-  os << "["
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorImageSiteStatus& status) {
+  os << "{"
      << "state=" << status.state_to_string() << ", "
      << "description=" << status.description << ", "
-     << "last_update=" << status.last_update << "]";
+     << "last_update=" << status.last_update << "]}";
   return os;
 }
 
-void MirrorImageStatusOnDisk::encode_meta(bufferlist &bl,
-                                          uint64_t features) const {
+void MirrorImageSiteStatusOnDisk::encode_meta(bufferlist &bl,
+                                              uint64_t features) const {
   ENCODE_START(1, 1, bl);
   encode(origin, bl, features);
   ENCODE_FINISH(bl);
 }
 
-void MirrorImageStatusOnDisk::encode(bufferlist &bl, uint64_t features) const {
+void MirrorImageSiteStatusOnDisk::encode(bufferlist &bl,
+                                         uint64_t features) const {
   encode_meta(bl, features);
-  cls::rbd::MirrorImageStatus::encode(bl);
+  cls::rbd::MirrorImageSiteStatus::encode(bl);
 }
 
-void MirrorImageStatusOnDisk::decode_meta(bufferlist::const_iterator &it) {
+void MirrorImageSiteStatusOnDisk::decode_meta(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(origin, it);
   DECODE_FINISH(it);
 }
 
-void MirrorImageStatusOnDisk::decode(bufferlist::const_iterator &it) {
+void MirrorImageSiteStatusOnDisk::decode(bufferlist::const_iterator &it) {
   decode_meta(it);
-  cls::rbd::MirrorImageStatus::decode(it);
+  cls::rbd::MirrorImageSiteStatus::decode(it);
 }
 
-void MirrorImageStatusOnDisk::generate_test_instances(
-    std::list<MirrorImageStatusOnDisk*> &o) {
-  o.push_back(new MirrorImageStatusOnDisk());
-  o.push_back(new MirrorImageStatusOnDisk(
-    {MIRROR_IMAGE_STATUS_STATE_ERROR, "error"}));
+void MirrorImageSiteStatusOnDisk::generate_test_instances(
+    std::list<MirrorImageSiteStatusOnDisk*> &o) {
+  o.push_back(new MirrorImageSiteStatusOnDisk());
+  o.push_back(new MirrorImageSiteStatusOnDisk(
+    {"", MIRROR_IMAGE_STATUS_STATE_ERROR, "error"}));
+  o.push_back(new MirrorImageSiteStatusOnDisk(
+    {"siteA", MIRROR_IMAGE_STATUS_STATE_STOPPED, ""}));
+}
+
+int MirrorImageStatus::get_local_mirror_image_site_status(
+    MirrorImageSiteStatus* status) const {
+  auto it = std::find_if(
+    mirror_image_site_statuses.begin(),
+    mirror_image_site_statuses.end(),
+    [](const MirrorImageSiteStatus& status) {
+      return status.fsid == MirrorImageSiteStatus::LOCAL_FSID;
+    });
+  if (it == mirror_image_site_statuses.end()) {
+    return -ENOENT;
+  }
+
+  *status = *it;
+  return 0;
+}
+
+void MirrorImageStatus::encode(bufferlist &bl) const {
+  // don't break compatibility for extra site statuses
+  ENCODE_START(2, 1, bl);
+
+  // local site status
+  MirrorImageSiteStatus local_status;
+  int r = get_local_mirror_image_site_status(&local_status);
+  local_status.encode_meta(1, bl);
+
+  bool local_status_valid = (r >= 0);
+  encode(local_status_valid, bl);
+
+  // remote site statuses
+  __u32 n = mirror_image_site_statuses.size();
+  if (local_status_valid) {
+    --n;
+  }
+  encode(n, bl);
+
+  for (auto& status : mirror_image_site_statuses) {
+    if (status.fsid == MirrorImageSiteStatus::LOCAL_FSID) {
+      continue;
+    }
+    status.encode_meta(2, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void MirrorImageStatus::decode(bufferlist::const_iterator &it) {
+  DECODE_START(2, it);
+
+  // local site status
+  MirrorImageSiteStatus local_status;
+  local_status.decode_meta(1, it);
+
+  if (struct_v < 2) {
+    mirror_image_site_statuses.push_back(local_status);
+  } else {
+    bool local_status_valid;
+    decode(local_status_valid, it);
+
+    __u32 n;
+    decode(n, it);
+    if (local_status_valid) {
+      ++n;
+    }
+
+    mirror_image_site_statuses.resize(n);
+    for (auto status_it = mirror_image_site_statuses.begin();
+         status_it != mirror_image_site_statuses.end(); ++status_it) {
+      if (local_status_valid &&
+          status_it == mirror_image_site_statuses.begin()) {
+        *status_it = local_status;
+        continue;
+      }
+
+      // remote site status
+      status_it->decode_meta(struct_v, it);
+    }
+  }
+  DECODE_FINISH(it);
+}
+
+void MirrorImageStatus::dump(Formatter *f) const {
+  MirrorImageSiteStatus local_status;
+  int r = get_local_mirror_image_site_status(&local_status);
+  if (r >= 0) {
+    local_status.dump(f);
+  }
+
+  f->open_array_section("remotes");
+  for (auto& status : mirror_image_site_statuses) {
+    if (status.fsid == MirrorImageSiteStatus::LOCAL_FSID) {
+      continue;
+    }
+
+    f->open_object_section("remote");
+    status.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool MirrorImageStatus::operator==(const MirrorImageStatus &rhs) const {
+  return (mirror_image_site_statuses == rhs.mirror_image_site_statuses);
+}
+
+void MirrorImageStatus::generate_test_instances(
+    std::list<MirrorImageStatus*> &o) {
+  o.push_back(new MirrorImageStatus());
+  o.push_back(new MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_ERROR, ""}}));
+  o.push_back(new MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_STOPPED, ""},
+                                     {"siteA", MIRROR_IMAGE_STATUS_STATE_REPLAYING, ""}}));
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorImageStatus& status) {
+  os << "{";
+  MirrorImageSiteStatus local_status;
+  int r = status.get_local_mirror_image_site_status(&local_status);
+  if (r >= 0) {
+    os << "state=" << local_status.state_to_string() << ", "
+       << "description=" << local_status.description << ", "
+       << "last_update=" << local_status.last_update << ", ";
+  }
+
+  os << "remotes=[";
+  for (auto& remote_status : status.mirror_image_site_statuses) {
+    if (remote_status.fsid == MirrorImageSiteStatus::LOCAL_FSID) {
+      continue;
+    }
+
+    os << "{"
+       << "fsid=" << remote_status.fsid << ", "
+       << "state=" << remote_status.state_to_string() << ", "
+       << "description=" << remote_status.description << ", "
+       << "last_update=" << remote_status.last_update
+       << "}";
+  }
+  os << "]}";
+  return os;
 }
 
 void ParentImageSpec::encode(bufferlist& bl) const {

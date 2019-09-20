@@ -1825,9 +1825,12 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id3", image3));
 
-  cls::rbd::MirrorImageStatus status1(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN);
-  cls::rbd::MirrorImageStatus status2(cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING);
-  cls::rbd::MirrorImageStatus status3(cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR);
+  cls::rbd::MirrorImageSiteStatus status1(
+    "", cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "");
+  cls::rbd::MirrorImageSiteStatus status2(
+    "", cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING, "");
+  cls::rbd::MirrorImageSiteStatus status3(
+    "", cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR, "");
 
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid1", status1));
   images.clear();
@@ -1839,9 +1842,9 @@ TEST_F(TestClsRbd, mirror_image_status) {
   // Test status is down due to RBD_MIRRORING is not watched
 
   status1.up = false;
-  ASSERT_EQ(statuses["image_id1"], status1);
+  ASSERT_EQ(statuses["image_id1"], cls::rbd::MirrorImageStatus{{status1}});
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
-  ASSERT_EQ(read_status, status1);
+  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status1}});
 
   // Test status summary. All statuses are unknown due to down.
   states.clear();
@@ -1880,22 +1883,22 @@ TEST_F(TestClsRbd, mirror_image_status) {
 
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
   status1.up = true;
-  ASSERT_EQ(read_status, status1);
+  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status1}});
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid2", &read_status));
   status2.up = true;
-  ASSERT_EQ(read_status, status2);
+  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status2}});
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid3", &read_status));
   status3.up = true;
-  ASSERT_EQ(read_status, status3);
+  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status3}});
 
   images.clear();
   statuses.clear();
   ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
   ASSERT_EQ(3U, images.size());
   ASSERT_EQ(3U, statuses.size());
-  ASSERT_EQ(statuses["image_id1"], status1);
-  ASSERT_EQ(statuses["image_id2"], status2);
-  ASSERT_EQ(statuses["image_id3"], status3);
+  ASSERT_EQ(statuses["image_id1"], cls::rbd::MirrorImageStatus{{status1}});
+  ASSERT_EQ(statuses["image_id2"], cls::rbd::MirrorImageStatus{{status2}});
+  ASSERT_EQ(statuses["image_id3"], cls::rbd::MirrorImageStatus{{status3}});
 
   read_instance = {};
   ASSERT_EQ(0, mirror_image_instance_get(&ioctx, "uuid1", &read_instance));
@@ -1909,15 +1912,15 @@ TEST_F(TestClsRbd, mirror_image_status) {
 
   ASSERT_EQ(0, mirror_image_status_remove_down(&ioctx));
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
-  ASSERT_EQ(read_status, status1);
+  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status1}});
   images.clear();
   statuses.clear();
   ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
   ASSERT_EQ(3U, images.size());
   ASSERT_EQ(3U, statuses.size());
-  ASSERT_EQ(statuses["image_id1"], status1);
-  ASSERT_EQ(statuses["image_id2"], status2);
-  ASSERT_EQ(statuses["image_id3"], status3);
+  ASSERT_EQ(statuses["image_id1"], cls::rbd::MirrorImageStatus{{status1}});
+  ASSERT_EQ(statuses["image_id2"], cls::rbd::MirrorImageStatus{{status2}});
+  ASSERT_EQ(statuses["image_id3"], cls::rbd::MirrorImageStatus{{status3}});
 
   states.clear();
   ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
@@ -1932,7 +1935,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid1", status1));
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid3", status3));
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid3", &read_status));
-  ASSERT_EQ(read_status, status3);
+  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status3}});
 
   states.clear();
   ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
@@ -1950,9 +1953,9 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
   ASSERT_EQ(3U, images.size());
   ASSERT_EQ(3U, statuses.size());
-  ASSERT_EQ(statuses["image_id1"], status1);
-  ASSERT_EQ(statuses["image_id2"], status2);
-  ASSERT_EQ(statuses["image_id3"], status3);
+  ASSERT_EQ(statuses["image_id1"], cls::rbd::MirrorImageStatus{{status1}});
+  ASSERT_EQ(statuses["image_id2"], cls::rbd::MirrorImageStatus{{status2}});
+  ASSERT_EQ(statuses["image_id3"], cls::rbd::MirrorImageStatus{{status3}});
 
   ioctx.unwatch2(watch_handle);
 
@@ -1960,14 +1963,14 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(3U, images.size());
   ASSERT_EQ(3U, statuses.size());
   status1.up = false;
-  ASSERT_EQ(statuses["image_id1"], status1);
+  ASSERT_EQ(statuses["image_id1"], cls::rbd::MirrorImageStatus{{status1}});
   status2.up = false;
-  ASSERT_EQ(statuses["image_id2"], status2);
+  ASSERT_EQ(statuses["image_id2"], cls::rbd::MirrorImageStatus{{status2}});
   status3.up = false;
-  ASSERT_EQ(statuses["image_id3"], status3);
+  ASSERT_EQ(statuses["image_id3"], cls::rbd::MirrorImageStatus{{status3}});
 
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
-  ASSERT_EQ(read_status, status1);
+  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status1}});
 
   states.clear();
   ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
@@ -2020,7 +2023,8 @@ TEST_F(TestClsRbd, mirror_image_status) {
     std::string id = "id" + stringify(i);
     std::string uuid = "uuid" + stringify(i);
     cls::rbd::MirrorImage image(uuid, cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-    cls::rbd::MirrorImageStatus status(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN);
+    cls::rbd::MirrorImageSiteStatus status(
+      "", cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "");
     ASSERT_EQ(0, mirror_image_set(&ioctx, id, image));
     ASSERT_EQ(0, mirror_image_status_set(&ioctx, uuid, status));
   }

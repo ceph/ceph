@@ -177,7 +177,8 @@ inline void encode(const MirrorImageStatusState &state, bufferlist& bl,
   encode(static_cast<uint8_t>(state), bl);
 }
 
-inline void decode(MirrorImageStatusState &state, bufferlist::const_iterator& it)
+inline void decode(MirrorImageStatusState &state,
+                   bufferlist::const_iterator& it)
 {
   uint8_t int_state;
   using ceph::decode;
@@ -187,16 +188,24 @@ inline void decode(MirrorImageStatusState &state, bufferlist::const_iterator& it
 
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
-struct MirrorImageStatus {
-  MirrorImageStatus() {}
-  MirrorImageStatus(MirrorImageStatusState state,
-		    const std::string &description = "")
-    : state(state), description(description) {}
+struct MirrorImageSiteStatus {
+  static const std::string LOCAL_FSID;
 
+  MirrorImageSiteStatus() {}
+  MirrorImageSiteStatus(const std::string& fsid,
+                        MirrorImageStatusState state,
+                        const std::string &description)
+    : fsid(fsid), state(state), description(description) {
+  }
+
+  std::string fsid = LOCAL_FSID;
   MirrorImageStatusState state = MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
   std::string description;
   utime_t last_update;
   bool up = false;
+
+  void encode_meta(uint8_t version, bufferlist &bl) const;
+  void decode_meta(uint8_t version, bufferlist::const_iterator &it);
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &it);
@@ -204,22 +213,21 @@ struct MirrorImageStatus {
 
   std::string state_to_string() const;
 
-  static void generate_test_instances(std::list<MirrorImageStatus*> &o);
+  bool operator==(const MirrorImageSiteStatus &rhs) const;
 
-  bool operator==(const MirrorImageStatus &rhs) const;
+  static void generate_test_instances(std::list<MirrorImageSiteStatus*> &o);
 };
+WRITE_CLASS_ENCODER(MirrorImageSiteStatus);
 
-std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
+std::ostream& operator<<(std::ostream& os, const MirrorImageSiteStatus& status);
 
-WRITE_CLASS_ENCODER(MirrorImageStatus);
-
-struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
+struct MirrorImageSiteStatusOnDisk : cls::rbd::MirrorImageSiteStatus {
   entity_inst_t origin;
 
-  MirrorImageStatusOnDisk() {
+  MirrorImageSiteStatusOnDisk() {
   }
-  MirrorImageStatusOnDisk(const cls::rbd::MirrorImageStatus &status) :
-    cls::rbd::MirrorImageStatus(status) {
+  MirrorImageSiteStatusOnDisk(const cls::rbd::MirrorImageSiteStatus &status) :
+    cls::rbd::MirrorImageSiteStatus(status) {
   }
 
   void encode_meta(bufferlist &bl, uint64_t features) const;
@@ -228,9 +236,34 @@ struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::const_iterator &it);
 
-  static void generate_test_instances(std::list<MirrorImageStatusOnDisk*> &o);
+  static void generate_test_instances(
+      std::list<MirrorImageSiteStatusOnDisk*> &o);
 };
-WRITE_CLASS_ENCODER_FEATURES(MirrorImageStatusOnDisk)
+WRITE_CLASS_ENCODER_FEATURES(MirrorImageSiteStatusOnDisk)
+
+struct MirrorImageStatus {
+  typedef std::list<MirrorImageSiteStatus> MirrorImageSiteStatuses;
+
+  MirrorImageStatus() {}
+  MirrorImageStatus(const MirrorImageSiteStatuses& statuses)
+    : mirror_image_site_statuses(statuses) {
+  }
+
+  MirrorImageSiteStatuses mirror_image_site_statuses;
+
+  int get_local_mirror_image_site_status(MirrorImageSiteStatus* status) const;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator &it);
+  void dump(Formatter *f) const;
+
+  bool operator==(const MirrorImageStatus& rhs) const;
+
+  static void generate_test_instances(std::list<MirrorImageStatus*> &o);
+};
+WRITE_CLASS_ENCODER(MirrorImageStatus);
+
+std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
 
 struct ParentImageSpec {
   int64_t pool_id = -1;
