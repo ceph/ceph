@@ -114,6 +114,25 @@ def get_default_addr():
 class ServerConfigException(Exception):
     pass
 
+def verify_cacrt(cert_fname):
+    """Basic validation of a ca cert"""
+
+    if not cert_fname:
+        raise ServerConfigException("CA cert not configured")
+    if not os.path.isfile(cert_fname):
+        raise ServerConfigException("Certificate {} does not exist".format(cert_fname))
+
+    from OpenSSL import crypto
+    try:
+        with open(cert_fname) as f:
+            x509 = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+            if x509.has_expired():
+                logger.warning(
+                    'Certificate {} has expired'.format(cert_fname))
+    except (ValueError, crypto.Error) as e:
+        raise ServerConfigException(
+            'Invalid certificate {}: {}'.format(cert_fname, str(e)))
+
 
 def verify_tls_files(cert_fname, pkey_fname):
     """Basic checks for TLS certificate and key files
@@ -133,21 +152,14 @@ def verify_tls_files(cert_fname, pkey_fname):
 
     if not cert_fname or not pkey_fname:
         raise ServerConfigException('no certificate configured')
-    if not os.path.isfile(cert_fname):
-        raise ServerConfigException('certificate %s does not exist' % cert_fname)
+
+    verify_cacrt(cert_fname)
+
     if not os.path.isfile(pkey_fname):
         raise ServerConfigException('private key %s does not exist' % pkey_fname)
 
     from OpenSSL import crypto, SSL
-    try:
-        with open(cert_fname) as f:
-            x509 = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
-            if x509.has_expired():
-                logger.warning(
-                    'Certificate {} has been expired'.format(cert_fname))
-    except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(
-            'Invalid certificate {}: {}'.format(cert_fname, str(e)))
+
     try:
         with open(pkey_fname) as f:
             pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
