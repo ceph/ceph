@@ -78,7 +78,11 @@ public:
     mutable ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*> extra_caller_ops;
     mutable ceph::unordered_map<osd_reqid_t,pg_log_dup_t*> dup_index;
 
-    // recovery pointers
+    // recovery pointers.  the *complete_to* pointer is used for updating
+    // last_complete incrementally during the course of recovery.  It is not
+    // strictly required to be correct, as the last_complete value will also
+    // get reset to last_update when recovery finally finishes and there are no
+    // more missing objects.
     list<pg_log_entry_t>::iterator complete_to; // not inclusive of referenced item
     version_t last_requested = 0;               // last object requested by primary
 
