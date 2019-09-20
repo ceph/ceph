@@ -27,7 +27,6 @@
 #include "common/ostream_temp.h"
 
 struct PGPool {
-  CephContext* cct;
   epoch_t cached_epoch;
   int64_t id;
   std::string name;
@@ -35,25 +34,24 @@ struct PGPool {
   pg_pool_t info;
   SnapContext snapc;   // the default pool snapc, ready to go.
 
-  PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
+  PGPool(OSDMapRef map, int64_t i, const pg_pool_t& info,
 	 const std::string& name)
-    : cct(cct),
-      cached_epoch(map->get_epoch()),
+    : cached_epoch(map->get_epoch()),
       id(i),
       name(name),
       info(info) {
     snapc = info.get_snap_context();
   }
 
-  void update(CephContext *cct, OSDMapRef map);
+  void update(OSDMapRef map);
 
-  ceph::timespan get_readable_interval() const {
+  ceph::timespan get_readable_interval(ConfigProxy &conf) const {
     double v = 0;
     if (info.opts.get(pool_opts_t::READ_LEASE_INTERVAL, &v)) {
       return ceph::make_timespan(v);
     } else {
-      auto hbi = cct->_conf->osd_heartbeat_grace;
-      auto fac = cct->_conf->osd_pool_default_read_lease_ratio;
+      auto hbi = conf->osd_heartbeat_grace;
+      auto fac = conf->osd_pool_default_read_lease_ratio;
       return ceph::make_timespan(hbi * fac);
     }
   }
