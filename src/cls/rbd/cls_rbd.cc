@@ -5037,8 +5037,8 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
 }
 
 int image_status_set(cls_method_context_t hctx, const string &global_image_id,
-		     const cls::rbd::MirrorImageStatus &status) {
-  cls::rbd::MirrorImageStatusOnDisk ondisk_status(status);
+		     const cls::rbd::MirrorImageSiteStatus &status) {
+  cls::rbd::MirrorImageSiteStatusOnDisk ondisk_status(status);
   ondisk_status.up = false;
   ondisk_status.last_update = ceph_clock_now();
 
@@ -5084,7 +5084,7 @@ int image_status_get(cls_method_context_t hctx, const string &global_image_id,
     return r;
   }
 
-  cls::rbd::MirrorImageStatusOnDisk ondisk_status;
+  cls::rbd::MirrorImageSiteStatusOnDisk ondisk_status;
   try {
     auto it = bl.cbegin();
     decode(ondisk_status, it);
@@ -5094,9 +5094,9 @@ int image_status_get(cls_method_context_t hctx, const string &global_image_id,
     return -EIO;
   }
 
-
-  *status = static_cast<cls::rbd::MirrorImageStatus>(ondisk_status);
-  status->up = (watchers.find(ondisk_status.origin) != watchers.end());
+  ondisk_status.fsid = cls::rbd::MirrorImageSiteStatus::LOCAL_FSID;
+  ondisk_status.up = (watchers.find(ondisk_status.origin) != watchers.end());
+  *status = {{ondisk_status}};
   return 0;
 }
 
@@ -5204,8 +5204,10 @@ int image_status_get_summary(
       cls::rbd::MirrorImageStatus status;
       image_status_get(hctx, mirror_image.global_image_id, watchers, &status);
 
-      cls::rbd::MirrorImageStatusState state = status.up ? status.state :
-	cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
+      cls::rbd::MirrorImageSiteStatus local_status;
+      r = status.get_local_mirror_image_site_status(&local_status);
+      cls::rbd::MirrorImageStatusState state = (r >= 0 && local_status.up ?
+        local_status.state : cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN);
       (*states)[state]++;
     }
 
@@ -5246,7 +5248,7 @@ int image_status_remove_down(cls_method_context_t hctx) {
 	break;
       }
 
-      cls::rbd::MirrorImageStatusOnDisk status;
+      cls::rbd::MirrorImageSiteStatusOnDisk status;
       try {
 	auto it = list_it.second.cbegin();
 	status.decode_meta(it);
@@ -5290,7 +5292,7 @@ int image_instance_get(cls_method_context_t hctx,
     return r;
   }
 
-  cls::rbd::MirrorImageStatusOnDisk ondisk_status;
+  cls::rbd::MirrorImageSiteStatusOnDisk ondisk_status;
   try {
     auto it = bl.cbegin();
     decode(ondisk_status, it);
@@ -5991,7 +5993,7 @@ int mirror_image_remove(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param global_image_id (std::string)
- * @param status (cls::rbd::MirrorImageStatus)
+ * @param status (cls::rbd::MirrorImageSiteStatus)
  *
  * Output:
  * @returns 0 on success, negative error code on failure
@@ -5999,7 +6001,7 @@ int mirror_image_remove(cls_method_context_t hctx, bufferlist *in,
 int mirror_image_status_set(cls_method_context_t hctx, bufferlist *in,
 			    bufferlist *out) {
   string global_image_id;
-  cls::rbd::MirrorImageStatus status;
+  cls::rbd::MirrorImageSiteStatus status;
   try {
     auto it = in->cbegin();
     decode(global_image_id, it);
