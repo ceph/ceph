@@ -213,19 +213,23 @@ export class OsdListComponent implements OnInit {
     ];
   }
 
-  getSelectedIds() {
-    return this.selection.selected.map((row) => row.id);
+  /**
+   * Only returns valid IDs, e.g. if an OSD is falsely still selected after being deleted, it won't
+   * get returned.
+   */
+  getSelectedOsdIds(): number[] {
+    const osdIds = this.osds.map((osd) => osd.id);
+    return this.selection.selected.map((row) => row.id).filter((id) => osdIds.includes(id));
   }
 
-  get hasOsdSelected() {
-    const validOsds = [];
-    if (this.selection.hasSelection) {
-      for (const osdId of this.getSelectedIds()) {
-        validOsds.push(this.osds.filter((o) => o.id === osdId).pop());
-      }
-      return validOsds.length > 0;
-    }
-    return false;
+  getSelectedOsds(): any[] {
+    return this.osds.filter(
+      (osd) => !_.isUndefined(osd) && this.getSelectedOsdIds().includes(osd.id)
+    );
+  }
+
+  get hasOsdSelected(): boolean {
+    return this.getSelectedOsdIds().length > 0;
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -233,36 +237,23 @@ export class OsdListComponent implements OnInit {
   }
 
   /**
-   * Returns true if no row is selected or if the selected row is in the given
+   * Returns true if no rows are selected or if *any* of the selected rows are in the given
    * state. Useful for deactivating the corresponding menu entry.
    */
   isNotSelectedOrInState(state: 'in' | 'up' | 'down' | 'out'): boolean {
-    if (!this.hasOsdSelected) {
+    const selectedOsds = this.getSelectedOsds();
+    if (selectedOsds.length === 0) {
       return true;
     }
-
-    let validOsds = [];
-    if (this.selection.hasSelection) {
-      for (const osdId of this.getSelectedIds()) {
-        validOsds.push(this.osds.filter((o) => o.id === osdId).pop());
-      }
-    }
-
-    validOsds = validOsds.filter((osd) => !_.isUndefined(osd));
-    if (validOsds.length === 0) {
-      // `osd` is undefined if the selected OSD has been removed.
-      return true;
-    }
-
     switch (state) {
       case 'in':
-        return validOsds.some((osd) => osd.in === 1);
+        return selectedOsds.some((osd) => osd.in === 1);
       case 'out':
-        return validOsds.some((osd) => osd.in !== 1);
+        return selectedOsds.some((osd) => osd.in !== 1);
       case 'down':
-        return validOsds.some((osd) => osd.up !== 1);
+        return selectedOsds.some((osd) => osd.up !== 1);
       case 'up':
-        return validOsds.some((osd) => osd.up === 1);
+        return selectedOsds.some((osd) => osd.up === 1);
     }
   }
 
@@ -285,7 +276,7 @@ export class OsdListComponent implements OnInit {
     }
 
     const initialState = {
-      selected: this.getSelectedIds(),
+      selected: this.getSelectedOsdIds(),
       deep: deep
     };
 
@@ -307,7 +298,7 @@ export class OsdListComponent implements OnInit {
         },
         onSubmit: () => {
           observableForkJoin(
-            this.getSelectedIds().map((osd: any) => onSubmit.call(this.osdService, osd))
+            this.getSelectedOsdIds().map((osd: any) => onSubmit.call(this.osdService, osd))
           ).subscribe(() => this.bsModalRef.hide());
         }
       }
@@ -330,7 +321,7 @@ export class OsdListComponent implements OnInit {
     templateItemDescription: string,
     action: (id: number) => Observable<any>
   ): void {
-    this.osdService.safeToDestroy(JSON.stringify(this.getSelectedIds())).subscribe((result) => {
+    this.osdService.safeToDestroy(JSON.stringify(this.getSelectedOsdIds())).subscribe((result) => {
       const modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
         initialState: {
           actionDescription: actionDescription,
@@ -342,7 +333,7 @@ export class OsdListComponent implements OnInit {
           },
           submitAction: () => {
             observableForkJoin(
-              this.getSelectedIds().map((osd: any) => action.call(this.osdService, osd))
+              this.getSelectedOsdIds().map((osd: any) => action.call(this.osdService, osd))
             ).subscribe(
               () => {
                 this.getOsdList();
