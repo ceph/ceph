@@ -234,7 +234,7 @@ function test_mon_injectargs()
   ceph tell osd.0 config get mon_lease | grep 6
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
-  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1 >& $TMPFILE || return 1
+  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1  2> $TMPFILE || return 1
   check_response "Error EINVAL: Parse error setting osd_scrub_auto_repair_num_errors to '-1' using injectargs"
 
   expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
