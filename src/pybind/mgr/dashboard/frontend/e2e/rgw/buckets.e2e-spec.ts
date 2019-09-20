@@ -3,6 +3,7 @@ import { BucketsPageHelper } from './buckets.po';
 
 describe('RGW buckets page', () => {
   let buckets: BucketsPageHelper;
+  const bucket_name = '000test';
 
   beforeAll(async () => {
     buckets = new BucketsPageHelper();
@@ -12,35 +13,44 @@ describe('RGW buckets page', () => {
     await BucketsPageHelper.checkConsole();
   });
 
-  it('should open and show breadcrumb', async () => {
-    await buckets.navigateTo();
-    await expect($('.breadcrumb-item.active').getText()).toBe('Buckets');
+  describe('breadcrumb tests', () => {
+    beforeEach(async () => {
+      await buckets.navigateTo();
+    });
+
+    it('should open and show breadcrumb', async () => {
+      await expect($('.breadcrumb-item.active').getText()).toBe('Buckets');
+    });
   });
 
-  it('should create bucket', async () => {
-    await buckets.navigateTo('create');
-    await buckets.create(
-      '000test',
-      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-      'default-placement'
-    );
-    await expect(buckets.getFirstTableCellWithText('000test').isPresent()).toBe(true);
-  });
+  describe('create, edit & delete bucket tests', () => {
+    beforeEach(async () => {
+      await buckets.navigateTo();
+      await buckets.uncheckAllTableRows();
+    });
 
-  it('should edit bucket', async () => {
-    await buckets.navigateTo();
-    await buckets.edit('000test', 'dev');
-    await expect(buckets.getTable().getText()).toMatch('dev');
-  });
+    it('should create bucket', async () => {
+      await buckets.navigateTo('create');
+      await buckets.create(
+        bucket_name,
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        'default-placement'
+      );
+      await expect(buckets.getFirstTableCellWithText(bucket_name).isPresent()).toBe(true);
+    });
 
-  it('should delete bucket', async () => {
-    await buckets.navigateTo();
-    await buckets.delete('000test');
+    it('should edit bucket', async () => {
+      await buckets.edit(bucket_name, 'dev');
+      await expect(buckets.getTable().getText()).toMatch('dev');
+    });
+
+    it('should delete bucket', async () => {
+      await buckets.delete(bucket_name);
+    });
   });
 
   describe('Invalid Input in Create and Edit tests', () => {
     it('should test invalid inputs in create fields', async () => {
-      await buckets.navigateTo('create');
       await buckets.testInvalidCreate();
     });
 
@@ -51,10 +61,9 @@ describe('RGW buckets page', () => {
         '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         'default-placement'
       );
-
       await buckets.testInvalidEdit('000rq');
-
       await buckets.navigateTo();
+      await buckets.uncheckAllTableRows();
       await buckets.delete('000rq');
     });
   });

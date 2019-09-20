@@ -2,15 +2,16 @@ import { $, by, element } from 'protractor';
 import { protractor } from 'protractor/built/ptor';
 import { PageHelper } from '../page-helper.po';
 
+const pages = {
+  index: '/#/rgw/user',
+  create: '/#/rgw/user/create'
+};
+
 export class UsersPageHelper extends PageHelper {
-  pages = {
-    index: '/#/rgw/user',
-    create: '/#/rgw/user/create'
-  };
+  pages = pages;
 
+  @PageHelper.restrictTo(pages.create)
   async create(username, fullname, email, maxbuckets) {
-    await this.navigateTo('create');
-
     // Enter in  username
     await element(by.id('uid')).sendKeys(username);
 
@@ -32,9 +33,8 @@ export class UsersPageHelper extends PageHelper {
     await this.waitPresence(this.getFirstTableCellWithText(username));
   }
 
+  @PageHelper.restrictTo(pages.index)
   async edit(name, new_fullname, new_email, new_maxbuckets) {
-    await this.navigateTo();
-
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
@@ -67,6 +67,7 @@ export class UsersPageHelper extends PageHelper {
   async invalidCreate() {
     const uname = '000invalid_create_user';
     // creating this user in order to check that you can't give two users the same name
+    await this.navigateTo('create');
     await this.create(uname, 'xxx', 'xxx@xxx', '1');
 
     await this.navigateTo('create');
@@ -134,6 +135,7 @@ export class UsersPageHelper extends PageHelper {
   async invalidEdit() {
     const uname = '000invalid_edit_user';
     // creating this user to edit for the test
+    await this.navigateTo('create');
     await this.create(uname, 'xxx', 'xxx@xxx', '1');
 
     await this.navigateTo();
