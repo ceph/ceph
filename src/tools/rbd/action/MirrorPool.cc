@@ -186,7 +186,7 @@ int get_remote_cluster_spec(const po::variables_map &vm,
 int set_peer_config_key(librados::IoCtx& io_ctx, const std::string& peer_uuid,
                         std::map<std::string, std::string>&& attributes) {
   librbd::RBD rbd;
-  int r = rbd.mirror_peer_set_attributes(io_ctx, peer_uuid, attributes);
+  int r = rbd.mirror_peer_site_set_attributes(io_ctx, peer_uuid, attributes);
   if (r == -EPERM) {
     std::cerr << "rbd: permission denied attempting to set peer "
               << "config-key secrets in the monitor" << std::endl;
@@ -202,7 +202,7 @@ int set_peer_config_key(librados::IoCtx& io_ctx, const std::string& peer_uuid,
 int get_peer_config_key(librados::IoCtx& io_ctx, const std::string& peer_uuid,
                         std::map<std::string, std::string>* attributes) {
   librbd::RBD rbd;
-  int r = rbd.mirror_peer_get_attributes(io_ctx, peer_uuid, attributes);
+  int r = rbd.mirror_peer_site_get_attributes(io_ctx, peer_uuid, attributes);
   if (r == -ENOENT) {
     return r;
   } else if (r == -EPERM) {
@@ -243,7 +243,7 @@ int update_peer_config_key(librados::IoCtx& io_ctx,
 
 int format_mirror_peers(librados::IoCtx& io_ctx,
                         at::Format::Formatter formatter,
-                        const std::vector<librbd::mirror_peer_t> &peers,
+                        const std::vector<librbd::mirror_peer_site_t> &peers,
                         bool config_key) {
   TextTable tbl;
   if (formatter != nullptr) {
@@ -276,7 +276,7 @@ int format_mirror_peers(librados::IoCtx& io_ctx,
     if (formatter != nullptr) {
       formatter->open_object_section("peer");
       formatter->dump_string("uuid", peer.uuid);
-      formatter->dump_string("cluster_name", peer.cluster_name);
+      formatter->dump_string("cluster_name", peer.site_name);
       formatter->dump_string("client_name", peer.client_name);
       for (auto& pair : attributes) {
         formatter->dump_string(pair.first.c_str(), pair.second);
@@ -285,7 +285,7 @@ int format_mirror_peers(librados::IoCtx& io_ctx,
     } else {
       tbl << " "
           << peer.uuid
-          << peer.cluster_name
+          << peer.site_name
           << peer.client_name;
       if (config_key) {
         tbl << attributes["mon_host"]
@@ -580,41 +580,44 @@ protected:
   void execute_action(librbd::Image &image,
                       librbd::RBD::AioCompletion *aio_comp) override {
     image.get_id(&m_image_id);
-    image.aio_mirror_image_get_status(&m_mirror_image_status,
-                                      sizeof(m_mirror_image_status), aio_comp);
+    image.aio_mirror_image_get_global_status(
+      &m_mirror_image_global_status, sizeof(m_mirror_image_global_status),
+      aio_comp);
   }
 
   void finalize_action() override {
-    if (m_mirror_image_status.info.global_id.empty()) {
+    if (m_mirror_image_global_status.info.global_id.empty()) {
       return;
     }
 
-    std::string state = utils::mirror_image_status_state(m_mirror_image_status);
-    std::string instance_id = (m_mirror_image_status.up &&
+    librbd::mirror_image_site_status_t local_status;
+    utils::get_local_mirror_image_status(
+      m_mirror_image_global_status, &local_status);
+
+    std::string state = utils::mirror_image_site_status_state(local_status);
+    std::string instance_id = (local_status.up &&
                                m_instance_ids.count(m_image_id)) ?
         m_instance_ids.find(m_image_id)->second : "";
     std::string last_update = (
-      m_mirror_image_status.last_update == 0 ?
-        "" : utils::timestr(m_mirror_image_status.last_update));
+      local_status.last_update == 0 ?
+        "" : utils::timestr(local_status.last_update));
 
     if (m_formatter != nullptr) {
       m_formatter->open_object_section("image");
-      m_formatter->dump_string("name", m_mirror_image_status.name);
-      m_formatter->dump_string("global_id",
-                               m_mirror_image_status.info.global_id);
+      m_formatter->dump_string("name", m_mirror_image_global_status.name);
+      m_formatter->dump_string(
+        "global_id", m_mirror_image_global_status.info.global_id);
       m_formatter->dump_string("state", state);
-      m_formatter->dump_string("description",
-                               m_mirror_image_status.description);
+      m_formatter->dump_string("description", local_status.description);
       m_daemon_service_info.dump(instance_id, m_formatter);
       m_formatter->dump_string("last_update", last_update);
       m_formatter->close_section(); // image
     } else {
-      std::cout << "\n" << m_mirror_image_status.name << ":\n"
+      std::cout << "\n" << m_mirror_image_global_status.name << ":\n"
 	        << "  global_id:   "
-                << m_mirror_image_status.info.global_id << "\n"
+                << m_mirror_image_global_status.info.global_id << "\n"
 	        << "  state:       " << state << "\n"
-	        << "  description: "
-                << m_mirror_image_status.description << "\n";
+	        << "  description: " << local_status.description << "\n";
       if (!instance_id.empty()) {
         std::cout << "  service:     "
                   << m_daemon_service_info.get_description(instance_id) << "\n";
@@ -632,7 +635,7 @@ private:
   const MirrorDaemonServiceInfo &m_daemon_service_info;
   at::Format::Formatter m_formatter;
   std::string m_image_id;
-  librbd::mirror_image_status_t m_mirror_image_status;
+  librbd::mirror_image_global_status_t m_mirror_image_global_status;
 };
 
 template <typename RequestT>
@@ -887,8 +890,8 @@ int execute_peer_add(const po::variables_map &vm,
   // TODO: temporary restriction to prevent adding multiple peers
   // until rbd-mirror daemon can properly handle the scenario
   librbd::RBD rbd;
-  std::vector<librbd::mirror_peer_t> mirror_peers;
-  r = rbd.mirror_peer_list(io_ctx, &mirror_peers);
+  std::vector<librbd::mirror_peer_site_t> mirror_peers;
+  r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
   if (r < 0) {
     std::cerr << "rbd: failed to list mirror peers" << std::endl;
     return r;
@@ -899,7 +902,9 @@ int execute_peer_add(const po::variables_map &vm,
   }
 
   std::string uuid;
-  r = rbd.mirror_peer_add(io_ctx, &uuid, remote_cluster, remote_client_name);
+  r = rbd.mirror_peer_site_add(
+    io_ctx, &uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, remote_cluster,
+    remote_client_name);
   if (r < 0) {
     std::cerr << "rbd: error adding mirror peer" << std::endl;
     return r;
@@ -951,7 +956,7 @@ int execute_peer_remove(const po::variables_map &vm,
   }
 
   librbd::RBD rbd;
-  r = rbd.mirror_peer_remove(io_ctx, uuid);
+  r = rbd.mirror_peer_site_remove(io_ctx, uuid);
   if (r < 0) {
     std::cerr << "rbd: error removing mirror peer" << std::endl;
     return r;
@@ -1026,9 +1031,10 @@ int execute_peer_set(const po::variables_map &vm,
 
   librbd::RBD rbd;
   if (key == "client") {
-    r = rbd.mirror_peer_set_client(io_ctx, uuid.c_str(), value.c_str());
+    r = rbd.mirror_peer_site_set_client_name(io_ctx, uuid.c_str(),
+                                             value.c_str());
   } else if (key == "cluster") {
-    r = rbd.mirror_peer_set_cluster(io_ctx, uuid.c_str(), value.c_str());
+    r = rbd.mirror_peer_site_set_name(io_ctx, uuid.c_str(), value.c_str());
   } else {
     r = update_peer_config_key(io_ctx, uuid, key, value);
     if (r  == -ENOENT) {
@@ -1211,9 +1217,9 @@ int execute_info(const po::variables_map &vm,
     return r;
   }
 
-  std::vector<librbd::mirror_peer_t> mirror_peers;
+  std::vector<librbd::mirror_peer_site_t> mirror_peers;
   if (namespace_name.empty()) {
-    r = rbd.mirror_peer_list(io_ctx, &mirror_peers);
+    r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
     if (r < 0) {
       return r;
     }

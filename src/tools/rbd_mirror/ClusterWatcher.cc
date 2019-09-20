@@ -140,8 +140,8 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers)
       continue;
     }
 
-    vector<librbd::mirror_peer_t> configs;
-    r = librbd::api::Mirror<>::peer_list(ioctx, &configs);
+    vector<librbd::mirror_peer_site_t> configs;
+    r = librbd::api::Mirror<>::peer_site_list(ioctx, &configs);
     if (r < 0) {
       derr << "error reading mirroring config for pool " << pool_name
 	   << cpp_strerror(r) << dendl;
@@ -153,7 +153,7 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers)
 
     std::vector<PeerSpec> peers{configs.begin(), configs.end()};
     for (auto& peer : peers) {
-      r = resolve_peer_config_keys(pool_id, pool_name, &peer);
+      r = resolve_peer_site_config_keys(pool_id, pool_name, &peer);
       if (r < 0) {
         break;
       }
@@ -183,9 +183,9 @@ int ClusterWatcher::read_site_name(std::string* site_name) {
   return rbd.mirror_site_name_get(*m_cluster, site_name);
 }
 
-int ClusterWatcher::resolve_peer_config_keys(int64_t pool_id,
-                                             const std::string& pool_name,
-                                             PeerSpec* peer) {
+int ClusterWatcher::resolve_peer_site_config_keys(int64_t pool_id,
+                                                  const std::string& pool_name,
+                                                  PeerSpec* peer) {
   dout(10) << "retrieving config-key: pool_id=" << pool_id << ", "
            << "pool_name=" << pool_name << ", "
            << "peer_uuid=" << peer->uuid << dendl;

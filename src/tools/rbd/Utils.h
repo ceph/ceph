@@ -189,9 +189,18 @@ bool is_not_user_snap_namespace(librbd::Image* image,
 
 std::string image_id(librbd::Image& image);
 
-std::string mirror_image_state(librbd::mirror_image_state_t mirror_image_state);
-std::string mirror_image_status_state(librbd::mirror_image_status_state_t state);
-std::string mirror_image_status_state(librbd::mirror_image_status_t status);
+std::string mirror_image_state(
+    librbd::mirror_image_state_t mirror_image_state);
+std::string mirror_image_status_state(
+    librbd::mirror_image_status_state_t state);
+std::string mirror_image_site_status_state(
+    const librbd::mirror_image_site_status_t& status);
+std::string mirror_image_global_status_state(
+    const librbd::mirror_image_global_status_t& status);
+
+int get_local_mirror_image_status(
+    const librbd::mirror_image_global_status_t& status,
+    librbd::mirror_image_site_status_t* local_status);
 
 std::string timestr(time_t t);
 
