@@ -639,7 +639,9 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   reschedule_update_status_task(30);
 
   if (on_replay_interrupted()) {
-    on_finish->complete(r);
+    if (on_finish != nullptr) {
+      on_finish->complete(r);
+    }
     return;
   }
 
