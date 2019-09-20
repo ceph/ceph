@@ -411,7 +411,7 @@ class Module(MgrModule):
         self.log.debug('put_device_metrics device %s key %s = %s, erase %s' %
                        (devid, key, data, erase))
         with rados.WriteOpCtx() as op:
-            ioctx.set_omap(op, (key,), (str(json.dumps(data)),))
+            ioctx.set_omap(op, (key,), (json.dumps(data).encode('ascii'),))
             if len(erase):
                 ioctx.remove_omap_keys(op, tuple(erase))
             ioctx.operate_write_op(op, devid)
