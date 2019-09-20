@@ -63,8 +63,8 @@ private:
 
   int read_site_name(std::string* site_name);
 
-  int resolve_peer_config_keys(int64_t pool_id, const std::string& pool_name,
-                               PeerSpec* peer);
+  int resolve_peer_site_config_keys(
+      int64_t pool_id, const std::string& pool_name, PeerSpec* peer);
 };
 
 } // namespace mirror

@@ -77,11 +77,10 @@ public:
                                                    RBD_MIRROR_MODE_POOL));
 
       std::string gen_uuid;
-      ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx,
-                                                   uuid != nullptr ? uuid :
-                                                                     &gen_uuid,
-					           peer.cluster_name,
-					           peer.client_name));
+      ASSERT_EQ(0, librbd::api::Mirror<>::peer_site_add(
+                     ioctx, uuid != nullptr ? uuid : &gen_uuid,
+                     RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                     peer.cluster_name, peer.client_name));
       m_pool_peers[pool_id].insert(peer);
     }
     if (name != nullptr) {

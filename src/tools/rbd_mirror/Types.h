@@ -81,9 +81,9 @@ struct PeerSpec {
     : uuid(uuid), cluster_name(cluster_name), client_name(client_name)
   {
   }
-  PeerSpec(const librbd::mirror_peer_t &peer) :
+  PeerSpec(const librbd::mirror_peer_site_t &peer) :
     uuid(peer.uuid),
-    cluster_name(peer.cluster_name),
+    cluster_name(peer.site_name),
     client_name(peer.client_name)
   {
   }

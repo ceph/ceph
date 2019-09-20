@@ -275,8 +275,8 @@ int execute_status(const po::variables_map &vm,
     return r;
   }
 
-  librbd::mirror_image_status_t status;
-  r = image.mirror_image_get_status(&status, sizeof(status));
+  librbd::mirror_image_global_status_t status;
+  r = image.mirror_image_get_global_status(&status, sizeof(status));
   if (r < 0) {
     std::cerr << "rbd: failed to get status for image " << image_name << ": "
 	      << cpp_strerror(r) << std::endl;
@@ -286,7 +286,10 @@ int execute_status(const po::variables_map &vm,
   std::string instance_id;
   MirrorDaemonServiceInfo daemon_service_info(io_ctx);
 
-  if (status.up) {
+  librbd::mirror_image_site_status_t local_status;
+  utils::get_local_mirror_image_status(status, &local_status);
+
+  if (local_status.up) {
     r = image.mirror_image_get_instance_id(&instance_id);
     if (r == -EOPNOTSUPP) {
       std::cerr << "rbd: newer release of Ceph OSDs required to map image "
@@ -301,16 +304,17 @@ int execute_status(const po::variables_map &vm,
     }
   }
 
-  std::string state = utils::mirror_image_status_state(status);
+  std::string state = utils::mirror_image_site_status_state(local_status);
   std::string last_update = (
-    status.last_update == 0 ? "" : utils::timestr(status.last_update));
+    local_status.last_update == 0 ?
+      "" : utils::timestr(local_status.last_update));
 
   if (formatter != nullptr) {
     formatter->open_object_section("image");
     formatter->dump_string("name", image_name);
     formatter->dump_string("global_id", status.info.global_id);
     formatter->dump_string("state", state);
-    formatter->dump_string("description", status.description);
+    formatter->dump_string("description", local_status.description);
     daemon_service_info.dump(instance_id, formatter);
     formatter->dump_string("last_update", last_update);
     formatter->close_section(); // image
@@ -319,7 +323,7 @@ int execute_status(const po::variables_map &vm,
     std::cout << image_name << ":\n"
 	      << "  global_id:   " << status.info.global_id << "\n"
 	      << "  state:       " << state << "\n"
-              << "  description: " << status.description << "\n";
+              << "  description: " << local_status.description << "\n";
     if (!instance_id.empty()) {
       std::cout << "  service:     " <<
         daemon_service_info.get_description(instance_id) << "\n";

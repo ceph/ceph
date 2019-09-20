@@ -107,9 +107,9 @@ public:
       ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(ioctx,
                                                    RBD_MIRROR_MODE_POOL));
       std::string uuid;
-      ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx, &uuid,
-                                                   peer.cluster_name,
-                                                   peer.client_name));
+      ASSERT_EQ(0, librbd::api::Mirror<>::peer_site_add(
+        ioctx, &uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, peer.cluster_name,
+        peer.client_name));
     }
     if (name != nullptr) {
       *name = pool_name;

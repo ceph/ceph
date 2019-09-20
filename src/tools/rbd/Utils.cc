@@ -850,7 +850,8 @@ std::string mirror_image_state(librbd::mirror_image_state_t state) {
   }
 }
 
-std::string mirror_image_status_state(librbd::mirror_image_status_state_t state) {
+std::string mirror_image_status_state(
+    librbd::mirror_image_status_state_t state) {
   switch (state) {
   case MIRROR_IMAGE_STATUS_STATE_UNKNOWN:
     return "unknown";
@@ -871,9 +872,37 @@ std::string mirror_image_status_state(librbd::mirror_image_status_state_t state)
   }
 }
 
-std::string mirror_image_status_state(librbd::mirror_image_status_t status) {
+std::string mirror_image_site_status_state(
+    const librbd::mirror_image_site_status_t& status) {
   return (status.up ? "up+" : "down+") +
     mirror_image_status_state(status.state);
+}
+
+std::string mirror_image_global_status_state(
+    const librbd::mirror_image_global_status_t& status) {
+  librbd::mirror_image_site_status_t local_status;
+  int r = get_local_mirror_image_status(status, &local_status);
+  if (r < 0) {
+    return "down+unknown";
+  }
+
+  return mirror_image_site_status_state(local_status);
+}
+
+int get_local_mirror_image_status(
+    const librbd::mirror_image_global_status_t& status,
+    librbd::mirror_image_site_status_t* local_status) {
+  auto it = std::find_if(status.site_statuses.begin(),
+                         status.site_statuses.end(),
+                         [](auto& site_status) {
+      return (site_status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+    });
+  if (it == status.site_statuses.end()) {
+    return -ENOENT;
+  }
+
+  *local_status = *it;
+  return 0;
 }
 
 std::string timestr(time_t t) {
