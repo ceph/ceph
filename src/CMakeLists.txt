@@ -670,9 +670,9 @@ if(WITH_LIBCEPHFS)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_LIBCEPHSQLITE)
-  set(libcephsqlite_srcs libcephsqlite.cc)
+  set(libcephsqlite_srcs libcephsqlite.cc BufferCache.cc)
   add_library(cephsqlite ${CEPH_SHARED} ${libcephsqlite_srcs})
-  set_target_properties(cephsqlite PROPERTIES COMPILE_FLAGS "-I${SQLITE3_INCLUDE_DIRS}")
+  set_target_properties(cephsqlite PROPERTIES COMPILE_FLAGS "-I${SQLITE3_INCLUDE_DIRS}" COMPILE_FLAGS "-I./include" COMPILE_FLAGS -g)
   target_link_libraries(cephsqlite radosstriper librados ${SQLITE3_LIBRARIES} ${EXTRALIBS})
   if(ENABLE_SHARED)
     set_target_properties(cephsqlite PROPERTIES

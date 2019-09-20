@@ -899,6 +899,8 @@ add_ceph_unittest(unittest_weighted_shuffle)
 
 if(WITH_LIBCEPHSQLITE)
   add_executable(test_libcephsqlite test_libcephsqlite.cc)
+  target_include_directories(test_libcephsqlite SYSTEM PRIVATE ../include ../../)
+  set_target_properties(test_libcephsqlite PROPERTIES COMPILE_FLAGS -g)
   target_link_libraries(test_libcephsqlite cephsqlite radosstriper librados)
 endif(WITH_LIBCEPHSQLITE)
 
