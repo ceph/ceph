@@ -104,7 +104,7 @@ void BufferedRecoveryMessages::send_info(
   }
 }
 
-void PGPool::update(CephContext *cct, OSDMapRef map)
+void PGPool::update(OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
   if (!pi) {
@@ -431,7 +431,7 @@ void PeeringState::advance_map(
 	    << dendl;
 
   update_osdmap_ref(osdmap);
-  pool.update(cct, osdmap);
+  pool.update(osdmap);
 
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
@@ -440,7 +440,7 @@ void PeeringState::advance_map(
   if (pool.info.last_change == osdmap_ref->get_epoch()) {
     pl->on_pool_change();
   }
-  readable_interval = pool.get_readable_interval();
+  readable_interval = pool.get_readable_interval(cct->_conf);
   last_require_osd_release = osdmap->require_osd_release;
 }
 
