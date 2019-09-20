@@ -12099,16 +12099,6 @@ int BlueStore::queue_transactions(
   ObjectStore::Transaction::collect_contexts(
     tls, &on_applied, &on_commit, &on_applied_sync);
 
-  if (cct->_conf->objectstore_blackhole) {
-    dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
-	    << dendl;
-    for (auto& l : { on_applied, on_commit, on_applied_sync }) {
-      for (auto c : l) {
-	delete c;
-      }
-    }
-    return 0;
-  }
   auto start = mono_clock::now();
 
   Collection *c = static_cast<Collection*>(ch.get());
