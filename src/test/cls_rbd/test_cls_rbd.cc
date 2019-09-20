@@ -1848,7 +1848,9 @@ TEST_F(TestClsRbd, mirror_image_status) {
 
   // Test status summary. All statuses are unknown due to down.
   states.clear();
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  cls::rbd::MirrorPeer mirror_peer{
+    "uuid", cls::rbd::MIRROR_PEER_DIRECTION_RX, "siteA", "client", "fsidA"};
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
 
@@ -1867,7 +1869,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
   ASSERT_EQ(3U, images.size());
   ASSERT_TRUE(statuses.empty());
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
 
@@ -1923,7 +1925,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(statuses["image_id3"], cls::rbd::MirrorImageStatus{{status3}});
 
   states.clear();
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
   ASSERT_EQ(3U, states.size());
   ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
   ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING]);
@@ -1938,42 +1940,101 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status3}});
 
   states.clear();
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING]);
 
-  // Test statuses are down after removing watcher
+  // Remote status
 
+  ASSERT_EQ(0, mirror_uuid_set(&ioctx, "mirror-uuid"));
+  ASSERT_EQ(0, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_POOL));
+
+  ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
+  cls::rbd::MirrorImageStatus expected_status1({status1});
+  ASSERT_EQ(expected_status1, read_status);
+
+  cls::rbd::MirrorImageSiteStatus remote_status1(
+    "fsidA", cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING, "");
+  ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid1", remote_status1));
+  ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
+  remote_status1.up = true;
+  expected_status1 = {{status1, remote_status1}};
+  ASSERT_EQ(expected_status1, read_status);
+
+  // summary under different modes
+  cls::rbd::MirrorImageSiteStatus remote_status2(
+    "fsidA", cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING, "");
+  remote_status2.up = true;
+  cls::rbd::MirrorImageSiteStatus remote_status3(
+    "fsidA", cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "");
+  remote_status3.up = true;
+
+  status1.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR;
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid1", status1));
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid2", status2));
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid3", status3));
+  ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid2", remote_status2));
+  ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid3", remote_status3));
+
+  expected_status1 = {{status1, remote_status1}};
+  cls::rbd::MirrorImageStatus expected_status2({status2, remote_status2});
+  cls::rbd::MirrorImageStatus expected_status3({status3, remote_status3});
 
   images.clear();
   statuses.clear();
   ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
   ASSERT_EQ(3U, images.size());
   ASSERT_EQ(3U, statuses.size());
-  ASSERT_EQ(statuses["image_id1"], cls::rbd::MirrorImageStatus{{status1}});
-  ASSERT_EQ(statuses["image_id2"], cls::rbd::MirrorImageStatus{{status2}});
-  ASSERT_EQ(statuses["image_id3"], cls::rbd::MirrorImageStatus{{status3}});
+  ASSERT_EQ(statuses["image_id1"], expected_status1);
+  ASSERT_EQ(statuses["image_id2"], expected_status2);
+  ASSERT_EQ(statuses["image_id3"], expected_status3);
 
+  states.clear();
+  mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX;
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(2U, states.size());
+  ASSERT_EQ(2, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR]);
+
+  states.clear();
+  mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_TX;
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(2U, states.size());
+  ASSERT_EQ(2, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
+
+  states.clear();
+  mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX_TX;
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(3U, states.size());
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR]);
+
+  // Test statuses are down after removing watcher
   ioctx.unwatch2(watch_handle);
 
   ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
   ASSERT_EQ(3U, images.size());
   ASSERT_EQ(3U, statuses.size());
   status1.up = false;
-  ASSERT_EQ(statuses["image_id1"], cls::rbd::MirrorImageStatus{{status1}});
+  remote_status1.up = false;
+  expected_status1 = {{status1, remote_status1}};
+  ASSERT_EQ(statuses["image_id1"], expected_status1);
   status2.up = false;
-  ASSERT_EQ(statuses["image_id2"], cls::rbd::MirrorImageStatus{{status2}});
+  remote_status2.up = false;
+  expected_status2 = {{status2, remote_status2}};
+  ASSERT_EQ(statuses["image_id2"], expected_status2);
   status3.up = false;
-  ASSERT_EQ(statuses["image_id3"], cls::rbd::MirrorImageStatus{{status3}});
+  remote_status3.up = false;
+  expected_status3 = {{status3, remote_status3}};
+  ASSERT_EQ(statuses["image_id3"], expected_status3);
 
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
-  ASSERT_EQ(read_status, cls::rbd::MirrorImageStatus{{status1}});
+  ASSERT_EQ(read_status, expected_status1);
 
   states.clear();
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
 
@@ -1992,7 +2053,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_TRUE(statuses.empty());
 
   states.clear();
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {mirror_peer}, &states));
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
 
@@ -2011,7 +2072,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id3"));
 
   states.clear();
-  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, {}, &states));
   ASSERT_EQ(0U, states.size());
 
   // Test status list with large number of images
