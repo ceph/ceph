@@ -289,4 +289,13 @@ export abstract class PageHelper {
   getTableRows() {
     return $$('datatable-row-wrapper');
   }
+
+  /**
+   * Uncheck all checked table rows.
+   */
+  async uncheckAllTableRows() {
+    await $$('.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked').each(
+      (e: ElementFinder) => e.click()
+    );
+  }
 }
