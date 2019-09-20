@@ -221,6 +221,61 @@ namespace rados {
 
         return 0;
       }
+
+      int Manager::init_ioctx(librados::Rados *rados,
+                              const string& pool,
+                              std::optional<string> pool_ns)
+      {
+        _ioctx.emplace();
+        int r = rados->ioctx_create(pool.c_str(), *_ioctx);
+        if (r < 0) {
+          return r;
+        }
+
+        if (pool_ns && !pool_ns->empty()) {
+          _ioctx->set_namespace(*pool_ns);
+        }
+
+        ioctx = &(*_ioctx);
+
+        return 0;
+      }
+
+      int Manager::open(bool create,
+                        std::optional<FIFO::MetaCreateParams> create_params)
+      {
+        if (create) {
+          librados::ObjectWriteOperation op;
+
+          FIFO::MetaCreateParams default_params;
+          FIFO::MetaCreateParams *params = (create_params ? &(*create_params) : &default_params);
+
+          int r = FIFO::meta_create(&op, *params);
+          if (r < 0) {
+            return r;
+          }
+
+          r = ioctx->operate(meta_oid, &op);
+          if (r < 0) {
+            return r;
+          }
+        }
+
+        FIFO::MetaGetParams get_params;
+        if (create_params) {
+          get_params.objv(create_params->state.objv);
+        }
+        int r = FIFO::meta_get(*ioctx,
+                               meta_oid,
+                               get_params,
+                               &meta_info);
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
+      }
+
     } // namespace fifo
   } // namespace cls
 } // namespace rados

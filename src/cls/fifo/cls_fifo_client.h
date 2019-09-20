@@ -78,6 +78,10 @@ namespace rados {
             std::optional<fifo_objv_t> objv;
           } state;
 
+          MetaGetParams& objv(std::optional<fifo_objv_t>& v) {
+            state.objv = v;
+            return *this;
+          }
           MetaGetParams& objv(const fifo_objv_t& v) {
             state.objv = v;
             return *this;
@@ -217,6 +221,37 @@ namespace rados {
                              const ListPartParams& params,
                              std::vector<cls_fifo_part_list_op_reply::entry> *pentries,
                              string *ptag = nullptr);
+      };
+
+      class Manager {
+        CephContext *cct;
+        string id;
+
+        string meta_oid;
+
+        std::optional<librados::IoCtx> _ioctx;
+        librados::IoCtx *ioctx{nullptr};
+
+        fifo_info_t meta_info;
+      public:
+        Manager(CephContext *_cct,
+                const string& _id) : cct(_cct),
+                                    id(_id) {
+          meta_oid = id;
+        }
+
+        int init_ioctx(librados::Rados *rados,
+                       const string& pool,
+                       std::optional<string> pool_ns);
+
+        int init_ioctx(librados::IoCtx *_ioctx) {
+          ioctx = ioctx;
+          return 0;
+        }
+
+        int open(bool create,
+                 std::optional<FIFO::MetaCreateParams> create_params = std::nullopt);
+
       };
     } // namespace fifo
   }  // namespace cls
