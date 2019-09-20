@@ -402,6 +402,9 @@ int mirror_peer_set_client(librados::IoCtx *ioctx,
 int mirror_peer_set_cluster(librados::IoCtx *ioctx,
                             const std::string &uuid,
                             const std::string &cluster_name);
+int mirror_peer_set_direction(
+    librados::IoCtx *ioctx, const std::string &uuid,
+    cls::rbd::MirrorPeerDirection mirror_peer_direction);
 
 void mirror_image_list_start(librados::ObjectReadOperation *op,
                              const std::string &start, uint64_t max_return);
@@ -455,11 +458,16 @@ void mirror_image_status_list_start(librados::ObjectReadOperation *op,
 int mirror_image_status_list_finish(bufferlist::const_iterator *iter,
                                     std::map<std::string, cls::rbd::MirrorImage> *images,
                                     std::map<std::string, cls::rbd::MirrorImageStatus> *statuses);
-int mirror_image_status_get_summary(librados::IoCtx *ioctx,
-                                    std::map<cls::rbd::MirrorImageStatusState, int> *states);
-void mirror_image_status_get_summary_start(librados::ObjectReadOperation *op);
-int mirror_image_status_get_summary_finish(bufferlist::const_iterator *iter,
-                                           std::map<cls::rbd::MirrorImageStatusState, int> *states);
+int mirror_image_status_get_summary(
+    librados::IoCtx *ioctx,
+    const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites,
+    std::map<cls::rbd::MirrorImageStatusState, int> *states);
+void mirror_image_status_get_summary_start(
+    librados::ObjectReadOperation *op,
+    const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites);
+int mirror_image_status_get_summary_finish(
+    bufferlist::const_iterator *iter,
+    std::map<cls::rbd::MirrorImageStatusState, int> *states);
 int mirror_image_status_remove_down(librados::IoCtx *ioctx);
 void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 

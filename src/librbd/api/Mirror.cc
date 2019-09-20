@@ -1499,7 +1499,7 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
 
   std::map<cls::rbd::MirrorImageStatusState, int> states_;
-  int r = cls_client::mirror_image_status_get_summary(&io_ctx, &states_);
+  int r = cls_client::mirror_image_status_get_summary(&io_ctx, {}, &states_);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to get mirror status summary: "
                << cpp_strerror(r) << dendl;

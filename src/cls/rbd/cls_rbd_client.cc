@@ -1922,6 +1922,22 @@ int mirror_peer_set_cluster(librados::IoCtx *ioctx,
   return 0;
 }
 
+int mirror_peer_set_direction(
+    librados::IoCtx *ioctx, const std::string &uuid,
+    cls::rbd::MirrorPeerDirection mirror_peer_direction) {
+  bufferlist in_bl;
+  encode(uuid, in_bl);
+  encode(static_cast<uint8_t>(mirror_peer_direction), in_bl);
+
+  bufferlist out_bl;
+  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_direction",
+                      in_bl, out_bl);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
 void mirror_image_list_start(librados::ObjectReadOperation *op,
                              const std::string &start, uint64_t max_return)
 {
@@ -2167,10 +2183,12 @@ int mirror_image_status_list_finish(bufferlist::const_iterator *iter,
   return 0;
 }
 
-int mirror_image_status_get_summary(librados::IoCtx *ioctx,
-                                    std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+int mirror_image_status_get_summary(
+    librados::IoCtx *ioctx,
+    const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites,
+    std::map<cls::rbd::MirrorImageStatusState, int> *states) {
   librados::ObjectReadOperation op;
-  mirror_image_status_get_summary_start(&op);
+  mirror_image_status_get_summary_start(&op, mirror_peer_sites);
 
   bufferlist out_bl;
   int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
@@ -2186,13 +2204,17 @@ int mirror_image_status_get_summary(librados::IoCtx *ioctx,
   return 0;
 }
 
-void mirror_image_status_get_summary_start(librados::ObjectReadOperation *op) {
+void mirror_image_status_get_summary_start(
+    librados::ObjectReadOperation *op,
+    const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites) {
   bufferlist bl;
+  encode(mirror_peer_sites, bl);
   op->exec("rbd", "mirror_image_status_get_summary", bl);
 }
 
-int mirror_image_status_get_summary_finish(bufferlist::const_iterator *iter,
-                                           std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+int mirror_image_status_get_summary_finish(
+    bufferlist::const_iterator *iter,
+    std::map<cls::rbd::MirrorImageStatusState, int> *states) {
   try {
     decode(*states, *iter);
   } catch (const buffer::error &err) {
