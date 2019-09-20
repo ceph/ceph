@@ -80,13 +80,15 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 		for (i = 0; i < nval; ++i) {
 			if (strcmp(exkeys[i], key))
 				continue;
-			if ((len == strlen(exvals[i]) + 1) && (val != NULL) && (!strcmp(exvals[i], val))) {
-				nfound++;
-				break;
+			if(val != NULL){
+				if ((len == strlen(exvals[i]) + 1) && (!strcmp(exvals[i], val))) {
+					nfound++;
+					break;
+				}
+				printf("rados_getxattrs(%s): got key %s, but the "
+					"value was %s rather than %s.\n",
+					oid, key, val, exvals[i]);
 			}
-			printf("rados_getxattrs(%s): got key %s, but the "
-				"value was %s rather than %s.\n",
-				oid, key, val, exvals[i]);
 			goto out_err;
 		}
 	}
