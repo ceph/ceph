@@ -3937,6 +3937,44 @@ returned %d, but should return zero on success." % (self.name, ret))
         finally:
             free(apps)
 
+    def application_metadata_get(self, app_name, key):
+        """
+        Gets application metadata on an OSD pool for the given key
+
+        :param app_name: application name
+        :type app_name: str
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+
+        :raises: :class:`Error`
+        """
+
+        app_name =  cstr(app_name, 'app_name')
+        key = cstr(key, 'key')
+        cdef:
+            char *_app_name = app_name
+            char *_key = key
+            size_t size = 129
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rados_application_metadata_get(self.io, _app_name,
+                                                         _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s for application %s' % (key, _app_name))
+            elif ret != 0:
+                raise make_ex(ret, 'error getting metadata %s for application %s' %
+                              (key, _app_name))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
     def application_metadata_set(self, app_name, key, value):
         """
         Sets application metadata on an OSD pool
