@@ -210,37 +210,71 @@ public:
 
 
 class RGWRadosList {
-  RGWRados *store;
+  struct process_t {
+    bool entire_container;
+    std::set<rgw_obj_key> filter_keys;
+    std::set<std::string> prefixes;
 
-  std::ostream& out;
+    process_t() :
+      entire_container(false)
+    {}
+  };
+
+  std::map<std::string,process_t> bucket_process_map;
+
+  void add_bucket_entire(const std::string& bucket_name) {
+    auto p = bucket_process_map.emplace(std::make_pair(bucket_name,
+						       process_t()));
+    p.first->second.entire_container = true;
+  }
+
+  void add_bucket_prefix(const std::string& bucket_name,
+			 const std::string& prefix) {
+    auto p = bucket_process_map.emplace(std::make_pair(bucket_name,
+						       process_t()));
+    p.first->second.prefixes.insert(prefix);
+  }
+
+  void add_bucket_filter(const std::string& bucket_name,
+			 const rgw_obj_key& obj_key) {
+    auto p = bucket_process_map.emplace(std::make_pair(bucket_name,
+						       process_t()));
+    p.first->second.filter_keys.insert(obj_key);
+  }
+
+  RGWRados *store;
 
   uint16_t max_concurrent_ios;
   uint64_t stale_secs;
+  std::string tenant_name;
 
   int handle_stat_result(RGWRados::Object::Stat::Result& result,
 			 std::set<string>& obj_oids);
-  int pop_and_handle_stat_op(map<int, list<string> >& oids,
+  int pop_and_handle_stat_op(RGWObjectCtx& obj_ctx,
+			     map<int, list<string> >& oids,
 			     std::deque<RGWRados::Object::Stat>& ops);
 
 public:
 
   RGWRadosList(RGWRados *_store,
-	    int _max_ios,
-	    uint64_t _stale_secs,
-	    std::ostream& _out = std::cout) :
+	       int _max_ios,
+	       uint64_t _stale_secs,
+	       const std::string& _tenant_name) :
     store(_store),
-    out(_out),
     max_concurrent_ios(_max_ios),
-    stale_secs(_stale_secs)
+    stale_secs(_stale_secs),
+    tenant_name(_tenant_name)
   {}
 
 #if 0
   // possible future expansion -- have it find all bucket....
-  int RGWRadosList::build_buckets_instance_index()
+  int RGWRadosList::build_buckets_instance_index();
 #endif
 
-  int build_linked_oids_for_bucket(const string& bucket_instance_id,
-				   map<int, list<string>>& oids);
+  int build_linked_oids_for_bucket(const std::string& bucket_instance_id,
+				   const std::string& prefix,
+				   const std::set<rgw_obj_key>& entries_filter,
+				   std::map<int, list<string>>& oids);
 
   int build_linked_oids_index();
 

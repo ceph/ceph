@@ -5320,21 +5320,18 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_BUCKET_RADOS_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
-    RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    RGWRadosList lister(store,
+			max_concurrent_ios, orphan_stale_secs, tenant);
+    ret = lister.run(bucket_name);
     if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    RGWRadosList lister(store, max_concurrent_ios, orphan_stale_secs, cout);
-    ret = lister.run(bucket.get_key());
-    if (ret < 0) {
-      cerr << "bucket radoslist failed to finish before encountering error: " <<
-	cpp_strerror(-ret) << std::endl;
+      cerr <<
+	"ERROR: bucket radoslist failed to finish before " <<
+	"encountering error: " << cpp_strerror(-ret) << std::endl;
+      cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
+	"BE USED TO MANUALLY DELETE ORPHANS" << std::endl;
       return -ret;
     }
   }

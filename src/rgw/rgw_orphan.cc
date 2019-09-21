@@ -10,6 +10,7 @@ using namespace std;
 #include "common/errno.h"
 
 #include "rgw_rados.h"
+#include "rgw_op.h"
 #include "rgw_orphan.h"
 #include "rgw_bucket.h"
 
@@ -948,6 +949,14 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
   obj_oids.clear();
 
   rgw_bucket& bucket = result.obj.bucket;
+
+  ldout(store->ctx(), 20) << "RRGWRadosList::" << __func__ <<
+      " bucket=" << bucket << ", has_manifest=" << result.has_manifest <<
+      dendl;
+
+  // iterator to store result of dlo/slo attribute find
+  decltype(result.attrs)::iterator attr_it = result.attrs.end();
+
   if (!result.has_manifest) {
     /* a very very old object, or part of a multipart upload during upload */
     const string loc = bucket.marker + "_" + result.obj.get_object();
@@ -968,13 +977,66 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
      * and produce an absolutely correct output. */
 
     obj_oids.insert(obj_force_ns(loc, "shadow"));
+  } else if ((attr_it = result.attrs.find(RGW_ATTR_USER_MANIFEST)) !=
+	     result.attrs.end()) {
+    // *** handle DLO object
+
+    const std::string s = bucket.marker + "_" + result.obj.get_object();
+    obj_oids.insert(s);
+
+    char* prefix_path_c = attr_it->second.c_str();
+    const std::string& prefix_path = prefix_path_c;
+
+    const size_t sep_pos = prefix_path.find('/');
+    if (string::npos == sep_pos) {
+      return -EINVAL;
+    }
+
+    const std::string bucket_name = prefix_path.substr(0, sep_pos);
+    const std::string prefix = prefix_path.substr(sep_pos + 1);
+
+    add_bucket_prefix(bucket_name, prefix);
+  } else if ((attr_it = result.attrs.find(RGW_ATTR_SLO_MANIFEST)) !=
+	     result.attrs.end()) {
+    // *** handle SLO object
+
+    const std::string s = bucket.marker + "_" + result.obj.get_object();
+    obj_oids.insert(s);
+
+    RGWSLOInfo slo_info;
+    bufferlist::iterator bliter = attr_it->second.begin();
+    try {
+      ::decode(slo_info, bliter);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 0) <<
+	"ERROR: failed to decode slo manifest for " << s << dendl;
+      return -EIO;
+    }
+
+    for (const auto& iter : slo_info.entries) {
+      const string& path_str = iter.path;
+
+      const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
+      if (string::npos == sep_pos) {
+	return -EINVAL;
+      }
+
+      std::string bucket_name;
+      std::string obj_name;
+
+      url_decode(path_str.substr(1, sep_pos - 1), bucket_name);
+      url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+      const rgw_obj_key obj_key(obj_name);
+      add_bucket_filter(bucket_name, obj_key);
+    }
   } else {
     RGWObjManifest& manifest = result.manifest;
 
     if (0 == manifest.get_max_head_size()) {
       // in multipart, the head object contains no data and just has
       // the manifest
-      string s = bucket.marker + "_" + result.obj.get_object();
+      const std::string s = bucket.marker + "_" + result.obj.get_object();
       obj_oids.insert(s);
     }
 
@@ -987,7 +1049,7 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
     // thereafter tail_bucket, if it exists
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
       const rgw_obj& loc = miter.get_location();
-      string s = bucket_cursor->marker + "_" + loc.get_object();
+      const std::string s = bucket_cursor->marker + "_" + loc.get_object();
       obj_oids.insert(s);
 
       // after doing this once, use tail bucket for test
@@ -1002,6 +1064,7 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
 }
 
 int RGWRadosList::pop_and_handle_stat_op(
+  RGWObjectCtx& obj_ctx,
   map<int, list<string> >& oids,
   std::deque<RGWRados::Object::Stat>& ops)
 {
@@ -1024,10 +1087,14 @@ int RGWRadosList::pop_and_handle_stat_op(
   }
 
   for (const auto& o : obj_oids) {
-    std::cout << o << std::endl;
+    cout << o << std::endl;
   }
 
 done:
+
+  // invalidate object context for this object to avoid memory leak
+  // (see pr https://github.com/ceph/ceph/pull/30174)
+  obj_ctx.invalidate(front_op.result.obj);
 
   ops.pop_front();
   return ret;
@@ -1043,7 +1110,7 @@ int RGWRadosList::build_buckets_instance_index()
   int ret = store->meta_mgr->list_keys_init(section, &handle);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
-    return -ret;
+    return ret;
   }
 
   map<int, list<string> > instances;
@@ -1060,7 +1127,7 @@ int RGWRadosList::build_buckets_instance_index()
     ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
-      return -ret;
+      return ret;
     }
 
     for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
@@ -1094,11 +1161,16 @@ int RGWRadosList::build_buckets_instance_index()
 
 
 int RGWRadosList::build_linked_oids_for_bucket(
-  const string& bucket_instance_id,
-  map<int, list<string> >& oids)
+  const std::string& bucket_instance_id,
+  const std::string& prefix,
+  const std::set<rgw_obj_key>& entries_filter,
+  std::map<int, list<string>>& oids)
 {
-  ldout(store->ctx(), 10) << "building linked oids for bucket instance: " <<
-    bucket_instance_id << dendl;
+  ldout(store->ctx(), 10) <<
+    "building linked oids for bucket_instance_id=" << bucket_instance_id <<
+    ", prefix=" << prefix <<
+    ", entries_filter.size=" << entries_filter.size() << dendl;
+
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
   int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id,
@@ -1122,6 +1194,7 @@ int RGWRadosList::build_linked_oids_for_bucket(
   list_op.params.list_versions = true;
   list_op.params.enforce_ns = false;
   list_op.params.allow_unordered = true;
+  list_op.params.prefix = prefix;
 
   bool truncated;
 
@@ -1131,11 +1204,13 @@ int RGWRadosList::build_linked_oids_for_bucket(
   do {
     vector<RGWObjEnt> result;
 
-#define MAX_LIST_OBJS_ENTRIES 100
-    ret = list_op.list_objects(MAX_LIST_OBJS_ENTRIES, &result, NULL, &truncated);
+    constexpr size_t LIST_OBJS_MAX_ENTRIES = 100;
+    ret = list_op.list_objects(LIST_OBJS_MAX_ENTRIES, &result,
+			       NULL, &truncated);
     if (ret < 0) {
-      cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+      cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) <<
+	std::endl;
+      return ret;
     }
 
     for (vector<RGWObjEnt>::iterator iter = result.begin();
@@ -1151,7 +1226,14 @@ int RGWRadosList::build_linked_oids_for_bucket(
       }
 
       ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" <<
-	entry.key.name << " entry.key.instance=" << entry.key.instance << dendl;
+	entry.key.name << " entry.key.instance=" << entry.key.instance <<
+	dendl;
+
+      // ignore entries that are not in the filter if there is a filter
+      if (!entries_filter.empty() &&
+	  entries_filter.find(entry.key) == entries_filter.cend()) {
+	continue;
+      }
 
       // we need to do this in two cases below, so use a lambda
       auto do_stat_key =
@@ -1174,7 +1256,7 @@ int RGWRadosList::build_linked_oids_for_bucket(
 	  }
 
 	  if (stat_ops.size() >= max_concurrent_ios) {
-	    ret = pop_and_handle_stat_op(oids, stat_ops);
+	    ret = pop_and_handle_stat_op(obj_ctx, oids, stat_ops);
 	    if (ret < 0) {
 	      if (ret != -ENOENT) {
 		lderr(store->ctx()) <<
@@ -1216,7 +1298,7 @@ int RGWRadosList::build_linked_oids_for_bucket(
   } while (truncated);
 
   while (!stat_ops.empty()) {
-    ret = pop_and_handle_stat_op(oids, stat_ops);
+    ret = pop_and_handle_stat_op(obj_ctx, oids, stat_ops);
     if (ret < 0) {
       if (ret != -ENOENT) {
         lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
@@ -1229,17 +1311,80 @@ int RGWRadosList::build_linked_oids_for_bucket(
 }
 
 
-int RGWRadosList::run(const std::string& bucket_id)
+/*
+ * some code here is based on rgw_admin.cc::init_bucket, although we
+ * ignore bucket_id's
+ *
+ * NOTE: do we need to pass the bucket_id, which is captured in
+ * rgw_amin, also?
+ */
+int RGWRadosList::run(const std::string& start_bucket_name)
 {
   int ret;
-  map<int, list<string> > oids;
+  map<int, list<string>> oids;
 
-  ret = build_linked_oids_for_bucket(bucket_id, oids);
-  if (ret < 0) {
-    lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
-      ": ERROR: build_linked_oids_for_bucket() indexed entry=" <<
-      bucket_id << " returned ret=" << ret << dendl;
-    return ret;
+  add_bucket_entire(start_bucket_name);
+
+  while (! bucket_process_map.empty()) {
+    // pop item from map and capture its key data
+    auto front = bucket_process_map.begin();
+    std::string bucket_name = front->first;
+    process_t process;
+    std::swap(process, front->second);
+    bucket_process_map.erase(front);
+
+    RGWObjectCtx obj_ctx(store);
+    RGWBucketInfo bucket_info;
+    ret = store->get_bucket_info(obj_ctx,
+				 tenant_name, bucket_name, bucket_info,
+				 nullptr, nullptr);
+    if (ret < 0) {
+      cerr << "ERROR: could not get info for bucket " << bucket_name <<
+	" -- " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    const std::string bucket_id = bucket_info.bucket.get_key();
+
+    static const std::set<rgw_obj_key> empty_filter;
+    static const std::string empty_prefix;
+
+    auto do_build =
+      [&bucket_id, &oids, this]
+      (const std::string& prefix,
+       const std::set<rgw_obj_key>& entries_filter) -> int {
+      int ret = build_linked_oids_for_bucket(bucket_id,
+					     prefix, entries_filter,
+					     oids);
+      if (ret < 0) {
+	lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
+	  ": ERROR: build_linked_oids_for_bucket() indexed entry=" <<
+	  bucket_id << " returned ret=" << ret << dendl;
+      }
+      return ret;
+    };
+
+    // either process the whole bucket *or* process the filters and/or
+    // the prefixes
+    if (process.entire_container) {
+      ret = do_build(empty_prefix, empty_filter);
+      if (ret < 0) {
+	return ret;
+      }
+    } else {
+      if (! process.filter_keys.empty()) {
+	ret = do_build(empty_prefix, process.filter_keys);
+	if (ret < 0) {
+	  return ret;
+	}
+      }
+      for (const auto& p : process.prefixes) {
+	ret = do_build(p, empty_filter);
+	if (ret < 0) {
+	  return ret;
+	}
+      }
+    }
   }
 
   return 0;
