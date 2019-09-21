@@ -21,7 +21,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#if defined(__linux__)
 #include <sys/xattr.h>
+#endif
 
 rados_t cluster;
 
