@@ -211,7 +211,7 @@ Color
 - Orange: MDS is in transient state trying to become active.
 - Red: MDS is indicating a state that causes the rank to be marked failed.
 - Purple: MDS and rank is stopping.
-- Red: MDS is indicating a state that causes the rank to be marked damaged.
+- Black: MDS is indicating a state that causes the rank to be marked damaged.
 
 Shape
 ~~~~~
