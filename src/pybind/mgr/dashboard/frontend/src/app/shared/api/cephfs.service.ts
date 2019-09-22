@@ -19,6 +19,10 @@ export class CephfsService {
     return this.http.get(`${this.baseURL}/${id}`);
   }
 
+  getTabs(id) {
+    return this.http.get(`ui-api/cephfs/${id}/tabs`);
+  }
+
   getClients(id) {
     return this.http.get(`${this.baseURL}/${id}/clients`);
   }

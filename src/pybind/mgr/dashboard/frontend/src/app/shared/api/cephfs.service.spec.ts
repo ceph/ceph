@@ -44,6 +44,12 @@ describe('CephfsService', () => {
     expect(req.request.method).toBe('GET');
   });
 
+  it('should call getTabs', () => {
+    service.getTabs(2).subscribe();
+    const req = httpTesting.expectOne('ui-api/cephfs/2/tabs');
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should call getMdsCounters', () => {
     service.getMdsCounters(1).subscribe();
     const req = httpTesting.expectOne('api/cephfs/1/mds_counters');
