@@ -535,6 +535,7 @@ int CephContext::_do_command(
 	     << cpp_strerror(r);
         } else {
           _conf.apply_changes(&ss);
+	  r = 0;
         }
       }
 
