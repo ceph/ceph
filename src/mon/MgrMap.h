@@ -457,11 +457,11 @@ public:
       f->open_object_section("standby");
       f->dump_int("gid", i.second.gid);
       f->dump_string("name", i.second.name);
+      f->dump_unsigned("mgr_features", i.second.mgr_features);
       f->open_array_section("available_modules");
       for (const auto& j : i.second.available_modules) {
         j.dump(f);
       }
-      f->dump_unsigned("mgr_features", i.second.mgr_features);
       f->close_section();
       f->close_section();
     }
