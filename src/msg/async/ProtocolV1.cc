@@ -1201,6 +1201,7 @@ void ProtocolV1::requeue_sent() {
     sent.pop_back();
     ldout(cct, 10) << __func__ << " " << *m << " for resend "
                    << " (" << m->get_seq() << ")" << dendl;
+    m->clear_payload();
     rq.push_front(make_pair(bufferlist(), m));
   }
 }
