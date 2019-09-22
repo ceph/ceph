@@ -59,7 +59,7 @@ def task(ctx, config):
     manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
-    manager.raw_cluster_cmd('tell', 'mon.0', 'injectargs', '--',
+    manager.raw_cluster_cmd('tell', 'mon.a', 'injectargs', '--',
 #                            '--mon-osd-report-timeout 90',
                             '--mon-pg-stuck-threshold 10')
 
