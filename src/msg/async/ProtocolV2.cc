@@ -800,7 +800,7 @@ CtPtr ProtocolV2::_banner_exchange(CtRef callback) {
 }
 
 CtPtr ProtocolV2::_wait_for_peer_banner() {
-  unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(__le16);
+  unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(ceph_le16);
   return READ(banner_len, _handle_peer_banner);
 }
 
@@ -828,7 +828,7 @@ CtPtr ProtocolV2::_handle_peer_banner(rx_buffer_t &&buffer, int r) {
   uint16_t payload_len;
   bufferlist bl;
   buffer->set_offset(banner_prefix_len);
-  buffer->set_length(sizeof(__le16));
+  buffer->set_length(sizeof(ceph_le16));
   bl.push_back(std::move(buffer));
   auto ti = bl.cbegin();
   try {

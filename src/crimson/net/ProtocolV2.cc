@@ -512,7 +512,7 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
   INTERCEPT_CUSTOM(custom_bp_t::BANNER_WRITE, bp_type_t::WRITE);
   return write_flush(std::move(bl)).then([this] {
       // 2. read peer banner
-      unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(__le16);
+      unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(ceph_le16);
       INTERCEPT_CUSTOM(custom_bp_t::BANNER_READ, bp_type_t::READ);
       return read_exactly(banner_len); // or read exactly?
     }).then([this] (auto bl) {

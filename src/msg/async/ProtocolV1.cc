@@ -801,8 +801,8 @@ CtPtr ProtocolV1::handle_message_middle(char *buffer, int r) {
 CtPtr ProtocolV1::read_message_data_prepare() {
   ldout(cct, 20) << __func__ << dendl;
 
-  unsigned data_len = le32_to_cpu(current_header.data_len);
-  unsigned data_off = le32_to_cpu(current_header.data_off);
+  unsigned data_len = current_header.data_len;
+  unsigned data_off = current_header.data_off;
 
   if (data_len) {
     // get a buffer

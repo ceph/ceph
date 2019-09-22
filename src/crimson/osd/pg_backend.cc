@@ -360,8 +360,8 @@ seastar::future<> PGBackend::create(
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
-  const int flags = le32_to_cpu(osd_op.op.flags);
-  if (os.exists && !os.oi.is_whiteout() && (flags & CEPH_OSD_OP_FLAG_EXCL)) {
+  if (os.exists && !os.oi.is_whiteout() &&
+      (osd_op.op.flags & CEPH_OSD_OP_FLAG_EXCL)) {
     // this is an exclusive create
     throw ceph::osd::make_error(-EEXIST);
   }

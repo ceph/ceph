@@ -499,8 +499,8 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
 static int do_copy(IoCtx& io_ctx, const char *objname,
 		   IoCtx& target_ctx, const char *target_obj)
 {
-  __le32 src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-  __le32 dest_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
+  uint32_t src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
+  uint32_t dest_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   ObjectWriteOperation op;
   op.copy_from(objname, io_ctx, 0, src_fadvise_flags);
   op.set_op_flags2(dest_fadvise_flags);
