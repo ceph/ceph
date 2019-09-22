@@ -681,7 +681,7 @@ static int block_device_run_smartctl(const string& devname, int timeout,
     "smartctl",
     "-a",
     //"-x",
-    "--json",
+    "--json=o",
     device.c_str(),
     NULL);
 
