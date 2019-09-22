@@ -4615,7 +4615,6 @@ int PrimaryLogPG::do_tmapup_slow(OpContext *ctx, bufferlist::const_iterator& bp,
   newop.op.extent.length = obl.length();
   newop.indata = obl;
   do_osd_ops(ctx, nops);
-  osd_op.outdata.claim(newop.outdata);
   return 0;
 }
 
@@ -4695,7 +4694,7 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDO
       last_in_key = key;
 
       dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
-	  
+
       // skip existing intervening keys
       bool key_exists = false;
       while (have_next && !key_exists) {
@@ -4803,7 +4802,6 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDO
       newop.op.extent.length = obl.length();
       newop.indata = obl;
       do_osd_ops(ctx, nops);
-      osd_op.outdata.claim(newop.outdata);
     }
   }
   return result;
