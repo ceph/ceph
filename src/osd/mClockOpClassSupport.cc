@@ -85,13 +85,9 @@ namespace ceph {
       if (osd_op_type_t::client_op != type) {
 	return type;
       } else {
-	// get_header returns ceph_msg_header type, ceph_msg_header
-	// stores type as unsigned little endian, so be sure to
-	// convert to CPU byte ordering
 	std::optional<OpRequestRef> op_ref_maybe = op.maybe_get_op();
 	ceph_assert(op_ref_maybe);
-	__le16 mtype_le = (*op_ref_maybe)->get_req()->get_header().type;
-	__u16 mtype = le16_to_cpu(mtype_le);
+	__u16 mtype = (*op_ref_maybe)->get_req()->get_header().type;
 	if (rep_op_msg_bitset.test(mtype)) {
 	  return osd_op_type_t::osd_rep_op;
 	} else {
