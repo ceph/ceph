@@ -14,8 +14,13 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
+#include <functional>
+#include <list>
+#include <map>
 #include <memory>
 #include <set>
+#include <string>
+#include <vector>
 
 #include "msg/Messenger.h"
 
@@ -287,7 +292,7 @@ private:
   int authenticate_err = 0;
   bool authenticated = false;
 
-  std::list<Message*> waiting_for_session;
+  std::list<MessageRef> waiting_for_session;
   utime_t last_rotating_renew_sent;
   std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
@@ -304,7 +309,7 @@ private:
   MonConnection& _add_conn(unsigned rank, uint64_t global_id);
   void _un_backoff();
   void _add_conns(uint64_t global_id);
-  void _send_mon_message(Message *m);
+  void _send_mon_message(MessageRef m);
 
   std::map<entity_addrvec_t, MonConnection>::iterator _find_pending_con(
     const ConnectionRef& con) {
@@ -448,9 +453,9 @@ public:
   int ping_monitor(const std::string &mon_id, std::string *result_reply);
 
   void send_mon_message(Message *m) {
-    std::lock_guard l(monc_lock);
-    _send_mon_message(m);
+    send_mon_message(MessageRef{m, false});
   }
+  void send_mon_message(MessageRef m);
   /**
    * If you specify a callback, you should not call
    * reopen_session() again until it has been triggered. The MonClient

@@ -2356,7 +2356,7 @@ void DaemonServer::send_report()
     }
   }
 
-  auto m = new MMonMgrReport();
+  auto m = ceph::make_message<MMonMgrReport>();
   py_modules.get_health_checks(&m->health_checks);
   py_modules.get_progress_events(&m->progress_events);
 
@@ -2427,7 +2427,7 @@ void DaemonServer::send_report()
   // TODO? We currently do not notify the PyModules
   // TODO: respect needs_send, so we send the report only if we are asked to do
   //       so, or the state is updated.
-  monc->send_mon_message(m);
+  monc->send_mon_message(std::move(m));
 }
 
 void DaemonServer::adjust_pgs()
