@@ -218,7 +218,7 @@ void MgrStandby::send_beacon()
   metadata["addrs"] = stringify(client_messenger->get_myaddrs());
   collect_sys_info(&metadata, g_ceph_context);
 
-  MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
+  auto m = ceph::make_message<MMgrBeacon>(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf()->name.get_id(),
                                  addrs,
@@ -243,7 +243,7 @@ void MgrStandby::send_beacon()
     m->set_services(active_mgr->get_services());
   }
                                  
-  monc.send_mon_message(m);
+  monc.send_mon_message(std::move(m));
 }
 
 void MgrStandby::tick()
