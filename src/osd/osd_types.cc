@@ -4433,9 +4433,38 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::const_iterator& p)
   this->decode(q);
 }
 
+namespace {
+void encode_dirty_regions(bufferlist &bl)
+{
+  bool new_object = true;
+  bool clean_omap = false;
+  interval_set<uint64_t> clean_offsets;
+  ENCODE_START(1, 1, bl);
+  using ceph::encode;
+  encode(clean_offsets, bl);
+  encode(clean_omap, bl);
+  encode(new_object, bl);
+  ENCODE_FINISH(bl);
+}
+
+void discard_clean_regions(bufferlist::const_iterator &bl)
+{
+  bool new_object = true;
+  bool clean_omap = false;
+  interval_set<uint64_t> clean_offsets;
+  DECODE_START(1, bl);
+  using ceph::decode;
+  decode(clean_offsets, bl);
+  decode(clean_omap, bl);
+  decode(new_object, bl);
+  DECODE_FINISH(bl);
+}
+}
+
+
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(12, 4, bl);
+  ENCODE_START(14, 4, bl);
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
@@ -4464,12 +4493,16 @@ void pg_log_entry_t::encode(bufferlist &bl) const
     encode(return_code, bl);
   if (!extra_reqids.empty())
     encode(extra_reqid_return_codes, bl);
+  encode_dirty_regions(bl);
+  if (op != ERROR)
+    encode(return_code, bl);
+  encode(op_returns, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(12, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -4525,6 +4558,14 @@ void pg_log_entry_t::decode(bufferlist::const_iterator &bl)
     decode(return_code, bl);
   if (struct_v >= 12 && !extra_reqids.empty())
     decode(extra_reqid_return_codes, bl);
+  if (struct_v >= 13)
+    discard_clean_regions(bl);
+  if (struct_v >= 14) {
+    if (op != ERROR) {
+      decode(return_code, bl);
+    }
+    decode(op_returns, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4552,6 +4593,13 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->close_section();
   f->dump_stream("mtime") << mtime;
   f->dump_int("return_code", return_code);
+  if (!op_returns.empty()) {
+    f->open_array_section("op_returns");
+    for (auto& i : op_returns) {
+      f->dump_object("op", i);
+    }
+    f->close_section();
+  }
   if (snaps.length() > 0) {
     vector<snapid_t> v;
     bufferlist c = snaps;
@@ -4592,6 +4640,9 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
       << std::left << std::setw(8) << e.get_op_name() << ' '
       << e.soid << " by " << e.reqid << " " << e.mtime
       << " " << e.return_code;
+  if (!e.op_returns.empty()) {
+    out << " " << e.op_returns;
+  }
   if (e.snaps.length()) {
     vector<snapid_t> snaps;
     bufferlist c = e.snaps;
@@ -4620,21 +4671,25 @@ std::string pg_log_dup_t::get_key_name() const
 
 void pg_log_dup_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(reqid, bl);
   encode(version, bl);
   encode(user_version, bl);
   encode(return_code, bl);
+  encode(op_returns, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_dup_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(reqid, bl);
   decode(version, bl);
   decode(user_version, bl);
   decode(return_code, bl);
+  if (struct_v >= 2) {
+    decode(op_returns, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4644,6 +4699,13 @@ void pg_log_dup_t::dump(Formatter *f) const
   f->dump_stream("version") << version;
   f->dump_stream("user_version") << user_version;
   f->dump_stream("return_code") << return_code;
+  if (!op_returns.empty()) {
+    f->open_array_section("op_returns");
+    for (auto& i : op_returns) {
+      f->dump_object("op", i);
+    }
+    f->close_section();
+  }
 }
 
 void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
@@ -4661,9 +4723,13 @@ void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
 
 
 std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e) {
-  return out << "log_dup(reqid=" << e.reqid <<
+  out << "log_dup(reqid=" << e.reqid <<
     " v=" << e.version << " uv=" << e.user_version <<
-    " rc=" << e.return_code << ")";
+    " rc=" << e.return_code;
+  if (!e.op_returns.empty()) {
+    out << " " << e.op_returns;
+  }
+  return out << ")";
 }
 
 
