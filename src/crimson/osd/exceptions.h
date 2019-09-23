@@ -6,6 +6,8 @@
 #include <exception>
 #include <system_error>
 
+#include "crimson/common/errorator.h"
+
 namespace crimson::osd {
 class error : private std::system_error {
 public:

@@ -20,12 +20,21 @@
 
 static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
 {
-  try {
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
-    return 0;
-  } catch (crimson::osd::error& e) {
-    return -e.code().value();
-  }
+  // we can expect the memory under `ret` will be still fine after
+  // executing the osd op as we're running inside `seastar::thread`
+  // created for us by `seastar::async` in `::do_op_call()`.
+  int ret = 0;
+  using osd_op_errorator = crimson::osd::OpsExecuter::osd_op_errorator;
+  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_osd_op(op).safe_then(
+    [] {
+      // TODO: handle it nicer with `::handle_error()` in errorator
+      return seastar::now();
+    }, osd_op_errorator::all_same_way([&ret] (const std::error_code& err) {
+      assert(err.value() > 0);
+      ret = -err.value();
+      return seastar::now();
+    })).get(); // we're blocking here which requires `seastar::thread`.
+  return ret;
 }
 
 int cls_call(cls_method_context_t hctx, const char *cls, const char *method,

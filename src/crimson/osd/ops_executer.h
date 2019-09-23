@@ -104,6 +104,9 @@ class OpsExecuter {
     throw crimson::osd::operation_not_supported();
   }
 
+  using read_errorator = PGBackend::read_errorator;
+  using get_attr_errorator = PGBackend::get_attr_errorator;
+
 public:
   OpsExecuter(PGBackend::cached_os_t os, PG& pg, Ref<MOSDOp> msg)
     : os(std::move(os)),
@@ -115,7 +118,11 @@ public:
     : OpsExecuter{PGBackend::cached_os_t{}, pg, std::move(msg)}
   {}
 
-  seastar::future<> execute_osd_op(class OSDOp& osd_op);
+  using osd_op_errorator = crimson::compound_errorator_t<
+    call_errorator,
+    read_errorator,
+    get_attr_errorator>;
+  osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
   seastar::future<> execute_pg_op(class OSDOp& osd_op);
 
   template <typename Func>
