@@ -142,6 +142,16 @@
 * New OSD daemon command dump_scrub_reservations which reveals the
   scrub reservations that are held for local (primary) and remote (replica) PGs.
 
+* Ceph will now issue a health warning if a RADOS pool as a ``pg_num``
+  value that is not a power of two.  This can be fixed by adjusting
+  the pool to a nearby power of two::
+
+    ceph osd pool set <pool-name> pg_num <new-pg-num>
+
+  Alternatively, the warning can be silenced with::
+
+    ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
+
 * The ``pg_autoscale_mode`` is now set to ``on`` by default for newly
   created pools, which means that Ceph will automatically manage the
   number of PGs.  To change this behavior, or to learn more about PG
