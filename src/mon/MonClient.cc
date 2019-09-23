@@ -1403,6 +1403,18 @@ int MonClient::handle_auth_request(
 	       << auth_method << dendl;
     return -EOPNOTSUPP;
   }
+
+  auto ac = &auth_meta->authorizer_challenge;
+  if (!HAVE_FEATURE(con->get_features(), CEPHX_V2)) {
+    if (cct->_conf->cephx_service_require_version >= 2) {
+      ldout(cct,10) << __func__ << " client missing CEPHX_V2 ("
+		    << "cephx_service_requre_version = "
+		    << cct->_conf->cephx_service_require_version << ")" << dendl;
+      return -EACCES;
+    }
+    ac = nullptr;
+  }
+
   bool was_challenge = (bool)auth_meta->authorizer_challenge;
   bool isvalid = ah->verify_authorizer(
     cct,
@@ -1415,7 +1427,7 @@ int MonClient::handle_auth_request(
     &con->peer_caps_info,
     &auth_meta->session_key,
     &auth_meta->connection_secret,
-    &auth_meta->authorizer_challenge);
+    ac);
   if (isvalid) {
     handle_authentication_dispatcher->ms_handle_authentication(con);
     return 1;
