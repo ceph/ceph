@@ -1983,16 +1983,16 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     for (auto q = i.second.begin();
 	 q != i.second.end();
 	 ++q) {
-      insert_snap_update(true, i.first, q.get_start(), q.get_end(),
-			 pending_inc.epoch,
-			 t);
+      insert_purged_snap_update(i.first, q.get_start(), q.get_end(),
+				pending_inc.epoch,
+				t);
     }
   }
   for (auto& [pool, snaps] : pending_pseudo_purged_snaps) {
     for (auto snap : snaps) {
-      insert_snap_update(true, pool, snap, snap + 1,
-			 pending_inc.epoch,
-			 t);
+      insert_purged_snap_update(pool, snap, snap + 1,
+				pending_inc.epoch,
+				t);
     }
   }
 
@@ -6884,8 +6884,7 @@ int OSDMonitor::lookup_purged_snap(
   return 0;
 }
 
-void OSDMonitor::insert_snap_update(
-  bool purged,
+void OSDMonitor::insert_purged_snap_update(
   int64_t pool,
   snapid_t start, snapid_t end,
   epoch_t epoch,
@@ -6893,50 +6892,50 @@ void OSDMonitor::insert_snap_update(
 {
   snapid_t before_begin, before_end;
   snapid_t after_begin, after_end;
-  int b = _lookup_snap(purged, pool, start - 1,
-		      &before_begin, &before_end);
-  int a = _lookup_snap(purged, pool, end,
-		       &after_begin, &after_end);
+  int b = lookup_purged_snap(pool, start - 1,
+			     &before_begin, &before_end);
+  int a = lookup_purged_snap(pool, end,
+			     &after_begin, &after_end);
   if (!b && !a) {
-    dout(10) << __func__ << (purged ? " (purged)" : " (removed)")
+    dout(10) << __func__
 	     << " [" << start << "," << end << ") - joins ["
 	     << before_begin << "," << before_end << ") and ["
 	     << after_begin << "," << after_end << ")" << dendl;
     // erase only the begin record; we'll overwrite the end one.
-    t->erase(OSD_SNAP_PREFIX, _make_snap_key(purged, pool, before_end - 1));
+    t->erase(OSD_SNAP_PREFIX, make_purged_snap_key(pool, before_end - 1));
     bufferlist v;
-    string k = _make_snap_key_value(purged, pool,
-				    before_begin, after_end - before_begin,
-				    pending_inc.epoch, &v);
+    string k = make_purged_snap_key_value(pool,
+					  before_begin, after_end - before_begin,
+					  pending_inc.epoch, &v);
     t->put(OSD_SNAP_PREFIX, k, v);
   } else if (!b) {
-    dout(10) << __func__ << (purged ? " (purged)" : " (removed)")
+    dout(10) << __func__
 	     << " [" << start << "," << end << ") - join with earlier ["
 	     << before_begin << "," << before_end << ")" << dendl;
-    t->erase(OSD_SNAP_PREFIX, _make_snap_key(purged, pool, before_end - 1));
+    t->erase(OSD_SNAP_PREFIX, make_purged_snap_key(pool, before_end - 1));
     bufferlist v;
-    string k = _make_snap_key_value(purged, pool,
-				    before_begin, end - before_begin,
-				    pending_inc.epoch, &v);
+    string k = make_purged_snap_key_value(pool,
+					  before_begin, end - before_begin,
+					  pending_inc.epoch, &v);
     t->put(OSD_SNAP_PREFIX, k, v);
   } else if (!a) {
-    dout(10) << __func__ << (purged ? " (purged)" : " (removed)")
+    dout(10) << __func__
 	     << " [" << start << "," << end << ") - join with later ["
 	     << after_begin << "," << after_end << ")" << dendl;
     // overwrite after record
     bufferlist v;
-    string k = _make_snap_key_value(purged, pool,
-				    start, after_end - start,
-				    pending_inc.epoch, &v);
+    string k = make_purged_snap_key_value(pool,
+					  start, after_end - start,
+					  pending_inc.epoch, &v);
     t->put(OSD_SNAP_PREFIX, k, v);
   } else {
-    dout(10) << __func__ << (purged ? " (purged)" : " (removed)")
+    dout(10) << __func__
 	     << " [" << start << "," << end << ") - new"
 	     << dendl;
     bufferlist v;
-    string k = _make_snap_key_value(purged, pool,
-				    start, end - start,
-				    pending_inc.epoch, &v);
+    string k = make_purged_snap_key_value(pool,
+					  start, end - start,
+					  pending_inc.epoch, &v);
     t->put(OSD_SNAP_PREFIX, k, v);
   }
 }
