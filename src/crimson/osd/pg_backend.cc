@@ -149,21 +149,8 @@ PGBackend::_load_ss(const hobject_t& oid)
       bl.push_back(std::move(bp));
       return seastar::make_ready_future<cached_ss_t>(
         ss_cache.insert(oid, std::make_unique<SnapSet>(bl)));
-<<<<<<< HEAD
-    },
-    [oid, this] (const auto& e) {
-      using T = std::decay_t<decltype(e)>;
-      if constexpr (std::is_same_v<T, crimson::ct_error::enoent> ||
-                    std::is_same_v<T, crimson::ct_error::enodata>) {
-        return seastar::make_ready_future<cached_ss_t>(
-          ss_cache.insert(oid, std::make_unique<SnapSet>()));
-      } else {
-        static_assert(always_false<T>::value, "non-exhaustive visitor!");
-      }
-    });
-=======
-    }, ceph::errorator<ceph::ct_error::enoent,
-                       ceph::ct_error::enodata>::all_same_way([oid, this] {
+    }, crimson::errorator<crimson::ct_error::enoent,
+                          crimson::ct_error::enodata>::all_same_way([oid, this] {
       // NOTE: the errors could have been handled by writing just:
       //   `get_attr_errorator::all_same_way(...)`.
       // however, this way is more explicit and resilient to unexpected
@@ -171,7 +158,6 @@ PGBackend::_load_ss(const hobject_t& oid)
       return seastar::make_ready_future<cached_ss_t>(
         ss_cache.insert(oid, std::make_unique<SnapSet>()));
     }));
->>>>>>> 72c0b99... crimson/osd: handle attr retrieval errors with all_same_way().
 }
 
 seastar::future<crimson::osd::acked_peers_t>
@@ -481,7 +467,7 @@ seastar::future<> PGBackend::setxattr(
   //ctx->delta_stats.num_wr++;
 }
 
-seastar::future<> PGBackend::getxattr(
+PGBackend::get_attr_errorator::future<> PGBackend::getxattr(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
@@ -500,11 +486,7 @@ seastar::future<> PGBackend::getxattr(
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     return seastar::now();
     //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
-  }, crimson::ct_error::enoent::handle([] {
-    return seastar::make_exception_future<>(crimson::osd::object_not_found{});
-  }), crimson::ct_error::enodata::handle([] {
-    return seastar::make_exception_future<>(crimson::osd::no_message_available{});
-  }));
+  }, get_attr_errorator::pass_further{});
   //ctx->delta_stats.num_rd++;
 }
 

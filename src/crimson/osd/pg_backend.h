@@ -91,10 +91,10 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
-  seastar::future<> getxattr(
+  using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
+  get_attr_errorator::future<> getxattr(
     const ObjectState& os,
     OSDOp& osd_op) const;
-  using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
   get_attr_errorator::future<ceph::bufferptr> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
