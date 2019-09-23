@@ -132,7 +132,10 @@ export class OsdListComponent implements OnInit {
             this.i18n('Purge'),
             this.i18n('OSD'),
             this.i18n('purged'),
-            this.osdService.purge
+            (id) => {
+              this.selection = new CdTableSelection();
+              return this.osdService.purge(id);
+            }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: Icons.erase
@@ -145,7 +148,10 @@ export class OsdListComponent implements OnInit {
             this.i18n('destroy'),
             this.i18n('OSD'),
             this.i18n('destroyed'),
-            this.osdService.destroy
+            (id) => {
+              this.selection = new CdTableSelection();
+              return this.osdService.destroy(id);
+            }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: Icons.destroy
@@ -235,13 +241,14 @@ export class OsdListComponent implements OnInit {
       return true;
     }
 
-    const validOsds = [];
+    let validOsds = [];
     if (this.selection.hasSelection) {
       for (const osdId of this.getSelectedIds()) {
         validOsds.push(this.osds.filter((o) => o.id === osdId).pop());
       }
     }
 
+    validOsds = validOsds.filter((osd) => !_.isUndefined(osd));
     if (validOsds.length === 0) {
       // `osd` is undefined if the selected OSD has been removed.
       return true;
@@ -300,10 +307,8 @@ export class OsdListComponent implements OnInit {
         },
         onSubmit: () => {
           observableForkJoin(
-            this.getSelectedIds().map((osd: any) => {
-              onSubmit.call(this.osdService, osd).subscribe(() => this.bsModalRef.hide());
-            })
-          );
+            this.getSelectedIds().map((osd: any) => onSubmit.call(this.osdService, osd))
+          ).subscribe(() => this.bsModalRef.hide());
         }
       }
     });
@@ -337,9 +342,13 @@ export class OsdListComponent implements OnInit {
           },
           submitAction: () => {
             observableForkJoin(
-              this.getSelectedIds().map((osd: any) => {
-                action.call(this.osdService, osd).subscribe(() => modalRef.hide());
-              })
+              this.getSelectedIds().map((osd: any) => action.call(this.osdService, osd))
+            ).subscribe(
+              () => {
+                this.getOsdList();
+                modalRef.hide();
+              },
+              () => modalRef.hide()
             );
           }
         }
