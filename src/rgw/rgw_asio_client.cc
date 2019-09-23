@@ -70,15 +70,16 @@ int ClientIO::init_env(CephContext *cct)
   env.set("REQUEST_METHOD", request.method_string().to_string());
 
   // split uri from query
-  auto url = request.target();
-  auto pos = url.find('?');
-  if (pos != url.npos) {
-    auto query = url.substr(pos + 1);
+  auto uri = request.target();
+  auto pos = uri.find('?');
+  if (pos != uri.npos) {
+    auto query = uri.substr(pos + 1);
     env.set("QUERY_STRING", query.to_string());
-    url = url.substr(0, pos);
+    uri = uri.substr(0, pos);
   }
-  env.set("REQUEST_URI", url.to_string());
-  env.set("SCRIPT_URI", url.to_string()); /* FIXME */
+  env.set("SCRIPT_URI", uri.to_string());
+
+  env.set("REQUEST_URI", request.target().to_string());
 
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", local_endpoint.port());
