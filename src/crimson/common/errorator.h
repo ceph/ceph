@@ -492,15 +492,43 @@ struct errorator {
   template <class... NewAllowedErrorsT>
   using extend = errorator<AllowedErrors..., NewAllowedErrorsT...>;
 
-  // comparing errorators
   template <class ErrorT>
-  struct is_carried {
-    static constexpr bool value = \
-      ((std::is_same_v<AllowedErrors, ErrorT>) || ...);
-  };
-  template <class ErrorT>
-  static constexpr bool is_carried_v = is_carried<ErrorT>::value;
+  static constexpr bool is_carried_v = count_v<ErrorT> > 0;
 
+  // get a new errorator by summing and deduplicating error set of
+  // the errorator `unify<>` is applied on with another errorator
+  // provided as template parameter.
+  template <class OtherErroratorT>
+  struct unify {
+    // 1st: generic NOP template
+  };
+  template <class    OtherAllowedErrorsHead,
+            class... OtherAllowedErrorsTail>
+  struct unify<errorator<OtherAllowedErrorsHead,
+                         OtherAllowedErrorsTail...>> {
+  private:
+    // 2nd: specialization for errorators with non-empty error set.
+    //
+    // split error set of other errorator, passed as template param,
+    // into head and tail. Mix error set of this errorator with head
+    // of the other one only if it isn't already present in the set.
+    using step_errorator = std::conditional_t<
+      is_carried_v<OtherAllowedErrorsHead> == false,
+      errorator<AllowedErrors..., OtherAllowedErrorsHead>,
+      errorator<AllowedErrors...>>;
+    using rest_errorator = errorator<OtherAllowedErrorsTail...>;
+
+  public:
+    using type = typename step_errorator::template unify<rest_errorator>::type;
+  };
+  template <class... EmptyPack>
+  struct unify<errorator<EmptyPack...>> {
+    // 3rd: recursion finisher
+    static_assert(sizeof...(EmptyPack) == 0);
+    using type = errorator<AllowedErrors...>;
+  };
+
+  // comparing errorators
   template <class>
   struct is_less_errorated {
     // NOP.
@@ -598,6 +626,31 @@ public:
   using futurize = ::seastar::futurize<T>;
 }; // class errorator, <> specialization
 
+
+template <class    ErroratorOne,
+          class    ErroratorTwo,
+          class... FurtherErrators>
+struct compound_errorator {
+private:
+  // generic template. Empty `FurtherErrators` are handled by
+  // the specialization below.
+  static_assert(sizeof...(FurtherErrators) > 0);
+  using step =
+    typename compound_errorator<ErroratorOne, ErroratorTwo>::type;
+
+public:
+  using type =
+    typename compound_errorator<step, FurtherErrators...>::type;
+};
+template <class ErroratorOne,
+          class ErroratorTwo>
+struct compound_errorator<ErroratorOne, ErroratorTwo>  {
+  // specialization for empty `FurtherErrators` arg pack
+  using type =
+    typename ErroratorOne::template unify<ErroratorTwo>::type;
+};
+template <class... Args>
+using compound_errorator_t = typename compound_errorator<Args...>::type;
 
 // this is conjunction of two nasty features: C++14's variable template
 // and inline global variable of C++17. The latter is crucial to ensure
