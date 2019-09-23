@@ -6797,14 +6797,6 @@ void OSDMonitor::clear_pool_flags(int64_t pool_id, uint64_t flags)
   pool->unset_flag(flags);
 }
 
-string OSDMonitor::make_removed_snap_epoch_key(int64_t pool, epoch_t epoch)
-{
-  char k[80];
-  snprintf(k, sizeof(k), "removed_epoch_%llu_%08lx",
-	   (unsigned long long)pool, (unsigned long)epoch);
-  return k;
-}
-
 string OSDMonitor::make_purged_snap_epoch_key(epoch_t epoch)
 {
   char k[80];
@@ -6812,17 +6804,16 @@ string OSDMonitor::make_purged_snap_epoch_key(epoch_t epoch)
   return k;
 }
 
-string OSDMonitor::_make_snap_key(bool purged, int64_t pool, snapid_t snap)
+string OSDMonitor::make_purged_snap_key(int64_t pool, snapid_t snap)
 {
   char k[80];
-  snprintf(k, sizeof(k), "%s_snap_%llu_%016llx",
-	   purged ? "purged" : "removed",
+  snprintf(k, sizeof(k), "purged_snap_%llu_%016llx",
 	   (unsigned long long)pool, (unsigned long long)snap);
   return k;
 }
 
-string OSDMonitor::_make_snap_key_value(
-  bool purged, int64_t pool, snapid_t snap, snapid_t num,
+string OSDMonitor::make_purged_snap_key_value(
+  int64_t pool, snapid_t snap, snapid_t num,
   epoch_t epoch, bufferlist *v)
 {
   // encode the *last* epoch in the key so that we can use forward
@@ -6830,7 +6821,7 @@ string OSDMonitor::_make_snap_key_value(
   encode(snap, *v);
   encode(snap + num, *v);
   encode(epoch, *v);
-  return _make_snap_key(purged, pool, snap + num - 1);
+  return make_purged_snap_key(pool, snap + num - 1);
 }
 
 
