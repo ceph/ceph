@@ -1,4 +1,4 @@
-  $ ceph osd pool create xrbddiff1 8
+  $ ceph osd pool create xrbddiff1
   pool 'xrbddiff1' created
   $ rbd pool init xrbddiff1
   $ rbd create --thick-provision --size 1M xrbddiff1/xtestdiff1 --no-progress

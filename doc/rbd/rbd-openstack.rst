@@ -77,10 +77,10 @@ By default, Ceph block devices use the ``rbd`` pool. You may use any available
 pool. We recommend creating a pool for Cinder and a pool for Glance. Ensure
 your Ceph cluster is running, then create the pools. ::
 
-    ceph osd pool create volumes 128
-    ceph osd pool create images 128
-    ceph osd pool create backups 128
-    ceph osd pool create vms 128
+    ceph osd pool create volumes
+    ceph osd pool create images
+    ceph osd pool create backups
+    ceph osd pool create vms
 
 See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement

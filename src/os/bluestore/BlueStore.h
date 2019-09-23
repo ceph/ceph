@@ -1152,6 +1152,10 @@ public:
 
     virtual void _trim_to(uint64_t max) = 0;
     void _trim() {
+      if (cct->_conf->objectstore_blackhole) {
+	// do not trim if we are throwing away IOs a layer down
+	return;
+      }
       _trim_to(max);
     }
     void trim() {
@@ -1160,7 +1164,9 @@ public:
     }
     void flush() {
       std::lock_guard l(lock);
-     _trim_to(0);
+      // we should not be shutting down after the blackhole is enabled
+      assert(!cct->_conf->objectstore_blackhole);
+      _trim_to(0);
     }
 
 #ifdef DEBUG_CACHE

@@ -36,8 +36,8 @@ become active until you create some pools and a file system.  See :doc:`/cephfs/
 
 ::
 
-    ceph osd pool create cephfs_data <pg_num>
-    ceph osd pool create cephfs_metadata <pg_num>
+    ceph osd pool create cephfs_data
+    ceph osd pool create cephfs_metadata
     ceph fs new <fs_name> cephfs_metadata cephfs_data
 
 
