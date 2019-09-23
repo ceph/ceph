@@ -170,11 +170,11 @@ public:
     union {
 	struct {
 	  ceph_le32 hint_type;          //OP_COLL_HINT
-	};
+	} __attribute__ ((packed));
 	struct {
 	  ceph_le32 alloc_hint_flags;   //OP_SETALLOCHINT
-	};
-    };
+	} __attribute__ ((packed));
+    } __attribute__ ((packed));
     ceph_le64 expected_object_size;   //OP_SETALLOCHINT
     ceph_le64 expected_write_size;    //OP_SETALLOCHINT
     ceph_le32 split_bits;             //OP_SPLIT_COLLECTION2,OP_COLL_SET_BITS,
