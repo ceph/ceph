@@ -4,6 +4,7 @@ cd-info-card {
   padding: 0 0.5vw 0 0.5vw;
   @extend .d-flex;
   @extend .flex-column;
+  @extend .mb-4;
 }
 
 ::ng-deep .pg-status-popover-wrapper {
