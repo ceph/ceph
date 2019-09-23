@@ -150,6 +150,31 @@ public:
   }
 };
 
+class MDCacheRstatFlushRerun : public MDCacheContext {
+  std::map<inodeno_t, std::map<metareqid_t, utime_t>> mdrs;
+public:
+  MDCacheRstatFlushRerun(MDCache* mdc, const std::map<inodeno_t, std::map<metareqid_t, utime_t>>& mv) :
+    MDCacheContext{mdc}, mdrs(mv) {}
+
+  void finish(int r) override {
+    for (auto& p : mdrs) {
+      CInode* in = mdcache->get_inode(p.first);
+      if (in) {
+	for (auto& p2 : p.second) {
+	  auto replica_map = in->get_replicas();
+	  for (auto& p3 : replica_map) {
+	    auto req = make_message<MMDSRstatFlush>(p2.first,
+		MMDSRstatFlush::OP_RSTATFLUSH,
+		p2.second,
+		filepath(in->ino()));
+	    get_mds()->send_message_mds(req, p3.first);
+	  }
+	}
+      }
+    }
+  }
+};
+
 MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   mds(m),
   open_file_table(m),
@@ -4423,6 +4448,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
 
     map<inodeno_t,map<client_t,Capability::Import> > imported_caps;
 
+    map<inodeno_t, map<metareqid_t, utime_t>> mdrs;
     // check cap exports
     for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
@@ -4439,8 +4465,19 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
 	  // all are zero
 	}
       }
+
+      auto it = local_rstatflushes.find(in);
+      if (it != local_rstatflushes.end()) {
+	for (auto reqid : it->second) {
+	  auto mdr = request_get(reqid);
+	  if (mdr->client_request)
+	    mdrs[p->first][reqid] = mdr->get_op_stamp();
+	}
+      }
+
       mds->locker->eval(in, CEPH_CAP_LOCKS, true);
     }
+    mds->wait_for_active_peer(from, new MDCacheRstatFlushRerun(this, std::move(mdrs)));
 
     encode(imported_caps, ack->imported_caps);
   } else {
@@ -13663,24 +13700,28 @@ void MDCache::handle_subtree_rstat_flush(const cref_t<MMDSRstatFlush> mrf)
   case MMDSRstatFlush::OP_RSTATFLUSH:
     {
       dout(20) << __func__ << " new OP_RSTATFLUSH " << *mrf << dendl;
-      if (!rstatflush_parent_child_mdr_map.count(mrf->get_reqid())) {
+      auto it = rstatflush_parent_child_mdr_map.find(mrf->get_reqid());
+      if (it == rstatflush_parent_child_mdr_map.end()) {
 	mdr = request_start_internal(CEPH_MDS_OP_SUBTREERSTATFLUSH);
 	rstatflush_parent_child_mdr_map[mrf->get_reqid()] = mdr->reqid;
 	mdr->parent_rstatflush_rid = mrf->get_reqid();
 	mdr->set_op_stamp(mrf->get_op_stamp());
+
+	int r = path_traverse(mdr, cf, mrf->get_rstatflush_root(), 0, NULL, &mdr->in[0]);
+	if (r > 0)
+	  return;
+	if (r < 0) {
+	  // The inode that doing rstat flush is not here, which means the current mds
+	  // shouldn't take part in the rstat flush operation, and the initiating mds
+	  // will receive the expire message later, and wouldn't consider this mds anymore,
+	  // so just finish it now.
+	  request_finish(mdr);
+	  return;
+	}
+      } else {
+	mdr = request_get(it->second);
       }
-      
-      int r = path_traverse(mdr, cf, mrf->get_rstatflush_root(), NULL, &mdr->in[0], 0);
-      if (r > 0)
-	return;
-      if (r < 0) {
-	// The inode that doing rstat flush is not here, which means the current mds
-	// shouldn't take part in the rstat flush operation, and the initiating mds
-	// will receive the expire message later, and wouldn't consider this mds anymore,
-	// so just finish it now.
-	request_finish(mdr);
-	return;
-      }
+
       if (!mdr->in[0]->state_test(CInode::STATE_RSTATFLUSH)) {
 	mdr->in[0]->get(CInode::PIN_RSTATFLUSH);
 	mdr->in[0]->state_set(CInode::STATE_RSTATFLUSH);
@@ -13689,7 +13730,7 @@ void MDCache::handle_subtree_rstat_flush(const cref_t<MMDSRstatFlush> mrf)
     }
 
   case MMDSRstatFlush::OP_RSTATFLUSH_SUBTREECOMPELETE:
-    if (!mdr) {
+    if (mrf->get_op() == MMDSRstatFlush::OP_RSTATFLUSH_SUBTREECOMPELETE) {
       dout(20) << __func__ << " new OP_RSTATFLUSH_SUBTREECOMPELETE " << *mrf << dendl;
       auto iter = rstatflush_parent_child_mdr_map.find(mrf->get_reqid());
       if (iter != rstatflush_parent_child_mdr_map.end())
