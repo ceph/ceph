@@ -6834,34 +6834,28 @@ string OSDMonitor::_make_snap_key_value(
 }
 
 
-int OSDMonitor::_lookup_snap(bool purged,
-			     int64_t pool, snapid_t snap,
-			     snapid_t *begin, snapid_t *end)
+int OSDMonitor::lookup_purged_snap(
+  int64_t pool, snapid_t snap,
+  snapid_t *begin, snapid_t *end)
 {
-  string k = _make_snap_key(purged, pool, snap);
+  string k = make_purged_snap_key(pool, snap);
   auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
   it->lower_bound(k);
   if (!it->valid()) {
-    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+    dout(20) << __func__
 	     << " pool " << pool << " snap " << snap
 	     << " - key '" << k << "' not found" << dendl;
     return -ENOENT;
   }
-  if ((purged && it->key().find("purged_snap_") != 0) ||
-      (!purged && it->key().find("removed_snap_") != 0)) {
-    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+  if (it->key().find("purged_snap_") != 0) {
+    dout(20) << __func__
 	     << " pool " << pool << " snap " << snap
 	     << " - key '" << k << "' got '" << it->key()
 	     << "', wrong prefix" << dendl;
     return -ENOENT;
   }
   string gotk = it->key();
-  const char *format;
-  if (purged) {
-    format = "purged_snap_%llu_";
-  } else {
-    format = "removed_snap_%llu_";
-  }
+  const char *format = "purged_snap_%llu_";
   long long int keypool;
   int n = sscanf(gotk.c_str(), format, &keypool);
   if (n != 1) {
@@ -6869,7 +6863,7 @@ int OSDMonitor::_lookup_snap(bool purged,
     return -ENOENT;
   }
   if (pool != keypool) {
-    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+    dout(20) << __func__
 	     << " pool " << pool << " snap " << snap
 	     << " - key '" << k << "' got '" << gotk
 	     << "', wrong pool " << keypool
@@ -6881,7 +6875,7 @@ int OSDMonitor::_lookup_snap(bool purged,
   decode(*begin, p);
   decode(*end, p);
   if (snap < *begin || snap >= *end) {
-    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+    dout(20) << __func__
 	     << " pool " << pool << " snap " << snap
 	     << " - found [" << *begin << "," << *end << "), no overlap"
 	     << dendl;
