@@ -956,6 +956,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     string custom_header = s->cct->_conf->rgw_swift_custom_header;
     if (s->info.env->exists(custom_header.c_str())) {
       user_data = s->info.env->get(custom_header.c_str());
+      s->generic_attrs[RGW_ATTR_USER_DATA] = user_data;
     }
   }
 

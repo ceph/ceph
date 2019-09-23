@@ -90,6 +90,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
 #define RGW_ATTR_TAGS           RGW_ATTR_PREFIX RGW_AMZ_PREFIX "tagging"
+#define RGW_ATTR_USER_DATA  RGW_ATTR_PREFIX "user_data"
 
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
