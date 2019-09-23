@@ -33,7 +33,7 @@ function run() {
 
     local old_path="$PATH"
     export PATH="bin:$PATH"
-    ceph osd pool create mypool 8
+    ceph osd pool create mypool
     rados -p mypool bench 10 write -b 123
     ceph osd out 0
     ceph osd in 0

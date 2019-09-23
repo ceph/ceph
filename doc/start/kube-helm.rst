@@ -255,7 +255,7 @@ Copy the user secret from the ``ceph`` namespace to ``default``::
 
 Create and initialize the RBD pool::
 
-    $ kubectl -n ceph exec -ti ceph-mon-cppdk -c ceph-mon -- ceph osd pool create rbd 256
+    $ kubectl -n ceph exec -ti ceph-mon-cppdk -c ceph-mon -- ceph osd pool create rbd
     pool 'rbd' created
     $ kubectl -n ceph exec -ti ceph-mon-cppdk -c ceph-mon -- rbd pool init rbd
 

@@ -481,6 +481,7 @@ function run_mon() {
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
 	--mon-allow-pool-delete \
+	--osd-pool-default-pg-autoscale-mode off \
 	--mon-osd-backfillfull-ratio .99 \
         "$@" || return 1
 

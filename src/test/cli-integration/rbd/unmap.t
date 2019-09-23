@@ -5,7 +5,7 @@ Setup
   $ rbd create --size 1 img
   $ rbd snap create img@snap
   $ rbd create --size 1 anotherimg
-  $ ceph osd pool create custom 8 >/dev/null 2>&1
+  $ ceph osd pool create custom >/dev/null 2>&1
   $ rbd pool init custom
   $ rbd create --size 1 custom/img
   $ rbd snap create custom/img@snap

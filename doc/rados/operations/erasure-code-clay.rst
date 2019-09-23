@@ -44,7 +44,7 @@ An example configuration that can be used to observe reduced bandwidth usage::
              plugin=clay \
              k=4 m=2 d=5 \
              crush-failure-domain=host
-        $ ceph osd pool create claypool 12 12 erasure CLAYprofile
+        $ ceph osd pool create claypool erasure CLAYprofile
 
 
 Creating a clay profile

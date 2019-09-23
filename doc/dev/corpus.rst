@@ -41,7 +41,7 @@ script of ``script/gen-corpus.sh``, or by following the instructions below:
 
 #. Use as much functionality of the cluster as you can, to exercise as many object encoder methods as possible::
 
-	bin/ceph osd pool create mypool 8
+	bin/ceph osd pool create mypool
 	bin/rados -p mypool bench 10 write -b 123
 	bin/ceph osd out 0
 	bin/ceph osd in 0

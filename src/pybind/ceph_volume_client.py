@@ -563,31 +563,10 @@ class CephFSVolumeClient(object):
             log.info("Pool {0} already exists".format(pool_name))
             return existing_id
 
-        osd_count = len(osd_map['osds'])
-
-        # We can't query the actual cluster config remotely, but since this is
-        # just a heuristic we'll assume that the ceph.conf we have locally reflects
-        # that in use in the rest of the cluster.
-        pg_warn_max_per_osd = int(self.rados.conf_get('mon_max_pg_per_osd'))
-
-        other_pgs = 0
-        for pool in osd_map['pools']:
-            if not pool['pool_name'].startswith(self.POOL_PREFIX):
-                other_pgs += pool['pg_num']
-
-        # A basic heuristic for picking pg_num: work out the max number of
-        # PGs we can have without tripping a warning, then subtract the number
-        # of PGs already created by non-manila pools, then divide by ten.  That'll
-        # give you a reasonable result on a system where you have "a few" manila
-        # shares.
-        pg_num = ((pg_warn_max_per_osd * osd_count) - other_pgs) // 10
-        # TODO Alternatively, respect an override set by the user.
-
         self._rados_command(
             'osd pool create',
             {
                 'pool': pool_name,
-                'pg_num': int(pg_num),
             }
         )
 

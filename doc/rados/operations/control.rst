@@ -253,7 +253,7 @@ Creates/deletes a snapshot of a pool. ::
 
 Creates/deletes/renames a storage pool. ::
 
-	ceph osd pool create {pool-name} pg_num [pgp_num]
+	ceph osd pool create {pool-name} [pg_num [pgp_num]]
 	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 	ceph osd pool rename {old-name} {new-name}
 
