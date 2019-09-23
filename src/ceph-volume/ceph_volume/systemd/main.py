@@ -99,7 +99,7 @@ def main(args=None):
             # don't log any output to the terminal, just rely on stderr/stdout
             # going to logging
             process.run(command, terminal_logging=False)
-            logger.info('successfully trggered activation for: %s', extra_data)
+            logger.info('successfully triggered activation for: %s', extra_data)
             break
         except RuntimeError as error:
             logger.warning(error)
