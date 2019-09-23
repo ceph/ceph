@@ -51,12 +51,8 @@ describe('RbdTrashListComponent', () => {
   });
 
   it('should call updateSelection', () => {
-    const selection = new CdTableSelection();
-    selection.selected = ['foo'];
-    selection.update();
-
     expect(component.selection.hasSelection).toBeFalsy();
-    component.updateSelection(selection);
+    component.updateSelection(new CdTableSelection(['foo']));
     expect(component.selection.hasSelection).toBeTruthy();
   });
 

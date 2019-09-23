@@ -31,8 +31,7 @@ describe('RoleDetailsComponent', () => {
 
   it('should create scopes permissions [1/2]', () => {
     component.scopes = ['log', 'rgw'];
-    component.selection = new CdTableSelection();
-    component.selection.selected = [
+    component.selection = new CdTableSelection([
       {
         description: 'RGW Manager',
         name: 'rgw-manager',
@@ -41,8 +40,7 @@ describe('RoleDetailsComponent', () => {
         },
         system: true
       }
-    ];
-    component.selection.update();
+    ]);
     expect(component.scopes_permissions.length).toBe(0);
     component.ngOnChanges();
     expect(component.scopes_permissions).toEqual([
@@ -53,8 +51,7 @@ describe('RoleDetailsComponent', () => {
 
   it('should create scopes permissions [2/2]', () => {
     component.scopes = ['cephfs', 'log', 'rgw'];
-    component.selection = new CdTableSelection();
-    component.selection.selected = [
+    component.selection = new CdTableSelection([
       {
         description: 'Test',
         name: 'test',
@@ -64,8 +61,7 @@ describe('RoleDetailsComponent', () => {
         },
         system: false
       }
-    ];
-    component.selection.update();
+    ]);
     expect(component.scopes_permissions.length).toBe(0);
     component.ngOnChanges();
     expect(component.scopes_permissions).toEqual([

@@ -97,12 +97,11 @@ describe('MgrModuleListComponent', () => {
     it('should enable module', fakeAsync(() => {
       spyOn(mgrModuleService, 'enable').and.returnValue(observableThrowError('y'));
       spyOn(mgrModuleService, 'list').and.returnValues(observableThrowError('z'), observableOf([]));
-      component.selection.selected.push({
+      component.selection.add({
         name: 'foo',
         enabled: false,
         always_on: false
       });
-      component.selection.update();
       component.updateModuleState();
       tick(2000);
       tick(2000);
@@ -117,12 +116,11 @@ describe('MgrModuleListComponent', () => {
     it('should disable module', fakeAsync(() => {
       spyOn(mgrModuleService, 'disable').and.returnValue(observableThrowError('x'));
       spyOn(mgrModuleService, 'list').and.returnValue(observableOf([]));
-      component.selection.selected.push({
+      component.selection.add({
         name: 'bar',
         enabled: true,
         always_on: false
       });
-      component.selection.update();
       component.updateModuleState();
       tick(2000);
       expect(mgrModuleService.disable).toHaveBeenCalledWith('bar');
@@ -139,7 +137,6 @@ describe('MgrModuleListComponent', () => {
           name: 'dashboard'
         }
       ];
-      component.selection.update();
       expect(component.isTableActionDisabled('enabled')).toBeTruthy();
     });
 
@@ -150,7 +147,6 @@ describe('MgrModuleListComponent', () => {
           always_on: true
         }
       ];
-      component.selection.update();
       expect(component.isTableActionDisabled('enabled')).toBeTruthy();
     });
   });

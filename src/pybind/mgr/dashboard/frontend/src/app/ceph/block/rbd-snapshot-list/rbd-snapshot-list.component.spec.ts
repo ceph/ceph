@@ -202,7 +202,6 @@ describe('RbdSnapshotListComponent', () => {
 
     it('should display old snapshot name', () => {
       component.selection.selected = [{ name: 'oldname' }];
-      component.selection.update();
       component.openEditSnapshotModal();
       expect(component.modalRef.content.snapName).toBe('oldname');
       expect(component.modalRef.content.editing).toBeTruthy();

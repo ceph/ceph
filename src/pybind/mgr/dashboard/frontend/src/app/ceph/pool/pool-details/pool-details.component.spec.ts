@@ -41,7 +41,6 @@ describe('PoolDetailsComponent', () => {
           pool: 0
         }
       ];
-      poolDetailsComponent.selection.update();
     });
 
     it('should recognize a tabset child', () => {
@@ -64,7 +63,6 @@ describe('PoolDetailsComponent', () => {
           tiers: []
         }
       ];
-      poolDetailsComponent.selection.update();
       fixture.detectChanges();
       const tabs = poolDetailsComponent.tabsetChild.tabs;
       expect(tabs.length).toEqual(2);

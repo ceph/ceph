@@ -479,11 +479,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       return;
     }
     this.selection.selected = newSelected;
-    this.onSelect();
+    this.onSelect(this.selection);
   }
 
-  onSelect() {
-    this.selection.update();
+  onSelect($event) {
+    this.selection.selected = $event['selected'];
     this.updateSelection.emit(_.clone(this.selection));
   }
 
