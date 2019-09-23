@@ -4107,8 +4107,8 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
   // update pg count now since we might not get an osdmap any time soon.
   if (pg->is_primary())
     service.logger->dec(l_osd_pg_primary);
-  else if (pg->is_replica())
-    service.logger->dec(l_osd_pg_replica);
+  else if (pg->is_nonprimary())
+    service.logger->dec(l_osd_pg_replica); // misnomver
   else
     service.logger->dec(l_osd_pg_stray);
 
@@ -8709,8 +8709,8 @@ bool OSD::advance_pg(
 	      // any time soon.
 	      if (pg->is_primary())
 		logger->dec(l_osd_pg_primary);
-	      else if (pg->is_replica())
-		logger->dec(l_osd_pg_replica);
+	      else if (pg->is_nonprimary())
+		logger->dec(l_osd_pg_replica); // misnomer
 	      else
 		logger->dec(l_osd_pg_stray);
 	    }
@@ -8917,8 +8917,8 @@ void OSD::consume_map()
     // racy, but we don't want to take pg lock here.
     if (pg->is_primary())
       num_pg_primary++;
-    else if (pg->is_replica())
-      num_pg_replica++;
+    else if (pg->is_nonprimary())
+      num_pg_replica++;  // misnomer
     else
       num_pg_stray++;
   }

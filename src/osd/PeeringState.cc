@@ -557,7 +557,7 @@ void PeeringState::start_peering_interval(
   pg_shard_t old_acting_primary = get_primary();
   pg_shard_t old_up_primary = up_primary;
   bool was_old_primary = is_primary();
-  bool was_old_replica = is_replica();
+  bool was_old_nonprimary = is_nonprimary();
 
   acting.swap(oldacting);
   up.swap(oldup);
@@ -678,7 +678,7 @@ void PeeringState::start_peering_interval(
   // reset primary/replica state?
   if (was_old_primary || is_primary()) {
     pl->clear_want_pg_temp();
-  } else if (was_old_replica || is_replica()) {
+  } else if (was_old_nonprimary || is_nonprimary()) {
     pl->clear_want_pg_temp();
   }
   clear_primary_state();
@@ -844,7 +844,7 @@ void PeeringState::init_hb_stamps()
       hb_stamps[i++] = pl->get_hb_stamps(p);
     }
     hb_stamps.resize(i);
-  } else if (is_replica()) {
+  } else if (is_nonprimary()) {
     // we care about just the primary
     hb_stamps.resize(1);
     hb_stamps[0] = pl->get_hb_stamps(get_primary().osd);
@@ -1134,7 +1134,7 @@ void PeeringState::send_lease()
 
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
-  if (get_role() < 0) {
+  if (!is_nonprimary()) {
     return;
   }
   psdout(10) << __func__ << " " << l << dendl;
