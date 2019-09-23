@@ -1927,6 +1927,9 @@ CtPtr ProtocolV1::handle_connect_message_2() {
         connection->policy.features_required |= CEPH_FEATURE_MSG_AUTH;
       }
     }
+    if (cct->_conf->cephx_service_require_version >= 2) {
+      connection->policy.features_required |= CEPH_FEATURE_CEPHX_V2;
+    }
   }
 
   uint64_t feat_missing =
