@@ -123,6 +123,7 @@ class MonitorDBStore
       OP_PUT	= 1,
       OP_ERASE	= 2,
       OP_COMPACT = 3,
+      OP_ERASE_RANGE = 4,
     };
 
     void put(string prefix, string key, bufferlist& bl) {
@@ -154,6 +155,12 @@ class MonitorDBStore
       ostringstream os;
       os << ver;
       erase(prefix, os.str());
+    }
+
+    void erase_range(string prefix, string begin, string end) {
+      ops.push_back(Op(OP_ERASE_RANGE, prefix, begin, end));
+      ++keys;
+      bytes += prefix.length() + begin.length() + end.length();
     }
 
     void compact_prefix(string prefix) {
@@ -189,6 +196,7 @@ class MonitorDBStore
       bl.append("value");
       ls.back()->put("prefix", "key", bl);
       ls.back()->erase("prefix2", "key2");
+      ls.back()->erase_range("prefix3", "key3", "key4");
       ls.back()->compact_prefix("prefix3");
       ls.back()->compact_range("prefix4", "from", "to");
     }
@@ -250,6 +258,14 @@ class MonitorDBStore
 	    f->dump_string("key", op.key);
 	  }
 	  break;
+	case OP_ERASE_RANGE:
+	  {
+	    f->dump_string("type", "ERASE_RANGE");
+	    f->dump_string("prefix", op.prefix);
+	    f->dump_string("start", op.key);
+	    f->dump_string("end", op.endkey);
+	  }
+	  break;
 	case OP_COMPACT:
 	  {
 	    f->dump_string("type", "COMPACT");
@@ -300,6 +316,9 @@ class MonitorDBStore
 	break;
       case Transaction::OP_ERASE:
 	dbt->rmkey(op.prefix, op.key);
+	break;
+      case Transaction::OP_ERASE_RANGE:
+	dbt->rm_range_keys(op.prefix, op.key, op.endkey);
 	break;
       case Transaction::OP_COMPACT:
 	compact.push_back(make_pair(op.prefix, make_pair(op.key, op.endkey)));
