@@ -1970,23 +1970,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
-  // removed_snaps
-  for (auto& i : pending_inc.new_removed_snaps) {
-    {
-      // all snaps removed this epoch
-      string k = make_removed_snap_epoch_key(i.first, pending_inc.epoch);
-      bufferlist v;
-      encode(i.second, v);
-      t->put(OSD_SNAP_PREFIX, k, v);
-    }
-    for (auto q = i.second.begin();
-	 q != i.second.end();
-	 ++q) {
-      insert_snap_update(false, i.first, q.get_start(), q.get_end(),
-			 pending_inc.epoch,
-			 t);
-    }
-  }
+  // purged_snaps
   if (tmp.require_osd_release >= ceph_release_t::octopus &&
       !pending_inc.new_purged_snaps.empty()) {
     // all snaps purged this epoch (across all pools)
