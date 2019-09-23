@@ -396,7 +396,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
   int ret = store->meta_mgr->list_keys_init(section, &handle);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
-    return -ret;
+    return ret;
   }
 
   map<int, list<string> > instances;
@@ -413,7 +413,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
     ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
-      return -ret;
+      return ret;
     }
 
     for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
@@ -576,7 +576,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
                                &result, nullptr, &truncated);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+      return ret;
     }
 
     for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
