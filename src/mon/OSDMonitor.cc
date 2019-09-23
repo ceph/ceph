@@ -101,13 +101,16 @@ static const string OSD_SNAP_PREFIX("osd_snap");
   OSD snapshot metadata
   ---------------------
 
-  -- starting with mimic --
+  -- starting with mimic, removed in octopus --
 
   "removed_epoch_%llu_%08lx" % (pool, epoch)
    -> interval_set<snapid_t>
 
   "removed_snap_%llu_%016llx" % (pool, last_snap)
    -> { first_snap, end_snap, epoch }   (last_snap = end_snap - 1)
+
+
+  -- starting with mimic --
 
   "purged_snap_%llu_%016llx" % (pool, last_snap)
    -> { first_snap, end_snap, epoch }   (last_snap = end_snap - 1)
@@ -1887,6 +1890,11 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	dout(10) << __func__ << " there were no pre-octopus purged snaps"
 		 << dendl;
       }
+
+      // clean out the old removed_snap_ and removed_epoch keys
+      // ('`' is ASCII '_' + 1)
+      t->erase_range(OSD_SNAP_PREFIX, "removed_snap_", "removed_snap`");
+      t->erase_range(OSD_SNAP_PREFIX, "removed_epoch_", "removed_epoch`");
     }
   }
 
