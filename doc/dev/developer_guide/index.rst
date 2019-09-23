@@ -1589,14 +1589,14 @@ using `vstart_runner.py`_. To do that, you'd need `teuthology`_ installed::
 
     $ git clone https://github.com/ceph/teuthology
     $ cd teuthology/
-    $ virtualenv ./venv
+    $ virtualenv -p python2.7 ./venv
     $ source venv/bin/activate
     $ pip install --upgrade pip
     $ pip install -r requirements.txt
     $ python setup.py develop
     $ deactivate
 
-.. note:: The pip command above is pip2, not pip3.
+.. note:: The pip command above is pip2, not pip3; run ``pip --version``.
 
 The above steps installs teuthology in a virtual environment. Before running
 a test locally, build Ceph successfully from the source (refer
