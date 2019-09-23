@@ -227,8 +227,8 @@ class HealthTest(DashboardTestCase):
                     'gid': int,
                     'name': str,
                     'mgr_features': int
-                }))
-            }),
+                }, allow_unknown=True))
+            }, allow_unknown=True),
             'mon_status': JObj({
                 'election_epoch': int,
                 'extra_probe_peers': JList(JAny(none=True)),
