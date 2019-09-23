@@ -106,7 +106,7 @@ public:
   void test_register_client(uint64_t random_index) {
     ASSERT_TRUE(m_cache_client_vec[random_index] == nullptr);
 
-    auto ctx = new FunctionContext([](int ret){
+    auto ctx = new LambdaContext([](int ret){
        ASSERT_TRUE(ret == 0);
     });
     auto session = create_session(random_index);

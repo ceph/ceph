@@ -31,6 +31,13 @@
 namespace librbd {
 namespace api {
 
+template <typename I>
+const typename Trash<I>::TrashImageSources Trash<I>::RESTORE_SOURCE_WHITELIST {
+    cls::rbd::TRASH_IMAGE_SOURCE_USER,
+    cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING,
+    cls::rbd::TRASH_IMAGE_SOURCE_USER_PARENT
+  };
+
 namespace {
 
 template <typename I>
@@ -137,32 +144,32 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
 
   if (r == 0) {
     if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      RWLock::WLocker image_locker(ictx->image_lock);
+      std::unique_lock image_locker{ictx->image_lock};
       ictx->set_journal_policy(new journal::DisabledPolicy());
     }
 
-    ictx->owner_lock.get_read();
+    ictx->owner_lock.lock_shared();
     if (ictx->exclusive_lock != nullptr) {
       ictx->exclusive_lock->block_requests(0);
 
       r = ictx->operations->prepare_image_update(false);
       if (r < 0) {
         lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
-        ictx->owner_lock.put_read();
+        ictx->owner_lock.unlock_shared();
         ictx->state->close();
         return -EBUSY;
       }
     }
-    ictx->owner_lock.put_read();
+    ictx->owner_lock.unlock_shared();
 
-    ictx->image_lock.get_read();
+    ictx->image_lock.lock_shared();
     if (!ictx->migration_info.empty()) {
       lderr(cct) << "cannot move migrating image to trash" << dendl;
-      ictx->image_lock.put_read();
+      ictx->image_lock.unlock_shared();
       ictx->state->close();
       return -EBUSY;
     }
-    ictx->image_lock.put_read();
+    ictx->image_lock.unlock_shared();
 
     r = disable_mirroring<I>(ictx);
     if (r < 0) {
@@ -545,7 +552,8 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
 }
 
 template <typename I>
-int Trash<I>::restore(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+int Trash<I>::restore(librados::IoCtx &io_ctx,
+                      const TrashImageSources& trash_image_sources,
                       const std::string &image_id,
                       const std::string &image_new_name) {
   CephContext *cct((CephContext *)io_ctx.cct());
@@ -560,10 +568,10 @@ int Trash<I>::restore(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     return r;
   }
 
-  if (trash_spec.source !=  static_cast<cls::rbd::TrashImageSource>(source)) {
-    lderr(cct) << "Current trash source: " << trash_spec.source
-               << " does not match expected: "
-               << static_cast<cls::rbd::TrashImageSource>(source) << dendl;
+  if (trash_image_sources.count(trash_spec.source) == 0) {
+    lderr(cct) << "Current trash source '" << trash_spec.source << "' "
+               << "does not match expected: "
+               << trash_image_sources << dendl;
     return -EINVAL;
   }
 

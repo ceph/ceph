@@ -226,8 +226,8 @@ TEST(LibRadosAio, RoundTrip3) {
   rados_read_op_read(op2, 0, sizeof(buf2), buf2, NULL, NULL);
   rados_read_op_set_flags(op2, LIBRADOS_OP_FLAG_FADVISE_NOCACHE |
 			       LIBRADOS_OP_FLAG_FADVISE_RANDOM);
-  __le32 init_value = -1;
-  __le32 checksum[2];
+  ceph_le32 init_value = init_le32(-1);
+  ceph_le32 checksum[2];
   rados_read_op_checksum(op2, LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			 reinterpret_cast<char *>(&init_value),
 			 sizeof(init_value), 0, 0, 0,

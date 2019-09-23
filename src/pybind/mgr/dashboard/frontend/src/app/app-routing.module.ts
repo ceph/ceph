@@ -7,7 +7,9 @@ import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.compo
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
+import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
+import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
@@ -16,6 +18,7 @@ import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component
 import { AlertListComponent } from './ceph/cluster/prometheus/alert-list/alert-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
+import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
@@ -70,15 +73,34 @@ const routes: Routes = [
   // Cluster
   {
     path: 'hosts',
-    component: HostsComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Hosts' }
+    data: { breadcrumbs: 'Cluster/Hosts' },
+    children: [
+      { path: '', component: HostsComponent },
+      {
+        path: URLVerbs.ADD,
+        component: HostFormComponent,
+        data: { breadcrumbs: ActionLabels.ADD }
+      }
+    ]
   },
   {
     path: 'monitor',
     component: MonitorComponent,
     canActivate: [AuthGuardService],
     data: { breadcrumbs: 'Cluster/Monitors' }
+  },
+  {
+    path: 'services',
+    component: ServicesComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Services' }
+  },
+  {
+    path: 'inventory',
+    component: InventoryComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Inventory' }
   },
   {
     path: 'osd',
@@ -179,7 +201,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'Pools' },
-    loadChildren: './ceph/pool/pool.module#RoutedPoolModule'
+    loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
   },
   // Block
   {
@@ -187,7 +209,7 @@ const routes: Routes = [
     canActivateChild: [AuthGuardService],
     canActivate: [AuthGuardService],
     data: { breadcrumbs: true, text: 'Block', path: null },
-    loadChildren: './ceph/block/block.module#RoutedBlockModule'
+    loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
   },
   // Filesystems
   {
@@ -209,7 +231,7 @@ const routes: Routes = [
       text: 'Object Gateway',
       path: null
     },
-    loadChildren: './ceph/rgw/rgw.module#RoutedRgwModule'
+    loadChildren: () => import('./ceph/rgw/rgw.module').then((m) => m.RoutedRgwModule)
   },
   // User/Role Management
   {
@@ -217,7 +239,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'User management', path: null },
-    loadChildren: './core/auth/auth.module#RoutedAuthModule'
+    loadChildren: () => import('./core/auth/auth.module').then((m) => m.RoutedAuthModule)
   },
   // User Profile
   {

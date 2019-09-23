@@ -35,6 +35,7 @@
 #include <cerrno>
 
 #include "objclass/objclass.h"
+#include "osd/osd_types.h"
 
 using ceph::bufferlist;
 using std::string;
@@ -157,10 +158,12 @@ static int writes_dont_return_data(cls_method_context_t hctx, bufferlist *in, bu
 
   // try to return some data.  note that this *won't* reach the
   // client!  see the matching test case in test_cls_hello.cc.
-  out->append("you will never see this");
+#warning "disable this return data temporarily"
+  //out->append("you will never see this");
 
   // if we try to return anything > 0 here the client will see 0.
-  return 42;
+  //return 42;
+  return 0;
 }
 
 
@@ -266,16 +269,10 @@ public:
   }
 
   ~PGLSHelloFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override
+  bool filter(const hobject_t& obj,
+              const bufferlist&  xattr_data) const override
   {
-    if (val.size() != xattr_data.length())
-      return false;
-
-    if (memcmp(val.c_str(), xattr_data.c_str(), val.size()))
-      return false;
-
-    return true;
+    return xattr_data.contents_equal(val.c_str(), val.size());
   }
 };
 

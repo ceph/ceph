@@ -247,7 +247,6 @@ OSD management
 --------------
 
 .. automethod:: Orchestrator.create_osds
-.. automethod:: Orchestrator.replace_osds
 .. automethod:: Orchestrator.remove_osds
 
 .. py:currentmodule:: ceph.deployment.drive_group
@@ -261,12 +260,45 @@ OSD management
 
 .. py:currentmodule:: orchestrator
 
+.. _orchestrator-osd-replace:
+
+OSD Replacement
+^^^^^^^^^^^^^^^
+
+See :ref:`rados-replacing-an-osd` for the underlying process.
+
+Replacing OSDs is fundamentally a two-staged process, as users need to
+physically replace drives. The orchestrator therefor exposes this two-staged process.
+
+Phase one is a call to :meth:`Orchestrator.remove_osds` with ``destroy=True`` in order to mark
+the OSD as destroyed.
+
+
+Phase two is a call to  :meth:`Orchestrator.create_osds` with a Drive Group with
+
+.. py:currentmodule:: ceph.deployment.drive_group
+
+:attr:`DriveGroupSpec.osd_id_claims` set to the destroyed OSD ids.
+
+.. py:currentmodule:: orchestrator
+
 Stateless Services
 ------------------
 
-.. automethod:: Orchestrator.add_stateless_service
-.. automethod:: Orchestrator.update_stateless_service
-.. automethod:: Orchestrator.remove_stateless_service
+.. autoclass:: StatelessServiceSpec
+
+.. automethod:: Orchestrator.add_mds
+.. automethod:: Orchestrator.remove_mds
+.. automethod:: Orchestrator.update_mds
+.. automethod:: Orchestrator.add_rgw
+.. automethod:: Orchestrator.remove_rgw
+.. automethod:: Orchestrator.update_rgw
+
+.. autoclass:: NFSServiceSpec
+
+.. automethod:: Orchestrator.add_nfs
+.. automethod:: Orchestrator.remove_nfs
+.. automethod:: Orchestrator.update_nfs
 
 Upgrades
 --------
@@ -281,6 +313,7 @@ Utility
 -------
 
 .. automethod:: Orchestrator.available
+.. automethod:: Orchestrator.get_feature_set
 
 Client Modules
 --------------

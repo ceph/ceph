@@ -28,7 +28,7 @@ from .settings import Settings
 from .services.auth import JwtManager
 
 try:
-    from typing import Any, AnyStr, Dict, List  # pylint: disable=unused-import
+    from typing import Any, AnyStr, Dict, List  # noqa pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -347,13 +347,13 @@ class NotificationQueue(threading.Thread):
                 raise Exception("n_types param is neither a string nor a list")
             for ev_type in n_types:
                 listeners = cls._listeners[ev_type]
-                toRemove = None
+                to_remove = None
                 for pr, fn in listeners:
                     if fn == func:
-                        toRemove = (pr, fn)
+                        to_remove = (pr, fn)
                         break
-                if toRemove:
-                    listeners.discard(toRemove)
+                if to_remove:
+                    listeners.discard(to_remove)
                     logger.debug("NQ: function %s was deregistered for events "
                                  "of type %s", func, ev_type)
 

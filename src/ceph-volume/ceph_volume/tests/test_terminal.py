@@ -2,9 +2,14 @@
 
 import codecs
 import io
+try:
+    from io import StringIO
+except ImportError:
+    from StringIO import StringIO
 import pytest
 import sys
 from ceph_volume import terminal
+from ceph_volume.log import setup_console
 
 
 class SubCommand(object):
@@ -78,12 +83,12 @@ def stream():
     def make_stream(buffer, encoding):
         # mock a stdout with given encoding
         if sys.version_info >= (3, 0):
-            stdout = sys.stdout
+            stderr = sys.stderr
             stream = io.TextIOWrapper(buffer,
                                       encoding=encoding,
-                                      errors=stdout.errors,
-                                      newline=stdout.newlines,
-                                      line_buffering=stdout.line_buffering)
+                                      errors=stderr.errors,
+                                      newline=stderr.newlines,
+                                      line_buffering=stderr.line_buffering)
         else:
             stream = codecs.getwriter(encoding)(buffer)
             # StreamWriter does not have encoding attached to it, it will ask
@@ -97,24 +102,42 @@ class TestWriteUnicode(object):
 
     def setup(self):
         self.octpus_and_squid_en = u'octpus and squid'
-        octpus_and_squid_zh = u'章鱼和鱿鱼'
-        self.message = self.octpus_and_squid_en + octpus_and_squid_zh
+        self.octpus_and_squid_zh = u'章鱼和鱿鱼'
+        self.message = self.octpus_and_squid_en + self.octpus_and_squid_zh
+        setup_console()
 
     def test_stdout_writer(self, capsys):
         # should work with whatever stdout is
         terminal.stdout(self.message)
-        out, _ = capsys.readouterr()
-        assert self.octpus_and_squid_en in out
+        _, err = capsys.readouterr()
+        assert self.octpus_and_squid_en in err
+        assert self.octpus_and_squid_zh in err
 
     @pytest.mark.parametrize('encoding', ['ascii', 'utf8'])
-    def test_writer(self, encoding, stream, monkeypatch, capsys):
+    def test_writer_log(self, stream, encoding, monkeypatch, caplog):
+        writer = StringIO()
+        terminal._Write(_writer=writer).raw(self.message)
+        writer.flush()
+        writer.seek(0)
+        output = writer.readlines()[0]
+        assert self.octpus_and_squid_en in output
+
+    @pytest.mark.parametrize('encoding', ['utf8'])
+    def test_writer(self, encoding, stream, monkeypatch, capsys, caplog):
         buffer = io.BytesIO()
-        # should keep writer alive
-        with capsys.disabled():
-            # we want to have access to the sys.stdout's attributes in
-            # make_stream(), not the ones of pytest.capture.EncodedFile
-            writer = stream(buffer, encoding)
-            monkeypatch.setattr(sys, 'stdout', writer)
-            terminal.stdout(self.message)
-            sys.stdout.flush()
-            assert self.octpus_and_squid_en.encode(encoding) in buffer.getvalue()
+        writer = stream(buffer, encoding)
+        terminal._Write(_writer=writer).raw(self.message)
+        writer.flush()
+        writer.seek(0)
+        val = buffer.getvalue()
+        assert self.octpus_and_squid_en.encode(encoding) in val
+
+    def test_writer_uses_log_on_unicodeerror(self, stream, monkeypatch, capture):
+
+        if sys.version_info > (3,):
+            pytest.skip("Something breaks inside of pytest's capsys")
+        monkeypatch.setattr(terminal.terminal_logger, 'info', capture)
+        buffer = io.BytesIO()
+        writer = stream(buffer, 'ascii')
+        terminal._Write(_writer=writer).raw(self.message)
+        assert self.octpus_and_squid_en in capture.calls[0]['args'][0]

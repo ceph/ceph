@@ -7,9 +7,10 @@
 #define TIMEOUT_MS 3000
 #define RETRY_COUNT 7
 
-RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
-						 RDMAWorker *w, RDMACMInfo *info)
-  : RDMAConnectedSocketImpl(cct, ib, s, w), cm_con_handler(new C_handle_cm_connection(this))
+RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib,
+                                                           shared_ptr<RDMADispatcher>& rdma_dispatcher,
+                                                           RDMAWorker *w, RDMACMInfo *info)
+  : RDMAConnectedSocketImpl(cct, ib, rdma_dispatcher, w), cm_con_handler(new C_handle_cm_connection(this))
 {
   status = IDLE;
   notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
@@ -18,7 +19,7 @@ RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, Inf
     cm_id = info->cm_id;
     cm_channel = info->cm_channel;
     status = RDMA_ID_CREATED;
-    remote_qpn = info->qp_num;
+    peer_qpn = info->qp_num;
     if (alloc_resource()) {
       close_notify();
       return;
@@ -28,8 +29,8 @@ RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, Inf
       status = CHANNEL_FD_CREATED;
     }, false);
     status = RESOURCE_ALLOCATED;
-    local_qpn = qp->get_local_qp_number();
-    my_msg.qpn = local_qpn;
+    qp->get_local_cm_meta().peer_qpn = peer_qpn;
+    qp->get_peer_cm_meta().local_qpn = peer_qpn;
   } else {
     is_server = false;
     cm_channel = rdma_create_event_channel();
@@ -96,8 +97,6 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
         notify();
         break;
       }
-      local_qpn = qp->get_local_qp_number();
-      my_msg.qpn = local_qpn;
 
       memset(&cm_params, 0, sizeof(cm_params));
       cm_params.retry_count = RETRY_COUNT;
@@ -113,8 +112,10 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
       ldout(cct, 20) << __func__ << " qp_num=" << cm_id->qp->qp_num << dendl;
       status = CONNECTED;
       if (!is_server) {
-        remote_qpn = event->param.conn.qp_num;
+        peer_qpn = event->param.conn.qp_num;
         activate();
+        qp->get_local_cm_meta().peer_qpn = peer_qpn;
+        qp->get_peer_cm_meta().local_qpn = peer_qpn;
         notify();
       }
       break;
@@ -156,13 +157,12 @@ void RDMAIWARPConnectedSocketImpl::activate() {
 
 int RDMAIWARPConnectedSocketImpl::alloc_resource() {
   ldout(cct, 30) << __func__ << dendl;
-  qp = infiniband->create_queue_pair(cct, dispatcher->get_tx_cq(),
+  qp = ib->create_queue_pair(cct, dispatcher->get_tx_cq(),
       dispatcher->get_rx_cq(), IBV_QPT_RC, cm_id);
   if (!qp) {
     return -1;
   }
-  if (!cct->_conf->ms_async_rdma_support_srq)
-    dispatcher->post_chunks_to_rq(infiniband->get_rx_queue_len(), qp->get_qp());
+  local_qpn = qp->get_local_qp_number();
   dispatcher->register_qp(qp, this);
   dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
   dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);

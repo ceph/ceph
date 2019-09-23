@@ -283,8 +283,8 @@ class TestActivateAll(object):
         activation = activate.Activate(args)
         activation.main()
         out, err = capsys.readouterr()
-        assert 'Was unable to find any OSDs to activate' in out
-        assert 'Verify OSDs are present with ' in out
+        assert 'Was unable to find any OSDs to activate' in err
+        assert 'Verify OSDs are present with ' in err
 
     def test_detects_running_osds(self, capsys, is_root, capture, monkeypatch):
         monkeypatch.setattr('ceph_volume.devices.lvm.activate.direct_report', lambda: direct_report)
@@ -293,8 +293,8 @@ class TestActivateAll(object):
         activation = activate.Activate(args)
         activation.main()
         out, err = capsys.readouterr()
-        assert 'a8789a96ce8b process is active. Skipping activation' in out
-        assert 'b8218eaa1634 process is active. Skipping activation' in out
+        assert 'a8789a96ce8b process is active. Skipping activation' in err
+        assert 'b8218eaa1634 process is active. Skipping activation' in err
 
     def test_detects_osds_to_activate(self, is_root, capture, monkeypatch):
         monkeypatch.setattr('ceph_volume.devices.lvm.activate.direct_report', lambda: direct_report)

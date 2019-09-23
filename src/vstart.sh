@@ -528,12 +528,6 @@ do_rgw_conf() {
 [client.rgw.${current_port}]
         rgw frontends = $rgw_frontend port=${current_port}
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
-        ; needed for s3tests
-        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
-        rgw crypt require ssl = false
-        ; uncomment the following to set LC days as the value in seconds;
-        ; needed for passing lc time based s3-tests (can be verbose)
-        ; rgw lc debug interval = 10
 EOF
         current_port=$((current_port + 1))
 done
@@ -660,6 +654,13 @@ EOF
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
+
+        ; needed for s3tests
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        ; uncomment the following to set LC days as the value in seconds;
+        ; needed for passing lc time based s3-tests (can be verbose)
+        ; rgw lc debug interval = 10
 $extra_conf
 EOF
 
@@ -844,7 +845,14 @@ EOF
 EOF
         fi
         echo start osd.$osd
-        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
+        local extra_seastar_args
+        if [ "$ceph_osd" == "crimson-osd" ]; then
+            # designate a single CPU node $osd for osd.$osd
+            extra_seastar_args="--smp 1 --cpuset $osd"
+        fi
+        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
+            $extra_seastar_args $extra_osd_args \
+            -i $osd $ARGS $COSD_ARGS
     done
 }
 
@@ -1019,17 +1027,17 @@ fi
 [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
 
 # sudo if btrfs
-test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
+[ -d $CEPH_DEV_DIR/osd0/. ] && [ -e $CEPH_DEV_DIR/sudo ] && SUDO="sudo"
 
 prun $SUDO rm -f core*
 
-test -d $CEPH_ASOK_DIR || mkdir $CEPH_ASOK_DIR
-test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
-test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
+[ -d $CEPH_ASOK_DIR ] || mkdir -p $CEPH_ASOK_DIR
+[ -d $CEPH_OUT_DIR  ] || mkdir -p $CEPH_OUT_DIR
+[ -d $CEPH_DEV_DIR  ] || mkdir -p $CEPH_DEV_DIR
 $SUDO rm -rf $CEPH_OUT_DIR/*
-test -d gmon && $SUDO rm -rf gmon/*
+[ -d gmon ] && $SUDO rm -rf gmon/*
 
-[ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
+[ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && [ -e $keyring_fn ] && rm $keyring_fn
 
 
 # figure machine's ip
@@ -1103,6 +1111,10 @@ osd_copyfrom_max_chunk = 524288
 mds_debug_frag = true
 mds_debug_auth_pins = true
 mds_debug_subtrees = true
+
+[mgr]
+mgr/telemetry/nag = false
+mgr/telemetry/enable = false
 
 EOF
 

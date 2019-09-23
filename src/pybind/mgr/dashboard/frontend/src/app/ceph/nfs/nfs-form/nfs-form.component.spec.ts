@@ -9,6 +9,7 @@ import { ToastrModule } from 'ngx-toastr';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
@@ -36,7 +37,9 @@ describe('NfsFormComponent', () => {
           provide: ActivatedRoute,
           useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
         },
-        i18nProviders
+        i18nProviders,
+        SummaryService,
+        CephReleaseNamePipe
       ]
     },
     true
@@ -45,6 +48,11 @@ describe('NfsFormComponent', () => {
   beforeEach(() => {
     const summaryService = TestBed.get(SummaryService);
     spyOn(summaryService, 'refresh').and.callFake(() => true);
+    spyOn(summaryService, 'getCurrentSummary').and.callFake(() => {
+      return {
+        version: 'master'
+      };
+    });
 
     fixture = TestBed.createComponent(NfsFormComponent);
     component = fixture.componentInstance;
@@ -64,10 +72,18 @@ describe('NfsFormComponent', () => {
     httpTesting.expectOne('ui-api/nfs-ganesha/cephx/clients').flush(['admin', 'fs', 'rgw']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.expectOne('api/rgw/user').flush(['test', 'dev']);
-    httpTesting.expectOne('api/rgw/user/dev').flush({ suspended: 0, user_id: 'dev', keys: ['a'] });
-    httpTesting
-      .expectOne('api/rgw/user/test')
-      .flush({ suspended: 1, user_id: 'test', keys: ['a'] });
+    const user_dev = {
+      suspended: 0,
+      user_id: 'dev',
+      keys: ['a']
+    };
+    httpTesting.expectOne('api/rgw/user/dev').flush(user_dev);
+    const user_test = {
+      suspended: 1,
+      user_id: 'test',
+      keys: ['a']
+    };
+    httpTesting.expectOne('api/rgw/user/test').flush(user_test);
     httpTesting.verify();
   });
 

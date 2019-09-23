@@ -7,12 +7,14 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/osd_operations/replicated_request.h"
 
 namespace ceph::osd {
 
 struct OSDConnectionPriv : public ceph::net::Connection::user_private_t {
   ClientRequest::ConnectionPipeline client_request_conn_pipeline;
   RemotePeeringEvent::ConnectionPipeline peering_request_conn_pipeline;
+  RepRequest::ConnectionPipeline replicated_request_conn_pipeline;
 };
 
 static OSDConnectionPriv &get_osd_priv(ceph::net::Connection *conn) {

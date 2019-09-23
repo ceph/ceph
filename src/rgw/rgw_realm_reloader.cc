@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_realm_reloader.h"
 #include "rgw_rados.h"
@@ -8,6 +8,7 @@
 #include "rgw_log.h"
 #include "rgw_rest.h"
 #include "rgw_user.h"
+#include "rgw_sal.h"
 
 #include "services/svc_zone.h"
 
@@ -25,13 +26,13 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::string>& service_map_meta,
+RGWRealmReloader::RGWRealmReloader(rgw::sal::RGWRadosStore*& store, std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends)
   : store(store),
     service_map_meta(service_map_meta),
     frontends(frontends),
     timer(store->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
-    mutex("RGWRealmReloader"),
+    mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
 {
   timer.init();
@@ -39,7 +40,7 @@ RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::
 
 RGWRealmReloader::~RGWRealmReloader()
 {
-  Mutex::Locker lock(mutex);
+  std::lock_guard lock{mutex};
   timer.shutdown();
 }
 
@@ -60,7 +61,7 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
 
   CephContext *const cct = store->ctx();
 
-  Mutex::Locker lock(mutex);
+  std::lock_guard lock{mutex};
   if (reload_scheduled) {
     ldout(cct, 4) << "Notification on realm, reconfiguration "
         "already scheduled" << dendl;
@@ -68,7 +69,7 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
   }
 
   reload_scheduled = new C_Reload(this);
-  cond.SignalOne(); // wake reload() if it blocked on a bad configuration
+  cond.notify_one(); // wake reload() if it blocked on a bad configuration
 
   // schedule reload() without delay
   timer.add_event_after(0, reload_scheduled);
@@ -96,7 +97,7 @@ void RGWRealmReloader::reload()
   {
     // allow a new notify to reschedule us. it's important that we do this
     // before we start loading the new realm, or we could miss some updates
-    Mutex::Locker lock(mutex);
+    std::lock_guard lock{mutex};
     reload_scheduled = nullptr;
   }
 
@@ -113,9 +114,9 @@ void RGWRealmReloader::reload()
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
-    RGWRados* store_cleanup = nullptr;
+    rgw::sal::RGWRadosStore* store_cleanup = nullptr;
     {
-      Mutex::Locker lock(mutex);
+      std::unique_lock lock{mutex};
 
       // failure to recreate RGWRados is not a recoverable error, but we
       // don't want to assert or abort the entire cluster.  instead, just
@@ -126,9 +127,7 @@ void RGWRealmReloader::reload()
             "configuration update. Waiting for a new update." << dendl;
 
         // sleep until another event is scheduled
-        while (!reload_scheduled)
-          cond.Wait(mutex);
-
+	cond.wait(lock, [this] { return reload_scheduled; });
         ldout(cct, 1) << "Woke up with a new configuration, retrying "
             "RGWRados initialization." << dendl;
       }
@@ -152,7 +151,7 @@ void RGWRealmReloader::reload()
     }
   }
 
-  int r = store->register_to_service_map("rgw", service_map_meta);
+  int r = store->getRados()->register_to_service_map("rgw", service_map_meta);
   if (r < 0) {
     lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
@@ -162,13 +161,9 @@ void RGWRealmReloader::reload()
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
   ldout(cct, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, store, store->svc.zone->get_zonegroup());
-  ldout(cct, 1) << " - user subsystem init" << dendl;
-  rgw_user_init(store);
-  ldout(cct, 1) << " - user subsystem init" << dendl;
-  rgw_bucket_init(store->meta_mgr);
+  rgw_rest_init(cct, store->svc()->zone->get_zonegroup());
   ldout(cct, 1) << " - usage subsystem init" << dendl;
-  rgw_log_usage_init(cct, store);
+  rgw_log_usage_init(cct, store->getRados());
 
   ldout(cct, 1) << "Resuming frontends with new realm configuration." << dendl;
 

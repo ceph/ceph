@@ -87,10 +87,10 @@ build_dashboard_frontend() {
   TEMP_DIR=`mktemp -d`
   $CURR_DIR/src/tools/setup-virtualenv.sh --python=$(_python_autoselect) $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
-  $TEMP_DIR/bin/nodeenv -p --node=10.13.0
+  $TEMP_DIR/bin/nodeenv -p --node=10.16.0
   cd src/pybind/mgr/dashboard/frontend
   . $TEMP_DIR/bin/activate
-  timeout 1h npm ci
+  NG_CLI_ANALYTICS="false" timeout 1h npm ci
   npm run build -- --prod --progress=false
   deactivate
   cd $CURR_DIR
@@ -116,7 +116,7 @@ echo "including src/.git_version, ceph.spec"
 
 for spec in ceph.spec.in alpine/APKBUILD.in; do
     cat $spec |
-        sed "s/@VERSION@/$rpm_version/g" |
+        sed "s/@PROJECT_VERSION@/$rpm_version/g" |
         sed "s/@RPM_RELEASE@/$rpm_release/g" |
         sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $spec | sed 's/.in$//'`
 done

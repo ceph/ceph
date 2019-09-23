@@ -25,19 +25,21 @@ endfunction()
 
 option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
 if(WITH_GTEST_PARALLEL)
-  set(gtest_parallel_source_dir ${CMAKE_CURRENT_BINARY_DIR}/gtest-parallel)
-  include(ExternalProject)
-  ExternalProject_Add(gtest-parallel_ext
-    SOURCE_DIR "${gtest_parallel_source_dir}"
-    GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
-    GIT_TAG "master"
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
-    INSTALL_COMMAND "")
-  add_dependencies(tests gtest-parallel_ext)
-  find_package(Python REQUIRED)
-  set(GTEST_PARALLEL_COMMAND
-    ${Python_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+  if(NOT TARGET gtest-parallel_ext)
+    set(gtest_parallel_source_dir ${CMAKE_CURRENT_BINARY_DIR}/gtest-parallel)
+    include(ExternalProject)
+    ExternalProject_Add(gtest-parallel_ext
+      SOURCE_DIR "${gtest_parallel_source_dir}"
+      GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
+      GIT_TAG "master"
+      CONFIGURE_COMMAND ""
+      BUILD_COMMAND ""
+      INSTALL_COMMAND "")
+    add_dependencies(tests gtest-parallel_ext)
+    find_package(Python REQUIRED)
+    set(GTEST_PARALLEL_COMMAND
+      ${Python_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+  endif()
 endif()
 
 #sets uniform compiler flags and link libraries
@@ -49,4 +51,53 @@ function(add_ceph_unittest unittest_name)
   endif()
   add_ceph_test(${unittest_name} "${UNITTEST}")
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
+endfunction()
+
+function(add_tox_test name)
+  set(test_name run-tox-${name})
+  set(venv_path ${CEPH_BUILD_VIRTUALENV}/${name}-virtualenv)
+  cmake_parse_arguments(TOXTEST "" "TOX_PATH" "TOX_ENVS" ${ARGN})
+  if(DEFINED TOXTEST_TOX_PATH)
+    set(tox_path ${TOXTEST_TOX_PATH})
+  else()
+    set(tox_path ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
+  if(WITH_PYTHON2)
+    list(APPEND tox_envs py27)
+  endif()
+  if(WITH_PYTHON3)
+    list(APPEND tox_envs py3)
+  endif()
+  if(DEFINED TOXTEST_TOX_ENVS)
+    list(APPEND tox_envs ${TOXTEST_TOX_ENVS})
+  endif()
+  string(REPLACE ";" "," tox_envs "${tox_envs}")
+  find_package(Python REQUIRED)
+  add_custom_command(
+    OUTPUT ${venv_path}/bin/activate
+    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python_EXECUTABLE}" ${venv_path}
+    WORKING_DIRECTORY ${tox_path}
+    COMMENT "preparing venv for ${name}")
+  add_custom_target(${name}-venv
+    DEPENDS ${venv_path}/bin/activate)
+  add_dependencies(tests ${name}-venv)
+  add_test(
+    NAME ${test_name}
+    COMMAND ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
+              --source-dir ${CMAKE_SOURCE_DIR}
+              --build-dir ${CMAKE_BINARY_DIR}
+              --tox-path ${tox_path}
+              --tox-envs ${tox_envs}
+              --venv-path ${venv_path})
+  set_property(
+    TEST ${test_name}
+    PROPERTY ENVIRONMENT
+    CEPH_ROOT=${CMAKE_SOURCE_DIR}
+    CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV}
+    LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
+    PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
+    PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind)
+  list(APPEND tox_test run-tox-${name})
 endfunction()

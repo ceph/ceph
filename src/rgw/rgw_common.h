@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -19,7 +19,6 @@
 
 #include <array>
 
-#include <boost/algorithm/string.hpp>
 #include <boost/utility/string_view.hpp>
 
 #include "common/ceph_crypto.h"
@@ -130,8 +129,6 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
 #define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
-
-#define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
@@ -294,36 +291,38 @@ struct rgw_err {
   std::string message;
 };
 
-
-
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
 {
-   string str;
-   string name;
-   string val;
+   const std::string str;
+   std::string name;
+   std::string val;
  public:
-    explicit NameVal(string nv) : str(nv) {}
+    explicit NameVal(const std::string& nv) : str(nv) {}
 
     int parse();
 
-    string& get_name() { return name; }
-    string& get_val() { return val; }
+    std::string& get_name() { return name; }
+    std::string& get_val() { return val; }
 };
 
 /** Stores the XML arguments associated with the HTTP request in req_state*/
 class RGWHTTPArgs {
-  string str, empty_str;
-  map<string, string> val_map;
-  map<string, string> sys_val_map;
-  map<string, string> sub_resources;
-  bool has_resp_modifier;
-  bool admin_subresource_added;
+  std::string str, empty_str;
+  std::map<std::string, std::string> val_map;
+  std::map<std::string, std::string> sys_val_map;
+  std::map<std::string, std::string> sub_resources;
+  bool has_resp_modifier = false;
+  bool admin_subresource_added = false;
  public:
-  RGWHTTPArgs() : has_resp_modifier(false), admin_subresource_added(false) {}
+  RGWHTTPArgs() = default;
+  explicit RGWHTTPArgs(const std::string& s) {
+      set(s);
+      parse();
+  }
 
   /** Set the arguments; as received */
-  void set(string s) {
+  void set(const std::string& s) {
     has_resp_modifier = false;
     val_map.clear();
     sub_resources.clear();
@@ -331,18 +330,18 @@ class RGWHTTPArgs {
   }
   /** parse the received arguments */
   int parse();
-  void append(const string& name, const string& val);
+  void append(const std::string& name, const string& val);
   /** Get the value for a specific argument parameter */
-  const string& get(const string& name, bool *exists = NULL) const;
+  const string& get(const std::string& name, bool *exists = NULL) const;
   boost::optional<const std::string&>
   get_optional(const std::string& name) const;
-  int get_bool(const string& name, bool *val, bool *exists);
+  int get_bool(const std::string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
   int get_int(const char *name, int *val, int def_val);
 
   /** Get the value for specific system argument parameter */
-  std::string sys_get(const string& name, bool *exists = nullptr) const;
+  std::string sys_get(const std::string& name, bool *exists = nullptr) const;
 
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) const {
@@ -351,7 +350,7 @@ class RGWHTTPArgs {
   bool sub_resource_exists(const char *name) const {
     return (sub_resources.find(name) != std::end(sub_resources));
   }
-  map<string, string>& get_params() {
+  std::map<std::string, std::string>& get_params() {
     return val_map;
   }
   const std::map<std::string, std::string>& get_sub_resources() const {
@@ -364,12 +363,12 @@ class RGWHTTPArgs {
     return has_resp_modifier;
   }
   void set_system() { /* make all system params visible */
-    map<string, string>::iterator iter;
+    std::map<std::string, std::string>::iterator iter;
     for (iter = sys_val_map.begin(); iter != sys_val_map.end(); ++iter) {
       val_map[iter->first] = iter->second;
     }
   }
-  const string& get_str() {
+  const std::string& get_str() {
     return str;
   }
 }; // RGWHTTPArgs
@@ -1145,16 +1144,27 @@ inline ostream& operator<<(ostream& out, const rgw_raw_obj& o) {
   return out;
 }
 
+struct rgw_bucket_key {
+  std::string tenant;
+  std::string name;
+  std::string bucket_id;
+
+  rgw_bucket_key(const std::string& _tenant,
+                 const std::string& _name,
+                 const std::string& _bucket_id) : tenant(_tenant),
+                                                  name(_name),
+                                                  bucket_id(_bucket_id) {}
+  rgw_bucket_key(const std::string& _tenant,
+                 const std::string& _name) : tenant(_tenant),
+                                             name(_name) {}
+}; 
+
 struct rgw_bucket {
   std::string tenant;
   std::string name;
   std::string marker;
   std::string bucket_id;
   rgw_data_placement_target explicit_placement;
-
-  std::string oid; /*
-                    * runtime in-memory only info. If not empty, points to the bucket instance object
-                    */
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
@@ -1166,6 +1176,9 @@ struct rgw_bucket {
     explicit_placement(b.explicit_placement.data_pool,
                        b.explicit_placement.data_extra_pool,
                        b.explicit_placement.index_pool) {}
+  rgw_bucket(const rgw_bucket_key& bk) : tenant(bk.tenant),
+                                         name(bk.name),
+                                         bucket_id(bk.bucket_id) {}
   rgw_bucket(const rgw_bucket&) = default;
   rgw_bucket(rgw_bucket&&) = default;
 
@@ -1238,7 +1251,6 @@ struct rgw_bucket {
 
   void update_bucket_id(const string& new_bucket_id) {
     bucket_id = new_bucket_id;
-    oid.clear();
   }
 
   // format a key for the bucket/instance. pass delim=0 to skip a field
@@ -1267,6 +1279,10 @@ struct rgw_bucket {
   bool operator==(const rgw_bucket& b) const {
     return (tenant == b.tenant) && (name == b.name) && \
            (bucket_id == b.bucket_id);
+  }
+  bool operator!=(const rgw_bucket& b) const {
+    return (tenant != b.tenant) || (name != b.name) ||
+           (bucket_id != b.bucket_id);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
@@ -1297,6 +1313,12 @@ struct rgw_bucket_shard {
   }
 };
 
+struct rgw_bucket_placement {
+  rgw_placement_rule placement_rule;
+  rgw_bucket bucket;
+
+  void dump(Formatter *f) const;
+};
 
 struct RGWObjVersionTracker {
   obj_version read_version;
@@ -1387,7 +1409,6 @@ struct RGWBucketInfo {
   rgw_placement_rule placement_rule;
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
-  obj_version ep_objv; /* entry point object version, for runtime tracking only */
   RGWQuotaInfo quota;
 
   // Represents the number of bucket index object shards:
@@ -1599,6 +1620,7 @@ struct RGWBucketEntryPoint
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWBucketEntryPoint*>& o);
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
@@ -2004,6 +2026,7 @@ struct req_state : DoutPrefixProvider {
   string redirect;
 
   RGWBucketInfo bucket_info;
+  obj_version bucket_ep_objv;
   real_time bucket_mtime;
   std::map<std::string, ceph::bufferlist> bucket_attrs;
   bool bucket_exists{false};
@@ -2440,22 +2463,10 @@ static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
 
 /* implement combining step, S3 header canonicalization;  k is a
  * valid header and in lc form */
-static inline void add_amz_meta_header(
+void rgw_add_amz_meta_header(
   std::map<std::string, std::string>& x_meta_map,
   const std::string& k,
-  const std::string& v)
-{
-  auto it = x_meta_map.find(k);
-  if (it != x_meta_map.end()) {
-    std::string old = it->second;
-    boost::algorithm::trim_right(old);
-    old.append(",");
-    old.append(v);
-    x_meta_map[k] = old;
-  } else {
-    x_meta_map[k] = v;
-  }
-} /* add_amz_meta_header */
+  const std::string& v);
 
 extern string rgw_string_unquote(const string& s);
 extern void parse_csv_string(const string& ival, vector<string>& ovals);

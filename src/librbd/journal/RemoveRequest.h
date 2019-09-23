@@ -8,7 +8,6 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
-#include "common/Mutex.h"
 #include "librbd/ImageCtx.h"
 #include "journal/Journaler.h"
 #include "librbd/journal/TypeTraits.h"
@@ -58,7 +57,7 @@ private:
   CephContext *m_cct;
   Journaler *m_journaler;
   SafeTimer *m_timer;
-  Mutex *m_timer_lock;
+  ceph::mutex *m_timer_lock;
   int m_r_saved;
 
   void stat_journal();

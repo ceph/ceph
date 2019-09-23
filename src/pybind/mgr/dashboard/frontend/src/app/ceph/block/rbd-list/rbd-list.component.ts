@@ -39,15 +39,15 @@ const BASE_URL = 'block/rbd';
   ]
 })
 export class RbdListComponent implements OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('usageTpl')
+  @ViewChild('usageTpl', { static: false })
   usageTpl: TemplateRef<any>;
-  @ViewChild('parentTpl')
+  @ViewChild('parentTpl', { static: true })
   parentTpl: TemplateRef<any>;
-  @ViewChild('nameTpl')
+  @ViewChild('nameTpl', { static: false })
   nameTpl: TemplateRef<any>;
-  @ViewChild('flattenTpl')
+  @ViewChild('flattenTpl', { static: true })
   flattenTpl: TemplateRef<any>;
 
   permission: Permission;
@@ -62,6 +62,8 @@ export class RbdListComponent implements OnInit {
 
   builders = {
     'rbd/create': (metadata) =>
+      this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
+    'rbd/delete': (metadata) =>
       this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
     'rbd/clone': (metadata) =>
       this.createRbdFromTask(metadata['child_pool_name'], metadata['child_image_name']),

@@ -115,7 +115,7 @@ public:
                               OSDPerfMetricSubKey *sub_key) {
           ceph_assert(d.is_supported());
 
-          auto m = static_cast<const MOSDOp*>(op.get_req());
+          auto m = op.get_req<MOSDOp>();
           std::string match_string;
           switch(d.type) {
           case OSDPerfMetricSubKeyType::CLIENT_ID:

@@ -34,7 +34,7 @@ import re
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
 
-redmine_endpoint = "http://tracker.ceph.com"
+redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
 delay_seconds = 5
@@ -53,6 +53,7 @@ status2status_id = {}
 project_id2project = {}
 tracker2tracker_id = {}
 version2version_id = {}
+resolve_parent = None
 
 def usage():
     logging.error("Command-line arguments must include either a Redmine key (--key) "
@@ -68,6 +69,8 @@ def parse_arguments():
     parser.add_argument("--key", help="Redmine user key")
     parser.add_argument("--user", help="Redmine user")
     parser.add_argument("--password", help="Redmine password")
+    parser.add_argument("--resolve-parent", help="Resolve parent issue if all backports resolved",
+                        action="store_true")
     parser.add_argument("--debug", help="Show debug-level messages",
                         action="store_true")
     parser.add_argument("--dry-run", help="Do not write anything to Redmine",
@@ -83,10 +86,16 @@ def set_logging_level(a):
 
 def report_dry_run(a):
     if a.dry_run:
-         logging.info("Dry run: nothing will be written to Redmine")
+        logging.info("Dry run: nothing will be written to Redmine")
     else:
-         logging.warning("Missing issues will be created in Backport tracker "
+        logging.warning("Missing issues will be created in Backport tracker "
                          "of the relevant Redmine project")
+
+def process_resolve_parent_option(a):
+    global resolve_parent
+    resolve_parent = a.resolve_parent
+    if a.resolve_parent:
+        logging.warning("Parent issues with all backports resolved will be marked Resolved")
 
 def connect_to_redmine(a):
     if a.key:
@@ -154,8 +163,10 @@ def get_release(issue):
             return field['value']
 
 def update_relations(r, issue, dry_run):
+    global resolve_parent
     relations = r.issue_relation.filter(issue_id=issue['id'])
     existing_backports = set()
+    existing_backports_dict = {}
     for relation in relations:
         other = r.issue.get(relation['issue_to_id'])
         if other['tracker']['name'] != 'Backport':
@@ -173,10 +184,13 @@ def update_relations(r, issue, dry_run):
                           " backport issue detected")
             continue
         existing_backports.add(release)
+        existing_backports_dict[release] = relation['issue_to_id']
         logging.debug(url(issue) + " backport to " + release + " is " +
             redmine_endpoint + "/issues/" + str(relation['issue_to_id']))
     if existing_backports == issue['backports']:
         logging.debug(url(issue) + " has all the required backport issues")
+        if resolve_parent:
+            maybe_resolve(issue, existing_backports_dict, dry_run)
         return None
     if existing_backports.issuperset(issue['backports']):
         logging.error(url(issue) + " has more backport issues (" +
@@ -211,6 +225,43 @@ def update_relations(r, issue, dry_run):
                      release + " " + url(other))
     return None
 
+def maybe_resolve(issue, backports, dry_run):
+    '''
+    issue is a parent issue in Pending Backports status, and backports is a dict
+    like, e.g., { "luminous": 25345, "mimic": 32134 }.
+    If all the backport issues are Resolved, set the parent issue to Resolved, too.
+    '''
+    global delay_seconds
+    global redmine
+    global status2status_id
+    pending_backport_status_id = status2status_id["Pending Backport"]
+    resolved_status_id = status2status_id["Resolved"]
+    logging.debug("entering maybe_resolve with parent issue ->{}<- backports ->{}<-"
+                  .format(issue.id, backports))
+    assert issue.status.id == pending_backport_status_id, \
+        "Parent Redmine issue ->{}<- has status ->{}<- (expected Pending Backport)".format(issue.id, issue.status)
+    all_resolved = True
+    for backport in backports.keys():
+        tracker_issue_id = backports[backport]
+        backport_issue = redmine.issue.get(tracker_issue_id)
+        logging.debug("{} backport is in status {}".format(backport, backport_issue.status.name))
+        if backport_issue.status.id != resolved_status_id:
+            all_resolved = False
+            break
+    if all_resolved:
+        logging.debug("Parent ->{}<- all backport issues in status Resolved".format(url(issue)))
+        note = ("While running with --resolve-parent, the script \"backport-create-issue\" "
+                "noticed that all backports of this issue are in status \"Resolved\".")
+        if dry_run:
+            logging.info("Set status of parent ->{}<- to Resolved".format(url(issue)))
+        else:
+            redmine.issue.update(issue.id, status_id=resolved_status_id, notes=note)
+            logging.info("Parent ->{}<- status changed from Pending Backport to Resolved".format(url(issue)))
+            logging.debug("Rate-limiting to avoid seeming like a spammer")
+            time.sleep(delay_seconds)
+    else:
+        logging.debug("Some backport issues are still unresolved: leaving parent issue open")
+
 def iterate_over_backports(r, issues, dry_run):
     counter = 0
     for issue in issues:
@@ -237,6 +288,7 @@ def iterate_over_backports(r, issues, dry_run):
 if __name__ == '__main__':
     args = parse_arguments()
     set_logging_level(args)
+    process_resolve_parent_option(args)
     report_dry_run(args)
     redmine = connect_to_redmine(args)
     project = redmine.project.get(project_name)

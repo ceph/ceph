@@ -22,6 +22,7 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
+from tasks.thrasher import Thrasher
 
 try:
     from subprocess import DEVNULL # py3k
@@ -100,11 +101,12 @@ class PoolType:
     ERASURE_CODED = 3
 
 
-class Thrasher:
+class OSDThrasher(Thrasher):
     """
     Object used to thrash Ceph
     """
     def __init__(self, manager, config, logger):
+        super(OSDThrasher, self).__init__()
         self.ceph_manager = manager
         self.cluster = manager.cluster
         self.ceph_manager.wait_for_clean()
@@ -955,6 +957,19 @@ class Thrasher:
             val -= prob
         return None
 
+    def do_thrash(self):
+        """
+        _do_thrash() wrapper.
+        """
+        try:
+            self._do_thrash()
+        except Exception as e:
+            # See _run exception comment for MDSThrasher
+            self.exception = e
+            self.logger.exception("exception:")
+            # Allow successful completion so gevent doesn't see an exception.
+            # The DaemonWatchdog will observe the error and tear down the test.
+
     def log_exc(func):
         @wraps(func)
         def wrapper(self):
@@ -1047,7 +1062,7 @@ class Thrasher:
         self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
 
     @log_exc
-    def do_thrash(self):
+    def _do_thrash(self):
         """
         Loop to select random actions to thrash ceph manager with.
         """
@@ -1612,7 +1627,7 @@ class CephManager:
         """
         Get status from cluster
         """
-        status = self.raw_cluster_cmd('status', '--format=json-pretty')
+        status = self.raw_cluster_cmd('status', '--format=json')
         return json.loads(status)
 
     def raw_osd_status(self):
@@ -2190,6 +2205,9 @@ class CephManager:
         Find the number of active pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active(pgs)
+
+    def _get_num_active(self, pgs):
         num = 0
         for pg in pgs:
             if pg['state'].count('active') and not pg['state'].count('stale'):
@@ -2234,9 +2252,12 @@ class CephManager:
         Find the number of PGs that are peered
         """
         pgs = self.get_pg_stats()
+        return self._get_num_peered(pgs)
+
+    def _get_num_peered(self, pgs):
         num = 0
         for pg in pgs:
-            if (pg['state'].count('peered')):
+            if pg['state'].count('peered') and not pg['state'].count('stale'):
                  num += 1
         return num
 
@@ -2449,7 +2470,8 @@ class CephManager:
         """
         Wrapper to check if all PGs are active or peered
         """
-        return (self.get_num_active() + self.get_num_peered()) == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs)
 
     def wait_till_active(self, timeout=None):
         """
@@ -2695,6 +2717,24 @@ class CephManager:
         remote.run(args=['sudo',
                          'install', '-d', '-m0777', '--', '/var/run/ceph', ], )
 
+    def get_service_task_status(self, service, status_key):
+        """
+        Return daemon task status for a given ceph service.
+
+        :param service: ceph service (mds, osd, etc...)
+        :param status_key: matching task status key
+        """
+        task_status = {}
+        status = self.raw_cluster_status()
+        try:
+            for k,v in status['servicemap']['services'][service]['daemons'].items():
+                ts = dict(v).get('task_status', None)
+                if ts:
+                    task_status[k] = ts[status_key]
+        except KeyError: # catches missing service and status key
+            return {}
+        self.log(task_status)
+        return task_status
 
 def utility_task(name):
     """

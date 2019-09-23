@@ -32,8 +32,8 @@ namespace mirror {
 template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
-  Mutex &timer_lock;
-  Cond timer_cond;
+  ceph::mutex &timer_lock;
+  ceph::condition_variable timer_cond;
 
   MockContextWQ *work_queue;
 
@@ -65,11 +65,11 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   std::string global_image_id;
 
   static ImageReplayer *create(
-    Threads<librbd::MockTestImageCtx> *threads,
-    InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
-    journal::CacheManagerHandler *cache_manager_handler,
-    RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
-    const std::string &global_image_id) {
+      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      const std::string &global_image_id,
+      Threads<librbd::MockTestImageCtx> *threads,
+      InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
+      journal::CacheManagerHandler *cache_manager_handler) {
     ceph_assert(s_instance != nullptr);
     s_instance->global_image_id = global_image_id;
     return s_instance;
@@ -144,14 +144,14 @@ public:
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillOnce(DoAll(
         WithArg<1>(Invoke([this, &mock_threads, timer_ctx](Context *ctx) {
-          ceph_assert(mock_threads.timer_lock.is_locked());
+          ceph_assert(ceph_mutex_is_locked(mock_threads.timer_lock));
           if (timer_ctx != nullptr) {
             *timer_ctx = ctx;
-            mock_threads.timer_cond.SignalOne();
+            mock_threads.timer_cond.notify_one();
           } else {
             m_threads->work_queue->queue(
-              new FunctionContext([&mock_threads, ctx](int) {
-                Mutex::Locker timer_lock(mock_threads.timer_lock);
+              new LambdaContext([&mock_threads, ctx](int) {
+                std::lock_guard timer_lock{mock_threads.timer_lock};
                 ctx->complete(0);
               }), 0);
           }
@@ -171,9 +171,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    &mock_threads, &mock_service_daemon, nullptr,
-    rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
-    "local_mirror_uuid", m_local_io_ctx.get_id());
+      m_local_io_ctx, "local_mirror_uuid",
+      &mock_threads, &mock_service_daemon, nullptr);
   std::string global_image_id("global_image_id");
 
   EXPECT_CALL(mock_image_replayer, get_global_image_id())
@@ -240,9 +239,8 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    &mock_threads, &mock_service_daemon, nullptr,
-    rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
-    "local_mirror_uuid", m_local_io_ctx.get_id());
+      m_local_io_ctx, "local_mirror_uuid",
+      &mock_threads, &mock_service_daemon, nullptr);
   std::string global_image_id("global_image_id");
 
   EXPECT_CALL(mock_image_replayer, get_global_image_id())
@@ -281,7 +279,7 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
 
   ASSERT_TRUE(timer_ctx1 != nullptr);
   {
-    Mutex::Locker timer_locker(mock_threads.timer_lock);
+    std::lock_guard timer_locker{mock_threads.timer_lock};
     timer_ctx1->complete(0);
   }
 
@@ -312,9 +310,8 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    &mock_threads, &mock_service_daemon, nullptr,
-    rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
-    "local_mirror_uuid", m_local_io_ctx.get_id());
+      m_local_io_ctx, "local_mirror_uuid",
+      &mock_threads, &mock_service_daemon, nullptr);
   std::string global_image_id("global_image_id");
 
   EXPECT_CALL(mock_image_replayer, get_global_image_id())

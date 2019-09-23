@@ -3965,7 +3965,6 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
 			   const string& prefix, bool extra) const
 {
   if (f) {
-    f->open_object_section("osdmap");
     f->dump_int("epoch", get_epoch());
     f->dump_int("num_osds", get_num_osds());
     f->dump_int("num_up_osds", get_num_up_osds());
@@ -3973,7 +3972,6 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
     f->dump_bool("full", test_flag(CEPH_OSDMAP_FULL) ? true : false);
     f->dump_bool("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ? true : false);
     f->dump_unsigned("num_remapped_pgs", get_num_pg_temp());
-    f->close_section();
   } else {
     utime_t now = ceph_clock_now();
     out << get_num_osds() << " osds: "
@@ -4135,9 +4133,13 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].last_change = epoch;
       pools[pool].application_metadata.insert(
         {pg_pool_t::APPLICATION_NAME_RBD, {}});
-      auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
-        cct->_conf.get_val<string>("osd_pool_default_pg_autoscale_mode"));
-      pools[pool].pg_autoscale_mode = m >= 0 ? m : 0;
+      if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
+            cct->_conf.get_val<string>("osd_pool_default_pg_autoscale_mode"));
+	  m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
+	pools[pool].pg_autoscale_mode = m;
+      } else {
+	pools[pool].pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
+      }
       pool_name[pool] = plname;
       name_pool[plname] = pool;
     }
@@ -5570,7 +5572,8 @@ void OSDMap::check_health(health_check_map_t *checks) const
 	  string err = string("OSD_") +
 	    string(crush->get_type_name(type)) + "_DOWN";
 	  boost::to_upper(err);
-	  auto& d = checks->add(err, HEALTH_WARN, ss.str());
+	  auto& d = checks->add(err, HEALTH_WARN, ss.str(),
+				subtree_type_down[type].size());
 	  for (auto j = subtree_type_down[type].rbegin();
 	       j != subtree_type_down[type].rend();
 	       ++j) {
@@ -5593,7 +5596,8 @@ void OSDMap::check_health(health_check_map_t *checks) const
       }
       ostringstream ss;
       ss << down_in_osds.size() << " osds down";
-      auto& d = checks->add("OSD_DOWN", HEALTH_WARN, ss.str());
+      auto& d = checks->add("OSD_DOWN", HEALTH_WARN, ss.str(),
+			    down_in_osds.size());
       for (auto it = down_in_osds.begin(); it != down_in_osds.end(); ++it) {
 	ostringstream ss;
 	ss << "osd." << *it << " (";
@@ -5606,7 +5610,8 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (!osds.empty()) {
       ostringstream ss;
       ss << osds.size() << " osds exist in the crush map but not in the osdmap";
-      auto& d = checks->add("OSD_ORPHAN", HEALTH_WARN, ss.str());
+      auto& d = checks->add("OSD_ORPHAN", HEALTH_WARN, ss.str(),
+			    osds.size());
       for (auto osd : osds) {
 	ostringstream ss;
 	ss << "osd." << osd << " exists in crush map but not in osdmap";
@@ -5636,7 +5641,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     out += noscrub ? string("noscrub") + (nodeepscrub ? ", " : "") : "";
     out += nodeepscrub ? "nodeep-scrub" : "";
     auto& d = checks->add("POOL_SCRUB_FLAGS", HEALTH_OK,
-      "Some pool(s) have the " + out + " flag(s) set");
+			  "Some pool(s) have the " + out + " flag(s) set", 0);
     d.detail.splice(d.detail.end(), scrub_messages);
   }
 
@@ -5675,7 +5680,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     }
     if (!detail.empty()) {
       auto& d = checks->add("OSD_OUT_OF_ORDER_FULL", HEALTH_ERR,
-			 "full ratio(s) out of order");
+			    "full ratio(s) out of order", 0);
       d.detail.swap(detail);
     }
   }
@@ -5690,7 +5695,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (full.size()) {
       ostringstream ss;
       ss << full.size() << " full osd(s)";
-      auto& d = checks->add("OSD_FULL", HEALTH_ERR, ss.str());
+      auto& d = checks->add("OSD_FULL", HEALTH_ERR, ss.str(), full.size());
       for (auto& i: full) {
 	ostringstream ss;
 	ss << "osd." << i << " is full";
@@ -5700,7 +5705,8 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (backfillfull.size()) {
       ostringstream ss;
       ss << backfillfull.size() << " backfillfull osd(s)";
-      auto& d = checks->add("OSD_BACKFILLFULL", HEALTH_WARN, ss.str());
+      auto& d = checks->add("OSD_BACKFILLFULL", HEALTH_WARN, ss.str(),
+			    backfillfull.size());
       for (auto& i: backfillfull) {
 	ostringstream ss;
 	ss << "osd." << i << " is backfill full";
@@ -5710,7 +5716,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (nearfull.size()) {
       ostringstream ss;
       ss << nearfull.size() << " nearfull osd(s)";
-      auto& d = checks->add("OSD_NEARFULL", HEALTH_WARN, ss.str());
+      auto& d = checks->add("OSD_NEARFULL", HEALTH_WARN, ss.str(), nearfull.size());
       for (auto& i: nearfull) {
 	ostringstream ss;
 	ss << "osd." << i << " is near full";
@@ -5741,9 +5747,10 @@ void OSDMap::check_health(health_check_map_t *checks) const
       CEPH_OSDMAP_NOREBALANCE;
     if (test_flag(warn_flags)) {
       ostringstream ss;
-      ss << get_flag_string(get_flags() & warn_flags)
-	 << " flag(s) set";
-      checks->add("OSDMAP_FLAGS", HEALTH_WARN, ss.str());
+      string s = get_flag_string(get_flags() & warn_flags);
+      ss << s << " flag(s) set";
+      checks->add("OSDMAP_FLAGS", HEALTH_WARN, ss.str(),
+		  s.size() /* kludgey but sufficient */);
     }
   }
 
@@ -5789,7 +5796,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (!detail.empty()) {
       ostringstream ss;
       ss << detail.size() << " OSDs or CRUSH {nodes, device-classes} have {NOUP,NODOWN,NOIN,NOOUT} flags set";
-      auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
+      auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str(), detail.size());
       d.detail.swap(detail);
     }
   }
@@ -5801,7 +5808,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
       ostringstream ss;
       ss << "crush map has legacy tunables (require " << min
 	 << ", min is " << g_conf()->mon_crush_min_required_version << ")";
-      auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str());
+      auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str(), 0);
       d.detail.push_back("see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
     }
   }
@@ -5811,7 +5818,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (crush->get_straw_calc_version() == 0) {
       ostringstream ss;
       ss << "crush map has straw_calc_version=0";
-      auto& d = checks->add("OLD_CRUSH_STRAW_CALC_VERSION", HEALTH_WARN, ss.str());
+      auto& d = checks->add("OLD_CRUSH_STRAW_CALC_VERSION", HEALTH_WARN, ss.str(), 0);
       d.detail.push_back(
 	"see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
     }
@@ -5834,7 +5841,8 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (!detail.empty()) {
       ostringstream ss;
       ss << detail.size() << " cache pools are missing hit_sets";
-      auto& d = checks->add("CACHE_POOL_NO_HIT_SET", HEALTH_WARN, ss.str());
+      auto& d = checks->add("CACHE_POOL_NO_HIT_SET", HEALTH_WARN, ss.str(),
+			    detail.size());
       d.detail.swap(detail);
     }
   }
@@ -5843,7 +5851,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   if (!test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     ostringstream ss;
     ss << "'sortbitwise' flag is not set";
-    checks->add("OSD_NO_SORTBITWISE", HEALTH_WARN, ss.str());
+    checks->add("OSD_NO_SORTBITWISE", HEALTH_WARN, ss.str(), 0);
   }
 
   // OSD_UPGRADE_FINISHED
@@ -5878,19 +5886,21 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (!full_detail.empty()) {
       ostringstream ss;
       ss << full_detail.size() << " pool(s) full";
-      auto& d = checks->add("POOL_FULL", HEALTH_WARN, ss.str());
+      auto& d = checks->add("POOL_FULL", HEALTH_WARN, ss.str(), full_detail.size());
       d.detail.swap(full_detail);
     }
     if (!backfillfull_detail.empty()) {
       ostringstream ss;
       ss << backfillfull_detail.size() << " pool(s) backfillfull";
-      auto& d = checks->add("POOL_BACKFILLFULL", HEALTH_WARN, ss.str());
+      auto& d = checks->add("POOL_BACKFILLFULL", HEALTH_WARN, ss.str(),
+			    backfillfull_detail.size());
       d.detail.swap(backfillfull_detail);
     }
     if (!nearfull_detail.empty()) {
       ostringstream ss;
       ss << nearfull_detail.size() << " pool(s) nearfull";
-      auto& d = checks->add("POOL_NEARFULL", HEALTH_WARN, ss.str());
+      auto& d = checks->add("POOL_NEARFULL", HEALTH_WARN, ss.str(),
+			    nearfull_detail.size());
       d.detail.swap(nearfull_detail);
     }
   }

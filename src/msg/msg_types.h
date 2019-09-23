@@ -77,7 +77,7 @@ public:
   bool is_mgr() const { return type() == TYPE_MGR; }
 
   operator ceph_entity_name() const {
-    ceph_entity_name n = { _type, {init_le64(_num)} };
+    ceph_entity_name n = { _type, init_le64(_num) };
     return n;
   }
 
@@ -154,8 +154,8 @@ namespace std {
 
 // define a wire format for sockaddr that matches Linux's.
 struct ceph_sockaddr_storage {
-  __le16 ss_family;
-  __u8 __ss_padding[128 - sizeof(__le16)];
+  ceph_le16 ss_family;
+  __u8 __ss_padding[128 - sizeof(ceph_le16)];
 
   void encode(ceph::buffer::list& bl) const {
     struct ceph_sockaddr_storage ss = *this;

@@ -110,6 +110,7 @@ private:
   friend class MDSContinuation;
   friend class ServerContext;
   friend class ServerLogContext;
+  friend class Batch_Getattr_Lookup;
 
 public:
   bool terminating_sessions;
@@ -169,12 +170,14 @@ public:
   void reconnect_tick();
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
-  enum RecallFlags {
+  enum class RecallFlags : uint64_t {
     NONE = 0,
     STEADY = (1<<0),
     ENFORCE_MAX = (1<<1),
+    TRIM = (1<<2),
+    ENFORCE_LIVENESS = (1<<3),
   };
-  std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, enum RecallFlags=RecallFlags::NONE);
+  std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, RecallFlags=RecallFlags::NONE);
   void force_clients_readonly();
 
   // -- requests --
@@ -348,9 +351,27 @@ public:
 private:
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder *gather);
+  void clear_batch_ops(const MDRequestRef& mdr);
 
   DecayCounter recall_throttle;
   time last_recall_state;
 };
+
+static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return static_cast<Server::RecallFlags>(static_cast<T>(a) | static_cast<T>(b));
+}
+static inline constexpr auto operator&(Server::RecallFlags a, Server::RecallFlags b) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return static_cast<Server::RecallFlags>(static_cast<T>(a) & static_cast<T>(b));
+}
+static inline std::ostream& operator<<(std::ostream& os, const Server::RecallFlags& f) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return os << "0x" << std::hex << static_cast<T>(f) << std::dec;
+}
+static inline constexpr bool operator!(const Server::RecallFlags& f) {
+  using T = std::underlying_type<Server::RecallFlags>::type;
+  return static_cast<T>(f) == static_cast<T>(0);
+}
 
 #endif

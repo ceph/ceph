@@ -67,12 +67,12 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
   ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
-  ${PROJECT_SOURCE_DIR}/src/common/Mutex.cc
   ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
+  ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc

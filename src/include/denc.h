@@ -360,19 +360,19 @@ template<typename T, typename=void> struct ExtType {
 template<typename T>
 struct ExtType<T, std::enable_if_t<std::is_same_v<T, int16_t> ||
 				   std::is_same_v<T, uint16_t>>> {
-  using type = __le16;
+  using type = ceph_le16;
 };
 
 template<typename T>
 struct ExtType<T, std::enable_if_t<std::is_same_v<T, int32_t> ||
 				   std::is_same_v<T, uint32_t>>> {
-  using type = __le32;
+  using type = ceph_le32;
 };
 
 template<typename T>
 struct ExtType<T, std::enable_if_t<std::is_same_v<T, int64_t> ||
 				   std::is_same_v<T, uint64_t>>> {
-  using type = __le64;
+  using type = ceph_le64;
 };
 
 template<>
@@ -588,11 +588,11 @@ denc_lba(uint64_t v, It& p) {
   word |= (v << pos) & 0x7fffffff;
   v >>= 31 - pos;
   if (!v) {
-    *(__le32*)p.get_pos_add(sizeof(uint32_t)) = word;
+    *(ceph_le32*)p.get_pos_add(sizeof(uint32_t)) = word;
     return;
   }
   word |= 0x80000000;
-  *(__le32*)p.get_pos_add(sizeof(uint32_t)) = word;
+  *(ceph_le32*)p.get_pos_add(sizeof(uint32_t)) = word;
   uint8_t byte = v & 0x7f;
   v >>= 7;
   while (v) {
@@ -607,7 +607,7 @@ denc_lba(uint64_t v, It& p) {
 template<class It>
 inline std::enable_if_t<is_const_iterator_v<It>>
 denc_lba(uint64_t& v, It& p) {
-  uint32_t word = *(__le32*)p.get_pos_add(sizeof(uint32_t));
+  uint32_t word = *(ceph_le32*)p.get_pos_add(sizeof(uint32_t));
   int shift;
   switch (word & 7) {
   case 0:
@@ -939,7 +939,16 @@ namespace _denc {
     static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
       p += sizeof(uint32_t);
       if constexpr (traits::bounded) {
+#if _GLIBCXX_USE_CXX11_ABI
+        // intensionally not calling container's empty() method to not prohibit
+        // compiler from optimizing the check if it and the ::size() operate on
+        // different memory (observed when std::list::empty() works on pointers,
+        // not the size field).
+        if (const auto elem_num = s.size(); elem_num > 0) {
+#else
         if (!s.empty()) {
+	  const auto elem_num = s.size();
+#endif
           // STL containers use weird element types like std::pair<const K, V>;
           // cast to something we have denc_traits for.
           size_t elem_size = 0;
@@ -948,7 +957,7 @@ namespace _denc {
           } else {
             denc(static_cast<const T&>(*s.begin()), elem_size);
           }
-          p += sizeof(uint32_t) + elem_size * s.size();
+          p += elem_size * elem_num;
         }
       } else {
         for (const T& e : s) {
@@ -1684,7 +1693,7 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 			   __u8 *struct_compat,				\
 			   char **len_pos,				\
 			   uint32_t *start_oob_off) {			\
-    *(__le32*)*len_pos = p.get_pos() - *len_pos - sizeof(uint32_t) +	\
+    *(ceph_le32*)*len_pos = p.get_pos() - *len_pos - sizeof(uint32_t) +	\
       p.get_out_of_band_offset() - *start_oob_off;			\
   }									\
   /* decode */								\

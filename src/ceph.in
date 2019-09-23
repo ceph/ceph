@@ -573,7 +573,7 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
                 next_header_print = Termsize().rows - 3
             next_header_print -= 1
             ret, outbuf, outs = json_command(cluster_handle, target=target,
-                argdict=valid_dict, inbuf=inbuf)
+                argdict=valid_dict, inbuf=inbuf, verbose=verbose)
             if valid_dict.get('poll', False):
                 valid_dict['print_header'] = False
             if not valid_dict.get('poll', False):

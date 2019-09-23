@@ -1,17 +1,19 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGWCACHE_H
 #define CEPH_RGWCACHE_H
 
-#include "rgw_rados.h"
 #include <string>
 #include <map>
 #include <unordered_map>
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/ceph_assert.h"
-#include "common/RWLock.h"
+#include "common/ceph_mutex.h"
+
+#include "cls/version/cls_version_types.h"
+#include "rgw_common.h"
 
 enum {
   UPDATE_OBJ,
@@ -23,8 +25,6 @@ enum {
 #define CACHE_FLAG_META           0x04
 #define CACHE_FLAG_MODIFY_XATTRS  0x08
 #define CACHE_FLAG_OBJV           0x10
-
-#define mydout(v) lsubdout(T::cct, rgw, v)
 
 struct ObjectMetaInfo {
   uint64_t size;
@@ -160,7 +160,7 @@ class ObjectCache {
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
-  RWLock lock;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("ObjectCache");
   CephContext *cct;
 
   vector<RGWChainedCache *> chained_cache;
@@ -176,7 +176,7 @@ class ObjectCache {
   void do_invalidate_all();
 
 public:
-  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL), enabled(false) { }
+  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), cct(NULL), enabled(false) { }
   ~ObjectCache();
   int get(const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
   std::optional<ObjectCacheInfo> get(const std::string& name) {
@@ -187,7 +187,7 @@ public:
 
   template<typename F>
   void for_each(const F& f) {
-    RWLock::RLocker l(lock);
+    std::shared_lock l{lock};
     if (enabled) {
       auto now  = ceph::coarse_mono_clock::now();
       for (const auto& [name, entry] : cache_map) {

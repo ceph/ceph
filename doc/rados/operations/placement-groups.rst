@@ -382,14 +382,15 @@ makes every effort to evenly spread OSDs among all existing Placement
 Groups.
 
 As long as there are one or two orders of magnitude more Placement
-Groups than OSDs, the distribution should be even. For instance, 300
-placement groups for 3 OSDs, 1000 placement groups for 10 OSDs etc.
+Groups than OSDs, the distribution should be even. For instance, 256
+placement groups for 3 OSDs, 512 or 1024 placement groups for 10 OSDs
+etc.
 
 Uneven data distribution can be caused by factors other than the ratio
 between OSDs and placement groups. Since CRUSH does not take into
 account the size of the objects, a few very large objects may create
 an imbalance. Let say one million 4K objects totaling 4GB are evenly
-spread among 1000 placement groups on 10 OSDs. They will use 4GB / 10
+spread among 1024 placement groups on 10 OSDs. They will use 4GB / 10
 = 400MB on each OSD. If one 400MB object is added to the pool, the
 three OSDs supporting the placement group in which the object has been
 placed will be filled with 400MB + 400MB = 800MB while the seven
@@ -433,9 +434,12 @@ You should then check if the result makes sense with the way you
 designed your Ceph cluster to maximize `data durability`_,
 `object distribution`_ and minimize `resource usage`_.
 
-The result should be **rounded up to the nearest power of two.**
-Rounding up is optional, but recommended for CRUSH to more evenly balance
-the number of objects among placement groups.
+The result should always be **rounded up to the nearest power of two**.
+
+Only a power of two will evenly balance the number of objects among
+placement groups. Other values will result in an uneven distribution of
+data across your OSDs. Their use should be limited to incrementally
+stepping from one power of two to another.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
 replicas, you would estimate your number of PGs as follows::

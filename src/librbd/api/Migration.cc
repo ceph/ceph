@@ -6,6 +6,7 @@
 #include "include/stringify.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -62,8 +63,9 @@ public:
                            ProgressContext *prog_ctx)
     : m_io_ctx(io_ctx), m_header_oid(header_oid), m_state(state),
       m_prog_ctx(prog_ctx), m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
-      m_lock(util::unique_lock_name("librbd::api::MigrationProgressContext",
-                                    this)) {
+      m_lock(ceph::make_mutex(
+	util::unique_lock_name("librbd::api::MigrationProgressContext",
+			       this))) {
     ceph_assert(m_prog_ctx != nullptr);
   }
 
@@ -90,14 +92,14 @@ private:
   ProgressContext *m_prog_ctx;
 
   CephContext* m_cct;
-  mutable Mutex m_lock;
-  Cond m_cond;
+  mutable ceph::mutex m_lock;
+  ceph::condition_variable m_cond;
   std::string m_state_description;
   bool m_pending_update = false;
   int m_in_flight_state_updates = 0;
 
   void send_state_description_update(const std::string &description) {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
 
     if (description == m_state_description) {
       return;
@@ -116,7 +118,7 @@ private:
   void set_state_description() {
     ldout(m_cct, 20) << "state_description=" << m_state_description << dendl;
 
-    ceph_assert(m_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(m_lock));
 
     librados::ObjectWriteOperation op;
     cls_client::migration_set_state(&op, m_state, m_state_description);
@@ -134,7 +136,7 @@ private:
   void handle_set_state_description(int r) {
     ldout(m_cct, 20) << "r=" << r << dendl;
 
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
 
     m_in_flight_state_updates--;
 
@@ -145,20 +147,17 @@ private:
       set_state_description();
       m_pending_update = false;
     } else {
-      m_cond.Signal();
+      m_cond.notify_all();
     }
   }
 
   void wait_for_in_flight_updates() {
-    Mutex::Locker locker(m_lock);
+    std::unique_lock locker{m_lock};
 
     ldout(m_cct, 20) << "m_in_flight_state_updates="
                      << m_in_flight_state_updates << dendl;
-
     m_pending_update = false;
-    while (m_in_flight_state_updates > 0) {
-      m_cond.Wait(m_lock);
-    }
+    m_cond.wait(locker, [this] { return m_in_flight_state_updates <= 0; });
   }
 };
 
@@ -389,7 +388,7 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
 
   uint64_t features;
   {
-    RWLock::RLocker image_locker(image_ctx->image_lock);
+    std::shared_lock image_locker{image_ctx->image_lock};
     features = image_ctx->features;
   }
   opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
@@ -718,7 +717,7 @@ int Migration<I>::execute() {
                                       m_prog_ctx);
     r = dst_image_ctx->operations->migrate(prog_ctx);
     if (r == -EROFS) {
-      RWLock::RLocker owner_locker(dst_image_ctx->owner_lock);
+      std::shared_lock owner_locker{dst_image_ctx->owner_lock};
       if (dst_image_ctx->exclusive_lock != nullptr &&
           !dst_image_ctx->exclusive_lock->accept_ops()) {
         ldout(m_cct, 5) << "lost exclusive lock, retrying remote" << dendl;
@@ -750,12 +749,12 @@ int Migration<I>::abort() {
 
   int r;
 
-  m_src_image_ctx->owner_lock.get_read();
+  m_src_image_ctx->owner_lock.lock_shared();
   if (m_src_image_ctx->exclusive_lock != nullptr &&
       !m_src_image_ctx->exclusive_lock->is_lock_owner()) {
     C_SaferCond ctx;
     m_src_image_ctx->exclusive_lock->acquire_lock(&ctx);
-    m_src_image_ctx->owner_lock.put_read();
+    m_src_image_ctx->owner_lock.unlock_shared();
     r = ctx.wait();
     if (r < 0) {
       lderr(m_cct) << "error acquiring exclusive lock: " << cpp_strerror(r)
@@ -763,7 +762,7 @@ int Migration<I>::abort() {
       return r;
     }
   } else {
-    m_src_image_ctx->owner_lock.put_read();
+    m_src_image_ctx->owner_lock.unlock_shared();
   }
 
   group_info_t group_info;
@@ -1026,7 +1025,7 @@ int Migration<I>::validate_src_snaps() {
   }
 
   for (auto &snap : snaps) {
-    RWLock::RLocker image_locker(m_src_image_ctx->image_lock);
+    std::shared_lock image_locker{m_src_image_ctx->image_lock};
     cls::rbd::ParentImageSpec parent_spec{m_src_image_ctx->md_ctx.get_id(),
                                           m_src_image_ctx->md_ctx.get_namespace(),
                                           m_src_image_ctx->id, snap.id};
@@ -1121,12 +1120,12 @@ template <typename I>
 int Migration<I>::v2_unlink_src_image() {
   ldout(m_cct, 10) << dendl;
 
-  m_src_image_ctx->owner_lock.get_read();
+  m_src_image_ctx->owner_lock.lock_shared();
   if (m_src_image_ctx->exclusive_lock != nullptr &&
       m_src_image_ctx->exclusive_lock->is_lock_owner()) {
     C_SaferCond ctx;
     m_src_image_ctx->exclusive_lock->release_lock(&ctx);
-    m_src_image_ctx->owner_lock.put_read();
+    m_src_image_ctx->owner_lock.unlock_shared();
     int r = ctx.wait();
      if (r < 0) {
       lderr(m_cct) << "error releasing exclusive lock: " << cpp_strerror(r)
@@ -1134,7 +1133,7 @@ int Migration<I>::v2_unlink_src_image() {
       return r;
      }
   } else {
-    m_src_image_ctx->owner_lock.put_read();
+    m_src_image_ctx->owner_lock.unlock_shared();
   }
 
   int r = Trash<I>::move(m_src_io_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
@@ -1175,7 +1174,8 @@ template <typename I>
 int Migration<I>::v2_relink_src_image() {
   ldout(m_cct, 10) << dendl;
 
-  int r = Trash<I>::restore(m_src_io_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
+  int r = Trash<I>::restore(m_src_io_ctx,
+                            {cls::rbd::TRASH_IMAGE_SOURCE_MIGRATION},
                             m_src_image_ctx->id, m_src_image_ctx->name);
   if (r < 0) {
     lderr(m_cct) << "failed restoring image from trash: " << cpp_strerror(r)
@@ -1193,7 +1193,7 @@ int Migration<I>::create_dst_image() {
   uint64_t size;
   cls::rbd::ParentImageSpec parent_spec;
   {
-    RWLock::RLocker image_locker(m_src_image_ctx->image_lock);
+    std::shared_lock image_locker{m_src_image_ctx->image_lock};
     size = m_src_image_ctx->size;
 
     // use oldest snapshot or HEAD for parent spec
@@ -1256,7 +1256,7 @@ int Migration<I>::create_dst_image() {
   } BOOST_SCOPE_EXIT_END;
 
   {
-    RWLock::RLocker owner_locker(dst_image_ctx->owner_lock);
+    std::shared_lock owner_locker{dst_image_ctx->owner_lock};
     r = dst_image_ctx->operations->prepare_image_update(true);
     if (r < 0) {
       lderr(m_cct) << "cannot obtain exclusive lock" << dendl;
@@ -1541,7 +1541,7 @@ int Migration<I>::relink_children(I *from_image_ctx, I *to_image_ctx) {
       // Also collect the list of the children currently attached to the
       // source, so we could make a proper decision later about relinking.
 
-      RWLock::RLocker src_image_locker(to_image_ctx->image_lock);
+      std::shared_lock src_image_locker{to_image_ctx->image_lock};
       cls::rbd::ParentImageSpec src_parent_spec{to_image_ctx->md_ctx.get_id(),
                                                 to_image_ctx->md_ctx.get_namespace(),
                                                 to_image_ctx->id, snap.id};
@@ -1553,7 +1553,7 @@ int Migration<I>::relink_children(I *from_image_ctx, I *to_image_ctx) {
         return r;
       }
 
-      RWLock::RLocker image_locker(from_image_ctx->image_lock);
+      std::shared_lock image_locker{from_image_ctx->image_lock};
       snap.id = from_image_ctx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
                                             snap.name);
       if (snap.id == CEPH_NOSNAP) {
@@ -1564,7 +1564,7 @@ int Migration<I>::relink_children(I *from_image_ctx, I *to_image_ctx) {
 
     std::vector<librbd::linked_image_spec_t> child_images;
     {
-      RWLock::RLocker image_locker(from_image_ctx->image_lock);
+      std::shared_lock image_locker{from_image_ctx->image_lock};
       cls::rbd::ParentImageSpec parent_spec{from_image_ctx->md_ctx.get_id(),
                                             from_image_ctx->md_ctx.get_namespace(),
                                             from_image_ctx->id, snap.id};
@@ -1614,7 +1614,7 @@ int Migration<I>::relink_child(I *from_image_ctx, I *to_image_ctx,
 
   librados::snap_t to_snap_id;
   {
-    RWLock::RLocker image_locker(to_image_ctx->image_lock);
+    std::shared_lock image_locker{to_image_ctx->image_lock};
     to_snap_id = to_image_ctx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
                                              from_snap.name);
     if (to_snap_id == CEPH_NOSNAP) {
@@ -1652,7 +1652,7 @@ int Migration<I>::relink_child(I *from_image_ctx, I *to_image_ctx,
   cls::rbd::ParentImageSpec parent_spec;
   uint64_t parent_overlap;
   {
-    RWLock::RLocker image_locker(child_image_ctx->image_lock);
+    std::shared_lock image_locker{child_image_ctx->image_lock};
 
     // use oldest snapshot or HEAD for parent spec
     if (!child_image_ctx->snap_info.empty()) {

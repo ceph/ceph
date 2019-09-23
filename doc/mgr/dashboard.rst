@@ -96,14 +96,14 @@ aspects of your Ceph cluster:
 * **RBD mirroring**: Enable and configure RBD mirroring to a remote Ceph server.
   Lists all active sync daemons and their status, pools and RBD images including
   their synchronization state.
-* **CephFS**: List all active filesystem clients and associated pools,
+* **CephFS**: List all active file system clients and associated pools,
   including their usage statistics.
 * **Object Gateway**: List all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
   owner, quotas). See :ref:`dashboard-enabling-object-gateway` for configuration
   instructions.
-* **NFS**: Manage NFS exports of CephFS filesystems and RGW S3 buckets via NFS
+* **NFS**: Manage NFS exports of CephFS file systems and RGW S3 buckets via NFS
   Ganesha. See :ref:`dashboard-nfs-ganesha-management` for details on how to
   enable this functionality.
 * **Ceph Manager Modules**: Enable and disable all Ceph Manager modules, change
@@ -451,7 +451,7 @@ To configure SSO on Ceph Dashboard, you should use the following command::
 Parameters:
 
 * **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
-* **<idp_metadata>**: URL, file path or content of the IdP metadata XML (e.g., `https://myidp/metadata`)
+* **<idp_metadata>**: URL to remote (`http://`, `https://`) or local (`file://`) path or content of the IdP metadata XML (e.g., `https://myidp/metadata`, `file:///home/myuser/metadata.xml`).
 * **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
 * **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
 * **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
@@ -609,7 +609,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Create User*::
 
-  $ ceph dashboard ac-user-create <username> [<password>] [<rolename>] [<name>] [<email>]
+  $ ceph dashboard ac-user-create <username> [<password>] [<rolename>] [<name>] [<email>] [<enabled>]
 
 - *Delete User*::
 
@@ -630,6 +630,13 @@ We provide a set of CLI commands to manage user accounts:
 
   $ ceph dashboard ac-user-set-info <username> <name> <email>
 
+- *Disable User*::
+
+  $ ceph dashboard ac-user-disable <username>
+
+- *Enable User*::
+
+  $ ceph dashboard ac-user-enable <username>
 
 User Roles and Permissions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -725,7 +732,7 @@ commands to manage roles are the following:
 
 - *Delete Scope Permission from Role*::
 
-  $ ceph dashboard ac-role-del-perms <rolename> <scopename>
+  $ ceph dashboard ac-role-del-scope-perms <rolename> <scopename>
 
 To associate roles to users, the following CLI commands are available:
 
@@ -779,13 +786,6 @@ to allow direct connections to the manager nodes, you could set up a proxy that
 automatically forwards incoming requests to the currently active ceph-mgr
 instance.
 
-.. note::
-  Note that putting the dashboard behind a load-balancing proxy like `HAProxy
-  <https://www.haproxy.org/>`_ currently has some limitations, particularly if
-  you require the traffic between the proxy and the dashboard to be encrypted
-  via SSL/TLS. See `BUG#24662 <https://tracker.ceph.com/issues/24662>`_ for
-  details.
-
 Configuring a URL Prefix
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -800,6 +800,71 @@ to use hyperlinks that include your prefix, you can set the
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
 
+Disable the redirection
+^^^^^^^^^^^^^^^^^^^^^^^
+
+If the dashboard is behind a load-balancing proxy like `HAProxy <https://www.haproxy.org/>`_
+you might want to disable the redirection behaviour to prevent situations that
+internal (unresolvable) URL's are published to the frontend client. Use the
+following command to get the dashboard to respond with a HTTP error (500 by default)
+instead of redirecting to the active dashboard::
+
+  $ ceph config set mgr mgr/dashboard/standby_behaviour "error"
+
+To reset the setting to the default redirection behaviour, use the following command::
+
+  $ ceph config set mgr mgr/dashboard/standby_behaviour "redirect"
+
+Configure the error status code
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the redirection behaviour is disabled, then you want to customize the HTTP status
+code of standby dashboards. To do so you need to run the command::
+
+  $ ceph config set mgr mgr/dashboard/standby_error_status_code 503
+
+HAProxy example configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Below you will find an example configuration for SSL/TLS pass through using
+`HAProxy <https://www.haproxy.org/>`_.
+
+Please note that the configuration works under the following conditions.
+If the dashboard fails over, the front-end client might receive a HTTP redirect
+(303) response and will be redirected to an unresolvable host. This happens when
+the failover occurs during two HAProxy health checks. In this situation the
+previously active dashboard node will now respond with a 303 which points to
+the new active node. To prevent that situation you should consider to disable
+the redirection behaviour on standby nodes.
+
+::
+
+  defaults
+    log global
+    option log-health-checks
+    timeout connect 5s
+    timeout client 50s
+    timeout server 450s
+
+  frontend dashboard_front
+    mode http
+    bind *:80
+    option httplog
+    redirect scheme https code 301 if !{ ssl_fc }
+
+  frontend dashboard_front_ssl
+    mode tcp
+    bind *:443
+    option tcplog
+    default_backend dashboard_back_ssl
+
+  backend dashboard_back_ssl
+    mode tcp
+    option httpchk GET /
+    http-check expect status 200
+    server x <HOST>:<PORT> check-ssl check verify none
+    server y <HOST>:<PORT> check-ssl check verify none
+    server z <HOST>:<PORT> check-ssl check verify none
 
 .. _dashboard-auditing:
 

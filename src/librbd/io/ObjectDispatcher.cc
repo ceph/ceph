@@ -34,11 +34,11 @@ struct ObjectDispatcher<I>::C_LayerIterator : public Context {
 
   void complete(int r) override {
     while (true) {
-      object_dispatcher->m_lock.get_read();
+      object_dispatcher->m_lock.lock_shared();
       auto it = object_dispatcher->m_object_dispatches.upper_bound(
         object_dispatch_layer);
       if (it == object_dispatcher->m_object_dispatches.end()) {
-        object_dispatcher->m_lock.put_read();
+        object_dispatcher->m_lock.unlock_shared();
         Context::complete(r);
         return;
       }
@@ -48,7 +48,7 @@ struct ObjectDispatcher<I>::C_LayerIterator : public Context {
 
       // prevent recursive locking back into the dispatcher while handling IO
       object_dispatch_meta.async_op_tracker->start_op();
-      object_dispatcher->m_lock.put_read();
+      object_dispatcher->m_lock.unlock_shared();
 
       // next loop should start after current layer
       object_dispatch_layer = object_dispatch->get_object_dispatch_layer();
@@ -175,8 +175,9 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
 template <typename I>
 ObjectDispatcher<I>::ObjectDispatcher(I* image_ctx)
   : m_image_ctx(image_ctx),
-    m_lock(librbd::util::unique_lock_name("librbd::io::ObjectDispatcher::lock",
-                                          this)) {
+    m_lock(ceph::make_shared_mutex(
+      librbd::util::unique_lock_name("librbd::io::ObjectDispatcher::lock",
+				     this))) {
   // configure the core object dispatch handler on startup
   auto object_dispatch = new ObjectDispatch(image_ctx);
   m_object_dispatches[object_dispatch->get_object_dispatch_layer()] =
@@ -195,7 +196,7 @@ void ObjectDispatcher<I>::shut_down(Context* on_finish) {
 
   std::map<ObjectDispatchLayer, ObjectDispatchMeta> object_dispatches;
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     std::swap(object_dispatches, m_object_dispatches);
   }
 
@@ -212,7 +213,7 @@ void ObjectDispatcher<I>::register_object_dispatch(
   auto type = object_dispatch->get_object_dispatch_layer();
   ldout(cct, 5) << "object_dispatch_layer=" << type << dendl;
 
-  RWLock::WLocker locker(m_lock);
+  std::unique_lock locker{m_lock};
   ceph_assert(type < OBJECT_DISPATCH_LAYER_LAST);
 
   auto result = m_object_dispatches.insert(
@@ -229,7 +230,7 @@ void ObjectDispatcher<I>::shut_down_object_dispatch(
 
   ObjectDispatchMeta object_dispatch_meta;
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     auto it = m_object_dispatches.find(object_dispatch_layer);
     ceph_assert(it != m_object_dispatches.end());
 
@@ -248,17 +249,17 @@ void ObjectDispatcher<I>::shut_down_object_dispatch(
   auto async_op_tracker = object_dispatch_meta.async_op_tracker;
 
   Context* ctx = *on_finish;
-  ctx = new FunctionContext(
+  ctx = new LambdaContext(
     [object_dispatch, async_op_tracker, ctx](int r) {
       delete object_dispatch;
       delete async_op_tracker;
 
       ctx->complete(r);
     });
-  ctx = new FunctionContext([object_dispatch, ctx](int r) {
+  ctx = new LambdaContext([object_dispatch, ctx](int r) {
       object_dispatch->shut_down(ctx);
     });
-  *on_finish = new FunctionContext([async_op_tracker, ctx](int r) {
+  *on_finish = new LambdaContext([async_op_tracker, ctx](int r) {
       async_op_tracker->wait_for_ops(ctx);
     });
 }
@@ -310,13 +311,13 @@ void ObjectDispatcher<I>::send(ObjectDispatchSpec* object_dispatch_spec) {
   // apply the IO request to all layers -- this method will be re-invoked
   // by the dispatch layer if continuing / restarting the IO
   while (true) {
-    m_lock.get_read();
+    m_lock.lock_shared();
     object_dispatch_layer = object_dispatch_spec->object_dispatch_layer;
     auto it = m_object_dispatches.upper_bound(object_dispatch_layer);
     if (it == m_object_dispatches.end()) {
       // the request is complete if handled by all layers
       object_dispatch_spec->dispatch_result = DISPATCH_RESULT_COMPLETE;
-      m_lock.put_read();
+      m_lock.unlock_shared();
       break;
     }
 
@@ -326,7 +327,7 @@ void ObjectDispatcher<I>::send(ObjectDispatchSpec* object_dispatch_spec) {
 
     // prevent recursive locking back into the dispatcher while handling IO
     object_dispatch_meta.async_op_tracker->start_op();
-    m_lock.put_read();
+    m_lock.unlock_shared();
 
     // advance to next layer in case we skip or continue
     object_dispatch_spec->object_dispatch_layer =

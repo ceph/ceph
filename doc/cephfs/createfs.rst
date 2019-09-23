@@ -1,17 +1,17 @@
-========================
-Create a Ceph filesystem
-========================
+=========================
+Create a Ceph file system
+=========================
 
 Creating pools
 ==============
 
-A Ceph filesystem requires at least two RADOS pools, one for data and one for metadata.
+A Ceph file system requires at least two RADOS pools, one for data and one for metadata.
 When configuring these pools, you might consider:
 
 - Using a higher replication level for the metadata pool, as any data loss in
-  this pool can render the whole filesystem inaccessible.
+  this pool can render the whole file system inaccessible.
 - Using lower-latency storage such as SSDs for the metadata pool, as this will
-  directly affect the observed latency of filesystem operations on clients.
+  directly affect the observed latency of file system operations on clients.
 - The data pool used to create the file system is the "default" data pool and
   the location for storing all inode backtrace information, used for hard link
   management and disaster recovery. For this reason, all inodes created in
@@ -23,7 +23,7 @@ When configuring these pools, you might consider:
   hierarchy of directories and files (see also :ref:`file-layouts`).
 
 Refer to :doc:`/rados/operations/pools` to learn more about managing pools.  For
-example, to create two pools with default settings for use with a filesystem, you
+example, to create two pools with default settings for use with a file system, you
 might run the following commands:
 
 .. code:: bash
@@ -36,10 +36,10 @@ this reason, a smaller PG count is usually recommended. 64 or 128 is commonly
 used in practice for large clusters.
 
 
-Creating a filesystem
-=====================
+Creating a file system
+======================
 
-Once the pools are created, you may enable the filesystem using the ``fs new`` command:
+Once the pools are created, you may enable the file system using the ``fs new`` command:
 
 .. code:: bash
 
@@ -53,7 +53,7 @@ For example:
     $ ceph fs ls
     name: cephfs, metadata pool: cephfs_metadata, data pools: [cephfs_data ]
 
-Once a filesystem has been created, your MDS(s) will be able to enter
+Once a file system has been created, your MDS(s) will be able to enter
 an *active* state.  For example, in a single MDS system:
 
 .. code:: bash
@@ -61,8 +61,8 @@ an *active* state.  For example, in a single MDS system:
     $ ceph mds stat
     cephfs-1/1/1 up {0=a=up:active}
 
-Once the filesystem is created and the MDS is active, you are ready to mount
-the filesystem.  If you have created more than one filesystem, you will
+Once the file system is created and the MDS is active, you are ready to mount
+the file system.  If you have created more than one file system, you will
 choose which to use when mounting.
 
 	- `Mount CephFS`_
@@ -71,8 +71,8 @@ choose which to use when mounting.
 .. _Mount CephFS: ../../cephfs/kernel
 .. _Mount CephFS as FUSE: ../../cephfs/fuse
 
-If you have created more than one filesystem, and a client does not
-specify a filesystem when mounting, you can control which filesystem
+If you have created more than one file system, and a client does not
+specify a file system when mounting, you can control which file system
 they will see by using the `ceph fs set-default` command.
 
 Using Erasure Coded pools with CephFS

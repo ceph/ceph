@@ -2,7 +2,7 @@
 CephFS Client Capabilities
 ================================
 
-Use Ceph authentication capabilities to restrict your filesystem clients
+Use Ceph authentication capabilities to restrict your file system clients
 to the lowest possible level of authority needed.
 
 .. note::
@@ -27,9 +27,9 @@ Syntax
 To grant rw access to the specified directory only, we mention the specified
 directory while creating key for a client using the following syntax. ::
 
- ceph fs authorize *filesystem_name* client.*client_name* /*specified_directory* rw
+ ceph fs authorize *file_system_name* client.*client_name* /*specified_directory* rw
 
-For example, to restrict client ``foo`` to writing only in the ``bar`` directory of filesystem ``cephfs``, use ::
+For example, to restrict client ``foo`` to writing only in the ``bar`` directory of file system ``cephfs``, use ::
 
  ceph fs authorize cephfs client.foo / r /bar rw
 
@@ -47,10 +47,10 @@ root directory ::
  ceph fs authorize cephfs client.foo /bar rw
 
 Note that if a client's read access is restricted to a path, they will only
-be able to mount the filesystem when specifying a readable path in the
+be able to mount the file system when specifying a readable path in the
 mount command (see below).
 
-Supplying ``all`` or ``*`` as the filesystem name will grant access to every
+Supplying ``all`` or ``*`` as the file system name will grant access to every
 file system. Note that it is usually necessary to quote ``*`` to protect it from
 the shell.
 
@@ -72,7 +72,7 @@ By default, when a client is mounting a sub-directory, the used space (``df``)
 will be calculated from the quota on that sub-directory, rather than reporting
 the overall amount of space used on the cluster.
 
-If you would like the client to report the overall usage of the filesystem,
+If you would like the client to report the overall usage of the file system,
 and not just the quota usage on the sub-directory mounted, then set the
 following config option on the client:
 
@@ -81,7 +81,7 @@ following config option on the client:
     client quota df = false
 
 If quotas are not enabled, or no quota is set on the sub-directory mounted,
-then the overall usage of the filesystem will be reported irrespective of
+then the overall usage of the file system will be reported irrespective of
 the value of this setting.
 
 Layout and Quota restriction (the 'p' flag)
@@ -93,7 +93,7 @@ with a "ceph." prefix, as well as restricting other means of setting
 these fields (such as openc operations with layouts).
 
 For example, in the following snippet client.0 can modify layouts and quotas
-on the filesystem cephfs_a, but client.1 cannot.
+on the file system cephfs_a, but client.1 cannot.
 
 ::
 
@@ -118,7 +118,7 @@ Note that when capability string also contains the 'p' flag, the 's' flag must
 appear after it (all flags except 'rw' must be specified in alphabetical order).
 
 For example, in the following snippet client.0 can create or delete snapshots
-in the ``bar`` directory of filesystem ``cephfs_a``.
+in the ``bar`` directory of file system ``cephfs_a``.
 
 ::
 

@@ -136,7 +136,8 @@ public:
   struct Collection : public CollectionImpl {
     KStore *store;
     kstore_cnode_t cnode;
-    RWLock lock;
+    ceph::shared_mutex lock =
+      ceph::make_shared_mutex("KStore::Collection::lock", true, false);
 
     OpSequencerRef osr;
 
@@ -160,9 +161,11 @@ public:
     void flush() override;
     bool flush_commit(Context *c) override;
 
+  private:
+    FRIEND_MAKE_REF(Collection);
     Collection(KStore *ns, coll_t c);
   };
-  typedef boost::intrusive_ptr<Collection> CollectionRef;
+  using CollectionRef = ceph::ref_t<Collection>;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
@@ -315,7 +318,8 @@ private:
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   bool mounted;
 
-  RWLock coll_lock;    ///< rwlock to protect coll_map
+  /// rwlock to protect coll_map
+  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("KStore::coll_lock");
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
   map<coll_t,CollectionRef> new_coll_map;
 
@@ -441,7 +445,8 @@ public:
   }
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
-  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+		  bool *per_pool_omap) override;
 
   CollectionHandle open_collection(const coll_t& c) override;
   CollectionHandle create_new_collection(const coll_t& c) override;

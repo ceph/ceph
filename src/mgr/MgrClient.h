@@ -60,8 +60,8 @@ protected:
 
   std::unique_ptr<MgrSessionState> session;
 
-  Mutex lock = {"MgrClient::lock"};
-  Cond shutdown_cond;
+  ceph::mutex lock = ceph::make_mutex("MgrClient::lock");
+  ceph::condition_variable shutdown_cond;
 
   uint32_t stats_period = 0;
   uint32_t stats_threshold = 0;
@@ -69,7 +69,8 @@ protected:
 
   CommandTable<MgrCommand> command_table;
 
-  utime_t last_connect_attempt;
+  using clock_t = ceph::real_clock;
+  clock_t::time_point last_connect_attempt;
 
   uint64_t last_config_bl_version = 0;
 
@@ -87,9 +88,11 @@ protected:
   // for service registration and beacon
   bool service_daemon = false;
   bool daemon_dirty_status = false;
+  bool task_dirty_status = false;
   std::string service_name, daemon_name;
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
+  std::map<std::string,std::string> task_status;
   std::vector<DaemonHealthMetric> daemon_health_metrics;
 
   void reconnect();
@@ -117,7 +120,11 @@ public:
   bool handle_mgr_map(ceph::ref_t<MMgrMap> m);
   bool handle_mgr_configure(ceph::ref_t<MMgrConfigure> m);
   bool handle_mgr_close(ceph::ref_t<MMgrClose> m);
-  bool handle_command_reply(ceph::ref_t<MCommandReply> m);
+  bool handle_command_reply(
+    uint64_t tid,
+    bufferlist& data,
+    const std::string& rs,
+    int r);
 
   void set_perf_metric_query_cb(
     std::function<void(const std::map<OSDPerfMetricQuery,
@@ -147,6 +154,8 @@ public:
     const std::map<std::string,std::string>& metadata);
   int service_daemon_update_status(
     std::map<std::string,std::string>&& status);
+  int service_daemon_update_task_status(
+    std::map<std::string,std::string> &&task_status);
   void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
 private:

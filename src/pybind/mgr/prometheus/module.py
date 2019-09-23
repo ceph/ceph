@@ -417,6 +417,16 @@ class Module(MgrModule):
     def get_fs(self):
         fs_map = self.get('fs_map')
         servers = self.get_service_list()
+        self.log.debug('standbys: {}'.format(fs_map['standbys']))
+        # export standby mds metadata, default standby fs_id is '-1'
+        for standby in fs_map['standbys']:
+            id_ = standby['name']
+            host_version = servers.get((id_, 'mds'), ('', ''))
+            self.metrics['mds_metadata'].set(1, (
+                'mds.{}'.format(id_), '-1',
+                host_version[0], standby['addr'],
+                standby['rank'], host_version[1]
+            ))
         for fs in fs_map['filesystems']:
             # collect fs metadata
             data_pools = ",".join([str(pool)
@@ -1061,8 +1071,8 @@ class Module(MgrModule):
                     raise cherrypy.HTTPError(503, 'No MON connection')
 
         # Make the cache timeout for collecting configurable
-        self.collect_timeout = self.get_localized_module_option(
-            'scrape_interval', 5.0)
+        self.collect_timeout = float(self.get_localized_module_option(
+            'scrape_interval', 5.0))
 
         server_addr = self.get_localized_module_option(
             'server_addr', get_default_addr())

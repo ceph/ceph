@@ -1,16 +1,16 @@
 
-Application best practices for distributed filesystems
-======================================================
+Application best practices for distributed file systems
+=======================================================
 
 CephFS is POSIX compatible, and therefore should work with any existing
-applications that expect a POSIX filesystem.  However, because it is a
-network filesystem (unlike e.g. XFS) and it is highly consistent (unlike
+applications that expect a POSIX file system.  However, because it is a
+network file system (unlike e.g. XFS) and it is highly consistent (unlike
 e.g. NFS), there are some consequences that application authors may
 benefit from knowing about.
 
-The following sections describe some areas where distributed filesystems
+The following sections describe some areas where distributed file systems
 may have noticeably different performance behaviours compared with
-local filesystems.
+local file systems.
 
 
 ls -l
@@ -56,7 +56,7 @@ Hard links
 ----------
 
 Hard links have an intrinsic cost in terms of the internal housekeeping
-that a filesystem has to do to keep two references to the same data.  In
+that a file system has to do to keep two references to the same data.  In
 CephFS there is a particular performance cost, because with normal files
 the inode is embedded in the directory (i.e. there is no extra fetch of
 the inode after looking up the path).
@@ -74,13 +74,10 @@ make sure you test it appropriately: don't test your system with a small
 number of files and then expect equivalent performance when you move
 to a much larger number of files.
 
-Do you need a filesystem?
--------------------------
+Do you need a file system?
+--------------------------
 
 Remember that Ceph also includes an object storage interface.  If your
 application needs to store huge flat collections of files where you just
 read and write whole files at once, then you might well be better off
 using the :ref:`Object Gateway <object-gateway>`
-
-
-

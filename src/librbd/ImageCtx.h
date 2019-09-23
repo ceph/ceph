@@ -13,11 +13,10 @@
 #include <vector>
 
 #include "common/allocator.h"
+#include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
 #include "common/event_socket.h"
-#include "common/Mutex.h"
 #include "common/Readahead.h"
-#include "common/RWLock.h"
 #include "common/snap_types.h"
 #include "common/zipkin_trace.h"
 
@@ -105,8 +104,8 @@ namespace librbd {
      * owner_lock, image_lock
      * async_op_lock, timestamp_lock
      */
-    RWLock owner_lock; // protects exclusive lock leadership updates
-    RWLock image_lock; // protects snapshot-related member variables,
+    ceph::shared_mutex owner_lock; // protects exclusive lock leadership updates
+    mutable ceph::shared_mutex image_lock; // protects snapshot-related member variables,
                        // features (and associated helper classes), and flags
                        // protects access to the mutable image metadata that
                        // isn't guarded by other locks below, and blocks writes
@@ -119,9 +118,9 @@ namespace librbd {
                        // object_map
                        // parent_md and parent
 
-    RWLock timestamp_lock; // protects (create/access/modify)_timestamp
-    Mutex async_ops_lock; // protects async_ops and async_requests
-    Mutex copyup_list_lock; // protects copyup_waiting_list
+    ceph::shared_mutex timestamp_lock; // protects (create/access/modify)_timestamp
+    ceph::mutex async_ops_lock; // protects async_ops and async_requests
+    ceph::mutex copyup_list_lock; // protects copyup_waiting_list
 
     unsigned extra_read_flags;
 
@@ -235,7 +234,7 @@ namespace librbd {
     ~ImageCtx();
     void init();
     void shutdown();
-    void init_layout();
+    void init_layout(int64_t pool_id);
     void perf_start(std::string name);
     void perf_stop();
     void set_read_flag(unsigned flag);
@@ -281,15 +280,15 @@ namespace librbd {
     uint64_t get_object_count(librados::snap_t in_snap_id) const;
     bool test_features(uint64_t test_features) const;
     bool test_features(uint64_t test_features,
-                       const RWLock &in_image_lock) const;
+                       const ceph::shared_mutex &in_image_lock) const;
     bool test_op_features(uint64_t op_features) const;
     bool test_op_features(uint64_t op_features,
-                          const RWLock &in_image_lock) const;
+                          const ceph::shared_mutex &in_image_lock) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     int test_flags(librados::snap_t in_snap_id,
                    uint64_t test_flags, bool *flags_set) const;
     int test_flags(librados::snap_t in_snap_id,
-                   uint64_t test_flags, const RWLock &in_image_lock,
+                   uint64_t test_flags, const ceph::shared_mutex &in_image_lock,
                    bool *flags_set) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
@@ -328,7 +327,7 @@ namespace librbd {
                                          ThreadPool **thread_pool,
                                          ContextWQ **op_work_queue);
     static void get_timer_instance(CephContext *cct, SafeTimer **timer,
-                                   Mutex **timer_lock);
+                                   ceph::mutex **timer_lock);
   };
 }
 

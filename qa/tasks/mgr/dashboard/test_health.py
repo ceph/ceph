@@ -54,7 +54,8 @@ class HealthTest(DashboardTestCase):
                 'standbys': JList(JObj({})),
             }),
             'health': JObj({
-                'checks': JList(str),
+                'checks': JList(JObj({}, allow_unknown=True)),
+                'mutes': JList(JObj({}, allow_unknown=True)),
                 'status': str,
             }),
             'hosts': int,
@@ -123,9 +124,13 @@ class HealthTest(DashboardTestCase):
                 'pools': JList(JObj({
                     'stats': JObj({
                         'stored': int,
+                        'stored_data': int,
+                        'stored_omap': int,
                         'objects': int,
                         'kb_used': int,
                         'bytes_used': int,
+                        'data_bytes_used': int,
+                        'omap_bytes_used': int,
                         'percent_used': float,
                         'max_avail': int,
                         'quota_objects': int,
@@ -149,7 +154,8 @@ class HealthTest(DashboardTestCase):
                     'total_used_raw_bytes': int,
                     'total_used_raw_ratio': float,
                     'num_osds': int,
-                    'num_per_pool_osds': int
+                    'num_per_pool_osds': int,
+                    'num_per_pool_omap_osds': int
                 })
             }),
             'fs_map': JObj({
@@ -182,7 +188,8 @@ class HealthTest(DashboardTestCase):
                 'standbys': JList(JObj({}, allow_unknown=True)),
             }),
             'health': JObj({
-                'checks': JList(str),
+                'checks': JList(JObj({}, allow_unknown=True)),
+                'mutes': JList(JObj({}, allow_unknown=True)),
                 'status': str,
             }),
             'hosts': int,
@@ -279,7 +286,8 @@ class HealthTest(DashboardTestCase):
             'client_perf': JObj({}, allow_unknown=True),
             'df': JObj({}, allow_unknown=True),
             'health': JObj({
-                'checks': JList(str),
+                'checks': JList(JObj({}, allow_unknown=True)),
+                'mutes': JList(JObj({}, allow_unknown=True)),
                 'status': str
             }),
             'pools': JList(JLeaf(dict)),

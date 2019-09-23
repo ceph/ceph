@@ -1919,16 +1919,14 @@ void Objecter::wait_for_osd_map()
   }
 
   // Leave this since it goes with C_SafeCond
-  Mutex lock("");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("");
+  ceph::condition_variable cond;
   bool done;
-  lock.Lock();
-  C_SafeCond *context = new C_SafeCond(&lock, &cond, &done, NULL);
+  std::unique_lock mlock{lock};
+  C_SafeCond *context = new C_SafeCond(lock, cond, &done, NULL);
   waiting_for_map[0].push_back(pair<Context*, int>(context, 0));
   l.unlock();
-  while (!done)
-    cond.Wait(lock);
-  lock.Unlock();
+  cond.wait(mlock, [&done] { return done; });
 }
 
 struct C_Objecter_GetVersion : public Context {
@@ -3801,10 +3799,11 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 
   auto iter = list_context->bl.cbegin();
   pg_nls_response_t response;
-  ceph::buffer::list extra_info;
   decode(response, iter);
   if (!iter.end()) {
-    decode(extra_info, iter);
+    // we do this as legacy.
+    ceph::buffer::list legacy_extra_info;
+    decode(legacy_extra_info, iter);
   }
 
   // if the osd returns 1 (newer code), or handle MAX, it means we
@@ -3831,7 +3830,6 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 		 << ", response.entries " << response.entries
 		 << ", handle " << response.handle
 		 << ", tentative new pos " << list_context->pos << dendl;
-  list_context->extra_info.append(extra_info);
   if (response_size) {
     list_context->list.splice(list_context->list.end(), response.entries);
   }
@@ -5159,11 +5157,12 @@ void Objecter::_enumerate_reply(
   auto iter = bl.cbegin();
   pg_nls_response_t response;
 
-  // XXX extra_info doesn't seem used anywhere?
-  ceph::buffer::list extra_info;
   decode(response, iter);
   if (!iter.end()) {
-    decode(extra_info, iter);
+    // extra_info isn't used anywhere. We do this solely to preserve
+    // backward compatibility
+    ceph::buffer::list legacy_extra_info;
+    decode(legacy_extra_info, iter);
   }
 
   ldout(cct, 10) << __func__ << ": got " << response.entries.size()

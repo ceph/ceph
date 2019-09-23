@@ -1,12 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_SYNC_LOG_H
 #define CEPH_RGW_SYNC_LOG_H
 
 #include <atomic>
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/shunique_lock.h"
 #include "common/admin_socket.h"
 
@@ -41,7 +41,7 @@ class RGWSyncTraceNode final {
   uint16_t state{0};
   std::string status;
 
-  Mutex lock{"RGWSyncTraceNode::lock"};
+  ceph::mutex lock = ceph::make_mutex("RGWSyncTraceNode::lock");
 
   std::string type;
   std::string id;

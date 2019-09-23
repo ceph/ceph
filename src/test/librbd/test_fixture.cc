@@ -139,7 +139,7 @@ int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
     return r;
   }
 
-  RWLock::RLocker owner_locker(ictx.owner_lock);
+  std::shared_lock owner_locker{ictx.owner_lock};
   ceph_assert(ictx.exclusive_lock != nullptr);
   return ictx.exclusive_lock->is_lock_owner() ? 0 : -EINVAL;
 }

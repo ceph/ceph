@@ -25,7 +25,7 @@ struct C_CompleteFlushes : public Context {
     : image_ctx(image_ctx), flush_contexts(std::move(flush_contexts)) {
   }
   void finish(int r) override {
-    RWLock::RLocker owner_locker(image_ctx->owner_lock);
+    std::shared_lock owner_locker{image_ctx->owner_lock};
     while (!flush_contexts.empty()) {
       Context *flush_ctx = flush_contexts.front();
       flush_contexts.pop_front();
@@ -43,7 +43,7 @@ void AsyncOperation::start_op(ImageCtx &image_ctx) {
   m_image_ctx = &image_ctx;
 
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << dendl;
-  Mutex::Locker l(m_image_ctx->async_ops_lock);
+  std::lock_guard l{m_image_ctx->async_ops_lock};
   m_image_ctx->async_ops.push_front(&m_xlist_item);
 }
 
@@ -51,7 +51,7 @@ void AsyncOperation::finish_op() {
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << dendl;
 
   {
-    Mutex::Locker l(m_image_ctx->async_ops_lock);
+    std::lock_guard l{m_image_ctx->async_ops_lock};
     xlist<AsyncOperation *>::iterator iter(&m_xlist_item);
     ++iter;
     ceph_assert(m_xlist_item.remove_myself());
@@ -76,7 +76,7 @@ void AsyncOperation::finish_op() {
 
 void AsyncOperation::flush(Context* on_finish) {
   {
-    Mutex::Locker locker(m_image_ctx->async_ops_lock);
+    std::lock_guard locker{m_image_ctx->async_ops_lock};
     xlist<AsyncOperation *>::iterator iter(&m_xlist_item);
     ++iter;
 

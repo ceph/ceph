@@ -46,7 +46,6 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   objecter(objecter_),
   client(client_),
   client_messenger(clientm_),
-  lock("Mgr::lock"),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
   digest_received(false),
   py_module_registry(py_module_registry_),
@@ -159,7 +158,7 @@ void Mgr::background_init(Context *completion)
 
   finisher.start();
 
-  finisher.queue(new FunctionContext([this, completion](int r){
+  finisher.queue(new LambdaContext([this, completion](int r){
     init();
     completion->complete(0);
   }));
@@ -167,14 +166,14 @@ void Mgr::background_init(Context *completion)
 
 std::map<std::string, std::string> Mgr::load_store()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   dout(10) << "listing keys" << dendl;
   JSONCommand cmd;
   cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
-  lock.Unlock();
+  lock.unlock();
   cmd.wait();
-  lock.Lock();
+  lock.lock();
   ceph_assert(cmd.r == 0);
 
   std::map<std::string, std::string> loaded;
@@ -194,9 +193,9 @@ std::map<std::string, std::string> Mgr::load_store()
       std::ostringstream cmd_json;
       cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
       get_cmd.run(monc, cmd_json.str());
-      lock.Unlock();
+      lock.unlock();
       get_cmd.wait();
-      lock.Lock();
+      lock.lock();
       if (get_cmd.r == 0) { // tolerate racing config-key change
 	if (key.substr(0, device_prefix.size()) == device_prefix) {
 	  // device/
@@ -227,7 +226,7 @@ std::map<std::string, std::string> Mgr::load_store()
 
 void Mgr::init()
 {
-  std::lock_guard l(lock);
+  std::unique_lock l(lock);
   ceph_assert(initializing);
   ceph_assert(!initialized);
 
@@ -263,9 +262,9 @@ void Mgr::init()
   monc->reopen_session();
 
   // Start Objecter and wait for OSD map
-  lock.Unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
+  lock.unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
   objecter->wait_for_osd_map();
-  lock.Lock();
+  lock.lock();
 
   // Populate PGs in ClusterState
   cluster_state.with_osdmap_and_pgmap([this](const OSDMap &osd_map,
@@ -275,32 +274,30 @@ void Mgr::init()
 
   // Wait for FSMap
   dout(4) << "waiting for FSMap..." << dendl;
-  while (!cluster_state.have_fsmap()) {
-    fs_map_cond.Wait(lock);
-  }
+  fs_map_cond.wait(l, [this] { return cluster_state.have_fsmap();});
 
   dout(4) << "waiting for config-keys..." << dendl;
 
   // Wait for MgrDigest...
   dout(4) << "waiting for MgrDigest..." << dendl;
-  while (!digest_received) {
-    digest_cond.Wait(lock);
-  }
+  digest_cond.wait(l, [this] { return digest_received; });
 
   // Load module KV store
   auto kv_store = load_store();
 
   // Migrate config from KV store on luminous->mimic
   // drop lock because we do blocking config sets to mon
-  lock.Unlock();
+  lock.unlock();
   py_module_registry->upgrade_config(monc, kv_store);
-  lock.Lock();
+  lock.lock();
 
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
   py_module_registry->active_start(daemon_state, cluster_state,
       kv_store, *monc, clog, audit_clog, *objecter, *client,
       finisher, server);
+
+  cluster_state.final_init();
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -309,7 +306,7 @@ void Mgr::init()
 
 void Mgr::load_all_metadata()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   JSONCommand mds_cmd;
   mds_cmd.run(monc, "{\"prefix\": \"mds metadata\"}");
@@ -318,11 +315,11 @@ void Mgr::load_all_metadata()
   JSONCommand mon_cmd;
   mon_cmd.run(monc, "{\"prefix\": \"mon metadata\"}");
 
-  lock.Unlock();
+  lock.unlock();
   mds_cmd.wait();
   osd_cmd.wait();
   mon_cmd.wait();
-  lock.Lock();
+  lock.lock();
 
   ceph_assert(mds_cmd.r == 0);
   ceph_assert(mon_cmd.r == 0);
@@ -403,7 +400,7 @@ void Mgr::load_all_metadata()
 
 void Mgr::shutdown()
 {
-  finisher.queue(new FunctionContext([&](int) {
+  finisher.queue(new LambdaContext([&](int) {
     {
       std::lock_guard l(lock);
       // First stop the server so that we're not taking any more incoming
@@ -422,7 +419,7 @@ void Mgr::shutdown()
 
 void Mgr::handle_osd_map()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   std::set<std::string> names_exist;
 
@@ -508,7 +505,7 @@ void Mgr::handle_service_map(ref_t<MServiceMap> m)
 void Mgr::handle_mon_map()
 {
   dout(20) << __func__ << dendl;
-  assert(lock.is_locked_by_me());
+  assert(ceph_mutex_is_locked_by_me(lock));
   std::set<std::string> names_exist;
   cluster_state.with_monmap([&] (auto &monmap) {
     for (unsigned int i = 0; i < monmap.size(); i++) {
@@ -562,13 +559,13 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
 
 void Mgr::handle_fs_map(ref_t<MFSMap> m)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   std::set<std::string> names_exist;
   
   const FSMap &new_fsmap = m->get_fsmap();
 
-  fs_map_cond.Signal();
+  fs_map_cond.notify_all();
 
   // TODO: callers (e.g. from python land) are potentially going to see
   // the new fsmap before we've bothered populating all the resulting
@@ -668,7 +665,7 @@ void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
 
   if (!digest_received) {
     digest_received = true;
-    digest_cond.Signal();
+    digest_cond.notify_all();
   }
 }
 

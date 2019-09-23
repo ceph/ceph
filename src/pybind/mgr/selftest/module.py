@@ -177,6 +177,7 @@ class Module(MgrModule):
                 self._health[check] = {
                     "severity": str(info["severity"]),
                     "summary": str(info["summary"]),
+                    "count": 123,
                     "detail": [str(m) for m in info["detail"]]
                 }
         except Exception as e:

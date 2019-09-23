@@ -326,26 +326,26 @@ int MDBalancer::localize_balancer()
   bool ack = false;
   int r = 0;
   bufferlist lua_src;
-  Mutex lock("lock");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("lock");
+  ceph::condition_variable cond;
 
   /* we assume that balancer is in the metadata pool */
   object_t oid = object_t(mds->mdsmap->get_balancer());
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   ceph_tid_t tid = mds->objecter->read(oid, oloc, 0, 0, CEPH_NOSNAP, &lua_src, 0,
-                                       new C_SafeCond(&lock, &cond, &ack, &r));
+                                       new C_SafeCond(lock, cond, &ack, &r));
   dout(15) << "launched non-blocking read tid=" << tid
            << " oid=" << oid << " oloc=" << oloc << dendl;
 
   /* timeout: if we waste half our time waiting for RADOS, then abort! */
-  auto bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
-  lock.Lock();
-  int ret_t = cond.WaitInterval(lock, utime_t(bal_interval / 2, 0));
-  lock.Unlock();
-
+  std::cv_status ret_t = [&] {
+    auto bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
+    std::unique_lock locker{lock};
+    return cond.wait_for(locker, std::chrono::seconds(bal_interval / 2));
+  }();
   /* success: store the balancer in memory and set the version. */
   if (!r) {
-    if (ret_t == ETIMEDOUT) {
+    if (ret_t == std::cv_status::timeout) {
       mds->objecter->op_cancel(tid, -ECANCELED);
       return -ETIMEDOUT;
     }
@@ -548,13 +548,13 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
     // Do the split ASAP: enqueue it in the MDSRank waiters which are
     // run at the end of dispatching the current request
     mds->queue_waiter(new MDSInternalContextWrapper(mds, 
-          new FunctionContext(callback)));
+          new LambdaContext(std::move(callback))));
   } else if (is_new) {
     // Set a timer to really do the split: we don't do it immediately
     // so that bursts of ops on a directory have a chance to go through
     // before we freeze it.
     mds->timer.add_event_after(bal_fragment_interval,
-                               new FunctionContext(callback));
+                               new LambdaContext(std::move(callback)));
   }
 }
 
@@ -616,7 +616,7 @@ void MDBalancer::queue_merge(CDir *dir)
     dout(20) << __func__ << " enqueued dir " << *dir << dendl;
     merge_pending.insert(frag);
     mds->timer.add_event_after(bal_fragment_interval,
-        new FunctionContext(callback));
+        new LambdaContext(std::move(callback)));
   } else {
     dout(20) << __func__ << " dir already in queue " << *dir << dendl;
   }

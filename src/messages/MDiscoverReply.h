@@ -66,6 +66,7 @@
 class MDiscoverReply : public Message {
 private:
   static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
   // info about original request
   inodeno_t base_ino;
@@ -109,9 +110,9 @@ private:
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
 protected:
-  MDiscoverReply() : Message{MSG_MDS_DISCOVERREPLY, HEAD_VERSION} { }
+  MDiscoverReply() : Message{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION} { }
   MDiscoverReply(const MDiscover &dis) :
-    Message{MSG_MDS_DISCOVERREPLY, HEAD_VERSION},
+    Message{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION},
     base_ino(dis.get_base_ino()),
     base_dir_frag(dis.get_base_dir_frag()),
     wanted_base_dir(dis.wants_base_dir()),
@@ -126,7 +127,7 @@ protected:
     header.tid = dis.get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
-    Message{MSG_MDS_DISCOVERREPLY, HEAD_VERSION},
+    Message{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION},
     base_ino(df.ino),
     base_dir_frag(df.frag),
     wanted_base_dir(false),

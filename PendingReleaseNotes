@@ -60,6 +60,10 @@
   objects and the other deletes them. Read the troubleshooting section
   of the dynamic resharding docs for details.
 
+* RGW: Bucket naming restrictions have changed and likely to cause
+  InvalidBucketName errors. We recommend to set ``rgw_relaxed_s3_bucket_names``
+  option to true as a workaround.
+
 * In the Zabbix Mgr Module there was a typo in the key being send
   to Zabbix for PGs in backfill_wait state. The key that was sent
   was 'wait_backfill' and the correct name is 'backfill_wait'.
@@ -87,6 +91,12 @@
   output should be modified to parse the structured output instead, as
   the human-readable output may change without notice.
 
+* The ``bluestore_no_per_pool_stats_tolerance`` config option has been
+  replaced with ``bluestore_fsck_error_on_no_per_pool_stats``
+  (default: false).  The overall default behavior has not changed:
+  fsck will warn but not fail on legacy stores, and repair will
+  convert to per-pool stats.
+
 * The ``osd_recovery_max_active`` option now has
   ``osd_recovery_max_active_hdd`` and ``osd_recovery_max_active_ssd``
   variants, each with different default values for HDD and SSD-backed
@@ -100,3 +110,34 @@
 * monitors now have a `ceph osd info` command that will provide information
   on all osds, or provided osds, thus simplifying the process of having to
   parse `osd dump` for the same information.
+
+* The structured output of ``ceph status`` or ``ceph -s`` is now more
+  concise, particularly the `mgrmap` and `monmap` sections, and the
+  structure of the `osdmap` section has been cleaned up.
+
+* A health warning is now generated if the average osd heartbeat ping
+  time exceeds a configurable threshold for any of the intervals
+  computed.  The OSD computes 1 minute, 5 minute and 15 minute
+  intervals with average, minimum and maximum values.  New configuration
+  option ``mon_warn_on_slow_ping_ratio`` specifies a percentage of
+  ``osd_heartbeat_grace`` to determine the threshold.  A value of zero
+  disables the warning.  New configuration option
+ ``mon_warn_on_slow_ping_time`` specified in milliseconds over-rides the
+  computed value, causes a warning
+  when OSD heartbeat pings take longer than the specified amount.
+  New admin command ``ceph daemon mgr.# dump_osd_network [threshold]`` command will
+  list all connections with a ping time longer than the specified threshold or
+  value determined by the config options, for the average for any of the 3 intervals.
+  New admin command ``ceph daemon osd.# dump_osd_network [threshold]`` will
+  do the same but only including heartbeats initiated by the specified OSD.
+
+* Following invalid settings now are not tolerated anymore
+  for the command `ceph osd erasure-code-profile set xxx`.
+  * invalid `m` for "reed_sol_r6_op" erasure technique
+  * invalid `m` and invalid `w` for "liber8tion" erasure technique
+
+* New OSD daemon command dump_recovery_reservations which reveals the
+  recovery locks held (in_progress) and waiting in priority queues.
+
+* New OSD daemon command dump_scrub_reservations which reveals the
+  scrub reservations that are held for local (primary) and remote (replica) PGs.

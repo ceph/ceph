@@ -18,8 +18,7 @@
 #include <boost/intrusive/list.hpp>
 #define BOOST_ICL_USE_STATIC_BOUNDED_INTERVALS
 #include <boost/icl/interval_set.hpp>
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 
 class Client;
 
@@ -55,7 +54,7 @@ typedef boost::intrusive::list< C_Block_Sync,
 class Barrier
 {
 private:
-  Cond cond;
+  ceph::condition_variable cond;
   boost::icl::interval_set<uint64_t> span;
   BlockSyncList write_list;
 
@@ -80,7 +79,7 @@ class BarrierContext
 private:
   Client *cl;
   uint64_t ino;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("BarrierContext");
 
   // writes not claimed by a commit
   BlockSyncList outstanding_writes;

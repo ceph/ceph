@@ -10,6 +10,14 @@
 #include <stdbool.h>
 #include "msgr.h"
 
+/* See comment in ceph_fs.h.  */
+#ifndef __KERNEL__
+#include "byteorder.h"
+#define __le16 ceph_le16
+#define __le32 ceph_le32
+#define __le64 ceph_le64
+#endif
+
 /*
  * fs id
  */
@@ -284,6 +292,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(OMAPSETHEADER, __CEPH_OSD_OP(WR, DATA, 22),	"omap-set-header")  \
 	f(OMAPCLEAR,	__CEPH_OSD_OP(WR, DATA, 23),	"omap-clear")	    \
 	f(OMAPRMKEYS,	__CEPH_OSD_OP(WR, DATA, 24),	"omap-rm-keys")	    \
+	f(OMAPRMKEYRANGE, __CEPH_OSD_OP(WR, DATA, 44),	"omap-rm-key-range") \
 	f(OMAP_CMP,	__CEPH_OSD_OP(RD, DATA, 25),	"omap-cmp")	    \
 									    \
 	/* tiering */							    \
@@ -662,5 +671,10 @@ struct ceph_osd_reply_head {
 	struct ceph_osd_op ops[0];  /* ops[], object */
 } __attribute__ ((packed));
 
+#ifndef __KERNEL__
+#undef __le16
+#undef __le32
+#undef __le64
+#endif
 
 #endif

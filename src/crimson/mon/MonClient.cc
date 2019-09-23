@@ -4,6 +4,7 @@
 
 #include <seastar/core/future-util.hh>
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/shared_future.hh>
 #include <seastar/util/log.hh>
 
 #include "auth/AuthClientHandler.h"
@@ -107,7 +108,7 @@ private:
 private:
   bool closed = false;
   // v1
-  seastar::promise<Ref<MAuthReply>> reply;
+  seastar::shared_promise<Ref<MAuthReply>> reply;
   // v2
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point auth_start;
@@ -251,7 +252,7 @@ Connection::do_auth_single(Connection::request_t what)
   logger().info("sending {}", *m);
   return conn->send(m).then([this] {
     logger().info("waiting");
-    return reply.get_future();
+    return reply.get_shared_future();
   }).then([this] (Ref<MAuthReply> m) {
     if (!m) {
       ceph_assert(closed);
@@ -297,7 +298,7 @@ Connection::authenticate_v1(epoch_t epoch,
   return conn->keepalive().then([epoch, name, this] {
     return setup_session(epoch, name);
   }).then([this] {
-    return reply.get_future();
+    return reply.get_shared_future();
   }).then([name, want_keys, this](Ref<MAuthReply> m) {
     if (!m) {
       logger().error("authenticate_v1 canceled on {}", name);
@@ -500,7 +501,7 @@ seastar::future<> Client::load_keyring()
 
 void Client::tick()
 {
-  seastar::with_gate(tick_gate, [this] {
+  (void) seastar::with_gate(tick_gate, [this] {
     if (active_con) {
       return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),

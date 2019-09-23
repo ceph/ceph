@@ -97,6 +97,7 @@ cdef extern from "rbd/librbd.h" nogil:
         RBD_MAX_BLOCK_NAME_SIZE
         RBD_MAX_IMAGE_NAME_SIZE
 
+    ctypedef void* rados_t
     ctypedef void* rados_ioctx_t
     ctypedef void* rbd_image_t
     ctypedef void* rbd_image_options_t
@@ -152,6 +153,11 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
         _RBD_MIRROR_MODE_IMAGE "RBD_MIRROR_MODE_IMAGE"
         _RBD_MIRROR_MODE_POOL "RBD_MIRROR_MODE_POOL"
+
+    ctypedef enum rbd_mirror_peer_direction_t:
+        _RBD_MIRROR_PEER_DIRECTION_RX "RBD_MIRROR_PEER_DIRECTION_RX"
+        _RBD_MIRROR_PEER_DIRECTION_TX "RBD_MIRROR_PEER_DIRECTION_TX"
+        _RBD_MIRROR_PEER_DIRECTION_RX_TX "RBD_MIRROR_PEER_DIRECTION_RX_TX"
 
     ctypedef struct rbd_mirror_peer_t:
         char *uuid
@@ -340,8 +346,18 @@ cdef extern from "rbd/librbd.h" nogil:
                              size_t status_size)
     void rbd_migration_status_cleanup(rbd_image_migration_status_t *status)
 
+    int rbd_mirror_site_name_get(rados_t cluster, char *name, size_t *max_len)
+    int rbd_mirror_site_name_set(rados_t cluster, const char *name)
+
     int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
     int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
+
+    int rbd_mirror_peer_bootstrap_create(rados_ioctx_t io_ctx, char *token,
+                                         size_t *max_len)
+    int rbd_mirror_peer_bootstrap_import(
+        rados_ioctx_t io_ctx, rbd_mirror_peer_direction_t direction,
+        const char *token)
+
     int rbd_mirror_peer_add(rados_ioctx_t io, char *uuid,
                             size_t uuid_max_length, const char *cluster_name,
                             const char *client_name)
@@ -648,6 +664,10 @@ RBD_MIRROR_MODE_DISABLED = _RBD_MIRROR_MODE_DISABLED
 RBD_MIRROR_MODE_IMAGE = _RBD_MIRROR_MODE_IMAGE
 RBD_MIRROR_MODE_POOL = _RBD_MIRROR_MODE_POOL
 
+RBD_MIRROR_PEER_DIRECTION_RX = _RBD_MIRROR_PEER_DIRECTION_RX
+RBD_MIRROR_PEER_DIRECTION_TX = _RBD_MIRROR_PEER_DIRECTION_TX
+RBD_MIRROR_PEER_DIRECTION_RX_TX = _RBD_MIRROR_PEER_DIRECTION_RX_TX
+
 RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
 RBD_MIRROR_IMAGE_DISABLED = _RBD_MIRROR_IMAGE_DISABLED
@@ -827,45 +847,52 @@ class DiskQuotaExceeded(OSError):
         super(DiskQuotaExceeded, self).__init__(
                 "RBD disk quota exceeded (%s)" % message, errno)
 
+class OperationNotSupported(OSError):
+    def __init__(self, message, errno=None):
+        super(OperationNotSupported, self).__init__(
+                "RBD operation not supported (%s)" % message, errno)
+
 class OperationCanceled(OSError):
     def __init__(self, message, errno=None):
         super(OperationCanceled, self).__init__(
                 "RBD operation canceled (%s)" % message, errno)
 
 cdef errno_to_exception = {
-    errno.EPERM     : PermissionError,
-    errno.ENOENT    : ImageNotFound,
-    errno.EIO       : IOError,
-    errno.ENOSPC    : NoSpace,
-    errno.EEXIST    : ImageExists,
-    errno.EINVAL    : InvalidArgument,
-    errno.EROFS     : ReadOnlyImage,
-    errno.EBUSY     : ImageBusy,
-    errno.ENOTEMPTY : ImageHasSnapshots,
-    errno.ENOSYS    : FunctionNotSupported,
-    errno.EDOM      : ArgumentOutOfRange,
-    errno.ESHUTDOWN : ConnectionShutdown,
-    errno.ETIMEDOUT : Timeout,
-    errno.EDQUOT    : DiskQuotaExceeded,
-    ECANCELED       : OperationCanceled,
+    errno.EPERM      : PermissionError,
+    errno.ENOENT     : ImageNotFound,
+    errno.EIO        : IOError,
+    errno.ENOSPC     : NoSpace,
+    errno.EEXIST     : ImageExists,
+    errno.EINVAL     : InvalidArgument,
+    errno.EROFS      : ReadOnlyImage,
+    errno.EBUSY      : ImageBusy,
+    errno.ENOTEMPTY  : ImageHasSnapshots,
+    errno.ENOSYS     : FunctionNotSupported,
+    errno.EDOM       : ArgumentOutOfRange,
+    errno.ESHUTDOWN  : ConnectionShutdown,
+    errno.ETIMEDOUT  : Timeout,
+    errno.EDQUOT     : DiskQuotaExceeded,
+    errno.EOPNOTSUPP : OperationNotSupported,
+    ECANCELED        : OperationCanceled,
 }
 
 cdef group_errno_to_exception = {
-    errno.EPERM     : PermissionError,
-    errno.ENOENT    : ObjectNotFound,
-    errno.EIO       : IOError,
-    errno.ENOSPC    : NoSpace,
-    errno.EEXIST    : ObjectExists,
-    errno.EINVAL    : InvalidArgument,
-    errno.EROFS     : ReadOnlyImage,
-    errno.EBUSY     : ImageBusy,
-    errno.ENOTEMPTY : ImageHasSnapshots,
-    errno.ENOSYS    : FunctionNotSupported,
-    errno.EDOM      : ArgumentOutOfRange,
-    errno.ESHUTDOWN : ConnectionShutdown,
-    errno.ETIMEDOUT : Timeout,
-    errno.EDQUOT    : DiskQuotaExceeded,
-    ECANCELED       : OperationCanceled,
+    errno.EPERM      : PermissionError,
+    errno.ENOENT     : ObjectNotFound,
+    errno.EIO        : IOError,
+    errno.ENOSPC     : NoSpace,
+    errno.EEXIST     : ObjectExists,
+    errno.EINVAL     : InvalidArgument,
+    errno.EROFS      : ReadOnlyImage,
+    errno.EBUSY      : ImageBusy,
+    errno.ENOTEMPTY  : ImageHasSnapshots,
+    errno.ENOSYS     : FunctionNotSupported,
+    errno.EDOM       : ArgumentOutOfRange,
+    errno.ESHUTDOWN  : ConnectionShutdown,
+    errno.ETIMEDOUT  : Timeout,
+    errno.EDQUOT     : DiskQuotaExceeded,
+    errno.EOPNOTSUPP : OperationNotSupported,
+    ECANCELED        : OperationCanceled,
 }
 
 cdef make_ex(ret, msg, exception_map=errno_to_exception):
@@ -884,6 +911,9 @@ cdef make_ex(ret, msg, exception_map=errno_to_exception):
     else:
         return OSError(msg, errno=ret)
 
+
+cdef rados_t convert_rados(rados.Rados rados) except? NULL:
+    return <rados_t>rados.cluster
 
 cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
     return <rados_ioctx_t>ioctx.io
@@ -1677,6 +1707,50 @@ class RBD(object):
 
         return status
 
+    def mirror_site_name_get(self, rados):
+        """
+        Get the local cluster's friendly site name
+
+        :param rados: cluster connection
+        :type rados: :class: rados.Rados
+        :returns: str - local site name
+        """
+        cdef:
+            rados_t _rados = convert_rados(rados)
+            char *_site_name = NULL
+            size_t _max_size = 512
+        try:
+            while True:
+                _site_name = <char *>realloc_chk(_site_name, _max_size)
+                with nogil:
+                    ret = rbd_mirror_site_name_get(_rados, _site_name,
+                                                   &_max_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error getting site name')
+            return decode_cstr(_site_name)
+        finally:
+            free(_site_name)
+
+    def mirror_site_name_set(self, rados, site_name):
+        """
+        Set the local cluster's friendly site name
+
+        :param rados: cluster connection
+        :type rados: :class: rados.Rados
+        :param site_name: friendly site name
+        :type str:
+        """
+        site_name = cstr(site_name, 'site_name')
+        cdef:
+            rados_t _rados = convert_rados(rados)
+            char *_site_name = site_name
+        with nogil:
+            ret = rbd_mirror_site_name_set(_rados, _site_name)
+        if ret != 0:
+            raise make_ex(ret, 'error setting mirror site name')
+
     def mirror_mode_get(self, ioctx):
         """
         Get pool mirror mode.
@@ -1710,6 +1784,55 @@ class RBD(object):
             ret = rbd_mirror_mode_set(_ioctx, _mirror_mode)
         if ret != 0:
             raise make_ex(ret, 'error setting mirror mode')
+
+    def mirror_peer_bootstrap_create(self, ioctx):
+        """
+        Creates a new RBD mirroring bootstrap token for an
+        external cluster.
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: str - bootstrap token
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_token = NULL
+            size_t _max_size = 512
+        try:
+            while True:
+                _token = <char *>realloc_chk(_token, _max_size)
+                with nogil:
+                    ret = rbd_mirror_peer_bootstrap_create(_ioctx, _token,
+                                                           &_max_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error creating bootstrap token')
+            return decode_cstr(_token)
+        finally:
+            free(_token)
+
+    def mirror_peer_bootstrap_import(self, ioctx, direction, token):
+        """
+        Import a bootstrap token from an external cluster to
+        auto-configure the mirror peer.
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param direction: mirror peer direction
+        :type direction: int
+        :param token: bootstrap token
+        :type token: str
+        """
+        token = cstr(token, 'token')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            rbd_mirror_peer_direction_t _direction = direction
+            char *_token = token
+        with nogil:
+            ret = rbd_mirror_peer_bootstrap_import(_ioctx, _direction, _token)
+        if ret != 0:
+            raise make_ex(ret, 'error importing bootstrap token')
 
     def mirror_peer_add(self, ioctx, cluster_name, client_name):
         """
@@ -3434,7 +3557,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_snap_remove2(self.image, _name, _flags, prog_cb, NULL)
         if ret != 0:
-            raise make_ex(ret, 'error removing snapshot %s from %s with flags %llx' % (name, self.name, flags))
+            raise make_ex(ret, 'error removing snapshot %s from %s with flags %lx' % (name, self.name, flags))
 
     def remove_snap_by_id(self, snap_id):
         """
@@ -4459,9 +4582,86 @@ written." % (self.name, ret, length))
         """
         List image-level config overrides.
 
-        :returns: :class:`ConfigPoolIterator`
+        :returns: :class:`ConfigImageIterator`
         """
         return ConfigImageIterator(self)
+
+
+    def config_set(self, key, value):
+        """
+        Set an image-level configuration override.
+
+        :param key: key
+        :type key: str
+        :param value: value
+        :type value: str
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        value = cstr(value, 'value')
+        cdef:
+            char *_key = conf_key
+            char *_value = value
+        with nogil:
+            ret = rbd_metadata_set(self.image, _key, _value)
+
+        if ret != 0:
+            raise make_ex(ret, 'error setting config %s for image %s' %
+                          (key, self.name))
+
+
+    def config_get(self, key):
+        """
+        Get an image-level configuration override.
+
+        :param key: key
+        :type key: str
+        :returns: str - value
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        cdef:
+            char *_key = conf_key
+            size_t size = 4096
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rbd_metadata_get(self.image, _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no config %s for image %s' % (key, self.name))
+            if ret != 0:
+                raise make_ex(ret, 'error getting config %s for image %s' %
+                              (key, self.name))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
+
+    def config_remove(self, key):
+        """
+        Remove an image-level configuration override.
+
+        :param key: key
+        :type key: str
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        cdef:
+            char *_key = conf_key
+        with nogil:
+            ret = rbd_metadata_remove(self.image, _key)
+
+        if ret == -errno.ENOENT:
+            raise KeyError('no config %s for image %s' % (key, self.name))
+        if ret != 0:
+            raise make_ex(ret, 'error removing config %s for image %s' %
+                          (key, self.name))
+
 
     def snap_get_namespace_type(self, snap_id):
         """

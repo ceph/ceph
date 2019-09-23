@@ -274,7 +274,9 @@ def is_lv(dev, lvs=None):
     splitname = dmsetup_splitname(dev)
     # Allowing to optionally pass `lvs` can help reduce repetitive checks for
     # multiple devices at once.
-    lvs = lvs if lvs is not None else Volumes()
+    if lvs is None or len(lvs) == 0:
+        lvs = Volumes()
+
     if splitname.get('LV_NAME'):
         lvs.filter(lv_name=splitname['LV_NAME'], vg_name=splitname['VG_NAME'])
         return len(lvs) > 0
@@ -364,7 +366,7 @@ def get_lv_from_argument(argument):
     return get_lv(lv_name=lv_name, vg_name=vg_name)
 
 
-def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
+def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None, lvs=None):
     """
     Return a matching lv for the current system, requiring ``lv_name``,
     ``vg_name``, ``lv_path`` or ``tags``. Raises an error if more than one lv
@@ -376,7 +378,8 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None)
     """
     if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
         return None
-    lvs = Volumes()
+    if lvs is None:
+        lvs = Volumes()
     return lvs.get(
         lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_uuid=lv_uuid,
         lv_tags=lv_tags

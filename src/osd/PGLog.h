@@ -898,8 +898,7 @@ protected:
     const hobject_t &hoid,               ///< [in] object we are merging
     const mempool::osd_pglog::list<pg_log_entry_t> &orig_entries, ///< [in] entries for hoid to merge
     const pg_info_t &info,              ///< [in] info for merging entries
-    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
-    eversion_t original_can_rollback_to,     ///< [in] original rollback boundary
+    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input InedexedLog
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
@@ -990,6 +989,7 @@ protected:
 	ceph_assert(!missing.is_missing(hoid));
       }
       missing.revise_have(hoid, eversion_t());
+      missing.mark_fully_dirty(hoid);
       if (rollbacker) {
 	if (!object_not_in_store) {
 	  rollbacker->remove(hoid);
@@ -1063,17 +1063,11 @@ protected:
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
                        << " olog_can_rollback_to: "
                        << olog_can_rollback_to << dendl;
-    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-                       << " original_crt: "
-                       << original_can_rollback_to << dendl;
     /// Distinguish between 4) and 5)
     for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	 i != entries.rend();
 	 ++i) {
-      /// Use original_can_rollback_to instead of olog_can_rollback_to to check
-      //  if we can rollback or not. This is to ensure that we don't try to rollback
-      //  to an object that has been deleted and doesn't exist.
-      if (!i->can_rollback() || i->version <= original_can_rollback_to) {
+      if (!i->can_rollback() || i->version <= olog_can_rollback_to) {
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot rollback "
 			   << *i << dendl;
 	can_rollback = false;
@@ -1086,7 +1080,7 @@ protected:
       for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	   i != entries.rend();
 	   ++i) {
-	ceph_assert(i->can_rollback() && i->version > original_can_rollback_to);
+	ceph_assert(i->can_rollback() && i->version > olog_can_rollback_to);
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " rolling back " << *i << dendl;
 	if (rollbacker)
@@ -1122,8 +1116,7 @@ protected:
     const IndexedLog &log,               ///< [in] log to merge against
     mempool::osd_pglog::list<pg_log_entry_t> &entries,       ///< [in] entries to merge
     const pg_info_t &oinfo,              ///< [in] info for merging entries
-    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
-    eversion_t original_can_rollback_to, ///< [in] original rollback boundary
+    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input IndexedLog
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
@@ -1139,7 +1132,6 @@ protected:
 	i->second,
 	oinfo,
 	olog_can_rollback_to,
-        original_can_rollback_to,
 	omissing,
 	rollbacker,
 	dpp);
@@ -1162,7 +1154,6 @@ protected:
       oe.soid,
       entries,
       info,
-      log.get_can_rollback_to(),
       log.get_can_rollback_to(),
       missing,
       rollbacker,
@@ -1399,10 +1390,11 @@ public:
 	  pg_missing_item item;
 	  decode(oid, bp);
 	  decode(item, bp);
+          ldpp_dout(dpp, 20) << "read_log_and_missing " << item << dendl;
 	  if (item.is_delete()) {
 	    ceph_assert(missing.may_include_deletes);
 	  }
-	  missing.add(oid, item.need, item.have, item.is_delete());
+	  missing.add(oid, std::move(item));
 	} else if (p->key().substr(0, 4) == string("dup_")) {
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
@@ -1451,8 +1443,6 @@ public:
 	    continue;
 	  if (i->is_error())
 	    continue;
-    if (!i->is_delete())
-        missing.merge(*i);
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
 
@@ -1481,8 +1471,7 @@ public:
 		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
 		checked.insert(i->soid);
 	      } else {
-		missing.add(i->soid, i->version, oi.version, i->is_delete(), false);
-		missing.merge(*i);
+		missing.add(i->soid, i->version, oi.version, i->is_delete());
 	      }
 	    }
 	  } else {
@@ -1500,8 +1489,7 @@ public:
 	      }
 	      checked.insert(i->soid);
 	    } else {
-	      missing.add(i->soid, i->version, eversion_t(), i->is_delete(), false);
-	      missing.merge(*i);
+	      missing.add(i->soid, i->version, eversion_t(), i->is_delete());
 	    }
 	  }
 	}
@@ -1650,7 +1638,7 @@ public:
 	if (item.is_delete()) {
 	  ceph_assert(missing.may_include_deletes);
 	}
-	missing.add(oid, item.need, item.have, item.is_delete());
+	missing.add(oid, std::move(item));
       } else if (p.first.substr(0, 4) == string("dup_")) {
 	pg_log_dup_t dup;
 	decode(dup, bp);
@@ -1713,7 +1701,7 @@ public:
     const DoutPrefixProvider *dpp = nullptr
     ) {
     ldpp_dout(dpp, 20) << "read_log_and_missing coll "
-		       << ch->cid
+		       << ch->get_cid()
 		       << " " << pgmeta_oid << dendl;
     return (new FuturizedStoreLogReader<missing_type>{
       store, ch, info, log, missing, pgmeta_oid, dpp})->start();

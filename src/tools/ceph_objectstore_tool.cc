@@ -539,7 +539,7 @@ void wait_until_done(ObjectStore::Transaction* txn, Func&& func)
   bool finished = false;
   std::condition_variable cond;
   std::mutex m;
-  txn->register_on_complete(make_lambda_context([&]() {
+  txn->register_on_complete(make_lambda_context([&](int) {
     std::unique_lock lock{m};
     finished = true;
     cond.notify_one();
@@ -2083,7 +2083,9 @@ int do_remove_object(ObjectStore *store, coll_t coll,
     r = get_snapset(store, coll, ghobj, ss, false);
     if (r < 0) {
       cerr << "Can't get snapset error " << cpp_strerror(r) << std::endl;
-      return r;
+      // If --force and bad snapset let them remove the head
+      if (!(force && !all))
+        return r;
     }
 //    cout << "snapset " << ss << std::endl;
     if (!ss.clone_snaps.empty() && !all) {

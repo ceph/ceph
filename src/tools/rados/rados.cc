@@ -158,8 +158,8 @@ void usage(ostream& out)
 "\n"
 "SCRUB AND REPAIR:\n"
 "   list-inconsistent-pg <pool>      list inconsistent PGs in given pool\n"
-"   list-inconsistent-obj <pgid>     list inconsistent objects in given pg\n"
-"   list-inconsistent-snapset <pgid> list inconsistent snapsets in the given pg\n"
+"   list-inconsistent-obj <pgid>     list inconsistent objects in given PG\n"
+"   list-inconsistent-snapset <pgid> list inconsistent snapsets in the given PG\n"
 "\n"
 "CACHE POOLS: (for testing/development only)\n"
 "   cache-flush <obj-name>           flush cache pool object (blocking)\n"
@@ -176,6 +176,8 @@ void usage(ostream& out)
 "        select given pool by name\n"
 "   --target-pool=pool\n"
 "        select target pool by name\n"
+"   --pgid PG id\n"
+"        select given PG id\n"
 "   -f [--format plain|json|json-pretty]\n"
 "   --format=[--format plain|json|json-pretty]\n"
 "   -b op_size\n"
@@ -497,8 +499,8 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
 static int do_copy(IoCtx& io_ctx, const char *objname,
 		   IoCtx& target_ctx, const char *target_obj)
 {
-  __le32 src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-  __le32 dest_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
+  uint32_t src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
+  uint32_t dest_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   ObjectWriteOperation op;
   op.copy_from(objname, io_ctx, 0, src_fadvise_flags);
   op.set_op_flags2(dest_fadvise_flags);
@@ -764,10 +766,10 @@ public:
     return total;
   }
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("LoadGen");
+  ceph::condition_variable cond;
 
-  explicit LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
+  explicit LoadGen(Rados *_rados) : rados(_rados), going_down(false) {
     read_percent = 80;
     min_obj_len = 1024;
     max_obj_len = 5ull * 1024ull * 1024ull * 1024ull;
@@ -788,7 +790,7 @@ public:
   void cleanup();
 
   void io_cb(completion_t c, LoadGenOp *op) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
 
     total_completed += op->len;
 
@@ -807,7 +809,7 @@ public:
 
     delete op;
 
-    cond.Signal();
+    cond.notify_all();
   }
 };
 
@@ -936,14 +938,14 @@ void LoadGen::gen_op(LoadGenOp *op)
 
 uint64_t LoadGen::gen_next_op()
 {
-  lock.Lock();
+  lock.lock();
 
   LoadGenOp *op = new LoadGenOp(this);
   gen_op(op);
   op->id = max_op++;
   pending_ops[op->id] = op;
 
-  lock.Unlock();
+  lock.unlock();
 
   run_op(op);
 
@@ -959,20 +961,20 @@ int LoadGen::run()
   uint32_t total_sec = 0;
 
   while (1) {
-    lock.Lock();
-    utime_t one_second(1, 0);
-    cond.WaitInterval(lock, one_second);
-    lock.Unlock();
+    {
+      std::unique_lock l{lock};
+      cond.wait_for(l, 1s);
+    }
     utime_t now = ceph_clock_now();
 
     if (now > end_time)
       break;
 
     uint64_t expected = total_expected();
-    lock.Lock();
+    lock.lock();
     uint64_t sent = total_sent;
     uint64_t completed = total_completed;
-    lock.Unlock();
+    lock.unlock();
 
     if (now - stamp_time >= utime_t(1, 0)) {
       double rate = (double)cur_completed_rate() / (1024 * 1024);
@@ -993,14 +995,14 @@ int LoadGen::run()
 
   // get a reference to all pending requests
   vector<librados::AioCompletion *> completions;
-  lock.Lock();
+  lock.lock();
   going_down = true;
   map<int, LoadGenOp *>::iterator iter;
   for (iter = pending_ops.begin(); iter != pending_ops.end(); ++iter) {
     LoadGenOp *op = iter->second;
     completions.push_back(op->completion);
   }
-  lock.Unlock();
+  lock.unlock();
 
   cout << "waiting for all operations to complete" << std::endl;
 
@@ -1622,6 +1624,8 @@ static void dump_obj_errors(const obj_err_t &err, Formatter &f)
     f.dump_string("error", "snapset_inconsistency");
   if (err.has_hinfo_inconsistency())
     f.dump_string("error", "hinfo_inconsistency");
+  if (err.has_size_too_large())
+    f.dump_string("error", "size_too_large");
   f.close_section();
 }
 
@@ -2107,13 +2111,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     with_reference = true;
   }
 
-  i = opts.find("pgid");
-  boost::optional<pg_t> pgid(i != opts.end(), pg_t());
-  if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
-    cerr << "invalid pgid" << std::endl;
-    return 1;
-  }
-
   // open rados
   ret = rados.init_with_context(g_ceph_context);
   if (ret < 0) {
@@ -2140,6 +2137,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
+  }
+
+  i = opts.find("pgid");
+  boost::optional<pg_t> pgid(i != opts.end(), pg_t());
+  if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
+    cerr << "invalid pgid" << std::endl;
+    return 1;
   }
 
   // open io context.

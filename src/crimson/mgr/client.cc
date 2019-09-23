@@ -117,7 +117,7 @@ seastar::future<> Client::handle_mgr_conf(ceph::net::Connection* conn,
 
 void Client::report()
 {
-  seastar::with_gate(gate, [this] {
+  (void) seastar::with_gate(gate, [this] {
     auto pg_stats = with_stats.get_stats();
     return conn->send(std::move(pg_stats)).finally([this] {
       if (report_period.count()) {

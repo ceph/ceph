@@ -116,7 +116,7 @@ bool PGBackend::handle_message(OpRequestRef op)
 
 void PGBackend::handle_recovery_delete(OpRequestRef op)
 {
-  const MOSDPGRecoveryDelete *m = static_cast<const MOSDPGRecoveryDelete *>(op->get_req());
+  auto m = op->get_req<MOSDPGRecoveryDelete>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE);
   dout(20) << __func__ << " " << op << dendl;
 
@@ -136,7 +136,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
   reply->objects = m->objects;
   ConnectionRef conn = m->get_connection();
 
-  gather.set_finisher(new FunctionContext(
+  gather.set_finisher(new LambdaContext(
     [=](int r) {
       if (r != -EAGAIN) {
 	get_parent()->send_message_osd_cluster(reply, conn.get());
@@ -149,7 +149,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
 
 void PGBackend::handle_recovery_delete_reply(OpRequestRef op)
 {
-  const MOSDPGRecoveryDeleteReply *m = static_cast<const MOSDPGRecoveryDeleteReply *>(op->get_req());
+  auto m = op->get_req<MOSDPGRecoveryDeleteReply>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE_REPLY);
   dout(20) << __func__ << " " << op << dendl;
 
@@ -755,6 +755,18 @@ bool PGBackend::be_compare_scrub_objects(
 		<< " != size " << auth.size
 		<< " from shard " << auth_shard;
     obj_result.set_size_mismatch();
+  }
+  // If the replica is too large and we didn't already count it for this object
+  //
+  if (candidate.size > cct->_conf->osd_max_object_size
+      && !obj_result.has_size_too_large()) {
+    if (error != CLEAN)
+      errorstream << ", ";
+    error = FOUND_ERROR;
+    errorstream << "size " << candidate.size
+		<< " > " << cct->_conf->osd_max_object_size
+		<< " is too large";
+    obj_result.set_size_too_large();
   }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();

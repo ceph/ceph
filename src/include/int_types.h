@@ -41,15 +41,6 @@ typedef int64_t __s64;
 #endif
 #endif /* LINUX_TYPES_H */
 
-#define __bitwise__
-
-typedef __u16 __bitwise__ __le16;
-typedef __u16 __bitwise__ __be16;
-typedef __u32 __bitwise__ __le32;
-typedef __u32 __bitwise__ __be32;
-typedef __u64 __bitwise__ __le64;
-typedef __u64 __bitwise__ __be64;
-
 #ifndef BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
 #define BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
 #endif

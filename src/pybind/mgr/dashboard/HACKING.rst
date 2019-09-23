@@ -129,15 +129,15 @@ Run ``npm run test`` to execute the unit tests via `Jest
 <https://facebook.github.io/jest/>`_.
 
 If you get errors on all tests, it could be because `Jest
-<https://facebook.github.io/jest/>`_ or something else was updated.
+<https://facebook.github.io/jest/>`__ or something else was updated.
 There are a few ways how you can try to resolve this:
 
 - Remove all modules with ``rm -rf dist node_modules`` and run ``npm install``
   again in order to reinstall them
 - Clear the cache of jest by running ``npx jest --clearCache``
 
-Running End-to-End Tests
-~~~~~~~~~~~~~~~~~~~~~~~~
+Running End-to-End (E2E) Tests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We use `Protractor <http://www.protractortest.org/>`__ to run our frontend E2E
 tests.
@@ -174,7 +174,7 @@ When developing E2E tests, it is not necessary to compile the frontend code
 on each change of the test files. When your development environment is
 running (``npm start``), you can point Protractor to just use this
 environment. To attach `Protractor <http://www.protractortest.org/>`__ to
-this process, run ``npm run e2e:dev``.
+this process, run ``npm run e2e:ci``.
 
 Note::
 
@@ -184,20 +184,36 @@ Note::
 Writing End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+To be used methods
+..................
+
+For clicking checkboxes, the ``clickCheckbox`` method is supposed to be used.
+Due an adaption of the ``<input type="checkbox">`` tag, the original checkbox
+is hidden and unclickable. Instead, a fancier replacement is shown. When the
+developer tries to use `ElementFinder::click()` on such a checkbox, it will
+raise an error. The ``clickCheckbox`` method prevents that by clicking the
+label of the checkbox, like a regular user would do.
+
 The PagerHelper class
-^^^^^^^^^^^^^^^^^^^^^
+.....................
 
 The ``PageHelper`` class is supposed to be used for general purpose code that
-can be used on various pages or suites. Examples are
-``getTableCellByContent()``, ``getTabsCount()`` or ``checkCheckbox()``. Every
-method that could be useful on several pages belongs there. Also, methods
+can be used on various pages or suites.
+
+Examples are
+
+- ``getTableCellByContent()`` - returns a table cell by its content
+- ``getTabsCount()`` - returns the amount of tabs
+- ``clickCheckbox()`` - clicks a checkbox
+
+Every method that could be useful on several pages belongs there. Also, methods
 which enhance the derived classes of the PageHelper belong there. A good
 example for such a case is the ``restrictTo()`` decorator. It ensures that a
 method implemented in a subclass of PageHelper is called on the correct page.
 It will also show a developer-friendly warning if this is not the case.
 
 Subclasses of PageHelper
-^^^^^^^^^^^^^^^^^^^^^^^^
+........................
 
 Helper Methods
 """"""""""""""
@@ -254,12 +270,67 @@ PageHelpers available to all suites.
   });
 
 Code Style
-^^^^^^^^^^
+..........
 
 Please refer to the official `Protractor style-guide
 <https://www.protractortest.org/#/style-guide>`__ for a better insight on how
 to write and structure tests as well as what exactly should be covered by
 end-to-end tests.
+
+``describe()`` vs ``it()``
+""""""""""""""""""""""""""
+
+Both ``describe()`` and ``it()`` are function blocks, meaning that any executable
+code necessary for the test can be contained in either block. However, Typescript
+scoping rules still apply, therefore any variables declared in a ``describe`` are available
+to the ``it()`` blocks inside of it.
+
+``describe()`` typically are containers for tests, allowing you to break tests into
+multiple parts. Likewise, any setup that must be made before your tests are run can be
+initialized within the ``describe()`` block. Here is an example:
+
+.. code:: TypeScript
+
+  describe('create, edit & delete image test', () => {
+    const poolName = 'e2e_images_pool';
+
+    beforeAll(() => {
+      pools.navigateTo('create'); // Need pool for image testing
+      pools.create(poolName, 8, 'rbd').then(() => {
+        pools.navigateTo();
+        pools.exist(poolName, true);
+      });
+      images.navigateTo();
+    });
+
+As shown, we can initiate the variable ``poolName`` as well as run commands
+before our test suite begins (creating a pool). ``describe()`` block messages should
+include what the test suite is.
+
+``it()`` blocks typically are parts of an overarching test. They contain the functionality of
+the test suite, each performing individual roles. Here is an example:
+
+.. code:: TypeScript
+
+ describe('create, edit & delete image test', () => {
+  it('should create image', () => {
+    images.createImage(imageName, poolName, '1');
+    expect(images.getTableCell(imageName).isPresent()).toBe(true);
+  });
+  it('should edit image', () => {
+    images.editImage(imageName, poolName, newImageName, '2');
+    expect(images.getTableCell(newImageName).isPresent()).toBe(true);
+  });
+  //...
+ });
+
+As shown from the previous example, our ``describe()`` test suite is to create, edit
+and delete an image. Therefore, each ``it()`` completes one of these steps, one for creating,
+one for editing, and so on. Likewise, every ``it()`` blocks message should be in lowercase
+and written so long as "it" can be the prefix of the message. For example, ``it('edits the test image' () => ...)``
+vs. ``it('image edit test' () => ...)``. As shown, the first example makes grammatical sense with ``it()`` as the
+prefix whereas the second message does not.``it()`` should describe what the individual test is doing and
+what it expects to happen.
 
 Further Help
 ~~~~~~~~~~~~
@@ -314,7 +385,7 @@ This components are declared on the components module:
 `src/pybind/mgr/dashboard/frontend/src/app/shared/components`.
 
 Helper
-......
+~~~~~~
 
 This component should be used to provide additional information to the user.
 
@@ -402,7 +473,7 @@ How to extract messages from source code?
 To extract the I18N messages from the templates and the TypeScript files just
 run the following command in ``src/pybind/mgr/dashboard/frontend``::
 
-  $ npm run i18n
+  $ npm run i18n:extract
 
 This will extract all marked messages from the HTML templates first and then
 add all marked strings from the TypeScript files to the translation template.
@@ -449,22 +520,35 @@ Updating translated messages
 Any time there are new messages translated and reviewed in a specific language
 we should update the translation file upstream.
 
-To do that, we need to download the language xlf file from transifex and replace
-the current one in the repository. Since Angular doesn't support missing
-translations, we need to do an extra step and fill all the untranslated strings
-with the source string.
+To do that, check the settings in the i18n config file
+``src/pybind/mgr/dashboard/frontend/i18n.config.json``:: and make sure that the
+organization is *ceph*, the project is *ceph-dashboard* and the resource is
+the one you want to pull from and push to e.g. *Master:master*. To find a list
+of avaiable resources visit `<https://www.transifex.com/ceph/ceph-dashboard/content/>`_.
 
-Each language file should be placed in ``src/locale/messages.<locale-id>.xlf``.
-For example, the path for german would be ``src/locale/messages.de-DE.xlf``.
-``<locale-id>`` should match the id previouisly inserted in
-``supported-languages.enum.ts``.
+After you checked the config go to the directory ``src/pybind/mgr/dashboard/frontend`` and run::
+
+  $ npm run i18n
+
+This command will extract all marked messages from the HTML templates and
+TypeScript files. Once the source file has been created it will push it to
+transifex and pull the latest translations. It will also fill all the
+untranslated strings with the source string.
+The tool will ask you for an api token, unless you added it by running:
+
+  $ npm run i18n:token
+
+To create a transifex api token visit `<https://www.transifex.com/user/settings/api/>`_.
+
+After the command ran successfully, build the UI and check if everything is
+working as expected. You also might want to run the frontend tests.
 
 Suggestions
 ~~~~~~~~~~~
 
 Strings need to start and end in the same line as the element:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- avoid -->
   <span i18n>
@@ -487,7 +571,7 @@ Strings need to start and end in the same line as the element:
 
 Isolated interpolations should not be translated:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- avoid -->
   <span i18n>{{ foo }}</span>
@@ -497,14 +581,14 @@ Isolated interpolations should not be translated:
 
 Interpolations used in a sentence should be kept in the translation:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- recommended -->
   <span i18n>There are {{ x }} OSDs.</span>
 
 Remove elements that are outside the context of the translation:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- avoid -->
   <label i18n>
@@ -520,7 +604,7 @@ Remove elements that are outside the context of the translation:
 
 Keep elements that affect the sentence:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- recommended -->
   <span i18n>Profile <b>foo</b> will be removed.</span>
@@ -562,25 +646,28 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``run-tox.sh`` in the dashboard directory (where
+To run the tests, run ``src/script/run_tox.sh`` in the dashboard directory (where
 ``tox.ini`` is located)::
 
   ## Run Python 2+3 tests+lint commands:
-  $ ./run-tox.sh
+  $ ../../../script/run_tox.sh --tox-env py27,py3,lint,check
 
   ## Run Python 3 tests+lint commands:
-  $ WITH_PYTHON2=OFF ./run-tox.sh
+  $ ../../../script/run_tox.sh --tox-env py3,lint,check
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
-  $ WITH_PYTHON2=OFF ./run-tox.sh pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+  $ WITH_PYTHON2=OFF ../../../script/run_tox.sh --tox-env py3 "" tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
 
-You can also run tox instead of ``run-tox.sh``::
+You can also run tox instead of ``run_tox.sh``::
 
   ## Run Python 3 tests command:
-  $ CEPH_BUILD_DIR=.tox tox -e py3-cov
+  $ tox -e py3
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
-  $ CEPH_BUILD_DIR=.tox tox -e py3-run pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+  $ tox -e py3 tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+
+Python files can be automatically fixed and formatted according to PEP8
+standards by using ``run_tox.sh --tox-env fix`` or ``tox -e fix``.
 
 We also collect coverage information from the backend code when you run tests. You can check the
 coverage information provided by the tox output, or by running the following
@@ -766,17 +853,17 @@ endpoint:
     # URL: /ping/{key}?opt1=...&opt2=...
     @Endpoint(path="/", query_params=['opt1'])
     def index(self, key, opt1, opt2=None):
-      # ...
+      """..."""
 
     # URL: /ping/{key}?opt1=...&opt2=...
     @Endpoint(query_params=['opt1'])
     def __call__(self, key, opt1, opt2=None):
-      # ...
+      """..."""
 
     # URL: /ping/post/{key1}/{key2}
     @Endpoint('POST', path_params=['key1', 'key2'])
     def post(self, key1, key2, data1, data2=None):
-      # ...
+      """..."""
 
 
 In the above example we see how the ``path`` option can be used to override the
@@ -813,7 +900,7 @@ Consider the following example:
     # URL: /ping/{node}/stats/{date}/latency?unit=...
     @Endpoint(path="/{date}/latency")
     def latency(self, node, date, unit="ms"):
-      # ...
+      """ ..."""
 
 In this example we explicitly declare a path parameter ``{node}`` in the
 controller URL path, and a path parameter ``{date}`` in the ``latency``
@@ -851,9 +938,10 @@ Example:
 
     @Proxy()
     def proxy(self, path, **params):
-      # if requested URL is "/foo/proxy/access/service?opt=1"
-      # then path is "access/service" and params is {'opt': '1'}
-      # ...
+      """
+      if requested URL is "/foo/proxy/access/service?opt=1"
+      then path is "access/service" and params is {'opt': '1'}
+      """
 
 
 How does the RESTController work?
@@ -966,6 +1054,37 @@ Example:
     def list(self):
       return {"msg": "Hello"}
 
+How to create a dedicated UI endpoint which uses the 'public' API?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sometimes we want to combine multiple calls into one single call
+to save bandwidth or for other performance reasons.
+In order to achieve that, we first have to create an ``@UiApiController`` which
+is used for endpoints consumed by the UI but that are not part of the
+'public' API. Let the ui class inherit from the REST controller class.
+Now you can use all methods from the api controller.
+
+Example:
+
+.. code-block:: python
+
+  import cherrypy
+  from . import UiApiController, ApiController, RESTController
+
+
+  @ApiController('ping', secure=False)  # /api/ping
+  class Ping(RESTController):
+    def list(self):
+      return self._list()
+
+    def _list(self):  # To not get in conflict with the JSON wrapper
+      return [1,2,3]
+
+
+  @UiApiController('ping', secure=False)  # /ui-api/ping
+  class PingUi(Ping):
+    def list(self):
+      return self._list() + [4, 5, 6]
 
 How to access the manager module instance from a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1574,6 +1693,7 @@ type and not as a string. Allowed values are ``str``, ``int``, ``bool``, ``float
 .. code-block:: python
 
  @EndpointDoc(parameters={'my_string': (str, 'Description of my_string')})
+ def method(my_string): pass
 
 For body parameters, more complex cases are possible. If the parameter is a
 dictionary, the type should be replaced with a ``dict`` containing its nested
@@ -1592,6 +1712,7 @@ for nested parameters).
       'item2': (str, 'Description of item2', True),  # item2 is optional
       'item3': (str, 'Description of item3', True, 'foo'),  # item3 is optional with 'foo' as default value
   }, 'Description of my_dictionary')})
+  def method(my_dictionary): pass
 
 If the parameter is a ``list`` of primitive types, the type should be
 surrounded with square brackets.
@@ -1599,6 +1720,7 @@ surrounded with square brackets.
 .. code-block:: python
 
   @EndpointDoc(parameters={'my_list': ([int], 'Description of my_list')})
+  def method(my_list): pass
 
 If the parameter is a ``list`` with nested parameters, the nested parameters
 should be placed in a dictionary and surrounded with square brackets.
@@ -1610,6 +1732,7 @@ should be placed in a dictionary and surrounded with square brackets.
       'list_item': (str, 'Description of list_item'),
       'list_item2': (str, 'Description of list_item2')
   }], 'Description of my_list')})
+  def method(my_list): pass
 
 
 ``responses``: A dict used for describing responses. Rules for describing
@@ -1620,7 +1743,8 @@ example below:
 .. code-block:: python
 
   @EndpointDoc(responses={
-    '400':{'my_response': (str, 'Description of my_response')}
+    '400':{'my_response': (str, 'Description of my_response')}})
+  def method(): pass
 
 
 Error Handling in Python
@@ -1730,7 +1854,7 @@ The available interfaces are the following:
 - ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
 - ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
 - ``HasOptions``: requires overriding ``get_options()`` hook by returning a list of ``Options()``. The options returned here are added to the ``MODULE_OPTIONS``.
-- ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand`. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
+- ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand``. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
 - ``HasControllers``: requires overriding ``get_controllers()`` hook by defining and returning the controllers as usual.
 - ``FilterRequest.BeforeHandler``: requires overriding ``filter_request_before_handler()`` hook. This method receives a ``cherrypy.request`` object for processing. A usual implementation of this method will allow some requests to pass or will raise a ``cherrypy.HTTPError` based on the ``request`` metadata and other conditions.
 

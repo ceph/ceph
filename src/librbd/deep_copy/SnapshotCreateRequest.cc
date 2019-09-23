@@ -76,11 +76,11 @@ void SnapshotCreateRequest<I>::send_create_snap() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_create_snap(r);
       finish_op_ctx->complete(0);
     });
-  RWLock::RLocker owner_locker(m_dst_image_ctx->owner_lock);
+  std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
   m_dst_image_ctx->operations->execute_snap_create(m_snap_namespace,
                                                    m_snap_name.c_str(),
                                                    ctx,
@@ -108,17 +108,17 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
     return;
   }
 
-  m_dst_image_ctx->image_lock.get_read();
+  m_dst_image_ctx->image_lock.lock_shared();
   auto snap_it = m_dst_image_ctx->snap_ids.find(
     {cls::rbd::UserSnapshotNamespace(), m_snap_name});
   if (snap_it == m_dst_image_ctx->snap_ids.end()) {
     lderr(m_cct) << "failed to locate snap: " << m_snap_name << dendl;
-    m_dst_image_ctx->image_lock.put_read();
+    m_dst_image_ctx->image_lock.unlock_shared();
     finish(-ENOENT);
     return;
   }
   librados::snap_t local_snap_id = snap_it->second;
-  m_dst_image_ctx->image_lock.put_read();
+  m_dst_image_ctx->image_lock.unlock_shared();
 
   std::string object_map_oid(librbd::ObjectMap<>::object_map_name(
     m_dst_image_ctx->id, local_snap_id));
@@ -140,7 +140,7 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_create_object_map(r);
       finish_op_ctx->complete(0);
     });
@@ -166,9 +166,9 @@ void SnapshotCreateRequest<I>::handle_create_object_map(int r) {
 
 template <typename I>
 Context *SnapshotCreateRequest<I>::start_lock_op(int* r) {
-  RWLock::RLocker owner_locker(m_dst_image_ctx->owner_lock);
+  std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
-    return new FunctionContext([](int r) {});
+    return new LambdaContext([](int r) {});
   }
   return m_dst_image_ctx->exclusive_lock->start_op(r);
 }

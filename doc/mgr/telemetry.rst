@@ -21,6 +21,8 @@ the per-channel setting has no effect.)
     - number of monitors, managers, OSDs, MDSs, radosgws, or other daemons
     - software version currently being used
     - number and types of RADOS pools and CephFS file systems
+    - names of configuration options that have been changed from their
+      default (but *not* their values)
 
 * **crash** (default: on): Information about daemon crashes, including
 
@@ -44,15 +46,6 @@ parameters which help the project to gain a better understanding of
 the way Ceph is used.
 
 Data is sent over HTTPS to *telemetry.ceph.com*.
-
-Enabling the module
--------------------
-
-The module must first be enabled.  Note that even if the module is
-enabled, telemetry is still "off" by default, so simply enabling the
-module will *NOT* result in any data being shared.::
-
-  ceph mgr module enable telemetry
 
 Sample report
 -------------

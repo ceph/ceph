@@ -5,8 +5,6 @@
 
 #include "osd/PeeringState.h"
 
-#include "messages/MOSDPGInfo.h"
-#include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGCreate2.h"
 
@@ -28,6 +26,11 @@ using namespace ceph::osd;
 struct compound_state {
   seastar::promise<BufferedRecoveryMessages> promise;
   BufferedRecoveryMessages ctx;
+  compound_state()
+    // assuming crimson-osd won't need to be compatible with pre-octopus
+    // releases
+    : ctx{ceph_release_t::octopus}
+  {}
   ~compound_state() {
     promise.set_value(std::move(ctx));
   }
@@ -107,126 +110,6 @@ std::vector<OperationRef> handle_pg_create(
   return ret;
 }
 
-std::vector<OperationRef> handle_pg_notify(
-  OSD &osd,
-  ceph::net::ConnectionRef conn,
-  compound_state_ref state,
-  Ref<MOSDPGNotify> m)
-{
-  std::vector<OperationRef> ret;
-  ret.reserve(m->get_pg_list().size());
-  const int from = m->get_source().num();
-  for (auto &p : m->get_pg_list()) {
-    auto& [pg_notify, past_intervals] = p;
-    spg_t pgid{pg_notify.info.pgid.pgid, pg_notify.to};
-    MNotifyRec notify{pgid,
-		      pg_shard_t{from, pg_notify.from},
-		      pg_notify,
-		      0, // the features is not used
-		      past_intervals};
-    logger().debug("handle_pg_notify on {} from {}", pgid.pgid, from);
-    auto create_info = new PGCreateInfo{
-      pgid,
-      pg_notify.query_epoch,
-      pg_notify.info.history,
-      past_intervals,
-      false};
-    auto op = osd.get_shard_services().start_operation<PeeringSubEvent>(
-      state,
-      osd,
-      conn,
-      osd.get_shard_services(),
-      pg_shard_t(from, pg_notify.from),
-      pgid,
-      pg_notify.epoch_sent,
-      pg_notify.query_epoch,
-      notify,
-      true, // requires_pg
-      create_info).first;
-    ret.push_back(op);
-  }
-  return ret;
-}
-
-std::vector<OperationRef> handle_pg_info(
-  OSD &osd,
-  ceph::net::ConnectionRef conn,
-  compound_state_ref state,
-  Ref<MOSDPGInfo> m)
-{
-  std::vector<OperationRef> ret;
-  ret.reserve(m->pg_list.size());
-  const int from = m->get_source().num();
-  for (auto &p : m->pg_list) {
-    auto& pg_notify = p.first;
-    spg_t pgid{pg_notify.info.pgid.pgid, pg_notify.to};
-    logger().debug("handle_pg_info on {} from {}", pgid.pgid, from);
-    MInfoRec info{pg_shard_t{from, pg_notify.from},
-		  pg_notify.info,
-		  pg_notify.epoch_sent};
-    auto op = osd.get_shard_services().start_operation<PeeringSubEvent>(
-	state,
-	osd,
-	conn,
-	osd.get_shard_services(),
-	pg_shard_t(from, pg_notify.from),
-	pgid,
-	pg_notify.epoch_sent,
-	pg_notify.query_epoch,
-	std::move(info)).first;
-    ret.push_back(op);
-  }
-  return ret;
-}
-
-class QuerySubEvent : public PeeringSubEvent {
-public:
-  template <typename... Args>
-  QuerySubEvent(Args &&... args) :
-    PeeringSubEvent(std::forward<Args>(args)...) {}
-
-  void on_pg_absent() final {
-    logger().debug("handle_pg_query on absent pg {} from {}", pgid, from);
-    pg_info_t empty(pgid);
-    ctx.notify_list[from.osd].emplace_back(
-      pg_notify_t(
-	from.shard, pgid.shard,
-	evt.get_epoch_sent(),
-	osd.get_shard_services().get_osdmap()->get_epoch(),
-	empty),
-      PastIntervals());
-  }
-};
-
-std::vector<OperationRef> handle_pg_query(
-  OSD &osd,
-  ceph::net::ConnectionRef conn,
-  compound_state_ref state,
-  Ref<MOSDPGQuery> m)
-{
-  std::vector<OperationRef> ret;
-  ret.reserve(m->pg_list.size());
-  const int from = m->get_source().num();
-  for (auto &p : m->pg_list) {
-    auto& [pgid, pg_query] = p;
-    MQuery query{pgid, pg_shard_t{from, pg_query.from},
-		 pg_query, pg_query.epoch_sent};
-    logger().debug("handle_pg_query on {} from {}", pgid, from);
-    auto op = osd.get_shard_services().start_operation<QuerySubEvent>(
-	state,
-	osd,
-	conn,
-	osd.get_shard_services(),
-	pg_shard_t(from, pg_query.from),
-	pgid,
-	pg_query.epoch_sent,
-	pg_query.epoch_sent,
-	std::move(query)).first;
-    ret.push_back(op);
-  }
-  return ret;
-}
-
 struct SubOpBlocker : BlockerT<SubOpBlocker> {
   static constexpr const char * type_name = "CompoundOpBlocker";
 
@@ -271,35 +154,12 @@ seastar::future<> CompoundPeeringRequest::start()
   auto state = seastar::make_lw_shared<compound_state>();
   auto blocker = std::make_unique<SubOpBlocker>(
     [&] {
-      switch (m->get_type()) {
-      case MSG_OSD_PG_CREATE2:
-	return handle_pg_create(
-	  osd,
-	  conn,
-	  state,
-	  boost::static_pointer_cast<MOSDPGCreate2>(m));
-      case MSG_OSD_PG_NOTIFY:
-	return handle_pg_notify(
-	  osd,
-	  conn,
-	  state,
-	  boost::static_pointer_cast<MOSDPGNotify>(m));
-      case MSG_OSD_PG_INFO:
-	return handle_pg_info(
-	  osd,
-	  conn,
-	  state,
-	  boost::static_pointer_cast<MOSDPGInfo>(m));
-      case MSG_OSD_PG_QUERY:
-	return handle_pg_query(
-	  osd,
-	  conn,
-	  state,
-	  boost::static_pointer_cast<MOSDPGQuery>(m));
-      default:
-	ceph_assert("Invalid message type" == 0);
-	return std::vector<OperationRef>();
-      }
+      assert((m->get_type() == MSG_OSD_PG_CREATE2));
+      return handle_pg_create(
+        osd,
+	conn,
+	state,
+	boost::static_pointer_cast<MOSDPGCreate2>(m));
     }());
 
   add_blocker(blocker.get());

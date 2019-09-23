@@ -92,7 +92,7 @@ describe('TableComponent', () => {
     mouseEvent.stopPropagation = () => {
       wasCalled = true;
     };
-    spyOn(window, 'addEventListener').and.callFake((eventName, fn) => {
+    spyOn(component.table.element, 'addEventListener').and.callFake((eventName, fn) => {
       fn(mouseEvent);
       expect(eventName).toBe('mouseenter');
       expect(wasCalled).toBe(true);

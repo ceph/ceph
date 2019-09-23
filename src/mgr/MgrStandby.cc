@@ -52,7 +52,6 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
-  lock("MgrStandby::lock"),
   finisher(g_ceph_context, "MgrStandby", "mgrsb-fin"),
   timer(g_ceph_context, lock),
   py_module_registry(clog),
@@ -190,7 +189,7 @@ int MgrStandby::init()
 
 void MgrStandby::send_beacon()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
   dout(20) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
@@ -219,13 +218,14 @@ void MgrStandby::send_beacon()
   metadata["addrs"] = stringify(client_messenger->get_myaddrs());
   collect_sys_info(&metadata, g_ceph_context);
 
-  MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
+  auto m = ceph::make_message<MMgrBeacon>(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf()->name.get_id(),
                                  addrs,
                                  available,
 				 std::move(module_info),
-				 std::move(metadata));
+				 std::move(metadata),
+				 CEPH_FEATURES_ALL);
 
   if (available) {
     if (!available_in_map) {
@@ -243,7 +243,7 @@ void MgrStandby::send_beacon()
     m->set_services(active_mgr->get_services());
   }
                                  
-  monc.send_mon_message(m);
+  monc.send_mon_message(std::move(m));
 }
 
 void MgrStandby::tick()
@@ -253,7 +253,7 @@ void MgrStandby::tick()
 
   timer.add_event_after(
       g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count(),
-      new FunctionContext([this](int r){
+      new LambdaContext([this](int r){
           tick();
       }
   )); 
@@ -269,7 +269,7 @@ void MgrStandby::handle_signal(int signum)
 
 void MgrStandby::shutdown()
 {
-  finisher.queue(new FunctionContext([&](int) {
+  finisher.queue(new LambdaContext([&](int) {
     std::lock_guard l(lock);
 
     dout(4) << "Shutting down" << dendl;
@@ -395,7 +395,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
       active_mgr.reset(new Mgr(&monc, map, &py_module_registry,
                                client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
-      active_mgr->background_init(new FunctionContext(
+      active_mgr->background_init(new LambdaContext(
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for
               // next tick.
@@ -440,9 +440,9 @@ bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
   bool handled = false;
   if (active_mgr) {
     auto am = active_mgr;
-    lock.Unlock();
+    lock.unlock();
     handled = am->ms_dispatch2(m);
-    lock.Lock();
+    lock.lock();
   }
   if (m->get_type() == MSG_MGR_MAP) {
     // let this pass through for mgrc

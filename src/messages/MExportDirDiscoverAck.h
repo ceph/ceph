@@ -20,6 +20,9 @@
 
 class MExportDirDiscoverAck : public Message {
 private:
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
+
   dirfrag_t dirfrag;
   bool success;
 
@@ -29,9 +32,9 @@ private:
   bool is_success() const { return success; }
 
 protected:
-  MExportDirDiscoverAck() : Message{MSG_MDS_EXPORTDIRDISCOVERACK} {}
+  MExportDirDiscoverAck() : Message{MSG_MDS_EXPORTDIRDISCOVERACK, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :
-    Message{MSG_MDS_EXPORTDIRDISCOVERACK},
+    Message{MSG_MDS_EXPORTDIRDISCOVERACK, HEAD_VERSION, COMPAT_VERSION},
     dirfrag(df), success(s) {
     set_tid(tid);
   }

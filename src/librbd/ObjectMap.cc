@@ -35,7 +35,7 @@ namespace librbd {
 template <typename I>
 ObjectMap<I>::ObjectMap(I &image_ctx, uint64_t snap_id)
   : m_image_ctx(image_ctx), m_snap_id(snap_id),
-    m_lock(util::unique_lock_name("librbd::ObjectMap::lock", this)),
+    m_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::ObjectMap::lock", this))),
     m_update_guard(new UpdateGuard(m_image_ctx.cct)) {
 }
 
@@ -72,7 +72,7 @@ bool ObjectMap<I>::is_compatible(const file_layout_t& layout, uint64_t size) {
 template <typename I>
 uint8_t ObjectMap<I>::operator[](uint64_t object_no) const
 {
-  RWLock::RLocker locker(m_lock);
+  std::shared_lock locker{m_lock};
   ceph_assert(object_no < m_object_map.size());
   return m_object_map[object_no];
 }
@@ -80,7 +80,7 @@ uint8_t ObjectMap<I>::operator[](uint64_t object_no) const
 template <typename I>
 bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
 {
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
 
   // Fall back to default logic if object map is disabled or invalid
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
@@ -106,7 +106,7 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
 template <typename I>
 bool ObjectMap<I>::object_may_not_exist(uint64_t object_no) const
 {
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
 
   // Fall back to default logic if object map is disabled or invalid
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
@@ -132,7 +132,7 @@ bool ObjectMap<I>::object_may_not_exist(uint64_t object_no) const
 template <typename I>
 bool ObjectMap<I>::update_required(const ceph::BitVector<2>::Iterator& it,
                                    uint8_t new_state) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   uint8_t state = *it;
   if ((state == new_state) ||
       (new_state == OBJECT_PENDING && state == OBJECT_NONEXISTENT) ||
@@ -162,20 +162,20 @@ void ObjectMap<I>::close(Context *on_finish) {
 
 template <typename I>
 bool ObjectMap<I>::set_object_map(ceph::BitVector<2> &target_object_map) {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
                                         m_image_ctx.image_lock));
-  RWLock::WLocker locker(m_lock);
+  std::unique_lock locker{m_lock};
   m_object_map = target_object_map;
   return true;
 }
 
 template <typename I>
 void ObjectMap<I>::rollback(uint64_t snap_id, Context *on_finish) {
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
 
-  RWLock::WLocker locker(m_lock);
+  std::unique_lock locker{m_lock};
   object_map::SnapshotRollbackRequest *req =
     new object_map::SnapshotRollbackRequest(m_image_ctx, snap_id, on_finish);
   req->send();
@@ -183,7 +183,7 @@ void ObjectMap<I>::rollback(uint64_t snap_id, Context *on_finish) {
 
 template <typename I>
 void ObjectMap<I>::snapshot_add(uint64_t snap_id, Context *on_finish) {
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   ceph_assert(snap_id != CEPH_NOSNAP);
 
@@ -195,7 +195,7 @@ void ObjectMap<I>::snapshot_add(uint64_t snap_id, Context *on_finish) {
 
 template <typename I>
 void ObjectMap<I>::snapshot_remove(uint64_t snap_id, Context *on_finish) {
-  ceph_assert(m_image_ctx.image_lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_wlocked(m_image_ctx.image_lock));
   ceph_assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   ceph_assert(snap_id != CEPH_NOSNAP);
 
@@ -207,11 +207,11 @@ void ObjectMap<I>::snapshot_remove(uint64_t snap_id, Context *on_finish) {
 
 template <typename I>
 void ObjectMap<I>::aio_save(Context *on_finish) {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
                                         m_image_ctx.image_lock));
-  RWLock::RLocker locker(m_lock);
+  std::shared_lock locker{m_lock};
 
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {
@@ -230,8 +230,8 @@ void ObjectMap<I>::aio_save(Context *on_finish) {
 template <typename I>
 void ObjectMap<I>::aio_resize(uint64_t new_size, uint8_t default_object_state,
 			      Context *on_finish) {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
                                         m_image_ctx.image_lock));
   ceph_assert(m_image_ctx.image_watcher != NULL);
@@ -249,8 +249,8 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  ceph_assert(m_image_ctx.image_lock.is_locked());
-  ceph_assert(m_lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
+  ceph_assert(ceph_mutex_is_wlocked(m_lock));
 
   BlockGuardCell *cell;
   int r = m_update_guard->detain({op.start_object_no, op.end_object_no},
@@ -273,7 +273,7 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
 
   ldout(cct, 20) << "in-flight update cell: " << cell << dendl;
   Context *on_finish = op.on_finish;
-  Context *ctx = new FunctionContext([this, cell, on_finish](int r) {
+  Context *ctx = new LambdaContext([this, cell, on_finish](int r) {
       handle_detained_aio_update(cell, r, on_finish);
     });
   aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
@@ -290,8 +290,8 @@ void ObjectMap<I>::handle_detained_aio_update(BlockGuardCell *cell, int r,
   m_update_guard->release(cell, &block_ops);
 
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
-    RWLock::WLocker locker(m_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
+    std::unique_lock locker{m_lock};
     for (auto &op : block_ops) {
       detained_aio_update(std::move(op));
     }
@@ -306,7 +306,7 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                               const boost::optional<uint8_t> &current_state,
                               const ZTracer::Trace &parent_trace,
                               bool ignore_enoent, Context *on_finish) {
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   ceph_assert(m_image_ctx.image_watcher != nullptr);
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
@@ -320,7 +320,7 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                        stringify(static_cast<uint32_t>(*current_state)) : "")
 		 << "->" << static_cast<uint32_t>(new_state) << dendl;
   if (snap_id == CEPH_NOSNAP) {
-    ceph_assert(m_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(m_lock));
     end_object_no = std::min(end_object_no, m_object_map.size());
     if (start_object_no >= end_object_no) {
       ldout(cct, 20) << "skipping update of invalid object map" << dendl;

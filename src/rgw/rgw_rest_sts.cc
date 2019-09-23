@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/format.hpp>
@@ -335,7 +335,7 @@ void RGWSTSAssumeRole::execute()
 }
 
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
-                            RGWRados *store,
+                            rgw::sal::RGWRadosStore *store,
                             const rgw::auth::StrategyRegistry& auth_registry,
                             struct req_state *s)
 {
@@ -353,15 +353,16 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
       for (const auto& t : tokens) {
         auto pos = t.find("=");
         if (pos != string::npos) {
-           std::string key = t.substr(0, pos);
-           std::string value = t.substr(pos + 1, t.size() - 1);
-           if (key == "RoleArn" || key == "Policy") {
-            value = url_decode(value);
-           }
-           s->info.args.append(key, value);
-         }
-       }
-    }
+          const auto key = t.substr(0, pos);
+          if (key == "Action") {
+            s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
+          } else if (key == "RoleArn" || key == "Policy") {
+            const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
+            s->info.args.append(key, value);
+          }
+        }
+      }
+    } 
   }
   auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
   s->info.args.append("PayloadHash", payload_hash);
@@ -385,7 +386,7 @@ RGWOp *RGWHandler_REST_STS::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_STS::init(RGWRados *store,
+int RGWHandler_REST_STS::init(rgw::sal::RGWRadosStore *store,
                               struct req_state *s,
                               rgw::io::BasicClient *cio)
 {

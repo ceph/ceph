@@ -1003,6 +1003,13 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_OMAPRMKEYS, 0, bl.length(), bl);
   }
 
+  void omap_rm_range(std::string_view key_begin, std::string_view key_end) {
+    bufferlist bl;
+    encode(key_begin, bl);
+    encode(key_end, bl);
+    add_data(CEPH_OSD_OP_OMAPRMKEYRANGE, 0, bl.length(), bl);
+  }
+
   // object classes
   void call(const char *cname, const char *method, ceph::buffer::list &indata) {
     add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
@@ -1610,8 +1617,6 @@ public:
 
     ceph::buffer::list filter;
 
-    ceph::buffer::list extra_info;
-
     // The budget associated with this context, once it is set (>= 0),
     // the budget is not get/released on OP basis, instead the budget
     // is acquired before sending the first OP and released upon receiving
@@ -2118,8 +2123,7 @@ private:
   // here or you will have great woe and misery.
 
   template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&... args) const ->
-    decltype(cb(*osdmap, std::forward<Args>(args)...)) {
+  decltype(auto) with_osdmap(Callback&& cb, Args&&... args) {
     shared_lock l(rwlock);
     return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }

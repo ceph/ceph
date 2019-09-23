@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_SYNC_TRACE_H
 #define CEPH_RGW_SYNC_TRACE_H
@@ -11,6 +11,7 @@
 
 #include "rgw_sync_trace.h"
 #include "rgw_rados.h"
+#include "rgw_worker.h"
 
 
 #define dout_context g_ceph_context

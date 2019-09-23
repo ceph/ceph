@@ -116,6 +116,7 @@ class MDSTableClient;
 class Messenger;
 class Objecter;
 class MonClient;
+class MgrClient;
 class Finisher;
 class ScrubStack;
 class C_MDS_Send_Command_Reply;
@@ -149,7 +150,7 @@ class MDSRank {
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
-    Mutex &mds_lock;
+    ceph::mutex &mds_lock;
 
     mono_time get_starttime() const {
       return starttime;
@@ -229,6 +230,10 @@ class MDSRank {
     bool is_cluster_degraded() const { return cluster_degraded; }
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
+    bool is_cache_trimmable() const {
+      return is_clientreplay() || is_active() || is_stopping();
+    }
+
     void handle_write_error(int err);
 
     void update_mlogger();
@@ -243,12 +248,12 @@ class MDSRank {
 
     class ProgressThread : public Thread {
       MDSRank *mds;
-      Cond cond;
+      ceph::condition_variable cond;
       public:
       explicit ProgressThread(MDSRank *mds_) : mds(mds_) {}
       void * entry() override;
       void shutdown();
-      void signal() {cond.Signal();}
+      void signal() {cond.notify_all();}
     } progress_thread;
 
   list<cref_t<Message>> waiting_for_nolaggy;
@@ -325,13 +330,14 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-        Mutex &mds_lock_,
+        ceph::mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
         Beacon &beacon_,
         std::unique_ptr<MDSMap> & mdsmap_,
         Messenger *msgr,
         MonClient *monc_,
+        MgrClient *mgrc,
         Context *respawn_hook_,
         Context *suicide_hook_);
 
@@ -452,6 +458,9 @@ class MDSRank {
 
     bool evict_client(int64_t session_id, bool wait, bool blacklist,
                       std::ostream& ss, Context *on_killed=nullptr);
+    int config_client(int64_t session_id, bool remove,
+		      const std::string& option, const std::string& value,
+		      std::ostream& ss);
 
     void mark_base_recursively_scrubbed(inodeno_t ino);
 
@@ -495,6 +504,7 @@ class MDSRank {
   protected:
     Messenger    *messenger;
     MonClient    *monc;
+    MgrClient    *mgrc;
 
     Context *respawn_hook;
     Context *suicide_hook;
@@ -567,6 +577,13 @@ class MDSRank {
 private:
     mono_time starttime = mono_clock::zero();
 
+    // "task" string that gets displayed in ceph status
+    inline static const std::string SCRUB_STATUS_KEY = "scrub status";
+
+    void get_task_status(std::map<std::string, std::string> *status);
+    void schedule_update_timer_task();
+    void send_task_status();
+
 protected:
   Context *create_async_exec_context(C_ExecAndReply *ctx);
 };
@@ -616,7 +633,7 @@ public:
   void handle_osd_map();
   void update_log_config();
 
-  const char** get_tracked_conf_keys() const final;
+  const char** get_tracked_conf_keys() const override final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
   bool handle_command(
@@ -636,13 +653,14 @@ public:
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      Mutex &mds_lock_,
+      ceph::mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,
       Beacon &beacon_,
       std::unique_ptr<MDSMap> &mdsmap_,
       Messenger *msgr,
       MonClient *monc_,
+      MgrClient *mgrc,
       Context *respawn_hook_,
       Context *suicide_hook_);
 };

@@ -2,8 +2,9 @@ import threading
 import functools
 import os
 import uuid
+
 try:
-    from typing import List
+    from typing import List, Dict
     from ceph.deployment.drive_group import DriveGroupSpec
 except ImportError:
     pass  # just for type checking
@@ -13,6 +14,13 @@ try:
     from kubernetes.client.rest import ApiException
 
     kubernetes_imported = True
+
+    # https://github.com/kubernetes-client/python/issues/895
+    from kubernetes.client.models.v1_container_image import V1ContainerImage
+    def names(self, names):
+        self._names = names
+    V1ContainerImage.names = V1ContainerImage.names.setter(names)
+
 except ImportError:
     kubernetes_imported = False
     client = None
@@ -87,7 +95,7 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
 
         self.message = message
 
-        self.error = None
+        self.exception = None
 
         # XXX hacky global
         global all_completions
@@ -107,10 +115,6 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
     @property
     def is_effective(self):
         return self.effective
-
-    @property
-    def is_errored(self):
-        return self.error is not None
 
     def execute(self):
         if not self.executed:
@@ -146,7 +150,7 @@ class RookEnv(object):
         # ROOK_CEPH_CLUSTER_CRD_NAME is new is Rook 1.0
         self.cluster_name = os.environ.get('ROOK_CEPH_CLUSTER_CRD_NAME', self.namespace)
 
-        self.operator_namespace = os.environ.get('ROOK_OPERATOR_NAMESPACE', "rook-ceph-system")
+        self.operator_namespace = os.environ.get('ROOK_OPERATOR_NAMESPACE', self.namespace)
         self.crd_version = os.environ.get('ROOK_CEPH_CLUSTER_CRD_VERSION', 'v1')
         self.api_name = "ceph.rook.io/" + self.crd_version
 
@@ -246,7 +250,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # a Rook cluster.  For development convenience, also support
         # running outside (reading ~/.kube config)
 
-        if self._rook_env.cluster_name:
+        if self._rook_env.has_namespace():
             config.load_incluster_config()
             cluster_name = self._rook_env.cluster_name
         else:
@@ -332,6 +336,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return result
 
     @deferred_read
+    def get_hosts(self):
+        return [orchestrator.InventoryNode(n, []) for n in self.rook_cluster.get_node_names()]
+
+    @deferred_read
     def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
 
         if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
@@ -345,6 +353,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             sd.nodename = p['nodename']
             sd.container_id = p['name']
             sd.service_type = p['labels']['app'].replace('rook-ceph-', '')
+            status = {
+                'Pending': -1,
+                'Running': 1,
+                'Succeeded': 0,
+                'Failed': -1,
+                'Unknown': -1,
+            }[p['phase']]
+            sd.status = status
+            sd.status_desc = p['phase']
 
             if sd.service_type == "osd":
                 sd.service_instance = "%s" % p['labels']["ceph-osd-id"]
@@ -375,24 +392,32 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return RookWriteCompletion(lambda: func(spec), None,
                     "Creating {0} services for {1}".format(typename, spec.name))
 
-    def add_stateless_service(self, service_type, spec):
-        # assert isinstance(spec, orchestrator.StatelessServiceSpec)
-        if service_type == "mds":
-            return self._service_add_decorate("Filesystem", spec,
-                                         self.rook_cluster.add_filesystem)
-        elif service_type == "rgw" :
-            return self._service_add_decorate("RGW", spec,
-                                         self.rook_cluster.add_objectstore)
-        elif service_type == "nfs" :
-            return self._service_add_decorate("NFS", spec,
-                                         self.rook_cluster.add_nfsgw)
-        else:
-            raise NotImplementedError(service_type)
+    def add_mds(self, spec):
+        return self._service_add_decorate("Filesystem", spec,
+                                          self.rook_cluster.add_filesystem)
 
-    def remove_stateless_service(self, service_type, service_id):
+    def add_rgw(self, spec):
+        return self._service_add_decorate("RGW", spec,
+                                          self.rook_cluster.add_objectstore)
+
+    def add_nfs(self, spec):
+        return self._service_add_decorate("NFS", spec,
+                                          self.rook_cluster.add_nfsgw)
+
+    def remove_mds(self, name):
         return RookWriteCompletion(
-            lambda: self.rook_cluster.rm_service(service_type, service_id), None,
-            "Removing {0} services for {1}".format(service_type, service_id))
+            lambda: self.rook_cluster.rm_service('cephfilesystems', name), None,
+            "Removing {0} services for {1}".format('mds', name))
+
+    def remove_rgw(self, zone):
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.rm_service('cephobjectstores', zone), None,
+            "Removing {0} services for {1}".format('rgw', zone))
+
+    def remove_nfs(self, name):
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.rm_service('cephnfses', name), None,
+            "Removing {0} services for {1}".format('nfs', name))
 
     def update_mons(self, num, hosts):
         if hosts:
@@ -402,11 +427,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             lambda: self.rook_cluster.update_mon_count(num), None,
             "Updating mon count to {0}".format(num))
 
-    def update_stateless_service(self, svc_type, spec):
-        # only nfs is currently supported
-        if svc_type != "nfs":
-            raise NotImplementedError(svc_type)
-
+    def update_nfs(self, spec):
         num = spec.count
         return RookWriteCompletion(
             lambda: self.rook_cluster.update_nfs_count(spec.name, num), None,

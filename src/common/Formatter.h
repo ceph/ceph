@@ -299,5 +299,7 @@ namespace ceph {
     std::vector< std::string > m_column_name;
   };
 
+  std::string fixed_to_string(int64_t num, int scale);
+  std::string fixed_u_to_string(uint64_t num, int scale);
 }
 #endif

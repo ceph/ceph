@@ -1,3 +1,4 @@
+.. _health-checks:
 
 =============
 Health checks
@@ -71,9 +72,77 @@ listen for v2 connections on the new default 3300 port.
 If a monitor is configured to listen for v1 connections on a non-standard port (not 6789), then the monmap will need to be modified manually.
 
 
+MON_DISK_LOW
+____________
+
+One or more monitors is low on disk space.  This alert triggers if the
+available space on the file system storing the monitor database
+(normally ``/var/lib/ceph/mon``), as a percentage, drops below
+``mon_data_avail_warn`` (default: 30%).
+
+This may indicate that some other process or user on the system is
+filling up the same file system used by the monitor.  It may also
+indicate that the monitors database is large (see ``MON_DISK_BIG``
+below).
+
+If space cannot be freed, the monitor's data directory may need to be
+moved to another storage device or file system (while the monitor
+daemon is not running, of course).
+
+
+MON_DISK_CRIT
+_____________
+
+One or more monitors is critically low on disk space.  This alert
+triggers if the available space on the file system storing the monitor
+database (normally ``/var/lib/ceph/mon``), as a percentage, drops
+below ``mon_data_avail_crit`` (default: 5%).  See ``MON_DISK_LOW``, above.
+
+MON_DISK_BIG
+____________
+
+The database size for one or more monitors is very large.  This alert
+triggers if the size of the monitor's database is larger than
+``mon_data_size_warn`` (default: 15 GiB).
+
+A large database is unusual, but may not necessarily indicate a
+problem.  Monitor databases may grow in size when there are placement
+groups that have not reached an ``active+clean`` state in a long time.
+
+This may also indicate that the monitor's database is not properly
+compacting, which has been observed with some older versions of
+leveldb and rocksdb.  Forcing a compaction with ``ceph daemon mon.<id>
+compact`` may shrink the on-disk size.
+
+This warning may also indicate that the monitor has a bug that is
+preventing it from pruning the cluster metadata it stores.  If the
+problem persists, please report a bug.
+
+The warning threshold may be adjusted with::
+
+  ceph config set global mon_data_size_warn <size>
+
 
 Manager
 -------
+
+MGR_DOWN
+________
+
+All manager daemons are currently down.  The cluster should normally
+have at least one running manager (``ceph-mgr``) daemon.  If no
+manager daemon is running, the cluster's ability to monitor itself will
+be compromised, and parts of the management API will become
+unavailable (for example, the dashboard will not work, and most CLI
+commands that report metrics or runtime state will block).  However,
+the cluster will still be able to perform all IO operations and
+recover from failures.
+
+The down manager daemon should generally be restarted as soon as
+possible to ensure that the cluster can be monitored (e.g., so that
+the ``ceph -s`` information is up to date, and/or metrics can be
+scraped by Prometheus).
+
 
 MGR_MODULE_DEPENDENCY
 _____________________
@@ -335,6 +404,59 @@ needs to be stopped and BlueFS informed of the device size change with::
 
   ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-$ID
 
+BLUEFS_AVAILABLE_SPACE
+______________________
+
+To check how much space is free for BlueFS do::
+
+  ceph daemon osd.123 bluestore bluefs available
+
+This will output up to 3 values: `BDEV_DB free`, `BDEV_SLOW free` and
+`available_from_bluestore`. `BDEV_DB` and `BDEV_SLOW` report amount of space that
+has been acquired by BlueFS and is considered free. Value `available_from_bluestore`
+denotes ability of BlueStore to relinquish more space to BlueFS.
+It is normal that this value is different from amount of BlueStore free space, as
+BlueFS allocation unit is typically larger than BlueStore allocation unit.
+This means that only part of BlueStore free space will be acceptable for BlueFS.
+
+BLUEFS_LOW_SPACE
+_________________
+
+If BlueFS is running low on available free space and there is little
+`available_from_bluestore` one can consider reducing BlueFS allocation unit size.
+To simulate available space when allocation unit is different do::
+
+  ceph daemon osd.123 bluestore bluefs available <alloc-unit-size>
+
+BLUESTORE_FRAGMENTATION
+_______________________
+
+As BlueStore works free space on underlying storage will get fragmented.
+This is normal and unavoidable but excessive fragmentation will cause slowdown.
+To inspect BlueStore fragmentation one can do::
+
+  ceph daemon osd.123 bluestore allocator score block
+
+Score is given in [0-1] range.
+[0.0 .. 0.4] tiny fragmentation
+[0.4 .. 0.7] small, acceptable fragmentation
+[0.7 .. 0.9] considerable, but safe fragmentation
+[0.9 .. 1.0] severe fragmentation, may impact BlueFS ability to get space from BlueStore
+
+If detailed report of free fragments is required do::
+
+  ceph daemon osd.123 bluestore allocator dump block
+
+In case when handling OSD process that is not running fragmentation can be
+inspected with `ceph-bluestore-tool`.
+Get fragmentation score::
+
+  ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-score
+
+And dump detailed free chunks::
+
+  ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-dump
+
 BLUESTORE_LEGACY_STATFS
 _______________________
 
@@ -356,6 +478,27 @@ This warning can be disabled with::
 
   ceph config set global bluestore_warn_on_legacy_statfs false
 
+BLUESTORE_NO_PER_POOL_OMAP
+__________________________
+
+Starting with the Octopus release, BlueStore tracks omap space utilization
+by pool, and one or more OSDs have volumes that were created prior to
+Octopus.  If all OSDs are not running BlueStore with the new tracking
+enabled, the cluster will report and approximate value for per-pool omap usage
+based on the most recent deep-scrub.
+
+The old OSDs can be updated to track by pool by stopping each OSD,
+running a repair operation, and the restarting it.  For example, if
+``osd.123`` needed to be updated,::
+
+  systemctl stop ceph-osd@123
+  ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
+  systemctl start ceph-osd@123
+
+This warning can be disabled with::
+
+  ceph config set global bluestore_warn_on_no_per_pool_omap false
+
 
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________
@@ -373,6 +516,20 @@ risk.  For example, if osd ``$N`` has the error,::
   ceph osd destroy osd.$N
   ceph-volume lvm zap /path/to/device
   ceph-volume lvm create --osd-id $N --data /path/to/device
+
+BLUESTORE_NO_COMPRESSION
+________________________
+
+One or more OSDs is unable to load a BlueStore compression plugin.
+This can be caused by a broken installation, in which the ``ceph-osd``
+binary does not match the compression plugins, or a recent upgrade
+that did not include a restart of the ``ceph-osd`` daemon.
+
+Verify that the package(s) on the host running the OSD(s) in question
+are correctly installed and that the OSD daemon(s) have been
+restarted.  If the problem persists, check the OSD log for any clues
+as to the source of the problem.
+
 
 
 Device health
@@ -859,6 +1016,28 @@ You can manually initiate a scrub of a clean PG with::
   ceph pg deep-scrub <pgid>
 
 
+PG_SLOW_SNAP_TRIMMING
+_____________________
+
+The snapshot trim queue for one or more PGs has exceeded the
+configured warning threshold.  This indicates that either an extremely
+large number of snapshots were recently deleted, or that the OSDs are
+unable to trim snapshots quickly enough to keep up with the rate of
+new snapshot deletions.
+
+The warning threshold is controlled by the
+``mon_osd_snap_trim_queue_warn_on`` option (default: 32768).
+
+This warning may trigger if OSDs are under excessive load and unable
+to keep up with their background work, or if the OSDs' internal
+metadata database is heavily fragmented and unable to perform.  It may
+also indicate some other performance issue with the OSDs.
+
+The exact size of the snapshot trim queue is reported by the
+``snaptrimq_len`` field of ``ceph pg ls -f json-detail``.
+
+
+
 Miscellaneous
 -------------
 
@@ -897,3 +1076,75 @@ The time period for what "recent" means is controlled by the option
 These warnings can be disabled entirely with::
 
   ceph config set mgr/crash/warn_recent_interval 0
+
+TELEMETRY_CHANGED
+_________________
+
+Telemetry has been enabled, but the contents of the telemetry report
+have changed since that time, so telemetry reports will not be sent.
+
+The Ceph developers periodically revise the telemetry feature to
+include new and useful information, or to remove information found to
+be useless or sensitive.  If any new information is included in the
+report, Ceph will require the administrator to re-enable telemetry to
+ensure they have an opportunity to (re)review what information will be
+shared.
+
+To review the contents of the telemetry report,::
+
+  ceph telemetry show
+
+Note that the telemetry report consists of several optional channels
+that may be independently enabled or disabled.  For more information, see
+:ref:`telemetry`.
+
+To re-enable telemetry (and make this warning go away),::
+
+  ceph telemetry on
+
+To disable telemetry (and make this warning go away),::
+
+  ceph telemetry off
+
+AUTH_BAD_CAPS
+_____________
+
+One or more auth users has capabilities that cannot be parsed by the
+monitor.  This generally indicates that the user will not be
+authorized to perform any action with one or more daemon types.
+
+This error is mostly likely to occur after an upgrade if the
+capabilities were set with an older version of Ceph that did not
+properly validate their syntax, or if the syntax of the capabilities
+has changed.
+
+The user in question can be removed with::
+
+  ceph auth rm <entity-name>
+
+(This will resolve the health alert, but obviously clients will not be
+able to authenticate as that user.)
+
+Alternatively, the capabilities for the user can be updated with::
+
+  ceph auth <entity-name> <daemon-type> <caps> [<daemon-type> <caps> ...]
+
+For more information about auth capabilities, see :ref:`user-management`.
+
+
+OSD_NO_DOWN_OUT_INTERVAL
+________________________
+
+The ``mon_osd_down_out_interval`` option is set to zero, which means
+that the system will not automatically perform any repair or healing
+operations after an OSD fails.  Instead, an administrator (or some
+other external entity) will need to manually mark down OSDs as 'out'
+(i.e., via ``ceph osd out <osd-id>``) in order to trigger recovery.
+
+This option is normally set to five or ten minutes--enough time for a
+host to power-cycle or reboot.
+
+This warning can silenced by setting the
+``mon_warn_on_osd_down_out_interval_zero`` to false::
+
+  ceph config global mon mon_warn_on_osd_down_out_interval_zero false

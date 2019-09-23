@@ -69,6 +69,9 @@ class ConnectionPool(object):
             assert self.ops_in_progress == 0
             log.debug("Connecting to cephfs '{0}'".format(self.fs_name))
             self.fs = cephfs.LibCephFS(rados_inst=self.mgr.rados)
+            log.debug("Setting user ID and group ID of CephFS mount as root...")
+            self.fs.conf_set("client_mount_uid", "0")
+            self.fs.conf_set("client_mount_gid", "0")
             log.debug("CephFS initializing...")
             self.fs.init()
             log.debug("CephFS mounting...")
@@ -172,6 +175,14 @@ class VolumeClient(object):
         for fs in fs_map['filesystems']:
             self.purge_queue.queue_purge_job(fs['mdsmap']['fs_name'])
 
+    def cluster_log(self, msg, lvl=None):
+        """
+        log to cluster log with default log level as WARN.
+        """
+        if not lvl:
+            lvl = self.mgr.CLUSTER_LOG_PRIO_WARN
+        self.mgr.cluster_log("cluster", lvl, msg)
+
     def gen_pool_names(self, volname):
         """
         return metadata and data pool name (from a filesystem/volume name) as a tuple
@@ -228,10 +239,9 @@ class VolumeClient(object):
         return self.mgr.mon_command(command)
 
     def create_mds(self, fs_name):
-        spec = orchestrator.StatelessServiceSpec()
-        spec.name = fs_name
+        spec = orchestrator.StatelessServiceSpec(fs_name)
         try:
-            completion = self.mgr.add_stateless_service("mds", spec)
+            completion = self.mgr.add_mds(spec)
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
@@ -245,7 +255,7 @@ class VolumeClient(object):
 
     ### volume operations -- create, rm, ls
 
-    def create_volume(self, volname, size=None):
+    def create_volume(self, volname):
         """
         create volume  (pool, filesystem and mds)
         """
@@ -273,7 +283,7 @@ class VolumeClient(object):
         self.connection_pool.del_fs_handle(volname)
         # Tear down MDS daemons
         try:
-            completion = self.mgr.remove_stateless_service("mds", volname)
+            completion = self.mgr.remove_mds(volname)
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
@@ -409,7 +419,7 @@ class VolumeClient(object):
                 if not path:
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume '{0}' not found".format(subvolname))
-                ret = 0, path, ""
+                ret = 0, path.decode("utf-8"), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -510,7 +520,7 @@ class VolumeClient(object):
                 if path is None:
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
-                return 0, path, ""
+                return 0, path.decode("utf-8"), ""
         except VolumeException as ve:
             return self.volume_exception_to_retval(ve)
 

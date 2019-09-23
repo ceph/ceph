@@ -236,7 +236,7 @@ int FileStore::lfn_stat(const coll_t& cid, const ghobject_t& oid, struct stat *b
     return r;
 
   ceph_assert(index.index);
-  RWLock::RLocker l((index.index)->access_lock);
+  std::shared_lock l{(index.index)->access_lock};
 
   r = lfn_find(oid, index, &path);
   if (r < 0)
@@ -281,13 +281,13 @@ int FileStore::lfn_open(const coll_t& cid,
   int fd, exist;
   ceph_assert((*index).index);
   if (need_lock) {
-    ((*index).index)->access_lock.get_write();
+    ((*index).index)->access_lock.lock();
   }
   if (!replaying) {
     *outfd = fdcache.lookup(oid);
     if (*outfd) {
       if (need_lock) {
-        ((*index).index)->access_lock.put_write();
+        ((*index).index)->access_lock.unlock();
       }
       return 0;
     }
@@ -342,7 +342,7 @@ int FileStore::lfn_open(const coll_t& cid,
   }
 
   if (need_lock) {
-    ((*index).index)->access_lock.put_write();
+    ((*index).index)->access_lock.unlock();
   }
 
   return 0;
@@ -350,7 +350,7 @@ int FileStore::lfn_open(const coll_t& cid,
  fail:
 
   if (need_lock) {
-    ((*index).index)->access_lock.put_write();
+    ((*index).index)->access_lock.unlock();
   }
 
   if (r == -EIO && m_filestore_fail_eio) handle_eio();
@@ -395,7 +395,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
 
   if (!index_same) {
 
-    RWLock::RLocker l1((index_old.index)->access_lock);
+    std::shared_lock l1{(index_old.index)->access_lock};
 
     r = index_old->lookup(o, &path_old, &exist);
     if (r < 0) {
@@ -405,7 +405,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
     if (!exist)
       return -ENOENT;
 
-    RWLock::WLocker l2((index_new.index)->access_lock);
+    std::unique_lock l2{(index_new.index)->access_lock};
 
     r = index_new->lookup(newoid, &path_new, &exist);
     if (r < 0) {
@@ -427,7 +427,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
       return r;
     }
   } else {
-    RWLock::WLocker l1((index_old.index)->access_lock);
+    std::unique_lock l1{(index_old.index)->access_lock};
 
     r = index_old->lookup(o, &path_old, &exist);
     if (r < 0) {
@@ -475,7 +475,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
   }
 
   ceph_assert(index.index);
-  RWLock::WLocker l((index.index)->access_lock);
+  std::unique_lock l{(index.index)->access_lock};
 
   {
     IndexedPath path;
@@ -541,12 +541,9 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   basedir_fd(-1), current_fd(-1),
   backend(nullptr),
   index_manager(cct, do_update),
-  lock("FileStore::lock"),
   force_sync(false),
-  sync_entry_timeo_lock("FileStore::sync_entry_timeo_lock"),
   timer(cct, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
-  coll_lock("FileStore::coll_lock"),
   fdcache(cct),
   wbthrottle(cct),
   next_osr_id(0),
@@ -561,7 +558,6 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
 	cct->_conf->filestore_op_thread_suicide_timeout, &op_tp),
   logger(nullptr),
   trace_endpoint("0.0.0.0", 0, "FileStore"),
-  read_error_lock("FileStore::read_error_lock"),
   m_filestore_commit_timeout(cct->_conf->filestore_commit_timeout),
   m_filestore_journal_parallel(cct->_conf->filestore_journal_parallel ),
   m_filestore_journal_trailing(cct->_conf->filestore_journal_trailing),
@@ -790,7 +786,8 @@ int FileStore::statfs(struct store_statfs_t *buf0, osd_alert_list_t* alerts)
   return 0;
 }
 
-int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+			   bool *per_pool_omap)
 {
   return -ENOTSUP;
 }
@@ -1907,7 +1904,7 @@ int FileStore::mount()
 	goto close_current_fd;
       }
       ceph_assert(index.index);
-      RWLock::WLocker l((index.index)->access_lock);
+      std::unique_lock l{(index.index)->access_lock};
 
       index->cleanup();
     }
@@ -1973,10 +1970,11 @@ int FileStore::mount()
 
 stop_sync:
   // stop sync thread
-  lock.Lock();
-  stop = true;
-  sync_cond.Signal();
-  lock.Unlock();
+  {
+    std::lock_guard l{lock};
+    stop = true;
+    sync_cond.notify_all();
+  }
   sync_thread.join();
   if (!m_disable_wbthrottle) {
     wbthrottle.stop();
@@ -2018,7 +2016,7 @@ void FileStore::init_temp_collections()
   for (vector<coll_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
     if (p->is_temp())
       continue;
-    coll_map[*p] = new OpSequencer(cct, ++next_osr_id, *p);
+    coll_map[*p] = ceph::make_ref<OpSequencer>(cct, ++next_osr_id, *p);
     if (p->is_meta())
       continue;
     coll_t temp = p->get_temp();
@@ -2047,14 +2045,15 @@ int FileStore::umount()
   do_force_sync();
 
   {
-    Mutex::Locker l(coll_lock);
+    std::lock_guard l(coll_lock);
     coll_map.clear();
   }
 
-  lock.Lock();
-  stop = true;
-  sync_cond.Signal();
-  lock.Unlock();
+  {
+    std::lock_guard l{lock};
+    stop = true;
+    sync_cond.notify_all();
+  }
   sync_thread.join();
   if (!m_disable_wbthrottle){
     wbthrottle.stop();
@@ -2101,7 +2100,7 @@ int FileStore::umount()
   object_map.reset();
 
   {
-    Mutex::Locker l(sync_entry_timeo_lock);
+    std::lock_guard l{sync_entry_timeo_lock};
     timer.shutdown();
   }
 
@@ -2118,7 +2117,7 @@ int FileStore::umount()
 
 ObjectStore::CollectionHandle FileStore::open_collection(const coll_t& c)
 {
-  Mutex::Locker l(coll_lock);
+  std::lock_guard l{coll_lock};
   auto p = coll_map.find(c);
   if (p == coll_map.end()) {
     return CollectionHandle();
@@ -2128,10 +2127,10 @@ ObjectStore::CollectionHandle FileStore::open_collection(const coll_t& c)
 
 ObjectStore::CollectionHandle FileStore::create_new_collection(const coll_t& c)
 {
-  Mutex::Locker l(coll_lock);
+  std::lock_guard l{coll_lock};
   auto p = coll_map.find(c);
   if (p == coll_map.end()) {
-    auto *r = new OpSequencer(cct, ++next_osr_id, c);
+    auto r = ceph::make_ref<OpSequencer>(cct, ++next_osr_id, c);
     coll_map[c] = r;
     return r;
   } else {
@@ -2219,7 +2218,7 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
     dout(5) << __FUNC__ << ": done stalling" << dendl;
   }
 
-  osr->apply_lock.Lock();
+  osr->apply_lock.lock();
   Op *o = osr->peek_queue();
   o->trace.event("op_apply_start");
   apply_manager.op_apply_start(o->op);
@@ -2243,7 +2242,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   lat -= o->start;
 
   dout(10) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << " lat " << lat << dendl;
-  osr->apply_lock.Unlock();  // locked in _do_op
+  osr->apply_lock.unlock();  // locked in _do_op
   o->trace.event("_finish_op");
 
   // called with tp lock held
@@ -3811,7 +3810,7 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
       goto out2;
     }
     ceph_assert(index.index);
-    RWLock::WLocker l((index.index)->access_lock);
+    std::unique_lock l{(index.index)->access_lock};
 
     r = lfn_open(cid, newoid, true, &n, &index);
     if (r < 0) {
@@ -4130,17 +4129,14 @@ private:
 
 void FileStore::sync_entry()
 {
-  lock.Lock();
+  std::unique_lock l{lock};
   while (!stop) {
-    utime_t max_interval;
-    max_interval.set_from_double(m_filestore_max_sync_interval);
-    utime_t min_interval;
-    min_interval.set_from_double(m_filestore_min_sync_interval);
-
-    utime_t startwait = ceph_clock_now();
+    auto min_interval = ceph::make_timespan(m_filestore_min_sync_interval);
+    auto max_interval = ceph::make_timespan(m_filestore_max_sync_interval);
+    auto startwait = ceph::real_clock::now();
     if (!force_sync) {
       dout(20) << __FUNC__ << ":  waiting for max_interval " << max_interval << dendl;
-      sync_cond.WaitInterval(lock, max_interval);
+      sync_cond.wait_for(l, max_interval);
     } else {
       dout(20) << __FUNC__ << ": not waiting, force_sync set" << dendl;
     }
@@ -4153,36 +4149,34 @@ void FileStore::sync_entry()
       break;
     } else {
       // wait for at least the min interval
-      utime_t woke = ceph_clock_now();
-      woke -= startwait;
+      auto woke = ceph::real_clock::now() - startwait;
       dout(20) << __FUNC__ << ": woke after " << woke << dendl;
       if (woke < min_interval) {
-	utime_t t = min_interval;
-	t -= woke;
+	auto t = min_interval - woke;
 	dout(20) << __FUNC__ << ": waiting for another " << t
 		 << " to reach min interval " << min_interval << dendl;
-	sync_cond.WaitInterval(lock, t);
+	sync_cond.wait_for(l, t);
       }
     }
 
     list<Context*> fin;
   again:
     fin.swap(sync_waiters);
-    lock.Unlock();
+    l.unlock();
 
     op_tp.pause();
     if (apply_manager.commit_start()) {
-      utime_t start = ceph_clock_now();
+      auto start = ceph::real_clock::now();
       uint64_t cp = apply_manager.get_committing_seq();
 
-      sync_entry_timeo_lock.Lock();
+      sync_entry_timeo_lock.lock();
       SyncEntryTimeout *sync_entry_timeo =
 	new SyncEntryTimeout(cct, m_filestore_commit_timeout);
       if (!timer.add_event_after(m_filestore_commit_timeout,
 				 sync_entry_timeo)) {
 	sync_entry_timeo = nullptr;
       }
-      sync_entry_timeo_lock.Unlock();
+      sync_entry_timeo_lock.unlock();
 
       logger->set(l_filestore_committing, 1);
 
@@ -4251,12 +4245,12 @@ void FileStore::sync_entry()
 	}
       }
 
-      utime_t done = ceph_clock_now();
-      utime_t lat = done - start;
-      utime_t dur = done - startwait;
+      auto done = ceph::real_clock::now();
+      auto lat = done - start;
+      auto dur = done - startwait;
       dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
       utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
-      if (max_pause_lat < dur - lat) {
+      if (max_pause_lat < utime_t{dur - lat}) {
         logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
       }
 
@@ -4289,14 +4283,14 @@ void FileStore::sync_entry()
       dout(15) << __FUNC__ << ": committed to op_seq " << cp << dendl;
 
       if (sync_entry_timeo) {
-	Mutex::Locker lock(sync_entry_timeo_lock);
+	std::lock_guard lock{sync_entry_timeo_lock};
 	timer.cancel_event(sync_entry_timeo);
       }
     } else {
       op_tp.unpause();
     }
 
-    lock.Lock();
+    l.lock();
     finish_contexts(cct, fin, 0);
     fin.clear();
     if (!sync_waiters.empty()) {
@@ -4309,41 +4303,41 @@ void FileStore::sync_entry()
     }
   }
   stop = false;
-  lock.Unlock();
 }
 
 void FileStore::do_force_sync()
 {
   dout(10) << __FUNC__ << dendl;
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   force_sync = true;
-  sync_cond.Signal();
+  sync_cond.notify_all();
 }
 
 void FileStore::start_sync(Context *onsafe)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   sync_waiters.push_back(onsafe);
-  sync_cond.Signal();
+  sync_cond.notify_all();
   force_sync = true;
   dout(10) << __FUNC__ << dendl;
 }
 
 void FileStore::sync()
 {
-  Mutex l("FileStore::sync");
-  Cond c;
+  ceph::mutex m = ceph::make_mutex("FileStore::sync");
+  ceph::condition_variable c;
   bool done;
-  C_SafeCond *fin = new C_SafeCond(&l, &c, &done);
+  C_SafeCond *fin = new C_SafeCond(m, c, &done);
 
   start_sync(fin);
 
-  l.Lock();
-  while (!done) {
-    dout(10) << "sync waiting" << dendl;
-    c.Wait(l);
-  }
-  l.Unlock();
+  std::unique_lock l{m};
+  c.wait(l, [&done, this] {
+    if (!done) {
+      dout(10) << "sync waiting" << dendl;
+    }
+    return done;
+  });
   dout(10) << "sync done" << dendl;
 }
 
@@ -4366,11 +4360,10 @@ void FileStore::flush()
 
   if (cct->_conf->filestore_blackhole) {
     // wait forever
-    Mutex lock("FileStore::flush::lock");
-    Cond cond;
-    lock.Lock();
-    while (true)
-      cond.Wait(lock);
+    ceph::mutex lock = ceph::make_mutex("FileStore::flush::lock");
+    ceph::condition_variable cond;
+    std::unique_lock l{lock};
+    cond.wait(l, [] {return false;} );
     ceph_abort();
   }
 
@@ -4531,24 +4524,24 @@ int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
 
 // debug EIO injection
 void FileStore::inject_data_error(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
+  std::lock_guard l{read_error_lock};
   dout(10) << __FUNC__ << ": init error on " << oid << dendl;
   data_error_set.insert(oid);
 }
 void FileStore::inject_mdata_error(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
+  std::lock_guard l{read_error_lock};
   dout(10) << __FUNC__ << ": init error on " << oid << dendl;
   mdata_error_set.insert(oid);
 }
 
 void FileStore::debug_obj_on_delete(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
+  std::lock_guard l{read_error_lock};
   dout(10) << __FUNC__ << ": clear error on " << oid << dendl;
   data_error_set.erase(oid);
   mdata_error_set.erase(oid);
 }
 bool FileStore::debug_data_eio(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
+  std::lock_guard l{read_error_lock};
   if (data_error_set.count(oid)) {
     dout(10) << __FUNC__ << ": inject error on " << oid << dendl;
     return true;
@@ -4557,7 +4550,7 @@ bool FileStore::debug_data_eio(const ghobject_t &oid) {
   }
 }
 bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
+  std::lock_guard l{read_error_lock};
   if (mdata_error_set.count(oid)) {
     dout(10) << __FUNC__ << ": inject error on " << oid << dendl;
     return true;
@@ -5063,7 +5056,7 @@ int FileStore::collection_empty(const coll_t& cid, bool *empty)
   }
 
   ceph_assert(index.index);
-  RWLock::RLocker l((index.index)->access_lock);
+  std::shared_lock l{(index.index)->access_lock};
 
   vector<ghobject_t> ls;
   r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(),
@@ -5188,7 +5181,7 @@ int FileStore::collection_list(const coll_t& c,
     return r;
 
   ceph_assert(index.index);
-  RWLock::RLocker l((index.index)->access_lock);
+  std::shared_lock l{(index.index)->access_lock};
 
   r = index->collection_list_partial(start, end, max, ls, next);
 
@@ -5225,7 +5218,7 @@ int FileStore::omap_get(CollectionHandle& ch, const ghobject_t &hoid,
     return r;
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0)
       return r;
@@ -5258,7 +5251,7 @@ int FileStore::omap_get_header(
     return r;
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0)
       return r;
@@ -5287,7 +5280,7 @@ int FileStore::omap_get_keys(CollectionHandle& ch, const ghobject_t &hoid, set<s
     return r;
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0)
       return r;
@@ -5321,7 +5314,7 @@ int FileStore::omap_get_values(CollectionHandle& ch, const ghobject_t &hoid,
   }
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0) {
       where = " (lfn_find)";
@@ -5359,7 +5352,7 @@ int FileStore::omap_check_keys(CollectionHandle& ch, const ghobject_t &hoid,
     return r;
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0)
       return r;
@@ -5397,7 +5390,7 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(const coll_t& _c,
   }
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0) {
       dout(10) << __FUNC__ << ": " << c << "/" << hoid << " = 0 "
@@ -5486,7 +5479,7 @@ int FileStore::_destroy_collection(const coll_t& c)
     if (r < 0)
       goto out;
     ceph_assert(from.index);
-    RWLock::WLocker l((from.index)->access_lock);
+    std::unique_lock l{(from.index)->access_lock};
 
     r = from->prep_delete();
     if (r < 0)
@@ -5692,7 +5685,7 @@ int FileStore::_omap_clear(const coll_t& cid, const ghobject_t &hoid,
     return r;
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0)
       return r;
@@ -5720,7 +5713,7 @@ int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
   }
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0) {
       dout(20) << __FUNC__ << ": lfn_find got " << cpp_strerror(r) << dendl;
@@ -5753,7 +5746,7 @@ int FileStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &hoid,
     return r;
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0)
       return r;
@@ -5793,7 +5786,7 @@ int FileStore::_omap_setheader(const coll_t& cid, const ghobject_t &hoid,
     return r;
   {
     ceph_assert(index.index);
-    RWLock::RLocker l((index.index)->access_lock);
+    std::shared_lock l{(index.index)->access_lock};
     r = lfn_find(hoid, index);
     if (r < 0)
       return r;
@@ -5852,10 +5845,10 @@ int FileStore::_merge_collection(const coll_t& cid,
 
     if (!r) {
       ceph_assert(from.index);
-      RWLock::WLocker l1((from.index)->access_lock);
+      std::unique_lock l1{(from.index)->access_lock};
 
       ceph_assert(to.index);
-      RWLock::WLocker l2((to.index)->access_lock);
+      std::unique_lock l2{(to.index)->access_lock};
 
       r = from->merge(bits, to.index);
     }
@@ -5872,10 +5865,10 @@ int FileStore::_merge_collection(const coll_t& cid,
 
     if (!r) {
       ceph_assert(from.index);
-      RWLock::WLocker l1((from.index)->access_lock);
+      std::unique_lock l1{(from.index)->access_lock};
 
       ceph_assert(to.index);
-      RWLock::WLocker l2((to.index)->access_lock);
+      std::unique_lock l2{(to.index)->access_lock};
 
       r = from->merge(bits, to.index);
     }
@@ -5959,10 +5952,10 @@ int FileStore::_split_collection(const coll_t& cid,
 
     if (!r) {
       ceph_assert(from.index);
-      RWLock::WLocker l1((from.index)->access_lock);
+      std::unique_lock l1{(from.index)->access_lock};
 
       ceph_assert(to.index);
-      RWLock::WLocker l2((to.index)->access_lock);
+      std::unique_lock l2{(to.index)->access_lock};
 
       r = from->split(rem, bits, to.index);
     }
@@ -6100,7 +6093,7 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("filestore_max_xattr_value_size_btrfs") ||
       changed.count("filestore_max_xattr_value_size_other")) {
     if (backend) {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       set_xattr_limits_via_conf();
     }
   }
@@ -6113,7 +6106,7 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("filestore_queue_high_threshhold") ||
       changed.count("filestore_queue_high_delay_multiple") ||
       changed.count("filestore_queue_max_delay_multiple")) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     set_throttle_params();
   }
 
@@ -6125,7 +6118,7 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("filestore_sloppy_crc_block_size") ||
       changed.count("filestore_max_alloc_hint_size") ||
       changed.count("filestore_fadvise")) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
     m_filestore_kill_at = conf->filestore_kill_at;
@@ -6136,7 +6129,7 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
     m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
   }
   if (changed.count("filestore_commit_timeout")) {
-    Mutex::Locker l(sync_entry_timeo_lock);
+    std::lock_guard l(sync_entry_timeo_lock);
     m_filestore_commit_timeout = conf->filestore_commit_timeout;
   }
   if (changed.count("filestore_dump_file")) {
@@ -6404,7 +6397,7 @@ void FileStore::OpSequencer::_unregister_apply(Op *o)
 
 void FileStore::OpSequencer::wait_for_apply(const ghobject_t& oid)
 {
-  Mutex::Locker l(qlock);
+  std::unique_lock l{qlock};
   uint32_t key = oid.hobj.get_hash();
 retry:
   while (true) {
@@ -6415,7 +6408,7 @@ retry:
       if (*p->second == oid) {
 	dout(20) << __func__ << " " << oid << " waiting on " << p->second
 		 << dendl;
-	cond.Wait(qlock);
+	cond.wait(l);
 	goto retry;
       }
       ++p;

@@ -5,8 +5,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/Mutex.h"
-#include "common/RWLock.h"
+#include "common/ceph_mutex.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
 #include "include/err.h"
@@ -40,7 +39,7 @@ namespace {
 
 template <typename I>
 inline bool is_copy_on_read(I *ictx, librados::snap_t snap_id) {
-  RWLock::RLocker image_locker(ictx->image_lock);
+  std::shared_lock image_locker{ictx->image_lock};
   return (ictx->clone_copy_on_read &&
           !ictx->read_only && snap_id == CEPH_NOSNAP &&
           (ictx->exclusive_lock == nullptr ||
@@ -104,6 +103,7 @@ ObjectRequest<I>::ObjectRequest(
   : m_ictx(ictx), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
     m_trace(util::create_trace(*ictx, "", trace)) {
+  ceph_assert(m_ictx->data_ctx.is_valid());
   if (m_trace.valid()) {
     m_trace.copy_name(trace_name + std::string(" ") +
                       data_object_name(ictx, objectno));
@@ -123,7 +123,7 @@ void ObjectRequest<I>::add_write_hint(I& image_ctx,
 template <typename I>
 bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
                                               bool read_request) {
-  ceph_assert(m_ictx->image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_ictx->image_lock));
 
   m_has_parent = false;
   parent_extents->clear();
@@ -197,10 +197,10 @@ template <typename I>
 void ObjectReadRequest<I>::read_object() {
   I *image_ctx = this->m_ictx;
   {
-    RWLock::RLocker image_locker(image_ctx->image_lock);
+    std::shared_lock image_locker{image_ctx->image_lock};
     if (image_ctx->object_map != nullptr &&
         !image_ctx->object_map->object_may_exist(this->m_object_no)) {
-      image_ctx->op_work_queue->queue(new FunctionContext([this](int r) {
+      image_ctx->op_work_queue->queue(new LambdaContext([this](int r) {
           read_parent();
         }), 0);
       return;
@@ -252,7 +252,7 @@ template <typename I>
 void ObjectReadRequest<I>::read_parent() {
   I *image_ctx = this->m_ictx;
 
-  RWLock::RLocker image_locker(image_ctx->image_lock);
+  std::shared_lock image_locker{image_ctx->image_lock};
 
   // calculate reverse mapping onto the image
   Extents parent_extents;
@@ -311,21 +311,21 @@ void ObjectReadRequest<I>::copyup() {
     return;
   }
 
-  image_ctx->owner_lock.get_read();
-  image_ctx->image_lock.get_read();
+  image_ctx->owner_lock.lock_shared();
+  image_ctx->image_lock.lock_shared();
   Extents parent_extents;
   if (!this->compute_parent_extents(&parent_extents, true) ||
       (image_ctx->exclusive_lock != nullptr &&
        !image_ctx->exclusive_lock->is_lock_owner())) {
-    image_ctx->image_lock.put_read();
-    image_ctx->owner_lock.put_read();
+    image_ctx->image_lock.unlock_shared();
+    image_ctx->owner_lock.unlock_shared();
     this->finish(0);
     return;
   }
 
   ldout(image_ctx->cct, 20) << dendl;
 
-  image_ctx->copyup_list_lock.Lock();
+  image_ctx->copyup_list_lock.lock();
   auto it = image_ctx->copyup_list.find(this->m_object_no);
   if (it == image_ctx->copyup_list.end()) {
     // create and kick off a CopyupRequest
@@ -333,15 +333,15 @@ void ObjectReadRequest<I>::copyup() {
       image_ctx, this->m_object_no, std::move(parent_extents), this->m_trace);
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
-    image_ctx->copyup_list_lock.Unlock();
-    image_ctx->image_lock.put_read();
+    image_ctx->copyup_list_lock.unlock();
+    image_ctx->image_lock.unlock_shared();
     new_req->send();
   } else {
-    image_ctx->copyup_list_lock.Unlock();
-    image_ctx->image_lock.put_read();
+    image_ctx->copyup_list_lock.unlock();
+    image_ctx->image_lock.unlock_shared();
   }
 
-  image_ctx->owner_lock.put_read();
+  image_ctx->owner_lock.unlock_shared();
   this->finish(0);
 }
 
@@ -365,17 +365,17 @@ AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
 
   compute_parent_info();
 
-  ictx->image_lock.get_read();
+  ictx->image_lock.lock_shared();
   if (!ictx->migration_info.empty()) {
     m_guarding_migration_write = true;
   }
-  ictx->image_lock.put_read();
+  ictx->image_lock.unlock_shared();
 }
 
 template <typename I>
 void AbstractObjectWriteRequest<I>::compute_parent_info() {
   I *image_ctx = this->m_ictx;
-  RWLock::RLocker image_locker(image_ctx->image_lock);
+  std::shared_lock image_locker{image_ctx->image_lock};
 
   this->compute_parent_extents(&m_parent_extents, false);
 
@@ -389,7 +389,7 @@ template <typename I>
 void AbstractObjectWriteRequest<I>::add_write_hint(
     librados::ObjectWriteOperation *wr) {
   I *image_ctx = this->m_ictx;
-  RWLock::RLocker image_locker(image_ctx->image_lock);
+  std::shared_lock image_locker{image_ctx->image_lock};
   if (image_ctx->object_map == nullptr || !this->m_object_may_exist) {
     ObjectRequest<I>::add_write_hint(*image_ctx, wr);
   }
@@ -402,7 +402,7 @@ void AbstractObjectWriteRequest<I>::send() {
                             << this->m_object_off << "~" << this->m_object_len
                             << dendl;
   {
-    RWLock::RLocker image_lock(image_ctx->image_lock);
+    std::shared_lock image_lock{image_ctx->image_lock};
     if (image_ctx->object_map == nullptr) {
       m_object_may_exist = true;
     } else {
@@ -427,16 +427,16 @@ template <typename I>
 void AbstractObjectWriteRequest<I>::pre_write_object_map_update() {
   I *image_ctx = this->m_ictx;
 
-  image_ctx->image_lock.get_read();
+  image_ctx->image_lock.lock_shared();
   if (image_ctx->object_map == nullptr || !is_object_map_update_enabled()) {
-    image_ctx->image_lock.put_read();
+    image_ctx->image_lock.unlock_shared();
     write_object();
     return;
   }
 
   if (!m_object_may_exist && m_copyup_enabled) {
     // optimization: copyup required
-    image_ctx->image_lock.put_read();
+    image_ctx->image_lock.unlock_shared();
     copyup();
     return;
   }
@@ -450,11 +450,11 @@ void AbstractObjectWriteRequest<I>::pre_write_object_map_update() {
         &AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace, false,
           this)) {
-    image_ctx->image_lock.put_read();
+    image_ctx->image_lock.unlock_shared();
     return;
   }
 
-  image_ctx->image_lock.put_read();
+  image_ctx->image_lock.unlock_shared();
   write_object();
 }
 
@@ -515,9 +515,9 @@ void AbstractObjectWriteRequest<I>::handle_write_object(int r) {
       return;
     }
   } else if (r == -ERANGE && m_guarding_migration_write) {
-    image_ctx->image_lock.get_read();
+    image_ctx->image_lock.lock_shared();
     m_guarding_migration_write = !image_ctx->migration_info.empty();
-    image_ctx->image_lock.put_read();
+    image_ctx->image_lock.unlock_shared();
 
     if (m_guarding_migration_write) {
       copyup();
@@ -549,7 +549,7 @@ void AbstractObjectWriteRequest<I>::copyup() {
   ceph_assert(!m_copyup_in_progress);
   m_copyup_in_progress = true;
 
-  image_ctx->copyup_list_lock.Lock();
+  image_ctx->copyup_list_lock.lock();
   auto it = image_ctx->copyup_list.find(this->m_object_no);
   if (it == image_ctx->copyup_list.end()) {
     auto new_req = CopyupRequest<I>::create(
@@ -561,11 +561,11 @@ void AbstractObjectWriteRequest<I>::copyup() {
     new_req->append_request(this);
     image_ctx->copyup_list[this->m_object_no] = new_req;
 
-    image_ctx->copyup_list_lock.Unlock();
+    image_ctx->copyup_list_lock.unlock();
     new_req->send();
   } else {
     it->second->append_request(this);
-    image_ctx->copyup_list_lock.Unlock();
+    image_ctx->copyup_list_lock.unlock();
   }
 }
 
@@ -596,10 +596,10 @@ template <typename I>
 void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
   I *image_ctx = this->m_ictx;
 
-  image_ctx->image_lock.get_read();
+  image_ctx->image_lock.lock_shared();
   if (image_ctx->object_map == nullptr || !is_object_map_update_enabled() ||
       !is_non_existent_post_write_object_map_state()) {
-    image_ctx->image_lock.put_read();
+    image_ctx->image_lock.unlock_shared();
     this->finish(0);
     return;
   }
@@ -613,11 +613,11 @@ void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
         &AbstractObjectWriteRequest<I>::handle_post_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
           this->m_trace, false, this)) {
-    image_ctx->image_lock.put_read();
+    image_ctx->image_lock.unlock_shared();
     return;
   }
 
-  image_ctx->image_lock.put_read();
+  image_ctx->image_lock.unlock_shared();
   this->finish(0);
 }
 

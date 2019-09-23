@@ -140,16 +140,16 @@ void SimpleSchedulerObjectDispatch<I>::ObjectRequests::try_merge_delayed_request
 
 template <typename I>
 void SimpleSchedulerObjectDispatch<I>::ObjectRequests::dispatch_delayed_requests(
-    I *image_ctx, LatencyStats *latency_stats, Mutex *latency_stats_lock) {
+    I *image_ctx, LatencyStats *latency_stats, ceph::mutex *latency_stats_lock) {
   for (auto &it : m_delayed_requests) {
     auto offset = it.first;
     auto &merged_requests = it.second;
 
-    auto ctx = new FunctionContext(
+    auto ctx = new LambdaContext(
         [requests=std::move(merged_requests.requests), latency_stats,
          latency_stats_lock, start_time=ceph_clock_now()](int r) {
           if (latency_stats) {
-            Mutex::Locker locker(*latency_stats_lock);
+	    std::lock_guard locker{*latency_stats_lock};
             auto latency = ceph_clock_now() - start_time;
             latency_stats->add(latency.to_nsec());
           }
@@ -167,15 +167,15 @@ void SimpleSchedulerObjectDispatch<I>::ObjectRequests::dispatch_delayed_requests
     req->send();
   }
 
-  m_dispatch_time = utime_t();
+  m_dispatch_time = {};
 }
 
 template <typename I>
 SimpleSchedulerObjectDispatch<I>::SimpleSchedulerObjectDispatch(
     I* image_ctx)
   : m_image_ctx(image_ctx),
-    m_lock(librbd::util::unique_lock_name(
-      "librbd::io::SimpleSchedulerObjectDispatch::lock", this)),
+    m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
+      "librbd::io::SimpleSchedulerObjectDispatch::lock", this))),
     m_max_delay(image_ctx->config.template get_val<uint64_t>(
       "rbd_io_scheduler_simple_max_delay")) {
   CephContext *cct = m_image_ctx->cct;
@@ -220,7 +220,7 @@ bool SimpleSchedulerObjectDispatch<I>::read(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << object_len << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   if (intersects(object_no, object_off, object_len)) {
     dispatch_delayed_requests(object_no);
   }
@@ -239,7 +239,7 @@ bool SimpleSchedulerObjectDispatch<I>::discard(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << object_len << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   dispatch_delayed_requests(object_no);
   register_in_flight_request(object_no, {}, on_finish);
 
@@ -257,7 +257,7 @@ bool SimpleSchedulerObjectDispatch<I>::write(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << data.length() << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   if (try_delay_write(object_no, object_off, std::move(data), snapc, op_flags,
                       *object_dispatch_flags, on_dispatched)) {
     *dispatch_result = DISPATCH_RESULT_COMPLETE;
@@ -282,7 +282,7 @@ bool SimpleSchedulerObjectDispatch<I>::write_same(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << object_len << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   dispatch_delayed_requests(object_no);
   register_in_flight_request(object_no, {}, on_finish);
 
@@ -301,7 +301,7 @@ bool SimpleSchedulerObjectDispatch<I>::compare_and_write(
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << cmp_data.length() << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   dispatch_delayed_requests(object_no);
   register_in_flight_request(object_no, {}, on_finish);
 
@@ -316,7 +316,7 @@ bool SimpleSchedulerObjectDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   dispatch_all_delayed_requests();
 
   return false;
@@ -325,7 +325,7 @@ bool SimpleSchedulerObjectDispatch<I>::flush(
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::intersects(
     uint64_t object_no, uint64_t object_off, uint64_t len) const {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   auto cct = m_image_ctx->cct;
 
   auto it = m_requests.find(object_no);
@@ -342,7 +342,7 @@ bool SimpleSchedulerObjectDispatch<I>::try_delay_write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
     const ::SnapContext &snapc, int op_flags, int object_dispatch_flags,
     Context* on_dispatched) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   auto cct = m_image_ctx->cct;
 
   if (m_latency_stats && !m_latency_stats->is_ready()) {
@@ -365,11 +365,11 @@ bool SimpleSchedulerObjectDispatch<I>::try_delay_write(
 
   // schedule dispatch on the first request added
   if (delayed && !object_requests->is_scheduled_dispatch()) {
-    auto dispatch_time = ceph_clock_now();
+    auto dispatch_time = ceph::real_clock::now();
     if (m_latency_stats) {
-      dispatch_time += utime_t(0, m_latency_stats->avg() / 2);
+      dispatch_time += std::chrono::nanoseconds(m_latency_stats->avg() / 2);
     } else {
-      dispatch_time += utime_t(0, m_max_delay * 1000000);
+      dispatch_time += std::chrono::milliseconds(m_max_delay);
     }
     object_requests->set_scheduled_dispatch(dispatch_time);
     m_dispatch_queue.push_back(object_requests);
@@ -383,7 +383,7 @@ bool SimpleSchedulerObjectDispatch<I>::try_delay_write(
 
 template <typename I>
 void SimpleSchedulerObjectDispatch<I>::dispatch_all_delayed_requests() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -404,11 +404,11 @@ void SimpleSchedulerObjectDispatch<I>::register_in_flight_request(
 
   auto dispatch_seq = ++m_dispatch_seq;
   it->second->set_dispatch_seq(dispatch_seq);
-  *on_finish = new FunctionContext(
+  *on_finish = new LambdaContext(
     [this, object_no, dispatch_seq, start_time, ctx=*on_finish](int r) {
       ctx->complete(r);
 
-      Mutex::Locker locker(m_lock);
+      std::lock_guard locker{m_lock};
       if (m_latency_stats && start_time != utime_t()) {
         auto latency = ceph_clock_now() - start_time;
         m_latency_stats->add(latency.to_nsec());
@@ -427,7 +427,7 @@ void SimpleSchedulerObjectDispatch<I>::register_in_flight_request(
 template <typename I>
 void SimpleSchedulerObjectDispatch<I>::dispatch_delayed_requests(
     uint64_t object_no) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   auto cct = m_image_ctx->cct;
 
   auto it = m_requests.find(object_no);
@@ -443,7 +443,7 @@ void SimpleSchedulerObjectDispatch<I>::dispatch_delayed_requests(
 template <typename I>
 void SimpleSchedulerObjectDispatch<I>::dispatch_delayed_requests(
     ObjectRequestsRef object_requests) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   auto cct = m_image_ctx->cct;
 
   ldout(cct, 20) << "object_no=" << object_requests->get_object_no() << ", "
@@ -467,10 +467,10 @@ void SimpleSchedulerObjectDispatch<I>::dispatch_delayed_requests(
 
 template <typename I>
 void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   auto cct = m_image_ctx->cct;
 
-  Mutex::Locker timer_locker(*m_timer_lock);
+  std::lock_guard timer_locker{*m_timer_lock};
 
   if (m_timer_task != nullptr) {
     ldout(cct, 20) << "canceling task " << m_timer_task << dendl;
@@ -498,17 +498,17 @@ void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
     object_requests = m_dispatch_queue.front().get();
   }
 
-  m_timer_task = new FunctionContext(
+  m_timer_task = new LambdaContext(
     [this, object_no=object_requests->get_object_no()](int r) {
-      ceph_assert(m_timer_lock->is_locked());
+      ceph_assert(ceph_mutex_is_locked(*m_timer_lock));
       auto cct = m_image_ctx->cct;
       ldout(cct, 20) << "running timer task " << m_timer_task << dendl;
 
       m_timer_task = nullptr;
       m_image_ctx->op_work_queue->queue(
-          new FunctionContext(
+          new LambdaContext(
             [this, object_no](int r) {
-              Mutex::Locker locker(m_lock);
+	      std::lock_guard locker{m_lock};
               dispatch_delayed_requests(object_no);
             }), 0);
     });

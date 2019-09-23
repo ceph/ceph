@@ -58,39 +58,55 @@ struct bufferlist_consumer {
 
 seastar::future<bufferlist> Socket::read(size_t bytes)
 {
-  if (bytes == 0) {
-    return seastar::make_ready_future<bufferlist>();
-  }
-  r.buffer.clear();
-  r.remaining = bytes;
-  return in.consume(bufferlist_consumer{r.buffer, r.remaining})
-    .then([this] {
+#ifdef UNIT_TESTS_BUILT
+  return try_trap_pre(next_trap_read).then([bytes, this] {
+#endif
+    if (bytes == 0) {
+      return seastar::make_ready_future<bufferlist>();
+    }
+    r.buffer.clear();
+    r.remaining = bytes;
+    return in.consume(bufferlist_consumer{r.buffer, r.remaining}).then([this] {
       if (r.remaining) { // throw on short reads
         throw std::system_error(make_error_code(error::read_eof));
       }
       return seastar::make_ready_future<bufferlist>(std::move(r.buffer));
     });
+#ifdef UNIT_TESTS_BUILT
+  }).then([this] (auto buf) {
+    return try_trap_post(next_trap_read
+    ).then([buf = std::move(buf)] () mutable {
+      return std::move(buf);
+    });
+  });
+#endif
 }
 
 seastar::future<seastar::temporary_buffer<char>>
 Socket::read_exactly(size_t bytes) {
-  if (bytes == 0) {
-    return seastar::make_ready_future<seastar::temporary_buffer<char>>();
-  }
-  return in.read_exactly(bytes)
-    .then([this](auto buf) {
+#ifdef UNIT_TESTS_BUILT
+  return try_trap_pre(next_trap_read).then([bytes, this] {
+#endif
+    if (bytes == 0) {
+      return seastar::make_ready_future<seastar::temporary_buffer<char>>();
+    }
+    return in.read_exactly(bytes).then([this](auto buf) {
       if (buf.empty()) {
         throw std::system_error(make_error_code(error::read_eof));
       }
       return seastar::make_ready_future<tmp_buf>(std::move(buf));
     });
+#ifdef UNIT_TESTS_BUILT
+  }).then([this] (auto buf) {
+    return try_trap_post(next_trap_read
+    ).then([buf = std::move(buf)] () mutable {
+      return std::move(buf);
+    });
+  });
+#endif
 }
 
 void Socket::shutdown() {
-#ifndef NDEBUG
-  ceph_assert(!down);
-  down = true;
-#endif
   socket.shutdown_input();
   socket.shutdown_output();
 }
@@ -119,5 +135,44 @@ seastar::future<> Socket::close() {
     ceph_abort();
   });
 }
+
+#ifdef UNIT_TESTS_BUILT
+seastar::future<> Socket::try_trap_pre(bp_action_t& trap) {
+  auto action = trap;
+  trap = bp_action_t::CONTINUE;
+  switch (action) {
+   case bp_action_t::CONTINUE:
+    break;
+   case bp_action_t::FAULT:
+    logger().info("[Test] got FAULT");
+    throw std::system_error(make_error_code(ceph::net::error::negotiation_failure));
+   case bp_action_t::BLOCK:
+    logger().info("[Test] got BLOCK");
+    return blocker->block();
+   case bp_action_t::STALL:
+    trap = action;
+    break;
+   default:
+    ceph_abort("unexpected action from trap");
+  }
+  return seastar::now();
+}
+
+seastar::future<> Socket::try_trap_post(bp_action_t& trap) {
+  auto action = trap;
+  trap = bp_action_t::CONTINUE;
+  switch (action) {
+   case bp_action_t::CONTINUE:
+    break;
+   case bp_action_t::STALL:
+    logger().info("[Test] got STALL and block");
+    shutdown();
+    return blocker->block();
+   default:
+    ceph_abort("unexpected action from trap");
+  }
+  return seastar::now();
+}
+#endif
 
 } // namespace ceph::net

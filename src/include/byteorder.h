@@ -83,21 +83,19 @@ using ceph_le64 = ceph_le<__u64>;
 using ceph_le32 = ceph_le<__u32>;
 using ceph_le16 = ceph_le<__u16>;
 
-inline __u64 init_le64(__u64 x) {
-  return mswab<__u64>(x);
+inline ceph_le64 init_le64(__u64 x) {
+  ceph_le64 v;
+  v = x;
+  return v;
 }
-inline __u32 init_le32(__u32 x) {
-  return mswab<__u32>(x);
+inline ceph_le32 init_le32(__u32 x) {
+  ceph_le32 v;
+  v = x;
+  return v;
 }
-inline __u16 init_le16(__u16 x) {
-  return mswab<__u16>(x);
+inline ceph_le16 init_le16(__u16 x) {
+  ceph_le16 v;
+  v = x;
+  return v;
 }
 
-  /*
-#define cpu_to_le64(x) (x)
-#define cpu_to_le32(x) (x)
-#define cpu_to_le16(x) (x)
-  */
-#define le64_to_cpu(x) ((uint64_t)x)
-#define le32_to_cpu(x) ((__u32)x)
-#define le16_to_cpu(x) ((__u16)x)

@@ -3,9 +3,11 @@
 
 #include <seastar/core/future.hh>
 
+#include "messages/MOSDPGLog.h"
+
+#include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
-#include "common/Formatter.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_connection_priv.h"
 
@@ -53,7 +55,7 @@ seastar::future<> PeeringEvent::start()
   IRef ref = this;
   return get_pg().then([this](Ref<PG> pg) {
     if (!pg) {
-      logger().debug("{}: pg absent, did not create", *this);
+      logger().warn("{}: pg absent, did not create", *this);
       on_pg_absent();
       handle.exit();
       return complete_rctx(pg);
@@ -94,7 +96,40 @@ RemotePeeringEvent::ConnectionPipeline &RemotePeeringEvent::cp()
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
 }
 
-seastar::future<Ref<PG>> RemotePeeringEvent::get_pg() {
+void RemotePeeringEvent::on_pg_absent()
+{
+  if (auto& e = get_event().get_event();
+      e.dynamic_type() == MQuery::static_type()) {
+    const auto map_epoch =
+      shard_services.get_osdmap_service().get_map()->get_epoch();
+    const auto& q = static_cast<const MQuery&>(e);
+    const pg_info_t empty{spg_t{pgid.pgid, q.query.to}};
+    if (q.query.type == q.query.LOG ||
+	q.query.type == q.query.FULLLOG)  {
+      auto m = ceph::make_message<MOSDPGLog>(q.query.from, q.query.to,
+					     map_epoch, empty,
+					     q.query.epoch_sent);
+      ctx.send_osd_message(q.from.osd, std::move(m));
+    } else {
+      ctx.send_notify(q.from.osd, {q.query.from, q.query.to,
+				   q.query.epoch_sent,
+				   map_epoch, empty,
+				   PastIntervals{}});
+    }
+  }
+}
+
+seastar::future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
+{
+  if (pg) {
+    return PeeringEvent::complete_rctx(pg);
+  } else {
+    return shard_services.dispatch_context_messages(std::move(ctx));
+  }
+}
+
+seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
+{
   return with_blocking_future(
     handle.enter(cp().await_map)
   ).then([this] {

@@ -47,7 +47,7 @@ Three parts of OpenStack integrate with Ceph's block devices:
   Cinder services.
 
 - **Guest Disks**: Guest disks are guest operating system disks. By default,
-  when you boot a virtual machine, its disk appears as a file on the filesystem
+  when you boot a virtual machine, its disk appears as a file on the file system
   of the hypervisor (usually under ``/var/lib/nova/instances/<uuid>/``). Prior
   to OpenStack Havana, the only way to boot a VM in Ceph was to use the
   boot-from-volume functionality of Cinder. However, now it is possible to boot
@@ -86,7 +86,7 @@ See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
-Newly created pools must initialized prior to use. Use the ``rbd`` tool
+Newly created pools must be initialized prior to use. Use the ``rbd`` tool
 to initialize the pools::
 
         rbd pool init volumes

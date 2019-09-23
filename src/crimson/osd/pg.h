@@ -19,8 +19,10 @@
 #include "osd/PeeringState.h"
 
 #include "crimson/common/type_helpers.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/osd_operations/replicated_request.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
 
@@ -54,6 +56,7 @@ class PG : public boost::intrusive_ref_counter<
 
   ClientRequest::PGPipeline client_request_pg_pipeline;
   PeeringEvent::PGPipeline peering_request_pg_pipeline;
+  RepRequest::PGPipeline replicated_request_pg_pipeline;
 
   spg_t pgid;
   pg_shard_t pg_whoami;
@@ -63,6 +66,7 @@ class PG : public boost::intrusive_ref_counter<
 public:
   PG(spg_t pgid,
      pg_shard_t pg_shard,
+     ceph::os::CollectionRef coll_ref,
      pg_pool_t&& pool,
      std::string&& name,
      cached_map_t osdmap,
@@ -77,6 +81,13 @@ public:
 
   const spg_t& get_pgid() const {
     return pgid;
+  }
+
+  PGBackend& get_backend() {
+    return *backend;
+  }
+  const PGBackend& get_backend() const {
+    return *backend;
   }
 
   // EpochSource
@@ -147,11 +158,11 @@ public:
   void send_cluster_message(
     int osd, Message *m,
     epoch_t epoch, bool share_map_update=false) final {
-    shard_services.send_to_osd(osd, m, epoch);
+    (void)shard_services.send_to_osd(osd, m, epoch);
   }
 
   void send_pg_created(pg_t pgid) final {
-    shard_services.send_pg_created(pgid);
+    (void)shard_services.send_pg_created(pgid);
   }
 
   bool try_flush_or_schedule_async() final;
@@ -159,7 +170,7 @@ public:
   void start_flush_on_transaction(
     ObjectStore::Transaction &t) final {
     t.register_on_commit(
-      new LambdaContext([this](){
+      new LambdaContext([this](int r){
 	peering_state.complete_flush();
     }));
   }
@@ -206,7 +217,7 @@ public:
     PGPeeringEventRef on_commit) final {
     t.register_on_commit(
       new LambdaContext(
-	[this, on_commit=std::move(on_commit)] {
+	[this, on_commit=std::move(on_commit)](int r){
 	  shard_services.start_operation<LocalPeeringEvent>(
 	    this,
 	    shard_services,
@@ -257,9 +268,7 @@ public:
   void on_change(ObjectStore::Transaction &t) final {
     // Not needed yet
   }
-  void on_activate(interval_set<snapid_t> to_trim) final {
-    // Not needed yet (will be needed for IO unblocking)
-  }
+  void on_activate(interval_set<snapid_t> to_trim) final;
   void on_activate_complete() final;
   void on_new_interval() final {
     // Not needed yet
@@ -377,6 +386,9 @@ public:
     return OstreamTemp(CLOG_ERROR, nullptr);
   }
 
+  ceph::signedspan get_mnow() final;
+  HeartbeatStampsRef get_hb_stamps(int peer) final;
+
   // Utility
   bool is_primary() const {
     return peering_state.is_primary();
@@ -391,6 +403,10 @@ public:
   }
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
+  }
+
+  const auto& get_pool() const {
+    return peering_state.get_pool();
   }
 
   /// initialize created PG
@@ -416,6 +432,10 @@ public:
   void handle_initialize(PeeringCtx &rctx);
   seastar::future<> handle_op(ceph::net::Connection* conn,
 			      Ref<MOSDOp> m);
+  seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
+  void handle_rep_op_reply(ceph::net::Connection* conn,
+			   const MOSDRepOpReply& m);
+
   void print(std::ostream& os) const;
 
 private:
@@ -423,6 +443,7 @@ private:
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
+  seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,
     OSDOp& op,
@@ -430,6 +451,9 @@ private:
   seastar::future<ceph::bufferlist> do_pgnls(ceph::bufferlist& indata,
 					     const std::string& nspace,
 					     uint64_t limit);
+  seastar::future<> submit_transaction(boost::local_shared_ptr<ObjectState>&& os,
+				       ceph::os::Transaction&& txn,
+				       const MOSDOp& req);
 
 private:
   OSDMapGate osdmap_gate;
@@ -439,14 +463,16 @@ private:
   std::unique_ptr<PGBackend> backend;
 
   PeeringState peering_state;
+  eversion_t projected_last_update;
 
   seastar::shared_promise<> active_promise;
   seastar::future<> wait_for_active();
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;
-  friend class PeeringEvent;
   friend class PGAdvanceMap;
+  friend class PeeringEvent;
+  friend class RepRequest;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);

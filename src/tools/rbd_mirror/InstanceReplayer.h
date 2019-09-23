@@ -9,7 +9,7 @@
 
 #include "common/AsyncOpTracker.h"
 #include "common/Formatter.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "tools/rbd_mirror/Types.h"
 
 namespace journal { struct CacheManagerHandler; }
@@ -28,23 +28,21 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class InstanceReplayer {
 public:
   static InstanceReplayer* create(
-      Threads<ImageCtxT> *threads,
-      ServiceDaemon<ImageCtxT> *service_daemon,
-      journal::CacheManagerHandler *cache_manager_handler,
-      RadosRef local_rados, const std::string &local_mirror_uuid,
-      int64_t local_pool_id) {
-    return new InstanceReplayer(threads, service_daemon, cache_manager_handler,
-                                local_rados, local_mirror_uuid, local_pool_id);
+      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      Threads<ImageCtxT> *threads, ServiceDaemon<ImageCtxT> *service_daemon,
+      journal::CacheManagerHandler *cache_manager_handler) {
+    return new InstanceReplayer(local_io_ctx, local_mirror_uuid, threads,
+                                service_daemon, cache_manager_handler);
   }
   void destroy() {
     delete this;
   }
 
-  InstanceReplayer(Threads<ImageCtxT> *threads,
+  InstanceReplayer(librados::IoCtx &local_io_ctx,
+                   const std::string &local_mirror_uuid,
+                   Threads<ImageCtxT> *threads,
                    ServiceDaemon<ImageCtxT> *service_daemon,
-                   journal::CacheManagerHandler *cache_manager_handler,
-		   RadosRef local_rados, const std::string &local_mirror_uuid,
-		   int64_t local_pool_id);
+                   journal::CacheManagerHandler *cache_manager_handler);
   ~InstanceReplayer();
 
   int init();
@@ -70,6 +68,8 @@ public:
   void restart();
   void flush();
 
+  void stop(Context *on_finish);
+
 private:
   /**
    * @verbatim
@@ -85,14 +85,13 @@ private:
    * @endverbatim
    */
 
+  librados::IoCtx &m_local_io_ctx;
+  std::string m_local_mirror_uuid;
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
-  RadosRef m_local_rados;
-  std::string m_local_mirror_uuid;
-  int64_t m_local_pool_id;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   AsyncOpTracker m_async_op_tracker;
   std::map<std::string, ImageReplayer<ImageCtxT> *> m_image_replayers;
   Peers m_peers;

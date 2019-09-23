@@ -43,7 +43,7 @@ TEST_F(TestObjectMap, RefreshInvalidatesWhenCorrupt) {
 
   C_SaferCond lock_ctx;
   {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
+    std::unique_lock owner_locker{ictx->owner_lock};
     ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
   }
   ASSERT_EQ(0, lock_ctx.wait());
@@ -71,7 +71,7 @@ TEST_F(TestObjectMap, RefreshInvalidatesWhenTooSmall) {
 
   C_SaferCond lock_ctx;
   {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
+    std::unique_lock owner_locker{ictx->owner_lock};
     ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
   }
   ASSERT_EQ(0, lock_ctx.wait());
@@ -100,7 +100,7 @@ TEST_F(TestObjectMap, InvalidateFlagOnDisk) {
 
   C_SaferCond lock_ctx;
   {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
+    std::unique_lock owner_locker{ictx->owner_lock};
     ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
   }
   ASSERT_EQ(0, lock_ctx.wait());
@@ -139,7 +139,7 @@ TEST_F(TestObjectMap, AcquireLockInvalidatesWhenTooSmall) {
 
   C_SaferCond lock_ctx;
   {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
+    std::unique_lock owner_locker{ictx->owner_lock};
     ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
   }
   ASSERT_EQ(0, lock_ctx.wait());
@@ -193,13 +193,13 @@ TEST_F(TestObjectMap, DISABLED_StressTest) {
 
     throttle.start_op();
     uint64_t object_no = (rand() % object_count);
-    auto ctx = new FunctionContext([&throttle, object_no](int r) {
+    auto ctx = new LambdaContext([&throttle, object_no](int r) {
         ASSERT_EQ(0, r) << "object_no=" << object_no;
         throttle.end_op(r);
       });
 
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::RLocker image_locker(ictx->image_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::shared_lock image_locker{ictx->image_lock};
     ASSERT_TRUE(ictx->object_map != nullptr);
 
     if (!ictx->object_map->aio_update<

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import PLUGIN_MANAGER as PM, Interface
+from . import PLUGIN_MANAGER as PM, Interface  # pylint: disable=cyclic-import
 
 
 class CanMgr(Interface):
@@ -22,29 +22,32 @@ class Setupable(Interface):
         Placeholder for plugin setup, right after server start.
         CanMgr.mgr and CanLog.log are initialized by then.
         """
-        pass
 
 
 @PM.add_interface
 class HasOptions(Interface):
     @PM.add_abcspec
-    def get_options(self): pass
+    def get_options(self):
+        pass
 
 
 @PM.add_interface
 class HasCommands(Interface):
     @PM.add_abcspec
-    def register_commands(self): pass
+    def register_commands(self):
+        pass
 
 
 @PM.add_interface
 class HasControllers(Interface):
     @PM.add_abcspec
-    def get_controllers(self): pass
+    def get_controllers(self):
+        pass
 
 
-class FilterRequest:
+class FilterRequest(object):
     @PM.add_interface
     class BeforeHandler(Interface):
         @PM.add_abcspec
-        def filter_request_before_handler(self, request): pass
+        def filter_request_before_handler(self, request):
+            pass

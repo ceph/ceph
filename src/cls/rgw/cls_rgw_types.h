@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_RGW_TYPES_H
 #define CEPH_CLS_RGW_TYPES_H
 
+#include <boost/container/flat_map.hpp>
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 
@@ -770,7 +771,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
 struct rgw_bucket_dir {
   rgw_bucket_dir_header header;
-  std::map<string, rgw_bucket_dir_entry> m;
+  boost::container::flat_map<string, rgw_bucket_dir_entry> m;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
@@ -1093,7 +1094,7 @@ struct cls_rgw_gc_obj_info
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.back()->tag = "footag";
-    ceph_timespec ts{21, 32};
+    ceph_timespec ts{init_le32(21), init_le32(32)};
     ls.back()->time = ceph::real_clock::from_ceph_timespec(ts);
   }
 };

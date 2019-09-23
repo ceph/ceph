@@ -1,8 +1,9 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
-import { Observable } from 'rxjs';
+import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
@@ -29,19 +30,19 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
   styleUrls: ['./osd-list.component.scss']
 })
 export class OsdListComponent implements OnInit {
-  @ViewChild('statusColor')
+  @ViewChild('statusColor', { static: true })
   statusColor: TemplateRef<any>;
-  @ViewChild('osdUsageTpl')
+  @ViewChild('osdUsageTpl', { static: true })
   osdUsageTpl: TemplateRef<any>;
-  @ViewChild('markOsdConfirmationTpl')
+  @ViewChild('markOsdConfirmationTpl', { static: true })
   markOsdConfirmationTpl: TemplateRef<any>;
-  @ViewChild('criticalConfirmationTpl')
+  @ViewChild('criticalConfirmationTpl', { static: true })
   criticalConfirmationTpl: TemplateRef<any>;
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   tableComponent: TableComponent;
-  @ViewChild('reweightBodyTpl')
+  @ViewChild('reweightBodyTpl', { static: false })
   reweightBodyTpl: TemplateRef<any>;
-  @ViewChild('safeToDestroyBodyTpl')
+  @ViewChild('safeToDestroyBodyTpl', { static: false })
   safeToDestroyBodyTpl: TemplateRef<any>;
 
   permissions: Permissions;
@@ -51,8 +52,8 @@ export class OsdListComponent implements OnInit {
   clusterWideActions: CdTableAction[];
   icons = Icons;
 
-  osds = [];
   selection = new CdTableSelection();
+  osds = [];
 
   protected static collectStates(osd) {
     return [osd['in'] ? 'in' : 'out', osd['up'] ? 'up' : 'down'];
@@ -86,7 +87,7 @@ export class OsdListComponent implements OnInit {
         name: this.actionLabels.REWEIGHT,
         permission: 'update',
         click: () => this.reweight(),
-        disable: () => !this.hasOsdSelected,
+        disable: () => !this.hasOsdSelected || !this.selection.hasSingleSelection,
         icon: Icons.reweight
       },
       {
@@ -206,11 +207,17 @@ export class OsdListComponent implements OnInit {
     ];
   }
 
+  getSelectedIds() {
+    return this.selection.selected.map((row) => row.id);
+  }
+
   get hasOsdSelected() {
+    const validOsds = [];
     if (this.selection.hasSelection) {
-      const osdId = this.selection.first().id;
-      const osd = this.osds.filter((o) => o.id === osdId).pop();
-      return !!osd;
+      for (const osdId of this.getSelectedIds()) {
+        validOsds.push(this.osds.filter((o) => o.id === osdId).pop());
+      }
+      return validOsds.length > 0;
     }
     return false;
   }
@@ -228,23 +235,27 @@ export class OsdListComponent implements OnInit {
       return true;
     }
 
-    const osdId = this.selection.first().id;
-    const osd = this.osds.filter((o) => o.id === osdId).pop();
+    const validOsds = [];
+    if (this.selection.hasSelection) {
+      for (const osdId of this.getSelectedIds()) {
+        validOsds.push(this.osds.filter((o) => o.id === osdId).pop());
+      }
+    }
 
-    if (!osd) {
+    if (validOsds.length === 0) {
       // `osd` is undefined if the selected OSD has been removed.
       return true;
     }
 
     switch (state) {
       case 'in':
-        return osd.in === 1;
+        return validOsds.some((osd) => osd.in === 1);
       case 'out':
-        return osd.in !== 1;
+        return validOsds.some((osd) => osd.in !== 1);
       case 'down':
-        return osd.up !== 1;
+        return validOsds.some((osd) => osd.up !== 1);
       case 'up':
-        return osd.up === 1;
+        return validOsds.some((osd) => osd.up === 1);
     }
   }
 
@@ -267,7 +278,7 @@ export class OsdListComponent implements OnInit {
     }
 
     const initialState = {
-      selected: this.tableComponent.selection.selected,
+      selected: this.getSelectedIds(),
       deep: deep
     };
 
@@ -288,9 +299,11 @@ export class OsdListComponent implements OnInit {
           markActionDescription: markAction
         },
         onSubmit: () => {
-          onSubmit
-            .call(this.osdService, this.selection.first().id)
-            .subscribe(() => this.bsModalRef.hide());
+          observableForkJoin(
+            this.getSelectedIds().map((osd: any) => {
+              onSubmit.call(this.osdService, osd).subscribe(() => this.bsModalRef.hide());
+            })
+          );
         }
       }
     });
@@ -312,7 +325,7 @@ export class OsdListComponent implements OnInit {
     templateItemDescription: string,
     action: (id: number) => Observable<any>
   ): void {
-    this.osdService.safeToDestroy(this.selection.first().id).subscribe((result) => {
+    this.osdService.safeToDestroy(JSON.stringify(this.getSelectedIds())).subscribe((result) => {
       const modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
         initialState: {
           actionDescription: actionDescription,
@@ -323,9 +336,11 @@ export class OsdListComponent implements OnInit {
             actionDescription: templateItemDescription
           },
           submitAction: () => {
-            action
-              .call(this.osdService, this.selection.first().id)
-              .subscribe(() => modalRef.hide());
+            observableForkJoin(
+              this.getSelectedIds().map((osd: any) => {
+                action.call(this.osdService, osd).subscribe(() => modalRef.hide());
+              })
+            );
           }
         }
       });

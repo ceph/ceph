@@ -4,9 +4,11 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+import copy
 import sys
 import time
 import fnmatch
+from functools import wraps
 import uuid
 import string
 import random
@@ -61,6 +63,11 @@ class _Completion(G):
         completion.
         """
         raise NotImplementedError()
+
+    def result_str(self):
+        if self.result is None:
+            return ''
+        return str(self.result)
 
     @property
     def exception(self):
@@ -123,7 +130,11 @@ def raise_if_exception(c):
         return my_obj
 
     if c.exception is not None:
-        raise copy_to_this_subinterpreter(c.exception)
+        try:
+            e = copy_to_this_subinterpreter(c.exception)
+        except (KeyError, AttributeError):
+            raise Exception(str(c.exception))
+        raise e
 
 
 class ReadCompletion(_Completion):
@@ -223,6 +234,9 @@ class WriteCompletion(_Completion):
         """
         return not self.is_persistent
 
+def _hide_in_features(f):
+    f._hide_in_features = True
+    return f
 
 class Orchestrator(object):
     """
@@ -243,6 +257,7 @@ class Orchestrator(object):
     while you scan hosts every time.
     """
 
+    @_hide_in_features
     def is_orchestrator_module(self):
         """
         Enable other modules to interrogate this module to discover
@@ -252,6 +267,7 @@ class Orchestrator(object):
         """
         return True
 
+    @_hide_in_features
     def available(self):
         # type: () -> Tuple[bool, str]
         """
@@ -265,7 +281,8 @@ class Orchestrator(object):
         (e.g. based on a periodic background ping of the orchestrator)
         if that's necessary to make this method fast.
 
-        ..note:: `True` doesn't mean that the desired functionality
+        .. note::
+            `True` doesn't mean that the desired functionality
             is actually available in the orchestrator. I.e. this
             won't work as expected::
 
@@ -276,6 +293,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    @_hide_in_features
     def wait(self, completions):
         """
         Given a list of Completion instances, progress any which are
@@ -291,6 +309,36 @@ class Orchestrator(object):
         :rtype: bool
         """
         raise NotImplementedError()
+
+    @_hide_in_features
+    def get_feature_set(self):
+        """Describes which methods this orchestrator implements
+
+        .. note::
+            `True` doesn't mean that the desired functionality
+            is actually possible in the orchestrator. I.e. this
+            won't work as expected::
+
+                >>> api = OrchestratorClientMixin()
+                ... if api.get_feature_set()['get_hosts']['available']:  # wrong.
+                ...     api.get_hosts()
+
+            It's better to ask for forgiveness instead::
+
+                >>> try:
+                ...     OrchestratorClientMixin().get_hosts()
+                ... except (OrchestratorError, NotImplementedError):
+                ...     ...
+
+
+        :returns: Dict of API method names to ``{'available': True or False}``
+        """
+        module = self.__class__
+        features = {a: {'available': getattr(Orchestrator, a, None) != getattr(module, a)}
+                    for a in Orchestrator.__dict__
+                    if not a.startswith('_') and not getattr(getattr(Orchestrator, a), '_hide_in_features', False)
+                    }
+        return features
 
     def add_host(self, host):
         # type: (str) -> WriteCompletion
@@ -386,18 +434,11 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def replace_osds(self, drive_group):
-        # type: (DriveGroupSpec) -> WriteCompletion
-        """
-        Like create_osds, but the osd_id_claims must be fully
-        populated.
-        """
-        raise NotImplementedError()
-
-    def remove_osds(self, osd_ids):
-        # type: (List[str]) -> WriteCompletion
+    def remove_osds(self, osd_ids, destroy=False):
+        # type: (List[str], bool) -> WriteCompletion
         """
         :param osd_ids: list of OSD IDs
+        :param destroy: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
 
         Note that this can only remove OSDs that were successfully
         created (i.e. got an OSD ID).
@@ -424,38 +465,66 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def add_stateless_service(self, service_type, spec):
-        # type: (str, StatelessServiceSpec) -> WriteCompletion
-        """
-        Installing and adding a completely new service to the cluster.
+    def add_mds(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """Create a new MDS cluster"""
+        raise NotImplementedError()
 
-        This is not about starting services.
+    def remove_mds(self, name):
+        # type: (str) -> WriteCompletion
+        """Remove an MDS cluster"""
+        raise NotImplementedError()
+
+    def update_mds(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy existing MDS cluster
+        Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
-    def update_stateless_service(self, service_type, spec):
-        # type: (str, StatelessServiceSpec) -> WriteCompletion
-        """
-        This is about changing / redeploying existing services. Like for
-        example changing the number of service instances.
+    def add_nfs(self, spec):
+        # type: (NFSServiceSpec) -> WriteCompletion
+        """Create a new MDS cluster"""
+        raise NotImplementedError()
 
-        :rtype: WriteCompletion
+    def remove_nfs(self, name):
+        # type: (str) -> WriteCompletion
+        """Remove a NFS cluster"""
+        raise NotImplementedError()
+
+    def update_nfs(self, spec):
+        # type: (NFSServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy existing NFS cluster
+        Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
-    def remove_stateless_service(self, service_type, id_resource):
-        # type: (str, str) -> WriteCompletion
-        """
-        Uninstalls an existing service from the cluster.
+    def add_rgw(self, spec):
+        # type: (RGWSpec) -> WriteCompletion
+        """Create a new MDS zone"""
+        raise NotImplementedError()
 
-        This is not about stopping services.
+    def remove_rgw(self, zone):
+        # type: (str) -> WriteCompletion
+        """Remove a RGW zone"""
+        raise NotImplementedError()
+
+    def update_rgw(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy existing RGW zone
+        Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
+    @_hide_in_features
     def upgrade_start(self, upgrade_spec):
         # type: (UpgradeSpec) -> WriteCompletion
         raise NotImplementedError()
 
+    @_hide_in_features
     def upgrade_status(self):
         # type: () -> ReadCompletion[UpgradeStatusSpec]
         """
@@ -466,6 +535,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    @_hide_in_features
     def upgrade_available(self):
         # type: () -> ReadCompletion[List[str]]
         """
@@ -496,6 +566,17 @@ class PlacementSpec(object):
     """
     def __init__(self):
         self.label = None
+
+
+def handle_type_error(method):
+    @wraps(method)
+    def inner(cls, *args, **kwargs):
+        try:
+            return method(cls, *args, **kwargs)
+        except TypeError as e:
+            error_msg = '{}: {}'.format(cls.__name__, e)
+        raise OrchestratorValidationError(error_msg)
+    return inner
 
 
 class ServiceDescription(object):
@@ -574,6 +655,7 @@ class ServiceDescription(object):
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
+    @handle_type_error
     def from_json(cls, data):
         return cls(**data)
 
@@ -584,86 +666,118 @@ class StatelessServiceSpec(object):
     """
     Details of stateless service creation.
 
-    This is *not* supposed to contain all the configuration
-    of the services: it's just supposed to be enough information to
-    execute the binaries.
+    Request to orchestrator for a group of stateless services
+    such as MDS, RGW or iscsi gateway
     """
+    # This structure is supposed to be enough information to
+    # start the services.
 
-    def __init__(self):
-        self.placement = PlacementSpec()
+    def __init__(self, name, placement=None, count=None):
+        self.placement = PlacementSpec() if placement is None else placement
 
-        # Give this set of statelss services a name: typically it would
-        # be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
-        # within one ceph cluster.
-        self.name = ""
+        #: Give this set of statelss services a name: typically it would
+        #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
+        #: within one ceph cluster.
+        self.name = name
 
-        # Count of service instances
-        self.count = 1
+        #: Count of service instances
+        self.count = 1 if count is None else count
 
-        # Arbitrary JSON-serializable object.
-        # Maybe you're using e.g. kubenetes and you want to pass through
-        # some replicaset special sauce for autoscaling?
-        self.extended = {}
+    def validate_add(self):
+        if not self.name:
+            raise OrchestratorValidationError('Cannot add Service: Name required')
 
-        # Object with specific settings for the service
-        self.service_spec = None
 
-class RGWSpec(object):
+class NFSServiceSpec(StatelessServiceSpec):
+    def __init__(self, name, pool=None, namespace=None, count=1, placement=None):
+        super(NFSServiceSpec, self).__init__(name, placement, count)
+
+        #: RADOS pool where NFS client recovery data is stored.
+        self.pool = pool
+
+        #: RADOS namespace where NFS client recovery data is stored in the pool.
+        self.namespace = namespace
+
+    def validate_add(self):
+        super(NFSServiceSpec, self).validate_add()
+
+        if not self.pool:
+            raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
+
+
+class RGWSpec(StatelessServiceSpec):
     """
-    Settings to configure a multisite Ceph RGW
-    """
-    def __init__(self, hosts=None, rgw_multisite=True, rgw_zone="Default_Zone",
-              rgw_zonemaster=True, rgw_zonesecondary=False,
-              rgw_multisite_proto="http", rgw_frontend_port="8080",
-              rgw_zonegroup="Main", rgw_zone_user="zone.user",
-              rgw_realm="RGW_Realm", system_access_key=None,
-              system_secret_key=None):
+    Settings to configure a (multisite) Ceph RGW
 
+    """
+    def __init__(self,
+                 rgw_zone,  # type: str
+                 hosts=None,  # type: Optional[List[str]]
+                 rgw_multisite=None,  # type: Optional[bool]
+                 rgw_zonemaster=None,  # type: Optional[bool]
+                 rgw_zonesecondary=None,  # type: Optional[bool]
+                 rgw_multisite_proto=None,  # type: Optional[str]
+                 rgw_frontend_port=None,  # type: Optional[int]
+                 rgw_zonegroup=None,  # type: Optional[str]
+                 rgw_zone_user=None,  # type: Optional[str]
+                 rgw_realm=None,  # type: Optional[str]
+                 system_access_key=None,  # type: Optional[str]
+                 system_secret_key=None,  # type: Optional[str]
+                 count=None  # type: Optional[int]
+                 ):
+        # Regarding default values. Ansible has a `set_rgwspec_defaults` that sets
+        # default values that makes sense for Ansible. Rook has default values implemented
+        # in Rook itself. Thus we don't set any defaults here in this class.
+
+        super(RGWSpec, self).__init__(name=rgw_zone, count=count)
+
+        #: List of hosts where RGWs should run. Not for Rook.
         self.hosts = hosts
+
+        #: is multisite
         self.rgw_multisite = rgw_multisite
-        self.rgw_zone = rgw_zone
         self.rgw_zonemaster = rgw_zonemaster
         self.rgw_zonesecondary = rgw_zonesecondary
         self.rgw_multisite_proto = rgw_multisite_proto
         self.rgw_frontend_port = rgw_frontend_port
 
-        if hosts:
-            self.rgw_multisite_endpoint_addr = hosts[0]
-
-            self.rgw_multisite_endpoints_list = ",".join(
-                ["{}://{}:{}".format(self.rgw_multisite_proto,
-                                    host,
-                                    self.rgw_frontend_port) for host in hosts])
-
         self.rgw_zonegroup = rgw_zonegroup
         self.rgw_zone_user = rgw_zone_user
         self.rgw_realm = rgw_realm
 
-        if system_access_key:
-            self.system_access_key = system_access_key
-        else:
-            self.system_access_key = self.genkey(20)
-        if system_secret_key:
-            self.system_secret_key = system_secret_key
-        else:
-            self.system_secret_key = self.genkey(40)
+        self.system_access_key = system_access_key
+        self.system_secret_key = system_secret_key
+
+    @property
+    def rgw_multisite_endpoint_addr(self):
+        """Returns the first host. Not supported for Rook."""
+        return self.hosts[0]
+
+    @property
+    def rgw_multisite_endpoints_list(self):
+        return ",".join(["{}://{}:{}".format(self.rgw_multisite_proto,
+                             host,
+                             self.rgw_frontend_port) for host in self.hosts])
 
     def genkey(self, nchars):
         """ Returns a random string of nchars
 
         :nchars : Length of the returned string
         """
+        # TODO Python 3: use Secrets module instead.
 
         return ''.join(random.choice(string.ascii_uppercase +
                                      string.ascii_lowercase +
                                      string.digits) for _ in range(nchars))
 
     @classmethod
-    def from_json(self, json_rgw_spec):
+    def from_json(cls, json_rgw_spec):
+        # type: (dict) -> RGWSpec
         """
-        Initialize 'RGWSpec' object geting data from a json estructure
-        :param json_rgw_spec: A valid json string with a the RGW settings
+        Initialize 'RGWSpec' object data from a json structure
+        :param json_rgw_spec: A valid dict with a the RGW settings
         """
+        # TODO: also add PlacementSpec(**json_rgw_spec['placement'])
         args = {k:v for k, v in json_rgw_spec.items()}
         return RGWSpec(**args)
 
@@ -744,6 +858,11 @@ class InventoryDevice(object):
                     extended=self.extended)
 
     @classmethod
+    @handle_type_error
+    def from_json(cls, data):
+        return cls(**data)
+
+    @classmethod
     def from_ceph_volume_inventory(cls, data):
         # TODO: change InventoryDevice itself to mirror c-v inventory closely!
 
@@ -798,6 +917,21 @@ class InventoryNode(object):
 
     def to_json(self):
         return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+
+    @classmethod
+    def from_json(cls, data):
+        try:
+            _data = copy.deepcopy(data)
+            name = _data.pop('name')
+            devices = [InventoryDevice.from_json(device)
+                       for device in _data.pop('devices')]
+            if _data:
+                error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
+                raise OrchestratorValidationError(error_msg)
+            return cls(name, devices)
+        except KeyError as e:
+            error_msg = '{} is required for {}'.format(e, cls.__name__)
+            raise OrchestratorValidationError(error_msg)
 
     @classmethod
     def from_nested_items(cls, hosts):
@@ -877,7 +1011,7 @@ class OrchestratorClientMixin(Orchestrator):
                 self.remote("progress", "complete", completion.progress_id)
             else:
                 self.remote("progress", "update", completion.progress_id, str(completion), progress,
-                            ["orchestrator"])
+                            [("origin", "orchestrator")])
         except AttributeError:
             # No WriteCompletion. Ignore.
             pass

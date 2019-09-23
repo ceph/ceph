@@ -41,10 +41,10 @@ void PyModuleRegistry::init()
   // Set up global python interpreter
 #if PY_MAJOR_VERSION >= 3
 #define WCHAR(s) L ## #s
-  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(PYTHON_EXECUTABLE)));
+  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(MGR_PYTHON_EXECUTABLE)));
 #undef WCHAR
 #else
-  Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
+  Py_SetProgramName(const_cast<char*>(MGR_PYTHON_EXECUTABLE));
 #endif
   // Add more modules
   if (g_conf().get_val<bool>("daemonize")) {
@@ -386,7 +386,8 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
         ss << dependency_modules.size()
 	   << " mgr modules have failed dependencies";
       }
-      auto& d = checks->add("MGR_MODULE_DEPENDENCY", HEALTH_WARN, ss.str());
+      auto& d = checks->add("MGR_MODULE_DEPENDENCY", HEALTH_WARN, ss.str(),
+			    dependency_modules.size());
       for (auto& i : dependency_modules) {
 	std::ostringstream ss;
         ss << "Module '" << i.first << "' has failed dependency: " << i.second;
@@ -402,7 +403,8 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       } else if (failed_modules.size() > 1) {
         ss << failed_modules.size() << " mgr modules have failed";
       }
-      auto& d = checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str());
+      auto& d = checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str(),
+			    failed_modules.size());
       for (auto& i : failed_modules) {
 	std::ostringstream ss;
         ss << "Module '" << i.first << "' has failed: " << i.second;

@@ -124,6 +124,26 @@ ENDOFKEY
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/$(uname -m)-linux-gnu-g++
 }
 
+function ensure_decent_cmake_on_ubuntu {
+    # TODO: remove me after a while
+    # remove Kitware Apt Archive Automatic Signing Key
+    $SUDO apt-key del 40CD72DA
+    $SUDO rm -f /etc/apt/sources.list.d/kitware.list
+    local new=$1
+    if command -v cmake > /dev/null; then
+        local old=$(cmake --version | grep -Po 'version \K[0-9].*')
+        if dpkg --compare-versions $old ge $new; then
+          return
+        fi
+    fi
+    install_pkg_on_ubuntu \
+	ceph-cmake \
+	d278b9d28de0f6b88f56dfe1e8bf684a41577210 \
+	xenial \
+	force \
+	cmake
+}
+
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -131,13 +151,19 @@ function install_pkg_on_ubuntu {
     shift
     local codename=$1
     shift
+    local force=$1
+    shift
     local pkgs=$@
     local missing_pkgs
-    for pkg in $pkgs; do
-	if ! dpkg -s $pkg &> /dev/null; then
-	    missing_pkgs+=" $pkg"
-	fi
-    done
+    if [ $force = "force" ]; then
+	missing_pkgs="$@"
+    else
+	for pkg in $pkgs; do
+	    if ! dpkg -s $pkg &> /dev/null; then
+		missing_pkgs+=" $pkg"
+	    fi
+	done
+    fi
     if test -n "$missing_pkgs"; then
 	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
 	$SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
@@ -152,6 +178,7 @@ function install_boost_on_ubuntu {
 	ceph-libboost1.67 \
 	dd38c27740c1f9a9e6719a07eef84a1369dc168b \
 	$codename \
+	check \
 	ceph-libboost-atomic1.67-dev \
 	ceph-libboost-chrono1.67-dev \
 	ceph-libboost-container1.67-dev \
@@ -197,12 +224,17 @@ EOF
 	    source /opt/rh/devtoolset-$dts_ver/enable
 	fi
     fi
-    if [ $(rpm -q --queryformat "%{VERSION}" devtoolset-$dts_ver-gcc-c++) = 8.3.1 ]; then
-        # rollback to avoid using a buggy version
-        $SUDO yum remove -y devtoolset-8-gcc-c++ devtoolset-8-gcc devtoolset-8-libstdc++-devel
-        $SUDO yum install -y devtoolset-8-gcc-c++-8.2.1-3.el7
-    fi
 }
+
+for_make_check=false
+if tty -s; then
+    # interactive
+    for_make_check=true
+elif [ $FOR_MAKE_CHECK ]; then
+    for_make_check=true
+else
+    for_make_check=false
+fi
 
 if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
@@ -239,11 +271,10 @@ if [ x$(uname)x = xFreeBSDx ]; then
         textproc/py-sphinx \
         emulators/fuse \
         java/junit \
-        lang/python \
-        lang/python27 \
         lang/python36 \
         devel/py-pip \
         devel/py-flake8 \
+        devel/py-tox \
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
@@ -263,15 +294,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
 
     exit
 else
-    for_make_check=false
-    if tty -s; then
-        # interactive
-        for_make_check=true
-    elif [ $FOR_MAKE_CHECK ]; then
-        for_make_check=true
-    else
-        for_make_check=false
-    fi
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     source /etc/os-release
     case $ID in
@@ -285,11 +307,15 @@ else
                 ;;
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 8 xenial
+                ensure_decent_cmake_on_ubuntu 3.10.1
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
+                ;;
+            *Disco*)
+                [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.67-all-dev
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -315,7 +341,6 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
-	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         yumdnf="yum"
@@ -347,6 +372,7 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 7 ; then
+		    $SUDO $yumdnf install -y python36-devel
 		    case $(uname -m) in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
@@ -374,9 +400,8 @@ else
 	if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
 	fi
-        ! grep -q -i error: $DIR/yum-builddep.out || exit 1
-        # for building python-saml and its dependencies
-        $SUDO $yumdnf install -y xmlsec1 xmlsec1-nss xmlsec1-openssl xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel
+        IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
+        sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
@@ -384,7 +409,6 @@ else
         $SUDO $zypp_install systemd-rpm-macros
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
-        $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel
         ;;
     alpine)
         # for now we need the testing repo for leveldb
@@ -411,9 +435,11 @@ function populate_wheelhouse() {
 
     # although pip comes with virtualenv, having a recent version
     # of pip matters when it comes to using wheel packages
-    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+    PIP_OPTS="--timeout 300 --exists-action i"
+    pip $PIP_OPTS $install \
+      'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
     if test $# != 0 ; then
-        pip --timeout 300 $install $@ || return 1
+        pip $PIP_OPTS $install $@ || return 1
     fi
 }
 
@@ -443,41 +469,51 @@ function activate_virtualenv() {
     . $env_dir/bin/activate
 }
 
+function preload_wheels_for_tox() {
+    local ini=$1
+    shift
+    pushd .
+    cd $(dirname $ini)
+    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
+    local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+    local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+    local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
+    local md5=wheelhouse/md5
+    if test "$require"; then
+        if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
+            rm -rf wheelhouse
+        fi
+    fi
+    if test "$require" && ! test -d wheelhouse ; then
+        for interpreter in python2.7 python3 ; do
+            type $interpreter > /dev/null 2>&1 || continue
+            activate_virtualenv $top_srcdir $interpreter || exit 1
+            populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
+        done
+        mv $wip_wheelhouse wheelhouse
+        md5sum $require_files $constraint_files > $md5
+    fi
+    popd
+}
+
 # use pip cache if possible but do not store it outside of the source
 # tree
 # see https://pip.pypa.io/en/stable/reference/pip_install.html#caching
-mkdir -p install-deps-cache
-top_srcdir=$(pwd)
-export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
-wip_wheelhouse=wheelhouse-wip
+if $for_make_check; then
+    mkdir -p install-deps-cache
+    top_srcdir=$(pwd)
+    export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
+    wip_wheelhouse=wheelhouse-wip
+    #
+    # preload python modules so that tox can run without network access
+    #
+    find . -name tox.ini | while read ini ; do
+        preload_wheels_for_tox $ini
+    done
+    for interpreter in python2.7 python3 ; do
+        rm -rf $top_srcdir/install-deps-$interpreter
+    done
+    rm -rf $XDG_CACHE_HOME
+    git --version || (echo "Dashboard uses git to pull dependencies." ; false)
+fi
 
-#
-# preload python modules so that tox can run without network access
-#
-find . -name tox.ini | while read ini ; do
-    (
-        cd $(dirname $ini)
-        require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
-        md5=wheelhouse/md5
-        if test "$require"; then
-            if ! test -f $md5 || ! md5sum -c $md5 ; then
-                rm -rf wheelhouse
-            fi
-        fi
-        if test "$require" && ! test -d wheelhouse ; then
-            for interpreter in python2.7 python3 ; do
-                type $interpreter > /dev/null 2>&1 || continue
-                activate_virtualenv $top_srcdir $interpreter || exit 1
-                populate_wheelhouse "wheel -w $wip_wheelhouse" $require || exit 1
-            done
-            mv $wip_wheelhouse wheelhouse
-            md5sum *requirements.txt > $md5
-        fi
-    )
-done
-
-for interpreter in python2.7 python3 ; do
-    rm -rf $top_srcdir/install-deps-$interpreter
-done
-rm -rf $XDG_CACHE_HOME
-git --version || (echo "Dashboard uses git to pull dependencies." ; false)

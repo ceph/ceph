@@ -7,9 +7,18 @@
               (fetchData)="getHosts($event)"
               selectionType="single"
               (updateSelection)="updateSelection($event)">
+      <div class="table-actions btn-toolbar">
+        <cd-table-actions [permission]="permissions.hosts"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="host-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
       <ng-template #servicesTpl let-value="value">
         <span *ngFor="let service of value; last as isLast">
-          <a [routerLink]="[service.cdLink]"
+          <a class="service-link"
+             [routerLink]="[service.cdLink]"
              [queryParams]="cdParams"
              *ngIf="service.canRead">{{ service.type }}.{{ service.id }}
           </a>
@@ -20,6 +29,7 @@
         </span>
       </ng-template>
       <cd-host-details cdTableDetail
+                       [permissions]="permissions"
                        [selection]="selection">
       </cd-host-details>
     </cd-table>

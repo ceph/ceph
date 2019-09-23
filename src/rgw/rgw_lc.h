@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_LC_H
 #define CEPH_RGW_LC_H
@@ -12,15 +12,15 @@
 
 #include "include/types.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/iso_8601.h"
 #include "common/Thread.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
-#include "rgw_multi.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
+#include "rgw_sal.h"
 
 #include <atomic>
 #include <tuple>
@@ -452,7 +452,7 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   int max_objs{0};
   string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
@@ -462,11 +462,11 @@ class RGWLC : public DoutPrefixProvider {
     const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("LCWorker");
+    ceph::condition_variable cond;
 
   public:
-    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc), lock("LCWorker") {}
+    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc) {}
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);
@@ -481,7 +481,7 @@ class RGWLC : public DoutPrefixProvider {
     finalize();
   }
 
-  void initialize(CephContext *_cct, RGWRados *_store);
+  void initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store);
   void finalize();
 
   int process();
@@ -512,7 +512,7 @@ class RGWLC : public DoutPrefixProvider {
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(RGWRados *store, const RGWBucketInfo& bucket_info,
+int fix_lc_shard_entry(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
 		       const map<std::string,bufferlist>& battrs);
 
 std::string s3_expiration_header(

@@ -76,12 +76,12 @@ export class TaskListService implements OnDestroy {
   }
 
   private addMissing(data: any[], tasks: ExecutingTask[]) {
-    const defaultBuilder = this.builders['default'] || {};
+    const defaultBuilder = this.builders['default'];
     tasks.forEach((task) => {
       const existing = data.find((item) => this.itemFilter(item, task));
       const builder = this.builders[task.name];
       if (!existing && (builder || defaultBuilder)) {
-        data.push(builder ? builder(task.metadata) : defaultBuilder(task));
+        data.push(builder ? builder(task.metadata) : defaultBuilder(task.metadata));
       }
     });
   }

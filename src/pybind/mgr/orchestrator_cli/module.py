@@ -1,6 +1,8 @@
 import errno
 import json
 
+from prettytable import PrettyTable
+
 try:
     from typing import Dict, List
 except ImportError:
@@ -54,7 +56,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.add_host(host)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator host rm',
                 "name=host,type=CephString,req=true",
@@ -63,7 +65,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.remove_host(host)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_read_cli('orchestrator host ls',
                desc='List hosts')
@@ -132,8 +134,10 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         orchestrator.raise_if_exception(completion)
         services = completion.result
 
+        def ukn(s):
+            return '<unknown>' if s is None else s
         # Sort the list for display
-        services.sort(key=lambda s: (s.service_type, s.nodename, s.service_instance))
+        services.sort(key=lambda s: (ukn(s.service_type), ukn(s.nodename), ukn(s.service_instance)))
 
         if len(services) == 0:
             return HandleCommandResult(stdout="No services reported")
@@ -141,22 +145,31 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             data = [s.to_json() for s in services]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
-            lines = []
+            table = PrettyTable(
+                ['type', 'id', 'host', 'container', 'version', 'status', 'description'],
+                border=False)
             for s in services:
-                if s.service == None:
+                if s.service is None:
                     service_id = s.service_instance
                 else:
                     service_id = "{0}.{1}".format(s.service, s.service_instance)
+                status = {
+                    -1: 'error',
+                    0: 'stopped',
+                    1: 'running',
+                    None: '<unknown>'
+                }[s.status]
 
-                lines.append("{0} {1} {2} {3} {4} {5}".format(
+                table.add_row((
                     s.service_type,
                     service_id,
-                    s.nodename,
-                    s.container_id,
-                    s.version,
-                    s.rados_config_location))
+                    ukn(s.nodename),
+                    ukn(s.container_id),
+                    ukn(s.version),
+                    status,
+                    ukn(s.status_desc)))
 
-            return HandleCommandResult(stdout="\n".join(lines))
+            return HandleCommandResult(stdout=table.get_string())
 
     @_write_cli('orchestrator osd create',
                 "name=svc_arg,type=CephString,req=false",
@@ -207,7 +220,7 @@ Usage:
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         self.log.warning(str(completion.result))
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator osd rm',
                 "name=svc_id,type=CephString,n=N",
@@ -221,29 +234,23 @@ Usage:
         completion = self.remove_osds(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
-
-    def _add_stateless_svc(self, svc_type, spec):
-        completion = self.add_stateless_service(svc_type, spec)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds add',
                 "name=svc_arg,type=CephString",
                 'Create an MDS service')
     def _mds_add(self, svc_arg):
-        spec = orchestrator.StatelessServiceSpec()
-        spec.name = svc_arg
-        return self._add_stateless_svc("mds", spec)
+        spec = orchestrator.StatelessServiceSpec(svc_arg)
+        completion = self.add_mds(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator rgw add',
-                'name=svc_arg,type=CephString,req=false',
+                'name=zone_name,type=CephString,req=false',
                 'Create an RGW service. A complete <rgw_spec> can be provided'\
                 ' using <-i> to customize completelly the RGW service')
-    def _rgw_add(self, svc_arg=None, inbuf=None):
-        """
-        """
+    def _rgw_add(self, zone_name=None, inbuf=None):
         usage = """
 Usage:
   ceph orchestrator rgw add -i <json_file>
@@ -256,15 +263,15 @@ Usage:
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        elif svc_arg:
-                rgw_spec = orchestrator.RGWSpec()
-                rgw_spec.zone_name = svc_arg
+        elif zone_name:
+            rgw_spec = orchestrator.RGWSpec(rgw_zone=zone_name)
+        else:
+            return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
-        spec = orchestrator.StatelessServiceSpec()
-        spec.service_spec = rgw_spec
-        spec.name = rgw_spec.rgw_zone
-
-        return self._add_stateless_svc("rgw", spec)
+        completion = self.add_rgw(rgw_spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator nfs add',
                 "name=svc_arg,type=CephString "
@@ -272,48 +279,49 @@ Usage:
                 "name=namespace,type=CephString,req=false",
                 'Create an NFS service')
     def _nfs_add(self, svc_arg, pool, namespace=None):
-        spec = orchestrator.StatelessServiceSpec()
-        spec.name = svc_arg
-        spec.extended = { "pool":pool }
-        if namespace is not None:
-            spec.extended["namespace"] = namespace
-        return self._add_stateless_svc("nfs", spec)
-
-    def _rm_stateless_svc(self, svc_type, svc_id):
-        completion = self.remove_stateless_service(svc_type, svc_id)
+        spec = orchestrator.NFSServiceSpec(svc_arg, pool=pool, namespace=namespace)
+        spec.validate_add()
+        completion = self.add_nfs(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds rm',
                 "name=svc_id,type=CephString",
                 'Remove an MDS service')
     def _mds_rm(self, svc_id):
-        return self._rm_stateless_svc("mds", svc_id)
+        completion = self.remove_mds(svc_id)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator rgw rm',
                 "name=svc_id,type=CephString",
                 'Remove an RGW service')
     def _rgw_rm(self, svc_id):
-        return self._rm_stateless_svc("rgw", svc_id)
+        completion = self.remove_rgw(svc_id)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator nfs rm',
                 "name=svc_id,type=CephString",
                 'Remove an NFS service')
     def _nfs_rm(self, svc_id):
-        return self._rm_stateless_svc("nfs", svc_id)
+        completion = self.remove_nfs(svc_id)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator nfs update',
                 "name=svc_id,type=CephString "
                 "name=num,type=CephInt",
                 'Scale an NFS service')
     def _nfs_update(self, svc_id, num):
-        spec = orchestrator.StatelessServiceSpec()
-        spec.name = svc_id
-        spec.count = num
-        completion = self.update_stateless_service("nfs", spec)
+        spec = orchestrator.NFSServiceSpec(svc_id, count=num)
+        completion = self.update_nfs(spec)
         self._orchestrator_wait([completion])
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator service',
                 "name=action,type=CephChoices,strings=start|stop|reload "
@@ -324,7 +332,7 @@ Usage:
         completion = self.service_action(action, svc_type, service_name=svc_name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator service-instance',
                 "name=action,type=CephChoices,strings=start|stop|reload "
@@ -335,7 +343,7 @@ Usage:
         completion = self.service_action(action, svc_type, service_id=svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mgr update',
                 "name=num,type=CephInt,req=true "
@@ -351,7 +359,7 @@ Usage:
         completion = self.update_mgrs(num, hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mon update',
                 "name=num,type=CephInt,req=true "
@@ -386,7 +394,7 @@ Usage:
         completion = self.update_mons(num, hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator set backend',
                 "name=module_name,type=CephString,req=true",

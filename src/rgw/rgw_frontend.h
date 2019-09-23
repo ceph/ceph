@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef RGW_FRONTEND_H
 #define RGW_FRONTEND_H
@@ -79,7 +79,7 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(RGWRados* store,
+  virtual void unpause_with_new_config(rgw::sal::RGWRadosStore* store,
                                        rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
@@ -142,7 +142,7 @@ public:
     env.mutex.get_write();
   }
 
-  void unpause_with_new_config(RGWRados* const store,
+  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = std::move(auth_registry);
@@ -185,7 +185,7 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(RGWRados* const store,
+  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = auth_registry;
@@ -229,7 +229,7 @@ public:
     rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
-    int ret = rgw_get_user_info_by_uid(env.store, uid, user_info, NULL);
+    int ret = env.store->ctl()->user->get_info_by_uid(uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
@@ -252,11 +252,16 @@ public:
 class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   std::list<RGWFrontend*> &frontends;
   RGWRealmReloader::Pauser* pauser;
+  rgw::auth::ImplicitTenants& implicit_tenants;
 
  public:
   RGWFrontendPauser(std::list<RGWFrontend*> &frontends,
+                    rgw::auth::ImplicitTenants& implicit_tenants,
                     RGWRealmReloader::Pauser* pauser = nullptr)
-    : frontends(frontends), pauser(pauser) {}
+    : frontends(frontends),
+      pauser(pauser),
+      implicit_tenants(implicit_tenants) {
+  }
 
   void pause() override {
     for (auto frontend : frontends)
@@ -264,11 +269,11 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(RGWRados *store) override {
+  void resume(rgw::sal::RGWRadosStore *store) override {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, store);
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->getRados()->pctl);
 
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store, auth_registry);

@@ -17,7 +17,8 @@
  */
 #include "include/compat.h"
 #include <pthread.h>
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
+#include "common/Clock.h"
 #include "obj_bencher.h"
 
 const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
@@ -91,14 +92,14 @@ void *ObjBencher::status_printer(void *_bencher) {
   bench_data& data = bencher->data;
   Formatter *formatter = bencher->formatter;
   ostream *outstream = bencher->outstream;
-  Cond cond;
+  ceph::condition_variable cond;
   int i = 0;
   int previous_writes = 0;
   int cycleSinceChange = 0;
   double bandwidth;
   int iops = 0;
   mono_clock::duration ONE_SECOND = std::chrono::seconds(1);
-  bencher->lock.lock();
+  std::unique_lock locker{bencher->lock};
   if (formatter)
     formatter->open_array_section("datas");
   while(!data.done) {
@@ -221,7 +222,7 @@ void *ObjBencher::status_printer(void *_bencher) {
     }
     ++i;
     ++cycleSinceChange;
-    cond.WaitInterval(bencher->lock, ONE_SECOND);
+    cond.wait_for(locker, ONE_SECOND);
   }
   if (formatter)
     formatter->close_section(); //datas
@@ -229,7 +230,6 @@ void *ObjBencher::status_printer(void *_bencher) {
     std::chrono::duration<double> runtime = mono_clock::now() - data.start_time;
     data.idata.min_iops = data.idata.max_iops = data.finished / runtime.count();
   }
-  bencher->lock.unlock();
   return NULL;
 }
 
@@ -244,6 +244,7 @@ int ObjBencher::aio_bench(
   if (concurrentios <= 0)
     return -EINVAL;
 
+  int num_ops = 0;
   int num_objects = 0;
   int r = 0;
   int prev_pid = 0;
@@ -256,7 +257,7 @@ int ObjBencher::aio_bench(
   if (operation != OP_WRITE || reuse_bench) {
     uint64_t prev_op_size, prev_object_size;
     r = fetch_bench_metadata(run_name_meta, &prev_op_size, &prev_object_size,
-			     &num_objects, &prev_pid);
+			     &num_ops, &num_objects, &prev_pid);
     if (r < 0) {
       if (r == -ENOENT) {
         if (reuse_bench)
@@ -297,17 +298,17 @@ int ObjBencher::aio_bench(
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prev_pid, no_verify);
+    r = seq_read_bench(secondsToRun, num_ops, num_objects, concurrentios, prev_pid, no_verify);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
-    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prev_pid, no_verify);
+    r = rand_read_bench(secondsToRun, num_ops, num_objects, concurrentios, prev_pid, no_verify);
     if (r != 0) goto out;
   }
 
   if (OP_WRITE == operation && cleanup) {
     r = fetch_bench_metadata(run_name_meta, &op_size, &object_size,
-                            &num_objects, &prev_pid);
+                            &num_ops, &num_objects, &prev_pid);
     if (r < 0) {
       if (r == -ENOENT)
         cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
@@ -339,21 +340,21 @@ int ObjBencher::aio_bench(
 }
 
 struct lock_cond {
-  explicit lock_cond(Mutex *_lock) : lock(_lock) {}
-  Mutex *lock;
-  Cond cond;
+  explicit lock_cond(ceph::mutex *_lock) : lock(_lock) {}
+  ceph::mutex *lock;
+  ceph::condition_variable cond;
 };
 
 void _aio_cb(void *cb, void *arg) {
   struct lock_cond *lc = (struct lock_cond *)arg;
   lc->lock->lock();
-  lc->cond.Signal();
+  lc->cond.notify_all();
   lc->lock->unlock();
 }
 
 int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
 				     uint64_t *op_size, uint64_t* object_size,
-				     int* num_objects, int* prevPid) {
+				     int* num_ops, int* num_objects, int* prevPid) {
   int r = 0;
   bufferlist object_data;
 
@@ -368,13 +369,19 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
   }
   auto p = object_data.cbegin();
   decode(*object_size, p);
-  decode(*num_objects, p);
+  decode(*num_ops, p);
   decode(*prevPid, p);
   if (!p.end()) {
     decode(*op_size, p);
   } else {
     *op_size = *object_size;
   }
+  unsigned ops_per_object = 1;
+  // make sure *op_size value is reasonable
+  if (*op_size > 0 && *object_size > *op_size) {
+    ops_per_object = *object_size / *op_size;
+  }
+  *num_objects = (*num_ops + ops_per_object - 1) / ops_per_object;
 
   return 0;
 }
@@ -436,10 +443,10 @@ int ObjBencher::write_bench(int secondsToRun,
 
   pthread_create(&print_thread, NULL, ObjBencher::status_printer, (void *)this);
   ceph_pthread_setname(print_thread, "write_stat");
-  lock.lock();
+  std::unique_lock locker{lock};
   data.finished = 0;
   data.start_time = mono_clock::now();
-  lock.unlock();
+  locker.unlock();
   for (int i = 0; i<concurrentios; ++i) {
     start_times[i] = mono_clock::now();
     r = create_completion(i, _aio_cb, (void *)&lc);
@@ -450,21 +457,20 @@ int ObjBencher::write_bench(int secondsToRun,
     if (r < 0) {
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
   }
 
   //keep on adding new writes as old ones complete until we've passed minimum time
   int slot;
-  int num_objects;
 
   //don't need locking for reads because other thread doesn't write
 
   stopTime = data.start_time + std::chrono::seconds(secondsToRun);
   slot = 0;
-  lock.lock();
+  locker.lock();
   while (secondsToRun && mono_clock::now() < stopTime) {
     bool found = false;
     while (1) {
@@ -481,9 +487,9 @@ int ObjBencher::write_bench(int secondsToRun,
       } while (slot != old_slot);
       if (found)
         break;
-      lc.cond.Wait(lock);
+      lc.cond.wait(locker);
     }
-    lock.unlock();
+    locker.unlock();
     //create new contents and name on the heap, and fill them
     newName = generate_object_name_fast(data.started / writes_per_object);
     newContents = contents[slot].get();
@@ -492,10 +498,10 @@ int ObjBencher::write_bench(int secondsToRun,
     newContents->invalidate_crc();
 
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r != 0) {
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     data.cur_latency = mono_clock::now() - start_times[slot];
@@ -509,7 +515,7 @@ int ObjBencher::write_bench(int secondsToRun,
     data.avg_latency = total_latency / data.finished;
     data.latency_diff_sum += delta * (data.cur_latency.count() - data.avg_latency);
     --data.in_flight;
-    lock.unlock();
+    locker.unlock();
     release_completion(slot);
 
     //write new stuff to backend
@@ -523,7 +529,7 @@ int ObjBencher::write_bench(int secondsToRun,
       goto ERR;
     }
     name[slot] = newName;
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
     if (data.op_size) {
@@ -533,15 +539,15 @@ int ObjBencher::write_bench(int secondsToRun,
         break;
     }
   }
-  lock.unlock();
+  locker.unlock();
 
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r != 0) {
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     data.cur_latency = mono_clock::now() - start_times[slot];
@@ -555,14 +561,14 @@ int ObjBencher::write_bench(int secondsToRun,
     data.avg_latency = total_latency / data.finished;
     data.latency_diff_sum += delta * (data.cur_latency.count() - data.avg_latency);
     --data.in_flight;
-    lock.unlock();
+    locker.unlock();
     release_completion(slot);
   }
 
   timePassed = mono_clock::now() - data.start_time;
-  lock.lock();
+  locker.lock();
   data.done = true;
-  lock.unlock();
+  locker.unlock();
 
   pthread_join(print_thread, NULL);
 
@@ -627,8 +633,7 @@ int ObjBencher::write_bench(int secondsToRun,
   }
   //write object size/number data for read benchmarks
   encode(data.object_size, b_write);
-  num_objects = (data.finished + writes_per_object - 1) / writes_per_object;
-  encode(num_objects, b_write);
+  encode(data.finished, b_write);
   encode(prev_pid ? prev_pid : getpid(),  b_write);
   encode(data.op_size, b_write);
 
@@ -640,14 +645,17 @@ int ObjBencher::write_bench(int secondsToRun,
   return 0;
 
  ERR:
-  lock.lock();
+  locker.lock();
   data.done = 1;
-  lock.unlock();
+  locker.unlock();
   pthread_join(print_thread, NULL);
   return r;
 }
 
-int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify) {
+int ObjBencher::seq_read_bench(
+  int seconds_to_run, int num_ops, int num_objects,
+  int concurrentios, int pid, bool no_verify) {
+
   lock_cond lc(&lock);
 
   if (concurrentios <= 0) 
@@ -680,10 +688,10 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     contents[i] = std::make_unique<bufferlist>();
   }
 
-  lock.lock();
+  std::unique_lock locker{lock};
   data.finished = 0;
   data.start_time = mono_clock::now();
-  lock.unlock();
+  locker.unlock();
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
@@ -701,10 +709,10 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
   }
 
   //keep on adding new reads as old ones complete
@@ -713,8 +721,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   slot = 0;
   while ((seconds_to_run && mono_clock::now() < finish_time) &&
-	 num_objects > data.started) {
-    lock.lock();
+	 num_ops > data.started) {
+    locker.lock();
     int old_slot = slot;
     bool found = false;
     while (1) {
@@ -731,7 +739,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       if (found) {
         break;
       }
-      lc.cond.Wait(lock);
+      lc.cond.wait(locker);
     }
 
     // calculate latency here, so memcmp doesn't inflate it
@@ -754,13 +762,13 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
     newName = generate_object_name_fast(data.started / reads_per_object, pid);
     index[slot] = data.started;
-    lock.unlock();
+    locker.unlock();
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r < 0) {
       cerr << "read got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     total_latency += data.cur_latency.count();
@@ -771,7 +779,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     ++data.finished;
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
-    lock.unlock();
+    locker.unlock();
     release_completion(slot);
 
     //start new read and check data if requested
@@ -782,10 +790,10 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     if (r < 0) {
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
     name[slot] = newName;
   }
 
@@ -793,11 +801,11 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r < 0) {
       cerr << "read got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     data.cur_latency = mono_clock::now() - start_times[slot];
@@ -812,21 +820,21 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     release_completion(slot);
     if (!no_verify) {
       snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", index[slot]);
-      lock.unlock();
+      locker.unlock();
       if ((contents[slot]->length() != data.op_size) || 
          (memcmp(data.object_contents, contents[slot]->c_str(), data.op_size) != 0)) {
         cerr << name[slot] << " is not correct!" << std::endl;
         ++errors;
       }
     } else {
-        lock.unlock();
+        locker.unlock();
     }
   }
 
   timePassed = mono_clock::now() - data.start_time;
-  lock.lock();
+  locker.lock();
   data.done = true;
-  lock.unlock();
+  locker.unlock();
 
   pthread_join(print_thread, NULL);
 
@@ -874,15 +882,17 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   return (errors > 0 ? -EIO : 0);
 
  ERR:
-  lock.lock();
+  locker.lock();
   data.done = 1;
-  lock.unlock();
+  locker.unlock();
   pthread_join(print_thread, NULL);
   return r;
 }
 
-int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify)
-{
+int ObjBencher::rand_read_bench(
+  int seconds_to_run, int num_ops, int num_objects,
+  int concurrentios, int pid, bool no_verify) {
+
   lock_cond lc(&lock);
 
   if (concurrentios <= 0)
@@ -917,10 +927,10 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     contents[i] = std::make_unique<bufferlist>();
   }
 
-  lock.lock();
+  unique_lock locker{lock};
   data.finished = 0;
   data.start_time = mono_clock::now();
-  lock.unlock();
+  locker.unlock();
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
@@ -938,10 +948,10 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
   }
 
   //keep on adding new reads as old ones complete
@@ -951,7 +961,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   slot = 0;
   while ((seconds_to_run && mono_clock::now() < finish_time)) {
-    lock.lock();
+    locker.lock();
     int old_slot = slot;
     bool found = false;
     while (1) {
@@ -968,22 +978,22 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
       if (found) {
         break;
       }
-      lc.cond.Wait(lock);
+      lc.cond.wait(locker);
     }
 
     // calculate latency here, so memcmp doesn't inflate it
     data.cur_latency = mono_clock::now() - start_times[slot];
 
-    lock.unlock();
+    locker.unlock();
 
     int current_index = index[slot];
     cur_contents = contents[slot].get();
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r < 0) {
       cerr << "read got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
 
@@ -995,7 +1005,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     ++data.finished;
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
-    lock.unlock();
+    locker.unlock();
     
     if (!no_verify) {
       snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", current_index);
@@ -1006,7 +1016,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
       }
     } 
 
-    rand_id = rand() % num_objects;
+    rand_id = rand() % num_ops;
     newName = generate_object_name_fast(rand_id / reads_per_object, pid);
     index[slot] = rand_id;
     release_completion(slot);
@@ -1022,10 +1032,10 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     if (r < 0) {
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
     name[slot] = newName;
   }
 
@@ -1034,11 +1044,11 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r < 0) {
       cerr << "read got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     data.cur_latency = mono_clock::now() - start_times[slot];
@@ -1053,21 +1063,21 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     release_completion(slot);
     if (!no_verify) {
       snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", index[slot]);
-      lock.unlock();
+      locker.unlock();
       if ((contents[slot]->length() != data.op_size) || 
           (memcmp(data.object_contents, contents[slot]->c_str(), data.op_size) != 0)) {
         cerr << name[slot] << " is not correct!" << std::endl;
         ++errors;
       }
     } else {
-        lock.unlock();
+        locker.unlock();
     }
   }
 
   timePassed = mono_clock::now() - data.start_time;
-  lock.lock();
+  locker.lock();
   data.done = true;
-  lock.unlock();
+  locker.unlock();
 
   pthread_join(print_thread, NULL);
 
@@ -1114,9 +1124,9 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   return (errors > 0 ? -EIO : 0);
 
  ERR:
-  lock.lock();
+  locker.lock();
   data.done = 1;
-  lock.unlock();
+  locker.unlock();
   pthread_join(print_thread, NULL);
   return r;
 }
@@ -1124,7 +1134,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, const std::string& run_name) {
   int r = 0;
   uint64_t op_size, object_size;
-  int num_objects;
+  int num_ops, num_objects;
   int prevPid;
 
   // default meta object if user does not specify one
@@ -1171,7 +1181,7 @@ int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, cons
       continue;
     }
 
-    r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_objects, &prevPid);
+    r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_ops, &num_objects, &prevPid);
     if (r < 0) {
       return r;
     }
@@ -1197,12 +1207,12 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   int r = 0;
   int slot = 0;
 
-  lock.lock();
+  unique_lock locker{lock};
   data.done = false;
   data.in_flight = 0;
   data.started = 0;
   data.finished = 0;
-  lock.unlock();
+  locker.unlock();
 
   // don't start more completions than files
   if (num_objects == 0) {
@@ -1228,15 +1238,15 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
   }
 
   //keep on adding new removes as old ones complete
   while (data.started < num_objects) {
-    lock.lock();
+    locker.lock();
     int old_slot = slot;
     bool found = false;
     while (1) {
@@ -1253,21 +1263,21 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
       if (found) {
         break;
       }
-      lc.cond.Wait(lock);
+      lc.cond.wait(locker);
     }
-    lock.unlock();
+    locker.unlock();
     newName = generate_object_name_fast(data.started, prevPid);
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r != 0 && r != -ENOENT) { // file does not exist
       cerr << "remove got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     ++data.finished;
     --data.in_flight;
-    lock.unlock();
+    locker.unlock();
     release_completion(slot);
 
     //start new remove and check data if requested
@@ -1276,10 +1286,10 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
     if (r < 0) {
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
     name[slot] = newName;
   }
 
@@ -1287,22 +1297,22 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r != 0 && r != -ENOENT) { // file does not exist
       cerr << "remove got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     ++data.finished;
     --data.in_flight;
     release_completion(slot);
-    lock.unlock();
+    locker.unlock();
   }
 
-  lock.lock();
+  locker.lock();
   data.done = true;
-  lock.unlock();
+  locker.unlock();
 
   completions_done();
 
@@ -1311,9 +1321,9 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   return 0;
 
  ERR:
-  lock.lock();
+  locker.lock();
   data.done = 1;
-  lock.unlock();
+  locker.unlock();
   return r;
 }
 
@@ -1363,12 +1373,12 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   std::list<Object> objects;
   bool objects_remain = true;
 
-  lock.lock();
+  std::unique_lock locker{lock};
   data.done = false;
   data.in_flight = 0;
   data.started = 0;
   data.finished = 0;
-  lock.unlock();
+  locker.unlock();
 
   out(cout) << "Warning: using slow linear search" << std::endl;
 
@@ -1401,15 +1411,15 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
   }
 
   //keep on adding new removes as old ones complete
   while (objects_remain) {
-    lock.lock();
+    locker.lock();
     int old_slot = slot;
     bool found = false;
     while (1) {
@@ -1426,9 +1436,9 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
       if (found) {
         break;
       }
-      lc.cond.Wait(lock);
+      lc.cond.wait(locker);
     }
-    lock.unlock();
+    locker.unlock();
 
     // get more objects if necessary
     if (objects.empty()) {
@@ -1444,16 +1454,16 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
     objects.pop_front();
 
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r != 0 && r != -ENOENT) { // file does not exist
       cerr << "remove got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     ++data.finished;
     --data.in_flight;
-    lock.unlock();
+    locker.unlock();
     release_completion(slot);
 
     //start new remove and check data if requested
@@ -1463,10 +1473,10 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
     if (r < 0) {
       goto ERR;
     }
-    lock.lock();
+    locker.lock();
     ++data.started;
     ++data.in_flight;
-    lock.unlock();
+    locker.unlock();
     name[slot] = newName;
   }
 
@@ -1474,22 +1484,22 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
     completion_wait(slot);
-    lock.lock();
+    locker.lock();
     r = completion_ret(slot);
     if (r != 0 && r != -ENOENT) { // file does not exist
       cerr << "remove got " << r << std::endl;
-      lock.unlock();
+      locker.unlock();
       goto ERR;
     }
     ++data.finished;
     --data.in_flight;
     release_completion(slot);
-    lock.unlock();
+    locker.unlock();
   }
 
-  lock.lock();
+  locker.lock();
   data.done = true;
-  lock.unlock();
+  locker.unlock();
 
   completions_done();
 
@@ -1498,8 +1508,8 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   return 0;
 
  ERR:
-  lock.lock();
+  locker.lock();
   data.done = 1;
-  lock.unlock();
+  locker.unlock();
   return -EIO;
 }

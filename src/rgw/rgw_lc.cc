@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
 #include <iostream>
@@ -19,6 +19,7 @@
 #include "rgw_lc.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
+#include "rgw_multi.h"
 
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
@@ -27,6 +28,8 @@
 #include "fmt/format.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
+#include "services/svc_tier_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -39,6 +42,7 @@ const char* LC_STATUS[] = {
 };
 
 using namespace librados;
+using namespace rgw::sal;
 
 bool LCRule::valid() const
 {
@@ -211,15 +215,14 @@ void *RGWLC::LCWorker::entry() {
 
     ldpp_dout(dpp, 5) << "schedule life cycle next start time: " << rgw_to_asctime(next) << dendl;
 
-    lock.Lock();
-    cond.WaitInterval(lock, utime_t(secs, 0));
-    lock.Unlock();
+    std::unique_lock l{lock};
+    cond.wait_for(l, std::chrono::seconds(secs));
   } while (!lc->going_down());
 
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
+void RGWLC::initialize(CephContext *_cct, RGWRadosStore *_store) {
   cct = _cct;
   store = _store;
   max_objs = cct->_conf->rgw_lc_max_objs;
@@ -278,13 +281,13 @@ int RGWLC::bucket_lc_prepare(int index)
 
 #define MAX_LC_LIST_ENTRIES 100
   do {
-    int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, MAX_LC_LIST_ENTRIES, entries);
+    int ret = cls_rgw_lc_list(store->getRados()->lc_pool_ctx, obj_names[index], marker, MAX_LC_LIST_ENTRIES, entries);
     if (ret < 0)
       return ret;
     map<string, int>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       pair<string, int > entry(iter->first, lc_uninitial);
-      ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
+      ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::bucket_lc_prepare() failed to set entry on "
             << obj_names[index] << dendl;
@@ -466,7 +469,7 @@ static inline bool has_all_tags(const lc_op& rule_action,
 }
 
 class LCObjsLister {
-  RGWRados *store;
+  RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
   RGWRados::Bucket target;
   RGWRados::Bucket::List list_op;
@@ -479,9 +482,9 @@ class LCObjsLister {
   int64_t delay_ms;
 
 public:
-  LCObjsLister(RGWRados *_store, RGWBucketInfo& _bucket_info) :
+  LCObjsLister(RGWRadosStore *_store, RGWBucketInfo& _bucket_info) :
       store(_store), bucket_info(_bucket_info),
-      target(store, bucket_info), list_op(&target) {
+      target(store->getRados(), bucket_info), list_op(&target) {
     list_op.params.list_versions = bucket_info.versioned();
     list_op.params.allow_unordered = true;
     delay_ms = store->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
@@ -557,12 +560,12 @@ public:
 
 struct op_env {
   lc_op& op;
-  RGWRados *store;
+  RGWRadosStore *store;
   RGWLC *lc;
   RGWBucketInfo& bucket_info;
   LCObjsLister& ol;
 
-  op_env(lc_op& _op, RGWRados *_store, RGWLC *_lc, RGWBucketInfo& _bucket_info,
+  op_env(lc_op& _op, RGWRadosStore *_store, RGWLC *_lc, RGWBucketInfo& _bucket_info,
          LCObjsLister& _ol) : op(_op), store(_store), lc(_lc), bucket_info(_bucket_info), ol(_ol) {}
 };
 
@@ -573,7 +576,7 @@ struct lc_op_ctx {
   op_env& env;
   rgw_bucket_dir_entry& o;
 
-  RGWRados *store;
+  RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
   lc_op& op;
   LCObjsLister& ol;
@@ -606,7 +609,7 @@ static int remove_expired_obj(lc_op_ctx& oc, bool remove_indeed)
   obj_owner.set_id(rgw_user {meta.owner});
   obj_owner.set_name(meta.owner_display_name);
 
-  RGWRados::Object del_target(store, bucket_info, oc.rctx, obj);
+  RGWRados::Object del_target(store->getRados(), bucket_info, oc.rctx, obj);
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket_info.owner;
@@ -676,7 +679,7 @@ static int check_tags(lc_op_ctx& oc, bool *skip)
     *skip = true;
 
     bufferlist tags_bl;
-    int ret = read_obj_tags(oc.store, oc.bucket_info, oc.obj, oc.rctx, tags_bl);
+    int ret = read_obj_tags(oc.store->getRados(), oc.bucket_info, oc.obj, oc.rctx, tags_bl);
     if (ret < 0) {
       if (ret != -ENODATA) {
         ldout(oc.cct, 5) << "ERROR: read_obj_tags returned r=" << ret << dendl;
@@ -733,6 +736,14 @@ public:
       ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": not current, skipping" << dendl;
       return false;
     }
+    if (o.is_delete_marker()) {
+      if (oc.ol.next_has_same_name()) {
+        return false;
+      } else {
+        *exp_time = real_clock::now();
+        return true;
+      }
+    }
 
     auto& mtime = o.meta.mtime;
     bool is_expired;
@@ -754,7 +765,12 @@ public:
 
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
-    int r = remove_expired_obj(oc, !oc.bucket_info.versioned());
+    int r;
+    if (o.is_delete_marker()) {
+      r = remove_expired_obj(oc, true);
+    } else {
+      r = remove_expired_obj(oc, !oc.bucket_info.versioned());
+    }
     if (r < 0) {
       ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
@@ -778,7 +794,7 @@ public:
     bool is_expired = obj_has_expired(oc.cct, mtime, expiration, exp_time);
 
     ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << is_expired << dendl;
-    return is_expired && pass_object_lock_check(oc.store, oc.bucket_info, oc.obj, oc.rctx);
+    return is_expired && pass_object_lock_check(oc.store->getRados(), oc.bucket_info, oc.obj, oc.rctx);
   }
 
   int process(lc_op_ctx& oc) {
@@ -876,14 +892,14 @@ public:
     target_placement.inherit_from(oc.bucket_info.placement_rule);
     target_placement.storage_class = transition.storage_class;
 
-    if (!oc.store->svc.zone->get_zone_params().valid_placement(target_placement)) {
+    if (!oc.store->svc()->zone->get_zone_params().valid_placement(target_placement)) {
       ldpp_dout(oc.dpp, 0) << "ERROR: non existent dest placement: " << target_placement
                            << " bucket="<< oc.bucket_info.bucket
                            << " rule_id=" << oc.op.id << dendl;
       return -EINVAL;
     }
 
-    int r = oc.store->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
+    int r = oc.store->getRados()->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
                                      target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp, null_yield);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
@@ -1010,13 +1026,13 @@ int RGWLC::bucket_lc_process(string& shard_id)
   map<string, bufferlist> bucket_attrs;
   string no_ns, list_versions;
   vector<rgw_bucket_dir_entry> objs;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   vector<std::string> result;
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
   string bucket_marker = result[2];
-  int ret = store->get_bucket_info(obj_ctx, bucket_tenant, bucket_name, bucket_info, NULL, null_yield, &bucket_attrs);
+  int ret = store->getRados()->get_bucket_info(obj_ctx, bucket_tenant, bucket_name, bucket_info, NULL, null_yield, &bucket_attrs);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket_info for " << bucket_name << " failed" << dendl;
     return ret;
@@ -1029,7 +1045,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     return -ENOENT;
   }
 
-  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket target(store->getRados(), bucket_info);
 
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
@@ -1112,7 +1128,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
   l.set_duration(lock_duration);
 
   do {
-    int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
+    int ret = l.lock_exclusive(&store->getRados()->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY || ret == -EEXIST) { /* already locked by another lc processor */
       ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to acquire lock on "
           << obj_names[index] << ", sleep 5, try again" << dendl;
@@ -1123,7 +1139,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
       return 0;
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() lock " << obj_names[index] << dendl;
     if (result ==  -ENOENT) {
-      ret = cls_rgw_lc_rm_entry(store->lc_pool_ctx, obj_names[index],  entry);
+      ret = cls_rgw_lc_rm_entry(store->getRados()->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to remove entry "
             << obj_names[index] << dendl;
@@ -1135,13 +1151,13 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
       entry.second = lc_complete;
     }
 
-    ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
+    ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx, obj_names[index],  entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
           << obj_names[index] << dendl;
     }
 clean:
-    l.unlock(&store->lc_pool_ctx, obj_names[index]);
+    l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() unlock " << obj_names[index] << dendl;
     return 0;
   } while (true);
@@ -1153,7 +1169,7 @@ int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, map<stri
   progress_map->clear();
   for(; index <max_objs; index++) {
     map<string, int > entries;
-    int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, max_entries, entries);
+    int ret = cls_rgw_lc_list(store->getRados()->lc_pool_ctx, obj_names[index], marker, max_entries, entries);
     if (ret < 0) {
       if (ret == -ENOENT) {
         ldpp_dout(this, 10) << __func__ << "() ignoring unfound lc object="
@@ -1199,7 +1215,7 @@ int RGWLC::process(int index, int max_lock_secs)
     utime_t time(max_lock_secs, 0);
     l.set_duration(time);
 
-    int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
+    int ret = l.lock_exclusive(&store->getRados()->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY || ret == -EEXIST) { /* already locked by another lc processor */
       ldpp_dout(this, 0) << "RGWLC::process() failed to acquire lock on "
           << obj_names[index] << ", sleep 5, try again" << dendl;
@@ -1210,7 +1226,7 @@ int RGWLC::process(int index, int max_lock_secs)
       return 0;
 
     cls_rgw_lc_obj_head head;
-    ret = cls_rgw_lc_get_head(store->lc_pool_ctx, obj_names[index], head);
+    ret = cls_rgw_lc_get_head(store->getRados()->lc_pool_ctx, obj_names[index], head);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj head "
           << obj_names[index] << ", ret=" << ret << dendl;
@@ -1228,7 +1244,7 @@ int RGWLC::process(int index, int max_lock_secs)
       }
     }
 
-    ret = cls_rgw_lc_get_next_entry(store->lc_pool_ctx, obj_names[index], head.marker, entry);
+    ret = cls_rgw_lc_get_next_entry(store->getRados()->lc_pool_ctx, obj_names[index], head.marker, entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj entry "
           << obj_names[index] << dendl;
@@ -1239,7 +1255,7 @@ int RGWLC::process(int index, int max_lock_secs)
       goto exit;
 
     entry.second = lc_processing;
-    ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
+    ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx, obj_names[index],  entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to set obj entry " << obj_names[index]
           << " (" << entry.first << "," << entry.second << ")" << dendl;
@@ -1247,18 +1263,18 @@ int RGWLC::process(int index, int max_lock_secs)
     }
 
     head.marker = entry.first;
-    ret = cls_rgw_lc_put_head(store->lc_pool_ctx, obj_names[index],  head);
+    ret = cls_rgw_lc_put_head(store->getRados()->lc_pool_ctx, obj_names[index],  head);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to put head " << obj_names[index] << dendl;
       goto exit;
     }
-    l.unlock(&store->lc_pool_ctx, obj_names[index]);
+    l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
     ret = bucket_lc_process(entry.first);
     bucket_lc_post(index, max_lock_secs, entry, ret);
   }while(1);
 
 exit:
-    l.unlock(&store->lc_pool_ctx, obj_names[index]);
+    l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
     return 0;
 }
 
@@ -1292,8 +1308,8 @@ std::ostream& RGWLC::gen_prefix(std::ostream& out) const
 
 void RGWLC::LCWorker::stop()
 {
-  Mutex::Locker l(lock);
-  cond.Signal();
+  std::lock_guard l{lock};
+  cond.notify_all();
 }
 
 bool RGWLC::going_down()
@@ -1378,7 +1394,7 @@ static std::string get_lc_shard_name(const rgw_bucket& bucket){
 }
 
 template<typename F>
-static int guard_lc_modify(RGWRados* store, const rgw_bucket& bucket, const string& cookie, const F& f) {
+static int guard_lc_modify(RGWRadosStore* store, const rgw_bucket& bucket, const string& cookie, const F& f) {
   CephContext *cct = store->ctx();
 
   string shard_id = get_lc_shard_name(bucket);
@@ -1394,7 +1410,7 @@ static int guard_lc_modify(RGWRados* store, const rgw_bucket& bucket, const stri
   l.set_duration(time);
   l.set_cookie(cookie);
 
-  librados::IoCtx *ctx = store->get_lc_pool_ctx();
+  librados::IoCtx *ctx = store->getRados()->get_lc_pool_ctx();
   int ret;
 
   do {
@@ -1431,7 +1447,9 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
 
   attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs, &bucket_info.objv_tracker);
+  int ret = store->ctl()->bucket->set_bucket_instance_attrs(bucket_info, attrs,
+							 &bucket_info.objv_tracker,
+							 null_yield);
   if (ret < 0)
     return ret;
 
@@ -1451,8 +1469,9 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
 {
   map<string, bufferlist> attrs = bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
-  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs,
-				&bucket_info.objv_tracker);
+  int ret = store->ctl()->bucket->set_bucket_instance_attrs(bucket_info, attrs,
+							 &bucket_info.objv_tracker,
+							 null_yield);
 
   rgw_bucket& bucket = bucket_info.bucket;
 
@@ -1473,7 +1492,7 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(RGWRados* store, const RGWBucketInfo& bucket_info,
+int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,
 		       const map<std::string,bufferlist>& battrs)
 {
   if (auto aiter = battrs.find(RGW_ATTR_LC);
@@ -1491,7 +1510,7 @@ int fix_lc_shard_entry(RGWRados* store, const RGWBucketInfo& bucket_info,
   // 2. entry doesn't exist, which usually happens when reshard has happened prior to update and next LC process has already dropped the update
   // 3. entry exists matching the current bucket id which was after a reshard (needs to be updated to the marker)
   // We are not dropping the old marker here as that would be caught by the next LC process update
-  auto lc_pool_ctx = store->get_lc_pool_ctx();
+  auto lc_pool_ctx = store->getRados()->get_lc_pool_ctx();
   int ret = cls_rgw_lc_get_entry(*lc_pool_ctx,
 				 lc_oid, shard_name, entry);
   if (ret == 0) {

@@ -132,6 +132,47 @@ class TestVolumes(CephFSTestCase):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_create_with_invalid_data_pool_layout(self):
+        subvolume = self._generate_random_subvolume_name()
+        data_pool = "invalid_pool"
+        # create subvolume with invalid data pool layout
+        try:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--pool_layout", data_pool)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise
+        else:
+            raise
+        # clean up
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--force")
+
+    def test_subvolume_create_with_auto_cleanup_on_fail(self):
+        subvolume = self._generate_random_subvolume_name()
+        data_pool = "invalid_pool"
+        # create subvolume with invalid data pool layout fails
+        with self.assertRaises(CommandFailedError):
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--pool_layout", data_pool)
+
+        # check whether subvol path is cleaned up
+        try:
+            self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                raise
+        else:
+            raise
+
+    def test_subvolume_create_with_invalid_size(self):
+        # create subvolume with an invalid size -1
+        subvolume = self._generate_random_subvolume_name()
+        try:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--size", "-1")
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise
+        else:
+            raise RuntimeError("expected the 'fs subvolume create' command to fail")
+
     def test_nonexistent_subvolume_rm(self):
         # remove non-existing subvolume
         subvolume = "non_existent_subvolume"
@@ -156,6 +197,23 @@ class TestVolumes(CephFSTestCase):
         except CommandFailedError as ce:
             if ce.exitstatus != errno.ENOENT:
                 raise
+
+    def test_default_uid_gid_subvolume(self):
+        subvolume = self._generate_random_subvolume_name()
+        expected_uid = 0
+        expected_gid = 0
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        subvol_path = self._get_subvolume_path(self.volname, subvolume)
+
+        # check subvolume's uid and gid
+        stat = self.mount_a.stat(subvol_path)
+        self.assertEqual(stat['st_uid'], expected_uid)
+        self.assertEqual(stat['st_gid'], expected_gid)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
     ### subvolume group operations
 
@@ -203,6 +261,36 @@ class TestVolumes(CephFSTestCase):
 
         self._fs_cmd("subvolumegroup", "rm", self.volname, group1)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group2)
+
+    def test_subvolume_group_create_with_invalid_data_pool_layout(self):
+        group = self._generate_random_group_name()
+        data_pool = "invalid_pool"
+        # create group with invalid data pool layout
+        try:
+            self._fs_cmd("subvolumegroup", "create", self.volname, group, "--pool_layout", data_pool)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise
+        else:
+            raise
+        # clean up
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group, "--force")
+
+    def test_subvolume_group_create_with_auto_cleanup_on_fail(self):
+        group = self._generate_random_group_name()
+        data_pool = "invalid_pool"
+        # create group with invalid data pool layout
+        with self.assertRaises(CommandFailedError):
+            self._fs_cmd("subvolumegroup", "create", self.volname, group, "--pool_layout", data_pool)
+
+        # check whether group path is cleaned up
+        try:
+            self._fs_cmd("subvolumegroup", "getpath", self.volname, group)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                raise
+        else:
+            raise
 
     def test_subvolume_create_with_desired_data_pool_layout_in_group(self):
         subvol1 = self._generate_random_subvolume_name()
@@ -308,6 +396,23 @@ class TestVolumes(CephFSTestCase):
 
         # force remove subvolume
         self._fs_cmd("subvolumegroup", "rm", self.volname, group, "--force")
+
+    def test_default_uid_gid_subvolume_group(self):
+        group = self._generate_random_group_name()
+        expected_uid = 0
+        expected_gid = 0
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        # check group's uid and gid
+        stat = self.mount_a.stat(group_path)
+        self.assertEqual(stat['st_uid'], expected_uid)
+        self.assertEqual(stat['st_gid'], expected_gid)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     ### snapshot operations
 

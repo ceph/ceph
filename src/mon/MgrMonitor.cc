@@ -22,6 +22,7 @@
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
 #include "ConfigMonitor.h"
+#include "HealthMonitor.h"
 
 #include "MgrMonitor.h"
 
@@ -63,6 +64,7 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "rbd_support",
       "volumes",
       "pg_autoscaler",
+      "telemetry",
     }
   }
 };
@@ -289,9 +291,9 @@ void MgrMonitor::post_paxos_update()
         send_digests();
       } else {
         cancel_timer();
-        wait_for_active_ctx(new C_MonContext(mon, [this](int) {
+        wait_for_active_ctx(new C_MonContext{mon, [this](int) {
           send_digests();
-        }));
+        }});
       }
     }
   }
@@ -320,7 +322,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_map.active_gid == 0) {
     auto level = should_warn_about_mgr_down();
     if (level != HEALTH_OK) {
-      next.add("MGR_DOWN", level, "no active mgr");
+      next.add("MGR_DOWN", level, "no active mgr", 0);
     } else {
       dout(10) << __func__ << " no health warning (never active and new cluster)"
 	       << dendl;
@@ -363,7 +365,7 @@ bool MgrMonitor::check_caps(MonOpRequestRef op, const uuid_d& fsid)
 
 bool MgrMonitor::preprocess_query(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
     case MSG_MGR_BEACON:
       return preprocess_beacon(op);
@@ -385,7 +387,7 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
 
 bool MgrMonitor::prepare_update(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
     case MSG_MGR_BEACON:
       return prepare_beacon(op);
@@ -427,7 +429,7 @@ public:
 
 bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 {
-  MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
+  auto m = op->get_req<MMgrBeacon>();
   mon->no_reply(op); // we never reply to beacons
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
@@ -442,7 +444,7 @@ bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 
 bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 {
-  MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
+  auto m = op->get_req<MMgrBeacon>();
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
   // See if we are seeing same name, new GID for the active daemon
@@ -528,6 +530,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
     pending_map.active_change = ceph_clock_now();
+    pending_map.active_mgr_features = m->get_mgr_features();
     pending_map.available_modules = m->get_available_modules();
     encode(m->get_metadata(), pending_metadata[m->get_name()]);
     pending_metadata_rm.erase(m->get_name());
@@ -554,7 +557,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       mon->clog->debug() << "Standby manager daemon " << m->get_name()
                          << " started";
       pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
-					    m->get_available_modules()};
+					    m->get_available_modules(),
+					    m->get_mgr_features()};
       encode(m->get_metadata(), pending_metadata[m->get_name()]);
       pending_metadata_rm.erase(m->get_name());
       updated = true;
@@ -632,7 +636,7 @@ void MgrMonitor::send_digests()
     auto mdigest = make_message<MMgrDigest>();
 
     JSONFormatter f;
-    mon->get_health_status(true, &f, nullptr, nullptr, nullptr);
+    mon->healthmon()->get_health_status(true, &f, nullptr, nullptr, nullptr);
     f.flush(mdigest->health_json);
     f.reset();
 
@@ -647,9 +651,9 @@ void MgrMonitor::send_digests()
 timer:
   digest_event = mon->timer.add_event_after(
     g_conf().get_val<int64_t>("mon_mgr_digest_period"),
-    new C_MonContext(mon, [this](int) {
+    new C_MonContext{mon, [this](int) {
       send_digests();
-  }));
+  }});
 }
 
 void MgrMonitor::cancel_timer()
@@ -662,18 +666,21 @@ void MgrMonitor::cancel_timer()
 
 void MgrMonitor::on_active()
 {
-  if (mon->is_leader()) {
-    mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
-
-    if (HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_NAUTILUS) &&
-	pending_map.always_on_modules != always_on_modules) {
-      pending_map.always_on_modules = always_on_modules;
-      dout(4) << "always on modules changed, pending "
-	      << pending_map.get_always_on_modules()
-	      << " != wanted " << always_on_modules << dendl;
-      propose_pending();
-    }
+  if (!mon->is_leader()) {
+    return;
   }
+  mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
+  if (!HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_NAUTILUS)) {
+    return;
+  }
+  if (pending_map.always_on_modules == always_on_modules) {
+    return;
+  }
+  dout(4) << "always on modules changed, pending "
+          << pending_map.always_on_modules << " != wanted "
+          << always_on_modules << dendl;
+  pending_map.always_on_modules = always_on_modules;
+  propose_pending();
 }
 
 void MgrMonitor::tick()
@@ -792,6 +799,8 @@ bool MgrMonitor::promote_standby()
     auto replacement_gid = pending_map.standbys.begin()->first;
     pending_map.active_gid = replacement_gid;
     pending_map.active_name = pending_map.standbys.at(replacement_gid).name;
+    pending_map.active_mgr_features =
+      pending_map.standbys.at(replacement_gid).mgr_features;
     pending_map.available = false;
     pending_map.active_addrs = entity_addrvec_t();
     pending_map.active_change = ceph_clock_now();
@@ -815,6 +824,7 @@ void MgrMonitor::drop_active()
   pending_map.active_name = "";
   pending_map.active_gid = 0;
   pending_map.active_change = ceph_clock_now();
+  pending_map.active_mgr_features = 0;
   pending_map.available = false;
   pending_map.active_addrs = entity_addrvec_t();
   pending_map.services.clear();
@@ -838,7 +848,7 @@ void MgrMonitor::drop_standby(uint64_t gid, bool drop_meta)
 
 bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   std::stringstream ss;
   bufferlist rdata;
 
@@ -977,7 +987,7 @@ reply:
 
 bool MgrMonitor::prepare_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
 
   std::stringstream ss;
   bufferlist rdata;

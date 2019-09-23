@@ -29,6 +29,7 @@
 #include "common/debug.h"
 #include "common/config.h"
 #include "common/ceph_crypto.h"
+#include "common/lockdep.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/Graylog.h"

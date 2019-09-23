@@ -19,6 +19,7 @@ Build-Depends: cmake (>= 3.5),
                dh-systemd,
                git,
                gperf,
+               g++ (>= 7),
                javahelper,
 # Make-Check   jq,
                junit4,
@@ -28,6 +29,7 @@ Build-Depends: cmake (>= 3.5),
                libblkid-dev (>= 2.17),
 # Crimson      libc-ares-dev,
 # Crimson      libcrypto++-dev,
+               libcap-ng-dev,
                libcunit1-dev,
                libcurl4-openssl-dev,
                libexpat1-dev,
@@ -57,6 +59,10 @@ Build-Depends: cmake (>= 3.5),
                libxml2-dev,
 # Crimson      libyaml-cpp-dev,
                librabbitmq-dev,
+# Make-Check   libxmlsec1,
+# Make-Check   libxmlsec1-nss,
+# Make-Check   libxmlsec1-openssl,
+# Make-Check   libxmlsec1-dev,
                lsb-release,
                parted,
                patch,
@@ -70,7 +76,7 @@ Build-Depends: cmake (>= 3.5),
 # Make-Check   python-pecan,
 # Make-Check   python-bcrypt,
 # Make-Check   python-six,
-# Make-Check   python-tox,
+# Make-Check   python-tox | tox,
 # Make-Check   python-coverage,
 # Make-Check   python-openssl,
 # Make-Check   python-prettytable,
@@ -83,7 +89,7 @@ Build-Depends: cmake (>= 3.5),
 # Crimson      ragel,
 # Make-Check   socat,
 # Crimson      systemtap-sdt-dev,
-               uuid-dev,
+# Make-Check   uuid-dev,
                uuid-runtime,
                valgrind,
                virtualenv | python-virtualenv,
@@ -206,6 +212,7 @@ Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
             ceph-mgr-diskprediction-cloud,
             ceph-mgr-rook,
+            ceph-mgr-k8sevents,
             ceph-mgr-ssh
 Suggests: python-influxdb
 Replaces: ceph (<< 0.93-417),
@@ -289,6 +296,21 @@ Description: rook plugin for ceph-mgr
  This package contains the rook plugin for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to install and configure ceph using
  Rook.
+
+Package: ceph-mgr-k8sevents
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         python-kubernetes,
+         ${misc:Depends},
+         ${python:Depends},
+Description: kubernetes events plugin for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the k8sevents plugin, to allow ceph-mgr to send
+ ceph related events to the kubernetes events API, and track all events
+ that occur within the rook-ceph namespace.
 
 Package: ceph-mgr-ssh
 Architecture: all

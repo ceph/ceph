@@ -262,7 +262,7 @@ setting for a specific daemon.
 
 :Description: The IP address and netmask of the public (front-side) network 
               (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
-              comma-delimited subnets.
+              comma-separated subnets.
 
 :Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
 :Required: No
@@ -293,7 +293,7 @@ settings using the ``cluster addr`` setting for specific OSD daemons.
 
 :Description: The IP address and netmask of the cluster (back-side) network 
               (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
-              comma-delimited subnets.
+              comma-separated subnets.
 
 :Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
 :Required: No

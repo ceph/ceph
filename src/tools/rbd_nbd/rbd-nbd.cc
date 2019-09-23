@@ -151,16 +151,15 @@ public:
   NBDServer(int _fd, librbd::Image& _image)
     : fd(_fd)
     , image(_image)
-    , disconnect_lock("NBDServer::DisconnectLocker")
-    , lock("NBDServer::Locker")
     , reader_thread(*this, &NBDServer::reader_entry)
     , writer_thread(*this, &NBDServer::writer_entry)
     , started(false)
   {}
 
 private:
-  Mutex disconnect_lock;
-  Cond disconnect_cond;
+  ceph::mutex disconnect_lock =
+    ceph::make_mutex("NBDServer::DisconnectLocker");
+  ceph::condition_variable disconnect_cond;
   std::atomic<bool> terminated = { false };
 
   void shutdown()
@@ -169,8 +168,8 @@ private:
     if (terminated.compare_exchange_strong(expected, true)) {
       ::shutdown(fd, SHUT_RDWR);
 
-      Mutex::Locker l(lock);
-      cond.Signal();
+      std::lock_guard l{lock};
+      cond.notify_all();
     }
   }
 
@@ -190,31 +189,30 @@ private:
 
   friend std::ostream &operator<<(std::ostream &os, const IOContext &ctx);
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("NBDServer::Locker");
+  ceph::condition_variable cond;
   xlist<IOContext*> io_pending;
   xlist<IOContext*> io_finished;
 
   void io_start(IOContext *ctx)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     io_pending.push_back(&ctx->item);
   }
 
   void io_finish(IOContext *ctx)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     ceph_assert(ctx->item.is_on_list());
     ctx->item.remove_myself();
     io_finished.push_back(&ctx->item);
-    cond.Signal();
+    cond.notify_all();
   }
 
   IOContext *wait_io_finish()
   {
-    Mutex::Locker l(lock);
-    while(io_finished.empty() && !terminated)
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return !io_finished.empty() || terminated; });
 
     if (io_finished.empty())
       return NULL;
@@ -228,9 +226,8 @@ private:
   void wait_clean()
   {
     ceph_assert(!reader_thread.is_started());
-    Mutex::Locker l(lock);
-    while(!io_pending.empty())
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return io_pending.empty(); });
 
     while(!io_finished.empty()) {
       std::unique_ptr<IOContext> free_ctx(io_finished.front());
@@ -348,8 +345,8 @@ private:
     dout(20) << __func__ << ": terminated" << dendl;
 
 signal:
-    Mutex::Locker l(disconnect_lock);
-    disconnect_cond.Signal();
+    std::lock_guard l{disconnect_lock};
+    disconnect_cond.notify_all();
   }
 
   void writer_entry()
@@ -423,8 +420,8 @@ public:
     if (!started)
       return;
 
-    Mutex::Locker l(disconnect_lock);
-    disconnect_cond.Wait(disconnect_lock);
+    std::unique_lock l{disconnect_lock};
+    disconnect_cond.wait(l);
   }
 
   ~NBDServer()

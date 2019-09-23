@@ -52,7 +52,7 @@ unsigned default_op_size = 1 << 22;
 unsigned default_max_thread = 2;
 int32_t default_report_period = 2;
 map< string, pair <uint64_t, uint64_t> > chunk_statistics; // < key, <count, chunk_size> >
-Mutex glock("chunk_statistics::Locker");
+ceph::mutex glock = ceph::make_mutex("chunk_statistics::Locker");
 
 void usage()
 {
@@ -112,8 +112,8 @@ class EstimateThread : public Thread
   int m;
   ObjectCursor begin;
   ObjectCursor end;
-  Mutex m_lock;
-  Cond m_cond;
+  ceph::mutex m_lock = ceph::make_mutex("EstimateThread::Locker");
+  ceph::condition_variable m_cond;
   int32_t timeout;
   bool m_stop = false;
   uint64_t total_bytes = 0;
@@ -126,13 +126,13 @@ class EstimateThread : public Thread
 public:
   EstimateThread(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, int32_t timeout,
 		uint64_t num_objects, uint64_t max_read_size = default_op_size):
-    io_ctx(io_ctx), n(n), m(m), begin(begin), end(end), m_lock("EstimateThread::Locker"), 
+    io_ctx(io_ctx), n(n), m(m), begin(begin), end(end), 
     timeout(timeout), total_objects(num_objects), max_read_size(max_read_size)
   {}
   void signal(int signum) {
-    Mutex::Locker l(m_lock);
+    std::lock_guard l{m_lock};
     m_stop = true;
-    m_cond.Signal();
+    m_cond.notify_all();
   }
   virtual void print_status(Formatter *f, ostream &out) = 0;
   uint64_t get_examined_objects() { return examined_objects; }
@@ -201,7 +201,7 @@ static void print_dedup_estimate(bool debug = false)
   uint64_t total_objects = 0;
   EstimateDedupRatio *ratio = NULL;
   for (auto &et : estimate_threads) {
-    Mutex::Locker l(glock);
+    std::lock_guard l{glock};
     ratio = dynamic_cast<EstimateDedupRatio*>(et.get());
     assert(ratio);
     for (auto p : ratio->get_chunk_statistics()) {
@@ -246,7 +246,7 @@ static void print_dedup_estimate(bool debug = false)
 
 static void handle_signal(int signum) 
 {
-  Mutex::Locker l(glock);
+  std::lock_guard l{glock};
   for (auto &p : estimate_threads) {
     p->signal(signum);
   }
@@ -302,7 +302,7 @@ void EstimateDedupRatio::estimate_dedup_ratio()
       const auto &oid = i.oid;
       uint64_t offset = 0;
       while (true) {
-	Mutex::Locker l(m_lock);
+	std::unique_lock l{m_lock};
 	if (m_stop) {
 	  Formatter *formatter = Formatter::create("json-pretty");
 	  print_status(formatter, cout);
@@ -323,7 +323,7 @@ void EstimateDedupRatio::estimate_dedup_ratio()
 	  break;
 	}
 	offset += next_offset;
-	m_cond.WaitInterval(m_lock,utime_t(0, COND_WAIT_INTERVAL));
+	m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
 	if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
 	  Formatter *formatter = Formatter::create("json-pretty");
 	  print_status(formatter, cout);
@@ -492,7 +492,7 @@ void ChunkScrub::chunk_scrub_common()
     }
 
     for (const auto & i : result) {
-      Mutex::Locker l(m_lock);
+      std::unique_lock l{m_lock};
       if (m_stop) {
 	Formatter *formatter = Formatter::create("json-pretty");
 	print_status(formatter, cout);
@@ -533,7 +533,7 @@ void ChunkScrub::chunk_scrub_common()
 	fixed_objects++;
       }
       examined_objects++;
-      m_cond.WaitInterval(m_lock,utime_t(0, COND_WAIT_INTERVAL));
+      m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
       if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
 	Formatter *formatter = Formatter::create("json-pretty");
 	print_status(formatter, cout);
@@ -710,19 +710,19 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     goto out;
   }
 
-  glock.Lock();
+  glock.lock();
   begin = io_ctx.object_list_begin();
   end = io_ctx.object_list_end();
   pool_names.push_back(pool_name);
   ret = rados.get_pool_stats(pool_names, stats);
   if (ret < 0) {
     cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
-    glock.Unlock();
+    glock.unlock();
     return ret;
   }
   if (stats.find(pool_name) == stats.end()) {
     cerr << "stats can not find pool name: " << pool_name << std::endl;
-    glock.Unlock();
+    glock.unlock();
     return ret;
   }
   s = stats[pool_name];
@@ -740,7 +740,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
-  glock.Unlock();
+  glock.unlock();
 
   for (auto &p : estimate_threads) {
     p->join();
@@ -904,19 +904,19 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     return ret;
   }
   
-  glock.Lock();
+  glock.lock();
   begin = chunk_io_ctx.object_list_begin();
   end = chunk_io_ctx.object_list_end();
   pool_names.push_back(chunk_pool_name);
   ret = rados.get_pool_stats(pool_names, stats);
   if (ret < 0) {
     cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
-    glock.Unlock();
+    glock.unlock();
     return ret;
   }
   if (stats.find(chunk_pool_name) == stats.end()) {
     cerr << "stats can not find pool name: " << chunk_pool_name << std::endl;
-    glock.Unlock();
+    glock.unlock();
     return ret;
   }
   s = stats[chunk_pool_name];
@@ -927,7 +927,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
-  glock.Unlock();
+  glock.unlock();
 
   for (auto &p : estimate_threads) {
     p->join();

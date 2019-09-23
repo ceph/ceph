@@ -801,8 +801,8 @@ CtPtr ProtocolV1::handle_message_middle(char *buffer, int r) {
 CtPtr ProtocolV1::read_message_data_prepare() {
   ldout(cct, 20) << __func__ << dendl;
 
-  unsigned data_len = le32_to_cpu(current_header.data_len);
-  unsigned data_off = le32_to_cpu(current_header.data_off);
+  unsigned data_len = current_header.data_len;
+  unsigned data_off = current_header.data_off;
 
   if (data_len) {
     // get a buffer
@@ -1009,12 +1009,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
   ceph::mono_time fast_dispatch_time;
 
-  auto& conf = cct->_conf;
-  if ((conf->ms_blackhole_mon && connection->peer_type == CEPH_ENTITY_TYPE_MON)||
-      (conf->ms_blackhole_osd && connection->peer_type == CEPH_ENTITY_TYPE_OSD)||
-      (conf->ms_blackhole_mds && connection->peer_type == CEPH_ENTITY_TYPE_MDS)||
-      (conf->ms_blackhole_client &&
-       connection->peer_type == CEPH_ENTITY_TYPE_CLIENT)) {
+  if (connection->is_blackhole()) {
     ldout(cct, 10) << __func__ << " blackhole " << *message << dendl;
     message->put();
     goto out;
@@ -1206,6 +1201,7 @@ void ProtocolV1::requeue_sent() {
     sent.pop_back();
     ldout(cct, 10) << __func__ << " " << *m << " for resend "
                    << " (" << m->get_seq() << ")" << dendl;
+    m->clear_payload();
     rq.push_front(make_pair(bufferlist(), m));
   }
 }
@@ -1304,7 +1300,10 @@ Message *ProtocolV1::_get_next_outgoing(bufferlist *bl) {
     ceph_assert(!it->second.empty());
     list<pair<bufferlist, Message *> >::iterator p = it->second.begin();
     m = p->second;
-    if (bl) bl->swap(p->first);
+    if (p->first.length() && bl) {
+      assert(bl->length() == 0);
+      bl->swap(p->first);
+    }
     it->second.erase(p);
     if (it->second.empty()) out_q.erase(it->first);
   }

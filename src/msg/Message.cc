@@ -76,10 +76,13 @@
 
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGNotify2.h"
 #include "messages/MOSDPGQuery.h"
+#include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
@@ -182,6 +185,8 @@
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
+#include "messages/MMgrCommand.h"
+#include "messages/MMgrCommandReply.h"
 #include "messages/MServiceMap.h"
 
 #include "messages/MLock.h"
@@ -288,11 +293,14 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
-Message *decode_message(CephContext *cct, int crcflags,
-			ceph_msg_header& header,
-			ceph_msg_footer& footer,
-			bufferlist& front, bufferlist& middle,
-			bufferlist& data, Connection* conn)
+Message *decode_message(CephContext *cct,
+                        int crcflags,
+                        ceph_msg_header& header,
+                        ceph_msg_footer& footer,
+                        ceph::bufferlist& front,
+                        ceph::bufferlist& middle,
+                        ceph::bufferlist& data,
+                        Message::ConnectionRef conn)
 {
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
@@ -521,8 +529,14 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_PG_NOTIFY:
     m = make_message<MOSDPGNotify>();
     break;
+  case MSG_OSD_PG_NOTIFY2:
+    m = make_message<MOSDPGNotify2>();
+    break;
   case MSG_OSD_PG_QUERY:
     m = make_message<MOSDPGQuery>();
+    break;
+  case MSG_OSD_PG_QUERY2:
+    m = make_message<MOSDPGQuery2>();
     break;
   case MSG_OSD_PG_LOG:
     m = make_message<MOSDPGLog>();
@@ -532,6 +546,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_PG_INFO:
     m = make_message<MOSDPGInfo>();
+    break;
+  case MSG_OSD_PG_INFO2:
+    m = make_message<MOSDPGInfo2>();
     break;
   case MSG_OSD_PG_CREATE:
     m = make_message<MOSDPGCreate>();
@@ -822,6 +839,14 @@ Message *decode_message(CephContext *cct, int crcflags,
     m = make_message<MMgrDigest>();
     break;
 
+  case MSG_MGR_COMMAND:
+    m = make_message<MMgrCommand>();
+    break;
+
+  case MSG_MGR_COMMAND_REPLY:
+    m = make_message<MMgrCommandReply>();
+    break;
+
   case MSG_MGR_OPEN:
     m = make_message<MMgrOpen>();
     break;
@@ -886,7 +911,7 @@ Message *decode_message(CephContext *cct, int crcflags,
     return 0;
   }
 
-  m->set_connection(conn);
+  m->set_connection(std::move(conn));
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);

@@ -89,7 +89,7 @@ void CloseRequest<I>::send_shut_down_io_queue() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
+  std::shared_lock owner_locker{m_image_ctx->owner_lock};
   m_image_ctx->io_work_queue->shut_down(create_context_callback<
     CloseRequest<I>, &CloseRequest<I>::handle_shut_down_io_queue>(this));
 }
@@ -105,11 +105,11 @@ void CloseRequest<I>::handle_shut_down_io_queue(int r) {
 template <typename I>
 void CloseRequest<I>::send_shut_down_exclusive_lock() {
   {
-    RWLock::WLocker owner_locker(m_image_ctx->owner_lock);
+    std::unique_lock owner_locker{m_image_ctx->owner_lock};
     m_exclusive_lock = m_image_ctx->exclusive_lock;
 
     // if reading a snapshot -- possible object map is open
-    RWLock::WLocker image_locker(m_image_ctx->image_lock);
+    std::unique_lock image_locker{m_image_ctx->image_lock};
     if (m_exclusive_lock == nullptr) {
       delete m_image_ctx->object_map;
       m_image_ctx->object_map = nullptr;
@@ -136,11 +136,11 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   {
-    RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
+    std::shared_lock owner_locker{m_image_ctx->owner_lock};
     ceph_assert(m_image_ctx->exclusive_lock == nullptr);
 
     // object map and journal closed during exclusive lock shutdown
-    RWLock::RLocker image_locker(m_image_ctx->image_lock);
+    std::shared_lock image_locker{m_image_ctx->image_lock};
     ceph_assert(m_image_ctx->journal == nullptr);
     ceph_assert(m_image_ctx->object_map == nullptr);
   }
@@ -162,7 +162,7 @@ void CloseRequest<I>::send_flush() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
+  std::shared_lock owner_locker{m_image_ctx->owner_lock};
   auto ctx = create_context_callback<
     CloseRequest<I>, &CloseRequest<I>::handle_flush>(this);
   auto aio_comp = io::AioCompletion::create_and_start(ctx, m_image_ctx,

@@ -34,6 +34,7 @@
 
 class CopyFromCallback;
 class PromoteCallback;
+struct RefCountCallback;
 
 class PrimaryLogPG;
 class PGLSFilter;
@@ -256,6 +257,17 @@ public:
     ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
+
+  friend struct RefCountCallback;
+  struct ManifestOp {
+    RefCountCallback *cb;
+    ceph_tid_t objecter_tid;
+
+    ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
+      : cb(cb), objecter_tid(tid) {}
+  };
+  typedef std::shared_ptr<ManifestOp> ManifestOpRef;
+  map<hobject_t, ManifestOpRef> manifest_ops;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() override {
@@ -1007,7 +1019,8 @@ protected:
   SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
   map<hobject_t, SnapSetContext*> snapset_contexts;
-  Mutex snapset_contexts_lock;
+  ceph::mutex snapset_contexts_lock =
+    ceph::make_mutex("PrimaryLogPG::snapset_contexts_lock");
 
   // debug order that client ops are applied
   map<hobject_t, map<client_t, ceph_tid_t>> debug_op_order;
@@ -1053,7 +1066,7 @@ protected:
     _register_snapset_context(ssc);
   }
   void _register_snapset_context(SnapSetContext *ssc) {
-    ceph_assert(snapset_contexts_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(snapset_contexts_lock));
     if (!ssc->registered) {
       ceph_assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
@@ -1141,7 +1154,7 @@ protected:
 				  PGBackend::RecoveryHandle *h,
 				  bool *work_started);
 
-  void finish_degraded_object(const hobject_t& oid);
+  void finish_degraded_object(const hobject_t oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef& map) override ;
@@ -1409,8 +1422,10 @@ protected:
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
-  bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
-  int get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter **pfilter);
+  bool pgls_filter(const PGLSFilter& filter, const hobject_t& sobj);
+
+  std::pair<int, std::unique_ptr<const PGLSFilter>> get_pgls_filter(
+    bufferlist::const_iterator& iter);
 
   map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
@@ -1453,8 +1468,9 @@ protected:
 			     uint64_t last_offset);
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 			     uint64_t offset, uint64_t last_offset, epoch_t lpr);
+  void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
   void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
-                         SnapContext snapc, bool get, Context *cb, uint64_t offset);
+                         SnapContext snapc, bool get, RefCountCallback *cb, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;

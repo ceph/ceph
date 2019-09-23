@@ -5,7 +5,7 @@
 #define CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
@@ -64,46 +64,46 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
   static ImageReplayer *create(
-    Threads<ImageCtxT> *threads, InstanceWatcher<ImageCtxT> *instance_watcher,
-    journal::CacheManagerHandler *cache_manager_handler, RadosRef local,
-    const std::string &local_mirror_uuid, int64_t local_pool_id,
-    const std::string &global_image_id) {
-    return new ImageReplayer(threads, instance_watcher, cache_manager_handler,
-                             local, local_mirror_uuid, local_pool_id,
-                             global_image_id);
+      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      const std::string &global_image_id, Threads<ImageCtxT> *threads,
+      InstanceWatcher<ImageCtxT> *instance_watcher,
+      journal::CacheManagerHandler *cache_manager_handler) {
+    return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
+                             threads, instance_watcher, cache_manager_handler);
   }
   void destroy() {
     delete this;
   }
 
-  ImageReplayer(Threads<ImageCtxT> *threads,
+  ImageReplayer(librados::IoCtx &local_io_ctx,
+                const std::string &local_mirror_uuid,
+                const std::string &global_image_id,
+                Threads<ImageCtxT> *threads,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
-                journal::CacheManagerHandler *cache_manager_handler,
-                RadosRef local, const std::string &local_mirror_uuid,
-                int64_t local_pool_id, const std::string &global_image_id);
+                journal::CacheManagerHandler *cache_manager_handler);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
 
-  bool is_stopped() { Mutex::Locker l(m_lock); return is_stopped_(); }
-  bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
-  bool is_replaying() { Mutex::Locker l(m_lock); return is_replaying_(); }
+  bool is_stopped() { std::lock_guard l{m_lock}; return is_stopped_(); }
+  bool is_running() { std::lock_guard l{m_lock}; return is_running_(); }
+  bool is_replaying() { std::lock_guard l{m_lock}; return is_replaying_(); }
 
-  std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
+  std::string get_name() { std::lock_guard l{m_lock}; return m_name; };
   void set_state_description(int r, const std::string &desc);
 
   // TODO temporary until policy handles release of image replayers
   inline bool is_finished() const {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     return m_finished;
   }
   inline void set_finished(bool finished) {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_finished = finished;
   }
 
   inline bool is_blacklisted() const {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     return (m_last_r == -EBLACKLISTED);
   }
 
@@ -112,7 +112,7 @@ public:
   void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx);
 
   inline int64_t get_local_pool_id() const {
-    return m_local_pool_id;
+    return m_local_io_ctx.get_id();
   }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
@@ -204,7 +204,7 @@ protected:
 
   virtual void on_start_fail(int r, const std::string &desc);
   virtual bool on_start_interrupted();
-  virtual bool on_start_interrupted(Mutex& lock);
+  virtual bool on_start_interrupted(ceph::mutex& lock);
 
   virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
@@ -270,6 +270,9 @@ private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
+  librados::IoCtx &m_local_io_ctx;
+  std::string m_local_mirror_uuid;
+  std::string m_global_image_id;
   Threads<ImageCtxT> *m_threads;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   journal::CacheManagerHandler *m_cache_manager_handler;
@@ -277,15 +280,11 @@ private:
   Peers m_peers;
   RemoteImage m_remote_image;
 
-  RadosRef m_local;
-  std::string m_local_mirror_uuid;
-  int64_t m_local_pool_id;
   std::string m_local_image_id;
-  std::string m_global_image_id;
   std::string m_local_image_name;
   std::string m_name;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
 
@@ -302,7 +301,6 @@ private:
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
-  IoCtxRef m_local_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
   std::string m_local_image_tag_owner;
 
@@ -434,6 +432,8 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+
+  std::string admin_socket_hook_name(const std::string &image_name) const;
 };
 
 } // namespace mirror

@@ -6,7 +6,7 @@ import cherrypy
 from mgr_module import CLICommand, Option
 
 from . import PLUGIN_MANAGER as PM
-from . import interfaces as I
+from . import interfaces as I  # noqa: E741,N812
 from .ttl_cache import ttl_cache
 
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
@@ -44,6 +44,7 @@ class Actions(Enum):
     STATUS = 'status'
 
 
+# pylint: disable=too-many-ancestors
 @PM.add_plugin
 class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
                      I.HasCommands, I.FilterRequest.BeforeHandler,
@@ -54,6 +55,7 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def setup(self):
+        # pylint: disable=attribute-defined-outside-init
         self.Controller2Feature = {
             controller: feature
             for feature, controllers in Feature2Controller.items()
@@ -132,8 +134,9 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
         @ApiController('/feature_toggles')
         class FeatureTogglesEndpoint(RESTController):
 
-            def list(_):
+            def list(_):  # pylint: disable=no-self-argument  # noqa: N805
                 return {
+                    # pylint: disable=protected-access
                     feature.value: self._is_feature_enabled(feature)
                     for feature in Features
                 }

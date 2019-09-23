@@ -1,11 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_LOG_H
 #define CEPH_RGW_LOG_H
+
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
-#include "common/Formatter.h"
 #include "common/OutputDataSocket.h"
 
 class RGWRados;
@@ -29,14 +29,15 @@ struct rgw_log_entry {
   uint64_t bytes_sent;
   uint64_t bytes_received;
   uint64_t obj_size;
-  Clock::duration total_time;
+  Clock::duration total_time{};
   string user_agent;
   string referrer;
   string bucket_id;
   headers_map x_headers;
+  string trans_id;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(9, 5, bl);
+    ENCODE_START(10, 5, bl);
     encode(object_owner.id, bl);
     encode(bucket_owner.id, bl);
     encode(bucket, bl);
@@ -59,10 +60,11 @@ struct rgw_log_entry {
     encode(object_owner, bl);
     encode(bucket_owner, bl);
     encode(x_headers, bl);
+    encode(trans_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, p);
     decode(object_owner.id, p);
     if (struct_v > 3)
       decode(bucket_owner.id, p);
@@ -108,16 +110,19 @@ struct rgw_log_entry {
     if (struct_v >= 9) {
       decode(x_headers, p);
     }
+    if (struct_v >= 10) {
+      decode(trans_id, p);
+    }
     DECODE_FINISH(p);
   }
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(list<rgw_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
 class OpsLogSocket : public OutputDataSocket {
-  Formatter *formatter;
-  Mutex lock;
+  ceph::Formatter *formatter;
+  ceph::mutex lock = ceph::make_mutex("OpsLogSocket");
 
   void formatter_to_bl(bufferlist& bl);
 
@@ -138,7 +143,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
-			      Formatter *formatter);
+			      ceph::Formatter *formatter);
 
 #endif /* CEPH_RGW_LOG_H */
 

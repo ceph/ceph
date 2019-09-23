@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import sys
 import cherrypy
 
 try:
@@ -13,7 +12,7 @@ try:
 except ImportError:
     python_saml_imported = False
 
-from .. import mgr, logger
+from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
 from ..tools import prepare_url_prefix
@@ -37,9 +36,7 @@ class Saml2(BaseController):
     @staticmethod
     def _check_python_saml():
         if not python_saml_imported:
-            python_saml_name = 'python3-saml' if sys.version_info >= (3, 0) else 'python-saml'
-            raise cherrypy.HTTPError(400,
-                                     'Required library not found: `{}`'.format(python_saml_name))
+            raise cherrypy.HTTPError(400, 'Required library not found: `python3-saml`')
         try:
             OneLogin_Saml2_Settings(mgr.SSO_DB.saml2.onelogin_settings)
         except OneLogin_Saml2_Error:
@@ -73,14 +70,13 @@ class Saml2(BaseController):
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
             token = token.decode('utf-8')
-            logger.debug("JWT Token: %s", token)
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
-        else:
-            return {
-                'is_authenticated': auth.is_authenticated(),
-                'errors': errors,
-                'reason': auth.get_last_error_reason()
-            }
+
+        return {
+            'is_authenticated': auth.is_authenticated(),
+            'errors': errors,
+            'reason': auth.get_last_error_reason()
+        }
 
     @Endpoint(xml=True)
     def metadata(self):

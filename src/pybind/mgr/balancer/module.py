@@ -141,6 +141,8 @@ class Eval:
         for t in ('pgs', 'objects', 'bytes'):
             if total[t] == 0:
                 r[t] = {
+                    'max': 0,
+                    'min': 0,
                     'avg': 0,
                     'stddev': 0,
                     'sum_weight': 0,
@@ -189,6 +191,8 @@ class Eval:
             stddev = math.sqrt(dev / float(max(num - 1, 1)))
             score = score / max(sum_weight, 1)
             r[t] = {
+                'max': max(count[t].values()),
+                'min': min(count[t].values()),
                 'avg': avg,
                 'stddev': stddev,
                 'sum_weight': sum_weight,
@@ -856,7 +860,7 @@ class Module(MgrModule):
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
         plan.mode = self.get_module_option('mode')
-        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
+        max_misplaced = self.get_ceph_option('target_max_misplaced_ratio')
         self.log.info('Mode %s, max misplaced %f' %
                       (plan.mode, max_misplaced))
 
@@ -957,7 +961,7 @@ class Module(MgrModule):
         step = self.get_module_option('crush_compat_step')
         if step <= 0 or step >= 1.0:
             return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
-        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
+        max_misplaced = self.get_ceph_option('target_max_misplaced_ratio')
         min_pg_per_osd = 2
 
         ms = plan.initial

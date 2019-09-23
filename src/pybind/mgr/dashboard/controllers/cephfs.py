@@ -5,7 +5,7 @@ from collections import defaultdict
 
 import cherrypy
 
-from . import ApiController, RESTController
+from . import ApiController, RESTController, UiApiController
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -28,7 +28,6 @@ class CephFS(RESTController):
 
     def get(self, fs_id):
         fs_id = self.fs_id_to_int(fs_id)
-
         return self.fs_status(fs_id)
 
     @RESTController.Resource('GET')
@@ -45,35 +44,36 @@ class CephFS(RESTController):
         return self._evict(fs_id, client_id)
 
     @RESTController.Resource('GET')
-    def mds_counters(self, fs_id):
+    def mds_counters(self, fs_id, counters=None):
+        fs_id = self.fs_id_to_int(fs_id)
+        return self._mds_counters(fs_id, counters)
+
+    def _mds_counters(self, fs_id, counters=None):
         """
         Result format: map of daemon name to map of counter to list of datapoints
         rtype: dict[str, dict[str, list]]
         """
 
-        # Opinionated list of interesting performance counters for the GUI --
-        # if you need something else just add it.  See how simple life is
-        # when you don't have to write general purpose APIs?
-        counters = [
-            "mds_server.handle_client_request",
-            "mds_log.ev",
-            "mds_cache.num_strays",
-            "mds.exported",
-            "mds.exported_inodes",
-            "mds.imported",
-            "mds.imported_inodes",
-            "mds.inodes",
-            "mds.caps",
-            "mds.subtrees",
-            "mds_mem.ino"
-        ]
-
-        fs_id = self.fs_id_to_int(fs_id)
+        if counters is None:
+            # Opinionated list of interesting performance counters for the GUI
+            counters = [
+                "mds_server.handle_client_request",
+                "mds_log.ev",
+                "mds_cache.num_strays",
+                "mds.exported",
+                "mds.exported_inodes",
+                "mds.imported",
+                "mds.imported_inodes",
+                "mds.inodes",
+                "mds.caps",
+                "mds.subtrees",
+                "mds_mem.ino"
+            ]
 
         result = {}
         mds_names = self._get_mds_names(fs_id)
 
-        def __to_second(point):
+        def _to_second(point):
             return (point[0] // 1000000000, point[1])
 
         for mds_name in mds_names:
@@ -82,7 +82,7 @@ class CephFS(RESTController):
                 data = mgr.get_counter("mds", mds_name, counter)
                 if data is not None:
                     result[mds_name][counter] = list(
-                        map(__to_second, data[counter]))
+                        map(_to_second, data[counter]))
                 else:
                     result[mds_name][counter] = []
 
@@ -120,6 +120,12 @@ class CephFS(RESTController):
             names.extend(info['name'] for info in fsmap['standbys'])
 
         return names
+
+    def _append_mds_metadata(self, mds_versions, metadata_key):
+        metadata = mgr.get_metadata('mds', metadata_key)
+        if metadata is None:
+            return
+        mds_versions[metadata.get('ceph_version', 'unknown')].append(metadata_key)
 
     # pylint: disable=too-many-statements,too-many-branches
     def fs_status(self, fs_id):
@@ -175,9 +181,7 @@ class CephFS(RESTController):
                 else:
                     activity = 0.0
 
-                metadata = mgr.get_metadata('mds', info['name'])
-                mds_versions[metadata.get('ceph_version', 'unknown')].append(
-                    info['name'])
+                self._append_mds_metadata(mds_versions, info['name'])
                 rank_table.append(
                     {
                         "rank": rank,
@@ -244,10 +248,7 @@ class CephFS(RESTController):
 
         standby_table = []
         for standby in fsmap['standbys']:
-            metadata = mgr.get_metadata('mds', standby['name'])
-            mds_versions[metadata.get('ceph_version', 'unknown')].append(
-                standby['name'])
-
+            self._append_mds_metadata(mds_versions, standby['name'])
             standby_table.append({
                 'name': standby['name']
             })
@@ -320,3 +321,31 @@ class CephFSClients(object):
     @ViewCache()
     def get(self):
         return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
+
+
+@UiApiController('/cephfs', Scope.CEPHFS)
+class CephFsUi(CephFS):
+    RESOURCE_ID = 'fs_id'
+
+    @RESTController.Resource('GET')
+    def tabs(self, fs_id):
+        data = {}
+        fs_id = self.fs_id_to_int(fs_id)
+
+        # Needed for detail tab
+        fs_status = self.fs_status(fs_id)
+        for pool in fs_status['cephfs']['pools']:
+            pool['size'] = pool['used'] + pool['avail']
+        data['pools'] = fs_status['cephfs']['pools']
+        data['ranks'] = fs_status['cephfs']['ranks']
+        data['name'] = fs_status['cephfs']['name']
+        data['standbys'] = ', '.join([x['name'] for x in fs_status['standbys']])
+        counters = self._mds_counters(fs_id)
+        for k, v in counters.items():
+            v['name'] = k
+        data['mds_counters'] = counters
+
+        # Needed for client tab
+        data['clients'] = self._clients(fs_id)
+
+        return data

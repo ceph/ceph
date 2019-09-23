@@ -356,6 +356,14 @@ void MonMap::dump(Formatter *f) const
   f->close_section();
 }
 
+void MonMap::dump_summary(Formatter *f) const
+{
+  f->dump_unsigned("epoch", epoch);
+  f->dump_string("min_mon_release_name", ceph::to_string(min_mon_release));
+  f->dump_unsigned("num_mons", ranks.size());
+}
+
+
 // an ambiguous mon addr may be legacy or may be msgr2--we aren' sure.
 // when that happens we need to try them both (unless we can
 // reasonably infer from the port number which it is).
@@ -666,12 +674,12 @@ future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& name)
     domain = name.substr(idx + 1);
     service = name.substr(0, idx);
   }
-  return net::dns::get_srv_records(
-      net::dns_resolver::srv_proto::tcp,
-      service, domain).then([this](net::dns_resolver::srv_records records) {
+  return seastar::net::dns::get_srv_records(
+      seastar::net::dns_resolver::srv_proto::tcp,
+      service, domain).then([this](seastar::net::dns_resolver::srv_records records) {
     return parallel_for_each(records, [this](auto record) {
-      return net::dns::resolve_name(record.target).then(
-          [record,this](net::inet_address a) {
+      return seastar::net::dns::resolve_name(record.target).then(
+          [record,this](seastar::net::inet_address a) {
 	// the resolved address does not contain ceph specific info like nonce
 	// nonce or msgr proto (legacy, msgr2), so set entity_addr_t manually
 	entity_addr_t addr;
@@ -679,10 +687,10 @@ future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& name)
 	addr.set_family(int(a.in_family()));
 	addr.set_port(record.port);
 	switch (a.in_family()) {
-	case net::inet_address::family::INET:
+	case seastar::net::inet_address::family::INET:
 	  addr.in4_addr().sin_addr = a;
 	  break;
-	case net::inet_address::family::INET6:
+	case seastar::net::inet_address::family::INET6:
 	  addr.in6_addr().sin6_addr = a;
 	  break;
 	}

@@ -1,7 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/random.h"
+#include "include/Context.h"
 #include "common/errno.h"
 
 #include "svc_notify.h"
@@ -309,7 +310,7 @@ int RGWSI_Notify::unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle)
 void RGWSI_Notify::add_watcher(int i)
 {
   ldout(cct, 20) << "add_watcher() i=" << i << dendl;
-  RWLock::WLocker l(watchers_lock);
+  std::unique_lock l{watchers_lock};
   watchers_set.insert(i);
   if (watchers_set.size() ==  (size_t)num_watchers) {
     ldout(cct, 2) << "all " << num_watchers << " watchers are set, enabling cache" << dendl;
@@ -320,7 +321,7 @@ void RGWSI_Notify::add_watcher(int i)
 void RGWSI_Notify::remove_watcher(int i)
 {
   ldout(cct, 20) << "remove_watcher() i=" << i << dendl;
-  RWLock::WLocker l(watchers_lock);
+  std::unique_lock l{watchers_lock};
   size_t orig_size = watchers_set.size();
   watchers_set.erase(i);
   if (orig_size == (size_t)num_watchers &&
@@ -335,7 +336,7 @@ int RGWSI_Notify::watch_cb(uint64_t notify_id,
                            uint64_t notifier_id,
                            bufferlist& bl)
 {
-  RWLock::RLocker l(watchers_lock);
+  std::shared_lock l{watchers_lock};
   if (cb) {
     return cb->watch_cb(notify_id, cookie, notifier_id, bl);
   }
@@ -344,7 +345,7 @@ int RGWSI_Notify::watch_cb(uint64_t notify_id,
 
 void RGWSI_Notify::set_enabled(bool status)
 {
-  RWLock::WLocker l(watchers_lock);
+  std::unique_lock l{watchers_lock};
   _set_enabled(status);
 }
 
@@ -468,7 +469,7 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 
 void RGWSI_Notify::register_watch_cb(CB *_cb)
 {
-  RWLock::WLocker l(watchers_lock);
+  std::unique_lock l{watchers_lock};
   cb = _cb;
   _set_enabled(enabled);
 }

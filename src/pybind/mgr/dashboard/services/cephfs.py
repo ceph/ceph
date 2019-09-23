@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 from contextlib import contextmanager
 
+import six
 import cephfs
 
 from .. import mgr, logger
@@ -40,6 +41,16 @@ class CephFS(object):
                 self.cfs.closedir(d)
 
     def get_dir_list(self, dirpath, level):
+        """
+        :param dirpath: The root directory path.
+        :type dirpath: str | bytes
+        :param level: The number of steps to go down the directory tree.
+        :type level: int
+        :return: A list of directory paths (bytes encoded).
+        :rtype: list
+        """
+        if isinstance(dirpath, six.string_types):
+            dirpath = dirpath.encode()
         logger.debug("[CephFS] get_dir_list dirpath=%s level=%s", dirpath,
                      level)
         if level == 0:
@@ -50,12 +61,12 @@ class CephFS(object):
             paths = [dirpath]
             while dent:
                 logger.debug("[CephFS] found entry=%s", dent.d_name)
-                if dent.d_name in ['.', '..']:
+                if dent.d_name in [b'.', b'..']:
                     dent = self.cfs.readdir(d)
                     continue
                 if dent.is_dir():
                     logger.debug("[CephFS] found dir=%s", dent.d_name)
-                    subdirpath = '{}{}/'.format(dirpath, dent.d_name)
+                    subdirpath = b''.join([dirpath, dent.d_name, b'/'])
                     paths.extend(self.get_dir_list(subdirpath, level-1))
                 dent = self.cfs.readdir(d)
         return paths

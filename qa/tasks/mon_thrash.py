@@ -11,6 +11,7 @@ import json
 import math
 from teuthology import misc as teuthology
 from tasks.cephfs.filesystem import MDSCluster
+from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def _get_mons(ctx):
     mons = [f[len('mon.'):] for f in teuthology.get_mon_names(ctx)]
     return mons
 
-class MonitorThrasher:
+class MonitorThrasher(Thrasher):
     """
     How it works::
 
@@ -41,11 +42,11 @@ class MonitorThrasher:
                         the monitor (default: 10)
     thrash_delay        Number of seconds to wait in-between
                         test iterations (default: 0)
-    thrash_store        Thrash monitor store before killing the monitor being thrashed (default: False)
-    thrash_store_probability  Probability of thrashing a monitor's store
+    store_thrash        Thrash monitor store before killing the monitor being thrashed (default: False)
+    store_thrash_probability  Probability of thrashing a monitor's store
                               (default: 50)
     thrash_many         Thrash multiple monitors instead of just one. If
-                        'maintain-quorum' is set to False, then we will
+                        'maintain_quorum' is set to False, then we will
                         thrash up to as many monitors as there are
                         available. (default: False)
     maintain_quorum     Always maintain quorum, taking care on how many
@@ -62,7 +63,7 @@ class MonitorThrasher:
     scrub               Scrub after each iteration (default: True)
     check_mds_failover  Check if mds failover happened (default: False)
 
-    Note: if 'store-thrash' is set to True, then 'maintain-quorum' must also
+    Note: if 'store_thrash' is set to True, then 'maintain_quorum' must also
           be set to True.
 
     For example::
@@ -72,8 +73,8 @@ class MonitorThrasher:
     - mon_thrash:
         revive_delay: 20
         thrash_delay: 1
-        thrash_store: true
-        thrash_store_probability: 40
+        store_thrash: true
+        store_thrash_probability: 40
         seed: 31337
         maintain_quorum: true
         thrash_many: true
@@ -85,11 +86,11 @@ class MonitorThrasher:
             - mon/workloadgen.sh
     """
     def __init__(self, ctx, manager, config, logger):
+        super(MonitorThrasher, self).__init__()
         self.ctx = ctx
         self.manager = manager
         self.manager.wait_for_clean()
 
-        self.e = None
         self.stopping = False
         self.logger = logger
         self.config = config
@@ -168,7 +169,9 @@ class MonitorThrasher:
         """
         addr = self.ctx.ceph['ceph'].mons['mon.%s' % mon]
         self.log('thrashing mon.{id}@{addr} store'.format(id=mon, addr=addr))
-        out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force')
+        out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force',
+                                           '--yes-i-really-mean-it',
+                                           '--i-know-what-i-am-doing')
         j = json.loads(out)
         assert j['ret'] == 0, \
             'error forcing store sync on mon.{id}:\n{ret}'.format(
@@ -228,7 +231,7 @@ class MonitorThrasher:
             self._do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
-            self.e = e
+            self.exception = e
             self.logger.exception("exception:")
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.
@@ -356,6 +359,10 @@ def task(ctx, config):
         'mon_thrash task only accepts a dict for configuration'
     assert len(_get_mons(ctx)) > 2, \
         'mon_thrash task requires at least 3 monitors'
+
+    if 'cluster' not in config:
+        config['cluster'] = 'ceph'
+
     log.info('Beginning mon_thrash...')
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
@@ -367,6 +374,7 @@ def task(ctx, config):
     thrash_proc = MonitorThrasher(ctx,
         manager, config,
         logger=log.getChild('mon_thrasher'))
+    ctx.ceph[config['cluster']].thrashers.append(thrash_proc)
     try:
         log.debug('Yielding')
         yield

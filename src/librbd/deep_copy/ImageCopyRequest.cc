@@ -30,12 +30,12 @@ ImageCopyRequest<I>::ImageCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                       const SnapSeqs &snap_seqs,
                                       ProgressContext *prog_ctx,
                                       Context *on_finish)
-  : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
+  : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
     m_snap_id_end(snap_id_end), m_flatten(flatten),
     m_object_number(object_number), m_snap_seqs(snap_seqs),
     m_prog_ctx(prog_ctx), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
-    m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)) {
+    m_lock(ceph::make_mutex(unique_lock_name("ImageCopyRequest::m_lock", this))) {
 }
 
 template <typename I>
@@ -53,7 +53,7 @@ void ImageCopyRequest<I>::send() {
 
 template <typename I>
 void ImageCopyRequest<I>::cancel() {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   ldout(m_cct, 20) << dendl;
   m_canceled = true;
@@ -68,7 +68,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 
   uint64_t size;
   {
-    RWLock::RLocker image_locker(m_src_image_ctx->image_lock);
+    std::shared_lock image_locker{m_src_image_ctx->image_lock};
     size =  m_src_image_ctx->get_image_size(CEPH_NOSNAP);
     for (auto snap_id : m_src_image_ctx->snaps) {
       size = std::max(size, m_src_image_ctx->get_image_size(snap_id));
@@ -81,7 +81,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 
   bool complete;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     for (uint64_t i = 0;
          i < m_src_image_ctx->config.template get_val<uint64_t>("rbd_concurrent_management_ops");
          ++i) {
@@ -100,7 +100,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 
 template <typename I>
 void ImageCopyRequest<I>::send_next_object_copy() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   if (m_canceled && m_ret_val == 0) {
     ldout(m_cct, 10) << "image copy canceled" << dendl;
@@ -117,7 +117,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
 
   ++m_current_ops;
 
-  Context *ctx = new FunctionContext(
+  Context *ctx = new LambdaContext(
     [this, ono](int r) {
       handle_object_copy(ono, r);
     });
@@ -132,7 +132,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
 
   bool complete;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     ceph_assert(m_current_ops > 0);
     --m_current_ops;
 
@@ -150,9 +150,9 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
         m_copied_objects.pop();
         uint64_t progress_object_no = *m_object_number + 1;
         m_updating_progress = true;
-        m_lock.Unlock();
+        m_lock.unlock();
         m_prog_ctx->update_progress(progress_object_no, m_end_object_no);
-        m_lock.Lock();
+        m_lock.lock();
         ceph_assert(m_updating_progress);
         m_updating_progress = false;
       }

@@ -44,9 +44,11 @@ void condition_variable_debug::notify_one()
 
 void condition_variable_debug::notify_all(bool sloppy)
 {
-  // make sure signaler is holding the waiter's lock.
-  ceph_assert(waiter_mutex == NULL ||
-         waiter_mutex->is_locked());
+  if (!sloppy) {
+    // make sure signaler is holding the waiter's lock.
+    ceph_assert(waiter_mutex == NULL ||
+                waiter_mutex->is_locked());
+  }
   if (int r = pthread_cond_broadcast(&cond); r != 0 && !sloppy) {
     throw std::system_error(r, std::generic_category());
   }

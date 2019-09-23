@@ -1,0 +1,152 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+  - osd.8
+  - osd.9
+  - osd.10
+  - osd.11
+  - osd.12
+  - osd.13
+  - osd.14
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 4
+      size: 1 # GB
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon memory target: 134217728 # reduced to 128_M
+        rocksdb cache size: 67108864 # reduced to 64_M
+        mon osd cache size: 100000
+        mon osd cache size min: 134217728
+      osd:
+        osd memory target: 1610612736 # reduced to 1.5_G
+        osd objectstore: bluestore
+        debug bluestore: 20
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        osd max backfills: 9
+
+tasks:
+- install:
+    branch: wip-sseshasa2-testing-2019-07-30-1825 # change as appropriate
+- ceph:
+    create_rbd_pool: false
+    log-whitelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow requests
+- interactive:
+- parallel:
+    - log-mon-rss
+    - stress-tasks
+    - benchload
+- exec:
+    client.0:
+      - "ceph_test_mon_memory_target 134217728" # mon memory target
+      - "ceph_test_mon_rss_usage 134217728"
+log-mon-rss:
+- background_exec:
+    client.0:
+      - while true
+      - do /usr/bin/ceph_test_log_rss_usage ceph-mon >> /var/log/ceph/ceph-mon-rss-usage.log
+      - sleep 300 # log rss usage every 5 mins. May be modified accordingly
+      - done
+- exec:
+    client.0:
+      - sleep 37860 # sum total of the radosbench test times below plus 60 secs
+benchload: # The total radosbench test below translates to 10.5 hrs
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+  - radosbench:
+      clients: [client.0]
+      time: 1800
+stress-tasks:
+- thrashosds:
+    op_delay: 1
+    bdev_inject_crash: 1
+    bdev_inject_crash_probability: .8
+    chance_down: 80
+    chance_pgnum_grow: 3
+    chance_pgpnum_fix: 1
+    chance_thrash_cluster_full: 0
+    chance_thrash_pg_upmap: 3
+    chance_thrash_pg_upmap_items: 3
+    min_in: 2

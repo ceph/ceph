@@ -36,6 +36,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
+#include "common/ceph_context.h"
 #include "common/histogram.h"
 #include "include/interval_set.h"
 #include "include/inline_memory.h"
@@ -742,6 +743,9 @@ public:
     }
     return false;
   }
+  int64_t pool() const {
+    return pgid.pool();
+  }
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
@@ -1320,39 +1324,41 @@ struct pg_pool_t {
     }
   }
 
-  enum {
-    PG_AUTOSCALE_MODE_OFF = 0,
-    PG_AUTOSCALE_MODE_WARN = 1,
-    PG_AUTOSCALE_MODE_ON = 2,
+  enum class pg_autoscale_mode_t : uint8_t {
+    OFF = 0,
+    WARN = 1,
+    ON = 2,
+    UNKNOWN = UINT8_MAX,
   };
-  static const char *get_pg_autoscale_mode_name(int m) {
+  static const char *get_pg_autoscale_mode_name(pg_autoscale_mode_t m) {
     switch (m) {
-    case PG_AUTOSCALE_MODE_OFF: return "off";
-    case PG_AUTOSCALE_MODE_ON: return "on";
-    case PG_AUTOSCALE_MODE_WARN: return "warn";
+    case pg_autoscale_mode_t::OFF: return "off";
+    case pg_autoscale_mode_t::ON: return "on";
+    case pg_autoscale_mode_t::WARN: return "warn";
     default: return "???";
     }
   }
-  static int get_pg_autoscale_mode_by_name(const std::string& m) {
+  static pg_autoscale_mode_t get_pg_autoscale_mode_by_name(const std::string& m) {
     if (m == "off") {
-      return PG_AUTOSCALE_MODE_OFF;
+      return pg_autoscale_mode_t::OFF;
     }
     if (m == "warn") {
-      return PG_AUTOSCALE_MODE_WARN;
+      return pg_autoscale_mode_t::WARN;
     }
     if (m == "on") {
-      return PG_AUTOSCALE_MODE_ON;
+      return pg_autoscale_mode_t::ON;
     }
-    return -1;
+    return pg_autoscale_mode_t::UNKNOWN;
   }
 
   utime_t create_time;
-  uint64_t flags;           ///< FLAG_*
-  __u8 type;                ///< TYPE_*
-  __u8 size, min_size;      ///< number of osds in each pg
-  __u8 crush_rule;          ///< crush placement rule
-  __u8 object_hash;         ///< hash mapping object name to ps
-  __u8 pg_autoscale_mode;   ///< PG_AUTOSCALE_MODE_
+  uint64_t flags = 0;           ///< FLAG_*
+  __u8 type = 0;                ///< TYPE_*
+  __u8 size = 0, min_size = 0;  ///< number of osds in each pg
+  __u8 crush_rule = 0;          ///< crush placement rule
+  __u8 object_hash = 0;         ///< hash mapping object name to ps
+  pg_autoscale_mode_t pg_autoscale_mode = pg_autoscale_mode_t::UNKNOWN;
+
 private:
   __u32 pg_num = 0, pgp_num = 0;  ///< number of pgs
   __u32 pg_num_pending = 0;       ///< pg_num we are about to merge down to
@@ -1362,7 +1368,7 @@ private:
 public:
   std::map<std::string, std::string> properties;  ///< OBSOLETE
   std::string erasure_code_profile; ///< name of the erasure code profile in OSDMap
-  epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
+  epoch_t last_change = 0;      ///< most recent epoch changed, exclusing snapshot changes
 
   /// last epoch that forced clients to resend
   epoch_t last_force_op_resend = 0;
@@ -1374,12 +1380,12 @@ public:
   /// metadata for the most recent PG merge
   pg_merge_meta_t last_pg_merge_meta;
   
-  snapid_t snap_seq;        ///< seq for per-pool snapshot
-  epoch_t snap_epoch;       ///< osdmap epoch of last snap
-  uint64_t auid;            ///< who owns the pg
+  snapid_t snap_seq = 0;        ///< seq for per-pool snapshot
+  epoch_t snap_epoch = 0;       ///< osdmap epoch of last snap
+  uint64_t auid = 0;            ///< who owns the pg
 
-  uint64_t quota_max_bytes; ///< maximum number of bytes for this pool
-  uint64_t quota_max_objects; ///< maximum number of objects for this pool
+  uint64_t quota_max_bytes = 0; ///< maximum number of bytes for this pool
+  uint64_t quota_max_objects = 0; ///< maximum number of objects for this pool
 
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
@@ -1395,14 +1401,14 @@ public:
    */
   interval_set<snapid_t> removed_snaps;
 
-  unsigned pg_num_mask, pgp_num_mask;
+  unsigned pg_num_mask = 0, pgp_num_mask = 0;
 
   std::set<uint64_t> tiers;      ///< pools that are tiers of us
-  int64_t tier_of;         ///< pool for which we are a tier
+  int64_t tier_of = -1;         ///< pool for which we are a tier
   // Note that write wins for read+write ops
-  int64_t read_tier;       ///< pool/tier for objecter to direct reads to
-  int64_t write_tier;      ///< pool/tier for objecter to direct writes to
-  cache_mode_t cache_mode;  ///< cache pool mode
+  int64_t read_tier = -1;       ///< pool/tier for objecter to direct reads to
+  int64_t write_tier = -1;      ///< pool/tier for objecter to direct writes to
+  cache_mode_t cache_mode = CACHEMODE_NONE;  ///< cache pool mode
 
   bool is_tier() const { return tier_of >= 0; }
   bool has_tiers() const { return !tiers.empty(); }
@@ -1434,32 +1440,32 @@ public:
     grade_table.resize(0);
   }
 
-  uint64_t target_max_bytes;   ///< tiering: target max pool size
-  uint64_t target_max_objects; ///< tiering: target max pool size
+  uint64_t target_max_bytes = 0;   ///< tiering: target max pool size
+  uint64_t target_max_objects = 0; ///< tiering: target max pool size
 
-  uint32_t cache_target_dirty_ratio_micro; ///< cache: fraction of target to leave dirty
-  uint32_t cache_target_dirty_high_ratio_micro; ///< cache: fraction of  target to flush with high speed
-  uint32_t cache_target_full_ratio_micro;  ///< cache: fraction of target to fill before we evict in earnest
+  uint32_t cache_target_dirty_ratio_micro = 0; ///< cache: fraction of target to leave dirty
+  uint32_t cache_target_dirty_high_ratio_micro = 0; ///< cache: fraction of  target to flush with high speed
+  uint32_t cache_target_full_ratio_micro = 0;  ///< cache: fraction of target to fill before we evict in earnest
 
-  uint32_t cache_min_flush_age;  ///< minimum age (seconds) before we can flush
-  uint32_t cache_min_evict_age;  ///< minimum age (seconds) before we can evict
+  uint32_t cache_min_flush_age = 0;  ///< minimum age (seconds) before we can flush
+  uint32_t cache_min_evict_age = 0;  ///< minimum age (seconds) before we can evict
 
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
-  uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
-  uint32_t hit_set_count;       ///< number of periods to retain
-  bool use_gmt_hitset;	        ///< use gmt to name the hitset archive object
-  uint32_t min_read_recency_for_promote;   ///< minimum number of HitSet to check before promote on read
-  uint32_t min_write_recency_for_promote;  ///< minimum number of HitSet to check before promote on write
-  uint32_t hit_set_grade_decay_rate;   ///< current hit_set has highest priority on objects
-                                       ///< temperature count,the follow hit_set's priority decay 
-                                       ///< by this params than pre hit_set
-  uint32_t hit_set_search_last_n;   ///< accumulate atmost N hit_sets for temperature
+  uint32_t hit_set_period = 0;   ///< periodicity of HitSet segments (seconds)
+  uint32_t hit_set_count = 0;    ///< number of periods to retain
+  bool use_gmt_hitset = true;	 ///< use gmt to name the hitset archive object
+  uint32_t min_read_recency_for_promote = 0;   ///< minimum number of HitSet to check before promote on read
+  uint32_t min_write_recency_for_promote = 0;  ///< minimum number of HitSet to check before promote on write
+  uint32_t hit_set_grade_decay_rate = 0; ///< current hit_set has highest priority on objects
+                                         ///< temperature count,the follow hit_set's priority decay
+                                         ///< by this params than pre hit_set
+  uint32_t hit_set_search_last_n = 0;    ///< accumulate atmost N hit_sets for temperature
 
-  uint32_t stripe_width;        ///< erasure coded stripe size in bytes
+  uint32_t stripe_width = 0;        ///< erasure coded stripe size in bytes
 
-  uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
-                                 ///< user does not specify any expected value
-  bool fast_read;            ///< whether turn on fast read on the pool or not
+  uint64_t expected_num_objects = 0; ///< expected number of objects on this pool, a value of 0 indicates
+                                     ///< user does not specify any expected value
+  bool fast_read = false;            ///< whether turn on fast read on the pool or not
 
   pool_opts_t opts; ///< options
 
@@ -1523,35 +1529,7 @@ public:
     }
   }
 
-  pg_pool_t()
-    : flags(0), type(0), size(0), min_size(0),
-      crush_rule(0), object_hash(0),
-      last_change(0),
-      snap_seq(0), snap_epoch(0),
-      auid(0),
-      quota_max_bytes(0), quota_max_objects(0),
-      pg_num_mask(0), pgp_num_mask(0),
-      tier_of(-1), read_tier(-1), write_tier(-1),
-      cache_mode(CACHEMODE_NONE),
-      target_max_bytes(0), target_max_objects(0),
-      cache_target_dirty_ratio_micro(0),
-      cache_target_dirty_high_ratio_micro(0),
-      cache_target_full_ratio_micro(0),
-      cache_min_flush_age(0),
-      cache_min_evict_age(0),
-      hit_set_params(),
-      hit_set_period(0),
-      hit_set_count(0),
-      use_gmt_hitset(true),
-      min_read_recency_for_promote(0),
-      min_write_recency_for_promote(0),
-      hit_set_grade_decay_rate(0),
-      hit_set_search_last_n(0),
-      stripe_width(0),
-      expected_num_objects(0),
-      fast_read(false),
-      opts()
-  { }
+  pg_pool_t() = default;
 
   void dump(ceph::Formatter *f) const;
 
@@ -2181,7 +2159,9 @@ struct pg_stat_t {
     // adding (or subtracting!) invalid stats render our stats invalid too
     stats_invalid |= o.stats_invalid;
     dirty_stats_invalid |= o.dirty_stats_invalid;
+    omap_stats_invalid |= o.omap_stats_invalid;
     hitset_stats_invalid |= o.hitset_stats_invalid;
+    hitset_bytes_stats_invalid |= o.hitset_bytes_stats_invalid;
     pin_stats_invalid |= o.pin_stats_invalid;
     manifest_stats_invalid |= o.manifest_stats_invalid;
   }
@@ -2367,6 +2347,20 @@ struct osd_stat_t {
 
   uint32_t num_osds = 0;
   uint32_t num_per_pool_osds = 0;
+  uint32_t num_per_pool_omap_osds = 0;
+
+  struct Interfaces {
+    uint32_t last_update;  // in seconds
+    uint32_t back_pingtime[3];
+    uint32_t back_min[3];
+    uint32_t back_max[3];
+    uint32_t back_last;
+    uint32_t front_pingtime[3];
+    uint32_t front_min[3];
+    uint32_t front_max[3];
+    uint32_t front_last;
+  };
+  map<int, Interfaces> hb_pingtime;  ///< map of osd id to Interfaces
 
   osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
        num_shards_repaired(0)	{}
@@ -2381,6 +2375,7 @@ struct osd_stat_t {
     num_pgs += o.num_pgs;
     num_osds += o.num_osds;
     num_per_pool_osds += o.num_per_pool_osds;
+    num_per_pool_omap_osds += o.num_per_pool_omap_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2398,6 +2393,7 @@ struct osd_stat_t {
     num_pgs -= o.num_pgs;
     num_osds -= o.num_osds;
     num_per_pool_osds -= o.num_per_pool_osds;
+    num_per_pool_omap_osds -= o.num_per_pool_omap_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2425,7 +2421,8 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.os_perf_stat == r.os_perf_stat &&
     l.num_pgs == r.num_pgs &&
     l.num_osds == r.num_osds &&
-    l.num_per_pool_osds == r.num_per_pool_osds;
+    l.num_per_pool_osds == r.num_per_pool_osds &&
+    l.num_per_pool_omap_osds == r.num_per_pool_omap_osds;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -2509,31 +2506,45 @@ struct pool_stat_t {
   // In legacy mode used and netto values are the same. But for new per-pool
   // collection 'used' provides amount of space ALLOCATED at all related OSDs 
   // and 'netto' is amount of stored user data.
-  uint64_t get_allocated_bytes(bool per_pool) const {
-    uint64_t allocated_bytes;
+  uint64_t get_allocated_data_bytes(bool per_pool) const {
     if (per_pool) {
-      allocated_bytes = store_stats.allocated;
+      return store_stats.allocated;
     } else {
       // legacy mode, use numbers from 'stats'
-      allocated_bytes = stats.sum.num_bytes +
-	stats.sum.num_bytes_hit_set_archive;
+      return stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
     }
-    // omap is not broken out by pool by nautilus bluestore
-    allocated_bytes += stats.sum.num_omap_bytes;
-    return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate, bool per_pool) const {
-    uint64_t user_bytes;
-    if (per_pool) {
-      user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
+  uint64_t get_allocated_omap_bytes(bool per_pool_omap) const {
+    if (per_pool_omap) {
+      return store_stats.omap_allocated;
     } else {
-      // legacy mode, use numbers from 'stats'
-      user_bytes = stats.sum.num_bytes +
-	stats.sum.num_bytes_hit_set_archive;
+      // omap is not broken out by pool by nautilus bluestore; report the
+      // scrub value.  this will be imprecise in that it won't account for
+      // any storage overhead/efficiency.
+      return stats.sum.num_omap_bytes;
     }
-    // omap is not broken out by pool by nautilus bluestore
-    user_bytes += stats.sum.num_omap_bytes;
-    return user_bytes;
+  }
+  uint64_t get_user_data_bytes(float raw_used_rate, ///< space amp factor
+			       bool per_pool) const {
+    // NOTE: we need the space amp factor so that we can work backwards from
+    // the raw utilization to the amount of data that the user actually stored.
+    if (per_pool) {
+      return raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
+    } else {
+      // legacy mode, use numbers from 'stats'.  note that we do NOT use the
+      // raw_used_rate factor here because we are working from the PG stats
+      // directly.
+      return stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
+    }
+  }
+  uint64_t get_user_omap_bytes(float raw_used_rate, ///< space amp factor
+			       bool per_pool_omap) const {
+    if (per_pool_omap) {
+      return raw_used_rate ? store_stats.omap_allocated / raw_used_rate : 0;
+    } else {
+      // omap usage is lazily reported during scrub; this value may lag.
+      return stats.sum.num_omap_bytes;
+    }
   }
 
   void dump(ceph::Formatter *f) const;
@@ -2991,35 +3002,6 @@ struct pg_fast_info_t {
   }
 };
 WRITE_CLASS_ENCODER(pg_fast_info_t)
-
-
-struct pg_notify_t {
-  epoch_t query_epoch;
-  epoch_t epoch_sent;
-  pg_info_t info;
-  shard_id_t to;
-  shard_id_t from;
-  pg_notify_t() :
-    query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
-    from(shard_id_t::NO_SHARD) {}
-  pg_notify_t(
-    shard_id_t to,
-    shard_id_t from,
-    epoch_t query_epoch,
-    epoch_t epoch_sent,
-    const pg_info_t &info)
-    : query_epoch(query_epoch),
-      epoch_sent(epoch_sent),
-      info(info), to(to), from(from) {
-    ceph_assert(from == info.pgid.shard);
-  }
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator &p);
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<pg_notify_t*> &o);
-};
-WRITE_CLASS_ENCODER(pg_notify_t)
-std::ostream &operator<<(std::ostream &lhs, const pg_notify_t &notify);
 
 
 class OSDMap;
@@ -3522,6 +3504,38 @@ PastIntervals::PriorSet::PriorSet(
 	   << (pg_down ? " pg_down":"")
 	   << dendl;
 }
+
+struct pg_notify_t {
+  epoch_t query_epoch;
+  epoch_t epoch_sent;
+  pg_info_t info;
+  shard_id_t to;
+  shard_id_t from;
+  PastIntervals past_intervals;
+  pg_notify_t() :
+    query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
+    from(shard_id_t::NO_SHARD) {}
+  pg_notify_t(
+    shard_id_t to,
+    shard_id_t from,
+    epoch_t query_epoch,
+    epoch_t epoch_sent,
+    const pg_info_t &info,
+    const PastIntervals& pi)
+    : query_epoch(query_epoch),
+      epoch_sent(epoch_sent),
+      info(info), to(to), from(from),
+      past_intervals(pi) {
+    ceph_assert(from == info.pgid.shard);
+  }
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<pg_notify_t*> &o);
+};
+WRITE_CLASS_ENCODER(pg_notify_t)
+std::ostream &operator<<(std::ostream &lhs, const pg_notify_t &notify);
+
 
 /** 
  * pg_query_t - used to ask a peer for information about a pg.
@@ -4217,13 +4231,11 @@ struct pg_missing_item {
   } flags;
   pg_missing_item() : flags(FLAG_NONE) {}
   explicit pg_missing_item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
-  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false, bool old_style = false,bool new_object = false) :
+  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false, bool old_style = false) :
     need(n), have(h) {
+    set_delete(is_delete);
     if (old_style)
       clean_regions.mark_fully_dirty();
-    if (new_object)
-      clean_regions.mark_object_new();
-    set_delete(is_delete);
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
@@ -4265,6 +4277,7 @@ struct pg_missing_item {
       uint8_t f;
       decode(f, bl);
       flags = static_cast<missing_flags_t>(f); 
+      clean_regions.mark_fully_dirty();
     }
   }
 
@@ -4443,7 +4456,7 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase((missing_it->second).need.version);
+        rmissing.erase(missing_it->second.need.version);
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
@@ -4456,14 +4469,20 @@ public:
     } else if (is_missing_divergent_item) {
       // already missing (prior).
       rmissing.erase((missing_it->second).need.version);
-      (missing_it->second).need = e.version;  // leave .have unchanged.
-      (missing_it->second).set_delete(e.is_delete());
-      (missing_it->second).clean_regions.merge(e.clean_regions);
+      missing_it->second.need = e.version;  // leave .have unchanged.
+      missing_it->second.set_delete(e.is_delete());
+      if (e.is_lost_revert())
+        missing_it->second.clean_regions.mark_fully_dirty();
+      else
+        missing_it->second.clean_regions.merge(e.clean_regions);
     } else {
       // not missing, we must have prior_version (if any)
       ceph_assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
-      missing[e.soid].clean_regions = e.clean_regions;
+      if (e.is_lost_revert())
+        missing[e.soid].clean_regions.mark_fully_dirty();
+      else
+        missing[e.soid].clean_regions = e.clean_regions;
     }
     rmissing[e.version.version] = e.soid;
     tracker.changed(e.soid);
@@ -4473,9 +4492,9 @@ public:
     auto p = missing.find(oid);
     if (p != missing.end()) {
       rmissing.erase((p->second).need.version);
-      (p->second).need = need;          // no not adjust .have
-      (p->second).set_delete(is_delete);
-      (p->second).clean_regions.mark_fully_dirty();
+      p->second.need = need;          // do not adjust .have
+      p->second.set_delete(is_delete);
+      p->second.clean_regions.mark_fully_dirty();
     } else {
       missing[oid] = item(need, eversion_t(), is_delete);
       missing[oid].clean_regions.mark_fully_dirty();
@@ -4493,11 +4512,24 @@ public:
     }
   }
 
+  void mark_fully_dirty(const hobject_t& oid) {
+    auto p = missing.find(oid);
+    if (p != missing.end()) {
+      tracker.changed(oid);
+      (p->second).clean_regions.mark_fully_dirty();
+    }
+  }
+
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
-	   bool is_delete, bool make_dirty = true) {
-    //if have== eversion_t() means that the object does not exist, we transfer new_object = true
-    missing[oid] = item(need, have, is_delete, make_dirty, have == eversion_t());
+	   bool is_delete) {
+    missing[oid] = item(need, have, is_delete, true);
     rmissing[need.version] = oid;
+    tracker.changed(oid);
+  }
+
+  void add(const hobject_t& oid, pg_missing_item&& item) {
+    rmissing[item.need.version] = oid;
+    missing.insert({oid, std::move(item)});
     tracker.changed(oid);
   }
 
@@ -5637,10 +5669,15 @@ struct OSDOp {
   sobject_t soid;
 
   ceph::buffer::list indata, outdata;
-  errorcode32_t rval;
+  errorcode32_t rval = 0;
 
-  OSDOp() : rval(0) {
+  OSDOp() {
     memset(&op, 0, sizeof(ceph_osd_op));
+  }
+
+  OSDOp(const int op_code) {
+    memset(&op, 0, sizeof(ceph_osd_op));
+    op.op = op_code;
   }
 
   /**
@@ -6064,5 +6101,46 @@ struct omap_stat_t {
  int64_t omap_bytes;
  int64_t omap_keys;
 };
+
+// filter for pg listings
+class PGLSFilter {
+  CephContext* cct;
+protected:
+  std::string xattr;
+public:
+  PGLSFilter();
+  virtual ~PGLSFilter();
+  virtual bool filter(const hobject_t &obj,
+                      const ceph::buffer::list& xattr_data) const = 0;
+
+  /**
+   * Arguments passed from the RADOS client.  Implementations must
+   * handle any encoding errors, and return an appropriate error code,
+   * or 0 on valid input.
+   */
+  virtual int init(ceph::buffer::list::const_iterator &params) = 0;
+
+  /**
+   * xattr key, or empty string.  If non-empty, this xattr will be fetched
+   * and the value passed into ::filter
+   */
+  virtual const std::string& get_xattr() const { return xattr; }
+
+  /**
+   * If true, objects without the named xattr (if xattr name is not empty)
+   * will be rejected without calling ::filter
+   */
+  virtual bool reject_empty_xattr() const { return true; }
+};
+
+class PGLSPlainFilter : public PGLSFilter {
+  std::string val;
+public:
+  int init(ceph::bufferlist::const_iterator &params) override;
+  ~PGLSPlainFilter() override {}
+  bool filter(const hobject_t& obj,
+              const ceph::bufferlist& xattr_data) const override;
+};
+
 
 #endif

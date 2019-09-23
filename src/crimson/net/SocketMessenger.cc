@@ -142,7 +142,8 @@ seastar::future<> SocketMessenger::shutdown()
 
 void SocketMessenger::do_bind(const entity_addrvec_t& addrs)
 {
-  Messenger::set_myaddrs(addrs);
+  // safe to discard an immediate ready future
+  (void) Messenger::set_myaddrs(addrs);
 
   // TODO: v2: listen on multiple addresses
   seastar::socket_address address(addrs.front().in4_addr());
@@ -162,15 +163,16 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
     ceph_assert(get_myaddr().is_legacy() || get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
 
-    seastar::keep_doing([this] {
+    // forwarded to accepting_complete
+    (void) seastar::keep_doing([this] {
         return Socket::accept(*listener)
           .then([this] (SocketFRef socket,
                         entity_addr_t peer_addr) {
             auto shard = locate_shard(peer_addr);
-            // don't wait before accepting another
 #warning fixme
             // we currently do dangerous i/o from a Connection core, different from the Socket core.
-            container().invoke_on(shard, [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
+            return container().invoke_on(shard,
+              [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
                 SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
                     msgr, *msgr.dispatcher, get_myaddr().is_msgr2());
                 conn->start_accept(std::move(sock), peer_addr);
@@ -371,4 +373,15 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
   ceph_assert(found != connections.end());
   ceph_assert(found->second == conn);
   connections.erase(found);
+}
+
+seastar::future<uint32_t>
+SocketMessenger::get_global_seq(uint32_t old)
+{
+  return container().invoke_on(0, [old] (auto& msgr) {
+    if (old > msgr.global_seq) {
+      msgr.global_seq = old;
+    }
+    return ++msgr.global_seq;
+  });
 }

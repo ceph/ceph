@@ -18,7 +18,7 @@ class SlowOps final : public DaemonHealthMetricCollector {
     return type == daemon_metric::SLOW_OPS;
   }
   health_check_t& _get_check(health_check_map_t& cm) const override {
-    return cm.get_or_add("SLOW_OPS", HEALTH_WARN, "");
+    return cm.get_or_add("SLOW_OPS", HEALTH_WARN, "", 1);
   }
   bool _update(const DaemonKey& daemon,
                const DaemonHealthMetric& metric) override {
@@ -61,7 +61,7 @@ class PendingPGs final : public DaemonHealthMetricCollector {
     return type == daemon_metric::PENDING_CREATING_PGS;
   }
   health_check_t& _get_check(health_check_map_t& cm) const override {
-    return cm.get_or_add("PENDING_CREATING_PGS", HEALTH_WARN, "");
+    return cm.get_or_add("PENDING_CREATING_PGS", HEALTH_WARN, "", 1);
   }
   bool _update(const DaemonKey& osd,
                const DaemonHealthMetric& metric) override {

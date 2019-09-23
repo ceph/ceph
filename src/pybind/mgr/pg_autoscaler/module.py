@@ -214,7 +214,7 @@ class PgAutoscaler(MgrModule):
         all_stats = self.get('osd_stats')
         for s in roots:
             s.osd_count = len(s.osds)
-            s.pg_target = s.osd_count * int(self.mon_target_pg_per_osd)
+            s.pg_target = s.osd_count * self.mon_target_pg_per_osd
 
             capacity = 0.0
             for osd_stats in all_stats['osd_stats']:
@@ -256,6 +256,9 @@ class PgAutoscaler(MgrModule):
         # iterate over all pools to determine how they should be sized
         for pool_name, p in iteritems(pools):
             pool_id = p['pool']
+            if pool_id not in pool_stats:
+                # race with pool deletion; skip
+                continue
 
             # FIXME: we assume there is only one take per pool, but that
             # may not be true.
@@ -270,7 +273,7 @@ class PgAutoscaler(MgrModule):
 
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
 
-            pool_logical_used = pool_stats[pool_id]['bytes_used']
+            pool_logical_used = pool_stats[pool_id]['stored']
             bias = p['options'].get('pg_autoscale_bias', 1.0)
             target_bytes = p['options'].get('target_size_bytes', 0)
 
@@ -401,6 +404,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TOO_FEW_PGS'] = {
                 'severity': 'warning',
                 'summary': summary,
+                'count': len(too_few),
                 'detail': too_few
             }
         if too_many:
@@ -409,6 +413,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TOO_MANY_PGS'] = {
                 'severity': 'warning',
                 'summary': summary,
+                'count': len(too_many),
                 'detail': too_many
             }
 
@@ -436,6 +441,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TARGET_SIZE_RATIO_OVERCOMMITTED'] = {
                 'severity': 'warning',
                 'summary': "%d subtrees have overcommitted pool target_size_ratio" % len(too_much_target_ratio),
+                'count': len(too_much_target_ratio),
                 'detail': too_much_target_ratio,
             }
 
@@ -465,6 +471,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TARGET_SIZE_BYTES_OVERCOMMITTED'] = {
                 'severity': 'warning',
                 'summary': "%d subtrees have overcommitted pool target_size_bytes" % len(too_much_target_bytes),
+                'count': len(too_much_target_bytes),
                 'detail': too_much_target_bytes,
             }
 

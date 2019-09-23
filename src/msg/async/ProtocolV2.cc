@@ -195,6 +195,7 @@ void ProtocolV2::requeue_sent() {
     ldout(cct, 5) << __func__ << " requeueing message m=" << m
                   << " seq=" << m->get_seq() << " type=" << m->get_type() << " "
                   << *m << dendl;
+    m->clear_payload();
     rq.emplace_front(out_queue_entry_t{false, m});
   }
 }
@@ -498,8 +499,8 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   ceph_msg_header2 header2{header.seq,        header.tid,
                            header.type,       header.priority,
                            header.version,
-                           0,                 header.data_off,
-                           ack_seq,
+                           init_le32(0),      header.data_off,
+                           init_le64(ack_seq),
                            footer.flags,      header.compat_version,
                            header.reserved};
 
@@ -799,7 +800,7 @@ CtPtr ProtocolV2::_banner_exchange(CtRef callback) {
 }
 
 CtPtr ProtocolV2::_wait_for_peer_banner() {
-  unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(__le16);
+  unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(ceph_le16);
   return READ(banner_len, _handle_peer_banner);
 }
 
@@ -827,7 +828,7 @@ CtPtr ProtocolV2::_handle_peer_banner(rx_buffer_t &&buffer, int r) {
   uint16_t payload_len;
   bufferlist bl;
   buffer->set_offset(banner_prefix_len);
-  buffer->set_length(sizeof(__le16));
+  buffer->set_length(sizeof(ceph_le16));
   bl.push_back(std::move(buffer));
   auto ti = bl.cbegin();
   try {
@@ -1393,15 +1394,16 @@ CtPtr ProtocolV2::handle_message() {
                          current_header.type,
                          current_header.priority,
                          current_header.version,
-                         msg_frame.front_len(),
-                         msg_frame.middle_len(),
-                         msg_frame.data_len(),
+                         init_le32(msg_frame.front_len()),
+                         init_le32(msg_frame.middle_len()),
+                         init_le32(msg_frame.data_len()),
                          current_header.data_off,
                          peer_name,
                          current_header.compat_version,
                          current_header.reserved,
-                         0};
-  ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
+                         init_le32(0)};
+  ceph_msg_footer footer{init_le32(0), init_le32(0),
+	                 init_le32(0), init_le64(0), current_header.flags};
 
   Message *message = decode_message(cct, 0, header, footer,
       msg_frame.front(),
@@ -1486,12 +1488,7 @@ CtPtr ProtocolV2::handle_message() {
 
   ceph::mono_time fast_dispatch_time;
 
-  auto& conf = cct->_conf;
-  if ((conf->ms_blackhole_mon && connection->peer_type == CEPH_ENTITY_TYPE_MON)||
-      (conf->ms_blackhole_osd && connection->peer_type == CEPH_ENTITY_TYPE_OSD)||
-      (conf->ms_blackhole_mds && connection->peer_type == CEPH_ENTITY_TYPE_MDS)||
-      (conf->ms_blackhole_client &&
-       connection->peer_type == CEPH_ENTITY_TYPE_CLIENT)) {
+  if (connection->is_blackhole()) {
     ldout(cct, 10) << __func__ << " blackhole " << *message << dendl;
     message->put();
     goto out;

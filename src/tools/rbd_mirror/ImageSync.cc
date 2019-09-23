@@ -47,7 +47,7 @@ public:
 
 template <typename I>
 ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
-                        SafeTimer *timer, Mutex *timer_lock,
+                        SafeTimer *timer, ceph::mutex *timer_lock,
                         const std::string &mirror_uuid, Journaler *journaler,
                         MirrorPeerClientMeta *client_meta,
                         ContextWQ *work_queue,
@@ -59,7 +59,7 @@ ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
     m_journaler(journaler), m_client_meta(client_meta),
     m_work_queue(work_queue), m_instance_watcher(instance_watcher),
     m_progress_ctx(progress_ctx),
-    m_lock(unique_lock_name("ImageSync::m_lock", this)),
+    m_lock(ceph::make_mutex(unique_lock_name("ImageSync::m_lock", this))),
     m_update_sync_point_interval(m_local_image_ctx->cct->_conf.template get_val<double>(
         "rbd_mirror_sync_point_update_age")), m_client_meta_copy(*client_meta) {
 }
@@ -78,7 +78,7 @@ void ImageSync<I>::send() {
 
 template <typename I>
 void ImageSync<I>::cancel() {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   dout(10) << dendl;
 
@@ -99,9 +99,9 @@ void ImageSync<I>::send_notify_sync_request() {
 
   dout(10) << dendl;
 
-  m_lock.Lock();
+  m_lock.lock();
   if (m_canceled) {
-    m_lock.Unlock();
+    m_lock.unlock();
     BaseRequest::finish(-ECANCELED);
     return;
   }
@@ -110,18 +110,18 @@ void ImageSync<I>::send_notify_sync_request() {
     m_work_queue, create_context_callback<
       ImageSync<I>, &ImageSync<I>::handle_notify_sync_request>(this));
   m_instance_watcher->notify_sync_request(m_local_image_ctx->id, ctx);
-  m_lock.Unlock();
+  m_lock.unlock();
 }
 
 template <typename I>
 void ImageSync<I>::handle_notify_sync_request(int r) {
   dout(10) << ": r=" << r << dendl;
 
-  m_lock.Lock();
+  m_lock.lock();
   if (r == 0 && m_canceled) {
     r = -ECANCELED;
   }
-  m_lock.Unlock();
+  m_lock.unlock();
 
   if (r < 0) {
     BaseRequest::finish(r);
@@ -207,7 +207,7 @@ void ImageSync<I>::send_copy_image() {
   librbd::deep_copy::ObjectNumber object_number;
   int r = 0;
   {
-    RWLock::RLocker image_locker(m_remote_image_ctx->image_lock);
+    std::shared_lock image_locker{m_remote_image_ctx->image_lock};
     ceph_assert(!m_client_meta->sync_points.empty());
     auto &sync_point = m_client_meta->sync_points.front();
     snap_id_end = m_remote_image_ctx->get_snap_id(
@@ -231,9 +231,9 @@ void ImageSync<I>::send_copy_image() {
     return;
   }
 
-  m_lock.Lock();
+  m_lock.lock();
   if (m_canceled) {
-    m_lock.Unlock();
+    m_lock.unlock();
     finish(-ECANCELED);
     return;
   }
@@ -248,7 +248,7 @@ void ImageSync<I>::send_copy_image() {
       false, object_number, m_work_queue, &m_client_meta->snap_seqs,
       m_image_copy_prog_ctx, ctx);
   m_image_copy_request->get();
-  m_lock.Unlock();
+  m_lock.unlock();
 
   update_progress("COPY_IMAGE");
 
@@ -260,8 +260,7 @@ void ImageSync<I>::handle_copy_image(int r) {
   dout(10) << ": r=" << r << dendl;
 
   {
-    Mutex::Locker timer_locker(*m_timer_lock);
-    Mutex::Locker locker(m_lock);
+    std::scoped_lock locker{*m_timer_lock, m_lock};
     m_image_copy_request->put();
     m_image_copy_request = nullptr;
     delete m_image_copy_prog_ctx;
@@ -300,7 +299,7 @@ void ImageSync<I>::handle_copy_image_update_progress(uint64_t object_no,
   int percent = 100 * object_no / object_count;
   update_progress("COPY_IMAGE " + stringify(percent) + "%");
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   m_image_copy_object_no = object_no;
   m_image_copy_object_count = object_count;
 
@@ -311,7 +310,7 @@ void ImageSync<I>::handle_copy_image_update_progress(uint64_t object_no,
 
 template <typename I>
 void ImageSync<I>::send_update_sync_point() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   m_update_sync_ctx = nullptr;
 
@@ -361,14 +360,13 @@ void ImageSync<I>::handle_update_sync_point(int r) {
   }
 
   {
-    Mutex::Locker timer_locker(*m_timer_lock);
-    Mutex::Locker locker(m_lock);
+    std::scoped_lock locker{*m_timer_lock, m_lock};
     m_updating_sync_point = false;
 
     if (m_image_copy_request != nullptr) {
-      m_update_sync_ctx = new FunctionContext(
+      m_update_sync_ctx = new LambdaContext(
         [this](int r) {
-          Mutex::Locker locker(m_lock);
+	  std::lock_guard locker{m_lock};
           this->send_update_sync_point();
         });
       m_timer->add_event_after(m_update_sync_point_interval,

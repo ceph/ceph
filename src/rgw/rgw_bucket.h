@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_BUCKET_H
 #define CEPH_RGW_BUCKET_H
@@ -10,42 +10,27 @@
 #include "include/types.h"
 #include "rgw_common.h"
 #include "rgw_tools.h"
-
-#include "rgw_rados.h"
+#include "rgw_metadata.h"
 
 #include "rgw_string.h"
 
 #include "common/Formatter.h"
 #include "common/lru_map.h"
 #include "common/ceph_time.h"
+
 #include "rgw_formats.h"
 
-// define as static when RGWBucket implementation completes
-extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
+#include "services/svc_bucket_types.h"
 
-extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
-                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                 real_time mtime);
-extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferlist& bl, bool exclusive,
-                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                 real_time mtime);
+class RGWSI_Meta;
+class RGWBucketMetadataHandler;
+class RGWBucketInstanceMetadataHandler;
+class RGWUserCtl;
+namespace rgw { namespace sal { class RGWRadosStore; } }
 
-extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id);
+extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                        rgw_bucket* bucket, int *shard_id);
-
-extern int rgw_bucket_instance_remove_entry(RGWRados *store, const string& entry,
-					    RGWObjVersionTracker *objv_tracker);
-extern void rgw_bucket_instance_key_to_oid(string& key);
-extern void rgw_bucket_instance_oid_to_key(string& oid);
-
-extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
-                                        const string& tenant_name,
-                                        const string& bucket_name,
-                                        RGWObjVersionTracker& objv_tracker);
-
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const RGWBucketInfo& bucket_info);
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
 
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
@@ -69,14 +54,30 @@ struct RGWBucketCompleteInfo {
 
 class RGWBucketEntryMetadataObject : public RGWMetadataObject {
   RGWBucketEntryPoint ep;
+  map<string, bufferlist> attrs;
 public:
-  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, real_time m) : ep(_ep) {
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, const obj_version& v, real_time m) : ep(_ep) {
     objv = v;
     mtime = m;
+    set_pattrs (&attrs);
+  }
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, const obj_version& v, real_time m, std::map<string, bufferlist>&& _attrs) :
+    ep(_ep), attrs(std::move(_attrs)) {
+    objv = v;
+    mtime = m;
+    set_pattrs (&attrs);
   }
 
   void dump(Formatter *f) const override {
     ep.dump(f);
+  }
+
+  RGWBucketEntryPoint& get_ep() {
+    return ep;
+  }
+
+  map<string, bufferlist>& get_attrs() {
+    return attrs;
   }
 };
 
@@ -84,7 +85,7 @@ class RGWBucketInstanceMetadataObject : public RGWMetadataObject {
   RGWBucketCompleteInfo info;
 public:
   RGWBucketInstanceMetadataObject() {}
-  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, real_time m) : info(i) {
+  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, const obj_version& v, real_time m) : info(i) {
     objv = v;
     mtime = m;
   }
@@ -97,7 +98,12 @@ public:
     info.decode_json(obj);
   }
 
-  RGWBucketInfo& get_bucket_info() { return info.info; }
+  RGWBucketCompleteInfo& get_bci() {
+    return info;
+  }
+  RGWBucketInfo& get_bucket_info() {
+    return info.info;
+  }
 };
 
 /**
@@ -162,35 +168,48 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
-class RGWMetadataManager;
-class RGWMetadataHandler;
+class RGWBucketMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
+public:
+  virtual ~RGWBucketMetadataHandlerBase() {}
+  virtual void init(RGWSI_Bucket *bucket_svc,
+                    RGWBucketCtl *bucket_ctl) = 0;
+
+};
+
+class RGWBucketInstanceMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
+public:
+  virtual ~RGWBucketInstanceMetadataHandlerBase() {}
+  virtual void init(RGWSI_Zone *zone_svc,
+                    RGWSI_Bucket *bucket_svc,
+                    RGWSI_BucketIndex *bi_svc) = 0;
+
+};
 
 class RGWBucketMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWBucketMetadataHandlerBase *alloc();
 };
 
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWBucketInstanceMetadataHandlerBase *alloc();
 };
 
 class RGWArchiveBucketMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWBucketMetadataHandlerBase *alloc();
 };
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWBucketInstanceMetadataHandlerBase *alloc();
 };
 
-extern void rgw_bucket_init(RGWMetadataManager *mm);
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_read_user_buckets(RGWRados *store,
+extern int rgw_read_user_buckets(rgw::sal::RGWRadosStore *store,
                                  const rgw_user& user_id,
                                  RGWUserBuckets& buckets,
                                  const string& marker,
@@ -200,26 +219,15 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
-extern int rgw_link_bucket(RGWRados* store,
-                           const rgw_user& user_id,
-                           rgw_bucket& bucket,
-                           ceph::real_time creation_time,
-                           bool update_entrypoint = true);
-extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
-                             const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
+extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
+extern int rgw_remove_bucket(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
+extern int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
 
-extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
-extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
-
-extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
-                                map<string, bufferlist>& attrs,
-                                RGWObjVersionTracker *objv_tracker);
-extern int rgw_object_get_attr(RGWRados* store, const RGWBucketInfo& bucket_info,
+extern int rgw_object_get_attr(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,
                                const rgw_obj& obj, const char* attr_name,
                                bufferlist& out_bl, optional_yield y);
 
-extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix);
+extern void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, bool fix);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
@@ -227,6 +235,7 @@ struct RGWBucketAdminOpState {
   std::string bucket_name;
   std::string bucket_id;
   std::string object_name;
+  std::string new_bucket_name;
 
   bool list_buckets;
   bool stat_buckets;
@@ -234,6 +243,7 @@ struct RGWBucketAdminOpState {
   bool fix_index;
   bool delete_child_objects;
   bool bucket_stored;
+  bool sync_bucket;
   int max_aio = 0;
 
   rgw_bucket bucket;
@@ -251,21 +261,30 @@ struct RGWBucketAdminOpState {
     if (!user_id.empty())
       uid = user_id;
   }
+  void set_tenant(const std::string& tenant_str) {
+    uid.tenant = tenant_str;
+  }
   void set_bucket_name(const std::string& bucket_str) {
     bucket_name = bucket_str; 
   }
   void set_object(std::string& object_str) {
     object_name = object_str;
   }
+  void set_new_bucket_name(std::string& new_bucket_str) {
+    new_bucket_name = new_bucket_str;
+  }
   void set_quota(RGWQuotaInfo& value) {
     quota = value;
   }
 
 
+  void set_sync_bucket(bool value) { sync_bucket = value; }
+
   rgw_user& get_user_id() { return uid; }
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
   std::string& get_object_name() { return object_name; }
+  std::string& get_tenant() { return uid.tenant; }
 
   rgw_bucket& get_bucket() { return bucket; }
   void set_bucket(rgw_bucket& _bucket) {
@@ -286,10 +305,11 @@ struct RGWBucketAdminOpState {
   bool is_system_op() { return uid.empty(); }
   bool has_bucket_stored() { return bucket_stored; }
   int get_max_aio() { return max_aio; }
+  bool will_sync_bucket() { return sync_bucket; }
 
   RGWBucketAdminOpState() : list_buckets(false), stat_buckets(false), check_objects(false), 
                             fix_index(false), delete_child_objects(false),
-                            bucket_stored(false)  {}
+                            bucket_stored(false), sync_bucket(true)  {}
 };
 
 /*
@@ -299,20 +319,21 @@ struct RGWBucketAdminOpState {
 class RGWBucket
 {
   RGWUserBuckets buckets;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWAccessHandle handle;
 
   RGWUserInfo user_info;
-  std::string tenant;
-  std::string bucket_name;
+  rgw_bucket bucket;
 
   bool failure;
 
   RGWBucketInfo bucket_info;
+  RGWObjVersionTracker ep_objv; // entrypoint object version
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
-  int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
+  int init(rgw::sal::RGWRadosStore *storage, RGWBucketAdminOpState& op_state, optional_yield y,
+              std::string *err_msg = NULL, map<string, bufferlist> *pattrs = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
               RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
@@ -328,13 +349,17 @@ public:
           std::string *err_msg = NULL);
 
   int remove(RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
-  int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
-  int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int link(RGWBucketAdminOpState& op_state, optional_yield y,
+           map<string, bufferlist>& attrs, std::string *err_msg = NULL);
+  int chown(RGWBucketAdminOpState& op_state, const string& marker,
+            optional_yield y, std::string *err_msg = NULL);
+  int unlink(RGWBucketAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
   int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y);
+  int sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *attrs, std::string *err_msg = NULL);
 
   void clear_failure() { failure = false; }
 
@@ -344,37 +369,40 @@ public:
 class RGWBucketAdminOp
 {
 public:
-  static int get_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int get_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);
-  static int get_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int get_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   RGWAccessControlPolicy& policy);
-  static int dump_s3_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int dump_s3_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   ostream& os);
 
-  static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
-  static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
+  static int unlink(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
+  static int link(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
+  static int chown(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, const string& marker, string *err_msg = NULL);
 
-  static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int check_index(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y);
 
-  static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true);
-  static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
-  static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
-  static int limit_check(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true);
+  static int remove_object(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
+  static int info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
+  static int limit_check(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 			 const std::list<std::string>& user_ids,
 			 RGWFormatterFlusher& flusher,
 			 bool warnings_only = false);
-  static int set_quota(RGWRados *store, RGWBucketAdminOpState& op_state);
+  static int set_quota(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
 
-  static int list_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int list_stale_instances(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 				  RGWFormatterFlusher& flusher);
 
-  static int clear_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int clear_stale_instances(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher);
-  static int fix_lc_shards(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int fix_lc_shards(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                            RGWFormatterFlusher& flusher);
-  static int fix_obj_expiry(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int fix_obj_expiry(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 			    RGWFormatterFlusher& flusher, bool dry_run = false);
+
+  static int sync_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
 };
 
 
@@ -450,16 +478,28 @@ namespace rgw {
 struct BucketChangeObserver;
 }
 
+struct RGWDataChangesLogMarker {
+  int shard;
+  string marker;
+
+  RGWDataChangesLogMarker() : shard(0) {}
+};
+
 class RGWDataChangesLog {
   CephContext *cct;
-  RGWRados *store;
   rgw::BucketChangeObserver *observer = nullptr;
+
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Cls *cls{nullptr};
+  } svc;
 
   int num_shards;
   string *oids;
 
-  Mutex lock;
-  RWLock modified_lock;
+  ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
+  ceph::shared_mutex modified_lock =
+    ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
   map<int, set<string> > modified_shards;
 
   std::atomic<bool> down_flag = { false };
@@ -467,17 +507,10 @@ class RGWDataChangesLog {
   struct ChangeStatus {
     real_time cur_expiration;
     real_time cur_sent;
-    bool pending;
-    RefCountedCond *cond;
-    Mutex *lock;
-
-    ChangeStatus() : pending(false), cond(NULL) {
-      lock = new Mutex("RGWDataChangesLog::ChangeStatus");
-    }
-
-    ~ChangeStatus() {
-      delete lock;
-    }
+    bool pending = false;
+    RefCountedCond *cond = nullptr;
+    ceph::mutex lock =
+      ceph::make_mutex("RGWDataChangesLog::ChangeStatus");
   };
 
   typedef std::shared_ptr<ChangeStatus> ChangeStatusPtr;
@@ -493,11 +526,11 @@ class RGWDataChangesLog {
   class ChangesRenewThread : public Thread {
     CephContext *cct;
     RGWDataChangesLog *log;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("ChangesRenewThread::lock");
+    ceph::condition_variable cond;
 
   public:
-    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread::lock") {}
+    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log) {}
     void *entry() override;
     void stop();
   };
@@ -506,34 +539,12 @@ class RGWDataChangesLog {
 
 public:
 
-  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
-                                                           lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
-                                                           changes(cct->_conf->rgw_data_log_changes_size) {
-    num_shards = cct->_conf->rgw_data_log_num_shards;
-
-    oids = new string[num_shards];
-
-    string prefix = cct->_conf->rgw_data_log_obj_prefix;
-
-    if (prefix.empty()) {
-      prefix = "data_log";
-    }
-
-    for (int i = 0; i < num_shards; i++) {
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%s.%d", prefix.c_str(), i);
-      oids[i] = buf;
-    }
-
-    renew_thread = new ChangesRenewThread(cct, this);
-    renew_thread->create("rgw_dt_lg_renew");
-  }
-
+  RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc);
   ~RGWDataChangesLog();
 
   int choose_oid(const rgw_bucket_shard& bs);
   const std::string& get_oid(int shard_id) const { return oids[shard_id]; }
-  int add_entry(rgw_bucket& bucket, int shard_id);
+  int add_entry(const rgw_bucket& bucket, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int renew_entries();
   int list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
@@ -543,17 +554,10 @@ public:
 		   bool *truncated);
   int trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
-  int trim_entries(const real_time& start_time, const real_time& end_time,
-                   const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
-  int lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id);
-  int unlock(int shard_id, string& zone_id, string& owner_id);
-  struct LogMarker {
-    int shard;
-    string marker;
 
-    LogMarker() : shard(0) {}
-  };
+  using LogMarker = RGWDataChangesLogMarker;
+
   int list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
                list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
 
@@ -565,6 +569,329 @@ public:
   }
 
   bool going_down();
+};
+
+struct rgw_ep_info {
+    RGWBucketEntryPoint &ep;
+    map<string, bufferlist>& attrs;
+    rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
+	: ep(ep), attrs(attrs) { }
+};
+
+class RGWBucketCtl
+{
+  CephContext *cct;
+
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Bucket *bucket{nullptr};
+    RGWSI_BucketIndex *bi{nullptr};
+  } svc;
+
+  struct Ctl {
+    RGWUserCtl *user{nullptr};
+  } ctl;
+
+  RGWBucketMetadataHandler *bm_handler;
+  RGWBucketInstanceMetadataHandler *bmi_handler;
+
+  RGWSI_Bucket_BE_Handler bucket_be_handler; /* bucket backend handler */
+  RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
+
+  int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
+  
+public:
+  RGWBucketCtl(RGWSI_Zone *zone_svc,
+               RGWSI_Bucket *bucket_svc,
+               RGWSI_BucketIndex *bi_svc);
+
+  void init(RGWUserCtl *user_ctl,
+            RGWBucketMetadataHandler *_bm_handler,
+            RGWBucketInstanceMetadataHandler *_bmi_handler);
+
+  struct Bucket {
+    struct GetParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+      real_time *mtime{nullptr};
+      map<string, bufferlist> *attrs{nullptr};
+      rgw_cache_entry_info *cache_info{nullptr};
+      boost::optional<obj_version> refresh_version;
+      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
+
+      GetParams() {}
+
+      GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
+      GetParams& set_mtime(ceph::real_time *_mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+
+      GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
+        cache_info = _cache_info;
+        return *this;
+      }
+
+      GetParams& set_refresh_version(const obj_version& _refresh_version) {
+        refresh_version = _refresh_version;
+        return *this;
+      }
+
+      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
+        bectx_params = _bectx_params;
+        return *this;
+      }
+    };
+
+    struct PutParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+      ceph::real_time mtime;
+      bool exclusive{false};
+      map<string, bufferlist> *attrs{nullptr};
+
+      PutParams() {}
+
+      PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
+      PutParams& set_mtime(const ceph::real_time& _mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      PutParams& set_exclusive(bool _exclusive) {
+        exclusive = _exclusive;
+        return *this;
+      }
+
+      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+    };
+
+    struct RemoveParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+
+      RemoveParams() {}
+
+      RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+    };
+  };
+
+  struct BucketInstance {
+    struct GetParams {
+      real_time *mtime{nullptr};
+      map<string, bufferlist> *attrs{nullptr};
+      rgw_cache_entry_info *cache_info{nullptr};
+      boost::optional<obj_version> refresh_version;
+      RGWObjVersionTracker *objv_tracker{nullptr};
+      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
+
+      GetParams() {}
+
+      GetParams& set_mtime(ceph::real_time *_mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+
+      GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
+        cache_info = _cache_info;
+        return *this;
+      }
+
+      GetParams& set_refresh_version(const obj_version& _refresh_version) {
+        refresh_version = _refresh_version;
+        return *this;
+      }
+
+      GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
+      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
+        bectx_params = _bectx_params;
+        return *this;
+      }
+    };
+
+    struct PutParams {
+      std::optional<RGWBucketInfo *> orig_info; /* nullopt: orig_info was not fetched,
+                                                   nullptr: orig_info was not found (new bucket instance */
+      ceph::real_time mtime;
+      bool exclusive{false};
+      map<string, bufferlist> *attrs{nullptr};
+      RGWObjVersionTracker *objv_tracker{nullptr};
+
+      PutParams() {}
+
+      PutParams& set_orig_info(RGWBucketInfo *pinfo) {
+        orig_info = pinfo;
+        return *this;
+      }
+
+      PutParams& set_mtime(const ceph::real_time& _mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      PutParams& set_exclusive(bool _exclusive) {
+        exclusive = _exclusive;
+        return *this;
+      }
+
+      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+
+      PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+    };
+
+    struct RemoveParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+
+      RemoveParams() {}
+
+      RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+    };
+  };
+
+  /* bucket entrypoint */
+  int read_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                  RGWBucketEntryPoint *info,
+                                  optional_yield y,
+                                  const Bucket::GetParams& params = {});
+  int store_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                   RGWBucketEntryPoint& info,
+                                   optional_yield y,
+                                   const Bucket::PutParams& params = {});
+  int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                    optional_yield y,
+                                    const Bucket::RemoveParams& params = {});
+
+  /* bucket instance */
+  int read_bucket_instance_info(const rgw_bucket& bucket,
+                                  RGWBucketInfo *info,
+                                  optional_yield y,
+                                  const BucketInstance::GetParams& params = {});
+  int store_bucket_instance_info(const rgw_bucket& bucket,
+                                 RGWBucketInfo& info,
+                                 optional_yield y,
+                                 const BucketInstance::PutParams& params = {});
+  int remove_bucket_instance_info(const rgw_bucket& bucket,
+                                  RGWBucketInfo& info,
+                                  optional_yield y,
+                                  const BucketInstance::RemoveParams& params = {});
+
+  /*
+   * bucket_id may or may not be provided
+   *
+   * ep_objv_tracker might not be populated even if provided. Will only be set if entrypoint is read
+   * (that is: if bucket_id is empty).
+   */
+  int read_bucket_info(const rgw_bucket& bucket,
+                       RGWBucketInfo *info,
+                       optional_yield y,
+                       const BucketInstance::GetParams& params = {},
+		       RGWObjVersionTracker *ep_objv_tracker = nullptr);
+
+
+  int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
+                                map<string, bufferlist>& attrs,
+                                RGWObjVersionTracker *objv_tracker,
+                                optional_yield y);
+
+  /* user/bucket */
+  int link_bucket(const rgw_user& user_id,
+                  const rgw_bucket& bucket,
+                  ceph::real_time creation_time,
+		  optional_yield y,
+                  bool update_entrypoint = true,
+                  rgw_ep_info *pinfo = nullptr);
+
+  int unlink_bucket(const rgw_user& user_id,
+                    const rgw_bucket& bucket,
+		    optional_yield y,
+                    bool update_entrypoint = true);
+
+  int chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
+            const rgw_user& user_id, const std::string& display_name,
+            const std::string& marker, optional_yield y);
+
+  int set_acl(ACLOwner& owner, rgw_bucket& bucket,
+              RGWBucketInfo& bucket_info, bufferlist& bl, optional_yield y);
+
+  int read_buckets_stats(map<string, RGWBucketEnt>& m,
+                         optional_yield y);
+
+  int read_bucket_stats(const rgw_bucket& bucket,
+                        RGWBucketEnt *result,
+                        optional_yield y);
+
+  /* quota related */
+  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info,
+                      RGWBucketEnt* pent = nullptr);
+
+private:
+  int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
+                              const rgw_bucket& bucket,
+                              optional_yield y);
+
+  int do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                                    const rgw_bucket& bucket,
+                                    RGWBucketInfo& info,
+                                    optional_yield y,
+                                    const BucketInstance::PutParams& params);
+
+  int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
+                                  RGWBucketInfo& info,
+                                  RGWBucketInfo *orig_info,
+                                  bool exclusive, real_time mtime,
+                                  obj_version *pep_objv,
+                                  map<string, bufferlist> *pattrs,
+                                  bool create_entry_point,
+				  optional_yield);
+
+  int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
+                     const rgw_user& user,
+                     const rgw_bucket& bucket,
+                     ceph::real_time creation_time,
+		     optional_yield y,
+                     bool update_entrypoint,
+                     rgw_ep_info *pinfo);
+
+  int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
+                       const rgw_user& user_id,
+                       const rgw_bucket& bucket,
+		       optional_yield y,
+                       bool update_entrypoint);
+
 };
 
 

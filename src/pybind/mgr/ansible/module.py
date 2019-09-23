@@ -586,11 +586,13 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return playbook_operation
 
-    def remove_osds(self, osd_ids):
+    def remove_osds(self, osd_ids, destroy=False):
         """Remove osd's.
 
         :param osd_ids: List of osd's to be removed (List[int])
+        :param destroy: unsupported.
         """
+        assert not destroy
 
         extravars = {'osd_to_kill': ",".join([str(osd_id) for osd_id in osd_ids]),
                      'ireallymeanit':'yes'}
@@ -695,37 +697,57 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return ARSChangeOperation(self.ar_client, self.log, operations)
 
-    def add_stateless_service(self, service_type, spec):
-        """ Add a stateless service in the cluster
+    def add_rgw(self, spec):
+        # type: (orchestrator.RGWSpec) -> PlaybookOperation
+        """ Add a RGW service in the cluster
 
-        : service_type: Kind of service (nfs, rgw, mds)
-        : spec        : an Orchestrator.StatelessServiceSpec object
+        : spec        : an Orchestrator.RGWSpec object
 
         : returns     : Completion object
         """
 
-        # Check service_type is supported
-        if service_type not in ["rgw"]:
-            raise orchestrator.OrchestratorError(
-                "{} service not supported".format(service_type))
 
         # Add the hosts to the inventory in the right group
-        hosts = spec.service_spec.hosts
+        hosts = spec.hosts
         if not hosts:
-            raise orchestrator.OrchestratorError("No hosts provided."\
-                "At least one destination host is needed to install the RGW "\
+            raise orchestrator.OrchestratorError("No hosts provided. "
+                "At least one destination host is needed to install the RGW "
                 "service")
-        InventoryGroup("{}s".format(service_type), self.ar_client).update(hosts)
+
+        def set_rgwspec_defaults(spec):
+            spec.rgw_multisite = spec.rgw_multisite if spec.rgw_multisite is not None else True
+            spec.rgw_zonemaster = spec.rgw_zonemaster if spec.rgw_zonemaster is not None else True
+            spec.rgw_zonesecondary = spec.rgw_zonesecondary \
+                if spec.rgw_zonesecondary is not None else False
+            spec.rgw_multisite_proto = spec.rgw_multisite_proto \
+                if spec.rgw_multisite_proto is not None else "http"
+            spec.rgw_frontend_port = spec.rgw_frontend_port \
+                if spec.rgw_frontend_port is not None else 8080
+
+            spec.rgw_zonegroup = spec.rgw_zonegroup if spec.rgw_zonegroup is not None else "default"
+            spec.rgw_zone_user = spec.rgw_zone_user if spec.rgw_zone_user is not None else "zone.user"
+            spec.rgw_realm = spec.rgw_realm if spec.rgw_realm is not None else "default"
+
+            spec.system_access_key = spec.system_access_key \
+                if spec.system_access_key is not None else spec.genkey(20)
+            spec.system_secret_key = spec.system_secret_key \
+                if spec.system_secret_key is not None else spec.genkey(40)
+
+        set_rgwspec_defaults(spec)
+        InventoryGroup("rgws", self.ar_client).update(hosts)
 
         # Limit playbook execution to certain hosts
         limited = ",".join(hosts)
 
         # Add the settings for this service
-        extravars = vars(spec.service_spec)
+        extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
+        extravars['rgw_zone'] = spec.name
+        extravars['rgw_multisite_endpoint_addr'] = spec.rgw_multisite_endpoint_addr
+        extravars['rgw_multisite_endpoints_list'] = spec.rgw_multisite_endpoints_list
+        extravars['rgw_frontend_port'] = str(spec.rgw_frontend_port)
 
         # Group hosts by resource (used in rm ops)
-        if service_type == "rgw":
-            resource_group = "rgw_zone_{}".format(spec.service_spec.rgw_zone)
+        resource_group = "rgw_zone_{}".format(spec.name)
         InventoryGroup(resource_group, self.ar_client).update(hosts)
 
 
@@ -747,30 +769,21 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return playbook_operation
 
-    def remove_stateless_service(self, service_type, id_resource):
-        """ Remove a stateles services providing <sv_id> resources
+    def remove_rgw(self, zone):
+        """ Remove a RGW service providing <zone>
 
-        :svc_type    : Kind of service (nfs, rgw, mds)
-        :id_resource : Id of the resource provided
-                            <zone name> if service is RGW
+        :zone : <zone name> of the RGW
                             ...
         : returns    : Completion object
         """
 
-        # Check service_type is supported
-        if service_type not in ["rgw"]:
-            raise orchestrator.OrchestratorError(
-                "{} service not supported".format(service_type))
 
         # Ansible Inventory group for the kind of service
-        group = "{}s".format(service_type)
+        group = "rgws"
 
         # get the list of hosts where to remove the service
         # (hosts in resource group)
-        if service_type == "rgw":
-            group_prefix = "rgw_zone_{}"
-
-        resource_group = group_prefix.format(id_resource)
+        resource_group = "rgw_zone_{}".format(zone)
 
         hosts_list = list(InventoryGroup(resource_group, self.ar_client))
         limited = ",".join(hosts_list)
@@ -798,8 +811,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         playbook_operation.clean_hosts_on_success = clean_inventory
 
         # Execute the playbook
-        self.log.info("Removing service %s for resource %s", service_type,
-                      id_resource)
+        self.log.info("Removing service rgw for resource %s", zone)
         self._launch_operation(playbook_operation)
 
         return playbook_operation

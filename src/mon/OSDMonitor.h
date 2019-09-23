@@ -27,6 +27,7 @@
 #include "include/types.h"
 #include "include/encoding.h"
 #include "common/simple_cache.hpp"
+#include "common/PriorityCache.h"
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
@@ -208,12 +209,17 @@ struct osdmap_manifest_t {
 };
 WRITE_CLASS_ENCODER(osdmap_manifest_t);
 
-class OSDMonitor : public PaxosService {
+class OSDMonitor : public PaxosService,
+                   public md_config_obs_t {
   CephContext *cct;
 
 public:
   OSDMap osdmap;
 
+  // config observer
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+    const std::set<std::string> &changed) override;
   // [leader]
   OSDMap::Incremental pending_inc;
   map<int, bufferlist> pending_metadata;
@@ -222,6 +228,9 @@ public:
   map<int,utime_t>    down_pending_out;  // osd down -> out
   bool priority_convert = false;
   map<int64_t,set<snapid_t>> pending_pseudo_purged_snaps;
+  std::shared_ptr<PriorityCache::PriCache> rocksdb_binned_kv_cache = nullptr;
+  std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
+  ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
 
   map<int,double> osd_weight;
 
@@ -256,7 +265,8 @@ public:
     OSDMap::Incremental& pending_inc;
     // lock to protect pending_inc form changing
     // when checking is done
-    Mutex pending_inc_lock = {"CleanUpmapJob::pending_inc_lock"};
+    ceph::mutex pending_inc_lock =
+      ceph::make_mutex("CleanUpmapJob::pending_inc_lock");
 
     CleanUpmapJob(CephContext *cct, const OSDMap& om, OSDMap::Incremental& pi)
       : ParallelPGMapper::Job(&om),
@@ -304,6 +314,28 @@ private:
   bool is_prune_supported() const;
   bool do_prune(MonitorDBStore::TransactionRef tx);
 
+  // Priority cache control
+  uint32_t mon_osd_cache_size = 0;  ///< Number of cached OSDMaps
+  uint64_t rocksdb_cache_size = 0;  ///< Cache for kv Db
+  double cache_kv_ratio = 0;        ///< Cache ratio dedicated to kv
+  double cache_inc_ratio = 0;       ///< Cache ratio dedicated to inc
+  double cache_full_ratio = 0;      ///< Cache ratio dedicated to full
+  uint64_t mon_memory_base = 0;     ///< Mon base memory for cache autotuning
+  double mon_memory_fragmentation = 0; ///< Expected memory fragmentation
+  uint64_t mon_memory_target = 0;   ///< Mon target memory for cache autotuning
+  uint64_t mon_memory_min = 0;      ///< Min memory to cache osdmaps
+  bool mon_memory_autotune = false; ///< Cache auto tune setting
+  int register_cache_with_pcm();
+  int _set_cache_sizes();
+  int _set_cache_ratios();
+  void _set_new_cache_sizes();
+  void _set_cache_autotuning();
+  int _update_mon_cache_settings();
+
+  friend struct OSDMemCache;
+  friend struct IncCache;
+  friend struct FullCache;
+
   /**
    * we haven't delegated full version stashing to paxosservice for some time
    * now, making this function useless in current context.
@@ -340,7 +372,8 @@ private:
   void check_osdmap_subs();
   void share_map_with_random_osd();
 
-  Mutex prime_pg_temp_lock = {"OSDMonitor::prime_pg_temp_lock"};
+  ceph::mutex prime_pg_temp_lock =
+    ceph::make_mutex("OSDMonitor::prime_pg_temp_lock");
   struct PrimeTempJob : public ParallelPGMapper::Job {
     OSDMonitor *osdmon;
     PrimeTempJob(const OSDMap& om, OSDMonitor *m)

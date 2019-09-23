@@ -177,21 +177,41 @@ def configure(ctx, config):
     log.info('Configuring s3-tests...')
     testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
+        properties = properties or {}
         s3tests_conf = config['s3tests_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
-            host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-                log.info('roles: ' + str(roles))
-                log.info('target: ' + str(target))
-                if properties['rgw_server'] in roles:
-                    _, host = split_user(target)
-            assert host is not None, "Invalid client specified as the rgw_server"
-            s3tests_conf['DEFAULT']['host'] = host
-        else:
-            s3tests_conf['DEFAULT']['host'] = 'localhost'
+        s3tests_conf['DEFAULT']['calling_format'] = properties.get('calling-format', 'ordinary')
 
-        if properties is not None and 'slow_backend' in properties:
-	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
+        # use rgw_server if given, or default to local client
+        role = properties.get('rgw_server', client)
+
+        endpoint = ctx.rgw.role_endpoints.get(role)
+        assert endpoint, 's3tests: no rgw endpoint for {}'.format(role)
+
+        s3tests_conf['DEFAULT']['host'] = endpoint.dns_name
+
+        website_role = properties.get('rgw_website_server')
+        if website_role:
+            website_endpoint = ctx.rgw.role_endpoints.get(website_role)
+            assert website_endpoint, \
+                    's3tests: no rgw endpoint for rgw_website_server {}'.format(website_role)
+            assert website_endpoint.website_dns_name, \
+                    's3tests: no dns-s3website-name for rgw_website_server {}'.format(website_role)
+            s3tests_conf['DEFAULT']['s3website_domain'] = website_endpoint.website_dns_name
+
+        kms_key = properties.get('kms_key')
+        if kms_key:
+            host = None
+            if not hasattr(ctx, 'barbican'):
+                raise ConfigError('s3tests must run after the barbican task')
+            if not ( kms_key in ctx.barbican.keys ):
+                raise ConfigError('Key '+kms_key+' not defined')
+
+            key = ctx.barbican.keys[kms_key]
+            s3tests_conf['DEFAULT']['kms_keyid'] = key['id']
+
+        slow_backend = properties.get('slow_backend')
+        if slow_backend:
+	    s3tests_conf['fixtures']['slow backend'] = slow_backend
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
@@ -248,9 +268,8 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    # civetweb > 1.8 && beast parsers are strict on rfc2616
-    attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616"]
     for client, client_config in config.iteritems():
+        client_config = client_config or {}
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
@@ -263,6 +282,10 @@ def run_tests(ctx, config):
             args += ['REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt']
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
+        # civetweb > 1.8 && beast parsers are strict on rfc2616
+        attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616"]
+        if client_config.get('calling-format') != 'ordinary':
+            attrs += ['!fails_with_subdomain']
         args += [
             '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
             '-w',
@@ -270,8 +293,8 @@ def run_tests(ctx, config):
             '-v',
             '-a', ','.join(attrs),
             ]
-        if client_config is not None and 'extra_args' in client_config:
-            args.extend(client_config['extra_args'])
+        if 'extra_args' in client_config:
+            args.append(client_config['extra_args'])
 
         remote.run(
             args=args,

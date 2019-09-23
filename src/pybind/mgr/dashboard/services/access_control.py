@@ -112,6 +112,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
     Scope.POOL: [_P.READ],
     Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -119,6 +120,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
 RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -131,6 +133,7 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
     Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -138,12 +141,14 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
 POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
     Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 # Pool manager role provides all permissions for CephFS related scopes
 CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
@@ -151,6 +156,7 @@ GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -168,7 +174,7 @@ SYSTEM_ROLES = {
 
 class User(object):
     def __init__(self, username, password, name=None, email=None, roles=None,
-                 lastUpdate=None):
+                 last_update=None, enabled=True):
         self.username = username
         self.password = password
         self.name = name
@@ -177,20 +183,30 @@ class User(object):
             self.roles = set()
         else:
             self.roles = roles
-        if lastUpdate is None:
-            self.refreshLastUpdate()
+        if last_update is None:
+            self.refresh_last_update()
         else:
-            self.lastUpdate = lastUpdate
+            self.last_update = last_update
+        self._enabled = enabled
 
-    def refreshLastUpdate(self):
-        self.lastUpdate = int(time.time())
+    def refresh_last_update(self):
+        self.last_update = int(time.time())
+
+    @property
+    def enabled(self):
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value):
+        self._enabled = value
+        self.refresh_last_update()
 
     def set_password(self, password):
         self.set_password_hash(password_hash(password))
 
     def set_password_hash(self, hashed_password):
         self.password = hashed_password
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def compare_password(self, password):
         """
@@ -205,18 +221,18 @@ class User(object):
 
     def set_roles(self, roles):
         self.roles = set(roles)
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def add_roles(self, roles):
         self.roles = self.roles.union(set(roles))
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def del_roles(self, roles):
         for role in roles:
             if role not in self.roles:
                 raise RoleNotInUser(role.name, self.username)
         self.roles.difference_update(set(roles))
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def authorize(self, scope, permissions):
         for role in self.roles:
@@ -243,18 +259,19 @@ class User(object):
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
             'email': self.email,
-            'lastUpdate': self.lastUpdate
+            'lastUpdate': self.last_update,
+            'enabled': self.enabled
         }
 
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'])
+                    u_dict['lastUpdate'], u_dict['enabled'])
 
 
 class AccessControlDB(object):
-    VERSION = 1
+    VERSION = 2
     ACDB_CONFIG_KEY = "accessdb_v"
 
     def __init__(self, version, users, roles):
@@ -290,12 +307,12 @@ class AccessControlDB(object):
 
             del self.roles[name]
 
-    def create_user(self, username, password, name, email):
+    def create_user(self, username, password, name, email, enabled=True):
         logger.debug("AC: creating user: username=%s", username)
         with self.lock:
             if username in self.users:
                 raise UserAlreadyExists(username)
-            user = User(username, password_hash(password), name, email)
+            user = User(username, password_hash(password), name, email, enabled=enabled)
             self.users[username] = user
             return user
 
@@ -317,7 +334,7 @@ class AccessControlDB(object):
                 return
             for _, user in self.users.items():
                 if role in user.roles:
-                    user.refreshLastUpdate()
+                    user.refresh_last_update()
 
     def save(self):
         with self.lock:
@@ -336,21 +353,40 @@ class AccessControlDB(object):
 
     def check_and_update_db(self):
         logger.debug("AC: Checking for previews DB versions")
-        if self.VERSION == 1:  # current version
+
+        def check_migrate_v0_to_current():
             # check if there is username/password from previous version
             username = mgr.get_module_option('username', None)
             password = mgr.get_module_option('password', None)
             if username and password:
-                logger.debug("AC: Found single user credentials: user=%s",
-                             username)
+                logger.debug("AC: Found single user credentials: user=%s", username)
                 # found user credentials
                 user = self.create_user(username, "", None, None)
                 # password is already hashed, so setting manually
                 user.password = password
                 user.add_roles([ADMIN_ROLE])
                 self.save()
-        else:
-            raise NotImplementedError()
+
+        def check_migrate_v1_to_current():
+            # Check if version 1 exists in the DB and migrate it to current version
+            v1_db = mgr.get_store(self.accessdb_config_key(1))
+            if v1_db:
+                logger.debug("AC: Found database v1 credentials")
+                v1_db = json.loads(v1_db)
+
+                for user, _ in v1_db['users'].items():
+                    v1_db['users'][user]['enabled'] = True
+
+                self.roles = {rn: Role.from_dict(r) for rn, r in v1_db.get('roles', {}).items()}
+                self.users = {un: User.from_dict(u, dict(self.roles, **SYSTEM_ROLES))
+                              for un, u in v1_db.get('users', {}).items()}
+
+                self.save()
+            else:
+                # If version 1 does not exist, check if migration of VERSION "0" needs to be done
+                check_migrate_v0_to_current()
+
+        check_migrate_v1_to_current()
 
     @classmethod
     def load(cls):
@@ -515,10 +551,11 @@ def ac_user_show_cmd(_, username=None):
                  'name=password,type=CephString,req=false '
                  'name=rolename,type=CephString,req=false '
                  'name=name,type=CephString,req=false '
-                 'name=email,type=CephString,req=false',
+                 'name=email,type=CephString,req=false '
+                 'name=enabled,type=CephBool,req=false',
                  'Create a user')
 def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
-                       email=None):
+                       email=None, enabled=True):
     try:
         role = mgr.ACCESS_CTRL_DB.get_role(rolename) if rolename else None
     except RoleDoesNotExist as ex:
@@ -527,7 +564,7 @@ def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
         role = SYSTEM_ROLES[rolename]
 
     try:
-        user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email)
+        user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email, enabled)
     except UserAlreadyExists as ex:
         return -errno.EEXIST, '', str(ex)
 
@@ -535,6 +572,34 @@ def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
         user.set_roles([role])
     mgr.ACCESS_CTRL_DB.save()
     return 0, json.dumps(user.to_dict()), ''
+
+
+@CLIWriteCommand('dashboard ac-user-enable',
+                 'name=username,type=CephString',
+                 'Enable a user')
+def ac_user_enable(_, username):
+    try:
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
+        user.enabled = True
+
+        mgr.ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
+
+
+@CLIWriteCommand('dashboard ac-user-disable',
+                 'name=username,type=CephString',
+                 'Disable a user')
+def ac_user_disable(_, username):
+    try:
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
+        user.enabled = False
+
+        mgr.ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
 
 
 @CLIWriteCommand('dashboard ac-user-delete',
@@ -683,7 +748,7 @@ class LocalAuthenticator(object):
         try:
             user = mgr.ACCESS_CTRL_DB.get_user(username)
             if user.password:
-                if user.compare_password(password):
+                if user.enabled and user.compare_password(password):
                     return user.permissions_dict()
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)

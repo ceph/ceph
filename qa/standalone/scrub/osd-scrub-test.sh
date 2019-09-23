@@ -134,7 +134,7 @@ function TEST_interval_changes() {
     local week="$(expr $day \* 7)"
     local min_interval=$day
     local max_interval=$week
-    local WAIT_FOR_UPDATE=2
+    local WAIT_FOR_UPDATE=3
 
     TESTDATA="testdata.$$"
 
@@ -183,6 +183,49 @@ function TEST_interval_changes() {
     ceph osd pool set $poolname scrub_max_interval $(expr $week \* 3)
     sleep $WAIT_FOR_UPDATE
     check_dump_scrubs $primary "3 days" "3 week" || return 1
+
+    teardown $dir || return 1
+}
+
+function TEST_scrub_extented_sleep() {
+    local dir=$1
+    local poolname=test
+    local OSDS=3
+    local objects=15
+
+    TESTDATA="testdata.$$"
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=3 || return 1
+    run_mgr $dir x || return 1
+    local scrub_begin_hour=$(date -d '2 hour ago' +"%H" | sed 's/^0//')
+    local scrub_end_hour=$(date -d '1 hour ago' +"%H" | sed 's/^0//')
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd_scrub_sleep=0 \
+                        --osd_scrub_extended_sleep=10 \
+                        --bluestore_cache_autotune=false \
+                        --osd_scrub_begin_hour=$scrub_begin_hour \
+                        --osd_scrub_end_hour=$scrub_end_hour || return 1
+    done
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
+
+    # Trigger a scrub on a PG
+    local pgid=$(get_pg $poolname SOMETHING)
+    local primary=$(get_primary $poolname SOMETHING)
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid || return 1
+
+    # Due to the long delay, the scrub should not be done within 3 seconds
+    for ((i=0; i < 3; i++)); do
+        if test "$(get_last_scrub_stamp $pgid)" '>' "$last_scrub" ; then
+            return 1
+        fi
+        sleep 1
+    done
 
     teardown $dir || return 1
 }

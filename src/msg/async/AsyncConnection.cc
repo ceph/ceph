@@ -113,7 +113,8 @@ class C_tick_wakeup : public EventCallback {
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
                                  Worker *w, bool m2, bool local)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
+  : Connection(cct, m),
+    delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
     logger(w->get_perf_counter()),
     state(STATE_NONE), port(-1),
     dispatch_queue(q), recv_buf(NULL),
@@ -524,14 +525,9 @@ int AsyncConnection::send_message(Message *m)
 		      << this
 		      << dendl;
 
-  auto cct = async_msgr->cct;
-  if ((cct->_conf->ms_blackhole_mon && peer_type == CEPH_ENTITY_TYPE_MON)||
-      (cct->_conf->ms_blackhole_osd && peer_type == CEPH_ENTITY_TYPE_OSD)||
-      (cct->_conf->ms_blackhole_mds && peer_type == CEPH_ENTITY_TYPE_MDS)||
-      (cct->_conf->ms_blackhole_client &&
-       peer_type == CEPH_ENTITY_TYPE_CLIENT)) {
-    lgeneric_subdout(cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
-				 << " blackhole " << *m << dendl;
+  if (is_blackhole()) {
+    lgeneric_subdout(async_msgr->cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
+      << " blackhole " << *m << dendl;
     m->put();
     return 0;
   }

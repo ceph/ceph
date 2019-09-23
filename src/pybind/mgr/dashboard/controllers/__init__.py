@@ -10,10 +10,8 @@ import os
 import pkgutil
 import sys
 
-if sys.version_info >= (3, 0):
-    from urllib.parse import unquote  # pylint: disable=no-name-in-module,import-error
-else:
-    from urllib import unquote  # pylint: disable=no-name-in-module
+import six
+from six.moves.urllib.parse import unquote
 
 # pylint: disable=wrong-import-position
 import cherrypy
@@ -26,17 +24,17 @@ from ..services.auth import AuthManager, JwtManager
 from ..plugins import PLUGIN_MANAGER
 
 
-def EndpointDoc(description="", group="", parameters=None, responses=None):
+def EndpointDoc(description="", group="", parameters=None, responses=None):  # noqa: N802
     if not isinstance(description, str):
         raise Exception("%s has been called with a description that is not a string: %s"
                         % (EndpointDoc.__name__, description))
-    elif not isinstance(group, str):
+    if not isinstance(group, str):
         raise Exception("%s has been called with a groupname that is not a string: %s"
                         % (EndpointDoc.__name__, group))
-    elif parameters and not isinstance(parameters, dict):
+    if parameters and not isinstance(parameters, dict):
         raise Exception("%s has been called with parameters that is not a dict: %s"
                         % (EndpointDoc.__name__, parameters))
-    elif responses and not isinstance(responses, dict):
+    if responses and not isinstance(responses, dict):
         raise Exception("%s has been called with responses that is not a dict: %s"
                         % (EndpointDoc.__name__, responses))
 
@@ -187,7 +185,7 @@ class UiApiController(Controller):
                                               secure=secure)
 
 
-def Endpoint(method=None, path=None, path_params=None, query_params=None,
+def Endpoint(method=None, path=None, path_params=None, query_params=None,  # noqa: N802
              json_response=True, proxy=False, xml=False):
 
     if method is None:
@@ -245,7 +243,7 @@ def Endpoint(method=None, path=None, path_params=None, query_params=None,
     return _wrapper
 
 
-def Proxy(path=None):
+def Proxy(path=None):  # noqa: N802
     if path is None:
         path = ""
     elif path == "/":
@@ -637,9 +635,7 @@ class BaseController(object):
         @wraps(func)
         def inner(*args, **kwargs):
             for key, value in kwargs.items():
-                # pylint: disable=undefined-variable
-                if (sys.version_info < (3, 0) and isinstance(value, unicode)) \
-                        or isinstance(value, str):
+                if isinstance(value, six.text_type):
                     kwargs[key] = unquote(value)
 
             # Process method arguments.
@@ -844,7 +840,7 @@ class RESTController(BaseController):
         return wrapper
 
     @staticmethod
-    def Resource(method=None, path=None, status=None, query_params=None):
+    def Resource(method=None, path=None, status=None, query_params=None):  # noqa: N802
         if not method:
             method = 'GET'
 
@@ -862,7 +858,7 @@ class RESTController(BaseController):
         return _wrapper
 
     @staticmethod
-    def Collection(method=None, path=None, status=None, query_params=None):
+    def Collection(method=None, path=None, status=None, query_params=None):  # noqa: N802
         if not method:
             method = 'GET'
 
@@ -900,21 +896,21 @@ def _set_func_permissions(func, permissions):
         func._security_permissions = list(set(permissions))
 
 
-def ReadPermission(func):
+def ReadPermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.READ)
     return func
 
 
-def CreatePermission(func):
+def CreatePermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.CREATE)
     return func
 
 
-def DeletePermission(func):
+def DeletePermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.DELETE)
     return func
 
 
-def UpdatePermission(func):
+def UpdatePermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.UPDATE)
     return func

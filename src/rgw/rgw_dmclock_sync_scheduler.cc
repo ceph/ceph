@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 #include "rgw_dmclock_scheduler.h"
 #include "rgw_dmclock_sync_scheduler.h"
 #include "rgw_dmclock_scheduler_ctx.h"

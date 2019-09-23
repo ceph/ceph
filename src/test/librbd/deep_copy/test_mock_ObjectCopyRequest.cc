@@ -167,8 +167,7 @@ public:
     if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
       return;
     }
-    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(
-      ReturnNew<FunctionContext>([](int) {}));
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(Return(new LambdaContext([](int){})));
   }
 
   void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx,
@@ -291,7 +290,7 @@ public:
                               Return(true)));
       } else {
         expect.WillOnce(DoAll(WithArg<7>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
-                                  ceph_assert(mock_image_ctx.image_ctx->image_lock.is_locked());
+                                  ceph_assert(ceph_mutex_is_locked(mock_image_ctx.image_ctx->image_lock));
                                   mock_image_ctx.image_ctx->object_map->aio_update<Context>(
                                     snap_id, 0, 1, state, boost::none, {}, false, ctx);
                                 })),

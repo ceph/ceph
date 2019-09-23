@@ -1146,6 +1146,7 @@ struct client_metadata_t {
   iterator find(const std::string& key) const { return kv_map.find(key); }
   iterator begin() const { return kv_map.begin(); }
   iterator end() const { return kv_map.end(); }
+  void erase(iterator it) { kv_map.erase(it); }
   std::string& operator[](const std::string& key) { return kv_map[key]; }
   void merge(const client_metadata_t& other) {
     kv_map.insert(other.kv_map.begin(), other.kv_map.end());
@@ -1422,13 +1423,13 @@ WRITE_CLASS_ENCODER(snaprealm_reconnect_t)
 
 // compat for pre-FLOCK feature
 struct old_ceph_mds_cap_reconnect {
-	__le64 cap_id;
-	__le32 wanted;
-	__le32 issued;
-  __le64 old_size;
+	ceph_le64 cap_id;
+	ceph_le32 wanted;
+	ceph_le32 issued;
+  ceph_le64 old_size;
   struct ceph_timespec old_mtime, old_atime;
-	__le64 snaprealm;
-	__le64 pathbase;        /* base ino for our path to this ino */
+	ceph_le64 snaprealm;
+	ceph_le64 pathbase;        /* base ino for our path to this ino */
 } __attribute__ ((packed));
 WRITE_RAW_ENCODER(old_ceph_mds_cap_reconnect)
 

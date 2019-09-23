@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
@@ -29,7 +30,7 @@ import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-mo
   providers: [TaskListService]
 })
 export class IscsiTargetListComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
   available: boolean = undefined;
@@ -83,7 +84,9 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
-        name: this.actionLabels.DELETE
+        name: this.actionLabels.DELETE,
+        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
+        disableDesc: () => this.getDeleteDisableDesc()
       }
     ];
   }
@@ -142,6 +145,13 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.summaryDataSubscription) {
       this.summaryDataSubscription.unsubscribe();
+    }
+  }
+
+  getDeleteDisableDesc(): string | undefined {
+    const first = this.selection.first();
+    if (first && first['info'] && first['info']['num_sessions']) {
+      return this.i18n('Target has active sessions');
     }
   }
 

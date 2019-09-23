@@ -20,7 +20,7 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     :param num_manager: Ceph manager
     :param num_inactive: number of inaactive pages that are stuck
     :param num_unclean: number of unclean pages that are stuck
-    :paran num_stale: number of stale pages that are stuck
+    :param num_stale: number of stale pages that are stuck
     :param timeout: timeout value for get_stuck_pgs calls
     """
     inactive = manager.get_stuck_pgs('inactive', timeout)

@@ -96,6 +96,10 @@
       mirror pool info                  Show information about the pool mirroring
                                         configuration.
       mirror pool peer add              Add a mirroring peer to a pool.
+      mirror pool peer bootstrap create Create a peer bootstrap token to import
+                                        in a remote cluster
+      mirror pool peer bootstrap import Import a peer bootstrap token created
+                                        from a remote cluster
       mirror pool peer remove           Remove a mirroring peer from a pool.
       mirror pool peer set              Update mirroring peer settings.
       mirror pool promote               Promote all non-primary images in the
@@ -1602,54 +1606,64 @@
     --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror pool demote
-  usage: rbd mirror pool demote [--pool <pool>] 
-                                <pool-name> 
+  usage: rbd mirror pool demote [--pool <pool>] [--namespace <namespace>] 
+                                <pool-spec> 
   
   Demote all primary images in the pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help mirror pool disable
-  usage: rbd mirror pool disable [--pool <pool>] 
-                                 <pool-name> 
+  usage: rbd mirror pool disable [--pool <pool>] [--namespace <namespace>] 
+                                 <pool-spec> 
   
   Disable RBD mirroring by default within a pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help mirror pool enable
-  usage: rbd mirror pool enable [--pool <pool>] 
-                                <pool-name> <mode> 
+  usage: rbd mirror pool enable [--pool <pool>] [--namespace <namespace>] 
+                                [--site-name <site-name>] 
+                                <pool-spec> <mode> 
   
   Enable RBD mirroring by default within a pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
     <mode>               mirror mode [image or pool]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --site-name arg      local site name
   
   rbd help mirror pool info
-  usage: rbd mirror pool info [--pool <pool>] [--format <format>] 
-                              [--pretty-format] [--all] 
-                              <pool-name> 
+  usage: rbd mirror pool info [--pool <pool>] [--namespace <namespace>] 
+                              [--format <format>] [--pretty-format] [--all] 
+                              <pool-spec> 
   
   Show information about the pool mirroring configuration.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --all                list all attributes
@@ -1675,6 +1689,42 @@
     --remote-cluster arg     remote cluster name
     --remote-mon-host arg    remote mon host(s)
     --remote-key-file arg    path to file containing remote key
+  
+  rbd help mirror pool peer bootstrap create
+  usage: rbd mirror pool peer bootstrap create
+                                           [--pool <pool>] 
+                                           [--site-name <site-name>] 
+                                           <pool-name> 
+  
+  Create a peer bootstrap token to import in a remote cluster
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --site-name arg      local site name
+  
+  rbd help mirror pool peer bootstrap import
+  usage: rbd mirror pool peer bootstrap import
+                                           [--pool <pool>] 
+                                           [--site-name <site-name>] 
+                                           [--token-path <token-path>] 
+                                           [--direction <direction>] 
+                                           <pool-name> <token-path> 
+  
+  Import a peer bootstrap token created from a remote cluster
+  
+  Positional arguments
+    <pool-name>          pool name
+    <token-path>         bootstrap token file (or '-' for stdin)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --site-name arg      local site name
+    --token-path arg     bootstrap token file (or '-' for stdin)
+    --direction arg      mirroring direction (rx-only, rx-tx)
+                         [default: rx-tx]
   
   rbd help mirror pool peer remove
   usage: rbd mirror pool peer remove [--pool <pool>] 
@@ -1706,29 +1756,34 @@
   
   rbd help mirror pool promote
   usage: rbd mirror pool promote [--force] [--pool <pool>] 
-                                 <pool-name> 
+                                 [--namespace <namespace>] 
+                                 <pool-spec> 
   
   Promote all non-primary images in the pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     --force              promote even if not cleanly demoted by remote cluster
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help mirror pool status
-  usage: rbd mirror pool status [--pool <pool>] [--format <format>] 
-                                [--pretty-format] [--verbose] 
-                                <pool-name> 
+  usage: rbd mirror pool status [--pool <pool>] [--namespace <namespace>] 
+                                [--format <format>] [--pretty-format] [--verbose] 
+                                <pool-spec> 
   
   Show status for all mirrored images in the pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --verbose            be verbose

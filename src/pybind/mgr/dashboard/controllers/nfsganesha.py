@@ -75,7 +75,7 @@ CREATE_EXPORT_SCHEMA = {
 
 
 # pylint: disable=not-callable
-def NfsTask(name, metadata, wait_for):
+def NfsTask(name, metadata, wait_for):  # noqa: N802
     def composed_decorator(func):
         return Task("nfs/{}".format(name), metadata, wait_for,
                     partial(serialize_dashboard_exception,
@@ -285,16 +285,16 @@ class NFSGaneshaUi(BaseController):
             logger.warning("[NFS] Limiting depth to maximum value of 5: "
                            "input depth=%s", depth)
             depth = 5
-        root_dir = '{}/'.format(root_dir) \
-                   if not root_dir.endswith('/') else root_dir
-
+        root_dir = '{}{}'.format(root_dir.rstrip('/'), '/')
         try:
             cfs = CephFS()
+            root_dir = root_dir.encode()
             paths = cfs.get_dir_list(root_dir, depth)
-            paths = [p[:-1] for p in paths if p != root_dir]
-            return {'paths': paths}
+            # Convert (bytes => string) and prettify paths (strip slashes).
+            paths = [p.decode().rstrip('/') for p in paths if p != root_dir]
         except (cephfs.ObjectNotFound, cephfs.PermissionError):
-            return {'paths': []}
+            paths = []
+        return {'paths': paths}
 
     @Endpoint('GET', '/cephfs/filesystems')
     def filesystems(self):

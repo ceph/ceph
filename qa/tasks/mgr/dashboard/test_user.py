@@ -8,7 +8,7 @@ from .helper import DashboardTestCase
 class UserTest(DashboardTestCase):
 
     @classmethod
-    def _create_user(cls, username=None, password=None, name=None, email=None, roles=None):
+    def _create_user(cls, username=None, password=None, name=None, email=None, roles=None, enabled=True):
         data = {}
         if username:
             data['username'] = username
@@ -20,6 +20,7 @@ class UserTest(DashboardTestCase):
             data['email'] = email
         if roles:
             data['roles'] = roles
+        data['enabled'] = enabled
         cls._post("/api/user", data)
 
     def test_crud_user(self):
@@ -38,7 +39,8 @@ class UserTest(DashboardTestCase):
             'name': 'My Name',
             'email': 'my@email.com',
             'roles': ['administrator'],
-            'lastUpdate': user['lastUpdate']
+            'lastUpdate': user['lastUpdate'],
+            'enabled': True
         })
 
         self._put('/api/user/user1', {
@@ -53,10 +55,39 @@ class UserTest(DashboardTestCase):
             'name': 'My New Name',
             'email': 'mynew@email.com',
             'roles': ['block-manager'],
-            'lastUpdate': user['lastUpdate']
+            'lastUpdate': user['lastUpdate'],
+            'enabled': True
         })
 
         self._delete('/api/user/user1')
+        self.assertStatus(204)
+
+    def test_crd_disabled_user(self):
+        self._create_user(username='klara',
+                          password='123456789',
+                          name='Klara Musterfrau',
+                          email='klara@musterfrau.com',
+                          roles=['administrator'],
+                          enabled=False)
+        self.assertStatus(201)
+        user = self.jsonBody()
+
+        # Restart dashboard module.
+        self._unload_module('dashboard')
+        self._load_module('dashboard')
+
+        self._get('/api/user/klara')
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'username': 'klara',
+            'name': 'Klara Musterfrau',
+            'email': 'klara@musterfrau.com',
+            'roles': ['administrator'],
+            'lastUpdate': user['lastUpdate'],
+            'enabled': False
+        })
+
+        self._delete('/api/user/klara')
         self.assertStatus(204)
 
     def test_list_users(self):
@@ -70,7 +101,8 @@ class UserTest(DashboardTestCase):
             'name': None,
             'email': None,
             'roles': ['administrator'],
-            'lastUpdate': user['lastUpdate']
+            'lastUpdate': user['lastUpdate'],
+            'enabled': True
         }])
 
     def test_create_user_already_exists(self):
@@ -102,6 +134,13 @@ class UserTest(DashboardTestCase):
         self._delete('/api/user/test')
         self.assertStatus(400)
         self.assertError(code='cannot_delete_current_user',
+                         component='user')
+
+    @DashboardTestCase.RunAs('test', 'test', [{'user': ['create', 'read', 'update', 'delete']}])
+    def test_disable_current_user(self):
+        self._put('/api/user/test', {'enabled': False})
+        self.assertStatus(400)
+        self.assertError(code='cannot_disable_current_user',
                          component='user')
 
     def test_update_user_does_not_exist(self):

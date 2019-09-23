@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -167,6 +167,7 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("user_agent", user_agent);
   f->dump_string("referrer", referrer);
   f->dump_string("bucket_id", bucket_id);
+  f->dump_string("trans_id", trans_id);
 }
 
 void ACLPermission::dump(Formatter *f) const
@@ -483,6 +484,9 @@ void RGWUserInfo::dump(Formatter *f) const
   if (system) { /* no need to show it for every user */
     encode_json("system", (bool)system, f);
   }
+  if (admin) {
+    encode_json("admin", (bool)admin, f);
+  }
   encode_json("default_placement", default_placement.name, f);
   encode_json("default_storage_class", default_placement.storage_class, f);
   encode_json("placement_tags", placement_tags, f);
@@ -561,6 +565,9 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   bool sys = false;
   JSONDecoder::decode_json("system", sys, obj);
   system = (__u8)sys;
+  bool ad = false;
+  JSONDecoder::decode_json("admin", ad, obj);
+  admin = (__u8)ad;
   JSONDecoder::decode_json("default_placement", default_placement.name, obj);
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("placement_tags", placement_tags, obj);
@@ -960,7 +967,6 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("otp_pool", otp_pool, f);
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
-  encode_json("metadata_heap", metadata_heap, f);
   encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
 }
@@ -1057,7 +1063,6 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("otp_pool", otp_pool, obj);
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
-  JSONDecoder::decode_json("metadata_heap", metadata_heap, obj);
   JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
 
@@ -1759,4 +1764,9 @@ void objexp_hint_entry::dump(Formatter *f) const
   utime_t ut(exp_time);
   encode_json("exp_time", ut, f);
   f->close_section();
+}
+
+void rgw_user::dump(Formatter *f) const
+{
+  ::encode_json("user", *this, f);
 }

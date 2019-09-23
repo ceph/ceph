@@ -820,11 +820,11 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
   RGWUserInfo user;
-  RGWRados rgw_rados;
+  rgw::sal::RGWRadosStore store;
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
   req_state rgw_req_state(cct.get(), &rgw_env, &user, 0);
-  rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  rgw_build_iam_environment(&store, &rgw_req_state);
   auto ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.1");
@@ -832,13 +832,13 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
   EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   EXPECT_EQ(ip, rgw_req_state.env.end());
 
   rgw_env.set("SOME_VAR", "192.168.1.2");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.2");
@@ -846,14 +846,14 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.3");
 
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.4");

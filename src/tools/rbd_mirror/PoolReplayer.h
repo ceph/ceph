@@ -4,26 +4,21 @@
 #ifndef CEPH_RBD_MIRROR_POOL_REPLAYER_H
 #define CEPH_RBD_MIRROR_POOL_REPLAYER_H
 
-#include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
 #include "common/WorkQueue.h"
+#include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
+#include "librbd/Utils.h"
 
-#include "ClusterWatcher.h"
-#include "LeaderWatcher.h"
-#include "PoolWatcher.h"
-#include "ImageDeleter.h"
+#include "tools/rbd_mirror/LeaderWatcher.h"
+#include "tools/rbd_mirror/NamespaceReplayer.h"
+#include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/Types.h"
-#include "tools/rbd_mirror/image_map/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
-#include "tools/rbd_mirror/pool_watcher/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 
-#include <set>
 #include <map>
 #include <memory>
-#include <atomic>
 #include <string>
 #include <vector>
 
@@ -36,9 +31,6 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-template <typename> class ImageMap;
-template <typename> class InstanceReplayer;
-template <typename> class InstanceWatcher;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
@@ -83,85 +75,20 @@ private:
    *  INIT
    *    |
    *    v
-   * <follower> <-------------------------\
-   *    .                                 |
-   *    .                                 |
-   *    v (leader acquired)               |
-   * INIT_IMAGE_MAP             SHUT_DOWN_IMAGE_MAP
-   *    |                                 ^
-   *    v                                 |
-   * INIT_LOCAL_POOL_WATCHER    WAIT_FOR_NOTIFICATIONS
-   *    |                                 ^
-   *    v                                 |
-   * INIT_REMOTE_POOL_WATCHER   SHUT_DOWN_POOL_WATCHERS
-   *    |                                 ^
-   *    v                                 |
-   * INIT_IMAGE_DELETER         SHUT_DOWN_IMAGE_DELETER
-   *    |                                 ^
-   *    v                                 .
-   * <leader> <-----------\               .
-   *    .                 |               .
-   *    . (image update)  |               .
-   *    . . > NOTIFY_INSTANCE_WATCHER     .
-   *    .                                 .
-   *    . (leader lost / shut down)       .
-   *    . . . . . . . . . . . . . . . . . .
+   * <follower> <---------------------\
+   *    .                             |
+   *    . (leader acquired)           |
+   *    v                             |
+   *  NOTIFY_NAMESPACE_WATCHERS     NOTIFY_NAMESPACE_WATCHERS
+   *    |                             ^
+   *    v                             .
+   * <leader>                         .
+   *    .                             .
+   *    . (leader lost / shut down)   .
+   *    . . . . . . . . . . . . . . . .
    *
    * @endverbatim
    */
-
-  typedef std::vector<std::string> InstanceIds;
-
-  struct PoolWatcherListener : public pool_watcher::Listener {
-    PoolReplayer *pool_replayer;
-    bool local;
-
-    PoolWatcherListener(PoolReplayer *pool_replayer, bool local)
-      : pool_replayer(pool_replayer), local(local) {
-    }
-
-    void handle_update(const std::string &mirror_uuid,
-                       ImageIds &&added_image_ids,
-                       ImageIds &&removed_image_ids) override {
-      pool_replayer->handle_update((local ? "" : mirror_uuid),
-				   std::move(added_image_ids),
-                                   std::move(removed_image_ids));
-    }
-  };
-
-  struct ImageMapListener : public image_map::Listener {
-    PoolReplayer *pool_replayer;
-
-    ImageMapListener(PoolReplayer *pool_replayer)
-      : pool_replayer(pool_replayer) {
-    }
-
-    void acquire_image(const std::string &global_image_id,
-                       const std::string &instance_id,
-                       Context* on_finish) override {
-      pool_replayer->handle_acquire_image(global_image_id, instance_id,
-                                          on_finish);
-    }
-
-    void release_image(const std::string &global_image_id,
-                       const std::string &instance_id,
-                       Context* on_finish) override {
-      pool_replayer->handle_release_image(global_image_id, instance_id,
-                                          on_finish);
-    }
-
-    void remove_image(const std::string &mirror_uuid,
-                      const std::string &global_image_id,
-                      const std::string &instance_id,
-                      Context* on_finish) override {
-      pool_replayer->handle_remove_image(mirror_uuid, global_image_id,
-                                         instance_id, on_finish);
-    }
-  };
-
-  void handle_update(const std::string &mirror_uuid,
-                     ImageIds &&added_image_ids,
-                     ImageIds &&removed_image_ids);
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
@@ -170,48 +97,89 @@ private:
                  const std::string &description, RadosRef *rados_ref,
                  bool strip_cluster_overrides);
 
+  void update_namespace_replayers();
+  int list_mirroring_namespaces(std::set<std::string> *namespaces);
+
+  void namespace_replayer_acquire_leader(const std::string &name,
+                                         Context *on_finish);
+
   void handle_post_acquire_leader(Context *on_finish);
   void handle_pre_release_leader(Context *on_finish);
 
-  void init_image_map(Context *on_finish);
-  void handle_init_image_map(int r, Context *on_finish);
-
-  void init_local_pool_watcher(Context *on_finish);
-  void handle_init_local_pool_watcher(int r, Context *on_finish);
-
-  void init_remote_pool_watcher(Context *on_finish);
-  void handle_init_remote_pool_watcher(int r, Context *on_finish);
-
-  void init_image_deleter(Context* on_finish);
-  void handle_init_image_deleter(int r, Context* on_finish);
-
-  void shut_down_image_deleter(Context* on_finish);
-  void handle_shut_down_image_deleter(int r, Context* on_finish);
-
-  void shut_down_pool_watchers(Context *on_finish);
-  void handle_shut_down_pool_watchers(int r, Context *on_finish);
-
-  void wait_for_update_ops(Context *on_finish);
-  void handle_wait_for_update_ops(int r, Context *on_finish);
-
-  void shut_down_image_map(Context *on_finish);
-  void handle_shut_down_image_map(int r, Context *on_finish);
-
   void handle_update_leader(const std::string &leader_instance_id);
 
-  void handle_acquire_image(const std::string &global_image_id,
-                            const std::string &instance_id,
-                            Context* on_finish);
-  void handle_release_image(const std::string &global_image_id,
-                            const std::string &instance_id,
-                            Context* on_finish);
-  void handle_remove_image(const std::string &mirror_uuid,
-                           const std::string &global_image_id,
-                           const std::string &instance_id,
-                           Context* on_finish);
+  void handle_instances_added(const std::vector<std::string> &instance_ids);
+  void handle_instances_removed(const std::vector<std::string> &instance_ids);
 
-  void handle_instances_added(const InstanceIds &instance_ids);
-  void handle_instances_removed(const InstanceIds &instance_ids);
+  // sync version, executed in the caller thread
+  template <typename L>
+  void with_namespace_replayers(L &&callback) {
+    std::lock_guard locker{m_lock};
+
+    if (m_namespace_replayers_locked) {
+      ceph_assert(m_on_namespace_replayers_unlocked == nullptr);
+      C_SaferCond cond;
+      m_on_namespace_replayers_unlocked = &cond;
+      m_lock.unlock();
+      cond.wait();
+      m_lock.lock();
+    } else {
+      m_namespace_replayers_locked = true;
+    }
+
+    ceph_assert(m_namespace_replayers_locked);
+    callback(); // may temporary release the lock
+    ceph_assert(m_namespace_replayers_locked);
+
+    if (m_on_namespace_replayers_unlocked == nullptr) {
+      m_namespace_replayers_locked = false;
+      return;
+    }
+
+    m_threads->work_queue->queue(m_on_namespace_replayers_unlocked);
+    m_on_namespace_replayers_unlocked = nullptr;
+  }
+
+  // async version
+  template <typename L>
+  void with_namespace_replayers(L &&callback, Context *on_finish) {
+    std::lock_guard locker{m_lock};
+
+    on_finish = librbd::util::create_async_context_callback(
+      m_threads->work_queue, new LambdaContext(
+          [this, on_finish](int r) {
+            {
+              std::lock_guard locker{m_lock};
+              ceph_assert(m_namespace_replayers_locked);
+
+              m_namespace_replayers_locked = false;
+
+              if (m_on_namespace_replayers_unlocked != nullptr) {
+                m_namespace_replayers_locked = true;
+                m_threads->work_queue->queue(m_on_namespace_replayers_unlocked);
+                m_on_namespace_replayers_unlocked = nullptr;
+              }
+            }
+            on_finish->complete(r);
+          }));
+
+    auto on_lock = new LambdaContext(
+        [this, callback, on_finish](int) {
+          std::lock_guard locker{m_lock};
+          ceph_assert(m_namespace_replayers_locked);
+
+          callback(on_finish);
+        });
+
+    if (m_namespace_replayers_locked) {
+      ceph_assert(m_on_namespace_replayers_unlocked == nullptr);
+      m_on_namespace_replayers_unlocked = on_lock;
+      return;
+    }
+
+    m_namespace_replayers_locked = true;
+    m_threads->work_queue->queue(on_lock);
+  }
 
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
@@ -220,9 +188,9 @@ private:
   PeerSpec m_peer;
   std::vector<const char*> m_args;
 
-  mutable Mutex m_lock;
-  Cond m_cond;
-  std::atomic<bool> m_stopping = { false };
+  mutable ceph::mutex m_lock;
+  ceph::condition_variable m_cond;
+  bool m_stopping = false;
   bool m_manual_stop = false;
   bool m_blacklisted = false;
 
@@ -232,22 +200,19 @@ private:
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
 
-  PoolWatcherListener m_local_pool_watcher_listener;
-  std::unique_ptr<PoolWatcher<ImageCtxT>> m_local_pool_watcher;
+  std::string m_local_mirror_uuid;
 
-  PoolWatcherListener m_remote_pool_watcher_listener;
-  std::unique_ptr<PoolWatcher<ImageCtxT>> m_remote_pool_watcher;
-
-  std::unique_ptr<InstanceReplayer<ImageCtxT>> m_instance_replayer;
-  std::unique_ptr<ImageDeleter<ImageCtxT>> m_image_deleter;
-
-  ImageMapListener m_image_map_listener;
-  std::unique_ptr<ImageMap<ImageCtxT>> m_image_map;
+  std::unique_ptr<NamespaceReplayer<ImageCtxT>> m_default_namespace_replayer;
+  std::map<std::string, NamespaceReplayer<ImageCtxT> *> m_namespace_replayers;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;
 
   service_daemon::CalloutId m_callout_id = service_daemon::CALLOUT_ID_NONE;
+
+  bool m_leader = false;
+  bool m_namespace_replayers_locked = false;
+  Context *m_on_namespace_replayers_unlocked = nullptr;
 
   class PoolReplayerThread : public Thread {
     PoolReplayer *m_pool_replayer;
@@ -294,8 +259,8 @@ private:
   } m_leader_listener;
 
   std::unique_ptr<LeaderWatcher<ImageCtxT>> m_leader_watcher;
-  std::unique_ptr<InstanceWatcher<ImageCtxT>> m_instance_watcher;
-  AsyncOpTracker m_update_op_tracker;
+  std::unique_ptr<Throttler<ImageCtxT>> m_image_sync_throttler;
+  std::unique_ptr<Throttler<ImageCtxT>> m_image_deletion_throttler;
 };
 
 } // namespace mirror

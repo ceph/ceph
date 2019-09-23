@@ -25,7 +25,7 @@ using librbd::util::create_context_callback;
 using util::C_DecodeTags;
 
 template <typename I>
-OpenRequest<I>::OpenRequest(I *image_ctx, Journaler *journaler, Mutex *lock,
+OpenRequest<I>::OpenRequest(I *image_ctx, Journaler *journaler, ceph::mutex *lock,
                             journal::ImageClientMeta *client_meta,
                             uint64_t *tag_tid, journal::TagData *tag_data,
                             Context *on_finish)
@@ -97,7 +97,7 @@ void OpenRequest<I>::handle_init(int r) {
 
   m_tag_class = image_client_meta->tag_class;
   {
-    Mutex::Locker locker(*m_lock);
+    std::lock_guard locker{*m_lock};
     *m_client_meta = *image_client_meta;
   }
 

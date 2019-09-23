@@ -114,37 +114,13 @@ endif()
 
 
 # require c++17
-if(CMAKE_VERSION VERSION_LESS "3.8")
-  CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
-  if(NOT COMPILER_SUPPORTS_CXX17)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support.")
-  endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-
-  # for compiletest_cxx11_client
-  CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-  if(NOT COMPILER_SUPPORTS_CXX11)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
-  endif()
-
-  include(CheckCCompilerFlag)
-  CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
-  if(NOT COMPILER_SUPPORTS_GNU99)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_C_COMPILER} has no GNU C99 support.")
-  endif()
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-else()
-  set(CMAKE_CXX_STANDARD 17)
-  set(CMAKE_CXX_EXTENSIONS OFF)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_C_STANDARD 99)
-  # we use `asm()` to inline assembly, so enable the GNU extension
-  set(CMAKE_C_EXTENSIONS ON)
-  set(C_STANDARD_REQUIRED ON)
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 99)
+# we use `asm()` to inline assembly, so enable the GNU extension
+set(CMAKE_C_EXTENSIONS ON)
+set(C_STANDARD_REQUIRED ON)
 
 include(CheckCXXSourceCompiles)
 CHECK_CXX_SOURCE_COMPILES("
@@ -434,7 +410,7 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
-  INSTALL_RPATH "")
+  SKIP_RPATH TRUE)
 if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
@@ -537,6 +513,10 @@ add_subdirectory(os)
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
+  # Link the Object Class API implementation directly as intermediary
+  # static library (like libosd.a) nullifies the effect of `-rdynamic`.
+  osd/objclass.cc
+  objclass/class_api.cc
   ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
@@ -660,6 +640,8 @@ add_subdirectory(bash_completion)
 add_subdirectory(client)
 
 if(WITH_LIBCEPHFS)
+  find_package(PkgConfig QUIET REQUIRED)
+  pkg_check_modules(CAPNG REQUIRED libcap-ng)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs PRIVATE client ceph-common

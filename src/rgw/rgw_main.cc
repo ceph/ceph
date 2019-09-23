@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -14,7 +14,6 @@
 #include "include/stringify.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
-#include "rgw_otp.h"
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
@@ -38,6 +37,9 @@
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
 #include "rgw_perf_counters.h"
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+#include "rgw_amqp.h"
+#endif
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
@@ -272,12 +274,12 @@ int main(int argc, const char **argv)
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
-  Mutex mutex("main");
+  ceph::mutex mutex = ceph::make_mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();
-  mutex.Lock();
+  mutex.lock();
   init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
-  mutex.Unlock();
+  mutex.unlock();
 
   common_init_finish(g_ceph_context);
 
@@ -301,7 +303,7 @@ int main(int argc, const char **argv)
   FCGX_Init();
 #endif
 
-  RGWRados *store =
+  rgw::sal::RGWRadosStore *store =
     RGWStoreManager::get_storage(g_ceph_context,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
@@ -310,10 +312,10 @@ int main(int argc, const char **argv)
 				 g_conf().get_val<bool>("rgw_dynamic_resharding"),
 				 g_conf()->rgw_cache_enabled);
   if (!store) {
-    mutex.Lock();
+    mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
-    mutex.Unlock();
+    mutex.unlock();
 
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
@@ -324,17 +326,14 @@ int main(int argc, const char **argv)
     return -r;
   }
 
-  rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
+  rgw_rest_init(g_ceph_context, store->svc()->zone->get_zonegroup());
 
-  mutex.Lock();
+  mutex.lock();
   init_timer.cancel_all_events();
   init_timer.shutdown();
-  mutex.Unlock();
+  mutex.unlock();
 
-  rgw_user_init(store);
-  rgw_bucket_init(store->meta_mgr);
-  rgw_otp_init(store);
-  rgw_log_usage_init(g_ceph_context, store);
+  rgw_log_usage_init(g_ceph_context, store->getRados());
 
   RGWREST rest;
 
@@ -357,17 +356,26 @@ int main(int argc, const char **argv)
   const bool s3website_enabled = apis_map.count("s3website") > 0;
   const bool sts_enabled = apis_map.count("sts") > 0;
   const bool iam_enabled = apis_map.count("iam") > 0;
+  const bool pubsub_enabled = apis_map.count("pubsub") > 0;
   // Swift API entrypoint could placed in the root instead of S3
   const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
-      rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
-                                                        new RGWRESTMgr_S3(s3website_enabled, sts_enabled, iam_enabled))));
+      rest.register_default_mgr(set_logging(rest_filter(store->getRados(), RGW_REST_S3,
+                                                        new RGWRESTMgr_S3(s3website_enabled, sts_enabled, iam_enabled, pubsub_enabled))));
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
            << "Swift API placed in the root of hierarchy" << dendl;
       return EINVAL;
     }
+  }
+
+  if (pubsub_enabled) {
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+    if (!rgw::amqp::init(cct.get())) {
+        dout(1) << "ERROR: failed to initialize AMQP manager" << dendl;
+    }
+#endif
   }
 
   if (apis_map.count("swift") > 0) {
@@ -386,10 +394,10 @@ int main(int argc, const char **argv)
 
     if (! swift_at_root) {
       rest.register_resource(g_conf()->rgw_swift_url_prefix,
-                          set_logging(rest_filter(store, RGW_REST_SWIFT,
+                          set_logging(rest_filter(store->getRados(), RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
-      if (store->svc.zone->get_zonegroup().zones.size() > 1) {
+      if (store->svc()->zone->get_zonegroup().zones.size() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
              << " multi-site configuration requires another instance of RadosGW"
              << " with S3 API enabled!" << dendl;
@@ -420,8 +428,10 @@ int main(int argc, const char **argv)
 
   /* Initialize the registry of auth strategies which will coordinate
    * the dynamic reconfiguration. */
+  rgw::auth::ImplicitTenants implicit_tenant_context{g_conf()};
+  g_conf().add_observer(&implicit_tenant_context);
   auto auth_registry = \
-    rgw::auth::StrategyRegistry::create(g_ceph_context, store);
+    rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenant_context, store->getRados()->pctl);
 
   /* Header custom behavior */
   rest.register_x_headers(g_conf()->rgw_log_http_headers);
@@ -531,7 +541,7 @@ int main(int argc, const char **argv)
     fes.push_back(fe);
   }
 
-  r = store->register_to_service_map("rgw", service_map_meta);
+  r = store->getRados()->register_to_service_map("rgw", service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
@@ -541,10 +551,10 @@ int main(int argc, const char **argv)
 
   // add a watcher to respond to realm configuration changes
   RGWPeriodPusher pusher(store);
-  RGWFrontendPauser pauser(fes, &pusher);
+  RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
   RGWRealmReloader reloader(store, service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->svc.zone->get_realm());
+  RGWRealmWatcher realm_watcher(g_ceph_context, store->svc()->zone->get_realm());
   realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 
@@ -593,6 +603,10 @@ int main(int argc, const char **argv)
   rgw_shutdown_resolver();
   rgw_http_client_cleanup();
   rgw::curl::cleanup_curl();
+  g_conf().remove_observer(&implicit_tenant_context);
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  rgw::amqp::shutdown();
+#endif
 
   rgw_perf_stop(g_ceph_context);
 

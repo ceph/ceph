@@ -34,7 +34,7 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
-  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  std::shared_lock owner_lock{m_image_ctx.owner_lock};
   switch (m_state) {
   case STATE_RESIZE_OBJECT_MAP:
     ldout(cct, 5) << "RESIZE_OBJECT_MAP" << dendl;
@@ -93,17 +93,17 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_resize_object_map() {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
-  m_image_ctx.image_lock.get_read();
+  m_image_ctx.image_lock.lock_shared();
   ceph_assert(m_image_ctx.object_map != nullptr);
 
   uint64_t size = get_image_size();
   uint64_t num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
 
   if (m_image_ctx.object_map->size() == num_objects) {
-    m_image_ctx.image_lock.put_read();
+    m_image_ctx.image_lock.unlock_shared();
     send_verify_objects();
     return;
   }
@@ -117,14 +117,14 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
 
   m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT,
                                      this->create_callback_context());
-  m_image_ctx.image_lock.put_read();
+  m_image_ctx.image_lock.unlock_shared();
 }
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_trim_image() {
   CephContext *cct = m_image_ctx.cct;
 
-  RWLock::RLocker l(m_image_ctx.owner_lock);
+  std::shared_lock l{m_image_ctx.owner_lock};
 
   // should have been canceled prior to releasing lock
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
@@ -135,7 +135,7 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
   uint64_t new_size;
   uint64_t orig_size;
   {
-    RWLock::RLocker l(m_image_ctx.image_lock);
+    std::shared_lock l{m_image_ctx.image_lock};
     ceph_assert(m_image_ctx.object_map != nullptr);
 
     new_size = get_image_size();
@@ -173,7 +173,7 @@ bool update_object_map(I& image_ctx, uint64_t object_no, uint8_t current_state,
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_verify_objects() {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
   m_state = STATE_VERIFY_OBJECTS;
@@ -189,7 +189,7 @@ void RebuildObjectMapRequest<I>::send_verify_objects() {
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_save_object_map() {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
   ldout(cct, 5) << this << " send_save_object_map" << dendl;
@@ -199,14 +199,14 @@ void RebuildObjectMapRequest<I>::send_save_object_map() {
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
               m_image_ctx.exclusive_lock->is_lock_owner());
 
-  RWLock::RLocker image_locker(m_image_ctx.image_lock);
+  std::shared_lock image_locker{m_image_ctx.image_lock};
   ceph_assert(m_image_ctx.object_map != nullptr);
   m_image_ctx.object_map->aio_save(this->create_callback_context());
 }
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_update_header() {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
 
   // should have been canceled prior to releasing lock
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
@@ -225,13 +225,13 @@ void RebuildObjectMapRequest<I>::send_update_header() {
   ceph_assert(r == 0);
   comp->release();
 
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   m_image_ctx.update_flags(m_image_ctx.snap_id, flags, false);
 }
 
 template <typename I>
 uint64_t RebuildObjectMapRequest<I>::get_image_size() const {
-  ceph_assert(m_image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
     if (!m_image_ctx.resize_reqs.empty()) {
       return m_image_ctx.resize_reqs.front()->get_image_size();

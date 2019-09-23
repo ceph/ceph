@@ -30,7 +30,7 @@ Instances<I>::Instances(Threads<I> *threads, librados::IoCtx &ioctx,
                         instances::Listener& listener) :
   m_threads(threads), m_ioctx(ioctx), m_instance_id(instance_id),
   m_listener(listener), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-  m_lock("rbd::mirror::Instances " + ioctx.get_pool_name()) {
+  m_lock(ceph::make_mutex("rbd::mirror::Instances " + ioctx.get_pool_name())) {
 }
 
 template <typename I>
@@ -41,7 +41,7 @@ template <typename I>
 void Instances<I>::init(Context *on_finish) {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
   get_instances();
@@ -51,14 +51,13 @@ template <typename I>
 void Instances<I>::shut_down(Context *on_finish) {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
 
-  Context *ctx = new FunctionContext(
+  Context *ctx = new LambdaContext(
     [this](int r) {
-      Mutex::Locker timer_locker(m_threads->timer_lock);
-      Mutex::Locker locker(m_lock);
+      std::scoped_lock locker{m_threads->timer_lock, m_lock};
       cancel_remove_task();
       wait_for_ops();
     });
@@ -70,7 +69,7 @@ template <typename I>
 void Instances<I>::unblock_listener() {
   dout(5) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_listener_blocked);
   m_listener_blocked = false;
 
@@ -91,7 +90,7 @@ template <typename I>
 void Instances<I>::acked(const InstanceIds& instance_ids) {
   dout(10) << "instance_ids=" << instance_ids << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   if (m_on_finish != nullptr) {
     dout(5) << "received on shut down, ignoring" << dendl;
     return;
@@ -105,15 +104,14 @@ template <typename I>
 void Instances<I>::handle_acked(const InstanceIds& instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
 
-  Mutex::Locker timer_locker(m_threads->timer_lock);
-  Mutex::Locker locker(m_lock);
+  std::scoped_lock locker{m_threads->timer_lock, m_lock};
   if (m_on_finish != nullptr) {
     dout(5) << "handled on shut down, ignoring" << dendl;
     return;
   }
 
   InstanceIds added_instance_ids;
-  auto time = ceph_clock_now();
+  auto time = clock_t::now();
   for (auto& instance_id : instance_ids) {
     auto &instance = m_instances.insert(
       std::make_pair(instance_id, Instance{})).first->second;
@@ -132,7 +130,7 @@ void Instances<I>::handle_acked(const InstanceIds& instance_ids) {
 
 template <typename I>
 void Instances<I>::notify_instances_added(const InstanceIds& instance_ids) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   InstanceIds added_instance_ids;
   for (auto& instance_id : instance_ids) {
     auto it = m_instances.find(instance_id);
@@ -146,9 +144,9 @@ void Instances<I>::notify_instances_added(const InstanceIds& instance_ids) {
   }
 
   dout(5) << "instance_ids=" << added_instance_ids << dendl;
-  m_lock.Unlock();
+  m_lock.unlock();
   m_listener.handle_added(added_instance_ids);
-  m_lock.Lock();
+  m_lock.lock();
 
   for (auto& instance_id : added_instance_ids) {
     auto it = m_instances.find(instance_id);
@@ -163,7 +161,7 @@ void Instances<I>::notify_instances_removed(const InstanceIds& instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
   m_listener.handle_removed(instance_ids);
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   for (auto& instance_id : instance_ids) {
     m_instances.erase(instance_id);
   }
@@ -173,7 +171,7 @@ template <typename I>
 void Instances<I>::list(std::vector<std::string> *instance_ids) {
   dout(20) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   for (auto it : m_instances) {
     instance_ids->push_back(it.first);
@@ -185,7 +183,7 @@ template <typename I>
 void Instances<I>::get_instances() {
   dout(10) << dendl;
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   Context *ctx = create_context_callback<
     Instances, &Instances<I>::handle_get_instances>(this);
@@ -199,7 +197,7 @@ void Instances<I>::handle_get_instances(int r) {
 
   Context *on_finish = nullptr;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     std::swap(on_finish, m_on_finish);
   }
 
@@ -215,7 +213,7 @@ template <typename I>
 void Instances<I>::wait_for_ops() {
   dout(10) << dendl;
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<
@@ -232,15 +230,15 @@ void Instances<I>::handle_wait_for_ops(int r) {
 
   Context *on_finish = nullptr;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     std::swap(on_finish, m_on_finish);
   }
   on_finish->complete(r);
 }
 
 template <typename I>
-void Instances<I>::remove_instances(const utime_t& time) {
-  ceph_assert(m_lock.is_locked());
+void Instances<I>::remove_instances(const Instances<I>::clock_t::time_point& time) {
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   InstanceIds instance_ids;
   for (auto& instance_pair : m_instances) {
@@ -257,7 +255,7 @@ void Instances<I>::remove_instances(const utime_t& time) {
   ceph_assert(!instance_ids.empty());
 
   dout(10) << "instance_ids=" << instance_ids << dendl;
-  Context* ctx = new FunctionContext([this, instance_ids](int r) {
+  Context* ctx = new LambdaContext([this, instance_ids](int r) {
       handle_remove_instances(r, instance_ids);
     });
   ctx = create_async_context_callback(m_threads->work_queue, ctx);
@@ -275,8 +273,7 @@ void Instances<I>::remove_instances(const utime_t& time) {
 template <typename I>
 void Instances<I>::handle_remove_instances(
     int r, const InstanceIds& instance_ids) {
-  Mutex::Locker timer_locker(m_threads->timer_lock);
-  Mutex::Locker locker(m_lock);
+  std::scoped_lock locker{m_threads->timer_lock, m_lock};
 
   dout(10) << "r=" << r << ", instance_ids=" << instance_ids << dendl;
   ceph_assert(r == 0);
@@ -286,14 +283,14 @@ void Instances<I>::handle_remove_instances(
     new C_NotifyInstancesRemoved(this, instance_ids), 0);
 
   // reschedule the timer for the next batch
-  schedule_remove_task(ceph_clock_now());
+  schedule_remove_task(clock_t::now());
   m_async_op_tracker.finish_op();
 }
 
 template <typename I>
 void Instances<I>::cancel_remove_task() {
-  ceph_assert(m_threads->timer_lock.is_locked());
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   if (m_timer_task == nullptr) {
     return;
@@ -307,7 +304,7 @@ void Instances<I>::cancel_remove_task() {
 }
 
 template <typename I>
-void Instances<I>::schedule_remove_task(const utime_t& time) {
+void Instances<I>::schedule_remove_task(const Instances<I>::clock_t::time_point& time) {
   cancel_remove_task();
   if (m_on_finish != nullptr) {
     dout(10) << "received on shut down, ignoring" << dendl;
@@ -319,7 +316,7 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
      m_cct->_conf.get_val<uint64_t>("rbd_mirror_leader_max_acquire_attempts_before_break"));
 
   bool schedule = false;
-  utime_t oldest_time = time;
+  auto oldest_time = time;
   for (auto& instance : m_instances) {
     if (instance.first == m_instance_id) {
       continue;
@@ -340,16 +337,16 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
   dout(10) << dendl;
 
   // schedule a time to fire when the oldest instance should be removed
-  m_timer_task = new FunctionContext(
+  m_timer_task = new LambdaContext(
     [this, oldest_time](int r) {
-      ceph_assert(m_threads->timer_lock.is_locked());
-      Mutex::Locker locker(m_lock);
+      ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
+      std::lock_guard locker{m_lock};
       m_timer_task = nullptr;
 
       remove_instances(oldest_time);
     });
 
-  oldest_time += after;
+  oldest_time += ceph::make_timespan(after);
   m_threads->timer->add_event_at(oldest_time, m_timer_task);
 }
 

@@ -1,6 +1,8 @@
-import codecs
 import logging
 import sys
+
+
+terminal_logger = logging.getLogger('terminal')
 
 
 class colorize(str):
@@ -23,10 +25,9 @@ class colorize(str):
     """
 
     def __init__(self, string):
-        self.stdout = sys.__stdout__
         self.appends = ''
         self.prepends = ''
-        self.isatty = self.stdout.isatty()
+        self.isatty = sys.__stderr__.isatty()
 
     def _set_attributes(self):
         """
@@ -81,32 +82,12 @@ yellow_arrow = yellow('--> ')
 class _Write(object):
 
     def __init__(self, _writer=None, prefix='', suffix='', flush=False):
-        if _writer is None:
-            _writer = sys.stdout
-        self._writer = _Write._unicode_output_stream(_writer)
-        if _writer is sys.stdout:
-            sys.stdout = self._writer
+        # we can't set sys.stderr as the default for _writer. otherwise
+        # pytest's capturing gets confused
+        self._writer = _writer or sys.stderr
         self.suffix = suffix
         self.prefix = prefix
         self.flush = flush
-
-    @staticmethod
-    def _unicode_output_stream(stream):
-        # wrapper for given stream, so it can write unicode without throwing
-        # exception
-        # sys.stdout.encoding is None if !isatty
-        encoding = stream.encoding or ''
-        if encoding.upper() in ('UTF-8', 'UTF8'):
-            # already using unicode encoding, nothing to do
-            return stream
-        encoding = encoding or 'UTF-8'
-        if sys.version_info >= (3, 0):
-            # try to use whatever writer class the stream was
-            return stream.__class__(stream.buffer, encoding, 'replace',
-                                    stream.newlines, stream.line_buffering)
-        else:
-            # in python2, stdout is but a "file"
-            return codecs.getwriter(encoding)(stream, 'replace')
 
     def bold(self, string):
         self.write(bold(string))
@@ -117,9 +98,17 @@ class _Write(object):
         self.write(string)
 
     def write(self, line):
-        self._writer.write(self.prefix + line + self.suffix)
-        if self.flush:
-            self._writer.flush()
+        entry = self.prefix + line + self.suffix
+
+        try:
+            self._writer.write(entry)
+            if self.flush:
+                self._writer.flush()
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            try:
+                terminal_logger.info(entry.strip('\n'))
+            except (AttributeError, TypeError):
+                terminal_logger.info(entry)
 
 
 def stdout(msg):
@@ -210,7 +199,7 @@ def subhelp(mapper):
     """
     Look at every value of every key in the mapper and will output any
     ``class.help`` possible to return it as a string that will be sent to
-    stdout.
+    stderr.
     """
     help_text_lines = []
     for key, value in mapper.items():

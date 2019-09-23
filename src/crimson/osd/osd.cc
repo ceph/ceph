@@ -16,26 +16,30 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDRepOpReply.h"
 #include "messages/MPGStats.h"
+
+#include "os/Transaction.h"
+#include "osd/ClassHandler.h"
+#include "osd/PGPeeringEvent.h"
+#include "osd/PeeringState.h"
 
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
-#include "os/Transaction.h"
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
-#include "osd/PGPeeringEvent.h"
-#include "osd/PeeringState.h"
+#include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/compound_peering_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
-#include "crimson/osd/osd_operations/client_request.h"
+#include "crimson/osd/osd_operations/replicated_request.h"
 
 namespace {
   seastar::logger& logger() {
@@ -56,17 +60,19 @@ OSD::OSD(int id, uint32_t nonce,
          ceph::net::Messenger& hb_back_msgr)
   : whoami{id},
     nonce{nonce},
-    beacon_timer{[this] { send_beacon(); }},
+    // do this in background
+    beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr, *this}},
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
-    heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
-    heartbeat_timer{[this] { update_heartbeat_peers(); }},
     store{ceph::os::FuturizedStore::create(
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"))},
-    shard_services{cluster_msgr, public_msgr, *monc, *mgrc, *store},
+    shard_services{*this, cluster_msgr, public_msgr, *monc, *mgrc, *store},
+    heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
+    // do this in background
+    heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -74,6 +80,14 @@ OSD::OSD(int id, uint32_t nonce,
                     std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
     msgr.get().set_auth_server(monc.get());
     msgr.get().set_auth_client(monc.get());
+  }
+
+  if (local_conf()->osd_open_classes_on_start) {
+    const int r = ClassHandler::get_instance().open_all_classes();
+    if (r) {
+      logger().warn("{} warning: got an error loading one or more classes: {}",
+                    __func__, cpp_strerror(r));
+    }
   }
 }
 
@@ -123,16 +137,18 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
       __func__,
       cluster_fsid,
       superblock.osd_fsid);
-
-    meta_coll = make_unique<OSDMeta>(
-      store->create_new_collection(coll_t::meta()), store.get());
+    return store->create_new_collection(coll_t::meta());
+  }).then([this] (auto ch) {
+    meta_coll = make_unique<OSDMeta>(ch , store.get());
     ceph::os::Transaction t;
     meta_coll->create(t);
     meta_coll->store_superblock(t, superblock);
     return store->do_transaction(meta_coll->collection(), std::move(t));
   }).then([cluster_fsid, this] {
-    store->write_meta("ceph_fsid", cluster_fsid.to_string());
-    store->write_meta("whoami", std::to_string(whoami));
+    return when_all_succeed(
+      store->write_meta("ceph_fsid", cluster_fsid.to_string()),
+      store->write_meta("whoami", std::to_string(whoami)));
+  }).then([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
                whoami, cluster_fsid);
@@ -185,9 +201,12 @@ seastar::future<> OSD::start()
 {
   logger().info("start");
 
+  startup_time = ceph::mono_clock::now();
+
   return store->mount().then([this] {
-    meta_coll = make_unique<OSDMeta>(store->open_collection(coll_t::meta()),
-                                     store.get());
+    return store->open_collection(coll_t::meta());
+  }).then([this](auto ch) {
+    meta_coll = make_unique<OSDMeta>(ch, store.get());
     return meta_coll->load_superblock();
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
@@ -247,8 +266,11 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr.get_myaddrs(),
                               public_msgr.get_myaddrs()); changed) {
-      cluster_msgr.set_myaddrs(addrs);
+      return cluster_msgr.set_myaddrs(addrs);
+    } else {
+      return seastar::now();
     }
+  }).then([this] {
     return heartbeat->start(public_msgr.get_myaddrs(),
                             cluster_msgr.get_myaddrs());
   }).then([this] {
@@ -280,8 +302,8 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
     logger().warn("osdmap NOUP flag is set, waiting for it to clear");
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     logger().error("osdmap SORTBITWISE OSDMap flag is NOT set; please set it");
-  } else if (osdmap->require_osd_release < ceph_release_t::luminous) {
-    logger().error("osdmap require_osd_release < luminous; please upgrade to luminous");
+  } else if (osdmap->require_osd_release < ceph_release_t::octopus) {
+    logger().error("osdmap require_osd_release < octopus; please upgrade to octopus");
   } else if (false) {
     // TODO: update mon if current fullness state is different from osdmap
   } else if (version_t n = local_conf()->osd_map_message_max;
@@ -357,8 +379,10 @@ seastar::future<> OSD::_send_alive()
     want,
     up_thru_wanted);
   if (!osdmap->exists(whoami)) {
+    logger().warn("{} DNE", __func__);
     return seastar::now();
-  } else if (want <= up_thru_wanted){
+  } else if (want <= up_thru_wanted) {
+    logger().debug("{} {} <= {}", __func__, want, up_thru_wanted);
     return seastar::now();
   } else {
     up_thru_wanted = want;
@@ -385,8 +409,8 @@ seastar::future<> OSD::stop()
 
 seastar::future<> OSD::load_pgs()
 {
-  return seastar::parallel_for_each(store->list_collections(),
-    [this](auto coll) {
+  return store->list_collections().then([this](auto colls) {
+    return seastar::parallel_for_each(colls, [this](auto coll) {
       spg_t pgid;
       if (coll.is_pg(&pgid)) {
         return load_pg(pgid).then([pgid, this](auto&& pg) {
@@ -402,6 +426,7 @@ seastar::future<> OSD::load_pgs()
         return seastar::now();
       }
     });
+  });
 }
 
 seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map, spg_t pgid)
@@ -426,13 +451,18 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map, spg_t pgid)
   })().then([pgid, this, create_map](pg_pool_t&& pool,
                        string&& name,
                        ec_profile_t&& ec_profile) {
-    return seastar::make_ready_future<Ref<PG>>(Ref<PG>{new PG{pgid,
+    return shard_services.get_store().open_collection(coll_t::meta()).then(
+      [this, pgid, create_map, pool=std::move(pool), name, ec_profile]
+      (auto coll_ref) mutable {
+      return seastar::make_ready_future<Ref<PG>>(new PG{pgid,
 	    pg_shard_t{whoami, pgid.shard},
+	    coll_ref,
 	    std::move(pool),
 	    std::move(name),
 	    create_map,
 	    shard_services,
-	    ec_profile}});
+	    ec_profile});
+    });
   });
 }
 
@@ -465,16 +495,23 @@ seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
   case CEPH_MSG_OSD_OP:
     return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
   case MSG_OSD_PG_CREATE2:
-  case MSG_OSD_PG_NOTIFY:
-  case MSG_OSD_PG_INFO:
-  case MSG_OSD_PG_QUERY:
     shard_services.start_operation<CompoundPeeringRequest>(
       *this,
       conn->get_shared(),
       m);
     return seastar::now();
+  case MSG_OSD_PG_NOTIFY2:
+    [[fallthrough]];
+  case MSG_OSD_PG_INFO2:
+    [[fallthrough]];
+  case MSG_OSD_PG_QUERY2:
+    [[fallthrough]];
   case MSG_OSD_PG_LOG:
-    return handle_pg_log(conn, boost::static_pointer_cast<MOSDPGLog>(m));
+    return handle_peering_op(conn, boost::static_pointer_cast<MOSDPeeringOp>(m));
+  case MSG_OSD_REPOP:
+    return handle_rep_op(conn, boost::static_pointer_cast<MOSDRepOp>(m));
+  case MSG_OSD_REPOPREPLY:
+    return handle_rep_op_reply(conn, boost::static_pointer_cast<MOSDRepOpReply>(m));
   default:
     logger().info("{} unhandled message {}", __func__, *m);
     return seastar::now();
@@ -639,7 +676,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 		Ref<PG>(),
 		startmap);
 	    }
-	    ceph_assert(osdmap->require_osd_release >= ceph_release_t::nautilus);
+	    ceph_assert(osdmap->require_osd_release >= ceph_release_t::octopus);
 	    if (!pool->has_flag(pg_pool_t::FLAG_CREATING)) {
 	      // this ensures we do not process old creating messages after the
 	      // pool's initial pgs have been created (and pg are subsequently
@@ -663,7 +700,8 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	[this, &info](auto pg, auto startmap) -> seastar::future<Ref<PG>> {
 	  if (!pg)
 	    return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
-	  PeeringCtx rctx;
+        return store->create_new_collection(coll_t(info->pgid)).then([this, &info, startmap, pg] (auto coll) {
+	  PeeringCtx rctx{ceph_release_t::octopus};
 	  const pg_pool_t* pp = startmap->get_pg_pool(info->pgid.pool());
 
 	  int up_primary, acting_primary;
@@ -677,7 +715,6 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	  }
 
 
-	  auto coll = store->create_new_collection(coll_t(info->pgid));
 	  create_pg_collection(
 	    rctx.transaction,
 	    info->pgid,
@@ -703,9 +740,10 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	    *this, pg, pg->get_osdmap_epoch(),
 	    osdmap->get_epoch(), std::move(rctx), true).second.then([pg] {
 	      return seastar::make_ready_future<Ref<PG>>(pg);
-	    });
+	  });
 	});
     });
+  });
 }
 
 seastar::future<> OSD::handle_osd_map(ceph::net::Connection* conn,
@@ -850,6 +888,30 @@ seastar::future<> OSD::handle_osd_op(ceph::net::Connection* conn,
   return seastar::now();
 }
 
+seastar::future<> OSD::handle_rep_op(ceph::net::Connection* conn,
+				     Ref<MOSDRepOp> m)
+{
+  m->finish_decode();
+  shard_services.start_operation<RepRequest>(
+    *this,
+    conn->get_shared(),
+    std::move(m));
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_rep_op_reply(ceph::net::Connection* conn,
+					   Ref<MOSDRepOpReply> m)
+{
+  const auto& pgs = pg_map.get_pgs();
+  if (auto pg = pgs.find(m->get_spg()); pg != pgs.end()) {
+    m->finish_decode();
+    pg->second->handle_rep_op_reply(conn, *m);
+  } else {
+    logger().warn("stale reply: {}", *m);
+  }
+  return seastar::now();
+}
+
 bool OSD::should_restart() const
 {
   if (!osdmap->is_up(whoami)) {
@@ -903,48 +965,51 @@ seastar::future<> OSD::send_beacon()
   return monc->send_message(m);
 }
 
-void OSD::update_heartbeat_peers()
+seastar::future<> OSD::update_heartbeat_peers()
 {
   if (!state.is_active()) {
-    return;
+    return seastar::now();
   }
-  for (auto& pg : pg_map.get_pgs()) {
-    vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(pg.first.pgid,
-                                 &up, nullptr,
-                                 &acting, nullptr);
-    for (auto osd : boost::join(up, acting)) {
-      if (osd != CRUSH_ITEM_NONE && osd != whoami) {
-        heartbeat->add_peer(osd, osdmap->get_epoch());
-      }
-    }
-  }
-  heartbeat->update_peers(whoami);
+  return seastar::parallel_for_each(
+    pg_map.get_pgs(),
+    [this](auto& pg) {
+      vector<int> up, acting;
+      osdmap->pg_to_up_acting_osds(pg.first.pgid,
+				   &up, nullptr,
+				   &acting, nullptr);
+      return seastar::parallel_for_each(
+        boost::join(up, acting),
+        [this](int osd) {
+          if (osd == CRUSH_ITEM_NONE || osd == whoami) {
+            return seastar::now();
+          } else {
+            return heartbeat->add_peer(osd, osdmap->get_epoch());
+          }
+        });
+    }).then([this] {
+      return heartbeat->update_peers(whoami);
+    });
 }
 
-seastar::future<> OSD::handle_pg_log(
+seastar::future<> OSD::handle_peering_op(
   ceph::net::Connection* conn,
-  Ref<MOSDPGLog> m)
+  Ref<MOSDPeeringOp> m)
 {
   const int from = m->get_source().num();
-  logger().debug("handle_pg_log on {} from {}", m->get_spg(), from);
+  logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
   shard_services.start_operation<RemotePeeringEvent>(
     *this,
     conn->get_shared(),
     shard_services,
-    pg_shard_t(from, m->from),
-    spg_t(m->info.pgid.pgid, m->to),
+    pg_shard_t{from, m->get_spg().shard},
+    m->get_spg(),
     std::move(*m->get_event()));
   return seastar::now();
 }
 
 void OSD::check_osdmap_features()
 {
-  if (osdmap->require_osd_release < ceph_release_t::nautilus) {
-    heartbeat->set_require_authorizer(false);
-  } else {
-    heartbeat->set_require_authorizer(true);
-  }
+  heartbeat->set_require_authorizer(true);
 }
 
 seastar::future<> OSD::consume_map(epoch_t epoch)
@@ -953,7 +1018,8 @@ seastar::future<> OSD::consume_map(epoch_t epoch)
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(pgs.begin(), pgs.end(), [=](auto& pg) {
     return shard_services.start_operation<PGAdvanceMap>(
-      *this, pg.second, pg.second->get_osdmap_epoch(), epoch).second;
+      *this, pg.second, pg.second->get_osdmap_epoch(), epoch,
+      PeeringCtx{ceph_release_t::octopus}, false).second;
   }).then([epoch, this] {
     osdmap_gate.got_map(epoch);
     return seastar::make_ready_future();
@@ -970,7 +1036,7 @@ OSD::get_or_create_pg(
   auto [fut, creating] = pg_map.get_pg(pgid, bool(info));
   if (!creating && info) {
     pg_map.set_creating(pgid);
-    handle_pg_create_info(std::move(info));
+    (void)handle_pg_create_info(std::move(info));
   }
   return std::move(fut);
 }

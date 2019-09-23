@@ -63,7 +63,7 @@
 // cons/des
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
-  mds_lock("MDSDaemon::mds_lock"),
+  mds_lock(ceph::make_mutex("MDSDaemon::mds_lock")),
   stopping(false),
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
@@ -271,15 +271,22 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Evict a CephFS client");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("osdmap barrier",
-				     "osdmap barrier name=target_epoch,type=CephInt",
-				     asok_hook,
-				     "Wait until the MDS has this OSD map epoch");
-  ceph_assert(r == 0);
   r = admin_socket->register_command("session ls",
 				     "session ls",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("session config",
+				     "session config name=client_id,type=CephInt,req=true "
+				     "name=option,type=CephString,req=true "
+				     "name=value,type=CephString,req=false ",
+				     asok_hook,
+				     "Config a CephFS client session");
+  assert(r == 0);
+  r = admin_socket->register_command("osdmap barrier",
+				     "osdmap barrier name=target_epoch,type=CephInt",
+				     asok_hook,
+				     "Wait until the MDS has this OSD map epoch");
   ceph_assert(r == 0);
   r = admin_socket->register_command("flush journal",
 				     "flush journal",
@@ -371,9 +378,9 @@ int MDSDaemon::init()
   r = monc->init();
   if (r < 0) {
     derr << "ERROR: failed to init monc: " << cpp_strerror(-r) << dendl;
-    mds_lock.Lock();
+    mds_lock.lock();
     suicide();
-    mds_lock.Unlock();
+    mds_lock.unlock();
     return r;
   }
 
@@ -387,9 +394,9 @@ int MDSDaemon::init()
   r = monc->authenticate();
   if (r < 0) {
     derr << "ERROR: failed to authenticate: " << cpp_strerror(-r) << dendl;
-    mds_lock.Lock();
+    mds_lock.lock();
     suicide();
-    mds_lock.Unlock();
+    mds_lock.unlock();
     return r;
   }
 
@@ -403,19 +410,18 @@ int MDSDaemon::init()
     }
     derr << "ERROR: failed to refresh rotating keys, "
          << "maximum retry time reached." << dendl;
-    mds_lock.Lock();
+    std::lock_guard locker{mds_lock};
     suicide();
-    mds_lock.Unlock();
     return -ETIMEDOUT;
   }
 
   mgrc.init();
   messenger->add_dispatcher_head(&mgrc);
 
-  mds_lock.Lock();
+  mds_lock.lock();
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
-    mds_lock.Unlock();
+    mds_lock.unlock();
     return 0;
   }
 
@@ -423,16 +429,15 @@ int MDSDaemon::init()
   monc->sub_want("mgrmap", 0, 0);
   monc->renew_subs();
 
-  mds_lock.Unlock();
+  mds_lock.unlock();
 
   // Set up admin socket before taking mds_lock, so that ordering
   // is consistent (later we take mds_lock within asok callbacks)
   set_up_admin_socket();
-  mds_lock.Lock();
+  std::lock_guard locker{mds_lock};
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
-    mds_lock.Unlock();
     return 0; 
   }
 
@@ -443,8 +448,6 @@ int MDSDaemon::init()
 
   // schedule tick
   reset_tick();
-  mds_lock.Unlock();
-
   return 0;
 }
 
@@ -456,8 +459,8 @@ void MDSDaemon::reset_tick()
   // schedule
   tick_event = timer.add_event_after(
     g_conf()->mds_tick_interval,
-    new FunctionContext([this](int) {
-	ceph_assert(mds_lock.is_locked_by_me());
+    new LambdaContext([this](int) {
+	ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 	tick();
       }));
 }
@@ -563,6 +566,10 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
     MDSCommand("client ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
     MDSCommand("session evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
     MDSCommand("client evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
+    MDSCommand("session config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
+	"Config a client session"),
+    MDSCommand("client config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
+	"Config a client session"),
     MDSCommand("damage ls", "List detected metadata damage"),
     MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
     MDSCommand("version", "report version of MDS"),
@@ -864,9 +871,9 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
       mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
-          timer, beacon, mdsmap, messenger, monc,
-          new FunctionContext([this](int r){respawn();}),
-          new FunctionContext([this](int r){suicide();}));
+          timer, beacon, mdsmap, messenger, monc, &mgrc,
+          new LambdaContext([this](int r){respawn();}),
+          new LambdaContext([this](int r){suicide();}));
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();
@@ -923,7 +930,7 @@ void MDSDaemon::handle_signal(int signum)
 
 void MDSDaemon::suicide()
 {
-  ceph_assert(mds_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(mds_lock));
   
   // make sure we don't suicide twice
   ceph_assert(stopping == false);
@@ -1213,9 +1220,6 @@ void MDSDaemon::ms_handle_accept(Connection *con)
   // request to open a session (initial state of Session is `closed`)
   if (!s) {
     s = new Session(con);
-    s->info.auth_name = con->get_peer_entity_name();
-    s->info.inst.addr = con->get_peer_socket_addr();
-    s->info.inst.name = n;
     dout(10) << " new session " << s << " for " << s->info.inst
 	     << " con " << con << dendl;
     con->set_priv(RefCountedPtr{s, false});

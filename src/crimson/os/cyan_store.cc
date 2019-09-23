@@ -3,6 +3,7 @@
 
 #include "cyan_store.h"
 
+#include <boost/algorithm/string/trim.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -51,7 +52,7 @@ seastar::future<> CyanStore::mount()
     if (int r = cbl.read_file(fn.c_str(), &err); r < 0) {
       throw std::runtime_error("read_file");
     }
-    CollectionRef c{new Collection{coll}};
+    boost::intrusive_ptr<Collection> c{new Collection{coll}};
     auto p = cbl.cbegin();
     c->decode(p);
     coll_map[coll] = c;
@@ -82,34 +83,35 @@ seastar::future<> CyanStore::umount()
 
 seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
-  std::string fsid_str;
-  int r = read_meta("fsid", &fsid_str);
-  if (r == -ENOENT) {
-    if (new_osd_fsid.is_zero()) {
-      osd_fsid.generate_random();
+  return read_meta("fsid").then([=](auto r, auto fsid_str) {
+    if (r == -ENOENT) {
+      if (new_osd_fsid.is_zero()) {
+        osd_fsid.generate_random();
+      } else {
+        osd_fsid = new_osd_fsid;
+      }
+      return write_meta("fsid", fmt::format("{}", osd_fsid));
+    } else if (r < 0) {
+      throw std::runtime_error("read_meta");
     } else {
-      osd_fsid = new_osd_fsid;
+      logger().info("{} already has fsid {}", __func__, fsid_str);
+      if (!osd_fsid.parse(fsid_str.c_str())) {
+        throw std::runtime_error("failed to parse fsid");
+      } else if (osd_fsid != new_osd_fsid) {
+        logger().error("on-disk fsid {} != provided {}", osd_fsid, new_osd_fsid);
+        throw std::runtime_error("unmatched osd_fsid");
+      } else {
+	return seastar::now();
+      }
     }
-    write_meta("fsid", fmt::format("{}", osd_fsid));
-  } else if (r < 0) {
-    throw std::runtime_error("read_meta");
-  } else {
-    logger().info("{} already has fsid {}", __func__, fsid_str);
-    if (!osd_fsid.parse(fsid_str.c_str())) {
-      throw std::runtime_error("failed to parse fsid");
-    } else if (osd_fsid != new_osd_fsid) {
-      logger().error("on-disk fsid {} != provided {}", osd_fsid, new_osd_fsid);
-      throw std::runtime_error("unmatched osd_fsid");
-    }
-  }
-
-  std::string fn = path + "/collections";
-  ceph::bufferlist bl;
-  std::set<coll_t> collections;
-  ceph::encode(collections, bl);
-  return ceph::buffer::write_file(std::move(bl), fn).then([this] {
-    write_meta("type", "memstore");
-    return seastar::now();
+  }).then([this]{
+    std::string fn = path + "/collections";
+    ceph::bufferlist bl;
+    std::set<coll_t> collections;
+    ceph::encode(collections, bl);
+    return ceph::buffer::write_file(std::move(bl), fn);
+  }).then([this] {
+    return write_meta("type", "memstore");
   });
 }
 
@@ -123,13 +125,14 @@ store_statfs_t CyanStore::stat() const
 }
 
 seastar::future<std::vector<ghobject_t>, ghobject_t>
-CyanStore::list_objects(CollectionRef c,
+CyanStore::list_objects(CollectionRef ch,
                         const ghobject_t& start,
                         const ghobject_t& end,
-                        uint64_t limit)
+                        uint64_t limit) const
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {} {}",
-                 __func__, c->cid, start, end, limit);
+                 __func__, c->get_cid(), start, end, limit);
   std::vector<ghobject_t> objects;
   objects.reserve(limit);
   ghobject_t next = ghobject_t::get_max();
@@ -147,39 +150,39 @@ CyanStore::list_objects(CollectionRef c,
     std::move(objects), next);
 }
 
-CollectionRef CyanStore::create_new_collection(const coll_t& cid)
+seastar::future<CollectionRef> CyanStore::create_new_collection(const coll_t& cid)
 {
   auto c = new Collection{cid};
-  return new_coll_map[cid] = c;
+  new_coll_map[cid] = c;
+  return seastar::make_ready_future<CollectionRef>(c);
 }
 
-CollectionRef CyanStore::open_collection(const coll_t& cid)
+seastar::future<CollectionRef> CyanStore::open_collection(const coll_t& cid)
 {
-  auto cp = coll_map.find(cid);
-  if (cp == coll_map.end())
-    return {};
-  return cp->second;
+  return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
 }
 
-std::vector<coll_t> CyanStore::list_collections()
+seastar::future<std::vector<coll_t>> CyanStore::list_collections()
 {
   std::vector<coll_t> collections;
   for (auto& coll : coll_map) {
     collections.push_back(coll.first);
   }
-  return collections;
+  return seastar::make_ready_future<std::vector<coll_t>>(std::move(collections));
 }
 
-seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef c,
+seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef ch,
                                             const ghobject_t& oid,
                                             uint64_t offset,
                                             size_t len,
                                             uint32_t op_flags)
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {}~{}",
-                __func__, c->cid, oid, offset, len);
+                __func__, c->get_cid(), oid, offset, len);
   if (!c->exists) {
-    throw std::runtime_error(fmt::format("collection does not exist: {}", c->cid));
+    throw std::runtime_error(fmt::format("collection does not exist: {}",
+					 c->get_cid()));
   }
   ObjectRef o = c->get_object(oid);
   if (!o) {
@@ -192,19 +195,16 @@ seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef c,
     l = o->get_size();
   else if (offset + l > o->get_size())
     l = o->get_size() - offset;
-  ceph::bufferlist bl;
-  if (int r = o->read(offset, l, bl); r < 0) {
-    throw std::runtime_error("read");
-  }
-  return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+  return seastar::make_ready_future<ceph::bufferlist>(o->read(offset, l));
 }
 
-seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
+seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef ch,
                                                      const ghobject_t& oid,
-                                                     std::string_view name)
+                                                     std::string_view name) const
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
-                __func__, c->cid, oid);
+                __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     return seastar::make_exception_future<ceph::bufferptr>(
@@ -214,15 +214,16 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
     return seastar::make_ready_future<ceph::bufferptr>(found->second);
   } else {
     return seastar::make_exception_future<ceph::bufferptr>(
-      EnoentException(fmt::format("attr does not exist: {}/{}", oid, name)));
+      EnodataException(fmt::format("attr does not exist: {}/{}", oid, name)));
   }
 }
 
-seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
+seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef ch,
                                                          const ghobject_t& oid)
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
-                __func__, c->cid, oid);
+                __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     throw std::runtime_error(fmt::format("object does not exist: {}", oid));
@@ -231,12 +232,13 @@ seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
 }
 
 seastar::future<CyanStore::omap_values_t>
-CyanStore::omap_get_values(CollectionRef c,
+CyanStore::omap_get_values(CollectionRef ch,
                            const ghobject_t& oid,
                            const omap_keys_t& keys)
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
-                __func__, c->cid, oid);
+                __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     throw std::runtime_error(fmt::format("object does not exist: {}", oid));
@@ -252,13 +254,14 @@ CyanStore::omap_get_values(CollectionRef c,
 
 seastar::future<bool, CyanStore::omap_values_t>
 CyanStore::omap_get_values(
-    CollectionRef c,
+    CollectionRef ch,
     const ghobject_t &oid,
     const std::optional<string> &start
   ) {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug(
     "{} {} {}",
-    __func__, c->cid, oid);
+    __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     throw std::runtime_error(fmt::format("object does not exist: {}", oid));
@@ -422,7 +425,7 @@ int CyanStore::_remove(const coll_t& cid, const ghobject_t& oid)
 {
   logger().debug("{} cid={} oid={}",
                 __func__, cid, oid);
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -439,7 +442,7 @@ int CyanStore::_touch(const coll_t& cid, const ghobject_t& oid)
 {
   logger().debug("{} cid={} oid={}",
                 __func__, cid, oid);
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -455,7 +458,7 @@ int CyanStore::_write(const coll_t& cid, const ghobject_t& oid,
                 __func__, cid, oid, offset, len);
   assert(len == bl.length());
 
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -478,7 +481,7 @@ int CyanStore::_omap_set_values(
     "{} {} {} {} keys",
     __func__, cid, oid, aset.size());
 
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -498,7 +501,7 @@ int CyanStore::_omap_set_header(
     "{} {} {} {} bytes",
     __func__, cid, oid, header.length());
 
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -516,7 +519,7 @@ int CyanStore::_omap_rmkeys(
     "{} {} {} {} keys",
     __func__, cid, oid, aset.size());
 
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -537,7 +540,7 @@ int CyanStore::_omap_rmkeyrange(
     "{} {} {} first={} last={}",
     __func__, cid, oid, first, last);
 
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -552,7 +555,7 @@ int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size
 {
   logger().debug("{} cid={} oid={} size={}",
                 __func__, cid, oid, size);
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -572,7 +575,7 @@ int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
 {
   logger().debug("{} cid={} oid={}",
                 __func__, cid, oid);
-  auto c = open_collection(cid);
+  auto c = _get_collection(cid);
   if (!c)
     return -ENOENT;
 
@@ -587,7 +590,7 @@ int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
 
 int CyanStore::_create_collection(const coll_t& cid, int bits)
 {
-  auto result = coll_map.insert(std::make_pair(cid, CollectionRef()));
+  auto result = coll_map.try_emplace(cid);
   if (!result.second)
     return -EEXIST;
   auto p = new_coll_map.find(cid);
@@ -598,8 +601,16 @@ int CyanStore::_create_collection(const coll_t& cid, int bits)
   return 0;
 }
 
-void CyanStore::write_meta(const std::string& key,
-                           const std::string& value)
+boost::intrusive_ptr<Collection> CyanStore::_get_collection(const coll_t& cid)
+{
+  auto cp = coll_map.find(cid);
+  if (cp == coll_map.end())
+    return {};
+  return cp->second;
+}
+
+seastar::future<> CyanStore::write_meta(const std::string& key,
+					const std::string& value)
 {
   std::string v = value;
   v += "\n";
@@ -608,27 +619,32 @@ void CyanStore::write_meta(const std::string& key,
       r < 0) {
     throw std::runtime_error{fmt::format("unable to write_meta({})", key)};
   }
+  return seastar::make_ready_future<>();
 }
 
-int CyanStore::read_meta(const std::string& key,
-                          std::string* value)
+seastar::future<int, std::string> CyanStore::read_meta(const std::string& key)
 {
-  char buf[4096];
-  int r = safe_read_file(path.c_str(), key.c_str(),
-                         buf, sizeof(buf));
-  if (r <= 0) {
-    return r;
+  std::string fsid(4096, '\0');
+  int r = safe_read_file(path.c_str(), key.c_str(), fsid.data(), fsid.size());
+  if (r > 0) {
+    fsid.resize(r);
+    // drop trailing newlines
+    boost::algorithm::trim_right_if(fsid,
+				    [](unsigned char c) {return isspace(c);});
+  } else {
+    fsid.clear();
   }
-  // drop trailing newlines
-  while (r && isspace(buf[r-1])) {
-    --r;
-  }
-  *value = std::string{buf, static_cast<size_t>(r)};
-  return 0;
+  return seastar::make_ready_future<int, std::string>(r, fsid);
 }
 
 uuid_d CyanStore::get_fsid() const
 {
   return osd_fsid;
+}
+
+unsigned CyanStore::get_max_attr_name_length() const
+{
+  // arbitrary limitation exactly like in the case of MemStore.
+  return 256;
 }
 }

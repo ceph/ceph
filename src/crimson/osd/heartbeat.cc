@@ -8,7 +8,7 @@
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/osd/osdmap_service.h"
+#include "crimson/osd/shard_services.h"
 #include "crimson/mon/MonClient.h"
 
 #include "osd/OSDMap.h"
@@ -21,7 +21,7 @@ namespace {
   }
 }
 
-Heartbeat::Heartbeat(const OSDMapService& service,
+Heartbeat::Heartbeat(const ceph::osd::ShardServices& service,
                      ceph::mon::Client& monc,
                      ceph::net::Messenger& front_msgr,
                      ceph::net::Messenger& back_msgr)
@@ -29,7 +29,8 @@ Heartbeat::Heartbeat(const OSDMapService& service,
     monc{monc},
     front_msgr{front_msgr},
     back_msgr{back_msgr},
-    timer{[this] {send_heartbeats();}}
+    // do this in background
+    timer{[this] { (void)send_heartbeats(); }}
 {}
 
 seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
@@ -90,26 +91,24 @@ void Heartbeat::set_require_authorizer(bool require_authorizer)
 
 seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
 {
-  auto found = peers.find(peer);
-  if (found == peers.end()) {
+  auto [peer_info, added] = peers.try_emplace(peer);
+  auto& info = peer_info->second;
+  info.epoch = epoch;
+  if (added) {
     logger().info("add_peer({})", peer);
-    auto osdmap = service.get_map();
+    auto osdmap = service.get_osdmap_service().get_map();
     // TODO: use addrs
     return seastar::when_all_succeed(
         front_msgr.connect(osdmap->get_hb_front_addrs(peer).front(),
                            CEPH_ENTITY_TYPE_OSD),
         back_msgr.connect(osdmap->get_hb_back_addrs(peer).front(),
                           CEPH_ENTITY_TYPE_OSD))
-      .then([this, peer, epoch] (auto xcon_front, auto xcon_back) {
-        PeerInfo info;
+      .then([this, &info=peer_info->second] (auto xcon_front, auto xcon_back) {
         // sharded-messenger compatible mode
         info.con_front = xcon_front->release();
         info.con_back = xcon_back->release();
-        info.epoch = epoch;
-        peers.emplace(peer, std::move(info));
       });
   } else {
-    found->second.epoch = epoch;
     return seastar::now();
   }
 }
@@ -122,7 +121,7 @@ seastar::future<Heartbeat::osds_t> Heartbeat::remove_down_peers()
   }
   return seastar::map_reduce(std::move(osds),
     [this](auto& osd) {
-      auto osdmap = service.get_map();
+      auto osdmap = service.get_osdmap_service().get_map();
       if (!osdmap->is_up(osd)) {
         return remove_peer(osd).then([] {
           return seastar::make_ready_future<osd_id_t>(-1);
@@ -141,9 +140,9 @@ seastar::future<Heartbeat::osds_t> Heartbeat::remove_down_peers()
     });
 }
 
-void Heartbeat::add_reporter_peers(int whoami)
+seastar::future<> Heartbeat::add_reporter_peers(int whoami)
 {
-  auto osdmap = service.get_map();
+  auto osdmap = service.get_osdmap_service().get_map();
   // include next and previous up osds to ensure we have a fully-connected set
   set<int> want;
   if (auto next = osdmap->get_next_up_osd_after(whoami); next >= 0) {
@@ -158,17 +157,20 @@ void Heartbeat::add_reporter_peers(int whoami)
   auto subtree = local_conf().get_val<string>("mon_osd_reporter_subtree_level");
   osdmap->get_random_up_osds_by_subtree(
     whoami, subtree, min_down, want, &want);
-  for (auto osd : want) {
-    add_peer(osd, osdmap->get_epoch());
-  }
+  return seastar::parallel_for_each(
+    std::move(want),
+    [epoch=osdmap->get_epoch(), this](int osd) {
+      return add_peer(osd, epoch);
+  });
 }
 
 seastar::future<> Heartbeat::update_peers(int whoami)
 {
   const auto min_peers = static_cast<size_t>(
     local_conf().get_val<int64_t>("osd_heartbeat_min_peers"));
-  return remove_down_peers().then([=](osds_t&& extra) {
-    add_reporter_peers(whoami);
+  return add_reporter_peers(whoami).then([this] {
+    return remove_down_peers();
+  }).then([=](osds_t&& extra) {
     // too many?
     struct iteration_state {
       osds_t::const_iterator where;
@@ -185,13 +187,18 @@ seastar::future<> Heartbeat::update_peers(int whoami)
     });
   }).then([=] {
     // or too few?
-    auto osdmap = service.get_map();
+    vector<int> want;
+    auto osdmap = service.get_osdmap_service().get_map();
     for (auto next = osdmap->get_next_up_osd_after(whoami);
       peers.size() < min_peers && next >= 0 && next != whoami;
       next = osdmap->get_next_up_osd_after(next)) {
-      add_peer(next, osdmap->get_epoch());
+      want.push_back(next);
     }
-    return seastar::now();
+    return seastar::parallel_for_each(
+      std::move(want),
+      [epoch=osdmap->get_epoch(), this](int osd) {
+        return add_peer(osd, epoch);
+    });
   });
 }
 
@@ -257,11 +264,15 @@ seastar::future<> Heartbeat::handle_ping(ceph::net::Connection* conn,
   auto min_message = static_cast<uint32_t>(
     local_conf()->osd_heartbeat_min_size);
   auto reply =
-    make_message<MOSDPing>(m->fsid,
-                           service.get_map()->get_epoch(),
-                           MOSDPing::PING_REPLY,
-                           m->stamp,
-                           min_message);
+    make_message<MOSDPing>(
+      m->fsid,
+      service.get_osdmap_service().get_map()->get_epoch(),
+      MOSDPing::PING_REPLY,
+      m->ping_stamp,
+      m->mono_ping_stamp,
+      service.get_mnow(),
+      service.get_osdmap_service().get_up_epoch(),
+      min_message);
   return conn->send(reply);
 }
 
@@ -275,7 +286,7 @@ seastar::future<> Heartbeat::handle_reply(ceph::net::Connection* conn,
     return seastar::now();
   }
   auto& peer = found->second;
-  auto ping = peer.ping_history.find(m->stamp);
+  auto ping = peer.ping_history.find(m->ping_stamp);
   if (ping == peer.ping_history.end()) {
     // old replies, deprecated by newly sent pings.
     return seastar::now();
@@ -314,6 +325,7 @@ seastar::future<> Heartbeat::send_heartbeats()
   using peers_item_t = typename peers_map_t::value_type;
   return seastar::parallel_for_each(peers,
     [this](peers_item_t& item) {
+      const auto mnow = service.get_mnow();
       const auto now = clock::now();
       const auto deadline =
         now + std::chrono::seconds(local_conf()->osd_heartbeat_grace);
@@ -328,15 +340,19 @@ seastar::future<> Heartbeat::send_heartbeats()
       std::vector<ceph::net::ConnectionRef> conns{info.con_front,
                                                   info.con_back};
       return seastar::parallel_for_each(std::move(conns),
-        [sent_stamp, &reply=reply->second, this] (auto con) {
+	 [sent_stamp, mnow, &reply=reply->second, this] (auto con) {
           if (con) {
             auto min_message = static_cast<uint32_t>(
               local_conf()->osd_heartbeat_min_size);
-            auto ping = make_message<MOSDPing>(monc.get_fsid(),
-                                               service.get_map()->get_epoch(),
-                                               MOSDPing::PING,
-                                               sent_stamp,
-                                               min_message);
+            auto ping = make_message<MOSDPing>(
+	      monc.get_fsid(),
+	      service.get_osdmap_service().get_map()->get_epoch(),
+	      MOSDPing::PING,
+	      sent_stamp,
+	      mnow,
+	      mnow,
+	      service.get_osdmap_service().get_up_epoch(),
+	      min_message);
             return con->send(ping).then([&reply] {
               reply.unacknowledged++;
               return seastar::now();
@@ -359,7 +375,7 @@ seastar::future<> Heartbeat::send_failures()
       }
       auto failed_for = chrono::duration_cast<chrono::seconds>(
         clock::now() - failed_since).count();
-      auto osdmap = service.get_map();
+      auto osdmap = service.get_osdmap_service().get_map();
       auto failure_report =
         make_message<MOSDFailure>(monc.get_fsid(),
                                   osd,
@@ -378,12 +394,13 @@ seastar::future<> Heartbeat::send_failures()
 seastar::future<> Heartbeat::send_still_alive(osd_id_t osd,
                                               const entity_addrvec_t& addrs)
 {
-  auto still_alive = make_message<MOSDFailure>(monc.get_fsid(),
-                                               osd,
-                                               addrs,
-                                               0,
-                                               service.get_map()->get_epoch(),
-                                               MOSDFailure::FLAG_ALIVE);
+  auto still_alive = make_message<MOSDFailure>(
+    monc.get_fsid(),
+    osd,
+    addrs,
+    0,
+    service.get_osdmap_service().get_map()->get_epoch(),
+    MOSDFailure::FLAG_ALIVE);
   return monc.send_message(still_alive).then([=] {
     failure_pending.erase(osd);
     return seastar::now();
