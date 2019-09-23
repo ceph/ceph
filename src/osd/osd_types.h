@@ -3823,6 +3823,100 @@ public:
 WRITE_CLASS_ENCODER(ObjectCleanRegions)
 ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
 
+
+struct OSDOp {
+  ceph_osd_op op;
+  sobject_t soid;
+
+  ceph::buffer::list indata, outdata;
+  errorcode32_t rval = 0;
+
+  OSDOp() {
+    memset(&op, 0, sizeof(ceph_osd_op));
+  }
+
+  OSDOp(const int op_code) {
+    memset(&op, 0, sizeof(ceph_osd_op));
+    op.op = op_code;
+  }
+
+  /**
+   * split a ceph::buffer::list into constituent indata members of a vector of OSDOps
+   *
+   * @param ops [out] vector of OSDOps
+   * @param in  [in] combined data buffer
+   */
+  static void split_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& in);
+
+  /**
+   * merge indata members of a vector of OSDOp into a single ceph::buffer::list
+   *
+   * Notably this also encodes certain other OSDOp data into the data
+   * buffer, including the sobject_t soid.
+   *
+   * @param ops [in] vector of OSDOps
+   * @param out [out] combined data buffer
+   */
+  static void merge_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& out);
+
+  /**
+   * split a ceph::buffer::list into constituent outdata members of a vector of OSDOps
+   *
+   * @param ops [out] vector of OSDOps
+   * @param in  [in] combined data buffer
+   */
+  static void split_osd_op_vector_out_data(std::vector<OSDOp>& ops, ceph::buffer::list& in);
+
+  /**
+   * merge outdata members of a vector of OSDOps into a single ceph::buffer::list
+   *
+   * @param ops [in] vector of OSDOps
+   * @param out [out] combined data buffer
+   */
+  static void merge_osd_op_vector_out_data(std::vector<OSDOp>& ops, ceph::buffer::list& out);
+
+  /**
+   * Clear data as much as possible, leave minimal data for historical op dump
+   *
+   * @param ops [in] vector of OSDOps
+   */
+  static void clear_data(std::vector<OSDOp>& ops);
+};
+std::ostream& operator<<(std::ostream& out, const OSDOp& op);
+
+
+struct pg_log_op_return_item_t {
+  int32_t rval;
+  bufferlist bl;
+  void encode(bufferlist& p) const {
+    using ceph::encode;
+    encode(rval, p);
+    encode(bl, p);
+  }
+  void decode(bufferlist::const_iterator& p) {
+    using ceph::decode;
+    decode(rval, p);
+    decode(bl, p);
+  }
+  void dump(Formatter *f) const {
+    f->dump_int("rval", rval);
+    f->dump_unsigned("bl_length", bl.length());
+  }
+  friend bool operator==(const pg_log_op_return_item_t& lhs,
+			 const pg_log_op_return_item_t& rhs) {
+    return lhs.rval == rhs.rval &&
+      lhs.bl.contents_equal(rhs.bl);
+  }
+  friend bool operator!=(const pg_log_op_return_item_t& lhs,
+			 const pg_log_op_return_item_t& rhs) {
+    return !(lhs == rhs);
+  }
+  friend ostream& operator<<(ostream& out, const pg_log_op_return_item_t& i) {
+    return out << "r=" << i.rval << "+" << i.bl.length() << "b";
+  }
+};
+WRITE_CLASS_ENCODER(pg_log_op_return_item_t)
+
 /**
  * pg_log_entry_t - single entry/event in pg log
  *
@@ -3882,6 +3976,8 @@ struct pg_log_entry_t {
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
   int32_t return_code; // only stored for ERRORs for dup detection
+
+  vector<pg_log_op_return_item_t> op_returns;
 
   __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
@@ -3947,6 +4043,14 @@ struct pg_log_entry_t {
       (op == MODIFY || op == DELETE || op == ERROR);
   }
 
+  void set_op_returns(std::vector<OSDOp>& ops) {
+    op_returns.resize(ops.size());
+    for (unsigned i = 0; i < ops.size(); ++i) {
+      op_returns[i].rval = ops[i].rval;
+      op_returns[i].bl = ops[i].outdata;
+    }
+  }
+
   std::string get_key_name() const;
   void encode_with_checksum(ceph::buffer::list& bl) const;
   void decode_with_checksum(ceph::buffer::list::const_iterator& p);
@@ -3967,12 +4071,16 @@ struct pg_log_dup_t {
   version_t user_version; // the user version for this entry
   int32_t return_code; // only stored for ERRORs for dup detection
 
+  vector<pg_log_op_return_item_t> op_returns;
+
   pg_log_dup_t()
     : user_version(0), return_code(0)
   {}
   explicit pg_log_dup_t(const pg_log_entry_t& entry)
     : reqid(entry.reqid), version(entry.version),
-      user_version(entry.user_version), return_code(entry.return_code)
+      user_version(entry.user_version),
+      return_code(entry.return_code),
+      op_returns(entry.op_returns)
   {}
   pg_log_dup_t(const eversion_t& v, version_t uv,
 	       const osd_reqid_t& rid, int return_code)
@@ -3990,7 +4098,8 @@ struct pg_log_dup_t {
     return reqid == rhs.reqid &&
       version == rhs.version &&
       user_version == rhs.user_version &&
-      return_code == rhs.return_code;
+      return_code == rhs.return_code &&
+      op_returns == rhs.op_returns;
   }
   bool operator!=(const pg_log_dup_t &rhs) const {
     return !(*this == rhs);
@@ -5663,67 +5772,6 @@ struct ScrubMapBuilder {
     return out << ")";
   }
 };
-
-struct OSDOp {
-  ceph_osd_op op;
-  sobject_t soid;
-
-  ceph::buffer::list indata, outdata;
-  errorcode32_t rval = 0;
-
-  OSDOp() {
-    memset(&op, 0, sizeof(ceph_osd_op));
-  }
-
-  OSDOp(const int op_code) {
-    memset(&op, 0, sizeof(ceph_osd_op));
-    op.op = op_code;
-  }
-
-  /**
-   * split a ceph::buffer::list into constituent indata members of a vector of OSDOps
-   *
-   * @param ops [out] vector of OSDOps
-   * @param in  [in] combined data buffer
-   */
-  static void split_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& in);
-
-  /**
-   * merge indata members of a vector of OSDOp into a single ceph::buffer::list
-   *
-   * Notably this also encodes certain other OSDOp data into the data
-   * buffer, including the sobject_t soid.
-   *
-   * @param ops [in] vector of OSDOps
-   * @param out [out] combined data buffer
-   */
-  static void merge_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& out);
-
-  /**
-   * split a ceph::buffer::list into constituent outdata members of a vector of OSDOps
-   *
-   * @param ops [out] vector of OSDOps
-   * @param in  [in] combined data buffer
-   */
-  static void split_osd_op_vector_out_data(std::vector<OSDOp>& ops, ceph::buffer::list& in);
-
-  /**
-   * merge outdata members of a vector of OSDOps into a single ceph::buffer::list
-   *
-   * @param ops [in] vector of OSDOps
-   * @param out [out] combined data buffer
-   */
-  static void merge_osd_op_vector_out_data(std::vector<OSDOp>& ops, ceph::buffer::list& out);
-
-  /**
-   * Clear data as much as possible, leave minimal data for historical op dump
-   *
-   * @param ops [in] vector of OSDOps
-   */
-  static void clear_data(std::vector<OSDOp>& ops);
-};
-
-std::ostream& operator<<(std::ostream& out, const OSDOp& op);
 
 struct watch_item_t {
   entity_name_t name;

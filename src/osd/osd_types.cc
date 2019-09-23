@@ -4555,7 +4555,7 @@ void pg_log_entry_t::decode_with_checksum(ceph::buffer::list::const_iterator& p)
 
 void pg_log_entry_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(13, 4, bl);
+  ENCODE_START(14, 4, bl);
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
@@ -4585,12 +4585,15 @@ void pg_log_entry_t::encode(ceph::buffer::list &bl) const
   if (!extra_reqids.empty())
     encode(extra_reqid_return_codes, bl);
   encode(clean_regions, bl);
+  if (op != ERROR)
+    encode(return_code, bl);
+  encode(op_returns, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(13, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -4650,6 +4653,12 @@ void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
     decode(clean_regions, bl);
   else
     clean_regions.mark_fully_dirty();
+  if (struct_v >= 14) {
+    if (op != ERROR) {
+      decode(return_code, bl);
+    }
+    decode(op_returns, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4677,6 +4686,13 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->close_section();
   f->dump_stream("mtime") << mtime;
   f->dump_int("return_code", return_code);
+  if (!op_returns.empty()) {
+    f->open_array_section("op_returns");
+    for (auto& i : op_returns) {
+      f->dump_object("op", i);
+    }
+    f->close_section();
+  }
   if (snaps.length() > 0) {
     vector<snapid_t> v;
     ceph::buffer::list c = snaps;
@@ -4722,6 +4738,9 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
       << std::left << std::setw(8) << e.get_op_name() << ' '
       << e.soid << " by " << e.reqid << " " << e.mtime
       << " " << e.return_code;
+  if (!e.op_returns.empty()) {
+    out << " " << e.op_returns;
+  }
   if (e.snaps.length()) {
     vector<snapid_t> snaps;
     ceph::buffer::list c = e.snaps;
@@ -4751,21 +4770,25 @@ std::string pg_log_dup_t::get_key_name() const
 
 void pg_log_dup_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(reqid, bl);
   encode(version, bl);
   encode(user_version, bl);
   encode(return_code, bl);
+  encode(op_returns, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_dup_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(reqid, bl);
   decode(version, bl);
   decode(user_version, bl);
   decode(return_code, bl);
+  if (struct_v >= 2) {
+    decode(op_returns, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4775,6 +4798,13 @@ void pg_log_dup_t::dump(Formatter *f) const
   f->dump_stream("version") << version;
   f->dump_stream("user_version") << user_version;
   f->dump_stream("return_code") << return_code;
+  if (!op_returns.empty()) {
+    f->open_array_section("op_returns");
+    for (auto& i : op_returns) {
+      f->dump_object("op", i);
+    }
+    f->close_section();
+  }
 }
 
 void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
@@ -4792,9 +4822,13 @@ void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
 
 
 std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e) {
-  return out << "log_dup(reqid=" << e.reqid <<
+  out << "log_dup(reqid=" << e.reqid <<
     " v=" << e.version << " uv=" << e.user_version <<
-    " rc=" << e.return_code << ")";
+    " rc=" << e.return_code;
+  if (!e.op_returns.empty()) {
+    out << " " << e.op_returns;
+  }
+  return out << ")";
 }
 
 
