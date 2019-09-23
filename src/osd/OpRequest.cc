@@ -113,6 +113,9 @@ bool OpRequest::need_skip_handle_cache() {
 bool OpRequest::need_skip_promote() {
   return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
 }
+bool OpRequest::allows_returnvec() const {
+  return check_rmw(CEPH_OSD_RMW_FLAG_RETURNVEC);
+}
 
 void OpRequest::set_rmw_flags(int flags) {
 #ifdef WITH_LTTNG
@@ -134,6 +137,7 @@ void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); 
 void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
 void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
 void OpRequest::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
+void OpRequest::set_returnvec() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RETURNVEC); }
 
 void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
 #ifdef WITH_LTTNG
