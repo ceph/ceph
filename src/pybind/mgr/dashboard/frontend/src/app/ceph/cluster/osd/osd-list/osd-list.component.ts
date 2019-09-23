@@ -56,7 +56,15 @@ export class OsdListComponent implements OnInit {
   osds = [];
 
   protected static collectStates(osd) {
-    return [osd['in'] ? 'in' : 'out', osd['up'] ? 'up' : 'down'];
+    const states = [osd['in'] ? 'in' : 'out'];
+    if (osd['up']) {
+      states.push('up');
+    } else if (osd.state.includes('destroyed')) {
+      states.push('destroyed');
+    } else {
+      states.push('down');
+    }
+    return states;
   }
 
   constructor(
