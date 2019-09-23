@@ -637,14 +637,18 @@ static inline void
 copy_from_legacy_head(struct ceph_mds_request_head *head,
 			struct ceph_mds_request_head_legacy *legacy)
 {
-	memcpy(&(head->oldest_client_tid), legacy, sizeof(*legacy));
+	struct ceph_mds_request_head_legacy *embedded_legacy =
+		(struct ceph_mds_request_head_legacy *)&head->oldest_client_tid;
+	*embedded_legacy = *legacy;
 }
 
 static inline void
 copy_to_legacy_head(struct ceph_mds_request_head_legacy *legacy,
 			struct ceph_mds_request_head *head)
 {
-	memcpy(legacy, &(head->oldest_client_tid), sizeof(*legacy));
+	struct ceph_mds_request_head_legacy *embedded_legacy =
+		(struct ceph_mds_request_head_legacy *)&head->oldest_client_tid;
+	*legacy = *embedded_legacy;
 }
 
 /* client reply */
@@ -875,10 +879,10 @@ struct ceph_mds_caps_body_legacy {
 			struct ceph_timespec mtime, atime, ctime;
 			struct ceph_file_layout layout;
 			__le32 time_warp_seq;
-		};
+		} __attribute__ ((packed));
 		/* export message */
 		struct ceph_mds_cap_peer peer;
-	};
+	} __attribute__ ((packed));
 } __attribute__ ((packed));
 
 /* cap release msg head */
