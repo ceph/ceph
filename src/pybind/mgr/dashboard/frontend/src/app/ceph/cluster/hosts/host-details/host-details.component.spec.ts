@@ -58,7 +58,6 @@ describe('HostDetailsComponent', () => {
           hostname: 'localhost'
         }
       ];
-      component.selection.update();
     });
 
     it('should recognize a tabset child', () => {

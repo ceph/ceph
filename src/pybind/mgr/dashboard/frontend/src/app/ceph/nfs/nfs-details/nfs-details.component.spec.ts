@@ -51,7 +51,6 @@ describe('NfsDetailsComponent', () => {
         state: 'LOADING'
       }
     ];
-    component.selection.update();
     component.ngOnChanges();
     fixture.detectChanges();
   });
@@ -85,7 +84,6 @@ describe('NfsDetailsComponent', () => {
       }
     });
     component.selection.selected = [newData];
-    component.selection.update();
     component.ngOnChanges();
     expect(component.data).toEqual({
       'Access Type': 'RW',
