@@ -10087,6 +10087,9 @@ int OSD::init_op_flags(OpRequestRef& op)
   if (m->has_flag(CEPH_OSD_FLAG_RWORDERED)) {
     op->set_force_rwordered();
   }
+  if (m->has_flag(CEPH_OSD_FLAG_RETURNVEC)) {
+    op->set_returnvec();
+  }
 
   // set bits based on op codes, called methods.
   for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
