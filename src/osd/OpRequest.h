@@ -39,6 +39,7 @@ struct OpRequest : public TrackedOp {
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
+  bool allows_returnvec() const;
   void set_read();
   void set_write();
   void set_cache();
@@ -49,6 +50,7 @@ struct OpRequest : public TrackedOp {
   void set_skip_handle_cache();
   void set_skip_promote();
   void set_force_rwordered();
+  void set_returnvec();
 
   struct ClassInfo {
     ClassInfo(std::string&& class_name, std::string&& method_name,
