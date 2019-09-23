@@ -116,7 +116,10 @@
  * MON config-key prefix for storing optional remote cluster connectivity
  * parameters
  */
-#define RBD_MIRROR_PEER_CONFIG_KEY_PREFIX "rbd/mirror/peer/"
+#define RBD_MIRROR_CONFIG_KEY_PREFIX          "rbd/mirror/"
+#define RBD_MIRROR_SITE_NAME_CONFIG_KEY       RBD_MIRROR_CONFIG_KEY_PREFIX "site_name"
+#define RBD_MIRROR_PEER_CLIENT_ID_CONFIG_KEY  RBD_MIRROR_CONFIG_KEY_PREFIX "peer_client_id"
+#define RBD_MIRROR_PEER_CONFIG_KEY_PREFIX     RBD_MIRROR_CONFIG_KEY_PREFIX "peer/"
 
 struct rbd_info {
 	ceph_le64 max_id;

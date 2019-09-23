@@ -39,14 +39,14 @@ tasks to configure mirroring using the ``rbd`` command. Mirroring is
 configured on a per-pool basis within the Ceph clusters.
 
 The pool configuration steps should be performed on both peer clusters. These
-procedures assume two clusters, named "local" and "remote", are accessible from
+procedures assume two clusters, named "site-a" and "site-b", are accessible from
 a single host for clarity.
 
 See the `rbd`_ manpage for additional details of how to connect to different
 Ceph clusters.
 
 .. note:: The cluster name in the following examples corresponds to a Ceph
-   configuration file of the same name (e.g. /etc/ceph/remote.conf).  See the
+   configuration file of the same name (e.g. /etc/ceph/site-b.conf).  See the
    `ceph-conf`_ documentation for how to configure multiple clusters.
 
 Enable Mirroring
@@ -66,8 +66,8 @@ The mirroring mode can either be ``pool`` or ``image``:
 
 For example::
 
-        $ rbd --cluster local mirror pool enable image-pool pool
-        $ rbd --cluster remote mirror pool enable image-pool pool
+        $ rbd --cluster site-a mirror pool enable image-pool pool
+        $ rbd --cluster site-b mirror pool enable image-pool pool
 
 Disable Mirroring
 -----------------
@@ -83,23 +83,72 @@ explicitly.
 
 For example::
 
-        $ rbd --cluster local mirror pool disable image-pool
-        $ rbd --cluster remote mirror pool disable image-pool
+        $ rbd --cluster site-a mirror pool disable image-pool
+        $ rbd --cluster site-b mirror pool disable image-pool
 
-Add Cluster Peer
-----------------
+Bootstrap Peers
+---------------
 
 In order for the ``rbd-mirror`` daemon to discover its peer cluster, the peer
-needs to be registered to the pool. To add a mirroring peer Ceph cluster with
-``rbd``, specify the ``mirror pool peer add`` command, the pool name, and a
-cluster specification::
+needs to be registered to the pool and a user account needs to be created.
+This process can be automated with ``rbd`` and the
+``mirror pool peer bootstrap create`` and ``mirror pool peer bootstrap import``
+commands.
+
+To manually create a new bootstrap token with ``rbd``, specify the
+``mirror pool peer bootstrap create`` command, a pool name, along with an
+optional friendly site name to describe the local cluster::
+
+        rbd mirror pool peer bootstrap create [--site-name {local-site-name}] {pool-name}
+
+The output of ``mirror pool peer bootstrap create`` will be a token that should
+be provided to the ``mirror pool peer bootstrap import`` command. For example,
+on site-a::
+
+        $ rbd --cluster site-a mirror pool peer bootstrap create --site-name site-a image-pool
+        eyJmc2lkIjoiOWY1MjgyZGItYjg5OS00NTk2LTgwOTgtMzIwYzFmYzM5NmYzIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFBUnczOWQwdkhvQmhBQVlMM1I4RmR5dHNJQU50bkFTZ0lOTVE9PSIsIm1vbl9ob3N0IjoiW3YyOjE5Mi4xNjguMS4zOjY4MjAsdjE6MTkyLjE2OC4xLjM6NjgyMV0ifQ==
+
+To manually import the bootstrap token created by another cluster with ``rbd``,
+specify the ``mirror pool peer bootstrap import`` command, the pool name, a file
+path to the created token (or '-' to read from standard input), along with an
+optional friendly site name to describe the local cluster and a mirroring
+direction (defaults to rx-tx for bidirectional mirroring, but can also be set
+to rx-only for unidirectional mirroring)::
+
+        rbd mirror pool peer bootstrap import [--site-name {local-site-name}] [--direction {rx-only or rx-tx}] {pool-name} {token-path}
+
+For example, on site-b::
+
+        $ cat <<EOF > token
+        eyJmc2lkIjoiOWY1MjgyZGItYjg5OS00NTk2LTgwOTgtMzIwYzFmYzM5NmYzIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFBUnczOWQwdkhvQmhBQVlMM1I4RmR5dHNJQU50bkFTZ0lOTVE9PSIsIm1vbl9ob3N0IjoiW3YyOjE5Mi4xNjguMS4zOjY4MjAsdjE6MTkyLjE2OC4xLjM6NjgyMV0ifQ==
+        EOF
+        $ rbd --cluster site-b mirror pool peer bootstrap import --site-name site-b image-pool token
+
+Add Cluster Peer Manually
+-------------------------
+
+Cluster peers can be specified manually if desired or if the above bootstrap
+commands are not available with the currently installed Ceph release.
+
+The remote ``rbd-mirror`` daemon will need access to the local cluster to
+perform mirroring. A new local Ceph user should be created for the remote
+daemon to use. To `create a Ceph user`_, with ``ceph`` specify the
+``auth get-or-create`` command, user name, monitor caps, and OSD caps::
+
+        ceph auth get-or-create client.rbd-mirror-peer mon 'profile rbd' osd 'profile rbd'
+
+The resulting keyring should be copied to the other cluster's ``rbd-mirror``
+daemon hosts if not using the Ceph monitor ``config-key`` store described below.
+
+To manually add a mirroring peer Ceph cluster with ``rbd``, specify the
+``mirror pool peer add`` command, the pool name, and a cluster specification::
 
         rbd mirror pool peer add {pool-name} {client-name}@{cluster-name}
 
 For example::
 
-        $ rbd --cluster local mirror pool peer add image-pool client.remote@remote
-        $ rbd --cluster remote mirror pool peer add image-pool client.local@local
+        $ rbd --cluster site-a mirror pool peer add image-pool client.rbd-mirror-peer@site-b
+        $ rbd --cluster site-b mirror pool peer add image-pool client.rbd-mirror-peer@site-a
 
 By default, the ``rbd-mirror`` daemon needs to have access to a Ceph
 configuration file located at ``/etc/ceph/{cluster-name}.conf`` that provides
@@ -112,12 +161,15 @@ stored within the local Ceph monitor ``config-key`` store. To specify the
 peer cluster connection attributes when adding a mirroring peer, use the
 ``--remote-mon-host`` and ``--remote-key-file`` optionals. For example::
 
-        $ rbd --cluster local mirror pool peer add image-pool client.remote@remote --remote-mon-host 192.168.1.1,192.168.1.2 --remote-key-file <(echo 'AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==')
-        $ rbd --cluster local mirror pool info image-pool --all
+        $ cat <<EOF > remote-key-file
+        AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==
+        EOF
+        $ rbd --cluster site-a mirror pool peer add image-pool client.rbd-mirror-peer@site-b --remote-mon-host 192.168.1.1,192.168.1.2 --remote-key-file remote-key-file
+        $ rbd --cluster site-a mirror pool info image-pool --all
         Mode: pool
         Peers: 
-          UUID                                 NAME   CLIENT        MON_HOST                KEY                                      
-          587b08db-3d33-4f32-8af8-421e77abb081 remote client.remote 192.168.1.1,192.168.1.2 AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw== 
+          UUID                                 NAME   CLIENT                 MON_HOST                KEY                                      
+          587b08db-3d33-4f32-8af8-421e77abb081 site-b client.rbd-mirror-peer 192.168.1.1,192.168.1.2 AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw== 
 
 Remove Cluster Peer
 -------------------
@@ -130,8 +182,8 @@ To remove a mirroring peer Ceph cluster with ``rbd``, specify the
 
 For example::
 
-        $ rbd --cluster local mirror pool peer remove image-pool 55672766-c02b-4729-8567-f13a66893445
-        $ rbd --cluster remote mirror pool peer remove image-pool 60c0e299-b38f-4234-91f6-eed0a367be08
+        $ rbd --cluster site-a mirror pool peer remove image-pool 55672766-c02b-4729-8567-f13a66893445
+        $ rbd --cluster site-b mirror pool peer remove image-pool 60c0e299-b38f-4234-91f6-eed0a367be08
 
 Data Pools
 ----------
@@ -177,7 +229,7 @@ the ``feature enable`` command, the pool and image name, and the feature name::
 
 For example::
 
-        $ rbd --cluster local feature enable image-pool/image-1 journaling
+        $ rbd --cluster site-a feature enable image-pool/image-1 journaling
 
 .. note:: The journaling feature is dependent on the exclusive-lock feature. If
    the exclusive-lock feature is not already enabled, it should be enabled prior
@@ -198,7 +250,7 @@ To enable mirroring for a specific image with ``rbd``, specify the
 
 For example::
 
-        $ rbd --cluster local mirror image enable image-pool/image-1
+        $ rbd --cluster site-a mirror image enable image-pool/image-1
 
 Disable Image Mirroring
 -----------------------
@@ -210,7 +262,7 @@ To disable mirroring for a specific image with ``rbd``, specify the
 
 For example::
 
-        $ rbd --cluster local mirror image disable image-pool/image-1
+        $ rbd --cluster site-a mirror image disable image-pool/image-1
 
 Image Promotion and Demotion
 ----------------------------
@@ -232,7 +284,7 @@ To demote a specific image to non-primary with ``rbd``, specify the
 
 For example::
 
-        $ rbd --cluster local mirror image demote image-pool/image-1
+        $ rbd --cluster site-a mirror image demote image-pool/image-1
 
 To demote all primary images within a pool to non-primary with ``rbd``, specify
 the ``mirror pool demote`` command along with the pool name::
@@ -241,7 +293,7 @@ the ``mirror pool demote`` command along with the pool name::
 
 For example::
 
-        $ rbd --cluster local mirror pool demote image-pool
+        $ rbd --cluster site-a mirror pool demote image-pool
 
 To promote a specific image to primary with ``rbd``, specify the
 ``mirror image promote`` command along with the pool and image name::
@@ -250,7 +302,7 @@ To promote a specific image to primary with ``rbd``, specify the
 
 For example::
 
-        $ rbd --cluster remote mirror image promote image-pool/image-1
+        $ rbd --cluster site-b mirror image promote image-pool/image-1
 
 To promote all non-primary images within a pool to primary with ``rbd``, specify
 the ``mirror pool promote`` command along with the pool name::
@@ -259,7 +311,7 @@ the ``mirror pool promote`` command along with the pool name::
 
 For example::
 
-        $ rbd --cluster local mirror pool promote image-pool
+        $ rbd --cluster site-a mirror pool promote image-pool
 
 .. tip:: Since the primary / non-primary status is per-image, it is possible to
    have two clusters split the IO load and stage failover / failback.

@@ -2270,6 +2270,16 @@ librados::Rados::~Rados()
   shutdown();
 }
 
+void librados::Rados::from_rados_t(rados_t cluster, Rados &rados) {
+  if (rados.client) {
+    rados.client->put();
+  }
+  rados.client = static_cast<RadosClient*>(cluster);
+  if (rados.client) {
+    rados.client->get();
+  }
+}
+
 int librados::Rados::init(const char * const id)
 {
   return rados_create((rados_t *)&client, id);
