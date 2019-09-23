@@ -329,7 +329,6 @@ void AsyncMessenger::ready()
     }
   }
 
-  std::lock_guard l{lock};
   for (auto &&p : processors)
     p->start();
   dispatch_queue.start();
