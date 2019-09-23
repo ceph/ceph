@@ -274,8 +274,8 @@ public:
   bool is_deleted() const {
     return recovery_state.is_deleted();
   }
-  bool is_replica() const {
-    return recovery_state.is_replica();
+  bool is_nonprimary() const {
+    return recovery_state.is_nonprimary();
   }
   bool is_primary() const {
     return recovery_state.is_primary();

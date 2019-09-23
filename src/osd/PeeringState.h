@@ -2064,9 +2064,11 @@ public:
   const PastIntervals& get_past_intervals() const {
     return past_intervals;
   }
-  bool is_replica() const {
-    return role > 0;
+  /// acting osd that is not the primary
+  bool is_nonprimary() const {
+    return role >= 0 && pg_whoami != primary;
   }
+  /// primary osd
   bool is_primary() const {
     return pg_whoami == primary;
   }
