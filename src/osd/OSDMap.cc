@@ -5413,7 +5413,8 @@ void print_osd_utilization(const OSDMap& osdmap,
   }
 }
 
-void OSDMap::check_health(health_check_map_t *checks) const
+void OSDMap::check_health(CephContext *cct,
+			  health_check_map_t *checks) const
 {
   int num_osds = get_num_osds();
 
@@ -5837,6 +5838,27 @@ void OSDMap::check_health(health_check_map_t *checks) const
       ss << nearfull_detail.size() << " pool(s) nearfull";
       auto& d = checks->add("POOL_NEARFULL", HEALTH_WARN, ss.str());
       d.detail.swap(nearfull_detail);
+    }
+  }
+
+  // POOL_PG_NUM_NOT_POWER_OF_TWO
+  if (cct->_conf.get_val<bool>("mon_warn_on_pool_pg_num_not_power_of_two")) {
+    list<string> detail;
+    for (auto it : get_pools()) {
+      if (!isp2(it.second.get_pg_num_target())) {
+	ostringstream ss;
+	ss << "pool '" << get_pool_name(it.first)
+	   << "' pg_num " << it.second.get_pg_num_target()
+	   << " is not a power of two";
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have non-power-of-two pg_num";
+      auto& d = checks->add("POOL_PG_NUM_NOT_POWER_OF_TWO", HEALTH_WARN,
+			    ss.str());
+      d.detail.swap(detail);
     }
   }
 }

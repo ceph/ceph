@@ -1735,6 +1735,11 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("issue POOL_APP_NOT_ENABLED health warning if pool has not application enabled"),
 
+    Option("mon_warn_on_pool_pg_num_not_power_of_two", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two pg_num value"),
+
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mgr")

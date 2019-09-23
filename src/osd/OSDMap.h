@@ -1499,7 +1499,7 @@ public:
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }
 
-  void check_health(health_check_map_t *checks) const;
+  void check_health(CephContext *cct, health_check_map_t *checks) const;
 
   int parse_osd_id_list(const vector<string>& ls,
 			set<int> *out,

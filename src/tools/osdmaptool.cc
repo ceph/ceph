@@ -739,7 +739,7 @@ skip_upmap:
 
   if (health) {
     health_check_map_t checks;
-    osdmap.check_health(&checks);
+    osdmap.check_health(g_ceph_context, &checks);
     JSONFormatter jf(true);
     jf.dump_object("checks", checks);
     jf.flush(cout);
