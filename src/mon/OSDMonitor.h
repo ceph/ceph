@@ -566,10 +566,6 @@ private:
   bool try_prune_purged_snaps();
   int _lookup_snap(bool purged, int64_t pool, snapid_t snap,
 		   snapid_t *begin, snapid_t *end);
-  int lookup_removed_snap(int64_t pool, snapid_t snap,
-			  snapid_t *begin, snapid_t *end) {
-    return _lookup_snap(false, pool, snap, begin,end);
-  }
   int lookup_purged_snap(int64_t pool, snapid_t snap,
 			 snapid_t *begin, snapid_t *end) {
     return _lookup_snap(true, pool, snap, begin,end);
