@@ -154,17 +154,18 @@ void Processor::start()
   ldout(msgr->cct, 1) << __func__ << dendl;
 
   // start thread
-  worker->center.submit_to(worker->center.get_id(), [this]() {
-      for (auto& listen_socket : listen_sockets) {
-	if (listen_socket) {
-          if (listen_socket.fd() == -1) {
-            ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
-            return;
-          }
-	  worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE,
-					   listen_handler); }
+  if (listen_sockets.size()) {
+    worker->center.submit_to(worker->center.get_id(), [this]() {
+        for (auto& listen_socket : listen_sockets) {
+	  if (listen_socket) {
+	    if (listen_socket.fd() == -1) {
+	      ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
+	      return;
+	    }
+	    worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE, listen_handler); }
       }
     }, false);
+  }
 }
 
 void Processor::accept()
