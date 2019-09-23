@@ -567,8 +567,7 @@ private:
   int lookup_purged_snap(int64_t pool, snapid_t snap,
 			 snapid_t *begin, snapid_t *end);
 
-  void insert_snap_update(
-    bool purged,
+  void insert_purged_snap_update(
     int64_t pool,
     snapid_t start, snapid_t end,
     epoch_t epoch,
