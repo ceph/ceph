@@ -152,6 +152,10 @@ class RgwBucket(RgwRESTController):
             raise DashboardException(e, http_status_code=500, component='rgw')
 
     def set(self, bucket, bucket_id, uid):
+        # When linking a non-tenant-user owned bucket to a tenanted user, we
+        # need to prefix bucket name with '/'. e.g. photos -> /photos
+        if '$' in uid and '/' not in bucket:
+            bucket = '/{}'.format(bucket)
         result = self.proxy('PUT', 'bucket', {
             'bucket': bucket,
             'bucket-id': bucket_id,
