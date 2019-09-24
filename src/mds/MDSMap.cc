@@ -505,6 +505,15 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
     ss << "multi-active mds while there are snapshots possibly created by pre-mimic MDS";
     check.detail.push_back(ss.str());
   }
+
+  if (get_inline_data_enabled()) {
+    health_check_t &check = checks->add(
+      "FS_INLINE_DATA_DEPRECATED", HEALTH_WARN,
+      "%num% filesystem%plurals% with deprecated feature inline_data", 1);
+    stringstream ss;
+    ss << "fs " << fs_name << " has deprecated feature inline_data enabled.";
+    check.detail.push_back(ss.str());
+  }
 }
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
