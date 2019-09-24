@@ -145,13 +145,10 @@ public:
     retry_attempt = req->get_retry_attempt();
     do_redirect = false;
 
-    // zero out ops payload_len and possibly out data
-    for (unsigned i = 0; i < ops.size(); i++) {
-      if (ignore_out_data &&
-	  (ceph_osd_op_mode_modify(ops[i].op.op) ||
-	   ceph_osd_op_mode_cache(ops[i].op.op))) {
-	// WIP: we will soon support some limited payload here
-	ceph_assert(ops[i].outdata.length() == 0);
+    // zero out data?
+    if (ignore_out_data) {
+      for (unsigned i = 0; i < ops.size(); i++) {
+	ops[i].outdata.clear();
       }
     }
   }
