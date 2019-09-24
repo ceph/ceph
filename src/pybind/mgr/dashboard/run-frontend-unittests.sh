@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 failed=false
-: ${CEPH_ROOT:=$PWD/../../../../}
+SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
+: ${CEPH_ROOT:=$SCRIPTPATH/../../../../}
+
 cd $CEPH_ROOT/src/pybind/mgr/dashboard/frontend
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
 if [ `uname` != "FreeBSD" ]; then
