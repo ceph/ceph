@@ -1068,6 +1068,15 @@ class TestOSD(TestArgparse):
                                    'erasure', 'A-Za-z0-9-_.', 'ruleset^^'])
         self.assert_valid_command(['osd', 'pool', 'create', 'poolname'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
+        # invalid pg_num and pgp_num, like "-1", could spill over to
+        # erasure_code_profile and rule as they are valid profile and rule
+        # names, so validate_commands() cannot identify such cases.
+        # but if they are matched by profile and rule, the "rule" argument
+        # won't get a chance to be matched anymore.
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+                                                    '-1', '-1',
+                                                    'ruleset']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
