@@ -54,6 +54,7 @@
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_torrent.h"
+#include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
 
@@ -4338,6 +4339,9 @@ void RGWPutObj::execute(optional_yield y)
   std::optional<RGWPutObj_Compress> compressor;
   std::optional<RGWPutObj_Torrent> torrent;
 
+  /* XXX Cksum::DigestVariant was designed to avoid allocation, but going with
+   * factory method to avoid issues with move assignment when wrapped */
+  std::unique_ptr<rgw::putobj::RGWPutObj_Cksum> cksum_filter;
   std::unique_ptr<rgw::sal::DataProcessor> encrypt;
   std::unique_ptr<rgw::sal::DataProcessor> run_lua;
 
@@ -4376,7 +4380,12 @@ void RGWPutObj::execute(optional_yield y)
     if (run_lua) {
       filter = &*run_lua;
     }
-  }
+    /* optional streaming checksum */
+    cksum_filter = rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env);
+    if (cksum_filter) {
+      filter = &*cksum_filter;
+    }
+  } /* !append */
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
   do {
     bufferlist data;
@@ -4502,6 +4511,28 @@ void RGWPutObj::execute(optional_yield y)
   }
   bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+  if (cksum_filter) {
+    auto cksum_verify =
+      cksum_filter->verify(*s->info.env); // valid or no supplied cksum
+    auto& cksum = get<1>(cksum_verify);
+    if (std::get<0>(cksum_verify)) {
+      buffer::list cksum_bl;
+      cksum_bl.append(cksum.to_string());
+      emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
+    } else {
+      /* content checksum mismatch */
+      const auto& hdr = cksum_filter->header();
+      ldpp_dout(this, 4)
+	<< fmt::format("{} content checksum mismatch", hdr.second)
+	<< fmt::format("\n\tcalculated={} != \n\texpected={}",
+		       cksum.to_armor(),
+		       cksum_filter->expected(*s->info.env))
+	<< dendl;
+      op_ret = -ERR_BAD_DIGEST;
+      return;
+    }
+  }
 
   populate_with_generic_attrs(s, attrs);
   op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
