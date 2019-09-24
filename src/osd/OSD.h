@@ -1114,6 +1114,8 @@ class OSD : public Dispatcher,
   // Tick timer for those stuff that do not need osd_lock
   ceph::mutex tick_timer_lock = ceph::make_mutex("OSD::tick_timer_lock");
   SafeTimer tick_timer_without_osd_lock;
+  ceph::mutex tick_timer_slow_op_lock;
+  SafeTimer tick_timer_check_slow_ops;
   std::string gss_ktfile_client{};
 
 public:
@@ -1160,6 +1162,7 @@ protected:
   void create_recoverystate_perf();
   void tick();
   void tick_without_osd_lock();
+  void tick_check_slow_ops();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
 
@@ -1258,6 +1261,7 @@ public:
 private:
   class C_Tick;
   class C_Tick_WithoutOSDLock;
+  class C_Tick_CheckSlowOps;
 
   // -- config settings --
   float m_osd_pg_epoch_max_lag_factor;

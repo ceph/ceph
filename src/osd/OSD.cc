@@ -2100,6 +2100,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   Dispatcher(cct_),
   tick_timer(cct, osd_lock),
   tick_timer_without_osd_lock(cct, tick_timer_lock),
+  tick_timer_slow_op_lock("OSD::tick_timer_slow_op_lock"),
+  tick_timer_check_slow_ops(cct, tick_timer_slow_op_lock),
   gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
@@ -2761,6 +2763,15 @@ class OSD::C_Tick_WithoutOSDLock : public Context {
   }
 };
 
+class OSD::C_Tick_CheckSlowOps : public Context {
+  OSD *osd;
+  public:
+  explicit C_Tick_CheckSlowOps(OSD *o) : osd(o) {}
+  void finish(int r) override {
+    osd->tick_check_slow_ops();
+  }
+};
+
 int OSD::enable_disable_fuse(bool stop)
 {
 #ifdef HAVE_LIBFUSE
@@ -2878,6 +2889,7 @@ int OSD::init()
 
   tick_timer.init();
   tick_timer_without_osd_lock.init();
+  tick_timer_check_slow_ops.init();
   service.recovery_request_timer.init();
   service.sleep_timer.init();
 
@@ -3200,6 +3212,11 @@ int OSD::init()
     std::lock_guard l(tick_timer_lock);
     tick_timer_without_osd_lock.add_event_after(get_tick_interval(),
 						new C_Tick_WithoutOSDLock(this));
+  }
+  {
+    std::lock_guard l(tick_timer_slow_op_lock);
+    tick_timer_check_slow_ops.add_event_after(get_tick_interval(),
+					      new C_Tick_CheckSlowOps(this));
   }
 
   osd_lock.unlock();
@@ -3641,6 +3658,10 @@ int OSD::shutdown()
   {
     std::lock_guard l(tick_timer_lock);
     tick_timer_without_osd_lock.shutdown();
+  }
+  {
+    std::lock_guard l(tick_timer_slow_op_lock);
+    tick_timer_check_slow_ops.shutdown();
   }
 
   // note unmount epoch
@@ -5395,10 +5416,17 @@ void OSD::tick_without_osd_lock()
     }
   }
 
-  mgrc.update_daemon_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(get_tick_interval(),
 					      new C_Tick_WithoutOSDLock(this));
+}
+
+void OSD::tick_check_slow_ops() 
+{
+  mgrc.update_daemon_health(get_health_metrics());
+
+  tick_timer_check_slow_ops.add_event_after(get_tick_interval(),
+					      new C_Tick_CheckSlowOps(this));
 }
 
 // Usage:
