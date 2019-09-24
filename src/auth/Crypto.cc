@@ -68,6 +68,8 @@ void CryptoRandom::get_bytes(char *buf, int len)
   if (unlikely(fd >= 0)) {
     ret = safe_read_exact(fd, buf, len);
   } else {
+    // getentropy() reads up to 256 bytes
+    assert(len <= 256);
     ret = TEMP_FAILURE_RETRY(::getentropy(buf, len));
   }
   if (ret < 0) {
