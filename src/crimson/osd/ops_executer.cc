@@ -376,7 +376,7 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
           osd_op.rval = bl.length();
           osd_op.outdata = std::move(bl);
           return seastar::now();
-        }, read_errorator::pass_further{});
+        });
     });
   case CEPH_OSD_OP_GETXATTR:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {

@@ -481,6 +481,12 @@ struct errorator {
                  std::forward<ErrorFuncTail>(error_func_tail)...));
     }
 
+    template <class ValueFunc>
+    auto safe_then(ValueFunc&& value_func) {
+      return safe_then(std::forward<ValueFunc>(value_func),
+                       errorator_type::pass_further{});
+    }
+
     template <class Func>
     void then(Func&&) = delete;
 
