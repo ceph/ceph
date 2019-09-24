@@ -5536,26 +5536,11 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  map<string, bufferlist> attrs;
-  attrs = s->bucket_attrs;
-  if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
-      aiter != attrs.end())
-  {
-    bufferlist::const_iterator iter{&aiter->second};
-    try {
-      rgw::IAM::PublicAccessConfiguration access_conf;
-      access_conf.decode(iter);
-      if (access_conf.block_public_acls() && new_policy.IsPublic()) {
-	op_ret = -EACCES;
-	return;
-      }
-    } catch (const buffer::error& e) {
-      ldpp_dout(this, 0) << __func__ <<  "decode access conf failed" << dendl;
-      op_ret = -EIO;
-      return;
-    }
+  if (auto access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
+      access_conf && access_conf->block_public_acls() && new_policy.IsPublic()) {
+    op_ret = -EACCES;
+    return;
   }
-
   new_policy.encode(bl);
   if (!s->object.empty()) {
     obj = rgw_obj(s->bucket, s->object);
@@ -5563,6 +5548,7 @@ void RGWPutACLs::execute()
     //if instance is empty, we should modify the latest object
     op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_ACL, bl);
   } else {
+    map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							  &s->bucket_info.objv_tracker,
@@ -7706,23 +7692,12 @@ void RGWPutBucketPolicy::execute()
   try {
     const Policy p(s->cct, s->bucket_tenant, data);
     auto attrs = s->bucket_attrs;
-    if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
-        aiter != attrs.end())
-      {
-        bufferlist::const_iterator iter{&aiter->second};
-        try {
-          rgw::IAM::PublicAccessConfiguration access_conf;
-          access_conf.decode(iter);
-          if (access_conf.block_public_policy() && rgw::IAM::IsPublic(p)) {
-            op_ret = -EACCES;
-            return;
-          }
-        } catch (const buffer::error& e) {
-          ldpp_dout(this, 0) << __func__ <<  "decode access conf failed" << dendl;
-          op_ret = -EIO;
-          return;
-        }
-      }
+    if (auto access_conf = get_public_access_conf_from_attr(attrs);
+        access_conf && access_conf->block_public_policy() && rgw::IAM::IsPublic(p))
+    {
+        op_ret = -EACCES;
+        return;
+    }
 
     op_ret = retry_raced_bucket_write(store->getRados(), s, [&p, this, &attrs] {
 	attrs[RGW_ATTR_IAM_POLICY].clear();
