@@ -86,6 +86,7 @@ using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
 using rgw::IAM::Policy;
+using rgw::IAM::PublicAccessConfiguration;
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
@@ -292,6 +293,24 @@ static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
   } else {
     return none;
   }
+}
+
+static boost::optional<PublicAccessConfiguration>
+get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
+{
+  if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+      aiter != attrs.end())
+    {
+      bufferlist::const_iterator iter{&aiter->second};
+      PublicAccessConfiguration access_conf;
+      try {
+        access_conf.decode(iter);
+      } catch (const buffer::error& e) {
+        return boost::none;
+      }
+      return access_conf;
+    }
+  return boost::none;
 }
 
 vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
@@ -3613,6 +3632,14 @@ int RGWPutObj::verify_permission()
 	return -EACCES;
       }
     }
+  }
+
+  auto access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
+  if (access_conf && access_conf->block_public_acls()) {
+    if (s->canned_acl.compare("public-read") ||
+        s->canned_acl.compare("public-read-write") ||
+        s->canned_acl.compare("authenticated-read"))
+      return -EACCES;
   }
 
   auto op_ret = get_params();
