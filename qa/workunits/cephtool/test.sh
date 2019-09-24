@@ -259,7 +259,7 @@ function test_mon_injectargs_SI()
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 1G
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 1000000000
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
-  check_response "'10F': (22) Invalid argument"
+  check_response "(22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
@@ -290,7 +290,7 @@ function test_mon_injectargs_IEC()
   $SUDO ceph daemon mon.a config set mon_data_size_warn 16Gi
   expect_config_value "mon.a" "mon_data_size_warn" 17179869184
   $SUDO ceph daemon mon.a config set mon_data_size_warn 10F > $TMPFILE || true
-  check_response "'10F': (22) Invalid argument"
+  check_response "(22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_data_size_warn 15000000000'
   expect_config_value "mon.a" "mon_data_size_warn" 15000000000
