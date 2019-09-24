@@ -84,16 +84,33 @@ TEST(ClsHello, WriteReturnData) {
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
+  // this will return nothing -- not flag set
   bufferlist in, out;
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "writes_dont_return_data", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "write_return_data", in, out));
   ASSERT_EQ(std::string(), std::string(out.c_str(), out.length()));
 
+  // this will return return an error due to unexpected input
   char buf[4096];
   memset(buf, 1, sizeof(buf));
   in.append(buf, sizeof(buf));
-  ASSERT_EQ(-EINVAL, ioctx.exec("myobject2", "hello", "writes_dont_return_data", in, out));
+  ASSERT_EQ(-EINVAL, ioctx.exec("myobject2", "hello", "write_return_data", in, out));
   ASSERT_EQ(std::string("too much input data!"), std::string(out.c_str(), out.length()));
   ASSERT_EQ(-ENOENT, ioctx.getxattr("myobject2", "foo", out));
+
+  // this *will* return data due to the RETURNVEC flag
+  in.clear();
+  out.clear();
+  int rval;
+  ObjectWriteOperation o;
+  o.exec("hello", "write_return_data", in, &out, &rval);
+  librados::AioCompletion *completion = cluster.aio_create_completion();
+  ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
+				 librados::OPERATION_RETURNVEC));
+  completion->wait_for_safe();
+  ASSERT_EQ(42, completion->get_return_value());
+  ASSERT_EQ(42, rval);
+  out.hexdump(std::cout);
+  ASSERT_EQ("you might see this", std::string(out.c_str(), out.length()));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
