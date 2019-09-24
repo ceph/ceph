@@ -30,6 +30,33 @@ endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
+set(blake3_srcs
+  ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3.c
+  ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_dispatch.c
+  ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_portable.c)
+
+if (HAVE_INTEL)
+  # restore compiler detected assembler, following use gas syntax
+  set(CMAKE_ASM_FLAGS ${SAVE_CMAKE_ASM_FLAGS})
+  set(CMAKE_ASM_COMPILER ${SAVE_CMAKE_ASM_COMPILER})
+  if(WIN32)
+  list(APPEND blake3_srcs
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_sse2_x86-64_windows_gnu.S
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_sse41_x86-64_windows_gnu.S
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_avx2_x86-64_windows_gnu.S
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_avx512_x86-64_windows_gnu.S)
+  else()
+  list(APPEND blake3_srcs
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3.c
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_dispatch.c
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_portable.c
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_sse2_x86-64_unix.S
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_sse41_x86-64_unix.S
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_avx2_x86-64_unix.S
+    ${CMAKE_SOURCE_DIR}/src/BLAKE3/c/blake3_avx512_x86-64_unix.S)
+  endif()
+endif()
+
 set(librgw_common_srcs
   services/svc_finisher.cc
   services/svc_bi_rados.cc
@@ -58,6 +85,7 @@ set(librgw_common_srcs
   services/svc_user_rados.cc
   services/svc_zone.cc
   services/svc_zone_utils.cc
+  ${blake3_srcs}
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc

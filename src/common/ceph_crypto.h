@@ -19,6 +19,7 @@
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/hmac.h>
+#include "BLAKE3/c/blake3.h"
 
 #include "include/ceph_assert.h"
 
@@ -48,6 +49,26 @@ namespace TOPNSPC::crypto {
       DigestException(const char* what_arg) : runtime_error(what_arg)
 	{}
   };
+
+  class Blake3 {
+    private:
+      blake3_hasher h;
+
+    public:
+      static constexpr uint16_t digest_size = BLAKE3_OUT_LEN /* 32 bytes */;
+
+      Blake3() { Restart(); }
+
+      void Restart() { blake3_hasher_init(&h); }
+
+      void Update(const unsigned char *data, uint64_t len) {
+	blake3_hasher_update(&h, data, len);
+      }
+
+      void Final(unsigned char* digest) {
+	blake3_hasher_finalize(&h, digest, digest_size);
+      }
+  }; /* Blake3 */
 
   namespace ssl {
     class OpenSSLDigest {
@@ -89,7 +110,6 @@ namespace TOPNSPC::crypto {
         static constexpr size_t digest_size = CEPH_CRYPTO_SHA512_DIGESTSIZE;
         SHA512 () : OpenSSLDigest(EVP_sha512()) { }
     };
-
 
 # if OPENSSL_VERSION_NUMBER < 0x10100000L
   class HMAC {
