@@ -121,6 +121,7 @@ authentication keyring.
     LazyIO <lazyio>
     Distributed Metadata Cache <mdcache>
     FS volume and subvolumes <fs-volumes>
+    Dynamic Metadata Management in CephFS <dynamic-metadata-management>
 
 .. toctree:: 
    :hidden:
