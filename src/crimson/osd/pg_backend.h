@@ -44,7 +44,8 @@ public:
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
-  seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
+  using get_os_errorator = crimson::errorator<crimson::ct_error::enoent>;
+  get_os_errorator::future<cached_os_t> get_object_state(const hobject_t& oid);
   seastar::future<> evict_object_state(const hobject_t& oid);
 
   using read_errorator = ll_read_errorator::extend<
