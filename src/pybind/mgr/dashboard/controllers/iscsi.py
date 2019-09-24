@@ -228,9 +228,10 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target already exists',
                                      code='target_already_exists',
                                      component='iscsi')
-        IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups)
+        settings = IscsiClient.instance().get_settings()
+        IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
         IscsiTarget._create(target_iqn, target_controls, acl_enabled, portals, disks, clients,
-                            groups, 0, 100, config)
+                            groups, 0, 100, config, settings)
 
     @iscsi_target_task('edit', {'target_iqn': '{target_iqn}'})
     def set(self, target_iqn, new_target_iqn=None, target_controls=None, acl_enabled=None,
@@ -250,11 +251,12 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target IQN already in use',
                                      code='target_iqn_already_in_use',
                                      component='iscsi')
-        IscsiTarget._validate(new_target_iqn, target_controls, portals, disks, groups)
+        settings = IscsiClient.instance().get_settings()
+        IscsiTarget._validate(new_target_iqn, target_controls, portals, disks, groups, settings)
         config = IscsiTarget._delete(target_iqn, config, 0, 50, new_target_iqn, target_controls,
                                      portals, disks, clients, groups)
         IscsiTarget._create(new_target_iqn, target_controls, acl_enabled, portals, disks, clients,
-                            groups, 50, 100, config)
+                            groups, 50, 100, config, settings)
 
     @staticmethod
     def _delete(target_iqn, config, task_progress_begin, task_progress_end, new_target_iqn=None,
@@ -396,7 +398,11 @@ class IscsiTarget(RESTController):
         if not new_disk:
             return True
         old_disk = IscsiTarget._get_disk(target['disks'], image_id)
-        if new_disk != old_disk:
+        new_disk_without_controls = deepcopy(new_disk)
+        new_disk_without_controls.pop('controls')
+        old_disk_without_controls = deepcopy(old_disk)
+        old_disk_without_controls.pop('controls')
+        if new_disk_without_controls != old_disk_without_controls:
             return True
         return False
 
@@ -417,13 +423,12 @@ class IscsiTarget(RESTController):
         return False
 
     @staticmethod
-    def _validate(target_iqn, target_controls, portals, disks, groups):
+    def _validate(target_iqn, target_controls, portals, disks, groups, settings):
         if not target_iqn:
             raise DashboardException(msg='Target IQN is required',
                                      code='target_iqn_required',
                                      component='iscsi')
 
-        settings = IscsiClient.instance().get_settings()
         minimum_gateways = max(1, settings['config']['minimum_gateways'])
         portals_by_host = IscsiTarget._get_portals_by_host(portals)
         if len(portals_by_host.keys()) < minimum_gateways:
@@ -541,7 +546,7 @@ class IscsiTarget(RESTController):
     @staticmethod
     def _create(target_iqn, target_controls, acl_enabled,
                 portals, disks, clients, groups,
-                task_progress_begin, task_progress_end, config):
+                task_progress_begin, task_progress_end, config, settings):
         target_config = config['targets'].get(target_iqn, None)
         TaskManager.current_task().set_progress(task_progress_begin)
         portals_by_host = IscsiTarget._get_portals_by_host(portals)
@@ -571,19 +576,29 @@ class IscsiTarget(RESTController):
                 pool = disk['pool']
                 image = disk['image']
                 image_id = '{}/{}'.format(pool, image)
+                backstore = disk['backstore']
                 if image_id not in config['disks']:
-                    backstore = disk['backstore']
                     IscsiClient.instance(gateway_name=gateway_name).create_disk(pool,
                                                                                 image,
                                                                                 backstore)
                 if not target_config or image_id not in target_config['disks']:
                     IscsiClient.instance(gateway_name=gateway_name).create_target_lun(target_iqn,
                                                                                       image_id)
-                    controls = disk['controls']
-                    if controls:
-                        IscsiClient.instance(gateway_name=gateway_name).reconfigure_disk(pool,
-                                                                                         image,
-                                                                                         controls)
+
+                controls = disk['controls']
+                d_conf_controls = {}
+                if image_id in config['disks']:
+                    d_conf_controls = config['disks'][image_id]['controls']
+                    disk_default_controls = settings['disk_default_controls'][backstore]
+                    for old_control in d_conf_controls.keys():
+                        # If control was removed, restore the default value
+                        if old_control not in controls:
+                            controls[old_control] = disk_default_controls[old_control]
+
+                if (image_id not in config['disks'] or d_conf_controls != controls) and controls:
+                    IscsiClient.instance(gateway_name=gateway_name).reconfigure_disk(pool,
+                                                                                     image,
+                                                                                     controls)
                 TaskManager.current_task().inc_progress(task_progress_inc)
             for client in clients:
                 client_iqn = client['client_iqn']
