@@ -84,7 +84,8 @@ describe('OsdListComponent', () => {
       CephModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      CoreModule
+      CoreModule,
+      RouterTestingModule
     ],
     declarations: [],
     providers: [
