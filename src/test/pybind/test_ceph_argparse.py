@@ -1258,8 +1258,10 @@ class TestConfigKey(TestArgparse):
 
     def test_list(self):
         self.check_no_arg('config-key', 'list')
+
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 &&
-#  PYTHONPATH=pybind nosetests --stop \
-#  test/pybind/test_ceph_argparse.py # test_ceph_argparse.py:TestOSD.test_rm"
+# compile-command: "cd ../../..; cmake --build build --target get_command_descriptions -j4 &&
+#  CEPH_BIN=build/bin \
+#  PYTHONPATH=src/pybind nosetests --stop \
+#  src/test/pybind/test_ceph_argparse.py:TestOSD.test_rm"
 # End:
