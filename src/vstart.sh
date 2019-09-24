@@ -164,6 +164,7 @@ conf_fn="$CEPH_CONF_PATH/ceph.conf"
 keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
+inc_osd_num=0
 
 msgr="21"
 
@@ -207,6 +208,7 @@ usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
+usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 
 usage_exit() {
     printf "$usage"
@@ -234,6 +236,16 @@ case $1 in
         ;;
     --new | -n )
         new=1
+        ;;
+    --inc-osd )
+        new=0
+        kill_all=0
+        inc_osd_num=$2
+        if [ "$inc_osd_num" == "" ]; then
+            inc_osd_num=1
+        else
+            shift
+        fi
         ;;
     --not-new | -N )
 	new=0
@@ -798,9 +810,18 @@ EOF
 }
 
 start_osd() {
-    for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
+    if [ $inc_osd_num -gt 0 ]; then
+        old_maxosd=$($CEPH_BIN/ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+        start=$old_maxosd
+        end=$(($start-1+$inc_osd_num))
+        overwrite_conf=1 # fake wconf
+    else
+        start=0
+        end=$(($CEPH_NUM_OSD-1))
+    fi
+    for osd in `seq $start $end`
     do
-	if [ "$new" -eq 1 ]; then
+	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
 [osd.$osd]
         host = $HOSTNAME
@@ -854,6 +875,11 @@ EOF
             $extra_seastar_args $extra_osd_args \
             -i $osd $ARGS $COSD_ARGS
     done
+    if [ $inc_osd_num -gt 0 ]; then
+        # update num osd
+        new_maxosd=$($CEPH_BIN/ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+        sed -i "s/num osd = .*/num osd = $new_maxosd/g" $conf_fn
+    fi
 }
 
 start_mgr() {
@@ -1029,12 +1055,16 @@ fi
 # sudo if btrfs
 [ -d $CEPH_DEV_DIR/osd0/. ] && [ -e $CEPH_DEV_DIR/sudo ] && SUDO="sudo"
 
-prun $SUDO rm -f core*
+if [ $inc_osd_num -eq 0 ]; then
+    prun $SUDO rm -f core*
+fi
 
 [ -d $CEPH_ASOK_DIR ] || mkdir -p $CEPH_ASOK_DIR
 [ -d $CEPH_OUT_DIR  ] || mkdir -p $CEPH_OUT_DIR
 [ -d $CEPH_DEV_DIR  ] || mkdir -p $CEPH_DEV_DIR
-$SUDO rm -rf $CEPH_OUT_DIR/*
+if [ $inc_osd_num -eq 0 ]; then
+    $SUDO rm -rf $CEPH_OUT_DIR/*
+fi
 [ -d gmon ] && $SUDO rm -rf gmon/*
 
 [ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && [ -e $keyring_fn ] && rm $keyring_fn
@@ -1080,6 +1110,11 @@ ceph_adm_to_file() {
 		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" "$@"
 	fi
 }
+
+if [ $inc_osd_num -gt 0 ]; then
+    start_osd
+    exit
+fi
 
 if [ "$new" -eq 1 ]; then
     prepare_conf
