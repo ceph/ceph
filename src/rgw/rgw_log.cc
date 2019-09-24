@@ -392,7 +392,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   entry.uri = std::move(uri);
 
-  set_param_str(s, "REQUEST_METHOD", entry.op);
+  entry.op = op_name;
 
   /* custom header logging */
   if (rest) {
