@@ -70,7 +70,28 @@ check_symbol_exists(res_nquery "resolv.h" HAVE_RES_NQUERY)
 check_symbol_exists(F_SETPIPE_SZ "linux/fcntl.h" CEPH_HAVE_SETPIPE_SZ)
 check_symbol_exists(__func__ "" HAVE_FUNC)
 check_symbol_exists(__PRETTY_FUNCTION__ "" HAVE_PRETTY_FUNC)
-check_symbol_exists(getentropy "unistd.h" HAVE_GETENTROPY)
+
+include(CheckCSourceRuns)
+check_c_source_runs("
+  #include <errno.h>
+  #include <unistd.h>
+
+  int main() {
+    char buf[20];
+    int ret;
+    ret = getentropy(buf, 20);
+    if (ret < 0 && errno == ENOSYS) // Function not implemented
+      return -1;
+    else 
+      return 0;
+  }
+" HAVE_IMPLEMENTED_GETENTROPY)
+if(HAVE_IMPLEMENTED_GETENTROPY)
+  set(HAVE_GETENTROPY 1)
+else()
+  set(HAVE_GETENTROPY 0)
+endif(HAVE_IMPLEMENTED_GETENTROPY)
+
 
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles("
