@@ -6673,6 +6673,12 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     }
   }
+  if (op.indata.length()) {
+    out << " in=" << op.indata.length() << "b";
+  }
+  if (op.outdata.length()) {
+    out << " out=" << op.outdata.length() << "b";
+  }
   return out;
 }
 
