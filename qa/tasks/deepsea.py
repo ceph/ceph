@@ -28,6 +28,7 @@ from teuthology.exceptions import (
     )
 from teuthology.orchestra import run
 from teuthology.task import Task
+from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 deepsea_ctx = {}
@@ -1697,10 +1698,17 @@ class Toolbox(DeepSea):
         """
         role = kwargs.keys()[0]
         remote = get_remote_for_role(self.ctx, role)
+        osds_before_rebuild = len(enumerate_osds(remote, self.log))
         self.log.info("Disengaging safety to prepare for rebuild")
-        self.master_remote.sh("sudo salt-run disengage.safety")
+        self.master_remote.sh("sudo salt-run disengage.safety 2>/dev/null")
         self.log.info("Rebuilding node {}".format(remote.hostname))
-        self.master_remote.sh("sudo salt-run rebuild.node {}*".format(remote.hostname))
+        self.master_remote.sh("sudo salt-run rebuild.node {} 2>/dev/null".format(remote.hostname))
+        with safe_while(sleep=15, tries=10,
+                        action="ceph osd tree") as proceed:
+            while proceed():
+                self.master_remote.sh("sudo ceph osd tree || true")
+                if osds_before_rebuild == len(enumerate_osds(remote, self.log)):
+                    break
 
     def _noout(self, add_or_rm, teuth_role):
         """
