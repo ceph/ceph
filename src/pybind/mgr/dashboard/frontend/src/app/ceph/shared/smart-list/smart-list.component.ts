@@ -2,13 +2,15 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/cor
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { HostService } from '../../../shared/api/host.service';
-import {
-  OsdService,
-  SmartAttribute,
-  SmartDataV1,
-  SmartError
-} from '../../../shared/api/osd.service';
+import { OsdService } from '../../../shared/api/osd.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import {
+  HddSmartDataV1,
+  NvmeSmartDataV1,
+  SmartDataResult,
+  SmartError,
+  SmartErrorResult
+} from '../../../shared/models/smart';
 
 @Component({
   selector: 'cd-smart-list',
@@ -24,17 +26,9 @@ export class SmartListComponent implements OnInit, OnChanges {
   loading = false;
   incompatible = false;
 
-  data: {
-    [deviceId: string]: {
-      info: { [key: string]: number | string | boolean };
-      smart: {
-        revision: number;
-        table: SmartAttribute[];
-      };
-    };
-  } = {};
+  data: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
 
-  columns: CdTableColumn[];
+  smartDataColumns: CdTableColumn[];
 
   constructor(
     private i18n: I18n,
@@ -42,12 +36,20 @@ export class SmartListComponent implements OnInit, OnChanges {
     private hostService: HostService
   ) {}
 
-  private isSmartError(data: SmartDataV1 | SmartError): data is SmartError {
-    return (data as SmartError).error !== undefined;
+  isSmartError(data: any): data is SmartError {
+    return _.get(data, 'error') !== undefined;
+  }
+
+  isNvmeSmartData(data: any): data is NvmeSmartDataV1 {
+    return _.get(data, 'device.protocol', '').toLowerCase() === 'nvme';
+  }
+
+  isHddSmartData(data: any): data is HddSmartDataV1 {
+    return _.get(data, 'device.protocol', '').toLowerCase() === 'ata';
   }
 
   private fetchData(data) {
-    const result = {};
+    const result: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
     _.each(data, (smartData, deviceId) => {
       if (this.isSmartError(smartData)) {
         let userMessage = '';
@@ -64,7 +66,7 @@ export class SmartListComponent implements OnInit, OnChanges {
             code: smartData.smartctl_error_code
           });
         }
-        result[deviceId] = {
+        const _result: SmartErrorResult = {
           error: smartData.error,
           smartctl_error_code: smartData.smartctl_error_code,
           smartctl_output: smartData.smartctl_output,
@@ -72,34 +74,54 @@ export class SmartListComponent implements OnInit, OnChanges {
           device: smartData.dev,
           identifier: smartData.nvme_vendor
         };
+        result[deviceId] = _result;
         return;
       }
 
       // Prepare S.M.A.R.T data
       if (smartData.json_format_version[0] === 1) {
         // Version 1.x
-        const excludes = [
-          'ata_smart_attributes',
-          'ata_smart_selective_self_test_log',
-          'ata_smart_data'
-        ];
-        const info = _.pickBy(smartData, (_value, key) => !excludes.includes(key));
-        // Build result
-        result[deviceId] = {
-          info: info,
-          smart: {
-            attributes: smartData.ata_smart_attributes,
-            data: smartData.ata_smart_data
-          },
-          device: info.device.name,
-          identifier: info.serial_number
-        };
+        if (this.isHddSmartData(smartData)) {
+          result[deviceId] = this.extractHddData(smartData);
+        } else if (this.isNvmeSmartData(smartData)) {
+          result[deviceId] = this.extractNvmeData(smartData);
+        }
+        return;
       } else {
         this.incompatible = true;
       }
     });
     this.data = result;
     this.loading = false;
+  }
+
+  private extractNvmeData(smartData: NvmeSmartDataV1): SmartDataResult {
+    const info = _.omitBy(smartData, (_value, key) =>
+      ['nvme_smart_health_information_log'].includes(key)
+    );
+    return {
+      info: info,
+      smart: {
+        nvmeData: smartData.nvme_smart_health_information_log
+      },
+      device: smartData.device.name,
+      identifier: smartData.serial_number
+    };
+  }
+
+  private extractHddData(smartData: HddSmartDataV1): SmartDataResult {
+    const info = _.omitBy(smartData, (_value, key) =>
+      ['ata_smart_attributes', 'ata_smart_selective_self_test_log', 'ata_smart_data'].includes(key)
+    );
+    return {
+      info: info,
+      smart: {
+        attributes: smartData.ata_smart_attributes,
+        data: smartData.ata_smart_data
+      },
+      device: info.device.name,
+      identifier: info.serial_number
+    };
   }
 
   private updateData() {
@@ -113,7 +135,7 @@ export class SmartListComponent implements OnInit, OnChanges {
   }
 
   ngOnInit() {
-    this.columns = [
+    this.smartDataColumns = [
       { prop: 'id', name: this.i18n('ID') },
       { prop: 'name', name: this.i18n('Name') },
       { prop: 'raw.value', name: this.i18n('Raw') },

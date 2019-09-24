@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 import json
 import logging
-from six.moves import reduce
 
 import rados
 
@@ -173,27 +172,27 @@ class CephService(object):
             raise SendCommandError(outs, prefix, argdict, r)
 
         try:
-            return json.loads(outb)
+            return json.loads(outb or outs)
         except Exception:  # pylint: disable=broad-except
             return outb
 
     @staticmethod
-    def get_smart_data_by_device(device):
-        dev_id = device['devid']
+    def _get_smart_data_by_device(device):
         if 'daemons' in device and device['daemons']:
             daemons = [daemon for daemon in device['daemons'] if daemon.startswith('osd')]
             if daemons:
                 svc_type, svc_id = daemons[0].split('.')
-                dev_smart_data = CephService.send_command(svc_type, 'smart', svc_id, devid=dev_id)
+                dev_smart_data = CephService.send_command(
+                    svc_type, 'smart', svc_id, devid=device['devid'])
                 for dev_id, dev_data in dev_smart_data.items():
                     if 'error' in dev_data:
                         logger.warning(
                             '[SMART] error retrieving smartctl data for device ID "%s": %s', dev_id,
                             dev_data)
                 return dev_smart_data
-            logger.warning('[SMART] no OSD service found for device ID "%s"', dev_id)
+            logger.warning('[SMART] no OSD service found for device ID "%s"', device['devid'])
             return {}
-        logger.warning('[SMART] key "daemon" not found for device ID "%s"', dev_id)
+        logger.warning('[SMART] key "daemon" not found for device ID "%s"', device['devid'])
         return {}
 
     @staticmethod
@@ -204,20 +203,24 @@ class CephService(object):
     @staticmethod
     def get_smart_data_by_host(hostname):
         # type: (str) -> dict
-        return reduce(lambda a, b: a.update(b) or a, [
-            CephService.get_smart_data_by_device(device)
-            for device in CephService.get_devices_by_host(hostname)
-        ], {})
+        devices = CephService.get_devices_by_host(hostname)
+        smart_data = {}
+        if devices:
+            for device in devices:
+                if device['devid'] not in smart_data:
+                    smart_data.update(CephService._get_smart_data_by_device(device))
+        return smart_data
 
     @staticmethod
     def get_smart_data_by_daemon(daemon_type, daemon_id):
         # type: (str, str) -> dict
         smart_data = CephService.send_command(daemon_type, 'smart', daemon_id)
-        for _, dev_data in smart_data.items():
-            if 'error' in dev_data:
-                logger.warning('[SMART] Error retrieving smartctl data for daemon "%s.%s"',
-                               daemon_type, daemon_id)
-        return smart_data
+        if smart_data:
+            for _, dev_data in smart_data.items():
+                if 'error' in dev_data:
+                    logger.warning('[SMART] Error retrieving smartctl data for daemon "%s.%s"',
+                                   daemon_type, daemon_id)
+        return smart_data or {}
 
     @classmethod
     def get_rates(cls, svc_type, svc_name, path):
