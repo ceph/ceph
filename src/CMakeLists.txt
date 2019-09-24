@@ -207,6 +207,10 @@ if(HAVE_INTEL)
   else()
     set(object_format "elf64")
   endif()
+
+  set(SAVE_CMAKE_ASM_FLAGS ${CMAKE_ASM_FLAGS})
+  set(SAVE_CMAKE_ASM_COMPILER ${CMAKE_ASM_COMPILER})
+
   set(CMAKE_ASM_FLAGS "-f ${object_format}")
   set(CMAKE_ASM_COMPILER ${PROJECT_SOURCE_DIR}/src/nasm-wrapper)
   if(NOT WIN32)

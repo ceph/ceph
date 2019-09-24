@@ -306,6 +306,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   dst_zone_trace = s->info.args.get(RGW_SYS_PARAM_PREFIX "if-not-replicated-to");
   get_torrent = s->info.args.exists("torrent");
 
+  auto checksum_mode_hdr =
+    s->info.env->get_optional("HTTP_X_AMZ_CHECKSUM_MODE");
+  checksum_mode =
+    (checksum_mode_hdr &&
+     boost::algorithm::iequals(*checksum_mode_hdr, "enabled"));
+
   // optional part number
   auto optstr = s->info.args.get_optional("partNumber");
   if (optstr) {
@@ -490,6 +496,20 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         dump_etag(s, iter->second.to_str());
       }
     }
+
+    if (checksum_mode) {
+      if (auto i = attrs.find(RGW_ATTR_CKSUM); i != attrs.end()) {
+	try {
+	  rgw::cksum::Cksum cksum;
+	  decode(cksum, i->second);
+	  dump_header(s, cksum.header_name(), cksum.to_armor());
+	}  catch (buffer::error& err) {
+	  ldpp_dout(this, 0) << "ERROR: failed to decode rgw::cksum::Cksum"
+			     << dendl;
+	  /* XXX return error here?  the user might prefer data we have */
+	}
+      }
+    } /* checksum_mode */
 
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
@@ -2715,12 +2735,18 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_content_length(s, 0);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
+      if (cksum) {
+	dump_header(s, cksum->header_name(), cksum->to_armor());
+      }
       for (auto &it : crypt_http_responses)
         dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
+      if (cksum) {
+	dump_header(s, cksum->header_name(), cksum->to_armor());
+      }
       end_header(s, this, to_mime_type(s->format));
       dump_start(s);
       struct tm tmp;

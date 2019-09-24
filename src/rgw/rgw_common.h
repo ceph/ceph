@@ -48,6 +48,7 @@
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
 #include "rgw_sal_fwd.h"
+#include "rgw_hex.h"
 
 namespace ceph {
   class Formatter;
@@ -82,6 +83,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_LC		RGW_ATTR_PREFIX "lc"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
+#define RGW_ATTR_CKSUM    	RGW_ATTR_PREFIX "cksum"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
@@ -159,6 +161,9 @@ using ceph::crypto::MD5;
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
 #define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
+
+/* Content Checksums */
+#define RGW_ATTR_AMZ_CKSUM      RGW_ATTR_PREFIX "x-amz-content-checksum"
 
 #define RGW_ATTR_CRYPT_PREFIX   RGW_ATTR_PREFIX "crypt."
 #define RGW_ATTR_CRYPT_MODE     RGW_ATTR_CRYPT_PREFIX "mode"
@@ -1028,6 +1033,8 @@ enum RGWBucketFlags {
 
 class RGWSI_Zone;
 
+#include "rgw_cksum.h"
+
 struct RGWBucketInfo {
   rgw_bucket bucket;
   rgw_owner owner;
@@ -1055,6 +1062,8 @@ struct RGWBucketInfo {
 
   std::map<std::string, uint32_t> mdsearch_config;
 
+  rgw::cksum::Type cksum_type = rgw::cksum::Type::none;
+
   // resharding
   cls_rgw_reshard_status reshard_status{cls_rgw_reshard_status::NOT_RESHARDING};
   std::string new_bucket_instance_id;
@@ -1065,7 +1074,6 @@ struct RGWBucketInfo {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
-
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<RGWBucketInfo*>& o);
 
@@ -1551,61 +1559,6 @@ struct multipart_upload_info
   }
 };
 WRITE_CLASS_ENCODER(multipart_upload_info)
-
-static inline void buf_to_hex(const unsigned char* const buf,
-                              const size_t len,
-                              char* const str)
-{
-  str[0] = '\0';
-  for (size_t i = 0; i < len; i++) {
-    ::sprintf(&str[i*2], "%02x", static_cast<int>(buf[i]));
-  }
-}
-
-template<size_t N> static inline std::array<char, N * 2 + 1>
-buf_to_hex(const std::array<unsigned char, N>& buf)
-{
-  static_assert(N > 0, "The input array must be at least one element long");
-
-  std::array<char, N * 2 + 1> hex_dest;
-  buf_to_hex(buf.data(), N, hex_dest.data());
-  return hex_dest;
-}
-
-static inline int hexdigit(char c)
-{
-  if (c >= '0' && c <= '9')
-    return (c - '0');
-  c = toupper(c);
-  if (c >= 'A' && c <= 'F')
-    return c - 'A' + 0xa;
-  return -EINVAL;
-}
-
-static inline int hex_to_buf(const char *hex, char *buf, int len)
-{
-  int i = 0;
-  const char *p = hex;
-  while (*p) {
-    if (i >= len)
-      return -EINVAL;
-    buf[i] = 0;
-    int d = hexdigit(*p);
-    if (d < 0)
-      return d;
-    buf[i] = d << 4;
-    p++;
-    if (!*p)
-      return -EINVAL;
-    d = hexdigit(*p);
-    if (d < 0)
-      return d;
-    buf[i] += d;
-    i++;
-    p++;
-  }
-  return i;
-}
 
 static inline int rgw_str_to_bool(const char *s, int def_val)
 {

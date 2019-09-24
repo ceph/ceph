@@ -34,6 +34,7 @@
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
 
+#include "rgw_cksum.h"
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
 #include "rgw_sal.h"
@@ -1255,6 +1256,9 @@ protected:
   RGWObjectRetention *obj_retention;
   RGWObjectLegalHold *obj_legal_hold;
 
+  // optional cksum
+  boost::optional<rgw::cksum::Cksum> cksum;
+
 public:
   RGWPutObj() : ofs(0),
                 supplied_md5_b64(NULL),
@@ -2170,7 +2174,7 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
       "x-amz-server-side-encryption-customer-key-md5",
-      "x-amz-storage-class"
+      "x-amz-storage-class",
   };
 
   size_t valid_meta_count = 0;
