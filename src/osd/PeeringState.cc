@@ -6255,6 +6255,11 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
 
   prior_set = ps->build_prior();
   ps->prior_readable_down_osds = prior_set.down;
+  if (ps->prior_readable_down_osds.empty()) {
+    psdout(10) << " no prior_set down osds, clearing prior_readable_until_ub"
+	       << dendl;
+    ps->clear_prior_readable_until_ub();
+  }
 
   ps->reset_min_peer_features();
   get_infos();
