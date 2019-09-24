@@ -59,6 +59,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_LC            RGW_ATTR_PREFIX "lc"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
+#define RGW_ATTR_CKSUM    	RGW_ATTR_PREFIX "cksum"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
@@ -1396,6 +1397,18 @@ inline ostream& operator<<(ostream& out, const RGWBucketIndexType &index_type)
   }
 }
 
+namespace rgw { namespace cksum {
+
+  enum class CksumType : uint16_t
+  {
+      none = 0,
+      sha256,
+      sha512,
+      blake2bp,
+  };
+
+}} /* namespace rgw::cksum */
+
 struct RGWBucketInfo {
   enum BIShardsHashType {
     MOD = 0
@@ -1430,6 +1443,8 @@ struct RGWBucketInfo {
 
   RGWBucketIndexType index_type = RGWBIType_Normal;
 
+  rgw::cksum::CksumType cksum_type = rgw::cksum::CksumType::none;
+
   bool swift_versioning;
   string swift_ver_location;
 
@@ -1444,7 +1459,7 @@ struct RGWBucketInfo {
   RGWObjectLock obj_lock;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(20, 4, bl);
+     ENCODE_START(21, 4, bl);
      encode(bucket, bl);
      encode(owner.id, bl);
      encode(flags, bl);
@@ -1474,10 +1489,11 @@ struct RGWBucketInfo {
      if (obj_lock_enabled()) {
        encode(obj_lock, bl);
      }
+     encode(uint16_t(cksum_type), bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(20, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(21, 4, 4, bl);
      decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -1543,6 +1559,9 @@ struct RGWBucketInfo {
      }
      if (struct_v >= 20 && obj_lock_enabled()) {
        decode(obj_lock, bl);
+     }
+     if (struct_v >= 21) {
+       decode(*(reinterpret_cast<uint16_t*>(&cksum_type)), bl);
      }
      DECODE_FINISH(bl);
   }

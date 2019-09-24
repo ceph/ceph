@@ -37,7 +37,7 @@
 #include "rgw_putobj_processor.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
-
+#include "rgw_cksum.h"
 
 /* XXX
  * ASSERT_H somehow not defined after all the above (which bring

@@ -18,6 +18,7 @@
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/hmac.h>
+#include "blake2/sse/blake2.h"
 
 #include "include/ceph_assert.h"
 
@@ -43,6 +44,31 @@ namespace ceph {
     public:
       DigestException(const char* what_arg) : runtime_error(what_arg)
 	{}
+    };
+
+    class Blake2B
+    {
+    private:
+      blake2bp_state s;
+    public:
+      static constexpr uint16_t digest_size =
+	BLAKE2B_OUTBYTES /* 64 */;
+
+      Blake2B() {
+	Restart();
+      }
+
+      void Restart() {
+	(void) blake2bp_init(&s, digest_size);
+      }
+
+      void Update(const unsigned char* data, uint64_t len) {
+	blake2bp_update(&s, data, len);
+      }
+
+      void Final(unsigned char* digest) {
+	blake2bp_final(&s, digest, digest_size);
+      }
     };
 
     namespace ssl {
@@ -84,7 +110,6 @@ namespace ceph {
     }
   }
 }
-
 
 namespace ceph::crypto::ssl {
 # if OPENSSL_VERSION_NUMBER < 0x10100000L
