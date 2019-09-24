@@ -21,7 +21,7 @@ class MgrModules(RESTController):
         """
         result = []
         mgr_map = mgr.get('mgr_map')
-        always_on_modules = mgr_map['always_on_modules'][mgr.release_name]
+        always_on_modules = mgr_map['always_on_modules'].get(mgr.release_name, [])
         for module_config in mgr_map['available_modules']:
             module_name = module_config['name']
             if module_name not in self.ignore_modules:
