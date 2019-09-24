@@ -253,7 +253,8 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   } while (truncated);
 
   /* use upload id as tag and do it asynchronously */
-  ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), false);
+  ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+  // XXX: should detect ENOSPC and delete inline
   if (ret < 0) {
     ldout(cct, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
     return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;

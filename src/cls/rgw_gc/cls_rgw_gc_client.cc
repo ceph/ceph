@@ -41,7 +41,7 @@ int cls_rgw_gc_queue_get_capacity(IoCtx& io_ctx, const string& oid, uint64_t& si
   return 0;
 }
 
-void cls_rgw_gc_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info)
+void cls_rgw_gc_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, const cls_rgw_gc_obj_info& info)
 {
   bufferlist in;
   cls_rgw_gc_set_entry_op call;
@@ -91,7 +91,7 @@ void cls_rgw_gc_queue_remove_entries(ObjectWriteOperation& op, uint32_t num_entr
   op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_REMOVE_ENTRIES, in);
 }
 
-void cls_rgw_gc_queue_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info)
+void cls_rgw_gc_queue_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, const cls_rgw_gc_obj_info& info)
 {
   bufferlist in;
   cls_rgw_gc_queue_defer_entry_op defer_op;
