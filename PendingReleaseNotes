@@ -1,3 +1,16 @@
+14.2.8
+------
+
+* Ceph will now issue a health warning if a RADOS pool as a ``pg_num``
+  value that is not a power of two.  This can be fixed by adjusting
+  the pool to a nearby power of two::
+
+    ceph osd pool set <pool-name> pg_num <new-pg-num>
+
+  Alternatively, the warning can be silenced with::
+
+    ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
+
 14.2.4
 ------
 
@@ -8,7 +21,7 @@
   new key being send to Zabbix.
 
 14.2.3
---------
+------
 
 * Nautilus-based librbd clients can now open images on Jewel clusters.
 
@@ -23,6 +36,7 @@
   (default: false).  The overall default behavior has not changed:
   fsck will warn but not fail on legacy stores, and repair will
   convert to per-pool stats.
+
 
 14.2.2
 ------
