@@ -1022,8 +1022,8 @@ COMMAND("osd pool create " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
 	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] " \
 	"name=rule,type=CephString,req=false " \
-        "name=expected_num_objects,type=CephInt,req=false " \
-        "name=size,type=CephInt,req=false " \
+        "name=expected_num_objects,type=CephInt,range=0,req=false " \
+        "name=size,type=CephInt,range=0,req=false " \
 	"name=pg_num_min,type=CephInt,range=0,req=false " \
 	"name=target_size_bytes,type=CephInt,range=0,req=false " \
 	"name=target_size_ratio,type=CephFloat,range=0|1,req=false",\
