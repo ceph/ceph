@@ -20,5 +20,9 @@ export class HostDetailsComponent {
   @ViewChild(TabsetComponent, { static: false })
   tabsetChild: TabsetComponent;
 
+  get selectedHostname(): string {
+    return this.selection.hasSelection ? this.selection.first()['hostname'] : null;
+  }
+
   constructor() {}
 }

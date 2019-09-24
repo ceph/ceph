@@ -41,7 +41,6 @@ import { OsdPgScrubModalComponent } from './osd/osd-pg-scrub-modal/osd-pg-scrub-
 import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
-import { OsdSmartListComponent } from './osd/osd-smart-list/osd-smart-list.component';
 import { ActiveAlertListComponent } from './prometheus/active-alert-list/active-alert-list.component';
 import { MonitoringListComponent } from './prometheus/monitoring-list/monitoring-list.component';
 import { RulesListComponent } from './prometheus/rules-list/rules-list.component';
@@ -109,7 +108,6 @@ import { ServicesComponent } from './services/services.component';
     ServicesComponent,
     InventoryComponent,
     HostFormComponent,
-    OsdSmartListComponent,
     OsdFormComponent,
     OsdDevicesSelectionModalComponent,
     InventoryDevicesComponent,
@@ -117,7 +115,8 @@ import { ServicesComponent } from './services/services.component';
     OsdCreationPreviewModalComponent,
     RulesListComponent,
     ActiveAlertListComponent,
-    MonitoringListComponent
+    MonitoringListComponent,
+    HostFormComponent
   ]
 })
 export class ClusterModule {}

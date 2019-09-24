@@ -33,4 +33,8 @@ export class HostService {
       .get<CdDevice[]>(`${this.baseURL}/${hostname}/devices`)
       .pipe(map((devices) => devices.map((device) => this.deviceService.prepareDevice(device))));
   }
+
+  getSmartData(hostname) {
+    return this.http.get(`${this.baseURL}/${hostname}/smart`);
+  }
 }

@@ -202,7 +202,7 @@ export class OsdService {
    */
   getSmartData(id: number) {
     return this.http.get<{ [deviceId: string]: SmartDataV1 | SmartError }>(
-      `${this.path}/${id}/get_smart_data`
+      `${this.path}/${id}/smart`
     );
   }
 
