@@ -79,3 +79,5 @@ GTAGS
 # mypy cache
 .mypy_cache/
 
+# Python building things where it shouldn't
+/src/python-common/build/
