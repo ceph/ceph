@@ -454,7 +454,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 	    return submit_transaction(std::move(os), std::move(txn), *m);
 	  }
         });
-      }, OpsExecuter::osd_op_errorator::pass_further{});
+      });
     });
   }).safe_then([m,this] {
     auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),

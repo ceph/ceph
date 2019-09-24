@@ -250,7 +250,7 @@ PGBackend::read(const object_info_t& oi,
       } else {
         return crimson::ct_error::object_corrupted::make();
       }
-    }, ll_read_errorator::pass_further{});
+    });
 }
 
 seastar::future<> PGBackend::stat(
@@ -486,7 +486,7 @@ PGBackend::get_attr_errorator::future<> PGBackend::getxattr(
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     return seastar::now();
     //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
-  }, get_attr_errorator::pass_further{});
+  });
   //ctx->delta_stats.num_rd++;
 }
 
