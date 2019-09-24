@@ -851,6 +851,7 @@ void PeeringState::init_hb_stamps()
   } else {
     hb_stamps.clear();
   }
+  dout(10) << __func__ << " now " << hb_stamps << dendl;
 }
 
 
@@ -1142,11 +1143,12 @@ void PeeringState::proc_lease(const pg_lease_t& l)
     readable_until_ub_from_primary = l.readable_until_ub;
   }
 
-  ceph::signedspan ru;
-  if (hb_stamps[0]->peer_clock_delta_ub) {
+  ceph::signedspan ru = ceph::signedspan::zero();
+  if (l.readable_until != ceph::signedspan::zero() &&
+      hb_stamps[0]->peer_clock_delta_ub) {
     ru = l.readable_until - *hb_stamps[0]->peer_clock_delta_ub;
-  } else {
-    ru = ceph::signedspan::zero();
+    psdout(20) << " peer_clock_delta_ub " << *hb_stamps[0]->peer_clock_delta_ub
+	       << " -> ru " << ru << dendl;
   }
   if (ru > readable_until) {
     readable_until = ru;
@@ -1158,8 +1160,11 @@ void PeeringState::proc_lease(const pg_lease_t& l)
   ceph::signedspan ruub;
   if (hb_stamps[0]->peer_clock_delta_lb) {
     ruub = l.readable_until_ub - *hb_stamps[0]->peer_clock_delta_lb;
+    psdout(20) << " peer_clock_delta_lb " << *hb_stamps[0]->peer_clock_delta_lb
+	       << " -> ruub " << ruub << dendl;
   } else {
     ruub = pl->get_mnow() + l.interval;
+    psdout(20) << " no peer_clock_delta_lb -> ruub " << ruub << dendl;
   }
   if (ruub > readable_until_ub) {
     readable_until_ub = ruub;
@@ -1201,6 +1206,8 @@ void PeeringState::recalc_readable_until()
     if (acting[i] == pg_whoami.osd || acting[i] == CRUSH_ITEM_NONE) {
       continue;
     }
+    dout(20) << __func__ << " peer osd." << acting[i]
+	     << " ruub " << acting_readable_until_ub[i] << dendl;
     if (acting_readable_until_ub[i] < min) {
       min = acting_readable_until_ub[i];
     }
