@@ -4001,7 +4001,14 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     // successful update
     if (ctx->op->allows_returnvec()) {
       // enforce reasonable bound on the return buffer sizes
-#warning write me
+      for (auto& i : *ctx->ops) {
+	if (i.outdata.length() > cct->_conf->osd_max_write_op_reply_len) {
+	  dout(10) << __func__ << " op " << i << " outdata overflow" << dendl;
+	  result = -EOVERFLOW;  // overall result is overflow
+	  i.rval = -EOVERFLOW;
+	  i.outdata.clear();
+	}
+      }
     } else {
       // legacy behavior -- zero result and return data etc.
       ignore_out_data = true;
