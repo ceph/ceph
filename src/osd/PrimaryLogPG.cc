@@ -4059,7 +4059,6 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     // save just what we need from ctx
     MOSDOpReply *reply = ctx->reply;
     ctx->reply = nullptr;
-    reply->claim_op_out_data(*ctx->ops);
     reply->get_header().data_off = (ctx->data_off ? *ctx->data_off : 0);
     close_op_ctx(ctx);
 
@@ -8659,7 +8658,6 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
     }
     ctx->bytes_read += p->outdata.length();
   }
-  ctx->reply->claim_op_out_data(*ctx->ops);
   ctx->reply->get_header().data_off = (ctx->data_off ? *ctx->data_off : 0);
 
   MOSDOpReply *reply = ctx->reply;
@@ -8933,10 +8931,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
                                           OSDOp& osd_op)
 {
-  // NOTE: we take non-const ref here for claim_op_out_data below; we must
-  // be careful not to modify anything else that will upset a racing
-  // operator<<
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   uint64_t features = m->get_features();
   object_copy_data_t reply_obj;
 
@@ -8946,7 +8941,6 @@ void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
   encode(reply_obj, osd_op.outdata, features);
   osd_op.rval = -ENOENT;
   MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0, false);
-  reply->claim_op_out_data(m->ops);
   reply->set_result(-ENOENT);
   reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
   osd->send_message_osd_client(reply, m->get_connection());
