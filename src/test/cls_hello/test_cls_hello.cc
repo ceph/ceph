@@ -112,6 +112,22 @@ TEST(ClsHello, WriteReturnData) {
   out.hexdump(std::cout);
   ASSERT_EQ("you might see this", std::string(out.c_str(), out.length()));
 
+  // this will overflow because the return data is too big
+  {
+    in.clear();
+    out.clear();
+    int rval;
+    ObjectWriteOperation o;
+    o.exec("hello", "write_too_much_return_data", in, &out, &rval);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
+				   librados::OPERATION_RETURNVEC));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EOVERFLOW, completion->get_return_value());
+    ASSERT_EQ(-EOVERFLOW, rval);
+    ASSERT_EQ("", std::string(out.c_str(), out.length()));
+  }
+
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
