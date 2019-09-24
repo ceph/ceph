@@ -161,6 +161,24 @@ static int write_return_data(cls_method_context_t hctx, bufferlist *in, bufferli
   return 42;
 }
 
+static int write_too_much_return_data(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // make some change to the object
+  bufferlist attrbl;
+  attrbl.append("bar");
+  int r = cls_cxx_setxattr(hctx, "foo", &attrbl);
+  if (r < 0)
+    return r;
+
+  // try to return too much data.  this should be enough to exceed
+  // osd_max_write_op_reply_len, which defaults to a pretty small number.
+  for (unsigned i=0; i < 10; ++i) {
+    out->append("you should not see this because it is toooooo long. ");
+  }
+
+  return 42;
+}
+
 
 /**
  * replay - a "read" method to get a previously recorded hello
@@ -301,6 +319,7 @@ CLS_INIT(hello)
   cls_method_handle_t h_record_hello;
   cls_method_handle_t h_replay;
   cls_method_handle_t h_write_return_data;
+  cls_method_handle_t h_write_too_much_return_data;
   cls_method_handle_t h_turn_it_to_11;
   cls_method_handle_t h_bad_reader;
   cls_method_handle_t h_bad_writer;
@@ -325,6 +344,9 @@ CLS_INIT(hello)
   cls_register_cxx_method(h_class, "write_return_data",
 			  CLS_METHOD_WR,
 			  write_return_data, &h_write_return_data);
+  cls_register_cxx_method(h_class, "write_too_much_return_data",
+			  CLS_METHOD_WR,
+			  write_too_much_return_data, &h_write_too_much_return_data);
   cls_register_cxx_method(h_class, "replay",
 			  CLS_METHOD_RD,
 			  replay, &h_replay);
