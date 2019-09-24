@@ -8,8 +8,8 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.orchestrator import OrchClient
-from ..services.exception import handle_orchestrator_error
 from ..services.ceph_service import CephService
+from ..services.exception import handle_orchestrator_error
 
 
 def host_task(name, metadata, wait_for=10.0):
@@ -106,5 +106,10 @@ class Host(RESTController):
 
     @RESTController.Resource('GET')
     def devices(self, hostname):
-        # (str) -> dict
-        return CephService.send_command('mon', 'device ls-by-host', host=hostname)
+        # (str) -> List
+        return CephService.get_devices_by_host(hostname)
+
+    @RESTController.Resource('GET')
+    def smart(self, hostname):
+        # type: (str) -> dict
+        return CephService.get_smart_data_by_host(hostname)
