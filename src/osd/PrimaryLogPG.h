@@ -1948,6 +1948,7 @@ public:
   void get_dynamic_perf_stats(DynamicPerfStats *stats)  override;
 
 private:
+  ceph::mutex stat_lock = { "PrimaryLogPG::stat_lock" };
   DynamicPerfStats m_dynamic_perf_stats;
 };
 

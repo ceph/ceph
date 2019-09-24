@@ -10332,9 +10332,7 @@ void OSD::get_perf_reports(
       // when set_perf_queries/get_perf_reports are called, so we may not hold
       // m_perf_queries_lock here.
       DynamicPerfStats pg_dps(m_perf_queries);
-      pg->lock();
       pg->get_dynamic_perf_stats(&pg_dps);
-      pg->unlock();
       dps.merge(pg_dps);
     }
   }

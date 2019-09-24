@@ -3923,6 +3923,7 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
 	   << " outb " << outb
 	   << " lat " << latency << dendl;
 
+  std::lock_guard l(stat_lock);
   if (m_dynamic_perf_stats.is_enabled()) {
     m_dynamic_perf_stats.add(osd, info, op, inb, outb, latency);
   }
@@ -3931,11 +3932,13 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
 void PrimaryLogPG::set_dynamic_perf_stats_queries(
     const std::list<OSDPerfMetricQuery> &queries)
 {
+  std::lock_guard l(stat_lock);
   m_dynamic_perf_stats.set_queries(queries);
 }
 
 void PrimaryLogPG::get_dynamic_perf_stats(DynamicPerfStats *stats)
 {
+  std::lock_guard l(stat_lock);
   std::swap(m_dynamic_perf_stats, *stats);
 }
 
