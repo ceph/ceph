@@ -6716,8 +6716,8 @@ void OSDOp::split_osd_op_vector_out_data(vector<OSDOp>& ops, ceph::buffer::list&
 void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, ceph::buffer::list& out)
 {
   for (unsigned i = 0; i < ops.size(); i++) {
+    ops[i].op.payload_len = ops[i].outdata.length();
     if (ops[i].outdata.length()) {
-      ops[i].op.payload_len = ops[i].outdata.length();
       out.append(ops[i].outdata);
     }
   }
