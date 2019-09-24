@@ -38,6 +38,8 @@ set(common_srcs
   admin_socket_client.cc
   assert.cc
   bit_str.cc
+  ${CMAKE_SOURCE_DIR}/src/blake2/sse/blake2b.c
+  ${CMAKE_SOURCE_DIR}/src/blake2/sse/blake2bp.c
   blkdev.cc
   bloom_filter.cc
   ceph_argparse.cc

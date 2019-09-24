@@ -282,6 +282,7 @@ list(APPEND mds_files
 
 add_subdirectory(json_spirit)
 
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/blake2/sse")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 

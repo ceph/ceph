@@ -61,3 +61,6 @@
 [submodule "src/c-ares"]
 	path = src/c-ares
 	url = https://github.com/ceph/c-ares.git
+[submodule "src/blake2"]
+	path = src/blake2
+	url = https://github.com/BLAKE2/BLAKE2.git
