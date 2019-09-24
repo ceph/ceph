@@ -37,4 +37,4 @@ class Scripts:
             cmd = "sudo " + cmd
         if args:
             cmd += ' ' + ' '.join(map(str, args))
-        remote.sh(cmd, label=script_name)
+        return remote.sh(cmd, label=script_name)
