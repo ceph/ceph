@@ -886,6 +886,7 @@ OPTION(osd_max_attr_size, OPT_U64)
 
 OPTION(osd_max_omap_entries_per_request, OPT_U64)
 OPTION(osd_max_omap_bytes_per_request, OPT_U64)
+OPTION(osd_max_write_op_reply_len, OPT_U64)
 
 OPTION(osd_objectstore, OPT_STR)  // ObjectStore backend type
 OPTION(osd_objectstore_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
