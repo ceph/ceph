@@ -24,6 +24,7 @@
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
 #include "common/perf_counters_key.h"
+#include "rgw_common.h"
 #include "rgw_tracer.h"
 
 #include "rgw_rados.h"
@@ -56,6 +57,7 @@
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_torrent.h"
+#include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
 #include "rgw_iam_managed_policy.h"
@@ -4322,9 +4324,13 @@ void RGWPutObj::execute(optional_yield y)
   std::optional<RGWPutObj_Compress> compressor;
   std::optional<RGWPutObj_Torrent> torrent;
 
+  /* XXX Cksum::DigestVariant was designed to avoid allocation, but going with
+   * factory method to avoid issues with move assignment when wrapped */
+  std::unique_ptr<rgw::putobj::RGWPutObj_Cksum> cksum_filter;
   std::unique_ptr<rgw::sal::DataProcessor> encrypt;
   std::unique_ptr<rgw::sal::DataProcessor> run_lua;
 
+  /* data processor filters--last filter runs first */
   if (!append) { // compression and encryption only apply to full object uploads
     op_ret = get_encrypt_filter(&encrypt, filter);
     if (op_ret < 0) {
@@ -4352,7 +4358,8 @@ void RGWPutObj::execute(optional_yield y)
     if (torrent = get_torrent_filter(filter); torrent) {
       filter = &*torrent;
     }
-    // run lua script before data is compressed and encrypted - last filter runs first
+    /* checksum lua filters must run before compression and encryption
+     * filters, checksum first (probably?) */
     op_ret = get_lua_filter(&run_lua, filter);
     if (op_ret < 0) {
       return;
@@ -4360,7 +4367,18 @@ void RGWPutObj::execute(optional_yield y)
     if (run_lua) {
       filter = &*run_lua;
     }
-  }
+    /* optional streaming checksum */
+    try {
+      cksum_filter =
+	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env);
+    } catch (const rgw::io::Exception& e) {
+      op_ret = e.code().value();
+      return;
+    }
+    if (cksum_filter) {
+      filter = &*cksum_filter;
+    }
+  } /* !append */
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
   do {
     bufferlist data;
@@ -4499,6 +4517,37 @@ void RGWPutObj::execute(optional_yield y)
   }
   bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+  if (cksum_filter) {
+    const auto& hdr = cksum_filter->header();
+    auto cksum_verify =
+      cksum_filter->verify(*s->info.env); // valid or no supplied cksum
+    cksum = get<1>(cksum_verify);
+    if (std::get<0>(cksum_verify)) {
+      buffer::list cksum_bl;
+      ldpp_dout(this, 16)
+	<< fmt::format("{} checksum verified ", hdr.second)
+	<< fmt::format("\n\tcomputed={} == \n\texpected=  {}",
+		       cksum->to_armor(),
+		       cksum_filter->expected(*s->info.env))
+	<< dendl;
+      cksum->encode(cksum_bl);
+      emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
+    } else {
+      /* content checksum mismatch */
+      auto computed_ck = cksum->to_armor();
+      auto expected_ck = cksum_filter->expected(*s->info.env);
+
+      ldpp_dout(this, 4)
+	<< fmt::format("{} content checksum mismatch", hdr.second)
+	<< fmt::format("\n\tcalculated={} != \n\texpected={}",
+		       computed_ck,
+		       (!!expected_ck) ? expected_ck : "(checksum unavailable)")
+	<< dendl;
+      op_ret = -ERR_INVALID_REQUEST;
+      return;
+    }
+  }
 
   populate_with_generic_attrs(s, attrs);
   op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
