@@ -1164,7 +1164,7 @@ sub-directories, files')
                         f = b'.' + f
                     poutput('{:10s} {}'.format(humansize(dusage),
                         f.decode('utf-8')))
-                except (libcephfs.Error, OSError) as e:
+                except libcephfs.Error as e:
                     perror(e)
                     continue
 
