@@ -34,31 +34,13 @@ struct object_not_found : public error {
   object_not_found() : error(std::errc::no_such_file_or_directory) {}
 };
 
-struct object_corrupted : public error {
-  object_corrupted() : error(std::errc::illegal_byte_sequence) {}
-};
-
 struct invalid_argument : public error {
   invalid_argument() : error(std::errc::invalid_argument) {}
 };
 
-struct no_message_available : public error {
-  no_message_available() : error(std::errc::no_message_available) {}
-};
-
 // FIXME: error handling
-struct operation_not_supported : public error {
-  operation_not_supported()
-    : error(std::errc::operation_not_supported) {
-  }
-};
-
 struct permission_denied : public error {
   permission_denied() : error(std::errc::operation_not_permitted) {}
-};
-
-struct input_output_error : public error {
-  input_output_error() : error(std::errc::io_error) {}
 };
 
 } // namespace crimson::osd

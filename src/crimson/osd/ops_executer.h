@@ -100,8 +100,8 @@ class OpsExecuter {
                                  std::as_const(msg->get_hobj().nspace));
   }
 
-  seastar::future<> dont_do_legacy_op() {
-    throw crimson::osd::operation_not_supported();
+  decltype(auto) dont_do_legacy_op() {
+    return crimson::ct_error::operation_not_supported::make();
   }
 
   using read_errorator = PGBackend::read_errorator;
