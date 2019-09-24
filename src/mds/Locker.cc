@@ -12,41 +12,24 @@
  * 
  */
 
-#include <string_view>
 
-#include "MDSRank.h"
-#include "MDCache.h"
-#include "Locker.h"
-#include "MDBalancer.h"
-#include "Migrator.h"
-#include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
-#include "Mutation.h"
-#include "MDSContext.h"
-
-#include "MDLog.h"
-#include "MDSMap.h"
-
-#include "events/EUpdate.h"
+#include "CInode.h"
+#include "common/config.h"
 #include "events/EOpen.h"
-
+#include "events/EUpdate.h"
+#include "Locker.h"
+#include "MDBalancer.h"
+#include "MDCache.h"
+#include "MDLog.h"
+#include "MDSRank.h"
+#include "MDSMap.h"
+#include "messages/MInodeFileCaps.h"
+#include "messages/MMDSSlaveRequest.h"
+#include "Migrator.h"
 #include "msg/Messenger.h"
 #include "osdc/Objecter.h"
-
-#include "messages/MInodeFileCaps.h"
-#include "messages/MLock.h"
-#include "messages/MClientLease.h"
-#include "messages/MClientReply.h"
-#include "messages/MClientCaps.h"
-#include "messages/MClientCapRelease.h"
-
-#include "messages/MMDSSlaveRequest.h"
-
-#include <errno.h>
-
-#include "common/config.h"
-
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -86,7 +69,7 @@ public:
 };
 
 Locker::Locker(MDSRank *m, MDCache *c) :
-  mds(m), mdcache(c), need_snapflush_inodes(member_offset(CInode, item_caps)) {}
+  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
 
 
 void Locker::dispatch(const cref_t<Message> &m)
