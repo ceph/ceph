@@ -58,7 +58,8 @@ public:
     size_t truncate_size,
     uint32_t truncate_seq,
     uint32_t flags);
-  seastar::future<> stat(
+  using stat_errorator = crimson::errorator<crimson::ct_error::enoent>;
+  stat_errorator::future<> stat(
     const ObjectState& os,
     OSDOp& osd_op);
 

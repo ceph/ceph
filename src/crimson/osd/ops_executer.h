@@ -121,7 +121,8 @@ public:
   using osd_op_errorator = crimson::compound_errorator_t<
     call_errorator,
     read_errorator,
-    get_attr_errorator>;
+    get_attr_errorator,
+    PGBackend::stat_errorator>;
   osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
   seastar::future<> execute_pg_op(class OSDOp& osd_op);
 
