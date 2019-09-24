@@ -1057,6 +1057,8 @@ class TestOSD(TestArgparse):
 
     def test_pool_create(self):
         self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname'])
+        self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128'])
@@ -1067,8 +1069,6 @@ class TestOSD(TestArgparse):
                                    'poolname', '128', '128',
                                    'erasure', 'A-Za-z0-9-_.', 'ruleset^^'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
-                                                    'poolname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname', '-1']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
