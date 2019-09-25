@@ -4,6 +4,7 @@
 #ifndef CEPH_ASYNC_OP_TRACKER_H
 #define CEPH_ASYNC_OP_TRACKER_H
 
+#include <iostream>
 #include "common/ceph_mutex.h"
 
 struct Context;
@@ -19,6 +20,13 @@ public:
   void wait_for_ops(Context *on_finish);
 
   bool empty();
+
+  friend std::ostream &operator<<(std::ostream &os,
+                                 const AsyncOpTracker &t) {
+    os << "pending_ops=" << t.m_pending_ops << ", "
+       << "on_finish=" << t.m_on_finish;
+    return os;
+  };
 
 private:
   ceph::mutex m_lock = ceph::make_mutex("AsyncOpTracker::m_lock");

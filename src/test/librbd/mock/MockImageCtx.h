@@ -5,6 +5,8 @@
 #define CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 
 #include "include/rados/librados.hpp"
+#include "cls/rbd/cls_rbd_types.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librbd/mock/MockExclusiveLock.h"
 #include "test/librbd/mock/MockImageState.h"
@@ -13,6 +15,7 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librbd/mock/MockOperations.h"
 #include "test/librbd/mock/MockReadahead.h"
+#include "test/librbd/mock/cache/MockImageCache.h"
 #include "test/librbd/mock/io/MockImageRequestWQ.h"
 #include "test/librbd/mock/io/MockObjectDispatcher.h"
 #include "common/RWLock.h"
@@ -186,6 +189,7 @@ struct MockImageCtx {
 			     librados::snap_t id));
 
   MOCK_METHOD0(user_flushed, void());
+  MOCK_METHOD2(flush_async_operations, void(Context *, io::FlushSource source));
   MOCK_METHOD1(flush_copyup, void(Context *));
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
@@ -280,6 +284,9 @@ struct MockImageCtx {
   MockContextWQ *op_work_queue;
 
   cache::MockImageCache *image_cache = nullptr;
+  bool ignore_image_cache_init_failure = false;
+  bool image_cache_init_succeeded = false;
+  bool disable_zero_copy = false;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;

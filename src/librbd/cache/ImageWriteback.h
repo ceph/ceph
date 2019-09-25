@@ -6,6 +6,7 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
+#include "librbd/io/Types.h"
 #include <vector>
 
 class Context;
@@ -22,9 +23,11 @@ namespace cache {
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageWriteback {
 public:
-  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+  typedef io::Extent Extent;
+  typedef io::Extents Extents;
 
-  explicit ImageWriteback(ImageCtxT &image_ctx);
+  ImageWriteback(ImageCtxT &image_ctx);
+  ~ImageWriteback();
 
   void aio_read(Extents &&image_extents, ceph::bufferlist *bl,
                 int fadvise_flags, Context *on_finish);
@@ -43,7 +46,6 @@ public:
                              int fadvise_flags, Context *on_finish);
 private:
   ImageCtxT &m_image_ctx;
-
 };
 
 } // namespace cache

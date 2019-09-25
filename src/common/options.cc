@@ -7567,6 +7567,44 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_min(0)
     .set_description("maximum io delay (in milliseconds) for simple io scheduler (if set to 0 dalay is calculated based on latency stats)"),
+
+    Option("rbd_rwl_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+#if defined(WITH_RBD_RWL)
+    .set_default(true)
+#else
+    .set_default(false)
+#endif
+    .set_description("enable persistent write back cache for this volume"),
+
+    Option("rbd_rwl_remove_on_close", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("remove pool files on RBD image close if completely flushed"),
+
+    Option("rbd_rwl_log_stats_on_close", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("emit detailed perf stats to debug log on close"),
+
+    Option("rbd_rwl_log_periodic_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("emi periodic perf stats to debug log"),
+
+    Option("rbd_rwl_invalidate_on_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Invalidate RWL contents after flushing to RADOS"),
+
+    Option("rbd_rwl_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+#ifdef NDEBUG
+    .set_default(1073741824)
+    .set_min(1073741824)
+#else
+    .set_default(10485760)
+    .set_min(10485760)
+#endif
+    .set_description("size of the persistent write back cache for this volume"),
+
+    Option("rbd_rwl_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description("location of the persistent write back cache in a DAX-enabled filesystem on persistent memory"),
   });
 }
 

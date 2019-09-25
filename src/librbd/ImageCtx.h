@@ -30,6 +30,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/Types.h"
+#include "librbd/cache/ImageCache.h"
 
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
@@ -51,7 +52,6 @@ namespace librbd {
   template <typename> class ObjectMap;
   template <typename> class Operations;
 
-  namespace cache { struct ImageCache; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -84,7 +84,7 @@ namespace librbd {
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
     // whether the image was opened read-only. cannot be changed after opening
-    bool read_only;
+    const bool read_only;
 
     std::map<rados::cls::lock::locker_id_t,
 	     rados::cls::lock::locker_info_t> lockers;
@@ -147,7 +147,9 @@ namespace librbd {
 
     file_layout_t layout;
 
-    cache::ImageCache *image_cache = nullptr;
+    cache::ImageCache<ImageCtx> *image_cache = nullptr;
+    bool ignore_image_cache_init_failure = false;
+    bool image_cache_init_succeeded = false;
 
     Readahead readahead;
     std::atomic<uint64_t> total_bytes_read = {0};

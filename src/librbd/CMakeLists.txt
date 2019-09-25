@@ -34,6 +34,7 @@ set(librbd_internal_srcs
   api/PoolMetadata.cc
   api/Snapshot.cc
   api/Trash.cc
+  cache/ImageCache.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/ParentCacheObjectDispatch.cc
@@ -142,10 +143,17 @@ set(librbd_internal_srcs
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
+if(WITH_RBD_RWL)
+  set(librbd_internal_srcs
+    ${librbd_internal_srcs}
+    cache/ReplicatedWriteLog.cc)
+endif(WITH_RBD_RWL)
+
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
+
 if(WITH_LTTNG)
   # librbd.cc includes tracing/librbd.h
   add_dependencies(rbd_api librbd-tp)
@@ -158,6 +166,12 @@ endif()
 target_link_libraries(rbd_internal PRIVATE
   ceph_immutable_object_cache_lib
   osdc)
+
+if(WITH_RBD_RWL)
+  target_link_libraries(rbd_internal PRIVATE
+    pmem::pmem
+    pmem::pmemobj)
+endif()
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)

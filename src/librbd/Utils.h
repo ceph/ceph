@@ -16,7 +16,7 @@
 
 namespace librbd {
 
-class ImageCtx;
+struct ImageCtx;
 
 namespace util {
 namespace detail {

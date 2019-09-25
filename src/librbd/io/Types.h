@@ -42,7 +42,8 @@ typedef enum {
 enum FlushSource {
   FLUSH_SOURCE_USER,
   FLUSH_SOURCE_INTERNAL,
-  FLUSH_SOURCE_SHUTDOWN
+  FLUSH_SOURCE_SHUTDOWN,
+  FLUSH_SOURCE_WRITEBACK
 };
 
 enum Direction {
@@ -81,7 +82,9 @@ using striper::LightweightBufferExtents;
 using striper::LightweightObjectExtent;
 using striper::LightweightObjectExtents;
 
-typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
+typedef std::pair<uint64_t,uint64_t> Extent;
+typedef std::vector<Extent> Extents;
+
 typedef std::map<uint64_t, uint64_t> ExtentMap;
 
 } // namespace io
