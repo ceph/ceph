@@ -6,6 +6,7 @@ except ImportError:
     # just for type checking
     pass
 import logging
+import errno
 import json
 import six
 import threading
@@ -579,6 +580,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def __init__(self, module_name, py_modules_ptr, this_ptr):
         self.module_name = module_name
+        self._log_level = None
 
         # If we're taking over from a standby module, let's make sure
         # its logger was unconfigured before we hook ours up
@@ -610,8 +612,21 @@ class MgrModule(ceph_module.BaseMgrModule):
         unconfigure_logger()
 
     @classmethod
-    def _register_commands(cls):
+    def _register_commands(cls, module_name):
+        cls.MODULE_OPTIONS.append(Option(name='log_level', type='str', default="WARNING", runtime=True))
+
         cls.COMMANDS.extend(CLICommand.dump_cmd_list())
+        cls.COMMANDS.extend([{
+            'cmd': '{} set log_level '
+                   'name=level,type=CephChoices,'
+                   'strings=INFO|DEBUG|CRITICAL|ERROR|WARNING|NOTSET'.format(module_name),
+            'desc': 'Set the module python log level',
+            'perm': 'w'
+        }, {
+            'cmd': '{} get log_level'.format(module_name),
+            'desc': 'Show the module python log level',
+            'perm': 'r'
+        }])
 
     @property
     def log(self):
@@ -970,7 +985,24 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         self._ceph_set_health_checks(checks)
 
+    def _get_log_level(self):
+        if self._log_level is None:
+            self._log_level = getattr(logging, self.get_module_option("log_level", "WARNING"))
+        return self._log_level
+
+    def _set_log_level(self, level):
+        self._log_level = getattr(logging, level)
+        self.set_module_option("log_level", level)
+
     def _handle_command(self, inbuf, cmd):
+        if cmd['prefix'] == '{} set log_level'.format(self.module_name):
+            if cmd['level'] not in ['INFO', 'WARNING', 'ERROR', 'DEBUG', 'CRITICAL', 'NOTSET']:
+                return HandleCommandResult(retval=-errno.EINVAL,
+                                           stderr='invalid log level: {}'.format(cmd['level']))
+            self._set_log_level(cmd['level'])
+            return HandleCommandResult(stdout='log level updated to {}'.format(cmd['level']))
+        if cmd['prefix'] == '{} get log_level'.format(self.module_name):
+            return HandleCommandResult(stdout=self.get_module_option("log_level", "WARNING"))
         if cmd['prefix'] not in CLICommand.COMMANDS:
             return self.handle_command(inbuf, cmd)
         return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
