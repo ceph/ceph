@@ -103,12 +103,14 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
 }
 
 template <typename I>
-void InstanceReplayer<I>::add_peer(std::string peer_uuid,
-                                   librados::IoCtx io_ctx) {
+void InstanceReplayer<I>::add_peer(
+    std::string peer_uuid, librados::IoCtx io_ctx,
+    MirrorStatusUpdater<I>* remote_status_updater) {
   dout(10) << peer_uuid << dendl;
 
   std::lock_guard locker{m_lock};
-  auto result = m_peers.insert(Peer(peer_uuid, io_ctx)).second;
+  auto result = m_peers.insert(
+    Peer(peer_uuid, io_ctx, remote_status_updater)).second;
   ceph_assert(result);
 }
 
@@ -159,7 +161,8 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
     // TODO only a single peer is currently supported
     ceph_assert(m_peers.size() == 1);
     auto peer = *m_peers.begin();
-    image_replayer->add_peer(peer.peer_uuid, peer.io_ctx);
+    image_replayer->add_peer(peer.peer_uuid, peer.io_ctx,
+                             peer.mirror_status_updater);
     start_image_replayer(image_replayer);
   } else {
     // A duplicate acquire notification implies (1) connection hiccup or

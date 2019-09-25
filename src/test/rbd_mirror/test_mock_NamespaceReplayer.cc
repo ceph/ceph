@@ -113,7 +113,8 @@ struct InstanceReplayer<librbd::MockTestImageCtx> {
 
   MOCK_METHOD2(print_status, void(Formatter*, std::stringstream*));
 
-  MOCK_METHOD2(add_peer, void(const std::string&, librados::IoCtx&));
+  MOCK_METHOD3(add_peer, void(const std::string&, librados::IoCtx&,
+                              MirrorStatusUpdater<librbd::MockTestImageCtx>*));
 
   MOCK_METHOD1(init, void(Context*));
   MOCK_METHOD1(shut_down, void(Context*));
@@ -315,7 +316,7 @@ public:
 
   void expect_instance_replayer_add_peer(
       MockInstanceReplayer& mock_instance_replayer, const std::string& uuid) {
-    EXPECT_CALL(mock_instance_replayer, add_peer(uuid, _));
+    EXPECT_CALL(mock_instance_replayer, add_peer(uuid, _, _));
   }
 
   void expect_instance_replayer_release_all(

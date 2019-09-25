@@ -113,7 +113,8 @@ public:
 
   image_replayer::HealthState get_health_state() const;
 
-  void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx);
+  void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx,
+                MirrorStatusUpdater<ImageCtxT>* remote_status_updater);
 
   inline int64_t get_local_pool_id() const {
     return m_local_io_ctx.get_id();
@@ -215,6 +216,7 @@ protected:
   bool on_replay_interrupted();
 
 private:
+  typedef std::set<Peer<ImageCtxT>> Peers;
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::ReplayEntry ReplayEntry;
 
   enum State {
@@ -230,10 +232,12 @@ private:
     std::string mirror_uuid;
     std::string image_id;
     librados::IoCtx io_ctx;
+    MirrorStatusUpdater<ImageCtxT>* mirror_status_updater = nullptr;
 
     RemoteImage() {
     }
-    RemoteImage(const Peer& peer) : io_ctx(peer.io_ctx) {
+    RemoteImage(const Peer<ImageCtxT>& peer)
+      : io_ctx(peer.io_ctx), mirror_status_updater(peer.mirror_status_updater) {
     }
   };
 

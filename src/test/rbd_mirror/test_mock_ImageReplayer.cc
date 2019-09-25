@@ -616,10 +616,14 @@ public:
   void expect_set_mirror_image_status_repeatedly() {
     EXPECT_CALL(m_local_status_updater, set_mirror_image_status(_, _, _))
       .WillRepeatedly(Invoke([](auto, auto, auto){}));
+    EXPECT_CALL(m_remote_status_updater, set_mirror_image_status(_, _, _))
+      .WillRepeatedly(Invoke([](auto, auto, auto){}));
   }
 
   void expect_mirror_image_status_exists(bool exists) {
     EXPECT_CALL(m_local_status_updater, exists(_))
+      .WillOnce(Return(exists));
+    EXPECT_CALL(m_remote_status_updater, exists(_))
       .WillOnce(Return(exists));
   }
 
@@ -627,13 +631,15 @@ public:
     m_image_replayer = new MockImageReplayer(
         m_local_io_ctx, "local_mirror_uuid", "global image id",
         &mock_threads, &m_instance_watcher, &m_local_status_updater, nullptr);
-    m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx);
+    m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx,
+                               &m_remote_status_updater);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx = nullptr;
   MockInstanceWatcher m_instance_watcher;
   MockMirrorStatusUpdater m_local_status_updater;
+  MockMirrorStatusUpdater m_remote_status_updater;
   MockImageReplayer *m_image_replayer = nullptr;
 };
 
@@ -793,13 +799,15 @@ TEST_F(TestMockImageReplayer, PrepareLocalImageError) {
   MockPrepareLocalImageRequest mock_prepare_local_image_request;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
-  expect_set_mirror_image_status_repeatedly();
+  EXPECT_CALL(m_local_status_updater, set_mirror_image_status(_, _, _))
+    .WillRepeatedly(Invoke([](auto, auto, auto){}));
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               mock_local_image_ctx.name, "remote mirror uuid", -EINVAL);
-  expect_mirror_image_status_exists(false);
+  EXPECT_CALL(m_local_status_updater, exists(_))
+    .WillOnce(Return(false));
 
   create_image_replayer(mock_threads);
 
