@@ -333,10 +333,8 @@ void ProtocolV1::write_event() {
         prepare_send_message(connection->get_features(), m, data);
       }
 
-      if (m->queue_start != ceph::mono_time()) {
-        connection->logger->tinc(l_msgr_send_messages_queue_lat,
-				 ceph::mono_clock::now() - m->queue_start);
-      }
+      connection->logger->tinc(l_msgr_send_messages_queue_lat,
+				ceph::mono_clock::now() - m->queue_start);
 
       r = write_message(m, data, more);
 

@@ -613,12 +613,8 @@ void ProtocolV2::write_event() {
         prepare_send_message(connection->get_features(), out_entry.m);
       }
 
-      if (out_entry.m->queue_start != ceph::mono_time()) {
-        connection->logger->tinc(l_msgr_send_messages_queue_lat,
-				 ceph::mono_clock::now() -
-				 out_entry.m->queue_start);
-      }
-
+      connection->logger->tinc(l_msgr_send_messages_queue_lat,
+				 ceph::mono_clock::now() -  out_entry.m->queue_start);
       r = write_message(out_entry.m, more);
 
       connection->write_lock.lock();
