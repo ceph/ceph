@@ -29,6 +29,46 @@ Prerequisites
 	ceph -s [-m {monitor-ip-address}] [-k {path/to/ceph.client.admin.keyring}]
 
 
+Deploy Metadata Server
+======================
+
+All metadata operations in CephFS happen via a metadata server, so you need at
+least one metadata server. Execute the following to create a metadata server::
+
+  ceph-deploy mds create {ceph-node}
+
+For example::
+
+  ceph-deploy mds create node1
+
+Now, your Ceph cluster would look like this:
+
+.. ditaa::
+           /------------------\         /----------------\
+           |    ceph-deploy   |         |     node1      |
+           |    Admin Node    |         | cCCC           |
+           |                  +-------->+   mon.node1    |
+           |                  |         |     osd.0      |
+           |                  |         |   mgr.node1    |
+           |                  |         |   mds.node1    |
+           \---------+--------/         \----------------/
+                     |
+                     |                  /----------------\
+                     |                  |     node2      |
+                     |                  | cCCC           |
+                     +----------------->+                |
+                     |                  |     osd.1      |
+                     |                  |   mon.node2    |
+                     |                  \----------------/
+                     |
+                     |                  /----------------\
+                     |                  |     node3      |
+                     |                  | cCCC           |
+                     +----------------->+                |
+                                        |     osd.2      |
+                                        |   mon.node3    |
+                                        \----------------/
+
 Create a File System
 ====================
 
