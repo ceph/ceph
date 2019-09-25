@@ -130,6 +130,9 @@ class CherryPyConfig(object):
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
 
+        cherrypy.log.access_log.propagate = False
+        cherrypy.log.error_log.propagate = False
+
         # Apply the 'global' CherryPy configuration.
         config = {
             'engine.autoreload.on': False,
