@@ -132,6 +132,7 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
       const std::string &remote_mirror_uuid,
+      const std::string &site_name,
       Threads<librbd::MockTestImageCtx> *threads,
       Throttler<librbd::MockTestImageCtx> *image_sync_throttler,
       Throttler<librbd::MockTestImageCtx> *image_deletion_throttler,
@@ -486,7 +487,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   MockServiceDaemon mock_service_daemon;
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  m_local_io_ctx.get_id(), peer_spec, {});
-  pool_replayer.init();
+  pool_replayer.init("siteA");
 
   ASSERT_TRUE(remote_cct != nullptr);
   ASSERT_EQ("123", remote_cct->_conf.get_val<std::string>("mon_host"));
@@ -538,7 +539,7 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   MockServiceDaemon mock_service_daemon;
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  m_local_io_ctx.get_id(), peer_spec, {});
-  pool_replayer.init();
+  pool_replayer.init("siteA");
 
   expect_service_daemon_add_or_update_attribute(
       mock_service_daemon, SERVICE_DAEMON_LEADER_KEY, true);
@@ -616,7 +617,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   MockServiceDaemon mock_service_daemon;
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  m_local_io_ctx.get_id(), peer_spec, {});
-  pool_replayer.init();
+  pool_replayer.init("siteA");
 
   C_SaferCond on_ns1_init;
   expect_namespace_replayer_init(*mock_ns1_namespace_replayer, 0);
@@ -720,7 +721,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   MockServiceDaemon mock_service_daemon;
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  m_local_io_ctx.get_id(), peer_spec, {});
-  pool_replayer.init();
+  pool_replayer.init("siteA");
 
   // test namespace replayer init fails for non leader
 

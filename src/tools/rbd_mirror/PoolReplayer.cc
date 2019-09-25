@@ -246,12 +246,13 @@ bool PoolReplayer<I>::is_running() const {
 }
 
 template <typename I>
-void PoolReplayer<I>::init() {
+void PoolReplayer<I>::init(const std::string& site_name) {
   ceph_assert(!m_pool_replayer_thread.is_started());
 
   // reset state
   m_stopping = false;
   m_blacklisted = false;
+  m_site_name = site_name;
 
   dout(10) << "replaying for " << m_peer << dendl;
   int r = init_rados(g_ceph_context->_conf->cluster,
@@ -317,8 +318,9 @@ void PoolReplayer<I>::init() {
 
   m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
       "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-      m_threads, m_image_sync_throttler.get(), m_image_deletion_throttler.get(),
-      m_service_daemon, m_cache_manager_handler));
+      m_site_name, m_threads, m_image_sync_throttler.get(),
+      m_image_deletion_throttler.get(), m_service_daemon,
+      m_cache_manager_handler));
 
   C_SaferCond on_init;
   m_default_namespace_replayer->init(&on_init);
@@ -595,7 +597,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
   for (auto &name : mirroring_namespaces) {
     auto namespace_replayer = NamespaceReplayer<I>::create(
         name, m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-        m_threads, m_image_sync_throttler.get(),
+        m_site_name, m_threads, m_image_sync_throttler.get(),
         m_image_deletion_throttler.get(), m_service_daemon,
         m_cache_manager_handler);
     auto on_init = new LambdaContext(
