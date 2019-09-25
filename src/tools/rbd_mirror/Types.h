@@ -16,6 +16,8 @@
 namespace rbd {
 namespace mirror {
 
+template <typename> struct MirrorStatusUpdater;
+
 // Performance counters
 enum {
   l_rbd_mirror_first = 27000,
@@ -51,24 +53,26 @@ std::ostream &operator<<(std::ostream &, const ImageId &image_id);
 
 typedef std::set<ImageId> ImageIds;
 
+template <typename I>
 struct Peer {
   std::string peer_uuid;
   librados::IoCtx io_ctx;
+  MirrorStatusUpdater<I>* mirror_status_updater = nullptr;
 
   Peer() {
   }
   Peer(const std::string &peer_uuid) : peer_uuid(peer_uuid) {
   }
-  Peer(const std::string &peer_uuid, librados::IoCtx& io_ctx)
-    : peer_uuid(peer_uuid), io_ctx(io_ctx) {
+  Peer(const std::string &peer_uuid, librados::IoCtx& io_ctx,
+       MirrorStatusUpdater<I>* mirror_status_updater)
+    : peer_uuid(peer_uuid), io_ctx(io_ctx),
+      mirror_status_updater(mirror_status_updater) {
   }
 
   inline bool operator<(const Peer &rhs) const {
     return peer_uuid < rhs.peer_uuid;
   }
 };
-
-typedef std::set<Peer> Peers;
 
 struct PeerSpec {
   PeerSpec() = default;

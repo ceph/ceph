@@ -359,7 +359,8 @@ void NamespaceReplayer<I>::handle_init_instance_replayer(int r) {
     return;
   }
 
-  m_instance_replayer->add_peer(m_remote_mirror_uuid, m_remote_io_ctx);
+  m_instance_replayer->add_peer(m_remote_mirror_uuid, m_remote_io_ctx,
+                                m_remote_status_updater.get());
 
   init_instance_watcher();
 }

@@ -312,12 +312,16 @@ image_replayer::HealthState ImageReplayer<I>::get_health_state() const {
 }
 
 template <typename I>
-void ImageReplayer<I>::add_peer(const std::string &peer_uuid,
-                                librados::IoCtx &io_ctx) {
+void ImageReplayer<I>::add_peer(
+    const std::string &peer_uuid, librados::IoCtx &io_ctx,
+    MirrorStatusUpdater<I>* remote_status_updater) {
+  dout(10) << "peer_uuid=" << &peer_uuid << ", "
+           << "remote_status_updater=" << remote_status_updater << dendl;
+
   std::lock_guard locker{m_lock};
   auto it = m_peers.find({peer_uuid});
   if (it == m_peers.end()) {
-    m_peers.insert({peer_uuid, io_ctx});
+    m_peers.insert({peer_uuid, io_ctx, remote_status_updater});
   }
 }
 
@@ -1442,6 +1446,10 @@ void ImageReplayer<I>::set_mirror_image_status_update(
   dout(15) << "status=" << status << dendl;
   m_local_status_updater->set_mirror_image_status(m_global_image_id, status,
                                                   force);
+  if (m_remote_image.mirror_status_updater != nullptr) {
+    m_remote_image.mirror_status_updater->set_mirror_image_status(
+      m_global_image_id, status, force);
+  }
 
   m_in_flight_op_tracker.finish_op();
 }
@@ -1621,6 +1629,17 @@ void ImageReplayer<I>::handle_shut_down(int r) {
         handle_shut_down(r);
       });
     m_local_status_updater->remove_mirror_image_status(m_global_image_id, ctx);
+    return;
+  }
+
+  if (m_remote_image.mirror_status_updater != nullptr &&
+      m_remote_image.mirror_status_updater->exists(m_global_image_id)) {
+    dout(15) << "removing remote mirror image status" << dendl;
+    auto ctx = new LambdaContext([this, r](int) {
+        handle_shut_down(r);
+      });
+    m_remote_image.mirror_status_updater->remove_mirror_image_status(
+      m_global_image_id, ctx);
     return;
   }
 

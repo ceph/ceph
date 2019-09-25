@@ -55,7 +55,8 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  void add_peer(std::string peer_uuid, librados::IoCtx io_ctx);
+  void add_peer(std::string peer_uuid, librados::IoCtx io_ctx,
+                MirrorStatusUpdater<ImageCtxT>* remote_status_updater);
 
   void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
                      const std::string &global_image_id, Context *on_finish);
@@ -88,6 +89,8 @@ private:
    *
    * @endverbatim
    */
+
+  typedef std::set<Peer<ImageCtxT>> Peers;
 
   librados::IoCtx &m_local_io_ctx;
   std::string m_local_mirror_uuid;
