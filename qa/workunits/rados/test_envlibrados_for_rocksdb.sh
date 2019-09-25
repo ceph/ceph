@@ -40,7 +40,7 @@ CURRENT_PATH=`pwd`
 # for rocksdb
 case $(lsb_release -si) in
 	Ubuntu|Debian|Devuan)
-		install g++-4.7 libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev librados-dev
+		install g++ libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev librados-dev
 		;;
 	CentOS|Fedora|RedHatEnterpriseServer)
 		install gcc-c++.x86_64 gflags-devel snappy-devel zlib zlib-devel bzip2 bzip2-devel librados2-devel.x86_64
