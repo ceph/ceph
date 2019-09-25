@@ -1033,30 +1033,39 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
   } else {
     RGWObjManifest& manifest = result.manifest;
 
+    // after the first insert into obj_oids, we need to switch to the
+    // tail bucket, if it exists
+    bool first_insert = false;
+
     if (0 == manifest.get_max_head_size()) {
       // in multipart, the head object contains no data and just has
       // the manifest
       const std::string s = bucket.marker + "_" + result.obj.get_object();
       obj_oids.insert(s);
+      first_insert = true;
     }
 
     RGWObjManifest::obj_iterator miter;
 
-    rgw_bucket* bucket_cursor = &bucket;
-    bool tail_checked = false;
+    // will either be this bucket or the tail bucket if it exists and
+    // after the first insert is done
+    const rgw_bucket* bucket_cursor = &bucket;
+    bool tail_checked = false; // only check for tail bucket once
 
-    // first time through the loop bucket_cursor is initial bucket,
-    // thereafter tail_bucket, if it exists
+    // after first output, we switch to tail bucket if it exists
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
+      // after doing this once, use tail bucket for test
+      if (first_insert &&
+	  !tail_checked &&
+	  !manifest.get_tail_bucket().name.empty()) {
+        bucket_cursor = &manifest.get_tail_bucket();
+	tail_checked = true;
+      }
+
       const rgw_obj& loc = miter.get_location();
       const std::string s = bucket_cursor->marker + "_" + loc.get_object();
       obj_oids.insert(s);
-
-      // after doing this once, use tail bucket for test
-      if (!tail_checked && !manifest.get_tail_bucket().name.empty()) {
-        bucket_cursor = &manifest.get_tail_bucket();
-      }
-      tail_checked = true;
+      first_insert = true;
     }
   }
 
