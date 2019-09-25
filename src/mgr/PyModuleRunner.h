@@ -52,7 +52,7 @@ protected:
 public:
   int serve();
   void shutdown();
-  void log(int level, const std::string &record);
+  void log(const std::string &record);
 
   const char *get_thread_name() const
   {
