@@ -96,22 +96,25 @@ private:
   /**
    * @verbatim
    *
-   * <uninitialized> <--------------------------------\
-   *    | (init)                 ^ (error)            |
-   *    v                        *                    |
-   * INIT_LOCAL_STATUS_UPDATER * *   * * * * > SHUT_DOWN_LOCAL_STATUS_UPDATER
-   *    |                            * (error)        ^
-   *    v                            *                |
-   * INIT_INSTANCE_REPLAYER  * * * * *   * * > SHUT_DOWN_INSTANCE_REPLAYER
-   *    |                                *            ^
-   *    v                                *            |
-   * INIT_INSTANCE_WATCHER * * * * * * * *     SHUT_DOWN_INSTANCE_WATCHER
-   *    |                       (error)               ^
-   *    |                                             |
-   *    v                                      STOP_INSTANCE_REPLAYER
-   *    |                                             ^
-   *    |    (shut down)                              |
-   *    |  /------------------------------------------/
+   * <uninitialized> <------------------------------------\
+   *    | (init)                 ^ (error)                |
+   *    v                        *                        |
+   * INIT_LOCAL_STATUS_UPDATER * *   * * * * * * > SHUT_DOWN_LOCAL_STATUS_UPDATER
+   *    |                            * (error)            ^
+   *    v                            *                    |
+   * INIT_REMOTE_STATUS_UPDATER  * * *   * * * * > SHUT_DOWN_REMOTE_STATUS_UPDATER
+   *    |                                * (error)        ^
+   *    v                                *                |
+   * INIT_INSTANCE_REPLAYER  * * * * * * *   * * > SHUT_DOWN_INSTANCE_REPLAYER
+   *    |                                    *            ^
+   *    v                                    *            |
+   * INIT_INSTANCE_WATCHER * * * * * * * * * *     SHUT_DOWN_INSTANCE_WATCHER
+   *    |                       (error)                   ^
+   *    |                                                 |
+   *    v                                          STOP_INSTANCE_REPLAYER
+   *    |                                                 ^
+   *    |    (shut down)                                  |
+   *    |  /----------------------------------------------/
    *    v  |
    * <follower> <---------------------------\
    *    .                                   |
@@ -201,6 +204,9 @@ private:
   void init_local_status_updater();
   void handle_init_local_status_updater(int r);
 
+  void init_remote_status_updater();
+  void handle_init_remote_status_updater(int r);
+
   void init_instance_replayer();
   void handle_init_instance_replayer(int r);
 
@@ -215,6 +221,9 @@ private:
 
   void shut_down_instance_replayer();
   void handle_shut_down_instance_replayer(int r);
+
+  void shut_down_remote_status_updater();
+  void handle_shut_down_remote_status_updater(int r);
 
   void shut_down_local_status_updater();
   void handle_shut_down_local_status_updater(int r);
@@ -268,6 +277,7 @@ private:
   Context *m_on_finish = nullptr;
 
   std::unique_ptr<MirrorStatusUpdater<ImageCtxT>> m_local_status_updater;
+  std::unique_ptr<MirrorStatusUpdater<ImageCtxT>> m_remote_status_updater;
 
   PoolWatcherListener m_local_pool_watcher_listener;
   std::unique_ptr<PoolWatcher<ImageCtxT>> m_local_pool_watcher;

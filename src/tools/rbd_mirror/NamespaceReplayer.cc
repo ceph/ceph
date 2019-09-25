@@ -283,9 +283,44 @@ void NamespaceReplayer<I>::handle_init_local_status_updater(int r) {
     derr << "error initializing local mirror status updater: "
          << cpp_strerror(r) << dendl;
 
+    m_local_status_updater.reset();
     ceph_assert(m_on_finish != nullptr);
     m_threads->work_queue->queue(m_on_finish, r);
     m_on_finish = nullptr;
+    return;
+  }
+
+  init_remote_status_updater();
+}
+
+template <typename I>
+void NamespaceReplayer<I>::init_remote_status_updater() {
+  dout(10) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked(m_lock));
+  ceph_assert(!m_remote_status_updater);
+
+  m_remote_status_updater.reset(MirrorStatusUpdater<I>::create(
+    m_remote_io_ctx, m_threads, m_local_site_name));
+  auto ctx = create_context_callback<
+    NamespaceReplayer<I>,
+    &NamespaceReplayer<I>::handle_init_remote_status_updater>(this);
+  m_remote_status_updater->init(ctx);
+}
+
+template <typename I>
+void NamespaceReplayer<I>::handle_init_remote_status_updater(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  std::lock_guard locker{m_lock};
+
+  if (r < 0) {
+    derr << "error initializing remote mirror status updater: "
+         << cpp_strerror(r) << dendl;
+
+    m_remote_status_updater.reset();
+    m_ret_val = r;
+    shut_down_local_status_updater();
     return;
   }
 
@@ -320,7 +355,7 @@ void NamespaceReplayer<I>::handle_init_instance_replayer(int r) {
 
     m_instance_replayer.reset();
     m_ret_val = r;
-    shut_down_local_status_updater();
+    shut_down_remote_status_updater();
     return;
   }
 
@@ -456,6 +491,35 @@ void NamespaceReplayer<I>::handle_shut_down_instance_replayer(int r) {
 
   m_instance_replayer.reset();
 
+  shut_down_remote_status_updater();
+}
+
+template <typename I>
+void NamespaceReplayer<I>::shut_down_remote_status_updater() {
+  dout(10) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked(m_lock));
+  ceph_assert(m_remote_status_updater);
+
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      NamespaceReplayer<I>,
+      &NamespaceReplayer<I>::handle_shut_down_remote_status_updater>(this));
+  m_remote_status_updater->shut_down(ctx);
+}
+
+template <typename I>
+void NamespaceReplayer<I>::handle_shut_down_remote_status_updater(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "error shutting remote mirror status updater down: "
+         << cpp_strerror(r) << dendl;
+  }
+
+  std::lock_guard locker{m_lock};
+  m_remote_status_updater.reset();
+
   shut_down_local_status_updater();
 }
 
@@ -479,8 +543,8 @@ void NamespaceReplayer<I>::handle_shut_down_local_status_updater(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
-    derr << "error shutting mirror status watcher down: " << cpp_strerror(r)
-         << dendl;
+    derr << "error shutting local mirror status updater down: "
+         << cpp_strerror(r) << dendl;
   }
 
   std::lock_guard locker{m_lock};
