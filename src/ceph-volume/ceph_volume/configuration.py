@@ -1,13 +1,19 @@
-try:
-    import configparser
-except ImportError:
-    import ConfigParser as configparser
 import contextlib
 import logging
 import os
 import re
 from ceph_volume import terminal, conf
 from ceph_volume import exceptions
+from sys import version_info as sys_version_info
+
+if sys_version_info.major >= 3:
+    import configparser
+    conf_parentclass = configparser.ConfigParser
+elif sys_version_info.major < 3:
+    import ConfigParser as configparser
+    conf_parentclass = configparser.SafeConfigParser
+else:
+    raise RuntimeError('Not expecting python version > 3 yet.')
 
 
 logger = logging.getLogger(__name__)
@@ -50,7 +56,7 @@ def load(abspath=None):
         ceph_file = open(abspath)
         trimmed_conf = _TrimIndentFile(ceph_file)
         with contextlib.closing(ceph_file):
-            parser.readfp(trimmed_conf)
+            parser.read_conf(trimmed_conf)
             conf.ceph = parser
             return parser
     except configparser.ParsingError as error:
@@ -59,9 +65,9 @@ def load(abspath=None):
         raise RuntimeError('Unable to read configuration file: %s' % abspath)
 
 
-class Conf(configparser.SafeConfigParser):
+class Conf(conf_parentclass):
     """
-    Subclasses from SafeConfigParser to give a few helpers for Ceph
+    Subclasses from ConfigParser to give a few helpers for Ceph
     configuration.
     """
 
@@ -215,3 +221,11 @@ class Conf(configparser.SafeConfigParser):
             for name, val in options.items():
                 if isinstance(val, list):
                     options[name] = '\n'.join(val)
+
+    def read_conf(self, conffile):
+        if sys_version_info.major >= 3:
+            self.read_file(conffile)
+        elif sys_version_info.major < 3:
+            self.readfp(conffile)
+        else:
+            raise RuntimeError('Not expecting python version > 3 yet.')
