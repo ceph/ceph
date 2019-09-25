@@ -3,6 +3,8 @@ overrides:
     mon_bind_addrvec: false
     mon_bind_msgr2: false
     crush_tunables: hammer
+    log-whitelist:
+      - \(MON_DOWN\)
     conf:
       global:
         ms bind msgr2: false
