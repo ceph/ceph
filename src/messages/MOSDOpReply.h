@@ -147,9 +147,11 @@ public:
     retry_attempt = req->get_retry_attempt();
     do_redirect = false;
 
-    // zero out data?
-    if (ignore_out_data) {
-      for (unsigned i = 0; i < ops.size(); i++) {
+    for (unsigned i = 0; i < ops.size(); i++) {
+      // zero out input data
+      ops[i].indata.clear();
+      if (ignore_out_data) {
+	// original request didn't set the RETURNVEC flag
 	ops[i].outdata.clear();
       }
     }
