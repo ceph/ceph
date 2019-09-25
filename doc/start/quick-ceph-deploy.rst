@@ -11,7 +11,7 @@ explore Ceph functionality.
 
 As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and three
 Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` state, expand it
-by adding a fourth Ceph OSD Daemon, a Metadata Server and two more Ceph Monitors.
+by adding a fourth Ceph OSD Daemon, and two more Ceph Monitors.
 For best results, create a directory on your admin node for maintaining the
 configuration files and keys that ``ceph-deploy`` generates for your cluster. ::
 
@@ -152,18 +152,18 @@ configuration details, perform the following steps using ``ceph-deploy``.
 Expanding Your Cluster
 ======================
 
-Once you have a basic cluster up and running, the next step is to
-expand cluster. Add a Ceph Metadata Server to ``node1``.  Then add a
-Ceph Monitor and Ceph Manager to ``node2`` and ``node3`` to improve reliability and availability.
+Once you have a basic cluster up and running, the next step is to expand
+cluster. Then add a Ceph Monitor and Ceph Manager to ``node2`` and ``node3``
+to improve reliability and availability.
 
 .. ditaa::
            /------------------\         /----------------\
            |    ceph-deploy   |         |     node1      |
            |    Admin Node    |         | cCCC           |
-           |                  +-------->+   mon.node1    |
+           |                  +-------->+                |
+           |                  |         |   mon.node1    |
            |                  |         |     osd.0      |
            |                  |         |   mgr.node1    |
-           |                  |         |   mds.node1    |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
@@ -181,18 +181,6 @@ Ceph Monitor and Ceph Manager to ``node2`` and ``node3`` to improve reliability 
                                         |     osd.2      |
                                         |   mon.node3    |
                                         \----------------/
-
-Add a Metadata Server
----------------------
-
-To use CephFS, you need at least one metadata server. Execute the following to
-create a metadata server::
-
-  ceph-deploy mds create {ceph-node}
-
-For example::
-
-  ceph-deploy mds create node1
 
 Adding Monitors
 ---------------
