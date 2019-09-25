@@ -30,11 +30,13 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 MirrorStatusUpdater<I>::MirrorStatusUpdater(
-    librados::IoCtx& io_ctx, Threads<I> *threads)
-  : m_io_ctx(io_ctx), m_threads(threads),
+    librados::IoCtx& io_ctx, Threads<I> *threads,
+    const std::string& site_name)
+  : m_io_ctx(io_ctx), m_threads(threads), m_site_name(site_name),
     m_lock(ceph::make_mutex("rbd::mirror::MirrorStatusUpdater " +
                             stringify(m_io_ctx.get_id()))) {
-  dout(10) << "pool_id=" << m_io_ctx.get_id() << dendl;
+  dout(10) << "site_name=" << site_name << ", "
+           << "pool_id=" << m_io_ctx.get_id() << dendl;
 }
 
 template <typename I>
@@ -46,6 +48,16 @@ MirrorStatusUpdater<I>::~MirrorStatusUpdater() {
 template <typename I>
 void MirrorStatusUpdater<I>::init(Context* on_finish) {
   dout(10) << dendl;
+
+  if (!m_site_name.empty()) {
+    librados::Rados rados(m_io_ctx);
+    int r = rados.cluster_fsid(&m_fsid);
+    if (r < 0) {
+      derr << "failed to retrieve fsid: " << cpp_strerror(r) << dendl;
+      m_threads->work_queue->queue(on_finish, r);
+      return;
+    }
+  }
 
   ceph_assert(!m_initialized);
   m_initialized = true;
@@ -299,6 +311,12 @@ void MirrorStatusUpdater<I>::update_task(int r) {
     librados::ObjectWriteOperation op;
     uint32_t op_count = 0;
 
+    if (!m_site_name.empty()) {
+      // updates to remote sites should include local site name
+      // to ensure status includes this peer
+      librbd::cls_client::mirror_peer_ping(&op, m_site_name, m_fsid);
+    }
+
     while (it != updating_global_image_ids.end() &&
            op_count < MAX_UPDATES_PER_OP) {
       auto& global_image_id = *it;
@@ -309,6 +327,7 @@ void MirrorStatusUpdater<I>::update_task(int r) {
         continue;
       }
 
+      status_it->second.fsid = m_fsid;
       librbd::cls_client::mirror_image_status_set(&op, global_image_id,
                                                   status_it->second);
       ++op_count;

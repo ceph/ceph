@@ -265,7 +265,7 @@ void NamespaceReplayer<I>::init_local_status_updater() {
   ceph_assert(!m_local_status_updater);
 
   m_local_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_local_io_ctx, m_threads));
+    m_local_io_ctx, m_threads, ""));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_local_status_updater>(this);

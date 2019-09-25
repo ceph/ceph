@@ -174,7 +174,8 @@ struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
   static MirrorStatusUpdater* s_instance;
 
   static MirrorStatusUpdater *create(librados::IoCtx &io_ctx,
-                                     Threads<librbd::MockTestImageCtx> *threads) {
+                                     Threads<librbd::MockTestImageCtx> *threads,
+                                     const std::string& site_name) {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }

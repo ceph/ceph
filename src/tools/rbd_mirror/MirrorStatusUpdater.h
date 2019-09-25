@@ -26,11 +26,13 @@ class MirrorStatusUpdater {
 public:
 
   static MirrorStatusUpdater* create(librados::IoCtx& io_ctx,
-                                     Threads<ImageCtxT> *threads) {
-    return new MirrorStatusUpdater(io_ctx, threads);
+                                     Threads<ImageCtxT> *threads,
+                                     const std::string& site_name) {
+    return new MirrorStatusUpdater(io_ctx, threads, site_name);
   }
 
-  MirrorStatusUpdater(librados::IoCtx& io_ctx, Threads<ImageCtxT> *threads);
+  MirrorStatusUpdater(librados::IoCtx& io_ctx, Threads<ImageCtxT> *threads,
+                      const std::string& site_name);
   ~MirrorStatusUpdater();
 
   void init(Context* on_finish);
@@ -68,6 +70,8 @@ private:
 
   librados::IoCtx m_io_ctx;
   Threads<ImageCtxT>* m_threads;
+  std::string m_site_name;
+  std::string m_fsid;
 
   Context* m_timer_task = nullptr;
 
