@@ -81,7 +81,7 @@ class RequestLoggingTool(cherrypy.Tool):
 
     def request_end(self):
         status = cherrypy.response.status[:3]
-        if status in ["401"]:
+        if status in ["401", "403"]:
             # log unauthorized accesses
             self._request_log(self.logger.warning)
         else:
