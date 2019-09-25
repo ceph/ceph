@@ -527,16 +527,16 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
 
-  verbose = verbose && (formatter != nullptr);
+  bool verbose_json_out = verbose && (formatter != nullptr) && (out != nullptr);
 
-  if (verbose) {
+  if (verbose_json_out) {
     formatter->open_array_section("entries");
   }
 
   uint64_t total_entries = 0;
 
-  if (!verbose) {
-    cout << "total entries:";
+  if (!verbose_json_out && out) {
+    (*out) << "total entries:";
   }
 
   const int num_source_shards =
@@ -555,7 +555,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
       for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
 	rgw_cls_bi_entry& entry = *iter;
-	if (verbose) {
+	if (verbose_json_out) {
 	  formatter->open_object_section("entry");
 
 	  encode_json("shard_id", i, formatter);
@@ -604,11 +604,9 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  }
 	}
 
-	if (verbose) {
+	if (verbose_json_out) {
 	  formatter->close_section();
-	  if (out) {
-	    formatter->flush(*out);
-	  }
+	  formatter->flush(*out);
 	} else if (out && !(total_entries % 1000)) {
 	  (*out) << " " << total_entries;
 	}
@@ -616,11 +614,9 @@ int RGWBucketReshard::do_reshard(int num_shards,
     }
   }
 
-  if (verbose) {
+  if (verbose_json_out) {
     formatter->close_section();
-    if (out) {
-      formatter->flush(*out);
-    }
+    formatter->flush(*out);
   } else if (out) {
     (*out) << " " << total_entries << std::endl;
   }
