@@ -3962,3 +3962,23 @@ TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_exit,
         ctf_integer(int, retval, retval)
     )
 )
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_obj_list_enter,
+    TP_ARGS(
+        rados_ioctx_t, io,
+        const char*, pgidstr,
+        size_t, size),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, io, io)
+        ceph_ctf_string(pgidstr, pgidstr)
+        ctf_integer(size_t, size, size)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_obj_list_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

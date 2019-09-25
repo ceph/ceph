@@ -10,6 +10,8 @@
 #include "common/common_init.h"
 #include "common/TracepointProvider.h"
 #include "common/hobject.h"
+#include "common/Formatter.h"
+#include "include/rados/rados_types.hpp"
 #include "include/rados/librados.h"
 #include "include/types.h"
 #include <include/stringify.h>
@@ -666,6 +668,129 @@ extern "C" int _rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_inconsistent_pg_list);
 
+static void dump_inconsistent(const librados::inconsistent_obj_t& inc,
+            Formatter& f)
+{
+  f.dump_string("obj_name", inc.object.name);
+
+  f.open_array_section("errors");
+  if (inc.has_object_info_inconsistency())
+    f.dump_string("error", "object_info_inconsistency");
+  if (inc.has_data_digest_mismatch())
+    f.dump_string("error", "data_digest_mismatch");
+  if (inc.has_omap_digest_mismatch())
+    f.dump_string("error", "omap_digest_mismatch");
+  if (inc.has_size_mismatch())
+    f.dump_string("error", "size_mismatch");
+  if (inc.has_attr_value_mismatch())
+    f.dump_string("error", "attr_value_mismatch");
+  if (inc.has_attr_name_mismatch())
+    f.dump_string("error", "attr_name_mismatch");
+  if (inc.has_snapset_inconsistency())
+    f.dump_string("error", "snapset_inconsistency");
+  if (inc.has_hinfo_inconsistency())
+    f.dump_string("error", "hinfo_inconsistency");
+  f.close_section(); // errors
+
+  f.open_array_section("shards");
+  for (const auto& shard_info : inc.shards) {
+    f.open_object_section("shard");
+    auto& osd_shard = shard_info.first;
+    f.dump_int("osd", osd_shard.osd);
+    f.dump_bool("primary", shard_info.second.primary);
+    f.close_section(); // shard
+  }
+  f.close_section(); // shards
+}
+
+extern "C" int _rados_inconsistent_obj_list(rados_ioctx_t io,
+              const char* pgidstr, char* buf, size_t size)
+{
+  tracepoint(librados, rados_inconsistent_obj_list_enter, io, pgidstr, size);
+
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+
+  pg_t pgid;
+  if (!pgid.parse(pgidstr)) {
+    return -EINVAL;
+  }
+
+  bool opened{false};
+  JSONFormatter f;
+
+  uint32_t interval{0}, first_interval{0};
+  const unsigned max_item_num{32};
+
+  for (librados::object_id_t start; ; ) {
+    std::vector<librados::inconsistent_obj_t> items;
+    auto completion = librados::Rados::aio_create_completion();
+    int ret = ctx->get_inconsistent_objects(pgid,
+                                           start,
+                                           max_item_num,
+                                           completion->pc,
+                                           &items,
+                                           &interval);
+    completion->wait_for_safe();
+    ret = completion->get_return_value();
+    completion->release();
+
+    if (ret < 0) {
+      break;
+    }
+    // It must be the same interval every time.  EAGAIN would
+    // occur if interval changes.
+    assert(start.name.empty() || first_interval == interval);
+
+    if (start.name.empty()) {
+      first_interval = interval;
+      f.open_object_section("info");
+      f.open_array_section("inconsistents");
+      opened = true;
+    }
+
+    for (const auto& inc : items) {
+      f.open_object_section("inconsistent");
+      dump_inconsistent(inc, f);
+      f.close_section();  // close inconsistent
+    }
+    if (items.size() < max_item_num) {
+      f.close_section(); // close inconsistents 
+      break;
+    }
+
+    if (!items.empty()) {
+      start = items.back().object;
+    }
+    items.clear();
+  }
+
+  bufferlist bl;
+  if (opened) {
+    f.close_section(); // close info
+    f.flush(bl);
+  }
+
+  if (bl.length() >= size) {
+    // if buffer size is not enough, return and reallocate buffer,
+    // buffer terminated with '\0'
+    return bl.length() + 1;
+  }
+
+  if (size > 0 && !buf) {
+    tracepoint(librados, rados_inconsistent_obj_list_exit, -EINVAL);
+    return -EINVAL;
+  }
+
+  char *b = buf;
+  if (b) {
+    memset(b, 0, size);
+  }
+  strncpy(buf, static_cast<const char*>(bl.c_str()), bl.length());
+  buf[bl.length()] = '\0';
+
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_inconsistent_obj_list);
 
 static void dict_to_map(const char *dict,
                         std::map<std::string, std::string>* dict_map)
