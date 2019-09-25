@@ -42,7 +42,12 @@ class TestMisc(CephFSTestCase):
         self.mount_a.kill_background(p)
 
     def test_fs_new(self):
-        data_pool_name = self.fs.get_data_pool_name()
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+
+	
+	 data_pool_name = self.fs.get_data_pool_name()
 
         self.fs.mds_stop()
         self.fs.mds_fail()
