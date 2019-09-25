@@ -43,6 +43,11 @@ const ClusterWatcher::PoolPeers& ClusterWatcher::get_pool_peers() const
   return m_pool_peers;
 }
 
+std::string ClusterWatcher::get_site_name() const {
+  ceph_assert(ceph_mutex_is_locked(m_lock));
+  return m_site_name;
+}
+
 void ClusterWatcher::refresh_pools()
 {
   dout(20) << "enter" << dendl;
@@ -50,8 +55,16 @@ void ClusterWatcher::refresh_pools()
   PoolPeers pool_peers;
   read_pool_peers(&pool_peers);
 
+  std::string site_name;
+  int r = read_site_name(&site_name);
+
   std::lock_guard l{m_lock};
   m_pool_peers = pool_peers;
+
+  if (r >= 0) {
+    m_site_name = site_name;
+  }
+
   // TODO: perhaps use a workqueue instead, once we get notifications
   // about config changes for existing pools
 }
@@ -161,6 +174,13 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers)
       m_service_pools.erase(current_it->first);
     }
   }
+}
+
+int ClusterWatcher::read_site_name(std::string* site_name) {
+  dout(10) << dendl;
+
+  librbd::RBD rbd;
+  return rbd.mirror_site_name_get(*m_cluster, site_name);
 }
 
 int ClusterWatcher::resolve_peer_config_keys(int64_t pool_id,

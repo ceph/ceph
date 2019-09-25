@@ -251,3 +251,16 @@ TEST_F(TestClusterWatcher, ConfigKey) {
 
   check_peers();
 }
+
+TEST_F(TestClusterWatcher, SiteName) {
+  REQUIRE(!is_librados_test_stub(*m_cluster));
+
+  std::string site_name;
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.mirror_site_name_get(*m_cluster, &site_name));
+
+  m_cluster_watcher->refresh_pools();
+
+  std::lock_guard l{m_lock};
+  ASSERT_EQ(site_name, m_cluster_watcher->get_site_name());
+}
