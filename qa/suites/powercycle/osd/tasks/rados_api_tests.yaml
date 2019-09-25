@@ -3,6 +3,7 @@ overrides:
     log-whitelist:
       - reached quota
       - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
 tasks:
 - ceph-fuse:
 - workunit:
