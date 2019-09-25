@@ -52,18 +52,11 @@ class CPlusPlusHandler(logging.Handler):
     def __init__(self, module_inst):
         super(CPlusPlusHandler, self).__init__()
         self._module = module_inst
+        self.setFormatter(logging.Formatter("[%(levelname)-4s] %(message)s"))
 
     def emit(self, record):
-        if record.levelno <= logging.DEBUG:
-            ceph_level = 20
-        elif record.levelno <= logging.INFO:
-            ceph_level = 4
-        elif record.levelno <= logging.WARNING:
-            ceph_level = 1
-        else:
-            ceph_level = 0
-
-        self._module._ceph_log(ceph_level, self.format(record))
+        if record.levelno >= self._module._get_log_level():
+            self._module._ceph_log(self.format(record))
 
 
 def configure_logger(module_inst, module_name):
@@ -97,7 +90,7 @@ def configure_logger(module_inst, module_name):
     # Check https://docs.python.org/3/library/logging.html#logging.Logger.setLevel
     # for more information about how the effective log level is
     # determined.
-    root_logger.setLevel(logging.ERROR)
+    root_logger.setLevel(logging.CRITICAL)
 
     return logger
 
