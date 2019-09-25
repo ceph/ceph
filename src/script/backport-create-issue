@@ -75,6 +75,8 @@ def parse_arguments():
                         action="store_true")
     parser.add_argument("--dry-run", help="Do not write anything to Redmine",
                         action="store_true")
+    parser.add_argument("--force", help="Create backport issues even if status not Pending Backport",
+                        action="store_true")
     return parser.parse_args()
 
 def set_logging_level(a):
@@ -262,13 +264,13 @@ def maybe_resolve(issue, backports, dry_run):
     else:
         logging.debug("Some backport issues are still unresolved: leaving parent issue open")
 
-def iterate_over_backports(r, issues, dry_run):
+def iterate_over_backports(r, issues, dry_run=False):
     counter = 0
     for issue in issues:
         counter += 1
         logging.debug("{} ({}) {}".format(issue.id, issue.project,
             issue.subject))
-        print('{}\r'.format(issue.id), end='', flush=True)
+        print('Examining issue#{} ({}/{})\r'.format(issue.id, counter, len(issues)), end='', flush=True)
         if not has_tracker(r, issue['project']['id'], 'Backport'):
             logging.info("{} skipped because the project {} does not "
                 "have a Backport tracker".format(url(issue),
@@ -280,8 +282,7 @@ def iterate_over_backports(r, issues, dry_run):
         if len(issue['backports']) == 0:
             logging.error(url(issue) + " the backport field is empty")
         update_relations(r, issue, dry_run)
-    logging.info("Processed {} issues with status Pending Backport"
-                 .format(counter))
+    logging.info("Processed {} issues".format(counter))
     return None
 
 
@@ -299,13 +300,29 @@ if __name__ == '__main__':
     logging.debug("Pending Backport status has ID {}"
         .format(pending_backport_status_id))
     populate_tracker_dict(redmine)
+    force_create = False
     if args.issue_numbers:
         issue_list = ','.join(args.issue_numbers)
         logging.info("Processing issue list ->{}<-".format(issue_list))
-        issues = redmine.issue.filter(project_id=ceph_project_id,
-                                      issue_id=issue_list,
-                                      status_id=pending_backport_status_id)
+        if args.force:
+            force_create = True
+            logging.warn("--force option was given: ignoring issue status!")
+            issues = redmine.issue.filter(project_id=ceph_project_id,
+                                          issue_id=issue_list)
+
+        else:
+            issues = redmine.issue.filter(project_id=ceph_project_id,
+                                          issue_id=issue_list,
+                                          status_id=pending_backport_status_id)
     else:
+        if args.force:
+            logging.warn("ignoring --force option, which can only be used with an explicit issue list")
         issues = redmine.issue.filter(project_id=ceph_project_id,
                                       status_id=pending_backport_status_id)
-    iterate_over_backports(redmine, issues, args.dry_run)
+    if force_create:
+        logging.info("Processing {} issues regardless of status"
+                     .format(len(issues)))
+    else:
+        logging.info("Processing {} issues with status Pending Backport"
+                     .format(len(issues)))
+    iterate_over_backports(redmine, issues, dry_run=args.dry_run)
