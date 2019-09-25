@@ -23,6 +23,7 @@ class RGWPSSyncModuleInstance : public RGWSyncModuleInstance {
   JSONFormattable effective_conf;
 public:
   RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config);
+  ~RGWPSSyncModuleInstance();
   RGWDataSyncModule *get_data_handler() override;
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
   bool supports_user_writes() override {
@@ -31,6 +32,9 @@ public:
   const JSONFormattable& get_effective_conf() {
     return effective_conf;
   }
+  // start with full sync based on configuration
+  // default to incremental only
+  virtual bool should_full_sync() const override;
 };
 
 #endif

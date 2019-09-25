@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_HTTP_CLIENT_H
 #define CEPH_RGW_HTTP_CLIENT_H
 
+#include "common/async/yield_context.h"
 #include "common/RWLock.h"
 #include "common/Cond.h"
 #include "rgw_common.h"
@@ -178,9 +179,9 @@ public:
     verify_ssl = flag;
   }
 
-  int process();
+  int process(optional_yield y=null_yield);
 
-  int wait();
+  int wait(optional_yield y=null_yield);
   void cancel();
   bool is_done();
 
@@ -360,6 +361,6 @@ class RGWHTTP
 {
 public:
   static int send(RGWHTTPClient *req);
-  static int process(RGWHTTPClient *req);
+  static int process(RGWHTTPClient *req, optional_yield y=null_yield);
 };
 #endif

@@ -2890,7 +2890,7 @@ int main(int argc, const char **argv)
   string sub_dest_bucket;
   string sub_push_endpoint;
   string event_id;
-  set<string, ltstr_nocase> event_types;
+  rgw::notify::EventTypeList event_types;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -3229,7 +3229,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--event-id", (char*)NULL)) {
       event_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--event-type", "--event-types", (char*)NULL)) {
-      get_str_set(val, ",", event_types);
+      rgw::notify::from_string_list(val, event_types);
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -8242,18 +8242,16 @@ next:
     RGWUserInfo& user_info = user_op.get_user_info();
     RGWUserPubSub ups(store, user_info.user_id);
 
-    RGWUserPubSub::Sub::list_events_result result;
-
     if (!max_entries_specified) {
-      max_entries = 100;
+      max_entries = RGWUserPubSub::Sub::DEFAULT_MAX_EVENTS;
     }
     auto sub = ups.get_sub(sub_name);
-    ret = sub->list_events(marker, max_entries, &result);
+    ret = sub->list_events(marker, max_entries);
     if (ret < 0) {
       cerr << "ERROR: could not list events: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    encode_json("result", result, formatter);
+    encode_json("result", *sub, formatter);
     formatter->flush(cout);
  }
 

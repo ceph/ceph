@@ -43,6 +43,7 @@ enum {
   l_rgw_pubsub_push_ok,
   l_rgw_pubsub_push_failed,
   l_rgw_pubsub_push_pending,
+  l_rgw_pubsub_missing_conf,
 
   l_rgw_last,
 };

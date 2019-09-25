@@ -503,9 +503,10 @@ protected:
   virtual RGWOp *op_copy() { return NULL; }
   virtual RGWOp *op_options() { return NULL; }
 
+public:
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
-public:
+
   static constexpr int MAX_BUCKET_NAME_LEN = 255;
   static constexpr int MAX_OBJ_NAME_LEN = 1024;
 
@@ -514,6 +515,7 @@ public:
 
   static int validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& object);
+  static int reallocate_formatter(struct req_state *s, int type);
 
   int init_permissions(RGWOp* op) override;
   int read_permissions(RGWOp* op) override;

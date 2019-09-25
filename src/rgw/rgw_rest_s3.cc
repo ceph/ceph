@@ -21,6 +21,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
+#include "rgw_rest_pubsub.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -3077,6 +3078,17 @@ RGWOp *RGWHandler_REST_Service_S3::op_head()
 
 RGWOp *RGWHandler_REST_Service_S3::op_post()
 {
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+
+  int ret;
+  bufferlist data;
+  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  if (ret < 0) {
+      return nullptr;
+  }
+
+  const auto post_body = data.to_str();
+
   if (s->info.args.exists("Action")) {
     string action = s->info.args.get("Action");
     if (action.compare("CreateRole") == 0)
@@ -3106,11 +3118,24 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
     if (action.compare("DeleteUserPolicy") == 0)
       return new RGWDeleteUserPolicy;
   }
-  if (this->isSTSenabled) {
-    RGWHandler_REST_STS sts_handler(auth_registry);
+
+  if (isSTSenabled) {
+    RGWHandler_REST_STS sts_handler(auth_registry, post_body);
     sts_handler.init(store, s, s->cio);
-    return sts_handler.get_op(store);
+    auto op = sts_handler.get_op(store);
+    if (op) {
+      return op;
+    }
   }
+  if (isPSenabled) {
+    RGWHandler_REST_PSTopic_AWS topic_handler(auth_registry, post_body);
+    topic_handler.init(store, s, s->cio);
+    auto op = topic_handler.get_op(store);
+    if (op) {
+      return op;
+    }
+  }
+
   return NULL;
 }
 
@@ -3158,6 +3183,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWGetBucketPolicy;
+  } else if (is_notification_op()) {
+    return RGWHandler_REST_PSNotifs_S3::create_get_op();
   }
   return get_obj_op(true);
 }
@@ -3194,6 +3221,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWPutBucketPolicy;
+  } else if (is_notification_op()) {
+    return RGWHandler_REST_PSNotifs_S3::create_put_op();
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -3206,6 +3235,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWDeleteBucketPolicy;
+  } else if (is_notification_op()) {
+    return RGWHandler_REST_PSNotifs_S3::create_delete_op();
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -3618,9 +3649,9 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
     }
   } else {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts);
+      handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts, enable_pubsub);
     } else if (s->object.empty()) {
-      handler = new RGWHandler_REST_Bucket_S3(auth_registry);
+      handler = new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
     } else {
       handler = new RGWHandler_REST_Obj_S3(auth_registry);
     }
@@ -4053,6 +4084,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ_TAGGING:
         case RGW_OP_PUT_LC:
         case RGW_OP_SET_REQUEST_PAYMENT:
+        case RGW_OP_PUBSUB_NOTIF_CREATE:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
