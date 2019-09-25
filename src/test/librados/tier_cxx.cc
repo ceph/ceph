@@ -6428,3 +6428,71 @@ TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
 
   ASSERT_EQ(-ECANCELED, ioctx.operate("propagate-base-tier-error", &op2));
 }
+
+TEST_F(LibRadosTwoPoolsPP, HelloWriteReturn) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // set things up such that the op would normally be proxied
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "hit_set_count", 2),
+	      inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "hit_set_period", 600),
+	      inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "hit_set_type",
+			   "explicit_object"),
+	      inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	      set_pool_str(cache_pool_name, "min_read_recency_for_promote",
+			   "10000"),
+	      inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // this *will* return data due to the RETURNVEC flag
+  {
+    bufferlist in, out;
+    int rval;
+    ObjectWriteOperation o;
+    o.exec("hello", "write_return_data", in, &out, &rval);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
+				   librados::OPERATION_RETURNVEC));
+    completion->wait_for_safe();
+    ASSERT_EQ(42, completion->get_return_value());
+    ASSERT_EQ(42, rval);
+    out.hexdump(std::cout);
+    ASSERT_EQ("you might see this", std::string(out.c_str(), out.length()));
+  }
+
+  // this will overflow because the return data is too big
+  {
+    bufferlist in, out;
+    int rval;
+    ObjectWriteOperation o;
+    o.exec("hello", "write_too_much_return_data", in, &out, &rval);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
+				   librados::OPERATION_RETURNVEC));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EOVERFLOW, completion->get_return_value());
+    ASSERT_EQ(-EOVERFLOW, rval);
+    ASSERT_EQ("", std::string(out.c_str(), out.length()));
+  }
+}

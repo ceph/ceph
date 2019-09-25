@@ -3408,6 +3408,10 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
   if (!(op->may_write() || op->may_cache())) {
     flags |= CEPH_OSD_FLAG_RWORDERED;
   }
+  if (op->allows_returnvec()) {
+    flags |= CEPH_OSD_FLAG_RETURNVEC;
+  }
+
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 
   ProxyWriteOpRef pwop(std::make_shared<ProxyWriteOp>(op, soid, m->ops, m->get_reqid()));
@@ -3735,6 +3739,7 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
     MOSDOpReply *reply = new MOSDOpReply(m, r, get_osdmap_epoch(), 0, true);
     reply->set_reply_versions(eversion_t(), pwop->user_version);
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+    reply->claim_op_out_data(pwop->ops);
     dout(10) << " sending commit on " << pwop << " " << reply << dendl;
     osd->send_message_osd_client(reply, m->get_connection());
     pwop->sent_reply = true;
@@ -4019,7 +4024,8 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, result, get_osdmap_epoch(), 0,
 			       ignore_out_data);
-  dout(20) << __func__ << " alloc reply " << ctx->reply << dendl;
+  dout(20) << __func__ << " alloc reply " << ctx->reply
+	   << " result " << result << dendl;
 
   // read or error?
   if ((ctx->op_t->empty() || result < 0) && !ctx->update_log_only) {
