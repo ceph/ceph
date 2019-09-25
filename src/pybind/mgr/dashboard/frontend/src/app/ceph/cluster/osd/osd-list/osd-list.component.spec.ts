@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import _ = require('lodash');
+import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { EMPTY, of } from 'rxjs';
@@ -129,7 +129,8 @@ describe('OsdListComponent', () => {
       stats: {
         stat_bytes_used: n * n,
         stat_bytes: n * n * n
-      }
+      },
+      state: []
     });
 
     const expectAttributeOnEveryOsd = (attr: string) =>
@@ -154,6 +155,15 @@ describe('OsdListComponent', () => {
     it('should have custom attribute "collectedStates"', () => {
       expectAttributeOnEveryOsd('collectedStates');
       expect(component.osds[0].collectedStates).toEqual(['in', 'up']);
+    });
+
+    it('should have "destroyed" state in "collectedStates"', () => {
+      osds[0].state.push('destroyed');
+      osds[0].up = 0;
+      component.getOsdList();
+
+      expectAttributeOnEveryOsd('collectedStates');
+      expect(component.osds[0].collectedStates).toEqual(['in', 'destroyed']);
     });
 
     it('should have custom attribute "stats_history.out_bytes"', () => {
