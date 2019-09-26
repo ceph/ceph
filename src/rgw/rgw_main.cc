@@ -433,6 +433,11 @@ int main(int argc, const char **argv)
   auto auth_registry = \
     rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenant_context, store->getRados()->pctl);
 
+  /* Initialize config cache for request_handling subsystem */
+  rgw::request::Config& request_config = rgw::request::request_config;
+  request_config.recompute_value(g_conf());
+  g_conf().add_observer(&request_config);
+
   /* Header custom behavior */
   rest.register_x_headers(g_conf()->rgw_log_http_headers);
 

@@ -9,6 +9,7 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
+#include "rgw_cksum.h"
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
 #include "rgw_fcgi.h"
 #endif
@@ -17,8 +18,41 @@
 
 #include <atomic>
 
-struct RGWRequest
-{
+namespace rgw { namespace request {
+
+  using rgw::cksum::CksumType;  
+
+  class Config : public md_config_obs_t
+  {
+  public:
+    CksumType cksum_type = CksumType::none;
+
+    void recompute_value(const ConfigProxy& c) {
+      cksum_type =
+	cksum::parse_cksum_type(c.get_val<std::string>("rgw_cksum_type"));
+    }
+    
+    const char** get_tracked_conf_keys() const override {
+      static const char *keys[] = {
+	"rgw_cksum_type",
+	nullptr };
+      return keys;
+    }
+
+    void handle_conf_change(const ConfigProxy& c,
+			    const std::set <std::string> &changed) override {
+      if (changed.count("rgw_cksum_type")) {
+	recompute_value(c);
+      }
+    }
+  }; /* request::Config */
+
+  static Config request_config;
+    
+  }} /* namespace rgw::request */
+
+  struct RGWRequest
+  {
   uint64_t id;
   struct req_state *s;
   RGWOp *op;
@@ -60,5 +94,5 @@ RGWLoadGenRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
 	: RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
 		fail_flag(ff) {}
 };
-
+  
 #endif /* RGW_REQUEST_H */
