@@ -52,7 +52,7 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
       return observableOf(true);
     }
     const config = route.data['moduleStatusGuardConfig'];
-    return this.http.get(`/api/${config.apiPath}/status`).pipe(
+    return this.http.get(`api/${config.apiPath}/status`).pipe(
       map((resp: any) => {
         if (!resp.available) {
           this.router.navigate([config.redirectTo, resp.message || '']);
