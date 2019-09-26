@@ -292,11 +292,37 @@ namespace rados {
       }
 
       int Manager::create_part(int64_t part_num, const string& tag) {
-#warning FIXME
+        librados::ObjectWriteOperation op;
+
+        op.create(true); /* exclusive */
+        int r = FIFO::part_init(&op,
+                                FIFO::PartInitParams()
+                                .tag(tag)
+                                .data_params(meta_info.data_params));
+        if (r < 0) {
+          return r;
+        }
+
+        r = ioctx->operate(meta_info.part_oid(part_num), &op);
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
       }
 
       int Manager::remove_part(int64_t part_num, const string& tag) {
-#warning FIXME
+        librados::ObjectWriteOperation op;
+        op.remove();
+        int r = ioctx->operate(meta_info.part_oid(part_num), &op);
+        if (r == -ENOENT) {
+          r = 0;
+        }
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
       }
 
       int Manager::process_journal_entry(const fifo_journal_entry_t& entry)
