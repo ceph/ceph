@@ -1545,6 +1545,10 @@ namespace rgw {
     /* skipping user-supplied etag--we might have one in future, but
      * like data it and other attrs would arrive after open */
 
+    /* optional cryptographic checksum */
+    dv = rgw::cksum::digest_factory(s->bucket_info.cksum_type);
+    digest = rgw::cksum::get_digest(dv);
+
     aio.emplace(s->cct->_conf->rgw_put_obj_min_window_size);
 
     if (s->bucket_info.versioning_enabled()) {
@@ -1668,6 +1672,14 @@ namespace rgw {
 
     bl.append(etag.c_str(), etag.size() + 1);
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+    if (digest) {
+      buffer::list cksum_bl;
+      auto cksum =
+	rgw::cksum::finalize_digest(digest, s->bucket_info.cksum_type);
+      cksum_bl.append(cksum.to_string());
+      emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
+    }
 
     policy.encode(aclbl);
     emplace_attr(RGW_ATTR_ACL, std::move(aclbl));

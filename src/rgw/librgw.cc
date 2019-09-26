@@ -562,6 +562,11 @@ namespace rgw {
     int port = 80;
     RGWProcessEnv env = { store, &rest, olog, port };
 
+    /* Initialize config cache for request_handling subsystem */
+    rgw::request::Config& request_config = rgw::request::request_config;
+    request_config.recompute_value(g_conf());
+    g_conf().add_observer(&request_config);
+
     string fe_count{"0"};
     fec = new RGWFrontendConfig("rgwlib");
     fe = new RGWLibFrontend(env, fec);

@@ -2422,6 +2422,9 @@ public:
   buffer::list data;
   uint64_t timer_id;
   MD5 hash;
+  rgw::cksum::DigestVariant dv;
+  rgw::cksum::Digest* digest{nullptr};
+
   off_t real_ofs;
   size_t bytes_written;
   bool eio;
