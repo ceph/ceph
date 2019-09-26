@@ -353,7 +353,7 @@ int main(int argc, const char **argv)
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
     dout(10) << "public_network " << g_conf()->public_network << dendl;
-    dout(10) << "public_addr " << g_conf()->public_network << dendl;
+    dout(10) << "public_addr " << g_conf()->public_addr << dendl;
 
     common_init_finish(g_ceph_context);
 
