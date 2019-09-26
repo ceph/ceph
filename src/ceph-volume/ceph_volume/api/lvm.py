@@ -1049,18 +1049,12 @@ class Volumes(list):
         """
         if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
             raise TypeError('.filter() requires lv_name, vg_name, lv_path, lv_uuid, or tags (none given)')
+
+        lvs_copy = Volumes(populate=False)
         # first find the filtered volumes with the values in self
-        filtered_volumes = self._filter(
-            lv_name=lv_name,
-            vg_name=vg_name,
-            lv_path=lv_path,
-            lv_uuid=lv_uuid,
-            lv_tags=lv_tags
-        )
-        # then purge everything
-        self._purge()
-        # and add the filtered items
-        self.extend(filtered_volumes)
+        lvs_copy.extend(self._filter(lv_name, vg_name, lv_path, lv_uuid,
+                                     lv_tags))
+        return lvs_copy if lvs_copy != [] else None
 
     def get(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
         """

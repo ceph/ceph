@@ -244,9 +244,9 @@ class Activate(object):
         lvs = api.Volumes()
         # filter them down for the OSD ID and FSID we need to activate
         if osd_id and osd_fsid:
-            lvs.filter(lv_tags={'ceph.osd_id': osd_id, 'ceph.osd_fsid': osd_fsid})
+            lvs = lvs.filter(lv_tags={'ceph.osd_id': osd_id, 'ceph.osd_fsid': osd_fsid})
         elif osd_fsid and not osd_id:
-            lvs.filter(lv_tags={'ceph.osd_fsid': osd_fsid})
+            lvs = lvs.filter(lv_tags={'ceph.osd_fsid': osd_fsid})
         if not lvs:
             raise RuntimeError('could not find osd.%s with fsid %s' % (osd_id, osd_fsid))
         # This argument is only available when passed in directly or via

@@ -81,7 +81,7 @@ def find_associated_devices(osd_id=None, osd_fsid=None):
     if osd_fsid:
         lv_tags['ceph.osd_fsid'] = osd_fsid
     lvs = api.Volumes()
-    lvs.filter(lv_tags=lv_tags)
+    lvs = lvs.filter(lv_tags=lv_tags)
     if not lvs:
         raise RuntimeError('Unable to find any LV for zapping OSD: %s' % osd_id or osd_fsid)
 
@@ -175,7 +175,7 @@ class Zap(object):
 
         if self.args.destroy:
             lvs = api.Volumes()
-            lvs.filter(vg_name=device.vg_name)
+            lvs = lvs.filter(vg_name=device.vg_name)
             if len(lvs) <= 1:
                 mlogger.info('Only 1 LV left in VG, will proceed to destroy volume group %s', device.vg_name)
                 api.remove_vg(device.vg_name)

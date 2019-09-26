@@ -184,7 +184,7 @@ class List(object):
             try:
                 lv = api.get_lv(vg_name=pv.vg_name)
             except MultipleLVsError:
-                lvs.filter(vg_name=pv.vg_name)
+                lvs = lvs.filter(vg_name=pv.vg_name)
                 return self.full_report(lvs=lvs)
 
         if lv:
