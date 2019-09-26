@@ -52,7 +52,8 @@ export class RgwBucketFormComponent implements OnInit {
       id: [null],
       bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
       owner: [null, [Validators.required]],
-      'placement-target': [null, this.editing ? [] : [Validators.required]]
+      'placement-target': [null, this.editing ? [] : [Validators.required]],
+      versioning: [null, this.editing ? [Validators.required] : []]
     });
   }
 
@@ -124,19 +125,22 @@ export class RgwBucketFormComponent implements OnInit {
     if (this.editing) {
       // Edit
       const idCtl = this.bucketForm.get('id');
-      this.rgwBucketService.update(bidCtl.value, idCtl.value, ownerCtl.value).subscribe(
-        () => {
-          this.notificationService.show(
-            NotificationType.success,
-            this.i18n('Updated Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
-          );
-          this.goToListView();
-        },
-        () => {
-          // Reset the 'Submit' button.
-          this.bucketForm.setErrors({ cdSubmitButton: true });
-        }
-      );
+      const versioningCtl = this.bucketForm.get('versioning');
+      this.rgwBucketService
+        .update(bidCtl.value, idCtl.value, ownerCtl.value, versioningCtl.value)
+        .subscribe(
+          () => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Updated Object Gateway bucket "{{bid}}".', { bid: bidCtl.value })
+            );
+            this.goToListView();
+          },
+          () => {
+            // Reset the 'Submit' button.
+            this.bucketForm.setErrors({ cdSubmitButton: true });
+          }
+        );
     } else {
       // Add
       this.rgwBucketService
