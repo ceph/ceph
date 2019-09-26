@@ -141,26 +141,33 @@ def deploy_daemon(daemon_type, daemon_id, c, config=None, keyring=None):
     install_base_units()
     unit = get_unit_file()
     unit_file = 'ceph-%s@.service' % (args.fsid)
-    with open(args.unit_dir + '/' + unit_file, 'w') as f:
+    with open(args.unit_dir + '/' + unit_file + '.new', 'w') as f:
         f.write(unit)
+        os.rename(args.unit_dir + '/' + unit_file + '.new',
+                  args.unit_dir + '/' + unit_file)
     check_output(['systemctl', 'daemon-reload'])
     unit_name = 'ceph-%s@%s.%s' % (args.fsid, daemon_type, daemon_id)
     check_output(['systemctl', 'enable', unit_name])
     check_output(['systemctl', 'start', unit_name])
 
 def install_base_units():
+    """
+    Set up ceph.target and ceph-$fsid.target units.
+    """
     existed = os.path.exists(args.unit_dir + '/ceph.target')
-    with open(args.unit_dir + '/ceph.target', 'w') as f:
+    with open(args.unit_dir + '/ceph.target.new', 'w') as f:
         f.write('[Unit]\n'
                 'Description=all ceph service\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target\n')
+        os.rename(args.unit_dir + '/ceph.target.new',
+                  args.unit_dir + '/ceph.target')
     if not existed:
         check_output(['systemctl', 'enable', 'ceph.target'])
         check_output(['systemctl', 'start', 'ceph.target'])
 
     existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % args.fsid)
-    with open(args.unit_dir + '/ceph-%s.target' % args.fsid, 'w') as f:
+    with open(args.unit_dir + '/ceph-%s.target.new' % args.fsid, 'w') as f:
         f.write('[Unit]\n'
                 'Description=ceph cluster {fsid}\n'
                 'PartOf=ceph.target\n'
@@ -169,6 +176,8 @@ def install_base_units():
                 'WantedBy=multi-user.target ceph.target\n'.format(
                     fsid=args.fsid)
         )
+        os.rename(args.unit_dir + '/ceph-%s.target.new' % args.fsid,
+                  args.unit_dir + '/ceph-%s.target' % args.fsid)
     if not existed:
         check_output(['systemctl', 'enable', 'ceph-%s.target' % args.fsid])
         check_output(['systemctl', 'start', 'ceph-%s.target' % args.fsid])
