@@ -7217,6 +7217,13 @@ std::vector<Option> get_rgw_options() {
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
 
+    Option("rgw_cksum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Secondary cryptographic digest algorithm")
+    .set_long_description(
+        "One of SHA256, SHA512, or Blake2B.  If set, the corresponding digest "
+        "is used to sign uploaded object data, and returned in custom header "
+        "x-rgw-checksum in GET and HEAD requests."),
   });
 }
 
