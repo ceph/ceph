@@ -1110,6 +1110,28 @@ int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
  */
 int ceph_lazyio(struct ceph_mount_info *cmount, int fd, int enable);
 
+
+/**
+ * Flushes the write buffer for the file thereby propogating the buffered write to the file.
+ *
+ * @param cmount the ceph mount handle to use for performing the fsync.
+ * @param fd the file descriptor of the file to sync.
+ * @param offset a boolean to enable lazyio or disable lazyio.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_lazyio_propagate(struct ceph_mount_info *cmount, int fd, int64_t offset, size_t count);
+
+
+/**
+ * Flushes the write buffer for the file and invalidate the read cache. This allows a subsequent read operation to read and cache data directly from the file and hence everyone's propagated writes would be visible. 
+ *
+ * @param cmount the ceph mount handle to use for performing the fsync.
+ * @param fd the file descriptor of the file to sync.
+ * @param offset a boolean to enable lazyio or disable lazyio.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_lazyio_synchronize(struct ceph_mount_info *cmount, int fd, int64_t offset, size_t count);
+
 /** @} file */
 
 /**
