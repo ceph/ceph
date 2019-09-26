@@ -12,6 +12,7 @@ public:
   static std::unique_ptr<DaemonHealthMetricCollector> create(daemon_metric m);
   void update(const DaemonKey& daemon, const DaemonHealthMetric& metric) {
     if (_is_relevant(metric.get_type())) {
+      // preserve reported state
       reported |= _update(daemon, metric);
     }
   }
