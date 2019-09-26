@@ -29,7 +29,6 @@
 #include "common/ceph_context.h"
 #include "common/mClockPriorityQueue.h"
 #include "osd/scheduler/OpSchedulerItem.h"
-#include "osd/mClockOpClassSupport.h"
 
 
 namespace ceph::osd::scheduler {
