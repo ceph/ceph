@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+
+CEPH_USER_UID=167
+CEPH_USER_GID=167
+DEFAULT_IMAGE='ceph/daemon-base'
+DATA_DIR='/var/lib/ceph'
+LOG_DIR='/var/log/ceph'
+VERSION='unknown development version'
+
+import argparse
+import logging
+import os
+import sys
+from distutils.spawn import find_executable
+from subprocess import check_output, CalledProcessError
+
+logging.basicConfig(level=logging.DEBUG)
+
+##################################
+
+def get_hostname():
+    import socket
+    return socket.gethostname()
+
+def make_fsid():
+    import uuid
+    return str(uuid.uuid1())
+
+def makedirs(dir):
+    os.makedirs(dir, exist_ok=True)
+
+def find_program(filename):
+    name = find_executable(filename)
+    if name is None:
+        raise ValueError(f'{filename} not found')
+    return name
+
+def get_data_dir(base, fsid, t, n):
+    return base + '/' + fsid + '/' + t + '.' + n;
+
+def get_daemon_args():
+    r = [
+#        '--log-dir', args.log_dir,
+#        '--data-dir', args.data_dir,
+        ]
+#    if args.uid != 0:
+#        r = r + ['--setuser', args.uid]
+#    if args.gid != 0:
+#        r = r + ['--setgroup', args.gid]
+    return r
+
+##################################
+
+class CephContainer:
+    def __init__(self,
+                 image,
+                 entrypoint,
+                 args=[],
+                 volume_mounts={},
+                 name='',
+                 podman_args=[]):
+        self.image = image
+        self.entrypoint = entrypoint
+        self.args = args
+        self.volume_mounts = volume_mounts
+        self.name = name
+        self.podman_args = podman_args
+
+    def run_cmd(self):
+        vols = sum(
+            [['-v', f'{host_dir}:{container_dir}']
+             for host_dir, container_dir in self.volume_mounts.items()], [])
+        envs = [
+            '-e', f'CONTAINER_IMAGE={self.image}',
+            '-e', f'NODE_NAME={get_hostname()}',
+        ]
+        name = ['--name', self.name] if self.name else []
+        return [
+            find_program('podman'),
+            'run',
+            '--rm',
+            '--net=host',
+        ] + self.podman_args + name + envs + vols + [
+            '--entrypoint', f'/usr/bin/{self.entrypoint}',
+            self.image
+        ] + self.args
+
+    def run(self):
+        logging.debug(self.run_cmd())
+        print(' '.join(self.run_cmd()))
+        return check_output(self.run_cmd())
+
+##################################
+
+def command_version():
+    out = CephContainer(args.image, 'ceph', ['--version']).run()
+    print(out.decode('utf-8'), end='')
+    return 0
+
+##################################
+
+def command_bootstrap():
+    fsid = args.fsid or make_fsid()
+    mon_id = args.mon_id or get_hostname()
+    mgr_id = args.mgr_id or get_hostname()
+    logging.debug('fsid %s, mon_id %s, mgr_id %s' % (fsid, mon_id, mgr_id))
+    mon_dir = get_data_dir(args.data_dir, fsid, 'mon', mon_id)
+    makedirs(mon_dir)
+    log_dir = get_data_dir(args.log_dir, fsid, 'mon', mon_id)
+    makedirs(log_dir)
+
+    mounts = {
+        log_dir: '/var/log/ceph:z',
+        mon_dir: '/var/lib/ceph/mon/ceph-' + mon_id + ':z',
+        '/tmp': '/mytmp:z',
+    }
+
+    # create initial monmap
+    if args.mon_ip:
+        addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
+    elif args.mon_addrv:
+        addr_arg = args.mon_addrv
+    else:
+        raise RuntimeError('must specify --mon-ip or --mon-addrv')
+    cmonpath = '/mytmp/monmap'
+    ckeyring = '/mytmp/keyring'
+    out = CephContainer(
+        image=args.image,
+        entrypoint='monmaptool',
+        args=['--create',
+              '--clobber',
+              '--fsid', fsid,
+              '--addv', mon_id, addr_arg,
+              cmonpath],
+        volume_mounts=mounts,
+    ).run()
+
+    # create initial keyring
+    mon_key = CephContainer(
+        image=args.image,
+        entrypoint='ceph-authtool',
+        args=['--gen-print-key'],
+        volume_mounts=mounts,
+    ).run().decode('utf-8').strip()
+    admin_key = CephContainer(
+        image=args.image,
+        entrypoint='ceph-authtool',
+        args=['--gen-print-key'],
+        volume_mounts=mounts,
+    ).run().decode('utf-8').strip()
+    with open('/tmp/keyring', 'w') as f:
+        f.write('[mon.]\n'
+                '\tkey = %s\n'
+                '\tcaps mon = *\n'
+                '[client.admin]\n'
+                '\tkey = %s\n'
+                '\tcaps mon = *\n'
+                '\tcaps mds = *\n'
+                '\tcaps mgr = *\n'
+                '\tcaps osd = *\n'
+            % (mon_key, admin_key));
+    """
+    CephContainer(
+        image=args.image,
+        entrypoint='ceph-authtool',
+        args=['--create-keyring',
+              '--gen-key',
+              '-n', 'mon.',
+              '--cap', 'mon', 'allow *',
+              ckeyring],
+        volume_mounts=mounts,
+    ).run()
+    CephContainer(
+        image=args.image,
+        entrypoint='ceph-authtool',
+        args=['--gen-key',
+              '-n', 'client.admin',
+              '--cap', 'mon', 'allow *',
+              '--cap', 'mgr', 'allow *',
+              '--cap', 'mds', 'allow *',
+              '--cap', 'osd', 'allow *',
+              ckeyring],
+        volume_mounts=mounts,
+    ).run()
+    """
+
+    # mkfs on the mon
+    out = CephContainer(
+        image=args.image,
+        entrypoint='ceph-mon',
+        args=['--mkfs',
+              '-i', mon_id,
+              '--fsid', fsid,
+              '-c', '/dev/null',
+              '--monmap', cmonpath,
+              '--keyring', ckeyring,
+              '--debug-mon', '20',
+              ] + get_daemon_args(),
+        volume_mounts=mounts,
+    ).run()
+    print(out.decode('utf-8'))
+
+
+    # create a mgr
+
+    # output
+    if args.output_keyring:
+        with open(args.output_keyring, 'w') as f:
+            f.write('[client.admin]\n'
+                    '\tkey = ' + admin_key + '\n')
+            os.fchmod(f.fileno(), 0o600)
+    if args.output_conf:
+        with open(args.output_conf, 'w') as f:
+            f.write('[global]\n'
+                    '\tmon host = ' + addr_arg + '\n')
+
+    return 1
+
+##################################
+
+def command_run():
+    fsid = args.fsid
+    name = args.name
+    (daemon_type, daemon_id) = name.split('.')
+
+    data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
+    makedirs(data_dir)
+    log_dir = get_data_dir(args.log_dir, fsid, daemon_type, daemon_id)
+    makedirs(log_dir)
+
+    mounts = {
+        log_dir: '/var/log/ceph:z',
+        data_dir: '/var/lib/ceph/' + daemon_type + '/ceph-' + daemon_id + ':z',
+    }
+    out = CephContainer(
+        image=args.image,
+        entrypoint='ceph-' + daemon_type,
+        args=['-i', daemon_id,
+              '-c', '/dev/null',
+              '-f', '-d',
+        ] + get_daemon_args(),
+        volume_mounts=mounts,
+    ).run()
+
+
+##################################
+
+def command_ls():
+    import prettytable
+    ls = []
+    print('write me')
+
+##################################
+
+parser = argparse.ArgumentParser(
+    description='Bootstrap Ceph daemons with systemd and containers.',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument(
+    '--image',
+    default=DEFAULT_IMAGE,
+    help='container image')
+parser.add_argument(
+    '--uid',
+    default=CEPH_USER_UID,
+    help='UID to use for new folders/files')
+parser.add_argument(
+    '--gid',
+    default=CEPH_USER_GID,
+    help='GID to use for new folders/files')
+parser.add_argument(
+    '--conf', '-c',
+    help='ceph conf file to incorporate')
+parser.add_argument(
+    '--data-dir',
+    default=DATA_DIR,
+    help='base directory for daemon data')
+parser.add_argument(
+    '--log-dir',
+    default=LOG_DIR,
+    help='base directory for daemon logs')
+subparsers = parser.add_subparsers(help='sub-command')
+
+parser_version = subparsers.add_parser(
+    'version', help='get ceph version from container')
+parser_version.set_defaults(func=command_version)
+
+parser_ls = subparsers.add_parser(
+    'ls', help='list daemon instances on this host')
+parser_ls.set_defaults(func=command_ls)
+
+parser_run = subparsers.add_parser(
+    'run', help='run a ceph daemon, in a container, in the foreground')
+parser_run.set_defaults(func=command_run)
+parser_run.add_argument(
+    '--name', '-n',
+    required=True,
+    help='daemon name (type.id)')
+parser_run.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+
+parser_bootstrap = subparsers.add_parser(
+    'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
+parser_bootstrap.set_defaults(func=command_bootstrap)
+parser_bootstrap.add_argument(
+    '--mon-id',
+    required=False,
+    help='mon id (default: local hostname)')
+parser_bootstrap.add_argument(
+    '--mon-addrv',
+    help='mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])')
+parser_bootstrap.add_argument(
+    '--mon-ip',
+    help='mon IP')
+parser_bootstrap.add_argument(
+    '--mgr-id',
+    required=False,
+    help='mgr id (default: local hostname)')
+parser_bootstrap.add_argument(
+    '--fsid',
+    help='cluster FSID')
+parser_bootstrap.add_argument(
+    '--output-keyring',
+    help='location to write keyring file with new cluster admin and mon keys')
+parser_bootstrap.add_argument(
+    '--output-conf',
+    help='location to write conf file to connect to new cluster')
+
+args = parser.parse_args()
+
+if 'func' not in args:
+    sys.stderr.write('No command specified; pass -h or --help for usage\n')
+    sys.exit(1)
+r = args.func()
+if not r:
+    r = 0
+sys.exit(r)
