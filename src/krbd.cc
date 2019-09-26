@@ -22,7 +22,10 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <thread>
+#include <tuple>
 #include <unistd.h>
+#include <utility>
 
 #include "auth/KeyRing.h"
 #include "common/errno.h"
@@ -33,6 +36,7 @@
 #include "common/secret.h"
 #include "common/TextTable.h"
 #include "include/assert.h"
+#include "include/compat.h"
 #include "include/stringify.h"
 #include "include/krbd.h"
 #include "mon/MonMap.h"
@@ -174,31 +178,69 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
   return 0;
 }
 
+/*
+ * Return:
+ *   <kernel error, false> - didn't map
+ *   <0 or udev error, true> - mapped
+ */
 template <typename F>
-static int wait_for_mapping(udev_monitor *mon, F udev_device_handler)
+static std::pair<int, bool> wait_for_mapping(int sysfs_r_fd, udev_monitor *mon,
+                                             F udev_device_handler)
 {
-  struct pollfd fds[1];
+  struct pollfd fds[2];
+  int sysfs_r = INT_MAX, udev_r = INT_MAX;
+  int r;
 
-  fds[0].fd = udev_monitor_get_fd(mon);
+  fds[0].fd = sysfs_r_fd;
   fds[0].events = POLLIN;
+  fds[1].fd = udev_monitor_get_fd(mon);
+  fds[1].events = POLLIN;
 
   for (;;) {
-    if (poll(fds, 1, -1) < 0) {
+    if (poll(fds, 2, -1) < 0) {
       ceph_abort();
     }
 
-    for (;;) {
-      struct udev_device *dev;
-
-      dev = udev_monitor_receive_device(mon);
-      if (!dev) {
-        if (errno != EINTR && errno != EAGAIN) {
-          return -errno;
-        }
-        break;
+    if (fds[0].revents) {
+      r = safe_read_exact(sysfs_r_fd, &sysfs_r, sizeof(sysfs_r));
+      if (r < 0) {
+        ceph_abort();
       }
-      if (udev_device_handler(dev)) {
-        return 0;
+      if (sysfs_r < 0) {
+        return std::make_pair(sysfs_r, false);
+      }
+      if (udev_r != INT_MAX) {
+        assert(!sysfs_r);
+        return std::make_pair(udev_r, true);
+      }
+      fds[0].fd = -1;
+    }
+
+    if (fds[1].revents) {
+      for (;;) {
+        struct udev_device *dev;
+
+        dev = udev_monitor_receive_device(mon);
+        if (!dev) {
+          if (errno != EINTR && errno != EAGAIN) {
+            udev_r = -errno;
+            if (sysfs_r != INT_MAX) {
+              assert(!sysfs_r);
+              return std::make_pair(udev_r, true);
+            }
+            fds[1].fd = -1;
+          }
+          break;
+        }
+        if (udev_device_handler(dev)) {
+          udev_r = 0;
+          if (sysfs_r != INT_MAX) {
+            assert(!sysfs_r);
+            return std::make_pair(udev_r, true);
+          }
+          fds[1].fd = -1;
+          break;
+        }
       }
     }
   }
@@ -285,6 +327,9 @@ static int do_map(struct udev *udev, const char *pool, const char *image,
                   const char *snap, const string& buf, string *pname)
 {
   struct udev_monitor *mon;
+  std::thread mapper;
+  bool mapped;
+  int fds[2];
   int r;
 
   mon = udev_monitor_new_from_netlink(udev, "udev");
@@ -303,17 +348,34 @@ static int do_map(struct udev *udev, const char *pool, const char *image,
   if (r < 0)
     goto out_mon;
 
-  r = sysfs_write_rbd_add(buf);
-  if (r < 0) {
-    cerr << "rbd: sysfs write failed" << std::endl;
+  if (pipe2(fds, O_NONBLOCK) < 0) {
+    r = -errno;
     goto out_mon;
   }
 
-  r = wait_for_mapping(mon, UdevMapHandler(pool, image, snap, pname));
+  mapper = std::thread([&buf, &fds]() {
+    ceph_pthread_setname(pthread_self(), "mapper");
+    int sysfs_r = sysfs_write_rbd_add(buf);
+    int r = safe_write(fds[1], &sysfs_r, sizeof(sysfs_r));
+    if (r < 0) {
+      ceph_abort();
+    }
+  });
+
+  std::tie(r, mapped) = wait_for_mapping(
+      fds[0], mon, UdevMapHandler(pool, image, snap, pname));
   if (r < 0) {
-    cerr << "rbd: wait failed" << std::endl;
-    goto out_mon;
+    if (!mapped) {
+      std::cerr << "rbd: sysfs write failed" << std::endl;
+    } else {
+      std::cerr << "rbd: udev wait failed" << std::endl;
+      /* TODO: fall back to enumeration */
+    }
   }
+
+  mapper.join();
+  close(fds[0]);
+  close(fds[1]);
 
 out_mon:
   udev_monitor_unref(mon);
@@ -525,6 +587,9 @@ private:
 static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
 {
   struct udev_monitor *mon;
+  std::thread unmapper;
+  bool unmapped;
+  int fds[2];
   int r;
 
   mon = udev_monitor_new_from_netlink(udev, "udev");
@@ -539,39 +604,58 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
   if (r < 0)
     goto out_mon;
 
-  /*
-   * On final device close(), kernel sends a block change event, in
-   * response to which udev apparently runs blkid on the device.  This
-   * makes unmap fail with EBUSY, if issued right after final close().
-   * Try to circumvent this with a retry before turning to udev.
-   */
-  for (int tries = 0; ; tries++) {
-    r = sysfs_write_rbd_remove(buf);
-    if (r >= 0) {
-      break;
-    } else if (r == -EBUSY && tries < 2) {
-      if (!tries) {
-        usleep(250 * 1000);
+  if (pipe2(fds, O_NONBLOCK) < 0) {
+    r = -errno;
+    goto out_mon;
+  }
+
+  unmapper = std::thread([&buf, &fds]() {
+    ceph_pthread_setname(pthread_self(), "unmapper");
+    /*
+     * On final device close(), kernel sends a block change event, in
+     * response to which udev apparently runs blkid on the device.  This
+     * makes unmap fail with EBUSY, if issued right after final close().
+     * Try to circumvent this with a retry before turning to udev.
+     */
+    for (int tries = 0; ; tries++) {
+      int sysfs_r = sysfs_write_rbd_remove(buf);
+      if (sysfs_r == -EBUSY && tries < 2) {
+        if (!tries) {
+          usleep(250 * 1000);
+        } else {
+          /*
+           * libudev does not provide the "wait until the queue is empty"
+           * API or the sufficient amount of primitives to build it from.
+           */
+          std::string err = run_cmd("udevadm", "settle", "--timeout", "10",
+                                    (char *)NULL);
+          if (!err.empty())
+            std::cerr << "rbd: " << err << std::endl;
+        }
       } else {
-        /*
-         * libudev does not provide the "wait until the queue is empty"
-         * API or the sufficient amount of primitives to build it from.
-         */
-        string err = run_cmd("udevadm", "settle", "--timeout", "10", NULL);
-        if (!err.empty())
-          cerr << "rbd: " << err << std::endl;
+        int r = safe_write(fds[1], &sysfs_r, sizeof(sysfs_r));
+        if (r < 0) {
+          ceph_abort();
+        }
+        break;
       }
+    }
+  });
+
+  std::tie(r, unmapped) = wait_for_mapping(fds[0], mon,
+                                           UdevUnmapHandler(devno));
+  if (r < 0) {
+    if (!unmapped) {
+      std::cerr << "rbd: sysfs write failed" << std::endl;
     } else {
-      cerr << "rbd: sysfs write failed" << std::endl;
-      goto out_mon;
+      std::cerr << "rbd: udev wait failed: " << cpp_strerror(r) << std::endl;
+      r = 0;
     }
   }
 
-  r = wait_for_mapping(mon, UdevUnmapHandler(devno));
-  if (r < 0) {
-    cerr << "rbd: wait failed" << std::endl;
-    goto out_mon;
-  }
+  unmapper.join();
+  close(fds[0]);
+  close(fds[1]);
 
 out_mon:
   udev_monitor_unref(mon);
