@@ -3,7 +3,10 @@
 fsid=0a464092-dfd0-11e9-b903-002590e526e8
 
 for f in `podman ps | awk '{print $1}' | grep -v CONT ` ; do podman kill $f ; done
+
 for f in `systemctl | grep ceph | awk '{print $1}'` ; do systemctl stop $f ; systemctl disable $f ; done
+rm /etc/systemd/system/ceph*
+systemctl daemon-reload
 
 rm -rf /var/lib/ceph/$fsid/*
 rm -rf /var/log/ceph/$fsid/*
