@@ -102,16 +102,20 @@ struct cls_fifo_meta_update_op
 
   std::optional<uint64_t> tail_part_num;
   std::optional<uint64_t> head_part_num;
-  std::optional<string> head_tag;
-  std::optional<rados::cls::fifo::fifo_prepare_status_t> head_prepare_status;
+  std::optional<uint64_t> min_push_part_num;
+  std::optional<uint64_t> max_push_part_num;
+  std::vector<rados::cls::fifo::fifo_journal_entry_t> journal_entries_add;
+  std::vector<rados::cls::fifo::fifo_journal_entry_t> journal_entries_rm;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode(objv, bl);
     encode(tail_part_num, bl);
     encode(head_part_num, bl);
-    encode(head_tag, bl);
-    encode(head_prepare_status, bl);
+    encode(min_push_part_num, bl);
+    encode(max_push_part_num, bl);
+    encode(journal_entries_add, bl);
+    encode(journal_entries_rm, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
@@ -119,8 +123,10 @@ struct cls_fifo_meta_update_op
     decode(objv, bl);
     decode(tail_part_num, bl);
     decode(head_part_num, bl);
-    decode(head_tag, bl);
-    decode(head_prepare_status, bl);
+    decode(min_push_part_num, bl);
+    decode(max_push_part_num, bl);
+    decode(journal_entries_add, bl);
+    decode(journal_entries_rm, bl);
     DECODE_FINISH(bl);
   }
 };

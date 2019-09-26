@@ -14,11 +14,16 @@
  */
 
 #include "include/rados/librados.hpp"
+#include "common/dout.h"
 
 using namespace librados;
 
 #include "cls/fifo/cls_fifo_ops.h"
 #include "cls/fifo/cls_fifo_client.h"
+
+
+#define dout_subsys ceph_subsys_objclass
+
 
 namespace rados {
   namespace cls {
@@ -106,8 +111,10 @@ namespace rados {
         op.objv = state.objv;
         op.tail_part_num = state.tail_part_num;
         op.head_part_num = state.head_part_num;
-        op.head_tag = state.head_tag;
-        op.head_prepare_status = state.head_prepare_status;
+        op.min_push_part_num = state.min_push_part_num;
+        op.max_push_part_num = state.max_push_part_num;
+        op.journal_entries_add = state.journal_entries_add;
+        op.journal_entries_rm = state.journal_entries_rm;
 
         bufferlist in;
         encode(op, in);
@@ -241,6 +248,225 @@ namespace rados {
         return 0;
       }
 
+      int Manager::update_meta(FIFO::MetaUpdateParams& update_params,
+                               bool *canceled)
+      {
+        update_params.objv(meta_info.objv);
+
+        librados::ObjectWriteOperation wop;
+        int r = FIFO::meta_update(&wop, update_params);
+        if (r < 0) {
+          return r;
+        }
+
+        r = ioctx->operate(meta_oid, &wop);
+        if (r < 0 && r != -ECANCELED) {
+          return r;
+        }
+
+        *canceled = (r == -ECANCELED);
+
+        r = read_meta();
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
+      }
+
+      int Manager::read_meta(std::optional<fifo_objv_t> objv)
+      {
+        FIFO::MetaGetParams get_params;
+        if (objv) {
+          get_params.objv(*objv);
+        }
+        int r = FIFO::meta_get(*ioctx,
+                               meta_oid,
+                               get_params,
+                               &meta_info);
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
+      }
+
+      int Manager::create_part(int64_t part_num, const string& tag) {
+#warning FIXME
+      }
+
+      int Manager::remove_part(int64_t part_num, const string& tag) {
+#warning FIXME
+      }
+
+      int Manager::process_journal_entry(const fifo_journal_entry_t& entry)
+      {
+        switch (entry.op) {
+          case fifo_journal_entry_t::Op::OP_CREATE:
+          return create_part(entry.part_num, entry.part_tag);
+          case fifo_journal_entry_t::Op::OP_REMOVE:
+          return remove_part(entry.part_num, entry.part_tag);
+        default:
+          /* nothing to do */
+          break;
+        }
+
+        return 0;
+      }
+
+      int Manager::process_journal_entries(vector<fifo_journal_entry_t> *processed)
+      {
+        for (auto& iter : meta_info.journal) {
+          auto& entry = iter.second;
+          int r = process_journal_entry(entry);
+          if (r < 0) {
+            ldout(cct, 10) << __func__ << "(): ERROR: failed processing journal entry for part=" << entry.part_num << dendl;
+          } else {
+            processed->push_back(entry);
+          }
+        }
+
+        return 0;
+      }
+
+      int Manager::process_journal()
+      {
+        vector<fifo_journal_entry_t> processed;
+
+        int r = process_journal_entries(&processed);
+        if (r < 0) {
+          return r;
+        }
+
+        if (processed.empty()) {
+          return 0;
+        }
+
+#define RACE_RETRY 10
+
+        int i;
+
+        for (i = 0; i < RACE_RETRY; ++i) {
+          bool canceled;
+          r = update_meta(FIFO::MetaUpdateParams()
+                          .journal_entries_rm(processed),
+                          &canceled);
+          if (r < 0) {
+            return r;
+          }
+
+          if (canceled) {
+            vector<fifo_journal_entry_t> new_processed;
+
+            for (auto& e : processed) {
+              auto jiter = meta_info.journal.find(e.part_num);
+              if (jiter == meta_info.journal.end() || /* journal entry was already processed */
+                  !(jiter->second == e)) {
+                continue;
+              }
+              
+              new_processed.push_back(e);
+            }
+            processed = std::move(new_processed);
+            continue;
+          }
+          break;
+        }
+        if (i == RACE_RETRY) {
+          ldout(cct, 0) << "ERROR: " << __func__ << "(): race check failed too many times, likely a bug" << dendl;
+          return -ECANCELED;
+        }
+        return 0;
+      }
+
+      int Manager::prepare_new_part()
+      {
+        fifo_journal_entry_t jentry;
+
+        meta_info.prepare_next_journal_entry(&jentry);
+
+        int r;
+        bool canceled;
+
+        int i;
+
+        for (i = 0; i < RACE_RETRY; ++i) {
+          r = update_meta(FIFO::MetaUpdateParams()
+                          .journal_entry_add(jentry),
+                          &canceled);
+          if (r < 0) {
+            return r;
+          }
+
+          if (canceled) {
+            if (meta_info.max_push_part_num >= jentry.part_num) { /* raced, but new part was already written */
+              return 0;
+            }
+
+            auto iter = meta_info.journal.find(jentry.part_num);
+            if (iter == meta_info.journal.end()) {
+              continue;
+            }
+          }
+          break;
+        }
+        if (i == RACE_RETRY) {
+          ldout(cct, 0) << "ERROR: " << __func__ << "(): race check failed too many times, likely a bug" << dendl;
+          return -ECANCELED;
+        }
+
+        r = process_journal();
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
+      }
+
+      int Manager::prepare_new_head()
+      {
+        int64_t new_head_num = meta_info.head_part_num + 1;
+
+        if (meta_info.max_push_part_num < new_head_num) {
+          int r = prepare_new_part();
+          if (r < 0) {
+            return r;
+          }
+
+          if (meta_info.max_push_part_num < new_head_num) {
+            ldout(cct, 0) << "ERROR: " << __func__ << ": after new part creation: meta_info.max_push_part_num="
+              << meta_info.max_push_part_num << " new_head_num=" << meta_info.max_push_part_num << dendl;
+            return -EIO;
+          }
+        }
+
+        int i;
+
+        for (i = 0; i < RACE_RETRY; ++i) {
+          bool canceled;
+          int r = update_meta(FIFO::MetaUpdateParams()
+                          .head_part_num(new_head_num),
+                          &canceled);
+          if (r < 0) {
+            return r;
+          }
+
+          if (canceled) {
+            if (meta_info.head_part_num < new_head_num) {
+              continue;
+            }
+          }
+          break;
+        }
+        if (i == RACE_RETRY) {
+          ldout(cct, 0) << "ERROR: " << __func__ << "(): race check failed too many times, likely a bug" << dendl;
+          return -ECANCELED;
+        }
+
+        
+        return 0;
+      }
+
       int Manager::open(bool create,
                         std::optional<FIFO::MetaCreateParams> create_params)
       {
@@ -271,6 +497,66 @@ namespace rados {
                                &meta_info);
         if (r < 0) {
           return r;
+        }
+
+        is_open = true;
+
+        return 0;
+      }
+
+      int Manager::push_entry(int64_t part_num, bufferlist& bl)
+      {
+        librados::ObjectWriteOperation op;
+
+        int r = FIFO::push_part(&op, FIFO::PushPartParams()
+                                          .tag(meta_info.head_tag)
+                                          .data(bl));
+        if (r < 0) {
+          return r;
+        }
+
+        r = ioctx->operate(meta_info.part_oid(part_num), &op);
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
+      }
+
+      int Manager::push(bufferlist& bl)
+      {
+        if (!is_open) {
+          return -EINVAL;
+        }
+
+        int r;
+
+        if (meta_info.need_new_head()) {
+          r = prepare_new_head();
+          if (r < 0) {
+            return r;
+          }
+        }
+
+        int i;
+
+        for (i = 0; i < RACE_RETRY; ++i) {
+          r = push_entry(meta_info.head_part_num, bl);
+          if (r == -ERANGE) {
+            r = prepare_new_head();
+            if (r < 0) {
+              return r;
+            }
+            continue;
+          }
+          if (r < 0) {
+            return r;
+          }
+          break;
+        }
+        if (i == RACE_RETRY) {
+          ldout(cct, 0) << "ERROR: " << __func__ << "(): race check failed too many times, likely a bug" << dendl;
+          return -ECANCELED;
         }
 
         return 0;

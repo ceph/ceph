@@ -91,38 +91,40 @@ namespace rados {
       };
       WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_data_params_t)
 
-      struct fifo_prepare_status_t {
-        enum Status {
-          STATUS_INIT = 0,
-          STATUS_PREPARE = 1,
-          STATUS_COMPLETE = 2,
-        } status{STATUS_INIT};
-        uint64_t head_num{0};
-        string head_tag;
+      struct fifo_journal_entry_t {
+        enum Op {
+          OP_UNKNOWN = 0,
+          OP_CREATE  = 1,
+          OP_REMOVE  = 2,
+        } op{OP_UNKNOWN};
+        int64_t part_num{0};
+        string part_tag;
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
-          encode((int)status, bl);
-          encode(head_num, bl);
-          encode(head_tag, bl);
+          encode((int)op, bl);
+          encode(part_num, bl);
+          encode(part_tag, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::const_iterator &bl) {
           DECODE_START(1, bl);
           int i;
           decode(i, bl);
-          status = (Status)i;
-          decode(head_num, bl);
-          decode(head_tag, bl);
+          op = (Op)i;
+          decode(part_num, bl);
+          decode(part_tag, bl);
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;
 
-        bool operator==(const Status& s) const {
-          return (status == s);
+        bool operator==(const fifo_journal_entry_t& e) {
+          return (op == e.op &&
+                  part_num == e.part_num &&
+                  part_tag == e.part_tag);
         }
       };
-      WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_prepare_status_t)
+      WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_journal_entry_t)
 
       struct fifo_info_t {
         string id;
@@ -130,23 +132,27 @@ namespace rados {
         string oid_prefix;
         fifo_data_params_t data_params;
 
-        uint64_t tail_part_num{0};
-        uint64_t head_part_num{0};
+        int64_t tail_part_num{0};
+        int64_t head_part_num{-1};
+        int64_t min_push_part_num{0};
+        int64_t max_push_part_num{-1};
+
         string head_tag;
+        map<int64_t, string> tags;
 
-        fifo_prepare_status_t head_prepare_status;
+        std::map<int64_t, fifo_journal_entry_t> journal;
 
-        uint64_t next_part() {
-          if (head_prepare_status == fifo_prepare_status_t::STATUS_INIT) {
-            return head_part_num;
-          }
-          if (head_prepare_status == fifo_prepare_status_t::STATUS_PREPARE) {
-            return head_prepare_status.head_num;
-          }
-          return head_part_num + 1;
+        bool need_new_head() {
+          return (head_part_num < min_push_part_num);
         }
 
-        string next_part_oid();
+        bool need_new_part() {
+          return (max_push_part_num < min_push_part_num);
+        }
+
+        string part_oid(int64_t part_num);
+        static string generate_tag();
+        void prepare_next_journal_entry(fifo_journal_entry_t *entry);
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
@@ -156,8 +162,11 @@ namespace rados {
           encode(data_params, bl);
           encode(tail_part_num, bl);
           encode(head_part_num, bl);
+          encode(min_push_part_num, bl);
+          encode(max_push_part_num, bl);
+          encode(tags, bl);
           encode(head_tag, bl);
-          encode(head_prepare_status, bl);
+          encode(journal, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::const_iterator &bl) {
@@ -168,8 +177,11 @@ namespace rados {
           decode(data_params, bl);
           decode(tail_part_num, bl);
           decode(head_part_num, bl);
+          decode(min_push_part_num, bl);
+          decode(max_push_part_num, bl);
+          decode(tags, bl);
           decode(head_tag, bl);
-          decode(head_prepare_status, bl);
+          decode(journal, bl);
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;

@@ -104,8 +104,10 @@ namespace rados {
 
             std::optional<uint64_t> tail_part_num;
             std::optional<uint64_t> head_part_num;
-            std::optional<string> head_tag;
-            std::optional<rados::cls::fifo::fifo_prepare_status_t> head_prepare_status;
+            std::optional<uint64_t> min_push_part_num;
+            std::optional<uint64_t> max_push_part_num;
+            std::vector<rados::cls::fifo::fifo_journal_entry_t> journal_entries_add;
+            std::vector<rados::cls::fifo::fifo_journal_entry_t> journal_entries_rm;
           } state;
 
           MetaUpdateParams& objv(const fifo_objv_t& objv) {
@@ -120,12 +122,20 @@ namespace rados {
             state.head_part_num = head_part_num;
             return *this;
           }
-          MetaUpdateParams& head_tag(const std::string& head_tag) {
-            state.head_tag = head_tag;
+          MetaUpdateParams& min_push_part_num(uint64_t num) {
+            state.min_push_part_num = num;
             return *this;
           }
-          MetaUpdateParams& head_prepare_status(const rados::cls::fifo::fifo_prepare_status_t& head_prepare_status) {
-            state.head_prepare_status = head_prepare_status;
+          MetaUpdateParams& max_push_part_num(uint64_t num) {
+            state.max_push_part_num = num;
+            return *this;
+          }
+          MetaUpdateParams& journal_entry_add(const rados::cls::fifo::fifo_journal_entry_t& entry) {
+            state.journal_entries_add.push_back(entry);
+            return *this;
+          }
+          MetaUpdateParams& journal_entries_rm(std::vector<rados::cls::fifo::fifo_journal_entry_t>& entries) {
+            state.journal_entries_rm = entries;
             return *this;
           }
         };
@@ -233,6 +243,24 @@ namespace rados {
         librados::IoCtx *ioctx{nullptr};
 
         fifo_info_t meta_info;
+
+        bool is_open{false};
+
+        int update_meta(FIFO::MetaUpdateParams& update_params,
+                        bool *canceled);
+        int read_meta(std::optional<fifo_objv_t> objv = std::nullopt);
+
+        int create_part(int64_t part_num, const string& tag);
+        int remove_part(int64_t part_num, const string& tag);
+
+        int process_journal_entry(const fifo_journal_entry_t& entry);
+        int process_journal_entries(vector<fifo_journal_entry_t> *processed);
+        int process_journal();
+
+        int prepare_new_part();
+        int prepare_new_head();
+
+        int push_entry(int64_t part_num, bufferlist& bl);
       public:
         Manager(CephContext *_cct,
                 const string& _id) : cct(_cct),
@@ -252,6 +280,7 @@ namespace rados {
         int open(bool create,
                  std::optional<FIFO::MetaCreateParams> create_params = std::nullopt);
 
+        int push(bufferlist& bl);
       };
     } // namespace fifo
   }  // namespace cls
