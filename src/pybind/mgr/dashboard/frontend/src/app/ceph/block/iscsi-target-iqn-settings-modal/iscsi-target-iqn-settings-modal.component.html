@@ -14,44 +14,10 @@
         <div class="form-group row"
              *ngFor="let setting of settingsForm.controls | keyvalue">
           <div class="col-sm-12">
-            <label class="col-form-label"
-                   for="{{ setting.key }}">{{ setting.key }}</label>
-            <input class="form-control"
-                   *ngIf="!isRadio(setting.key)"
-                   type="number"
-                   [formControlName]="setting.key">
-            <span class="invalid-feedback"
-                  *ngIf="settingsForm.showError(setting.key, formDir, 'min')">
-              <ng-container i18n>Must be greater than or equal to {{ target_controls_limits[setting.key]['min'] }}.</ng-container>
-            </span>
-            <span class="invalid-feedback"
-                  *ngIf="settingsForm.showError(setting.key, formDir, 'max')">
-              <ng-container i18n>Must be less than or equal to {{ target_controls_limits[setting.key]['max'] }}.</ng-container>
-            </span>
-
-            <ng-container *ngIf="isRadio(setting.key)">
-              <br>
-              <div class="custom-control custom-radio custom-control-inline">
-                <input type="radio"
-                       [id]="setting.key + 'Yes'"
-                       value="Yes"
-                       [formControlName]="setting.key"
-                       class="custom-control-input">
-                <label class="custom-control-label"
-                       [for]="setting.key + 'Yes'">Yes</label>
-              </div>
-              <div class="custom-control custom-radio custom-control-inline">
-                <input type="radio"
-                       [id]="setting.key + 'No'"
-                       value="No"
-                       class="custom-control-input"
-                       [formControlName]="setting.key">
-                <label class="custom-control-label"
-                       [for]="setting.key + 'No'">No</label>
-              </div>
-            </ng-container>
-
-            <span class="form-text text-muted">{{ helpText[setting.key]?.help }}</span>
+            <cd-iscsi-setting [settingsForm]="settingsForm"
+                              [formDir]="formDir"
+                              [setting]="setting.key"
+                              [limits]="getTargetControlLimits(setting.key)"></cd-iscsi-setting>
           </div>
         </div>
       </div>

@@ -8,6 +8,7 @@ import { TableComponent } from '../../../shared/datatable/table/table.component'
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { BooleanTextPipe } from '../../../shared/pipes/boolean-text.pipe';
 import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
 
 @Component({
@@ -42,7 +43,11 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   title: string;
   tree: TreeModel;
 
-  constructor(private i18n: I18n, private iscsiBackstorePipe: IscsiBackstorePipe) {}
+  constructor(
+    private i18n: I18n,
+    private iscsiBackstorePipe: IscsiBackstorePipe,
+    private booleanTextPipe: BooleanTextPipe
+  ) {}
 
   ngOnInit() {
     this.columns = [
@@ -249,6 +254,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     };
   }
 
+  private format(value) {
+    if (typeof value === 'boolean') {
+      return this.booleanTextPipe.transform(value);
+    }
+    return value;
+  }
+
   onNodeSelected(e: NodeEvent) {
     if (e.node.id) {
       this.title = e.node.value;
@@ -257,10 +269,11 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       if (e.node.id === 'root') {
         this.columns[2].isHidden = false;
         this.data = _.map(this.settings.target_default_controls, (value, key) => {
+          value = this.format(value);
           return {
             displayName: key,
             default: value,
-            current: tempData[key] || value
+            current: !_.isUndefined(tempData[key]) ? this.format(tempData[key]) : value
           };
         });
         // Target level authentication was introduced in ceph-iscsi config v11
@@ -276,10 +289,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       } else if (e.node.id.toString().startsWith('disk_')) {
         this.columns[2].isHidden = false;
         this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
+          value = this.format(value);
           return {
             displayName: key,
             default: value,
-            current: !_.isUndefined(tempData.controls[key]) ? tempData.controls[key] : value
+            current: !_.isUndefined(tempData.controls[key])
+              ? this.format(tempData.controls[key])
+              : value
           };
         });
         this.data.push({
@@ -293,7 +309,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
           return {
             displayName: key,
             default: undefined,
-            current: value
+            current: this.format(value)
           };
         });
       }

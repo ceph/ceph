@@ -31,7 +31,7 @@ describe('IscsiTargetFormComponent', () => {
     target_default_controls: {
       cmdsn_depth: 128,
       dataout_timeout: 20,
-      immediate_data: 'Yes'
+      immediate_data: true
     },
     required_rbd_features: {
       'backstore:1': 0,
