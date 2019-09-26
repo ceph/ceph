@@ -74,27 +74,25 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 #endif
 
   logger().debug("calling method {}.{}", cname, mname);
-  return seastar::async(
+  return call_errorator::errorize{ seastar::async(
     [this, method, indata=std::move(indata)]() mutable {
       ceph::bufferlist outdata;
       auto cls_context = reinterpret_cast<cls_method_context_t>(this);
       const auto ret = method->exec(cls_context, indata, outdata);
       return std::make_pair(ret, std::move(outdata));
     }
-  ).then(
+  )}.then(
     [prev_rd = num_read, prev_wr = num_write, this, &osd_op, flags]
-    (auto outcome) {
+    (auto outcome) -> call_errorator::future<> {
       auto& [ret, outdata] = outcome;
 
       if (num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
         logger().error("method tried to read object but is not marked RD");
-        return call_errorator::make_plain_exception_future<>(
-          crimson::ct_error::input_output_error::make());
+        return crimson::ct_error::input_output_error::make();
       }
       if (num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
         logger().error("method tried to update object but is not marked WR");
-        return call_errorator::make_plain_exception_future<>(
-          crimson::ct_error::input_output_error::make());
+        return crimson::ct_error::input_output_error::make();
       }
 
       // for write calls we never return data expect errors. For details refer
@@ -105,8 +103,7 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
         osd_op.outdata.claim_append(outdata);
       }
       if (ret < 0) {
-        return call_errorator::make_plain_exception_future<>(
-          crimson::stateful_ec{ std::error_code(-ret, std::generic_category()) });
+        return crimson::stateful_ec{ std::error_code(-ret, std::generic_category()) };
       }
       return seastar::now();
     }
