@@ -226,18 +226,21 @@ Usage:
 * name - name of the alias being looked up, added, or replaced
 * value - what the alias will be resolved to (if adding or replacing) this can contain spaces and does not need to be quoted
 
-pyscript
---------
+run_pyscript
+------------
 
 Runs a python script file inside the console
 
 Usage: 
     
-    pyscript <script_path> [script_arguments]
+    run_pyscript <script_path> [script_arguments]
 
 * Console commands can be executed inside this script with cmd ("your command")
-  However, you cannot run nested "py" or "pyscript" commands from within this script
-  Paths or arguments that contain spaces must be enclosed in quotes
+  However, you cannot run nested "py" or "pyscript" commands from within this
+  script. Paths or arguments that contain spaces must be enclosed in quotes
+
+.. note:: This command is available as ``pyscript`` for cmd2 versions 0.9.13
+   or less.
 
 py
 --
