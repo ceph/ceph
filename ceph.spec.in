@@ -16,6 +16,7 @@
 #
 %bcond_without ocf
 %bcond_with make_check
+%bcond_without ceph_test_package
 %ifarch s390 s390x
 %bcond_with tcmalloc
 %else
@@ -23,14 +24,12 @@
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
-%bcond_without ceph_test_package
 %bcond_without cephfs_java
 %bcond_with lowmem_builder
 %bcond_without lttng
 %endif
 %if 0%{?suse_version}
 %bcond_with selinux
-%bcond_with ceph_test_package
 %bcond_with cephfs_java
 %bcond_without lowmem_builder
 %ifarch x86_64 aarch64
