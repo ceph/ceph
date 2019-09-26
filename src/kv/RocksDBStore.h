@@ -190,7 +190,7 @@ private:
   bool cf_check_mode(rocksdb::ColumnFamilyHandle* &cf, const std::string &prefix) const;
   std::pair<std::string, ColumnFamilyHandle> cf_get_by_rocksdb_ID(uint32_t ID) const;
   int cf_create(const std::string& name, const std::string& options);
-  KeyValueDB::ColumnFamilyHandle cf_wrap_handle(rocksdb::ColumnFamilyHandle*) const;
+  static KeyValueDB::ColumnFamilyHandle cf_wrap_handle(rocksdb::ColumnFamilyHandle*);
   int cf_compact(rocksdb::ColumnFamilyHandle* cf, const std::string& start, const std::string& end);
   int cf_compact_async(rocksdb::ColumnFamilyHandle* cf, const std::string& start, const std::string& end);
 
