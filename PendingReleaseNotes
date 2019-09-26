@@ -153,3 +153,6 @@
   number of PGs.  To change this behavior, or to learn more about PG
   autoscaling, see :ref:`pg-autoscaler`.  Note that existing pools in
   upgraded clusters will still be set to ``warn`` by default.
+
+* The ``upmap_max_iterations`` config option of mgr/balancer has been
+  renamed to ``upmap_max_optimizations`` to better match its behaviour.
