@@ -16,11 +16,8 @@
 
 #include "osd/scheduler/OpScheduler.h"
 
-#include "common/PrioritizedQueue.h"
 #include "common/WeightedPriorityQueue.h"
 #include "osd/scheduler/mClockScheduler.h"
-#include "osd/mClockClientQueue.h"
-#include "osd/mClockOpClassQueue.h"
 
 namespace ceph::osd::scheduler {
 
@@ -28,38 +25,14 @@ OpSchedulerRef make_scheduler(CephContext *cct)
 {
   const std::string *type = &cct->_conf->osd_op_queue;
   if (*type == "debug_random") {
-    static const std::string index_lookup[] = { "prioritized",
-						"mclock_opclass",
-						"mclock_client",
-						"mclock_scheduler",
+    static const std::string index_lookup[] = { "mclock_scheduler",
 						"wpq" };
     srand(time(NULL));
     unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
     type = &index_lookup[which];
   }
 
-  if (*type == "prioritized") {
-    return std::make_unique<
-      ClassedOpQueueScheduler<PrioritizedQueue<OpSchedulerItem, client>>>(
-	cct,
-	cct->_conf->osd_op_pq_max_tokens_per_priority,
-	cct->_conf->osd_op_pq_min_cost
-      );
-  } else if (*type == "mclock_opclass") {
-    return std::make_unique<
-      ClassedOpQueueScheduler<mClockOpClassQueue>>(
-	cct,
-	cct
-    );
-  } else if (*type == "mclock_client") {
-    return std::make_unique<
-      ClassedOpQueueScheduler<mClockClientQueue>>(
-	cct,
-	cct
-    );
-  } else if (*type == "mclock_scheduler") {
-    return std::make_unique<mClockScheduler>(cct);
-  } else if (*type == "wpq" ) {
+  if (*type == "wpq" ) {
     // default is 'wpq'
     return std::make_unique<
       ClassedOpQueueScheduler<WeightedPriorityQueue<OpSchedulerItem, client>>>(
@@ -67,6 +40,8 @@ OpSchedulerRef make_scheduler(CephContext *cct)
 	cct->_conf->osd_op_pq_max_tokens_per_priority,
 	cct->_conf->osd_op_pq_min_cost
     );
+  } else if (*type == "mclock_scheduler") {
+    return std::make_unique<mClockScheduler>(cct);
   } else {
     ceph_assert("Invalid choice of wq" == 0);
   }

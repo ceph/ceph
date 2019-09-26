@@ -29,9 +29,6 @@ set(osd_srcs
   osd_types.cc
   ECUtil.cc
   ExtentCache.cc
-  mClockOpClassSupport.cc
-  mClockOpClassQueue.cc
-  mClockClientQueue.cc
   scheduler/OpScheduler.cc
   scheduler/OpSchedulerItem.cc
   scheduler/mClockScheduler.cc
