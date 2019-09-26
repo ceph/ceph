@@ -137,7 +137,8 @@ def deploy_daemon(daemon_type, daemon_id, c, config=None, keyring=None):
         f.write('#!/bin/sh\n' + ' '.join(c.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o700)
 
-    # unit
+    # systemd
+    install_base_units()
     unit = get_unit_file()
     unit_file = 'ceph-%s@.service' % (args.fsid)
     with open(args.unit_dir + '/' + unit_file, 'w') as f:
@@ -147,10 +148,38 @@ def deploy_daemon(daemon_type, daemon_id, c, config=None, keyring=None):
     check_output(['systemctl', 'enable', unit_name])
     check_output(['systemctl', 'start', unit_name])
 
+def install_base_units():
+    existed = os.path.exists(args.unit_dir + '/ceph.target')
+    with open(args.unit_dir + '/ceph.target', 'w') as f:
+        f.write('[Unit]\n'
+                'Description=all ceph service\n'
+                '[Install]\n'
+                'WantedBy=multi-user.target\n')
+    if not existed:
+        check_output(['systemctl', 'enable', 'ceph.target'])
+        check_output(['systemctl', 'start', 'ceph.target'])
+
+    existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % args.fsid)
+    with open(args.unit_dir + '/ceph-%s.target' % args.fsid, 'w') as f:
+        f.write('[Unit]\n'
+                'Description=ceph cluster {fsid}\n'
+                'PartOf=ceph.target\n'
+                'Before=ceph.target\n'
+                '[Install]\n'
+                'WantedBy=multi-user.target ceph.target\n'.format(
+                    fsid=args.fsid)
+        )
+    if not existed:
+        check_output(['systemctl', 'enable', 'ceph-%s.target' % args.fsid])
+        check_output(['systemctl', 'start', 'ceph-%s.target' % args.fsid])
+
 def get_unit_file():
     u = """[Unit]
 Description=Ceph daemon for {fsid}
 After=network.target
+
+PartOf=ceph-{fsid}.target
+Before=ceph-{fsid}.target
 
 [Service]
 EnvironmentFile=-/etc/environment
@@ -165,7 +194,7 @@ TimeoutStartSec=120
 TimeoutStopSec=15
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ceph-{fsid}.target
 """.format(fsid=args.fsid, data_dir=args.data_dir)
     return u
 
