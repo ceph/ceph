@@ -98,7 +98,7 @@ ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 
-    case $codename in
+    case "$codename" in
         trusty)
             old=4.8;;
         xenial)
@@ -120,8 +120,8 @@ ENDOFKEY
     $SUDO update-alternatives --auto gcc
 
     # cmake uses the latter by default
-    $SUDO ln -nsf /usr/bin/gcc /usr/bin/$(uname -m)-linux-gnu-gcc
-    $SUDO ln -nsf /usr/bin/g++ /usr/bin/$(uname -m)-linux-gnu-g++
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/${ARCH}-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
 }
 
 function ensure_decent_cmake_on_ubuntu {
@@ -296,7 +296,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     source /etc/os-release
-    case $ID in
+    case "$ID" in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y devscripts equivs
@@ -350,12 +350,12 @@ else
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
-	if [ "$ID" = "centos" -a $(uname -m) = aarch64 ]; then
+	if [ "$ID" = "centos" -a "$ARCH" = "aarch64" ]; then
 	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
 	    $SUDO yum-config-manager --disable centos-sclo-rh || true
 	    $SUDO yum remove centos-release-scl || true
 	fi
-        case $ID in
+        case "$ID" in
             fedora)
                 if test $yumdnf = yum; then
                     $SUDO $yumdnf install -y yum-utils
@@ -367,13 +367,12 @@ else
                 if test $ID = rhel ; then
                     $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
-                $SUDO yum install --nogpgcheck -y epel-release
+                $SUDO yum install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 7 ; then
 		    $SUDO $yumdnf install -y python36-devel
-		    case $(uname -m) in
+		    case "$ARCH" in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
 			    dts_ver=8
