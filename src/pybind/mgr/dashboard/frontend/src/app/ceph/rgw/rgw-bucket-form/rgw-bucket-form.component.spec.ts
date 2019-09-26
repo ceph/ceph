@@ -169,7 +169,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Updated Object Gateway bucket ""'
+        'Updated Object Gateway bucket "".'
       );
     });
   });

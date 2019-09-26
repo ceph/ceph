@@ -8,6 +8,8 @@ const pages = {
 
 export class BucketsPageHelper extends PageHelper {
   pages = pages;
+  versioningStateEnabled = 'Enabled';
+  versioningStateSuspended = 'Suspended';
 
   /**
    * TODO add check to verify the existance of the bucket!
@@ -50,6 +52,16 @@ export class BucketsPageHelper extends PageHelper {
     );
     await element(by.id('owner')).click(); // click owner dropdown menu
     await element(by.cssContainingText('select[name=owner] option', new_owner)).click(); // select the new user
+
+    // Enable versioning
+    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
+      this.versioningStateSuspended
+    );
+    await element(by.css('input[id=enabled]')).click();
+    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
+      this.versioningStateEnabled
+    );
+
     await element(by.cssContainingText('button', 'Edit Bucket')).click();
 
     // wait to be back on buckets page with table visible and click
@@ -59,10 +71,45 @@ export class BucketsPageHelper extends PageHelper {
     );
 
     // check its details table for edited owner field
-    const element_details_table = element
-      .all(by.css('.table.table-striped.table-bordered'))
-      .first();
-    return expect(element_details_table.getText()).toMatch(new_owner);
+    let bucketDataTable = element.all(by.css('.table.table-striped.table-bordered')).first();
+    await expect(bucketDataTable.getText()).toMatch(new_owner);
+
+    // Check versioning enabled:
+    const ownerValueCell = bucketDataTable
+      .all(by.css('tr'))
+      .get(2)
+      .all(by.css('td'))
+      .last();
+    await expect(ownerValueCell.getText()).toEqual(new_owner);
+    let versioningValueCell = bucketDataTable
+      .all(by.css('tr'))
+      .get(11)
+      .all(by.css('td'))
+      .last();
+    await expect(versioningValueCell.getText()).toEqual(this.versioningStateEnabled);
+
+    // Disable versioning:
+    await this.getFirstTableCellWithText(name).click(); // click on the bucket you want to edit in the table
+    await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
+    await element(by.css('input[id=suspended]')).click();
+    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
+      this.versioningStateSuspended
+    );
+    await element(by.cssContainingText('button', 'Edit Bucket')).click();
+
+    // Check versioning suspended:
+    await this.waitClickableAndClick(
+      this.getFirstTableCellWithText(name),
+      'Could not return to buckets page and load table after editing bucket'
+    );
+    bucketDataTable = element.all(by.css('.table.table-striped.table-bordered')).first();
+    versioningValueCell = bucketDataTable
+      .all(by.css('tr'))
+      .get(11)
+      .all(by.css('td'))
+      .last();
+    return expect(versioningValueCell.getText()).toEqual(this.versioningStateSuspended);
   }
 
   async testInvalidCreate() {
@@ -144,6 +191,10 @@ export class BucketsPageHelper extends PageHelper {
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
+
+    await expect(element(by.css('input[name=versioning]:checked')).getAttribute('value')).toBe(
+      this.versioningStateSuspended
+    );
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
