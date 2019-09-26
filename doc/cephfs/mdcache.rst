@@ -73,5 +73,5 @@ inode info to the clients.
 
 The auth MDS for an inode can change over time as well. The MDS' will
 actively balance responsibility for the inode cache amongst
-themselves, but this can be overriden by **pinning** certain subtrees
+themselves, but this can be overridden by **pinning** certain subtrees
 to a single MDS.

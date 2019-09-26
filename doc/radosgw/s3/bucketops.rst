@@ -578,7 +578,7 @@ Delete a specific, or all, notifications from a bucket.
 
     - Notification deletion is an extension to the S3 notification API
     - When the bucket is deleted, any notification defined on it is also deleted 
-    - Deleting an unkown notification (e.g. double delete) is not considered an error
+    - Deleting an unknown notification (e.g. double delete) is not considered an error
 
 Syntax
 ~~~~~~

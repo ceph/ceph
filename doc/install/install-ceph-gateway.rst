@@ -194,7 +194,7 @@ Referring back to the description for installing a Ceph Object Gateway with
 ``ceph-deploy``, notice that the configuration file only has one setting
 ``rgw_frontends`` (and that's assuming you elected to change the default port).
 The ``ceph-deploy`` utility generates the data directory and the keyring for
-you--placing the keyring in ``/var/lib/ceph/radosgw/{rgw-intance}``. The daemon
+you--placing the keyring in ``/var/lib/ceph/radosgw/{rgw-instance}``. The daemon
 looks in default locations, whereas you may have specified different settings
 in your Ceph configuration file. Since you already have keys and a data
 directory, you will want to maintain those paths in your Ceph configuration
