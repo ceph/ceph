@@ -294,10 +294,10 @@ class Module(MgrModule):
             'runtime': True,
         },
         {
-            'name': 'upmap_max_iterations',
+            'name': 'upmap_max_optimizations',
             'type': 'uint',
             'default': 10,
-            'desc': 'maximum upmap optimization iterations',
+            'desc': 'maximum upmap optimizations to make per attempt',
             'runtime': True,
         },
         {
@@ -905,7 +905,7 @@ class Module(MgrModule):
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = self.get_module_option('upmap_max_iterations')
+        max_optimizations = self.get_module_option('upmap_max_optimizations')
         max_deviation = self.get_module_option('upmap_max_deviation')
 
         ms = plan.initial
@@ -920,7 +920,7 @@ class Module(MgrModule):
 
         inc = plan.inc
         total_did = 0
-        left = max_iterations
+        left = max_optimizations
         osdmap_dump = self.get_osdmap().dump()
         pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
                                if p['pg_num'] > p['pg_num_target']]
@@ -946,7 +946,7 @@ class Module(MgrModule):
             left -= did
             if left <= 0:
                 break
-        self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
+        self.log.info('prepared %d/%d changes' % (total_did, max_optimizations))
         if total_did == 0:
             return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or pool(s)\' pg_num is decreasing, ' \
