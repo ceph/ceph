@@ -82,6 +82,10 @@ export class IscsiService {
     return this.http.get(`ui-api/iscsi/settings`);
   }
 
+  version() {
+    return this.http.get(`ui-api/iscsi/version`);
+  }
+
   portals() {
     return this.http.get(`ui-api/iscsi/portals`);
   }
