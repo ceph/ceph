@@ -64,6 +64,8 @@ CephContext *common_preinit(const CephInitParameters &iparams,
     conf.set_val_default("log_flush_on_exit", "false");
   }
 
+  conf.set_val("no_config_file", iparams.no_config_file ? "true" : "false");
+
   return cct;
 }
 #endif	// #ifndef WITH_SEASTAR
