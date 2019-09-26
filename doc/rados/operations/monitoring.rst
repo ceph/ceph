@@ -165,7 +165,7 @@ Network Performance Checks
 Ceph OSDs send heartbeat ping messages amongst themselves to monitor daemon availability.  We
 also use the response times to monitor network performance.
 While it is possible that a busy OSD could delay a ping response, we can assume
-that if a network switch fails mutiple delays will be detected between distinct pairs of OSDs.
+that if a network switch fails multiple delays will be detected between distinct pairs of OSDs.
 
 By default we will warn about ping times which exceed 1 second (1000 milliseconds).
 

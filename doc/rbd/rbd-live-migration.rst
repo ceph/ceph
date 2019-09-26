@@ -130,7 +130,7 @@ If the `migration_source` image is a parent of one or more clones, the `--force`
 option will need to be specified after ensuring all descendent clone images are
 not in use.
 
-Commiting the live-migration will remove the cross-links between the source
+Committing the live-migration will remove the cross-links between the source
 and target images, and will remove the source image::
 
     $ rbd trash list --all
