@@ -1007,12 +1007,29 @@ class Volumes(list):
         """
         self[:] = []
 
-    def _filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
+    def _filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None,
+                lv_tags=None, dev=None):
         """
         The actual method that filters using a new list. Useful so that other
         methods that do not want to alter the contents of the list (e.g.
         ``self.find``) can operate safely.
         """
+        if dev:
+            splitname = dmsetup_splitname(dev)
+            if not splitname.get('LV_NAME'):
+                return Volumes(populate=False)
+
+            if dev and lv_name and lv_name != splitname['LV_NAME']:
+                logger.fatal('Received both dev and LV_NAME and both are '
+                             'different')
+                raise RuntimeError('internal error; please check logs and report')
+            if dev and vg_name and vg_name != splitname['VG_NAME']:
+                logger.fatal('Received both dev and VG_NAME and both are '
+                             'different')
+                raise RuntimeError('internal error; please check logs and report')
+            lv_name = splitname['LV_NAME']
+            vg_name = splitname['VG_NAME']
+
         filtered = [i for i in self]
         if lv_name:
             filtered = [i for i in filtered if i.lv_name == lv_name]
@@ -1039,7 +1056,8 @@ class Volumes(list):
 
         return filtered
 
-    def filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
+    def filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None,
+               lv_tags=None, dev=None):
         """
         Filter out volumes on top level attributes like ``lv_name`` or by
         ``lv_tags`` where a dict is required. For example, to find a volume
@@ -1048,14 +1066,14 @@ class Volumes(list):
             lv_tags={'ceph.osd_id': '0'}
 
         """
-        if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
-            raise TypeError('.filter() requires lv_name, vg_name, lv_path, lv_uuid, or tags (none given)')
+        if not any([dev, lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
+            raise TypeError('.filter() requires lv_name, vg_name, lv_path, '
+                            'lv_uuid, or tags (none given)')
 
-        lvs_copy = Volumes(populate=False)
-        # first find the filtered volumes with the values in self
-        lvs_copy.extend(self._filter(lv_name, vg_name, lv_path, lv_uuid,
-                                     lv_tags))
-        return lvs_copy if lvs_copy != [] else None
+        filtered_lvs = Volumes(populate=False)
+        filtered_lvs.extend(self._filter(lv_name, vg_name, lv_path, lv_uuid,
+                                         lv_tags, dev))
+        return filtered_lvs
 
     def get(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
         """
