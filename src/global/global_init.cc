@@ -111,6 +111,10 @@ void global_pre_init(
     }
   }
 
+  if (conf.get_val<bool>("no_config_file")) {
+    flags |= CINIT_FLAG_NO_DEFAULT_CONFIG_FILE;
+  }
+
   int ret = conf.parse_config_files(c_str_or_null(conf_file_list),
 				    &cerr, flags);
   if (ret == -EDOM) {
@@ -126,7 +130,8 @@ void global_pre_init(
 	     << conf_file_list << std::endl;
         _exit(1);
       } else {
-	cerr << "did not load config file, using default settings." << std::endl;
+	cerr << "did not load config file, using default settings."
+	     << std::endl;
       }
     }
   }
