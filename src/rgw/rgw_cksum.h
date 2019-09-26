@@ -107,7 +107,7 @@ namespace rgw { namespace cksum {
   typedef TDigest<ceph::crypto::Blake2B> Blake2B;
   typedef TDigest<ceph::crypto::SHA256> SHA256;
   typedef TDigest<ceph::crypto::SHA512> SHA512;
-
+  
   typedef boost::variant<boost::blank,
 			 Blake2B,
 			 SHA256,

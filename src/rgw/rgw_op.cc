@@ -57,11 +57,11 @@
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
-
+#include "compressor/Compressor.h"
+#include "rgw_cksum.h"
+#include "rgw_request.h"
 
 #include "include/ceph_assert.h"
-
-#include "compressor/Compressor.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -784,8 +784,8 @@ int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *
       store->getRados()->set_prefetch_data(s->obj_ctx, obj);
     }
     ret = read_obj_policy(store, s, s->bucket_info, s->bucket_attrs,
-			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket,
-                          s->object);
+			  s->object_acl.get(), nullptr, s->iam_policy,
+			  s->bucket, s->object);
   }
 
   return ret;
@@ -3217,6 +3217,8 @@ void RGWCreateBucket::execute()
     info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
   }
 
+  /* data checksum style, if configured */
+  info.cksum_type = rgw::request::request_config.cksum_type;
 
   op_ret = store->getRados()->create_bucket(*(s->user), s->bucket, zonegroup_id,
                                 placement_rule, s->bucket_info.swift_ver_location,
@@ -3669,18 +3671,26 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 
 void RGWPutObj::execute()
 {
+  using namespace rgw::cksum;
+
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
+
   bufferlist bl, aclbl, bs;
   int len;
-  
+
   off_t fst;
   off_t lst;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
+
+  /* optional cryptographic checksum */
+  DigestVariant dv = rgw::cksum::digest_factory(s->bucket_info.cksum_type);
+  Digest* digest = get_digest(dv);
+
   perfcounter->inc(l_rgw_put);
   // report latency on return
   auto put_lat = make_scope_guard([&] {
@@ -3696,7 +3706,6 @@ void RGWPutObj::execute()
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
-
 
   op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (op_ret < 0) {
@@ -3889,8 +3898,15 @@ void RGWPutObj::execute()
       break;
     }
 
+    /* XXX likely this forces a rebuild of data--should implement a
+     * segmented Digest::Update */
     if (need_calc_md5) {
       hash.Update((const unsigned char *)data.c_str(), data.length());
+    }
+
+    /* XXX at least here data is already-rebuilt */
+    if (digest) {
+      (*digest).Update((const unsigned char *)data.c_str(), data.length());
     }
 
     /* update torrrent */
@@ -3981,6 +3997,13 @@ void RGWPutObj::execute()
   }
   bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+  if (digest) {
+    buffer::list cksum_bl;
+    auto cksum = rgw::cksum::finalize_digest(digest, s->bucket_info.cksum_type);
+    cksum_bl.append(cksum.to_string());
+    emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
+  }
 
   populate_with_generic_attrs(s, attrs);
   op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
