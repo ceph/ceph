@@ -68,42 +68,41 @@ PGBackend::get_object_state(const hobject_t& oid)
     return _load_os(oid);
   } else {
     // we want a snap
-    return _load_ss(oid).then([oid,this](cached_ss_t ss) {
-      // head?
-      if (oid.snap > ss->seq) {
-        return _load_os(oid.get_head());
-      } else {
-        // which clone would it be?
-        auto clone = std::upper_bound(begin(ss->clones), end(ss->clones),
-                                      oid.snap);
-        if (clone == end(ss->clones)) {
-          return get_os_errorator::make_plain_exception_future<cached_os_t>(
-            crimson::ct_error::enoent::make());
+    return get_os_errorator::errorize{_load_ss(oid)}.then(
+      [oid,this](cached_ss_t ss) -> get_os_errorator::future<cached_os_t> {
+        // head?
+        if (oid.snap > ss->seq) {
+          return _load_os(oid.get_head());
+        } else {
+          // which clone would it be?
+          auto clone = std::upper_bound(begin(ss->clones), end(ss->clones),
+                                        oid.snap);
+          if (clone == end(ss->clones)) {
+            return crimson::ct_error::enoent::make();
+          }
+          // clone
+          auto soid = oid;
+          soid.snap = *clone;
+          return get_os_errorator::errorize{_load_ss(soid)}.then(
+            [soid,this](cached_ss_t ss) -> get_os_errorator::future<cached_os_t> {
+              auto clone_snap = ss->clone_snaps.find(soid.snap);
+              assert(clone_snap != end(ss->clone_snaps));
+              if (clone_snap->second.empty()) {
+                logger().trace("find_object: {}@[] -- DNE", soid);
+                return crimson::ct_error::enoent::make();
+              }
+              auto first = clone_snap->second.back();
+              auto last = clone_snap->second.front();
+              if (first > soid.snap) {
+                logger().trace("find_object: {}@[{},{}] -- DNE",
+                               soid, first, last);
+                return crimson::ct_error::enoent::make();
+              }
+              logger().trace("find_object: {}@[{},{}] -- HIT",
+                             soid, first, last);
+              return _load_os(soid);
+          });
         }
-        // clone
-        auto soid = oid;
-        soid.snap = *clone;
-        return _load_ss(soid).then([soid,this](cached_ss_t ss) {
-          auto clone_snap = ss->clone_snaps.find(soid.snap);
-          assert(clone_snap != end(ss->clone_snaps));
-          if (clone_snap->second.empty()) {
-            logger().trace("find_object: {}@[] -- DNE", soid);
-            return get_os_errorator::make_plain_exception_future<cached_os_t>(
-              crimson::ct_error::enoent::make());
-          }
-          auto first = clone_snap->second.back();
-          auto last = clone_snap->second.front();
-          if (first > soid.snap) {
-            logger().trace("find_object: {}@[{},{}] -- DNE",
-                           soid, first, last);
-            return get_os_errorator::make_plain_exception_future<cached_os_t>(
-              crimson::ct_error::enoent::make());
-          }
-          logger().trace("find_object: {}@[{},{}] -- HIT",
-                         soid, first, last);
-          return _load_os(soid);
-        });
-      }
     });
   }
 }

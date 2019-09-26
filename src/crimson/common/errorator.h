@@ -511,14 +511,6 @@ struct errorator {
     }
   };
 
-  template <class... ValuesT, class ErrorT>
-  static auto make_plain_exception_future(ErrorT&& e) noexcept {
-    static_assert(contains_once_v<std::decay_t<ErrorT>>,
-                  "passing further disallowed ErrorT");
-    return ::seastar::make_exception_future<ValuesT...>(
-      make_exception_ptr(std::forward<ErrorT>(e)));
-  }
-
   // the visitor that forwards handling of all errors to next continuation
   struct pass_further {
     template <class ErrorT>
@@ -584,6 +576,26 @@ struct errorator {
     // 3rd: recursion finisher
     static_assert(sizeof...(EmptyPack) == 0);
     using type = errorator<AllowedErrors...>;
+  };
+
+  template <class... ValuesT>
+  class errorize {
+    seastar::future<ValuesT...> fut;
+  public:
+    errorize(seastar::future<ValuesT...>&& fut) : fut(std::move(fut)) {
+    }
+
+    template <class Func>
+    auto then(Func&& func) && {
+      using FuncResult = std::result_of_t<Func(ValuesT&&...)>;
+      using Futurator = futurize<FuncResult>;
+      return typename Futurator::type{ std::move(fut).then([
+        this, func = std::forward<Func>(func)
+      ] (ValuesT&&... args) mutable {
+        return plainify(std::invoke(std::forward<Func>(func),
+                                    std::forward<ValuesT>(args)...));
+      })};
+    }
   };
 
 private:
