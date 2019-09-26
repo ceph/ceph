@@ -103,7 +103,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw1"
         request = copy.deepcopy(iscsi_target_request)
         request['target_iqn'] = target_iqn
-        self._post('/api/iscsi/target', request)
+        self._task_post('/api/iscsi/target', request)
         self.assertStatus(201)
         self._get('/api/iscsi/target')
         self.assertStatus(200)
@@ -116,7 +116,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw2"
         request = copy.deepcopy(iscsi_target_request)
         request['target_iqn'] = target_iqn
-        self._post('/api/iscsi/target', request)
+        self._task_post('/api/iscsi/target', request)
         self.assertStatus(201)
         self._get('/api/iscsi/target/{}'.format(request['target_iqn']))
         self.assertStatus(200)
@@ -129,7 +129,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw3"
         request = copy.deepcopy(iscsi_target_request)
         request['target_iqn'] = target_iqn
-        self._post('/api/iscsi/target', request)
+        self._task_post('/api/iscsi/target', request)
         self.assertStatus(201)
         self._delete('/api/iscsi/target/{}'.format(request['target_iqn']))
         self.assertStatus(204)
@@ -350,7 +350,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         create_request['target_iqn'] = target_iqn
         create_request['groups'].append(copy.deepcopy(create_request['groups'][0]))
         create_request['groups'][1]['group_id'] = 'mygroup2'
-        self._post('/api/iscsi/target', create_request)
+        self._task_post('/api/iscsi/target', create_request)
         self.assertStatus(400)
         self.assertJsonBody({
             'detail': 'Each initiator can only be part of 1 group at a time',
@@ -359,7 +359,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         })
 
     def _update_iscsi_target(self, create_request, update_request, response):
-        self._post('/api/iscsi/target', create_request)
+        self._task_post('/api/iscsi/target', create_request)
         self.assertStatus(201)
         self._put('/api/iscsi/target/{}'.format(create_request['target_iqn']), update_request)
         self.assertStatus(200)
