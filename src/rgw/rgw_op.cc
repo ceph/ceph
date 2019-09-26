@@ -2205,6 +2205,18 @@ void RGWGetObj::execute()
     goto done_err;
   }
 
+  /* optional cryptographic checksum */
+  attr_iter = attrs.find(RGW_ATTR_CKSUM);
+  if (attr_iter != attrs.end()) {
+    try {
+      bufferlist::const_iterator iter{&attr_iter->second};
+      decode(cksum, iter);
+    } catch (buffer::error& err) {
+      ldout(s->cct, 0)
+	<< "ERROR: caught buffer::error, couldn't decode cksum" << dendl;
+    }
+  }
+
   /* Decode S3 objtags, if any */
   rgw_cond_decode_objtags(s, attrs);
 

@@ -292,6 +292,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       }
     }
 
+    dump_header_if_nonempty(s, "x-rgw-cksum", cksum);
+
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
       string val = s->info.args.get(p->param, &exists);

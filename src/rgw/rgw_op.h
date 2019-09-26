@@ -46,6 +46,7 @@
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
 #include "rgw_tag.h"
+#include "rgw_cksum.h"
 #include "rgw_object_lock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -283,6 +284,7 @@ protected:
   utime_t gc_invalidate_time;
   bool is_slo;
   string lo_etag;
+  string cksum;
   bool rgwx_stat; /* extended rgw stat operation */
   string version_id;
 
