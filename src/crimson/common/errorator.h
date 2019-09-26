@@ -288,6 +288,10 @@ struct errorator {
     static constexpr bool value =
       (0 + ... + std::is_same_v<ErrorT, AllowedErrors>) == 1;
   };
+  template <class... Errors>
+  struct contains_once<errorator<Errors...>> {
+    static constexpr bool value = (... && contains_once<Errors>::value);
+  };
   template <class T>
   static constexpr bool contains_once_v = contains_once<T>::value;
 
@@ -329,21 +333,20 @@ struct errorator {
                           ErrorVisitorRetsHeadT,
                           ErrorVisitorRetsTailT...> {
     private:
-      using step_errorator = errorator<ValueFuncAllowedErrors>;
+      using step_errorator = errorator<ValueFuncAllowedErrors...>;
+      // add ErrorVisitorRetsHeadT only if 1) it's an error type and
+      // 2) isn't already included in the errorator's error set.
+      // It's enough to negate contains_once_v as any errorator<...>
+      // type is already guaranteed to be free of duplications.
+      using next_errorator = std::conditional_t<
+        is_error_v<ErrorVisitorRetsHeadT> &&
+          !step_errorator::template contains_once_v<ErrorVisitorRetsHeadT>,
+        typename step_errorator::template extend<ErrorVisitorRetsHeadT>,
+        step_errorator>;
 
     public:
-      using type = std::conditional_t<
-        // add ErrorVisitorRetsHeadT only if 1) it's an error type and
-        // 2) isn't already included in the errorator's error set.
-        // It's enough to negate contains_once_v as any errorator<...>
-        // type is already guaranteed to be free of duplications.
-        is_error_v<ErrorVisitorRetsHeadT> &&
-          !step_errorator::template contains_once_v<ErrorVisitorRetsT>,
-        typename make_errorator<errorator<ValueFuncAllowedErrors...,
-                                          ErrorVisitorRetsHeadT>,
-                                ErrorVisitorRetsTailT...>::type,
-        typename make_errorator<step_errorator,
-                                ErrorVisitorRetsTailT...>::type>;
+      using type = typename make_errorator<next_errorator,
+                                           ErrorVisitorRetsTailT...>::type;
     };
     // finish the recursion
     template <class... ValueFuncAllowedErrors>
@@ -369,9 +372,7 @@ struct errorator {
     operator ErroratedFuture<ValuesT...> () && {
       using dest_errorator_t = \
         typename ErroratedFuture<ValuesT...>::errorator_type;
-      using this_errorator_t = errorator<AllowedErrors...>;
-
-      static_assert(!dest_errorator_t::template is_less_errorated_v<this_errorator_t>,
+      static_assert(dest_errorator_t::template contains_once_v<errorator_type>,
                     "conversion is possible to more-or-eq errorated future!");
       return std::move(*this).as_plain_future();
     }
@@ -410,8 +411,7 @@ struct errorator {
       : base_t(
           seastar::make_exception_future<ValuesT...>(
             errorator_type::make_exception_ptr(e))) {
-      // this is `fold expression` of C++17.
-      static_assert((... || (std::is_same_v<DecayedT, AllowedErrors>)),
+      static_assert(errorator_type::contains_once_v<DecayedT>,
                     "ErrorT is not enlisted in errorator");
     }
 
@@ -513,8 +513,7 @@ struct errorator {
 
   template <class... ValuesT, class ErrorT>
   static auto make_plain_exception_future(ErrorT&& e) noexcept {
-    using decayed_t = std::decay_t<ErrorT>;
-    static_assert((... || std::is_same_v<AllowedErrors, decayed_t>),
+    static_assert(contains_once_v<std::decay_t<ErrorT>>,
                   "passing further disallowed ErrorT");
     return ::seastar::make_exception_future<ValuesT...>(
       make_exception_ptr(std::forward<ErrorT>(e)));
@@ -524,8 +523,7 @@ struct errorator {
   struct pass_further {
     template <class ErrorT>
     decltype(auto) operator()(ErrorT&& e) {
-      using decayed_t = std::decay_t<ErrorT>;
-      static_assert((... || std::is_same_v<AllowedErrors, decayed_t>),
+      static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "passing further disallowed ErrorT");
       return std::forward<ErrorT>(e);
     }
@@ -534,8 +532,7 @@ struct errorator {
   struct discard_all {
     template <class ErrorT>
     decltype(auto) operator()(ErrorT&&) {
-      static_assert((... || std::is_same_v<AllowedErrors,
-                                           std::decay_t<ErrorT>>),
+      static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
     }
   };
@@ -556,9 +553,6 @@ struct errorator {
   template <class... NewAllowedErrorsT>
   using extend = errorator<AllowedErrors..., NewAllowedErrorsT...>;
 
-  template <class ErrorT>
-  static constexpr bool is_carried_v = count_v<ErrorT> > 0;
-
   // get a new errorator by summing and deduplicating error set of
   // the errorator `unify<>` is applied on with another errorator
   // provided as template parameter.
@@ -577,7 +571,7 @@ struct errorator {
     // into head and tail. Mix error set of this errorator with head
     // of the other one only if it isn't already present in the set.
     using step_errorator = std::conditional_t<
-      is_carried_v<OtherAllowedErrorsHead> == false,
+      contains_once_v<OtherAllowedErrorsHead> == false,
       errorator<AllowedErrors..., OtherAllowedErrorsHead>,
       errorator<AllowedErrors...>>;
     using rest_errorator = errorator<OtherAllowedErrorsTail...>;
@@ -591,20 +585,6 @@ struct errorator {
     static_assert(sizeof...(EmptyPack) == 0);
     using type = errorator<AllowedErrors...>;
   };
-
-  // comparing errorators
-  template <class>
-  struct is_less_errorated {
-    // NOP.
-  };
-  template <class... OtherAllowedErrors>
-  struct is_less_errorated<errorator<OtherAllowedErrors...>> {
-    static constexpr bool value = \
-      ((!is_carried_v<OtherAllowedErrors>) || ...);
-  };
-  template <class OtherErrorator>
-  static constexpr bool is_less_errorated_v = \
-    is_less_errorated<OtherErrorator>::value;
 
 private:
   template <class... Args>
@@ -691,6 +671,14 @@ public:
 
   template <class T>
   using futurize = ::seastar::futurize<T>;
+
+  // get a new errorator by extending current one with new error
+  template <class... NewAllowedErrors>
+  using extend = errorator<NewAllowedErrors...>;
+
+  // errorator with empty error set never contains any error
+  template <class T>
+  static constexpr bool contains_once_v = false;
 }; // class errorator, <> specialization
 
 
