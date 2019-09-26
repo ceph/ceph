@@ -328,18 +328,21 @@ Usage:
 
 * file_path - path to a file to open in editor
 
-load
-----
+run_script
+----------
 
 Runs commands in script file that is encoded as either ASCII or UTF-8 text.
+Each command in the script should be separated by a newline.
 
 Usage:  
     
-    load <file_path>
+    run_script <file_path>
+
 
 * file_path - a file path pointing to a script
 
-* Script should contain one command per line, just like command would betyped in console.
+.. note:: This command is available as ``load`` for cmd2 versions 0.9.13
+   or less.
 
 shell
 -----
