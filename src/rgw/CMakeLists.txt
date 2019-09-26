@@ -77,6 +77,7 @@ set(librgw_common_srcs
   rgw_multi_del.cc
   rgw_obj_manifest.cc
   rgw_pubsub.cc
+  rgw_request.cc
   rgw_sync.cc
   rgw_data_sync.cc
   rgw_sync_counters.cc
