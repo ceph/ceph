@@ -7,6 +7,7 @@ import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
+import { IscsiSettingComponent } from '../iscsi-setting/iscsi-setting.component';
 import { IscsiTargetIqnSettingsModalComponent } from './iscsi-target-iqn-settings-modal.component';
 
 describe('IscsiTargetIqnSettingsModalComponent', () => {
@@ -14,7 +15,7 @@ describe('IscsiTargetIqnSettingsModalComponent', () => {
   let fixture: ComponentFixture<IscsiTargetIqnSettingsModalComponent>;
 
   configureTestBed({
-    declarations: [IscsiTargetIqnSettingsModalComponent],
+    declarations: [IscsiTargetIqnSettingsModalComponent, IscsiSettingComponent],
     imports: [SharedModule, ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule],
     providers: [BsModalRef, i18nProviders]
   });
@@ -26,7 +27,24 @@ describe('IscsiTargetIqnSettingsModalComponent', () => {
     component.target_default_controls = {
       cmdsn_depth: 1,
       dataout_timeout: 2,
-      first_burst_length: 'Yes'
+      first_burst_length: true
+    };
+    component.target_controls_limits = {
+      cmdsn_depth: {
+        min: 1,
+        max: 512,
+        type: 'int'
+      },
+      dataout_timeout: {
+        min: 2,
+        max: 60,
+        type: 'int'
+      },
+      first_burst_length: {
+        max: 16777215,
+        min: 512,
+        type: 'int'
+      }
     };
     component.ngOnInit();
     fixture.detectChanges();

@@ -35,20 +35,10 @@
             <div class="form-group row"
                  *ngFor="let setting of disk_default_controls[bs] | keyvalue">
               <div class="col-sm-12">
-                <label class="col-form-label"
-                       for="{{ setting.key }}">{{ setting.key }}</label>
-                <input type="number"
-                       class="form-control"
-                       [formControlName]="setting.key">
-                <span class="invalid-feedback"
-                      *ngIf="settingsForm.showError(setting.key, formDir, 'min')">
-                  <ng-container i18n>Must be greater than or equal to {{ disk_controls_limits[bs][setting.key]['min'] }}.</ng-container>
-                </span>
-                <span class="invalid-feedback"
-                      *ngIf="settingsForm.showError(setting.key, formDir, 'max')">
-                  <ng-container i18n>Must be less than or equal to {{ disk_controls_limits[bs][setting.key]['max'] }}.</ng-container>
-                </span>
-                <span class="form-text text-muted">{{ helpText[setting.key]?.help }}</span>
+                <cd-iscsi-setting [settingsForm]="settingsForm"
+                                  [formDir]="formDir"
+                                  [setting]="setting.key"
+                                  [limits]="getDiskControlLimits(bs, setting.key)"></cd-iscsi-setting>
               </div>
             </div>
           </ng-container>
