@@ -937,7 +937,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // list item node for when we have unpropagated rstat data
   elist<CInode*>::item dirty_rstat_item;
 
-  mempool::mds_co::compact_map<int, mempool::mds_co::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+  mempool::mds_co::set<client_t> client_snap_caps;
   mempool::mds_co::compact_map<snapid_t, mempool::mds_co::set<client_t> > client_need_snapflush;
 
   // LogSegment lists i (may) belong to
