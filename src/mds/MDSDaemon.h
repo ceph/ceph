@@ -24,7 +24,7 @@
 #include "messages/MMonCommand.h"
 
 #include "common/LogClient.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include "include/Context.h"
 #include "include/types.h"
@@ -35,18 +35,18 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 
-#define CEPH_MDS_PROTOCOL    34 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    35 /* cluster internal */
 
 class Messenger;
 class MonClient;
 
-class MDSDaemon : public Dispatcher, public md_config_obs_t {
+class MDSDaemon : public Dispatcher {
  public:
   /* Global MDS lock: every time someone takes this, they must
    * also check the `stopping` flag.  If stopping is true, you
    * must either do nothing and immediately drop the lock, or
    * never drop the lock again (i.e. call respawn()) */
-  Mutex        mds_lock;
+  ceph::mutex  mds_lock;
   bool         stopping;
 
   SafeTimer    timer;
@@ -92,11 +92,6 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
    * such that deleting xlists doesn't assert.
    */
   bool is_clean_shutdown();
-
-  // config observer bits
-  const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const ConfigProxy& conf,
-			  const std::set <std::string> &changed) override;
  protected:
   // tick and other timer fun
   Context *tick_event = nullptr;

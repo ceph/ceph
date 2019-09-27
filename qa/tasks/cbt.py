@@ -46,9 +46,9 @@ class CBT(Task):
 
         benchmark_config = self.config.get('benchmarks')
         benchmark_type = benchmark_config.keys()[0]
-        if benchmark_type == 'librbdfio':
+        if benchmark_type in ['librbdfio', 'fio']:
           testdir = misc.get_testdir(self.ctx)
-          benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
+          benchmark_config[benchmark_type]['cmd_path'] = os.path.join(testdir, 'fio/fio')
         if benchmark_type == 'cosbench':
             # create cosbench_dir and cosbench_xml_dir
             testdir = misc.get_testdir(self.ctx)
@@ -61,11 +61,13 @@ class CBT(Task):
             remotes_and_roles = self.ctx.cluster.remotes.items()
             ips = [host for (host, port) in
                    (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
-            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" %(ips[0])
+            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:80/auth/v1.0;retry=9" %(ips[0])
+        client_endpoints_config = self.config.get('client_endpoints', None)
 
         return dict(
             cluster=cluster_config,
             benchmarks=benchmark_config,
+            client_endpoints = client_endpoints_config,
             )
 
     def install_dependencies(self):
@@ -82,7 +84,7 @@ class CBT(Task):
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         self.log.info('benchmark: %s', benchmark_type)
 
-        if benchmark_type == 'librbdfio':
+        if benchmark_type in ['librbdfio', 'fio']:
             # install fio
             testdir = misc.get_testdir(self.ctx)
             self.first_mon.run(
@@ -177,13 +179,20 @@ class CBT(Task):
         branch = self.config.get('branch', 'master')
         branch = self.config.get('force-branch', branch)
         sha1 = self.config.get('sha1')
-        self.first_mon.run(
-            args=[
-                'git', 'clone', '-b', branch, repo,
-                '{tdir}/cbt'.format(tdir=testdir)
-            ]
-        )
-        if sha1:
+        if sha1 is None:
+            self.first_mon.run(
+                args=[
+                    'git', 'clone', '--depth', '1', '-b', branch, repo,
+                    '{tdir}/cbt'.format(tdir=testdir)
+                ]
+            )
+        else:
+            self.first_mon.run(
+                args=[
+                    'git', 'clone', '-b', branch, repo,
+                    '{tdir}/cbt'.format(tdir=testdir)
+                ]
+            )
             self.first_mon.run(
                 args=[
                     'cd', os.path.join(testdir, 'cbt'), run.Raw('&&'),
@@ -226,7 +235,7 @@ class CBT(Task):
             ]
         )
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
-        if benchmark_type == 'librbdfio':
+        if benchmark_type in ['librbdfio', 'fio']:
             self.first_mon.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',

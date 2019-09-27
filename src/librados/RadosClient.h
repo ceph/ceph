@@ -16,9 +16,8 @@
 
 #include "common/config_fwd.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
-#include "common/RWLock.h"
 #include "common/Timer.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -68,8 +67,8 @@ private:
 
   Objecter *objecter;
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("librados::RadosClient::lock");
+  ceph::condition_variable cond;
   SafeTimer timer;
   int refcnt;
 
@@ -118,7 +117,8 @@ public:
 		    bool wait_latest_map = false);
 
   int pool_list(std::list<std::pair<int64_t, string> >& ls);
-  int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);
+  int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t> *result,
+    bool *per_pool);
   int get_fs_stats(ceph_statfs& result);
   bool get_pool_is_selfmanaged_snaps_mode(const std::string& pool);
 

@@ -421,7 +421,6 @@ class RestClient(object):
                 logger.error(
                     "%s REST API failed %s req status: %s", self.client_name,
                     method.upper(), resp.status_code)
-                from pprint import pprint as pp
                 from pprint import pformat as pf
 
                 raise RequestException(
@@ -437,8 +436,8 @@ class RestClient(object):
                     errno = "n/a"
                     strerror = "SSL error. Probably trying to access a non " \
                                "SSL connection."
-                    logger.error("%s REST API failed %s, SSL error.",
-                                 self.client_name, method.upper())
+                    logger.error("%s REST API failed %s, SSL error (url=%s).",
+                                 self.client_name, method.upper(), ex.request.url)
                 else:
                     try:
                         match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
@@ -449,20 +448,21 @@ class RestClient(object):
                         errno = match.group(1)
                         strerror = match.group(2)
                         logger.error(
-                            "%s REST API failed %s, connection error: "
+                            "%s REST API failed %s, connection error (url=%s): "
                             "[errno: %s] %s",
-                            self.client_name, method.upper(), errno, strerror)
+                            self.client_name, method.upper(), ex.request.url,
+                            errno, strerror)
                     else:
                         errno = "n/a"
                         strerror = "n/a"
                         logger.error(
-                            "%s REST API failed %s, connection error.",
-                            self.client_name, method.upper())
+                            "%s REST API failed %s, connection error (url=%s).",
+                            self.client_name, method.upper(), ex.request.url)
             else:
                 errno = "n/a"
                 strerror = "n/a"
-                logger.error("%s REST API failed %s, connection error.",
-                             self.client_name, method.upper())
+                logger.error("%s REST API failed %s, connection error (url=%s).",
+                             self.client_name, method.upper(), ex.request.url)
 
             if errno != "n/a":
                 ex_msg = (

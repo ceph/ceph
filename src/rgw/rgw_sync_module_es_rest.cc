@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_es_rest.h"
@@ -379,7 +379,7 @@ class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
 protected:
   RGWOp *op_get() override {
     if (s->info.args.exists("query")) {
-      return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
+      return new RGWMetadataSearch_ObjStore_S3(store->getRados()->get_sync_module());
     }
     if (!s->init_state.url_bucket.empty() &&
         s->info.args.exists("mdsearch")) {

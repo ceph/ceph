@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <utility>
+#include "common/containers.h"
+
 // What and why
 // ============
 //
@@ -21,10 +24,18 @@ namespace ceph {
       return true;
     }
     void unlock() {}
+    void lock_shared() {}
+    void unlock_shared() {}
+  };
+
+  struct dummy_shared_mutex : dummy_mutex {
+    void lock_shared() {}
+    void unlock_shared() {}
   };
 
   using mutex = dummy_mutex;
   using recursive_mutex = dummy_mutex;
+  using shared_mutex = dummy_shared_mutex;
   // in seastar, we should use a difference interface for enforcing the
   // semantics of condition_variable
 
@@ -35,6 +46,11 @@ namespace ceph {
 
   template <typename ...Args>
   recursive_mutex make_recursive_mutex(Args&& ...args) {
+    return {};
+  }
+
+  template <typename ...Args>
+  shared_mutex make_shared_mutex(Args&& ...args) {
     return {};
   }
 
@@ -84,7 +100,11 @@ namespace ceph {
 
   // debug methods
   #define ceph_mutex_is_locked(m) ((m).is_locked())
+  #define ceph_mutex_is_not_locked(m) (!(m).is_locked())
+  #define ceph_mutex_is_rlocked(m) ((m).is_rlocked())
+  #define ceph_mutex_is_wlocked(m) ((m).is_wlocked())
   #define ceph_mutex_is_locked_by_me(m) ((m).is_locked_by_me())
+  #define ceph_mutex_is_not_locked_by_me(m) (!(m).is_locked_by_me())
 }
 
 #else
@@ -123,9 +143,32 @@ namespace ceph {
   // because any code that does anything other than assert these
   // are true is broken.
   #define ceph_mutex_is_locked(m) true
+  #define ceph_mutex_is_not_locked(m) true
+  #define ceph_mutex_is_rlocked(m) true
+  #define ceph_mutex_is_wlocked(m) true
   #define ceph_mutex_is_locked_by_me(m) true
+  #define ceph_mutex_is_not_locked_by_me(m) true
+
 }
 
 #endif	// CEPH_DEBUG_MUTEX
 
 #endif	// WITH_SEASTAR
+
+namespace ceph {
+
+template <class LockT,
+          class LockFactoryT>
+ceph::containers::tiny_vector<LockT> make_lock_container(
+  const std::size_t num_instances,
+  LockFactoryT&& lock_factory)
+{
+  return {
+    num_instances, [&](const std::size_t i, auto emplacer) {
+      // this will be called `num_instances` times
+      new (emplacer.data()) LockT {lock_factory(i)};
+    }
+  };
+}
+} // namespace ceph
+

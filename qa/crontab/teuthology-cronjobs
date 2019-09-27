@@ -1,6 +1,6 @@
 PATH=/home/teuthology/src/teuthology_master/virtualenv/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 MAILTO="ceph-infra@redhat.com;yweinste@redhat.com"
-CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
+CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 ### !!!!!!!!!!!!!!!!!!!!!!!!!!
 ## THIS CRONTAB MUST NOT BE EDITED MANUALLY !!!!
@@ -29,8 +29,10 @@ CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
 @daily SUITE_NAME=~/src/ceph-qa-suite_master/suites/ceph-ansible; crontab=$(teuthology-describe-tests --show-facet no $SUITE_NAME | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h4. $SUITE_NAME ; echo " "; echo " ") ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible.xml?key=$(cat /etc/redmine-key)
 
 
-## ********** smoke tests on master branch
+## ********** smoke tests on master, mimic and nautilus branches
 0 5  * * * CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k testing -p 71 -e $CEPH_QA_EMAIL
+0 6  * * * CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k testing -p 71 -e $CEPH_QA_EMAIL
+0 7  * * * CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k testing -p 71 -e $CEPH_QA_EMAIL
 
 ## master branch runs - frequency 3 times a week 
 ## suites rados, rbd and multimds use --subset arg and must be call with schedule_subset.sh
@@ -87,9 +89,8 @@ CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
 
 ## upgrades suites for on luminous
 ## !!!! three suites below MUST use --suite-branch hammer, kraken OR jewel
-## --filter "ubuntu_14.04,ubuntu_16.04,centos_7.4" == test only supported distro
-45 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-hammer -k distro -e $CEPH_QA_EMAIL --suite-branch hammer --filter "ubuntu_14.04"
-47 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter "ubuntu_14.04,ubuntu_16.04,centos_7.4"
+## --filter "ubuntu_16.04,centos_7.4" == test only supported distro
+47 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter "ubuntu_16.04,centos_7.4"
 50 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-kraken -k distro -e $CEPH_QA_EMAIL --suite-branch kraken
 ## point-to-point upgrades suites on luminous
 30 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/luminous-p2p -k distro -e $CEPH_QA_EMAIL
@@ -196,4 +197,5 @@ DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
 
 ### upgrade runs for next release octopus (runs on master)
 ###### on smithi
-23 14 * * 1,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL
+23 14 * * 1,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL -p 70
+23 24 * * 1,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/mimic-x -e $CEPH_QA_EMAIL -p 70

@@ -14,7 +14,6 @@ export class PasswordButtonDirective implements OnInit {
   ngOnInit() {
     this.renderer.setAttribute(this.elementRef.nativeElement, 'tabindex', '-1');
     this.iElement = this.renderer.createElement('i');
-    this.renderer.addClass(this.iElement, 'icon-prepend');
     this.renderer.addClass(this.iElement, 'fa');
     this.renderer.appendChild(this.elementRef.nativeElement, this.iElement);
     this.update();

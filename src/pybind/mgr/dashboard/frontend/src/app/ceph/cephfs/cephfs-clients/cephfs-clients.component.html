@@ -1,7 +1,12 @@
-<cd-view-cache [status]="viewCacheStatus"></cd-view-cache>
+<cd-view-cache [status]="clients.status"></cd-view-cache>
 
 <cd-table [data]="clients.data"
-          [columns]="clients.columns"
-          (fetchData)="refresh()"
-          [header]="false">
+          [columns]="columns"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
 </cd-table>

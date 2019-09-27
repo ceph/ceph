@@ -168,7 +168,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
   if (ret == 0) {
     conf.parse_env(client->cct()->get_module_type());
     conf.apply_changes(NULL);
-    conf.complain_about_parse_errors(client->cct());
+    conf.complain_about_parse_error(client->cct());
   } else if (ret == -ENOENT) {
     // ignore missing client config
     return 0;
@@ -991,6 +991,19 @@ Rados::~Rados() {
   shutdown();
 }
 
+void Rados::from_rados_t(rados_t p, Rados &rados) {
+  if (rados.client != nullptr) {
+    reinterpret_cast<TestRadosClient*>(rados.client)->put();
+    rados.client = nullptr;
+  }
+
+  auto impl = reinterpret_cast<TestRadosClient*>(p);
+  if (impl) {
+    impl->get();
+    rados.client = reinterpret_cast<RadosClient*>(impl);
+  }
+}
+
 AioCompletion *Rados::aio_create_completion(void *cb_arg,
                                             callback_t cb_complete,
                                             callback_t cb_safe) {
@@ -1389,6 +1402,12 @@ int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
   return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs, ctx->snapc);
 }
 
+int cls_cxx_truncate(cls_method_context_t hctx, int ofs) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->truncate(ctx->oid, ofs, ctx->snapc);
+}
+
 int cls_cxx_list_watchers(cls_method_context_t hctx,
 			  obj_list_watch_response_t *watchers) {
   librados::TestClassHandler::MethodContext *ctx =
@@ -1476,6 +1495,10 @@ ceph_release_t cls_get_required_osd_release(cls_handle_t hclass) {
   return ceph_release_t::nautilus;
 }
 
+ceph_release_t cls_get_min_compatible_client(cls_handle_t hclass) {
+  return ceph_release_t::nautilus;
+}
+
 // stubs to silence TestClassHandler::open_class()
 PGLSFilter::~PGLSFilter()
 {}
@@ -1492,4 +1515,8 @@ int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
 
 int cls_cxx_map_read_header(cls_method_handle_t, bufferlist *) {
   return -ENOTSUP;
+}
+
+uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
+  return 0;
 }

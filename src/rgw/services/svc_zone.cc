@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_zone.h"
 #include "svc_rados.h"
@@ -63,10 +63,7 @@ int RGWSI_Zone::do_start()
   if (ret < 0) {
     return ret;
   }
-  ret = sync_modules_svc->start();
-  if (ret < 0) {
-    return ret;
-  }
+
   ret = realm->init(cct, sysobj_svc);
   if (ret < 0 && ret != -ENOENT) {
     ldout(cct, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
@@ -146,13 +143,18 @@ int RGWSI_Zone::do_start()
   }
   if (zone_iter != zonegroup->zones.end()) {
     *zone_public_config = zone_iter->second;
-    ldout(cct, 20) << "zone " << zone_params->get_name() << dendl;
+    ldout(cct, 20) << "zone " << zone_params->get_name() << " found"  << dendl;
   } else {
     lderr(cct) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
     return -EINVAL;
   }
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
+
+  ret = sync_modules_svc->start();
+  if (ret < 0) {
+    return ret;
+  }
 
   RGWSyncModuleRef sm;
   if (!sync_modules_svc->get_manager()->get_module(zone_public_config->tier_type, &sm)) {
@@ -173,7 +175,7 @@ int RGWSI_Zone::do_start()
   if (zone_by_id.find(zone_id()) == zone_by_id.end()) {
     ldout(cct, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
   }
-  *zone_public_config = zone_by_id[zone_id()];
+
   for (const auto& ziter : zonegroup->zones) {
     const string& id = ziter.first;
     const RGWZone& z = ziter.second;
@@ -200,6 +202,9 @@ int RGWSI_Zone::do_start()
     }
   }
 
+  ldout(cct, 20) << "started zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << 
+        ") with tier type = " << zone_public_config->tier_type << dendl;
+
   return 0;
 }
 
@@ -224,7 +229,7 @@ int RGWSI_Zone::list_regions(list<string>& regions)
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(region_info_oid_prefix, &regions);
+  return syspool.list_prefixed_objs(region_info_oid_prefix, &regions);
 }
 
 int RGWSI_Zone::list_zonegroups(list<string>& zonegroups)
@@ -232,7 +237,7 @@ int RGWSI_Zone::list_zonegroups(list<string>& zonegroups)
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups);
+  return syspool.list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups);
 }
 
 int RGWSI_Zone::list_zones(list<string>& zones)
@@ -240,7 +245,7 @@ int RGWSI_Zone::list_zones(list<string>& zones)
   RGWZoneParams zoneparams;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zoneparams.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(zone_names_oid_prefix, &zones);
+  return syspool.list_prefixed_objs(zone_names_oid_prefix, &zones);
 }
 
 int RGWSI_Zone::list_realms(list<string>& realms)
@@ -248,7 +253,7 @@ int RGWSI_Zone::list_realms(list<string>& realms)
   RGWRealm realm(cct, sysobj_svc);
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(realm_names_oid_prefix, &realms);
+  return syspool.list_prefixed_objs(realm_names_oid_prefix, &realms);
 }
 
 int RGWSI_Zone::list_periods(list<string>& periods)
@@ -256,7 +261,7 @@ int RGWSI_Zone::list_periods(list<string>& periods)
   RGWPeriod period;
   list<string> raw_periods;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
-  int ret = syspool.op().list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods);
+  int ret = syspool.list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods);
   if (ret < 0) {
     return ret;
   }
@@ -885,6 +890,13 @@ bool RGWSI_Zone::find_zone_id_by_name(const string& name, string *id) {
   }
   *id = i->second; 
   return true;
+}
+
+bool RGWSI_Zone::need_to_sync() const
+{
+  return !(zonegroup->master_zone.empty() ||
+	   !rest_master_conn ||
+	   current_period->get_id().empty());
 }
 
 bool RGWSI_Zone::need_to_log_data() const

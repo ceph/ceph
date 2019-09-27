@@ -18,9 +18,9 @@ Extended Attributes
 
 Extended Attributes (XATTRs) are an important aspect in your configuration. 
 Some file systems have limits on the number of bytes stored in XATTRS. 
-Additionally, in some cases, the filesystem may not be as fast as an alternative
+Additionally, in some cases, the file system may not be as fast as an alternative
 method of storing XATTRs. The following settings may help improve performance
-by using a method of storing XATTRs that is extrinsic to the underlying filesystem.
+by using a method of storing XATTRs that is extrinsic to the underlying file system.
 
 Ceph XATTRs are stored as ``inline xattr``, using the XATTRs provided
 by the underlying file system, if it does not impose a size limit. If
@@ -32,10 +32,10 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size``
 
-:Description: The maximum size of an XATTR stored in the filesystem (i.e., XFS,
+:Description: The maximum size of an XATTR stored in the file system (i.e., XFS,
               btrfs, ext4, etc.) per object. Should not be larger than the
-              filesystem can handle. Default value of 0 means to use the value
-              specific to the underlying filesystem.
+              file system can handle. Default value of 0 means to use the value
+              specific to the underlying file system.
 :Type: Unsigned 32-bit Integer
 :Required: No
 :Default: ``0``
@@ -43,7 +43,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size xfs``
 
-:Description: The maximum size of an XATTR stored in the XFS filesystem.
+:Description: The maximum size of an XATTR stored in the XFS file system.
               Only used if ``filestore max inline xattr size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
@@ -52,7 +52,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size btrfs``
 
-:Description: The maximum size of an XATTR stored in the btrfs filesystem.
+:Description: The maximum size of an XATTR stored in the btrfs file system.
               Only used if ``filestore max inline xattr size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
@@ -61,7 +61,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size other``
 
-:Description: The maximum size of an XATTR stored in other filesystems.
+:Description: The maximum size of an XATTR stored in other file systems.
               Only used if ``filestore max inline xattr size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
@@ -70,9 +70,9 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattrs``
 
-:Description: The maximum number of XATTRs stored in the filesystem per object.
+:Description: The maximum number of XATTRs stored in the file system per object.
               Default value of 0 means to use the value specific to the
-              underlying filesystem.
+              underlying file system.
 :Type: 32-bit Integer
 :Required: No
 :Default: ``0``
@@ -80,7 +80,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattrs xfs``
 
-:Description: The maximum number of XATTRs stored in the XFS filesystem per object.
+:Description: The maximum number of XATTRs stored in the XFS file system per object.
               Only used if ``filestore max inline xattrs`` == 0.
 :Type: 32-bit Integer
 :Required: No
@@ -89,7 +89,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattrs btrfs``
 
-:Description: The maximum number of XATTRs stored in the btrfs filesystem per object.
+:Description: The maximum number of XATTRs stored in the btrfs file system per object.
               Only used if ``filestore max inline xattrs`` == 0.
 :Type: 32-bit Integer
 :Required: No
@@ -98,7 +98,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattrs other``
 
-:Description: The maximum number of XATTRs stored in other filesystems per object.
+:Description: The maximum number of XATTRs stored in other file systems per object.
               Only used if ``filestore max inline xattrs`` == 0.
 :Type: 32-bit Integer
 :Required: No
@@ -110,11 +110,11 @@ Synchronization Intervals
 =========================
 
 Periodically, the filestore needs to quiesce writes and synchronize the
-filesystem, which creates a consistent commit point. It can then free journal
+file system, which creates a consistent commit point. It can then free journal
 entries up to the commit point. Synchronizing more frequently tends to reduce
 the time required to perform synchronization, and reduces the amount of data
 that needs to remain in the  journal. Less frequent synchronization allows the
-backing filesystem to coalesce  small writes and metadata updates more
+backing file system to coalesce  small writes and metadata updates more
 optimally--potentially resulting in more efficient synchronization.
 
 
@@ -174,7 +174,7 @@ performance in some cases.
 
 ``filestore fsync flushes journal data``
 
-:Description: Flush journal data during filesystem synchronization.
+:Description: Flush journal data during file system synchronization.
 :Type: Boolean
 :Required: No
 :Default: ``false``
@@ -213,7 +213,7 @@ Timeouts
 
 ``filestore op threads``
 
-:Description: The number of filesystem operation threads that execute in parallel. 
+:Description: The number of file system operation threads that execute in parallel. 
 :Type: Integer
 :Required: No
 :Default: ``2``
@@ -221,7 +221,7 @@ Timeouts
 
 ``filestore op thread timeout``
 
-:Description: The timeout for a filesystem operation thread (in seconds).
+:Description: The timeout for a file system operation thread (in seconds).
 :Type: Integer
 :Required: No
 :Default: ``60``

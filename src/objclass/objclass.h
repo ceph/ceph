@@ -14,6 +14,7 @@
 #include "include/rados/objclass.h"
 
 struct obj_list_watch_response_t;
+class PGLSFilter;
 
 extern "C" {
 #endif
@@ -74,36 +75,6 @@ extern void class_fini(void);
 
 #ifdef __cplusplus
 }
-class PGLSFilter {
-  CephContext* cct;
-protected:
-  std::string xattr;
-public:
-  PGLSFilter();
-  virtual ~PGLSFilter();
-  virtual bool filter(const hobject_t &obj, ceph::buffer::list& xattr_data,
-                      ceph::buffer::list& outdata) = 0;
-
-  /**
-   * Arguments passed from the RADOS client.  Implementations must
-   * handle any encoding errors, and return an appropriate error code,
-   * or 0 on valid input.
-   */
-  virtual int init(ceph::buffer::list::const_iterator &params) = 0;
-
-  /**
-   * xattr key, or empty string.  If non-empty, this xattr will be fetched
-   * and the value passed into ::filter
-   */
-  virtual std::string& get_xattr() { return xattr; }
-
-  /**
-   * If true, objects without the named xattr (if xattr name is not empty)
-   * will be rejected without calling ::filter
-   */
-  virtual bool reject_empty_xattr() { return true; }
-};
-
 // Classes expose a filter constructor that returns a subclass of PGLSFilter
 typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
 
@@ -123,6 +94,7 @@ extern int cls_cxx_getxattrs(cls_method_context_t hctx, std::map<std::string,
 			     ceph::buffer::list> *attrset);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
 			   ceph::buffer::list *bl);
+extern int cls_cxx_truncate(cls_method_context_t hctx, int ofs);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
 extern int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
@@ -144,6 +116,10 @@ extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
                                 const std::map<std::string, ceph::buffer::list> *map);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl);
 extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const std::string &key);
+/* remove keys in the range [key_begin, key_end) */
+extern int cls_cxx_map_remove_range(cls_method_context_t hctx,
+                                    const std::string& key_begin,
+                                    const std::string& key_end);
 extern int cls_cxx_map_update(cls_method_context_t hctx, ceph::buffer::list *inbl);
 
 extern int cls_cxx_list_watchers(cls_method_context_t hctx,
@@ -159,6 +135,7 @@ extern int cls_current_subop_num(cls_method_context_t hctx);
 extern uint64_t cls_get_features(cls_method_context_t hctx);
 extern uint64_t cls_get_client_features(cls_method_context_t hctx);
 extern ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx);
+extern ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx);
 
 /* helpers */
 extern void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s);
@@ -175,6 +152,8 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
                    ceph::buffer::list *write_inbl, uint32_t op_flags, ceph::buffer::list *set_inbl,
 		   int set_len);
 bool cls_has_chunk(cls_method_context_t hctx, std::string fp_oid);
+
+extern uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx);
 
 #endif
 

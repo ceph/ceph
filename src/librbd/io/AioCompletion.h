@@ -70,6 +70,7 @@ struct AioCompletion {
 
   bool event_notify = false;
   bool was_armed = false;
+  bool external_callback = false;
 
   template <typename T, void (T::*MF)(int)>
   static void callback_adapter(completion_t cb, void *arg) {
@@ -176,6 +177,7 @@ struct AioCompletion {
 
 private:
   void queue_complete();
+  void complete_external_callback();
 
 };
 

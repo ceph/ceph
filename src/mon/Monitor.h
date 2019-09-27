@@ -104,14 +104,6 @@ class AdminSocketHook;
 
 #define COMPAT_SET_LOC "feature_set"
 
-class C_MonContext final : public FunctionContext {
-  const Monitor *mon;
-public:
-  explicit C_MonContext(Monitor *m, boost::function<void(int)>&& callback)
-    : FunctionContext(std::move(callback)), mon(m) {}
-  void finish(int r) override;
-};
-
 class Monitor : public Dispatcher,
 		public AuthClient,
 		public AuthServer,
@@ -125,7 +117,7 @@ public:
   int rank;
   Messenger *messenger;
   ConnectionRef con_self;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("Monitor::lock");
   SafeTimer timer;
   Finisher finisher;
   ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
@@ -601,7 +593,7 @@ public:
   void start_election();
   void win_standalone_election();
   // end election (called by Elector)
-  void win_election(epoch_t epoch, set<int>& q,
+  void win_election(epoch_t epoch, const set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
 		    ceph_release_t min_mon_release,
@@ -667,7 +659,7 @@ public:
 
   // -- sessions --
   MonSessionMap session_map;
-  Mutex session_map_lock{"Monitor::session_map_lock"};
+  ceph::mutex session_map_lock = ceph::make_mutex("Monitor::session_map_lock");
   AdminSocketHook *admin_hook;
 
   template<typename Func, typename...Args>
@@ -727,7 +719,7 @@ public:
 
   void health_tick_start();
   void health_tick_stop();
-  utime_t health_interval_calc_next_update();
+  ceph::real_clock::time_point health_interval_calc_next_update();
   void health_interval_start();
   void health_interval_stop();
   void health_events_cleanup();
@@ -737,12 +729,6 @@ public:
   void do_health_to_clog_interval();
   void do_health_to_clog(bool force = false);
 
-  health_status_t get_health_status(
-    bool want_detail,
-    Formatter *f,
-    std::string *plain,
-    const char *sep1 = " ",
-    const char *sep2 = "; ");
   void log_health(
     const health_check_map_t& updated,
     const health_check_map_t& previous,
@@ -833,7 +819,7 @@ public:
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
     void _finish(int r) override {
-      MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+      auto m = op->get_req<MMonCommand>();
       if (r >= 0) {
         ostringstream ss;
         if (!op->get_req()->get_connection()) {
@@ -884,9 +870,8 @@ public:
   //on forwarded messages, so we create a non-locking version for this class
   void _ms_dispatch(Message *m);
   bool ms_dispatch(Message *m) override {
-    lock.Lock();
+    std::lock_guard l{lock};
     _ms_dispatch(m);
-    lock.Unlock();
     return true;
   }
   void dispatch_op(MonOpRequestRef op);
@@ -1049,5 +1034,32 @@ public:
 // make sure you add your feature to Monitor::get_supported_features
 
 
+/* Callers use:
+ *
+ *      new C_MonContext{...}
+ *
+ * instead of
+ *
+ *      new C_MonContext(...)
+ *
+ * because of gcc bug [1].
+ *
+ * [1] https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85883
+ */
+template<typename T>
+class C_MonContext : public LambdaContext<T> {
+public:
+  C_MonContext(const Monitor* m, T&& f) :
+      LambdaContext<T>(std::forward<T>(f)),
+      mon(m)
+  {}
+  void finish(int r) override {
+    if (mon->is_shutdown())
+      return;
+    LambdaContext<T>::finish(r);
+  }
+private:
+  const Monitor* mon;
+};
 
 #endif

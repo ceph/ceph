@@ -126,7 +126,7 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     bool schema,
     bool histograms,
     const std::string &logger,
-    const std::string &counter)
+    const std::string &counter) const
 {
   f->open_object_section("perfcounter_collection");
   
@@ -350,7 +350,7 @@ void PerfCounters::reset()
 }
 
 void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
-    bool histograms, const std::string &counter)
+    bool histograms, const std::string &counter) const
 {
   f->open_object_section(m_name.c_str());
   

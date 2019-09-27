@@ -20,6 +20,7 @@
 #include <sys/file.h>
 
 #include "KernelDevice.h"
+#include "include/intarith.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
@@ -29,7 +30,6 @@
 #include "bsm/audit_errno.h"
 #endif
 #include "common/debug.h"
-#include "common/align.h"
 #include "common/numa.h"
 
 #include "global/global_context.h"
@@ -122,7 +122,7 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
 
@@ -554,7 +554,8 @@ void KernelDevice::_aio_thread()
 	      "This may suggest HW issue. Please check your dmesg!");
           }
         } else if (aio[i]->length != (uint64_t)r) {
-          derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
+          derr << "aio to 0x" << std::hex << aio[i]->offset
+	       << "~" << aio[i]->length << std::dec
                << " but returned: " << r << dendl;
           ceph_abort_msg("unexpected aio return value: does not match length");
         }
@@ -798,8 +799,8 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
   }
 #ifdef HAVE_SYNC_FILE_RANGE
   if (buffered) {
-    // initiate IO (but do not wait)
-    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE);
+    // initiate IO and wait till it completes
+    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
     if (r < 0) {
       r = -errno;
       derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
@@ -824,6 +825,11 @@ int KernelDevice::write(
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
   ceph_assert(is_valid_io(off, len));
+  if (cct->_conf->objectstore_blackhole) {
+    lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
+	       << dendl;
+    return 0;
+  }
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
@@ -848,6 +854,11 @@ int KernelDevice::aio_write(
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
   ceph_assert(is_valid_io(off, len));
+  if (cct->_conf->objectstore_blackhole) {
+    lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
+	       << dendl;
+    return 0;
+  }
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
@@ -927,6 +938,11 @@ int KernelDevice::aio_write(
 int KernelDevice::discard(uint64_t offset, uint64_t len)
 {
   int r = 0;
+  if (cct->_conf->objectstore_blackhole) {
+    lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
+	       << dendl;
+    return 0;
+  }
   if (support_discard) {
       dout(10) << __func__
 	       << " 0x" << std::hex << offset << "~" << len << std::dec
@@ -1019,8 +1035,8 @@ int KernelDevice::aio_read(
 
 int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 {
-  uint64_t aligned_off = align_down(off, block_size);
-  uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
+  uint64_t aligned_off = p2align(off, block_size);
+  uint64_t aligned_len = p2roundup(off+len, block_size) - aligned_off;
   bufferptr p = buffer::create_small_page_aligned(aligned_len);
   int r = 0;
 

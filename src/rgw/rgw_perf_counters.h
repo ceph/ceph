@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
 
@@ -32,6 +32,8 @@ enum {
 
   l_rgw_keystone_token_cache_hit,
   l_rgw_keystone_token_cache_miss,
+
+  l_rgw_gc_retire,
 
   l_rgw_pubsub_event_triggered,
   l_rgw_pubsub_event_lost,

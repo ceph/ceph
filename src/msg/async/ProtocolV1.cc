@@ -240,7 +240,8 @@ void ProtocolV1::send_message(Message *m) {
     out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
                    << dendl;
-    if (can_write != WriteStatus::REPLACING) {
+    if (can_write != WriteStatus::REPLACING && !write_in_progress) {
+      write_in_progress = true;
       connection->center->dispatch_event_external(connection->write_handler);
     }
   }
@@ -345,9 +346,13 @@ void ProtocolV1::write_event() {
       } else if (r < 0) {
         ldout(cct, 1) << __func__ << " send msg failed" << dendl;
         break;
-      } else if (r > 0)
-        break;
+      } else if (r > 0) {
+	// Outbound message in-progress, thread will be re-awoken
+	// when the outbound socket is writeable again
+	break;
+      }
     } while (can_write == WriteStatus::CANWRITE);
+    write_in_progress = false;
     connection->write_lock.unlock();
 
     // if r > 0 mean data still lefted, so no need _try_send.
@@ -378,6 +383,7 @@ void ProtocolV1::write_event() {
       return;
     }
   } else {
+    write_in_progress = false;
     connection->write_lock.unlock();
     connection->lock.lock();
     connection->write_lock.lock();
@@ -795,8 +801,8 @@ CtPtr ProtocolV1::handle_message_middle(char *buffer, int r) {
 CtPtr ProtocolV1::read_message_data_prepare() {
   ldout(cct, 20) << __func__ << dendl;
 
-  unsigned data_len = le32_to_cpu(current_header.data_len);
-  unsigned data_off = le32_to_cpu(current_header.data_off);
+  unsigned data_len = current_header.data_len;
+  unsigned data_off = current_header.data_off;
 
   if (data_len) {
     // get a buffer
@@ -1001,15 +1007,23 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
   state = OPENED;
 
+  ceph::mono_time fast_dispatch_time;
+
+  if (connection->is_blackhole()) {
+    ldout(cct, 10) << __func__ << " blackhole " << *message << dendl;
+    message->put();
+    goto out;
+  }
+
   connection->logger->inc(l_msgr_recv_messages);
   connection->logger->inc(
       l_msgr_recv_bytes,
       cur_msg_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
 
   messenger->ms_fast_preprocess(message);
-  auto fast_dispatch_time = ceph::mono_clock::now();
+  fast_dispatch_time = ceph::mono_clock::now();
   connection->logger->tinc(l_msgr_running_recv_time,
-                           fast_dispatch_time - connection->recv_start_time);
+			   fast_dispatch_time - connection->recv_start_time);
   if (connection->delay_state) {
     double delay_period = 0;
     if (rand() % 10000 < cct->_conf->ms_inject_delay_probability * 10000.0) {
@@ -1032,6 +1046,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                                         connection->conn_id);
   }
 
+ out:
   // clean up local buffer references
   data_buf.clear();
   front.clear();
@@ -1174,6 +1189,7 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
 }
 
 void ProtocolV1::requeue_sent() {
+  write_in_progress = false;
   if (sent.empty()) {
     return;
   }
@@ -1185,6 +1201,7 @@ void ProtocolV1::requeue_sent() {
     sent.pop_back();
     ldout(cct, 10) << __func__ << " " << *m << " for resend "
                    << " (" << m->get_seq() << ")" << dendl;
+    m->clear_payload();
     rq.push_front(make_pair(bufferlist(), m));
   }
 }
@@ -1233,6 +1250,7 @@ void ProtocolV1::discard_out_queue() {
     }
   }
   out_q.clear();
+  write_in_progress = false;
 }
 
 void ProtocolV1::reset_recv_state()
@@ -1282,7 +1300,10 @@ Message *ProtocolV1::_get_next_outgoing(bufferlist *bl) {
     ceph_assert(!it->second.empty());
     list<pair<bufferlist, Message *> >::iterator p = it->second.begin();
     m = p->second;
-    if (bl) bl->swap(p->first);
+    if (p->first.length() && bl) {
+      assert(bl->length() == 0);
+      bl->swap(p->first);
+    }
     it->second.erase(p);
     if (it->second.empty()) out_q.erase(it->first);
   }
@@ -2025,7 +2046,14 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   // session security structure.  PLR
   ldout(cct, 10) << __func__ << " accept setting up session_security." << dendl;
 
-  // existing?
+  if (connection->policy.server &&
+      connection->policy.lossy) {
+    // incoming lossy client, no need to register this connection
+    // new session
+    ldout(cct, 10) << __func__ << " accept new session" << dendl;
+    return open(reply, authorizer_reply);
+  }
+
   AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
 
   connection->inject_delay();
@@ -2305,6 +2333,7 @@ CtPtr ProtocolV1::replace(const AsyncConnectionRef& existing,
         << __func__ << " stop myself to swap existing" << dendl;
     exproto->can_write = WriteStatus::REPLACING;
     exproto->replacing = true;
+    exproto->write_in_progress = false;
     existing->state_offset = 0;
     // avoid previous thread modify event
     exproto->state = NONE;

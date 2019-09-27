@@ -13,7 +13,6 @@
 #include <string>
 
 class Context;
-class Mutex;
 
 namespace journal {
 
@@ -120,7 +119,8 @@ struct MockJournaler {
   MOCK_METHOD0(stop_replay, void());
   MOCK_METHOD1(stop_replay, void(Context *on_finish));
 
-  MOCK_METHOD4(start_append, void(int, uint64_t, double, uint64_t));
+  MOCK_METHOD1(start_append, void(uint64_t));
+  MOCK_METHOD3(set_append_batch_options, void(int, uint64_t, double));
   MOCK_CONST_METHOD0(get_max_append_size, uint64_t());
   MOCK_METHOD2(append, MockFutureProxy(uint64_t tag_id,
                                        const bufferlist &bl));
@@ -143,15 +143,17 @@ struct MockJournalerProxy {
 
   template <typename IoCtxT>
   MockJournalerProxy(IoCtxT &header_ioctx, const std::string &,
-                     const std::string &, const Settings&) {
+                     const std::string &, const Settings&,
+                     journal::CacheManagerHandler *) {
     MockJournaler::get_instance().construct();
   }
 
   template <typename WorkQueue, typename Timer>
-  MockJournalerProxy(WorkQueue *work_queue, Timer *timer, Mutex *timer_lock,
+  MockJournalerProxy(WorkQueue *work_queue, Timer *timer, ceph::mutex *timer_lock,
                      librados::IoCtx &header_ioctx,
                      const std::string &journal_id,
-                     const std::string &client_id, const Settings&) {
+                     const std::string &client_id, const Settings&,
+                     journal::CacheManagerHandler *) {
     MockJournaler::get_instance().construct();
   }
 
@@ -257,11 +259,14 @@ struct MockJournalerProxy {
     MockJournaler::get_instance().stop_replay(on_finish);
   }
 
-  void start_append(int flush_interval, uint64_t flush_bytes, double flush_age,
-                    uint64_t max_in_flight_appends) {
-    MockJournaler::get_instance().start_append(flush_interval, flush_bytes,
-                                               flush_age,
-                                               max_in_flight_appends);
+  void start_append(uint64_t max_in_flight_appends) {
+    MockJournaler::get_instance().start_append(max_in_flight_appends);
+  }
+
+  void set_append_batch_options(int flush_interval, uint64_t flush_bytes,
+                                double flush_age) {
+    MockJournaler::get_instance().set_append_batch_options(
+      flush_interval, flush_bytes, flush_age);
   }
 
   uint64_t get_max_append_size() const {

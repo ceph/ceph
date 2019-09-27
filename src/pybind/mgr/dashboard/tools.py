@@ -27,6 +27,11 @@ from .exceptions import ViewCacheNoDataException
 from .settings import Settings
 from .services.auth import JwtManager
 
+try:
+    from typing import Any, AnyStr, Dict, List  # noqa pylint: disable=unused-import
+except ImportError:
+    pass  # For typing only
+
 
 class RequestLoggingTool(cherrypy.Tool):
     def __init__(self):
@@ -342,13 +347,13 @@ class NotificationQueue(threading.Thread):
                 raise Exception("n_types param is neither a string nor a list")
             for ev_type in n_types:
                 listeners = cls._listeners[ev_type]
-                toRemove = None
+                to_remove = None
                 for pr, fn in listeners:
                     if fn == func:
-                        toRemove = (pr, fn)
+                        to_remove = (pr, fn)
                         break
-                if toRemove:
-                    listeners.discard(toRemove)
+                if to_remove:
+                    listeners.discard(to_remove)
                     logger.debug("NQ: function %s was deregistered for events "
                                  "of type %s", func, ev_type)
 
@@ -764,6 +769,36 @@ def str_to_bool(val):
     if isinstance(val, bool):
         return val
     return bool(strtobool(val))
+
+
+def json_str_to_object(value):  # type: (AnyStr) -> Any
+    """
+    It converts a JSON valid string representation to object.
+
+    >>> result = json_str_to_object('{"a": 1}')
+    >>> result == {'a': 1}
+    True
+    """
+    if value == '':
+        return value
+
+    try:
+        # json.loads accepts binary input from version >=3.6
+        value = value.decode('utf-8')
+    except AttributeError:
+        pass
+
+    return json.loads(value)
+
+
+def partial_dict(orig, keys):  # type: (Dict, List[str]) -> Dict
+    """
+    It returns Dict containing only the selected keys of original Dict.
+
+    >>> partial_dict({'a': 1, 'b': 2}, ['b'])
+    {'b': 2}
+    """
+    return {k: orig[k] for k in keys}
 
 
 def get_request_body_params(request):

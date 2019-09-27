@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
-import { ChartsModule } from 'ng2-charts/ng2-charts';
+import { ChartsModule } from 'ng2-charts';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
@@ -11,6 +11,7 @@ import { CephfsChartComponent } from './cephfs-chart/cephfs-chart.component';
 import { CephfsClientsComponent } from './cephfs-clients/cephfs-clients.component';
 import { CephfsDetailComponent } from './cephfs-detail/cephfs-detail.component';
 import { CephfsListComponent } from './cephfs-list/cephfs-list.component';
+import { CephfsTabsComponent } from './cephfs-tabs/cephfs-tabs.component';
 
 @NgModule({
   imports: [
@@ -25,7 +26,8 @@ import { CephfsListComponent } from './cephfs-list/cephfs-list.component';
     CephfsDetailComponent,
     CephfsClientsComponent,
     CephfsChartComponent,
-    CephfsListComponent
+    CephfsListComponent,
+    CephfsTabsComponent
   ]
 })
 export class CephfsModule {}

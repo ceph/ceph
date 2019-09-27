@@ -500,6 +500,15 @@ file under each ``[client.radosgw.{instance-name}]`` instance.
    ``rgw md log max shards`` should not be changed after sync has
    started.
 
+S3 Settings
+===========
+
+``rgw s3 auth use ldap``
+
+:Description: Should S3 authentication use LDAP.
+:Type: Boolean
+:Default: ``false``
+
 
 Swift Settings
 ==============
@@ -610,12 +619,9 @@ Swift Settings
               Those containers cannot be versioned by the S3 object versioning
               mechanism.
 
-	      The ``X-History-Location`` attribute, also understood by
-	      OpenStack Swift for handling ``DELETE`` operations
-	      `slightly differently
-	      <https://docs.openstack.org/swift/latest/overview_object_versioning.html>`_
-	      from ``X-Versions-Location``, is currently not
-	      supported.
+	      A slightly different attribute, ``X-History-Location``, which is also understood by 
+              `OpenStack Swift <https://docs.openstack.org/swift/latest/api/object_versioning.html>`_
+              for handling ``DELETE`` operations, is currently not supported.
 :Type: Boolean
 :Default: ``false``
 

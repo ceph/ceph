@@ -62,6 +62,7 @@
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDMarkMeDead.h"
 #include "messages/MOSDFull.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
@@ -70,13 +71,18 @@
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
+#include "messages/MMonGetPurgedSnaps.h"
+#include "messages/MMonGetPurgedSnapsReply.h"
 
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGNotify2.h"
 #include "messages/MOSDPGQuery.h"
+#include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
@@ -179,6 +185,8 @@
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
+#include "messages/MMgrCommand.h"
+#include "messages/MMgrCommandReply.h"
 #include "messages/MServiceMap.h"
 
 #include "messages/MLock.h"
@@ -285,11 +293,14 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
-Message *decode_message(CephContext *cct, int crcflags,
-			ceph_msg_header& header,
-			ceph_msg_footer& footer,
-			bufferlist& front, bufferlist& middle,
-			bufferlist& data, Connection* conn)
+Message *decode_message(CephContext *cct,
+                        int crcflags,
+                        ceph_msg_header& header,
+                        ceph_msg_footer& footer,
+                        ceph::bufferlist& front,
+                        ceph::bufferlist& middle,
+                        ceph::bufferlist& data,
+                        Message::ConnectionRef conn)
 {
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
@@ -439,6 +450,12 @@ Message *decode_message(CephContext *cct, int crcflags,
   case CEPH_MSG_MON_GET_OSDMAP:
     m = make_message<MMonGetOSDMap>();
     break;
+  case MSG_MON_GET_PURGED_SNAPS:
+    m = make_message<MMonGetPurgedSnaps>();
+    break;
+  case MSG_MON_GET_PURGED_SNAPS_REPLY:
+    m = make_message<MMonGetPurgedSnapsReply>();
+    break;
   case CEPH_MSG_MON_GET_VERSION:
     m = make_message<MMonGetVersion>();
     break;
@@ -466,6 +483,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_MARK_ME_DOWN:
     m = make_message<MOSDMarkMeDown>();
+    break;
+  case MSG_OSD_MARK_ME_DEAD:
+    m = make_message<MOSDMarkMeDead>();
     break;
   case MSG_OSD_FULL:
     m = make_message<MOSDFull>();
@@ -509,8 +529,14 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_PG_NOTIFY:
     m = make_message<MOSDPGNotify>();
     break;
+  case MSG_OSD_PG_NOTIFY2:
+    m = make_message<MOSDPGNotify2>();
+    break;
   case MSG_OSD_PG_QUERY:
     m = make_message<MOSDPGQuery>();
+    break;
+  case MSG_OSD_PG_QUERY2:
+    m = make_message<MOSDPGQuery2>();
     break;
   case MSG_OSD_PG_LOG:
     m = make_message<MOSDPGLog>();
@@ -520,6 +546,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_PG_INFO:
     m = make_message<MOSDPGInfo>();
+    break;
+  case MSG_OSD_PG_INFO2:
+    m = make_message<MOSDPGInfo2>();
     break;
   case MSG_OSD_PG_CREATE:
     m = make_message<MOSDPGCreate>();
@@ -810,6 +839,14 @@ Message *decode_message(CephContext *cct, int crcflags,
     m = make_message<MMgrDigest>();
     break;
 
+  case MSG_MGR_COMMAND:
+    m = make_message<MMgrCommand>();
+    break;
+
+  case MSG_MGR_COMMAND_REPLY:
+    m = make_message<MMgrCommandReply>();
+    break;
+
   case MSG_MGR_OPEN:
     m = make_message<MMgrOpen>();
     break;
@@ -874,7 +911,7 @@ Message *decode_message(CephContext *cct, int crcflags,
     return 0;
   }
 
-  m->set_connection(conn);
+  m->set_connection(std::move(conn));
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);
@@ -949,15 +986,12 @@ void Message::decode_trace(bufferlist::const_iterator &p, bool create)
 
 void encode_message(Message *msg, uint64_t features, bufferlist& payload)
 {
-  bufferlist front, middle, data;
   ceph_msg_footer_old old_footer;
-  ceph_msg_footer footer;
   msg->encode(features, MSG_CRC_ALL);
   encode(msg->get_header(), payload);
 
   // Here's where we switch to the old footer format.  PLR
-
-  footer = msg->get_footer();
+  ceph_msg_footer footer = msg->get_footer();
   old_footer.front_crc = footer.front_crc;   
   old_footer.middle_crc = footer.middle_crc;   
   old_footer.data_crc = footer.data_crc;   

@@ -22,6 +22,7 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
+from tasks.thrasher import Thrasher
 
 try:
     from subprocess import DEVNULL # py3k
@@ -95,11 +96,17 @@ def mount_osd_data(ctx, remote, cluster, osd):
             )
 
 
-class Thrasher:
+class PoolType:
+    REPLICATED = 1
+    ERASURE_CODED = 3
+
+
+class OSDThrasher(Thrasher):
     """
     Object used to thrash Ceph
     """
-    def __init__(self, manager, config, logger=None):
+    def __init__(self, manager, config, logger):
+        super(OSDThrasher, self).__init__()
         self.ceph_manager = manager
         self.cluster = manager.cluster
         self.ceph_manager.wait_for_clean()
@@ -131,15 +138,6 @@ class Thrasher:
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
         self.min_pgs = self.config.get("min_pgs_per_pool_osd", 1) * len(num_osds)
-        if self.logger is not None:
-            self.log = lambda x: self.logger.info(x)
-        else:
-            def tmp(x):
-                """
-                Implement log behavior
-                """
-                print x
-            self.log = tmp
         if self.config is None:
             self.config = dict()
         # prevent monitor from auto-marking things out while thrasher runs
@@ -149,6 +147,7 @@ class Thrasher:
         # another
         first_mon = teuthology.get_first_mon(manager.ctx, self.config).split('.')
         opts = [('mon', 'mon_osd_down_out_interval', 0)]
+        #why do we disable marking an OSD out automatically? :/
         for service, opt, new_value in opts:
             old_value = manager.get_config(first_mon[0],
                                            first_mon[1],
@@ -180,6 +179,9 @@ class Thrasher:
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+
+    def log(self, msg, *args, **kwargs):
+        self.logger.info(msg, *args, **kwargs)
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
@@ -489,6 +491,8 @@ class Thrasher:
         try:
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
+                if not pgs:
+                    return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
@@ -529,6 +533,8 @@ class Thrasher:
         try:
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
+                if not pgs:
+                    return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
@@ -644,7 +650,6 @@ class Thrasher:
         Increase the size of the pool
         """
         pool = self.ceph_manager.get_pool()
-        orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Growing pool %s" % (pool,))
         if self.ceph_manager.expand_pool(pool,
                                          self.config.get('pool_grow_by', 10),
@@ -679,27 +684,103 @@ class Thrasher:
 
     def test_pool_min_size(self):
         """
-        Kill and revive all osds except one.
+        Loop to selectively push PGs below their min_size and test that recovery
+        still occurs.
         """
         self.log("test_pool_min_size")
         self.all_up()
         self.ceph_manager.wait_for_recovery(
             timeout=self.config.get('timeout')
             )
-        the_one = random.choice(self.in_osds)
-        self.log("Killing everyone but %s", the_one)
-        to_kill = filter(lambda x: x != the_one, self.in_osds)
-        [self.kill_osd(i) for i in to_kill]
-        [self.out_osd(i) for i in to_kill]
-        time.sleep(self.config.get("test_pool_min_size_time", 10))
-        self.log("Killing %s" % (the_one,))
-        self.kill_osd(the_one)
-        self.out_osd(the_one)
-        self.log("Reviving everyone but %s" % (the_one,))
-        [self.revive_osd(i) for i in to_kill]
-        [self.in_osd(i) for i in to_kill]
-        self.log("Revived everyone but %s" % (the_one,))
-        self.log("Waiting for clean")
+
+        minout = int(self.config.get("min_out", 1))
+        minlive = int(self.config.get("min_live", 2))
+        mindead = int(self.config.get("min_dead", 1))
+        self.log("doing min_size thrashing")
+        self.ceph_manager.wait_for_clean(timeout=60)
+        assert self.ceph_manager.is_clean(), \
+            'not clean before minsize thrashing starts'
+        while not self.stopping:
+            # look up k and m from all the pools on each loop, in case it
+            # changes as the cluster runs
+            k = 0
+            m = 99
+            has_pools = False
+            pools_json = self.ceph_manager.get_osd_dump_json()['pools']
+
+            for pool_json in pools_json:
+                pool = pool_json['pool_name']
+                has_pools = True
+                pool_type = pool_json['type']  # 1 for rep, 3 for ec
+                min_size = pool_json['min_size']
+                self.log("pool {pool} min_size is {min_size}".format(pool=pool,min_size=min_size))
+                try:
+                    ec_profile = self.ceph_manager.get_pool_property(pool, 'erasure_code_profile')
+                    if pool_type != PoolType.ERASURE_CODED:
+                        continue
+                    ec_profile = pool_json['erasure_code_profile']
+                    ec_profile_json = self.ceph_manager.raw_cluster_cmd(
+                        'osd',
+                        'erasure-code-profile',
+                        'get',
+                        ec_profile,
+                        '--format=json')
+                    ec_json = json.loads(ec_profile_json)
+                    local_k = int(ec_json['k'])
+                    local_m = int(ec_json['m'])
+                    self.log("pool {pool} local_k={k} local_m={m}".format(pool=pool,
+                                                                          k=local_k, m=local_m))
+                    if local_k > k:
+                        self.log("setting k={local_k} from previous {k}".format(local_k=local_k, k=k))
+                        k = local_k
+                    if local_m < m:
+                        self.log("setting m={local_m} from previous {m}".format(local_m=local_m, m=m))
+                        m = local_m
+                except CommandFailedError:
+                    self.log("failed to read erasure_code_profile. %s was likely removed", pool)
+                    continue
+
+            if has_pools :
+                self.log("using k={k}, m={m}".format(k=k,m=m))
+            else:
+                self.log("No pools yet, waiting")
+                time.sleep(5)
+                continue
+                
+            if minout > len(self.out_osds): # kill OSDs and mark out
+                self.log("forced to out an osd")
+                self.kill_osd(mark_out=True)
+                continue
+            elif mindead > len(self.dead_osds): # kill OSDs but force timeout
+                self.log("forced to kill an osd")
+                self.kill_osd()
+                continue
+            else: # make mostly-random choice to kill or revive OSDs
+                minup = max(minlive, k)
+                rand_val = random.uniform(0, 1)
+                self.log("choosing based on number of live OSDs and rand val {rand}".\
+                         format(rand=rand_val))
+                if len(self.live_osds) > minup+1 and rand_val < 0.5:
+                    # chose to knock out as many OSDs as we can w/out downing PGs
+                    
+                    most_killable = min(len(self.live_osds) - minup, m)
+                    self.log("chose to kill {n} OSDs".format(n=most_killable))
+                    for i in range(1, most_killable):
+                        self.kill_osd(mark_out=True)
+                    time.sleep(15)
+                    assert self.ceph_manager.all_active_or_peered(), \
+                            'not all PGs are active or peered 15 seconds after marking out OSDs'
+                else: # chose to revive OSDs, bring up a random fraction of the dead ones
+                    self.log("chose to revive osds")
+                    for i in range(1, int(rand_val * len(self.dead_osds))):
+                        revive_osd()
+
+            # let PGs repair themselves or our next knockout might kill one
+            self.ceph_manager.wait_for_clean(timeout=self.config.get('timeout'))
+ 
+        # / while not self.stopping
+        self.all_up_in()
+ 
         self.ceph_manager.wait_for_recovery(
             timeout=self.config.get('timeout')
             )
@@ -813,9 +894,9 @@ class Thrasher:
         if isinstance(chance_down, int):
             chance_down = float(chance_down) / 100
         minin = self.minin
-        minout = self.config.get("min_out", 0)
-        minlive = self.config.get("min_live", 2)
-        mindead = self.config.get("min_dead", 0)
+        minout = int(self.config.get("min_out", 0))
+        minlive = int(self.config.get("min_live", 2))
+        mindead = int(self.config.get("min_dead", 0))
 
         self.log('choose_action: min_in %d min_out '
                  '%d min_live %d min_dead %d' %
@@ -840,7 +921,7 @@ class Thrasher:
         actions.append((self.fix_pgp_num,
                         self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size,
-                        chance_test_min_size,))
+                        self.config.get('chance_test_min_size', 0),))
         actions.append((self.test_backfill_full,
                         chance_test_backfill_full,))
         if self.chance_thrash_cluster_full > 0:
@@ -875,6 +956,19 @@ class Thrasher:
                 return action
             val -= prob
         return None
+
+    def do_thrash(self):
+        """
+        _do_thrash() wrapper.
+        """
+        try:
+            self._do_thrash()
+        except Exception as e:
+            # See _run exception comment for MDSThrasher
+            self.exception = e
+            self.logger.exception("exception:")
+            # Allow successful completion so gevent doesn't see an exception.
+            # The DaemonWatchdog will observe the error and tear down the test.
 
     def log_exc(func):
         @wraps(func)
@@ -968,7 +1062,7 @@ class Thrasher:
         self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
 
     @log_exc
-    def do_thrash(self):
+    def _do_thrash(self):
         """
         Loop to select random actions to thrash ceph manager with.
         """
@@ -1104,9 +1198,6 @@ class CephManager:
     the same name.
     """
 
-    REPLICATED_POOL = 1
-    ERASURE_CODED_POOL = 3
-
     def __init__(self, controller, ctx=None, config=None, logger=None,
                  cluster='ceph'):
         self.lock = threading.RLock()
@@ -1131,7 +1222,7 @@ class CephManager:
         for pool in pools:
             # we may race with a pool deletion; ignore failures here
             try:
-                self.pools[pool] = self.get_pool_property(pool, 'pg_num')
+                self.pools[pool] = self.get_pool_int_property(pool, 'pg_num')
             except CommandFailedError:
                 self.log('Failed to get pg_num from pool %s, ignoring' % pool)
 
@@ -1536,7 +1627,7 @@ class CephManager:
         """
         Get status from cluster
         """
-        status = self.raw_cluster_cmd('status', '--format=json-pretty')
+        status = self.raw_cluster_cmd('status', '--format=json')
         return json.loads(status)
 
     def raw_osd_status(self):
@@ -1710,7 +1801,7 @@ class CephManager:
         """
         :param pool_name: pool
         :param prop: property to be checked.
-        :returns: property as an int value.
+        :returns: property as string
         """
         with self.lock:
             assert isinstance(pool_name, basestring)
@@ -1721,7 +1812,10 @@ class CephManager:
                 'get',
                 pool_name,
                 prop)
-            return int(output.split()[1])
+            return output.split()[1]
+
+    def get_pool_int_property(self, pool_name, prop):
+        return int(self.get_pool_property(pool_name, prop))
 
     def set_pool_property(self, pool_name, prop, val):
         """
@@ -1987,7 +2081,7 @@ class CephManager:
         """
         pool_dump = self.get_pool_dump(pool)
         object_map = self.get_object_map(pool, name)
-        if pool_dump["type"] == CephManager.ERASURE_CODED_POOL:
+        if pool_dump["type"] == PoolType.ERASURE_CODED:
             shard = object_map['acting'].index(osdid)
             return "{pgid}s{shard}".format(pgid=object_map['pgid'],
                                            shard=shard)
@@ -2067,6 +2161,9 @@ class CephManager:
         Find the number of active and clean pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active_clean(pgs)
+
+    def _get_num_active_clean(self, pgs):
         num = 0
         for pg in pgs:
             if (pg['state'].count('active') and
@@ -2080,6 +2177,9 @@ class CephManager:
         Find the number of active and recovered pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active_recovered(pgs)
+
+    def _get_num_active_recovered(self, pgs):
         num = 0
         for pg in pgs:
             if (pg['state'].count('active') and
@@ -2105,6 +2205,9 @@ class CephManager:
         Find the number of active pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active(pgs)
+
+    def _get_num_active(self, pgs):
         num = 0
         for pg in pgs:
             if pg['state'].count('active') and not pg['state'].count('stale'):
@@ -2130,6 +2233,9 @@ class CephManager:
         Find the number of pgs that are either active or down.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active_down(pgs)
+
+    def _get_num_active_down(self, pgs):
         num = 0
         for pg in pgs:
             if ((pg['state'].count('active') and not
@@ -2141,23 +2247,40 @@ class CephManager:
                 num += 1
         return num
 
+    def get_num_peered(self):
+        """
+        Find the number of PGs that are peered
+        """
+        pgs = self.get_pg_stats()
+        return self._get_num_peered(pgs)
+
+    def _get_num_peered(self, pgs):
+        num = 0
+        for pg in pgs:
+            if pg['state'].count('peered') and not pg['state'].count('stale'):
+                 num += 1
+        return num
+
     def is_clean(self):
         """
         True if all pgs are clean
         """
-        return self.get_num_active_clean() == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active_clean(pgs) == len(pgs)
 
     def is_recovered(self):
         """
         True if all pgs have recovered
         """
-        return self.get_num_active_recovered() == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active_recovered(pgs) == len(pgs)
 
     def is_active_or_down(self):
         """
         True if all pgs are active or down
         """
-        return self.get_num_active_down() == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active_down(pgs) == len(pgs)
 
     def wait_for_clean(self, timeout=1200):
         """
@@ -2342,6 +2465,13 @@ class CephManager:
         Wrapper to check if all pgs are active
         """
         return self.get_num_active() == self.get_num_pgs()
+
+    def all_active_or_peered(self):
+        """
+        Wrapper to check if all PGs are active or peered
+        """
+        pgs = self.get_pg_stats()
+        return self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs)
 
     def wait_till_active(self, timeout=None):
         """
@@ -2587,6 +2717,24 @@ class CephManager:
         remote.run(args=['sudo',
                          'install', '-d', '-m0777', '--', '/var/run/ceph', ], )
 
+    def get_service_task_status(self, service, status_key):
+        """
+        Return daemon task status for a given ceph service.
+
+        :param service: ceph service (mds, osd, etc...)
+        :param status_key: matching task status key
+        """
+        task_status = {}
+        status = self.raw_cluster_status()
+        try:
+            for k,v in status['servicemap']['services'][service]['daemons'].items():
+                ts = dict(v).get('task_status', None)
+                if ts:
+                    task_status[k] = ts[status_key]
+        except KeyError: # catches missing service and status key
+            return {}
+        self.log(task_status)
+        return task_status
 
 def utility_task(name):
     """

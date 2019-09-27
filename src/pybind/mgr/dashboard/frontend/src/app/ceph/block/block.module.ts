@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { TreeModule } from 'ng2-tree';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -14,6 +15,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '../../shared/services/feature-toggles-guard.service';
 import { SharedModule } from '../../shared/shared.module';
+import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
 import { IscsiTargetDiscoveryModalComponent } from './iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
@@ -62,11 +64,13 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     ModalModule.forRoot(),
     SharedModule,
     RouterModule,
-    TreeModule
+    TreeModule,
+    NgBootstrapFormValidationModule
   ],
   declarations: [
     RbdListComponent,
     IscsiComponent,
+    IscsiSettingComponent,
     IscsiTabsComponent,
     IscsiTargetListComponent,
     RbdDetailsComponent,

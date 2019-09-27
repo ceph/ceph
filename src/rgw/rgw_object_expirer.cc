@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
 #include <iostream>
@@ -33,13 +33,13 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static RGWRados *store = NULL;
+static rgw::sal::RGWRadosStore *store = NULL;
 
 class StoreDestructor {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
 
 public:
-  explicit StoreDestructor(RGWRados *_s) : store(_s) {}
+  explicit StoreDestructor(rgw::sal::RGWRadosStore *_s) : store(_s) {}
   ~StoreDestructor() {
     if (store) {
       RGWStoreManager::close_storage(store);
@@ -86,9 +86,6 @@ int main(const int argc, const char **argv)
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;
   }
-
-  rgw_user_init(store);
-  rgw_bucket_init(store->meta_mgr);
 
   /* Guard to not forget about closing the rados store. */
   StoreDestructor store_dtor(store);

@@ -36,8 +36,6 @@
 class CephContext;
 class health_check_map_t;
 
-#define MDS_FS_NAME_DEFAULT "cephfs"
-
 /**
  * The MDSMap and any additional fields describing a particular
  * filesystem (a unique fs_cluster_id_t).
@@ -68,17 +66,7 @@ public:
   {
     return get_standby_replay(who) != MDS_GID_NONE;
   }
-  mds_gid_t get_standby_replay(mds_gid_t who) const
-  {
-    for (const auto &i : mds_map.mds_info) {
-      const auto &info = i.second;
-      if (info.state == MDSMap::STATE_STANDBY_REPLAY
-          && info.rank == mds_map.mds_info.at(who).rank) {
-        return info.global_id;
-      }
-    }
-    return MDS_GID_NONE;
-  }
+  mds_gid_t get_standby_replay(mds_gid_t who) const;
   bool is_standby_replay(mds_gid_t who) const
   {
     auto p = mds_map.mds_info.find(who);
@@ -95,26 +83,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
 class FSMap {
-protected:
-  epoch_t epoch = 0;
-  uint64_t next_filesystem_id = FS_CLUSTER_ID_ANONYMOUS + 1;
-  fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
-  CompatSet compat;
-  bool enable_multiple = false;
-  bool ever_enabled_multiple = false; // < the cluster had multiple MDSes enabled once
-
-  std::map<fs_cluster_id_t, Filesystem::ref> filesystems;
-
-  // Remember which Filesystem an MDS daemon's info is stored in
-  // (or in standby_daemons for FS_CLUSTER_ID_NONE)
-  std::map<mds_gid_t, fs_cluster_id_t> mds_roles;
-
-  // For MDS daemons not yet assigned to a Filesystem
-  std::map<mds_gid_t, MDSMap::mds_info_t> standby_daemons;
-  std::map<mds_gid_t, epoch_t> standby_epochs;
-
 public:
-
   friend class MDSMonitor;
   friend class PaxosFSMap;
 
@@ -139,25 +108,7 @@ public:
     }
   }
 
-  FSMap &operator=(const FSMap &rhs)
-  {
-    epoch = rhs.epoch;
-    next_filesystem_id = rhs.next_filesystem_id;
-    legacy_client_fscid = rhs.legacy_client_fscid;
-    compat = rhs.compat;
-    enable_multiple = rhs.enable_multiple;
-    mds_roles = rhs.mds_roles;
-    standby_daemons = rhs.standby_daemons;
-    standby_epochs = rhs.standby_epochs;
-
-    filesystems.clear();
-    for (const auto &i : rhs.filesystems) {
-      const auto &fs = i.second;
-      filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
-    }
-
-    return *this;
-  }
+  FSMap &operator=(const FSMap &rhs);
 
   const CompatSet &get_compat() const {return compat;}
 
@@ -189,74 +140,24 @@ public:
     return standby_daemons.size();
   }
 
-  bool is_any_degraded() const {
-    for (auto& i : filesystems) {
-      if (i.second->mds_map.is_degraded()) {
-	return true;
-      }
-    }
-    return false;
-  }
+  bool is_any_degraded() const;
 
   /**
    * Get state of all daemons (for all filesystems, including all standbys)
    */
-  std::map<mds_gid_t, MDSMap::mds_info_t> get_mds_info() const
-  {
-    std::map<mds_gid_t, MDSMap::mds_info_t> result;
-    for (const auto &i : standby_daemons) {
-      result[i.first] = i.second;
-    }
-
-    for (const auto &i : filesystems) {
-      const auto &fs_info = i.second->mds_map.get_mds_info();
-      for (const auto &j : fs_info) {
-        result[j.first] = j.second;
-      }
-    }
-
-    return result;
-  }
+  std::map<mds_gid_t, MDSMap::mds_info_t> get_mds_info() const;
 
   mds_gid_t get_available_standby() const;
 
   /**
    * Resolve daemon name to GID
    */
-  mds_gid_t find_mds_gid_by_name(std::string_view s) const
-  {
-    const auto info = get_mds_info();
-    for (const auto &p : info) {
-      if (p.second.name == s) {
-	return p.first;
-      }
-    }
-    return MDS_GID_NONE;
-  }
+  mds_gid_t find_mds_gid_by_name(std::string_view s) const;
 
   /**
    * Resolve daemon name to status
    */
-  const MDSMap::mds_info_t* find_by_name(std::string_view name) const
-  {
-    std::map<mds_gid_t, MDSMap::mds_info_t> result;
-    for (const auto &i : standby_daemons) {
-      if (i.second.name == name) {
-        return &(i.second);
-      }
-    }
-
-    for (const auto &i : filesystems) {
-      const auto &fs_info = i.second->mds_map.get_mds_info();
-      for (const auto &j : fs_info) {
-        if (j.second.name == name) {
-          return &(j.second);
-        }
-      }
-    }
-
-    return nullptr;
-  }
+  const MDSMap::mds_info_t* find_by_name(std::string_view name) const;
 
   /**
    * Does a daemon exist with this GID?
@@ -410,19 +311,7 @@ public:
    * for the one we had previously.  Impose the new one
    * on all filesystems.
    */
-  void update_compat(const CompatSet &c)
-  {
-    // We could do something more complicated here to enable
-    // different filesystems to be served by different MDS versions,
-    // but this is a lot simpler because it doesn't require us to
-    // track the compat versions for standby daemons.
-    compat = c;
-    for (const auto &i : filesystems) {
-      MDSMap &mds_map = i.second->mds_map;
-      mds_map.compat = c;
-      mds_map.epoch = epoch;
-    }
-  }
+  void update_compat(const CompatSet &c);
 
   Filesystem::const_ref get_legacy_filesystem()
   {
@@ -452,23 +341,9 @@ public:
   Filesystem::const_ref get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
   Filesystem::ref get_filesystem(fs_cluster_id_t fscid) {return filesystems.at(fscid);}
   Filesystem::const_ref get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
-  Filesystem::const_ref get_filesystem(std::string_view name) const
-  {
-    for (const auto& p : filesystems) {
-      if (p.second->mds_map.fs_name == name) {
-        return p.second;
-      }
-    }
-    return nullptr;
-  }
-  std::vector<Filesystem::const_ref> get_filesystems(void) const
-  {
-    std::vector<Filesystem::const_ref> ret;
-    for (const auto& p : filesystems) {
-      ret.push_back(p.second);
-    }
-    return ret;
-  }
+  Filesystem::const_ref get_filesystem(std::string_view name) const;
+
+  std::vector<Filesystem::const_ref> get_filesystems(void) const;
 
   int parse_filesystem(
       std::string_view ns_str,
@@ -483,15 +358,7 @@ public:
   /**
    * Return true if this pool is in use by any of the filesystems
    */
-  bool pool_in_use(int64_t poolid) const {
-    for (auto const &i : filesystems) {
-      if (i.second->mds_map.is_data_pool(poolid)
-          || i.second->mds_map.metadata_pool == poolid) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool pool_in_use(int64_t poolid) const;
 
   mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name) const;
 
@@ -521,6 +388,24 @@ public:
 
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<FSMap*>& ls);
+
+protected:
+  epoch_t epoch = 0;
+  uint64_t next_filesystem_id = FS_CLUSTER_ID_ANONYMOUS + 1;
+  fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
+  CompatSet compat;
+  bool enable_multiple = false;
+  bool ever_enabled_multiple = false; // < the cluster had multiple MDSes enabled once
+
+  std::map<fs_cluster_id_t, Filesystem::ref> filesystems;
+
+  // Remember which Filesystem an MDS daemon's info is stored in
+  // (or in standby_daemons for FS_CLUSTER_ID_NONE)
+  std::map<mds_gid_t, fs_cluster_id_t> mds_roles;
+
+  // For MDS daemons not yet assigned to a Filesystem
+  std::map<mds_gid_t, MDSMap::mds_info_t> standby_daemons;
+  std::map<mds_gid_t, epoch_t> standby_epochs;
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 

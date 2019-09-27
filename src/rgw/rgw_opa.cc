@@ -1,7 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_opa.h"
+#include "rgw_http_client.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

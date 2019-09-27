@@ -63,6 +63,32 @@ void flush_evict_all(librados::Rados& cluster, librados::IoCtx& cache_ioctx)
   }
 }
 
+static string _get_required_osd_release(Rados& cluster)
+{
+  bufferlist inbl;
+  string cmd = string("{\"prefix\": \"osd dump\",\"format\":\"json\"}");
+  bufferlist outbl;
+  int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+  ceph_assert(r >= 0);
+  string outstr(outbl.c_str(), outbl.length());
+  json_spirit::Value v;
+  if (!json_spirit::read(outstr, v)) {
+    cerr <<" unable to parse json " << outstr << std::endl;
+    return "";
+  }
+
+  json_spirit::Object& o = v.get_obj();
+  for (json_spirit::Object::size_type i=0; i<o.size(); i++) {
+    json_spirit::Pair& p = o[i];
+    if (p.name_ == "require_osd_release") {
+      cout << "require_osd_release = " << p.value_.get_str() << std::endl;
+      return p.value_.get_str();
+    }
+  }
+  cerr << "didn't find require_osd_release in " << outstr << std::endl;
+  return "";
+}
+
 class LibRadosTwoPoolsPP : public RadosTestPP
 {
 public:
@@ -607,10 +633,12 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
 
   ioctx.snap_set_read(my_snaps[0]);
 
-  // read foo snap
+  // read foo snap.  the OSD may or may not realize that this snap has
+  // been logically deleted; either response is valid.
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
+    int r = ioctx.read("foo", bl, 1, 0);
+    ASSERT_TRUE(r == 1 || r == -ENOENT);
   }
 
   // cleanup
@@ -2193,8 +2221,8 @@ TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
 
 
 IoCtx *read_ioctx = 0;
-Mutex test_lock("FlushReadRaces::lock");
-Cond cond;
+ceph::mutex test_lock = ceph::make_mutex("FlushReadRaces::lock");
+ceph::condition_variable cond;
 int max_reads = 100;
 int num_reads = 0; // in progress
 
@@ -2213,14 +2241,13 @@ void start_flush_read()
 void flush_read_race_cb(completion_t cb, void *arg)
 {
   //cout << " finished read" << std::endl;
-  test_lock.Lock();
+  std::lock_guard l{test_lock};
   if (num_reads > max_reads) {
     num_reads--;
-    cond.Signal();
+    cond.notify_all();
   } else {
     start_flush_read();
   }
-  test_lock.Unlock();
 }
 
 TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
@@ -2257,12 +2284,12 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
 
   // start a continuous stream of reads
   read_ioctx = &ioctx;
-  test_lock.Lock();
+  test_lock.lock();
   for (int i = 0; i < max_reads; ++i) {
     start_flush_read();
     num_reads++;
   }
-  test_lock.Unlock();
+  test_lock.unlock();
 
   // try-flush
   ObjectReadOperation op;
@@ -2278,11 +2305,9 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
   completion->release();
 
   // stop reads
-  test_lock.Lock();
-  max_reads = 0;
-  while (num_reads > 0)
-    cond.Wait(test_lock);
-  test_lock.Unlock();
+  std::unique_lock locker{test_lock};
+  max_reads = 0;  
+  cond.wait(locker, [] { return num_reads == 0;});
 }
 
 TEST_F(LibRadosTierPP, HitSetNone) {
@@ -2409,7 +2434,6 @@ static int _get_pg_num(Rados& cluster, string pool_name)
   cerr << "didn't find pg_num in " << outstr << std::endl;
   return -1;
 }
-
 
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
@@ -2954,16 +2978,9 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
 
 TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
   // skip test if not yet mimic
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("mimic") == std::string::npos) {
-      cout << "cluster is not yet mimic, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "mimic") {
+    cout << "cluster is not yet mimic, skipping test" << std::endl;
+    return;
   }
 
   // create object
@@ -3032,16 +3049,9 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
 
 TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
   // skip test if not yet mimic
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("mimic") == std::string::npos) {
-      cout << "cluster is not yet mimic, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "mimic") {
+    cout << "cluster is not yet mimic, skipping test" << std::endl;
+    return;
   }
 
   // create object
@@ -3236,16 +3246,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
 
 TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // skip test if not yet nautilus
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("nautilus") == std::string::npos) {
-      cout << "cluster is not yet nautilus, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "nautilus") {
+    cout << "cluster is not yet nautilus, skipping test" << std::endl;
+    return;
   }
 
   // create object
@@ -3387,17 +3390,11 @@ using ceph::crypto::SHA1;
 #include "rgw/rgw_common.h"
 TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   // skip test if not yet nautilus
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("nautilus") == std::string::npos) {
-      cout << "cluster is not yet nautilus, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "nautilus") {
+    cout << "cluster is not yet nautilus, skipping test" << std::endl;
+    return;
   }
+
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	    set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
@@ -3514,6 +3511,94 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     }
     ASSERT_EQ(2u, read_ret.refs.size());
   }
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
+  // skip test if not yet octopus 
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("base chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CHUNKS");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
+  }
+
+  // configure tier
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk
+  {
+    ObjectWriteOperation op;
+    op.set_chunk(0, 2, cache_ioctx, "bar-chunk", 0);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // set-chunk
+  {
+    ObjectWriteOperation op;
+    op.set_chunk(2, 2, cache_ioctx, "bar-chunk", 2);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // make chunked object dirty
+  {
+    bufferlist bl;
+    bl.append("DD");
+    ObjectWriteOperation op;
+    op.write(0, bl);
+    ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
+  }
+  // flush
+  {
+    ObjectWriteOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // read and verify the chunked object
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, cache_ioctx.read("bar-chunk", bl, 1, 0));
+    ASSERT_EQ('D', bl[0]);
+  }
+
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -3963,10 +4048,12 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnapTrimRace) {
 
   ioctx.snap_set_read(my_snaps[0]);
 
-  // read foo snap
+  // read foo snap.  the OSD may or may not realize that this snap has
+  // been logically deleted; either response is valid.
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
+    int r = ioctx.read("foo", bl, 1, 0);
+    ASSERT_TRUE(r == 1 || r == -ENOENT);
   }
 
   // cleanup
@@ -5447,12 +5534,12 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
 
   // start a continuous stream of reads
   read_ioctx = &ioctx;
-  test_lock.Lock();
+  test_lock.lock();
   for (int i = 0; i < max_reads; ++i) {
     start_flush_read();
     num_reads++;
   }
-  test_lock.Unlock();
+  test_lock.unlock();
 
   // try-flush
   ObjectReadOperation op;
@@ -5468,11 +5555,9 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
   completion->release();
 
   // stop reads
-  test_lock.Lock();
-  max_reads = 0;
-  while (num_reads > 0)
-    cond.Wait(test_lock);
-  test_lock.Unlock();
+  std::unique_lock locker{test_lock};
+  max_reads = 0;  
+  cond.wait(locker, [] { return num_reads == 0;});
 }
 
 TEST_F(LibRadosTierECPP, CallForcesPromote) {
@@ -5589,7 +5674,7 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
   cluster.wait_for_latest_osdmap();
 
   ASSERT_EQ(0, cluster.pool_delete(cache_pool_name.c_str()));
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, cluster));
 }
 
 TEST_F(LibRadosTierECPP, HitSetNone) {

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string>
 #include <map>
@@ -119,10 +119,10 @@ int RGWUsage::show(RGWRados *store, const rgw_user& uid, const string& bucket_na
       rgw_usage_data total_usage;
       entry.sum(total_usage, *categories);
       formatter->open_object_section("total");
-      formatter->dump_int("bytes_sent", total_usage.bytes_sent);
-      formatter->dump_int("bytes_received", total_usage.bytes_received);
-      formatter->dump_int("ops", total_usage.ops);
-      formatter->dump_int("successful_ops", total_usage.successful_ops);
+      encode_json("bytes_sent", total_usage.bytes_sent, formatter);
+      encode_json("bytes_received", total_usage.bytes_received, formatter);
+      encode_json("ops", total_usage.ops, formatter);
+      encode_json("successful_ops", total_usage.successful_ops, formatter);
       formatter->close_section(); // total
 
       formatter->close_section(); // user

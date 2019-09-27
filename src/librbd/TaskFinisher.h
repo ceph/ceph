@@ -6,7 +6,7 @@
 #include "include/Context.h"
 #include "common/ceph_context.h"
 #include "common/Finisher.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include <map>
 #include <utility>
@@ -16,12 +16,11 @@ class CephContext;
 namespace librbd {
 
 struct TaskFinisherSingleton {
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("librbd::TaskFinisher::m_lock");
   SafeTimer *m_safe_timer;
   Finisher *m_finisher;
 
-  explicit TaskFinisherSingleton(CephContext *cct)
-    : m_lock("librbd::TaskFinisher::m_lock") {
+  explicit TaskFinisherSingleton(CephContext *cct) {
     m_safe_timer = new SafeTimer(cct, m_lock, false);
     m_safe_timer->init();
     m_finisher = new Finisher(cct, "librbd::TaskFinisher::m_finisher", "taskfin_librbd");
@@ -29,7 +28,7 @@ struct TaskFinisherSingleton {
   }
   virtual ~TaskFinisherSingleton() {
     {
-      Mutex::Locker l(m_lock);
+      std::lock_guard l{m_lock};
       m_safe_timer->shutdown();
       delete m_safe_timer;
     }
@@ -53,7 +52,7 @@ public:
   }
 
   void cancel(const Task& task) {
-    Mutex::Locker l(*m_lock);
+    std::lock_guard l{*m_lock};
     typename TaskContexts::iterator it = m_task_contexts.find(task);
     if (it != m_task_contexts.end()) {
       delete it->second.first;
@@ -64,7 +63,7 @@ public:
 
   void cancel_all(Context *comp) {
     {
-      Mutex::Locker l(*m_lock);
+      std::lock_guard l{*m_lock};
       for (typename TaskContexts::iterator it = m_task_contexts.begin();
            it != m_task_contexts.end(); ++it) {
         delete it->second.first;
@@ -76,7 +75,7 @@ public:
   }
 
   bool add_event_after(const Task& task, double seconds, Context *ctx) {
-    Mutex::Locker l(*m_lock);
+    std::lock_guard l{*m_lock};
     if (m_task_contexts.count(task) != 0) {
       // task already scheduled on finisher or timer
       delete ctx;
@@ -94,7 +93,7 @@ public:
   }
 
   bool queue(const Task& task, Context *ctx) {
-    Mutex::Locker l(*m_lock);
+    std::lock_guard l{*m_lock};
     typename TaskContexts::iterator it = m_task_contexts.find(task);
     if (it != m_task_contexts.end()) {
       if (it->second.second != NULL) {
@@ -130,7 +129,7 @@ private:
 
   CephContext &m_cct;
 
-  Mutex *m_lock;
+  ceph::mutex *m_lock;
   Finisher *m_finisher;
   SafeTimer *m_safe_timer;
 
@@ -140,7 +139,7 @@ private:
   void complete(const Task& task) {
     Context *ctx = NULL;
     {
-      Mutex::Locker l(*m_lock);
+      std::lock_guard l{*m_lock};
       typename TaskContexts::iterator it = m_task_contexts.find(task);
       if (it != m_task_contexts.end()) {
         ctx = it->second.first;

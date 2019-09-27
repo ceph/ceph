@@ -23,6 +23,7 @@ import {
 import * as _ from 'lodash';
 import { Observable, timer as observableTimer } from 'rxjs';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
@@ -36,21 +37,21 @@ import { CdUserConfig } from '../../models/cd-user-config';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
-  @ViewChild(DatatableComponent)
+  @ViewChild(DatatableComponent, { static: true })
   table: DatatableComponent;
-  @ViewChild('tableCellBoldTpl')
+  @ViewChild('tableCellBoldTpl', { static: true })
   tableCellBoldTpl: TemplateRef<any>;
-  @ViewChild('sparklineTpl')
+  @ViewChild('sparklineTpl', { static: true })
   sparklineTpl: TemplateRef<any>;
-  @ViewChild('routerLinkTpl')
+  @ViewChild('routerLinkTpl', { static: true })
   routerLinkTpl: TemplateRef<any>;
-  @ViewChild('checkIconTpl')
+  @ViewChild('checkIconTpl', { static: true })
   checkIconTpl: TemplateRef<any>;
-  @ViewChild('perSecondTpl')
+  @ViewChild('perSecondTpl', { static: true })
   perSecondTpl: TemplateRef<any>;
-  @ViewChild('executingTpl')
+  @ViewChild('executingTpl', { static: true })
   executingTpl: TemplateRef<any>;
-  @ViewChild('classAddingTpl')
+  @ViewChild('classAddingTpl', { static: true })
   classAddingTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
@@ -138,6 +139,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   selection = new CdTableSelection();
 
   tableColumns: CdTableColumn[];
+  icons = Icons;
   cellTemplates: {
     [key: string]: TemplateRef<any>;
   } = {};
@@ -146,10 +148,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   loadingIndicator = true;
   loadingError = false;
   paginationClasses = {
-    pagerLeftArrow: 'i fa fa-angle-double-left',
-    pagerRightArrow: 'i fa fa-angle-double-right',
-    pagerPrevious: 'i fa fa-angle-left',
-    pagerNext: 'i fa fa-angle-right'
+    pagerLeftArrow: Icons.leftArrowDouble,
+    pagerRightArrow: Icons.rightArrowDouble,
+    pagerPrevious: Icons.leftArrow,
+    pagerNext: Icons.rightArrow
   };
   userConfig: CdUserConfig = {};
   tableName: string;
@@ -177,14 +179,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   ngOnInit() {
     // ngx-datatable triggers calculations each time mouse enters a row,
     // this will prevent that.
-    window.addEventListener(
-      'mouseenter',
-      function(event) {
-        event.stopPropagation();
-      },
-      true
-    );
-
+    this.table.element.addEventListener('mouseenter', (e) => e.stopPropagation(), true);
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
@@ -329,7 +324,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     // https://github.com/swimlane/ngx-datatable/issues/193#issuecomment-329144543
     if (this.table && this.table.element.clientWidth !== this.currentWidth) {
       this.currentWidth = this.table.element.clientWidth;
+      // Recalculate the sizes of the grid.
       this.table.recalculate();
+      // Mark the datatable as changed, Angular's change-detection will
+      // do the rest for us => the grid will be redrawn.
+      // Note, the ChangeDetectorRef variable is private, so we need to
+      // use this workaround to access it and make TypeScript happy.
+      const cdRef = _.get(this.table, 'cd');
+      cdRef.markForCheck();
     }
   }
 

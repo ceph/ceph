@@ -5,102 +5,102 @@
       <tbody>
         <tr>
           <td i18n
-              class="bold col-sm-1">Name</td>
-          <td class="col-sm-3">{{ selectedItem.name }}</td>
+              class="bold w-25">Name</td>
+          <td class="w-75">{{ selectedItem.name }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Description</td>
-          <td class="col-sm-3">{{ selectedItem.desc }}</td>
+              class="bold">Description</td>
+          <td>{{ selectedItem.desc }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Long description</td>
-          <td class="col-sm-3">{{ selectedItem.long_desc }}</td>
+              class="bold">Long description</td>
+          <td>{{ selectedItem.long_desc }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Current values</td>
-          <td class="col-sm-3">
+              class="bold">Current values</td>
+          <td>
             <span *ngFor="let conf of selectedItem.value; last as isLast">
-              {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br/>
+              {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br />
             </span>
           </td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Default</td>
-          <td class="col-sm-3">{{ selectedItem.default }}</td>
+              class="bold">Default</td>
+          <td>{{ selectedItem.default }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Daemon default</td>
-          <td class="col-sm-3">{{ selectedItem.daemon_default }}</td>
+              class="bold">Daemon default</td>
+          <td>{{ selectedItem.daemon_default }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Type</td>
-          <td class="col-sm-3">{{ selectedItem.type }}</td>
+              class="bold">Type</td>
+          <td>{{ selectedItem.type }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Min</td>
-          <td class="col-sm-3">{{ selectedItem.min }}</td>
+              class="bold">Min</td>
+          <td>{{ selectedItem.min }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Max</td>
-          <td class="col-sm-3">{{ selectedItem.max }}</td>
+              class="bold">Max</td>
+          <td>{{ selectedItem.max }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Flags</td>
-          <td class="col-sm-3">
+              class="bold">Flags</td>
+          <td>
             <span *ngFor="let flag of selectedItem.flags">
               <span title="{{ flags[flag] }}">
-                <span class="badge badge-pill badge-primary margin-right-sm">{{ flag | uppercase }}</span>
+                <span class="badge badge-dark mr-2">{{ flag | uppercase }}</span>
               </span>
             </span>
           </td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Services</td>
-          <td class="col-sm-3">
+              class="bold">Services</td>
+          <td>
             <span *ngFor="let service of selectedItem.services">
-              <span class="badge badge-pill badge-primary margin-right-sm">{{ service }}</span>
+              <span class="badge badge-dark mr-2">{{ service }}</span>
             </span>
           </td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Source</td>
-          <td class="col-sm-3">{{ selectedItem.source }}</td>
+              class="bold">Source</td>
+          <td>{{ selectedItem.source }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Level</td>
-          <td class="col-sm-3">{{ selectedItem.level }}</td>
+              class="bold">Level</td>
+          <td>{{ selectedItem.level }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Can be updated at runtime (editable)</td>
-          <td class="col-sm-3">{{ selectedItem.can_update_at_runtime | booleanText }}</td>
+              class="bold">Can be updated at runtime (editable)</td>
+          <td>{{ selectedItem.can_update_at_runtime | booleanText }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Tags</td>
-          <td class="col-sm-3">{{ selectedItem.tags }}</td>
+              class="bold">Tags</td>
+          <td>{{ selectedItem.tags }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Enum values</td>
-          <td class="col-sm-3">{{ selectedItem.enum_values }}</td>
+              class="bold">Enum values</td>
+          <td>{{ selectedItem.enum_values }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">See also</td>
-          <td class="col-sm-3">{{ selectedItem.see_also }}</td>
+              class="bold">See also</td>
+          <td>{{ selectedItem.see_also }}</td>
         </tr>
       </tbody>
     </table>

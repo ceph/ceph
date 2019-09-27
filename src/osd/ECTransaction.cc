@@ -105,7 +105,8 @@ void ECTransaction::generate_transactions(
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   set<hobject_t> *temp_added,
   set<hobject_t> *temp_removed,
-  DoutPrefixProvider *dpp)
+  DoutPrefixProvider *dpp,
+  const ceph_release_t require_osd_release)
 {
   ceph_assert(written_map);
   ceph_assert(transactions);
@@ -264,9 +265,15 @@ void ECTransaction::generate_transactions(
 	[&](const PGTransaction::ObjectOperation::Init::None &) {},
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
 	  for (auto &&st: *transactions) {
-	    st.second.touch(
-	      coll_t(spg_t(pgid, st.first)),
-	      ghobject_t(oid, ghobject_t::NO_GEN, st.first));
+	    if (require_osd_release >= ceph_release_t::octopus) {
+	      st.second.create(
+		coll_t(spg_t(pgid, st.first)),
+		ghobject_t(oid, ghobject_t::NO_GEN, st.first));
+	    } else {
+	      st.second.touch(
+		coll_t(spg_t(pgid, st.first)),
+		ghobject_t(oid, ghobject_t::NO_GEN, st.first));
+	    }
 	  }
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Clone &op) {

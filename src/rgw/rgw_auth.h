@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 
 #ifndef CEPH_RGW_AUTH_H
@@ -12,10 +12,11 @@
 #include <utility>
 
 #include "rgw_common.h"
-#include "rgw_keystone.h"
 #include "rgw_web_idp.h"
 
 #define RGW_USER_ANON_ID "anonymous"
+
+class RGWCtl;
 
 namespace rgw {
 namespace auth {
@@ -91,7 +92,7 @@ std::unique_ptr<Identity> transform_old_authinfo(const req_state* const s);
  * imposed by a particular rgw::auth::Engine.
  *
  * In contrast to rgw::auth::Engine, implementations of this interface
- * are allowed to handle req_state or RGWRados in the read-write manner.
+ * are allowed to handle req_state or RGWUserCtl in the read-write manner.
  *
  * It's expected that most (if not all) of implementations will also
  * conform to rgw::auth::Identity interface to provide authorization
@@ -354,17 +355,17 @@ class StrategyRegistry;
 class WebIdentityApplier : public IdentityApplier {
 protected:
   CephContext* const cct;
-  RGWRados* const store;
+  RGWCtl* const ctl;
   rgw::web_idp::WebTokenClaims token_claims;
 
   string get_idp_url() const;
 
 public:
   WebIdentityApplier( CephContext* const cct,
-                      RGWRados* const store,
+                      RGWCtl* const ctl,
                       const rgw::web_idp::WebTokenClaims& token_claims)
     : cct(cct),
-      store(store),
+      ctl(ctl),
       token_claims(token_claims) {
   }
 
@@ -412,6 +413,43 @@ public:
   };
 };
 
+class ImplicitTenants: public md_config_obs_t {
+public:
+  enum implicit_tenant_flag_bits {IMPLICIT_TENANTS_SWIFT=1,
+	IMPLICIT_TENANTS_S3=2, IMPLICIT_TENANTS_BAD = -1, };
+private:
+  int saved;
+  void recompute_value(const ConfigProxy& );
+  class ImplicitTenantValue {
+    friend class ImplicitTenants;
+    int v;
+    ImplicitTenantValue(int v) : v(v) {};
+  public:
+    bool inline is_split_mode()
+    {
+      assert(v != IMPLICIT_TENANTS_BAD);
+      return v == IMPLICIT_TENANTS_SWIFT || v == IMPLICIT_TENANTS_S3;
+    }
+    bool inline implicit_tenants_for_(const implicit_tenant_flag_bits bit)
+    {
+      assert(v != IMPLICIT_TENANTS_BAD);
+      return static_cast<bool>(v&bit);
+    }
+  };
+public:
+  ImplicitTenants(const ConfigProxy& c) { recompute_value(c);}
+  ImplicitTenantValue get_value() {
+    return ImplicitTenantValue(saved);
+  }
+private:
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+    const std::set <std::string> &changed) override;
+};
+
+std::tuple<bool,bool> implicit_tenants_enabled_for_swift(CephContext * const cct);
+std::tuple<bool,bool> implicit_tenants_enabled_for_s3(CephContext * const cct);
+
 /* rgw::auth::RemoteApplier targets those authentication engines which don't
  * need to ask the RADOS store while performing the auth process. Instead,
  * they obtain credentials from an external source like Keystone or LDAP.
@@ -456,7 +494,7 @@ protected:
   CephContext* const cct;
 
   /* Read-write is intensional here due to RGWUserInfo creation process. */
-  RGWRados* const store;
+  RGWCtl* const ctl;
 
   /* Supplemental strategy for extracting permissions from ACLs. Its results
    * will be combined (ORed) with a default strategy that is responsible for
@@ -464,23 +502,27 @@ protected:
   const acl_strategy_t extra_acl_strategy;
 
   const AuthInfo info;
-  const bool implicit_tenants;
+  rgw::auth::ImplicitTenants& implicit_tenant_context;
+  const rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit;
 
   virtual void create_account(const DoutPrefixProvider* dpp,
                               const rgw_user& acct_user,
+                              bool implicit_tenant,
                               RGWUserInfo& user_info) const;          /* out */
 
 public:
   RemoteApplier(CephContext* const cct,
-                RGWRados* const store,
+                RGWCtl* const ctl,
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
-                const bool implicit_tenants)
+		rgw::auth::ImplicitTenants& implicit_tenant_context,
+                rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit)
     : cct(cct),
-      store(store),
+      ctl(ctl),
       extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info),
-      implicit_tenants(implicit_tenants) {
+      implicit_tenant_context(implicit_tenant_context),
+      implicit_tenant_bit(implicit_tenant_bit) {
   }
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;

@@ -140,6 +140,28 @@ class FSStatus(object):
             log.warn(json.dumps(list(self.get_all()), indent=2))  # dump for debugging
             raise RuntimeError("MDS id '{0}' not found in map".format(name))
 
+    def get_mds_gid(self, gid):
+        """
+        Get the info for the given MDS gid.
+        """
+        for info in self.get_all():
+            if info['gid'] == gid:
+                return info
+        return None
+
+    def hadfailover(self, status):
+        """
+        Compares two statuses for mds failovers.
+        Returns True if there is a failover.
+        """
+        for fs in status.map['filesystems']:
+            for info in fs['mdsmap']['info'].values():
+                oldinfo = self.get_mds_gid(info['gid'])
+                if oldinfo is None or oldinfo['incarnation'] != info['incarnation']:
+                    return True
+        #all matching
+        return False
+
 class CephCluster(object):
     @property
     def admin_remote(self):
@@ -407,6 +429,9 @@ class Filesystem(MDSCluster):
         # poke our methods.
         if not hasattr(self._ctx, "filesystem"):
             self._ctx.filesystem = self
+
+    def get_task_status(self, status_key):
+        return self.mon_manager.get_service_task_status("mds", status_key)
 
     def getinfo(self, refresh = False):
         status = self.status()

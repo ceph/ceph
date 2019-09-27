@@ -3,6 +3,7 @@ import { FormControl, NgForm } from '@angular/forms';
 
 import * as _ from 'lodash';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ConfigurationService } from '../../api/configuration.service';
 import { CdFormGroup } from '../../forms/cd-form-group';
 import { ConfigOptionTypes } from './config-option.types';
@@ -24,6 +25,7 @@ export class ConfigOptionComponent implements OnInit {
   @Input()
   optionsFormShowReset = true;
 
+  icons = Icons;
   options: Array<any> = [];
   optionsFormGroup: CdFormGroup = new CdFormGroup({});
 

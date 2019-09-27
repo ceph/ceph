@@ -68,8 +68,8 @@ void DPDKWorker::initialize()
     WAIT_PORT_FIN_STAGE,
     DONE
   } create_stage = WAIT_DEVICE_STAGE;
-  static Mutex lock("DPDKStack::lock");
-  static Cond cond;
+  static ceph::mutex lock = ceph::make_mutex("DPDKStack::lock");
+  static ceph::condition_variable cond;
   static unsigned queue_init_done = 0;
   static unsigned cores = 0;
   static std::shared_ptr<DPDKDevice> sdev;
@@ -87,13 +87,12 @@ void DPDKWorker::initialize()
     sdev->workers.resize(cores);
     ldout(cct, 1) << __func__ << " using " << cores << " cores " << dendl;
 
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     create_stage = WAIT_PORT_FIN_STAGE;
-    cond.Signal();
+    cond.notify_all();
   } else {
-    Mutex::Locker l(lock);
-    while (create_stage <= WAIT_DEVICE_STAGE)
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [] { return create_stage > WAIT_DEVICE_STAGE; });
   }
   ceph_assert(sdev);
   if (i < sdev->hw_queues_count()) {
@@ -105,9 +104,9 @@ void DPDKWorker::initialize()
     cpu_weights[i] = cct->_conf->ms_dpdk_hw_queue_weight;
     qp->configure_proxies(cpu_weights);
     sdev->set_local_queue(i, std::move(qp));
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     ++queue_init_done;
-    cond.Signal();
+    cond.notify_all();
   } else {
     // auto master = qid % sdev->hw_queues_count();
     // sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
@@ -115,29 +114,27 @@ void DPDKWorker::initialize()
   }
   if (i == 0) {
     {
-      Mutex::Locker l(lock);
-      while (queue_init_done < cores)
-        cond.Wait(lock);
+      std::unique_lock l{lock};
+      cond.wait(l, [] { return queue_init_done >= cores; });
     }
 
     if (sdev->init_port_fini() < 0) {
       lderr(cct) << __func__ << " init_port_fini failed " << dendl;
       ceph_abort();
     }
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     create_stage = DONE;
-    cond.Signal();
+    cond.notify_all();
   } else {
-    Mutex::Locker l(lock);
-    while (create_stage <= WAIT_PORT_FIN_STAGE)
-      cond.Wait(lock);
+    std::unique_lock  l{lock};
+    cond.wait(l, [&] { return create_stage > WAIT_PORT_FIN_STAGE; });
   }
 
   sdev->workers[i] = this;
   _impl = std::unique_ptr<DPDKWorker::Impl>(
           new DPDKWorker::Impl(cct, i, &center, sdev));
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (!--queue_init_done) {
       create_stage = WAIT_DEVICE_STAGE;
       sdev.reset();
@@ -203,7 +200,9 @@ DPDKWorker::Impl::~Impl()
   _dev->unset_local_queue(id);
 }
 
-int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
+int DPDKWorker::listen(entity_addr_t &sa,
+		       unsigned addr_slot,
+		       const SocketOptions &opt,
                        ServerSocket *sock)
 {
   ceph_assert(sa.get_family() == AF_INET);
@@ -232,7 +231,7 @@ int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
   // _inet.set_gw_address(ipv4_address(std::get<1>(tuples[idx])));
   // _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[idx])));
   return tcpv4_listen(_impl->_inet.get_tcp(), sa.get_port(), opt, sa.get_type(),
-		      sock);
+		      addr_slot, sock);
 }
 
 int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)

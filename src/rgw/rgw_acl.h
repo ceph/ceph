@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_ACL_H
 #define CEPH_RGW_ACL_H
@@ -344,6 +344,7 @@ public:
   static void generate_test_instances(list<RGWAccessControlList*>& o);
 
   void add_grant(ACLGrant *grant);
+  void remove_canon_user_grant(rgw_user& user_id);
 
   multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
   const multimap<string, ACLGrant>& get_grant_map() const { return grant_map; }

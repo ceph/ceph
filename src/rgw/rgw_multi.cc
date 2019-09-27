@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
 
@@ -11,36 +11,13 @@
 #include "rgw_xml.h"
 #include "rgw_multi.h"
 #include "rgw_op.h"
+#include "rgw_sal.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_tier_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-
-
-bool MultipartMetaFilter::filter(const string& name, string& key) {
-  // the length of the suffix so we can skip past it
-  static const size_t MP_META_SUFFIX_LEN = MP_META_SUFFIX.length();
-
-  size_t len = name.size();
-
-  // make sure there's room for suffix plus at least one more
-  // character
-  if (len <= MP_META_SUFFIX_LEN)
-    return false;
-
-  size_t pos = name.find(MP_META_SUFFIX, len - MP_META_SUFFIX_LEN);
-  if (pos == string::npos)
-    return false;
-
-  pos = name.rfind('.', pos - 1);
-  if (pos == string::npos)
-    return false;
-
-  key = name.substr(0, pos);
-
-  return true;
-}
 
 
 bool RGWMultiPart::xml_end(const char *el)
@@ -100,7 +77,7 @@ bool is_v2_upload_id(const string& upload_id)
          (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
-int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info,
+int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
 			 CephContext *cct,
 			 const string& upload_id,
 			 const string& meta_oid, int num_parts,
@@ -116,18 +93,15 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info,
   obj.set_in_extra_data(true);
 
   rgw_raw_obj raw_obj;
-  store->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
+  store->getRados()->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
 
   bool sorted_omap = is_v2_upload_id(upload_id) && !assume_unsorted;
 
-  int ret;
-
   parts.clear();
 
-
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_obj);
-
+  int ret;
   if (sorted_omap) {
     string p;
     p = "part.";
@@ -141,32 +115,39 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info,
   } else {
     ret = sysobj.omap().get_all(&parts_map, null_yield);
   }
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   int i;
   int last_num = 0;
 
   uint32_t expected_next = marker + 1;
 
-  for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
+  for (i = 0, iter = parts_map.begin();
+       (i < num_parts || !sorted_omap) && iter != parts_map.end();
+       ++iter, ++i) {
     bufferlist& bl = iter->second;
     auto bli = bl.cbegin();
     RGWUploadPartInfo info;
     try {
       decode(info, bli);
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
+      ldout(cct, 0) << "ERROR: could not part info, caught buffer::error" <<
+	dendl;
       return -EIO;
     }
     if (sorted_omap) {
       if (info.num != expected_next) {
-        /* ouch, we expected a specific part num here, but we got a different one. Either
-         * a part is missing, or it could be a case of mixed rgw versions working on the same
-         * upload, where one gateway doesn't support correctly sorted omap keys for multipart
-         * upload just assume data is unsorted.
+        /* ouch, we expected a specific part num here, but we got a
+         * different one. Either a part is missing, or it could be a
+         * case of mixed rgw versions working on the same upload,
+         * where one gateway doesn't support correctly sorted omap
+         * keys for multipart upload just assume data is unsorted.
          */
-        return list_multipart_parts(store, bucket_info, cct, upload_id, meta_oid, num_parts, marker, parts, next_marker, truncated, true);
+        return list_multipart_parts(store, bucket_info, cct, upload_id,
+				    meta_oid, num_parts, marker, parts,
+				    next_marker, truncated, true);
       }
       expected_next++;
     }
@@ -178,21 +159,23 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info,
   }
 
   if (sorted_omap) {
-    if (truncated)
+    if (truncated) {
       *truncated = (iter != parts_map.end());
+    }
   } else {
     /* rebuild a map with only num_parts entries */
-
     map<uint32_t, RGWUploadPartInfo> new_parts;
     map<uint32_t, RGWUploadPartInfo>::iterator piter;
-
-    for (i = 0, piter = parts.begin(); i < num_parts && piter != parts.end(); ++i, ++piter) {
+    for (i = 0, piter = parts.begin();
+	 i < num_parts && piter != parts.end();
+	 ++i, ++piter) {
       new_parts[piter->first] = piter->second;
       last_num = piter->first;
     }
 
-    if (truncated)
+    if (truncated) {
       *truncated = (piter != parts.end());
+    }
 
     parts.swap(new_parts);
   }
@@ -204,17 +187,21 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int list_multipart_parts(RGWRados *store, struct req_state *s,
+int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 			 const string& upload_id,
 			 const string& meta_oid, int num_parts,
 			 int marker, map<uint32_t, RGWUploadPartInfo>& parts,
 			 int *next_marker, bool *truncated,
 			 bool assume_unsorted)
 {
-  return list_multipart_parts(store, s->bucket_info, s->cct, upload_id, meta_oid, num_parts, marker, parts, next_marker, truncated, assume_unsorted);
+  return list_multipart_parts(store, s->bucket_info, s->cct, upload_id,
+			      meta_oid, num_parts, marker, parts,
+			      next_marker, truncated, assume_unsorted);
 }
 
-int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info, RGWMPObj& mp_obj)
+int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
+			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
+			   RGWMPObj& mp_obj)
 {
   rgw_obj meta_obj;
   meta_obj.init_ns(bucket_info.bucket, mp_obj.get_meta(), RGW_OBJ_NS_MULTIPART);
@@ -228,27 +215,34 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   int ret;
 
   do {
-    ret = list_multipart_parts(store, bucket_info, cct, mp_obj.get_upload_id(), mp_obj.get_meta(), 1000,
-      marker, obj_parts, &marker, &truncated);
-    if (ret < 0)
+    ret = list_multipart_parts(store, bucket_info, cct,
+			       mp_obj.get_upload_id(), mp_obj.get_meta(),
+			       1000, marker, obj_parts, &marker, &truncated);
+    if (ret < 0) {
+      ldout(cct, 20) << __func__ << ": list_multipart_parts returned " <<
+	ret << dendl;
       return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
-    for (auto obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
+    }
+
+    for (auto obj_iter = obj_parts.begin();
+	 obj_iter != obj_parts.end();
+	 ++obj_iter) {
       RGWUploadPartInfo& obj_part = obj_iter->second;
       rgw_obj obj;
       if (obj_part.manifest.empty()) {
         string oid = mp_obj.get_part(obj_iter->second.num);
         obj.init_ns(bucket_info.bucket, oid, RGW_OBJ_NS_MULTIPART);
         obj.index_hash_source = mp_obj.get_key();
-        ret = store->delete_obj(*obj_ctx, bucket_info, obj, 0);
+        ret = store->getRados()->delete_obj(*obj_ctx, bucket_info, obj, 0);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
-        store->update_gc_chain(meta_obj, obj_part.manifest, &chain);
+        store->getRados()->update_gc_chain(meta_obj, obj_part.manifest, &chain);
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
         if (oiter != obj_part.manifest.obj_end()) {
           rgw_obj head;
-          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store);
-          rgw_raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
+          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
+          RGWSI_Tier_RADOS::raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
 
           rgw_obj_index_key key;
           head.key.get_index_key(&key);
@@ -257,15 +251,16 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
       }
     }
   } while (truncated);
-  /* use upload id as tag */
-  ret = store->send_chain_to_gc(chain, mp_obj.get_upload_id() , false);  // do it async
+
+  /* use upload id as tag and do it asynchronously */
+  ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), false);
   if (ret < 0) {
-    ldout(cct, 5) << "gc->send_chain() returned " << ret << dendl;
+    ldout(cct, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
     return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
   }
-  RGWRados::Object del_target(store, bucket_info, *obj_ctx, meta_obj);
-  RGWRados::Object::Delete del_op(&del_target);
 
+  RGWRados::Object del_target(store->getRados(), bucket_info, *obj_ctx, meta_obj);
+  RGWRados::Object::Delete del_op(&del_target);
   del_op.params.bucket_owner = bucket_info.owner;
   del_op.params.versioning_status = 0;
   if (!remove_objs.empty()) {
@@ -273,16 +268,22 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   }
 
   // and also remove the metadata obj
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
+  if (ret < 0) {
+    ldout(cct, 20) << __func__ << ": del_op.delete_obj returned " <<
+      ret << dendl;
+  }
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 
-int list_bucket_multiparts(RGWRados *store, RGWBucketInfo& bucket_info,
-                                string& prefix, string& marker, string& delim,
-                                int& max_uploads, vector<rgw_bucket_dir_entry> *objs,
-                                map<string, bool> *common_prefixes, bool *is_truncated)
+int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
+			   const string& prefix, const string& marker,
+			   const string& delim,
+			   const int& max_uploads,
+			   vector<rgw_bucket_dir_entry> *objs,
+			   map<string, bool> *common_prefixes, bool *is_truncated)
 {
-  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
   MultipartMetaFilter mp_filter;
 
@@ -292,13 +293,14 @@ int list_bucket_multiparts(RGWRados *store, RGWBucketInfo& bucket_info,
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
 
-  return(list_op.list_objects(max_uploads, objs, common_prefixes,is_truncated));
+  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield));
 }
 
-int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bucket_info,
+int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
 				string& prefix, string& delim)
 {
-  int ret, max = 1000, num_deleted = 0;
+  constexpr int max = 1000;
+  int ret, num_deleted = 0;
   vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   string marker;
@@ -306,10 +308,19 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
 
   do {
     ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
-				max, &objs, nullptr, &is_truncated);
+				 max, &objs, nullptr, &is_truncated);
     if (ret < 0) {
+      ldout(store->ctx(), 0) << __func__ <<
+	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
+	"; bucket=\"" << bucket_info.bucket << "\"; prefix=\"" <<
+	prefix << "\"; delim=\"" << delim << "\"" << dendl;
       return ret;
     }
+    ldout(store->ctx(), 20) << __func__ <<
+      " INFO: aborting and cleaning up multipart upload(s); bucket=\"" <<
+      bucket_info.bucket << "\"; objs.size()=" << objs.size() <<
+      "; is_truncated=" << is_truncated << dendl;
+
     if (!objs.empty()) {
       RGWMPObj mp;
       for (const auto& obj : objs) {
@@ -317,16 +328,30 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
         if (!mp.from_meta(key.name))
           continue;
         ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
-        if (ret < 0 && ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
-          return ret;
+        if (ret < 0) {
+	  // we're doing a best-effort; if something cannot be found,
+	  // log it and keep moving forward
+	  if (ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
+	    ldout(store->ctx(), 0) << __func__ <<
+	      " ERROR : failed to abort and clean-up multipart upload \"" <<
+	      key.get_oid() << "\"" << dendl;
+	    return ret;
+	  } else {
+	    ldout(store->ctx(), 10) << __func__ <<
+	      " NOTE : unable to find part(s) of "
+	      "aborted multipart upload of \"" << key.get_oid() <<
+	      "\" for cleaning up" << dendl;
+	  }
         }
         num_deleted++;
       }
       if (num_deleted) {
-        ldout(store->ctx(),0) << "WARNING : aborted " << num_deleted << " incomplete multipart uploads" << dendl;
+        ldout(store->ctx(), 0) << __func__ <<
+	  " WARNING : aborted " << num_deleted <<
+	  " incomplete multipart uploads" << dendl;
       }
     }
   } while (is_truncated);
 
-  return ret;
+  return 0;
 }

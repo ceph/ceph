@@ -112,8 +112,8 @@ class List(object):
     def list(self, args):
         # ensure everything is up to date before calling out
         # to list lv's
-        self.update()
-        report = self.generate(args)
+        lvs = self.update()
+        report = self.generate(args, lvs)
         if args.format == 'json':
             # If the report is empty, we don't return a non-zero exit status
             # because it is assumed this is going to be consumed by automated
@@ -153,25 +153,27 @@ class List(object):
                         # this means that the device has changed, so it must be updated
                         # on the API to reflect this
                         lv.set_tags({device_name: disk_device})
+        return lvs
 
-    def generate(self, args):
+    def generate(self, args, lvs=None):
         """
         Generate reports for an individual device or for all Ceph-related
         devices, logical or physical, as long as they have been prepared by
         this tool before and contain enough metadata.
         """
         if args.device:
-            return self.single_report(args.device)
+            return self.single_report(args.device, lvs)
         else:
-            return self.full_report()
+            return self.full_report(lvs)
 
-    def single_report(self, device):
+    def single_report(self, device, lvs=None):
         """
         Generate a report for a single device. This can be either a logical
         volume in the form of vg/lv or a device with an absolute path like
         /dev/sda1 or /dev/sda
         """
-        lvs = api.Volumes()
+        if lvs is None:
+            lvs = api.Volumes()
         report = {}
         lv = api.get_lv_from_argument(device)
 
@@ -227,6 +229,7 @@ class List(object):
         if lvs is None:
             lvs = api.Volumes()
         report = {}
+
         for lv in lvs:
             try:
                 _id = lv.tags['ceph.osd_id']
@@ -246,7 +249,7 @@ class List(object):
                     # bluestore will not have a journal, filestore will not have
                     # a block/wal/db, so we must skip if not present
                     continue
-                if not api.get_lv(lv_uuid=device_uuid):
+                if not api.get_lv(lv_uuid=device_uuid, lvs=lvs):
                     # means we have a regular device, so query blkid
                     disk_device = disk.get_device_from_partuuid(device_uuid)
                     if disk_device:

@@ -653,6 +653,13 @@ void librados::ObjectWriteOperation::unset_manifest()
   o->unset_manifest();
 }
 
+void librados::ObjectWriteOperation::tier_flush()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_flush();
+}
+
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 {
   ceph_assert(impl);
@@ -1119,6 +1126,10 @@ librados::IoCtx& librados::IoCtx::operator=(IoCtx&& rhs) noexcept
 librados::IoCtx::~IoCtx()
 {
   close();
+}
+
+bool librados::IoCtx::is_valid() const {
+  return io_ctx_impl != nullptr;
 }
 
 void librados::IoCtx::close()
@@ -1737,9 +1748,9 @@ struct AioUnlockCompletion : public librados::ObjectOperationCompletion {
     rados_callback_t cb = completion->callback_complete;
     void *cb_arg = completion->callback_complete_arg;
     cb(completion, cb_arg);
-    completion->lock.Lock();
+    completion->lock.lock();
     completion->callback_complete = NULL;
-    completion->cond.Signal();
+    completion->cond.notify_all();
     completion->put_unlock();
   }
 };
@@ -2259,6 +2270,16 @@ librados::Rados::~Rados()
   shutdown();
 }
 
+void librados::Rados::from_rados_t(rados_t cluster, Rados &rados) {
+  if (rados.client) {
+    rados.client->put();
+  }
+  rados.client = static_cast<RadosClient*>(cluster);
+  if (rados.client) {
+    rados.client->get();
+  }
+}
+
 int librados::Rados::init(const char * const id)
 {
   return rados_create((rados_t *)&client, id);
@@ -2563,18 +2584,21 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
 				    stats_map& result)
 {
   map<string,::pool_stat_t> rawresult;
-  int r = client->get_pool_stats(v, rawresult);
+  bool per_pool = false;
+  int r = client->get_pool_stats(v, &rawresult, &per_pool);
   for (map<string,::pool_stat_t>::iterator p = rawresult.begin();
        p != rawresult.end();
        ++p) {
     pool_stat_t& pv = result[p->first];
     auto& pstat = p->second;
     store_statfs_t &statfs = pstat.store_stats;
-    uint64_t allocated_bytes = pstat.get_allocated_bytes();
+    uint64_t allocated_bytes = pstat.get_allocated_data_bytes(per_pool) +
+      pstat.get_allocated_omap_bytes(per_pool);
     // FIXME: raw_used_rate is unknown hence use 1.0 here
     // meaning we keep net amount aggregated over all replicas
     // Not a big deal so far since this field isn't exposed
-    uint64_t user_bytes = pstat.get_user_bytes(1.0);
+    uint64_t user_bytes = pstat.get_user_data_bytes(1.0, per_pool) +
+      pstat.get_user_omap_bytes(1.0, per_pool);
 
     object_stat_sum_t *sum = &p->second.stats.sum;
     pv.num_kb = shift_round_up(allocated_bytes, 10);

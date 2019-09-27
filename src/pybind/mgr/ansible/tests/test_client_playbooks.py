@@ -8,13 +8,11 @@ import requests_mock
 from requests.exceptions import ConnectionError
 
 from ..ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode, \
-                                LOGIN_URL, API_URL, PLAYBOOK_EXEC_URL, \
+                                API_URL, PLAYBOOK_EXEC_URL, \
                                 PLAYBOOK_EVENTS, AnsibleRunnerServiceError
 
 
 SERVER_URL = "ars:5001"
-USER = "admin"
-PASSWORD = "admin"
 CERTIFICATE = ""
 
 # Playbook attributes
@@ -32,30 +30,11 @@ formatter = logging.Formatter("%(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-
-def mock_login(mock_server):
-
-    the_login_url = "https://%s/%s" % (SERVER_URL,LOGIN_URL)
-
-    mock_server.register_uri("GET",
-                            the_login_url,
-                            json={"status": "OK",
-                            "msg": "Token returned",
-                            "data": {"token": "dummy_token"}},
-                            status_code=200)
-
-    the_api_url = "https://%s/%s" % (SERVER_URL,API_URL)
-    mock_server.register_uri("GET",
-                    the_api_url,
-                    text="<!DOCTYPE html>api</html>",
-                    status_code=200)
-
 def mock_get_pb(mock_server, playbook_name, return_code):
 
-    mock_login(mock_server)
-
-    ars_client = Client(SERVER_URL, USER, PASSWORD,
-                        CERTIFICATE, logger)
+    ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
+                        client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
+                        logger = logger)
 
     the_pb_url = "https://%s/%s/%s" % (SERVER_URL, PLAYBOOK_EXEC_URL, playbook_name)
 
@@ -82,34 +61,26 @@ class ARSclientTest(unittest.TestCase):
     def test_server_not_reachable(self):
 
         with self.assertRaises(AnsibleRunnerServiceError):
-            ars_client = Client(SERVER_URL, USER, PASSWORD,
-                                CERTIFICATE, logger)
+            ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
+                            client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
+                            logger = logger)
 
-    def test_server_wrong_USER(self):
+            status = ars_client.is_operative()
 
-        with requests_mock.Mocker() as mock_server:
-            the_login_url = "https://%s/%s" % (SERVER_URL,LOGIN_URL)
-            mock_server.get(the_login_url,
-                            json={"status": "NOAUTH",
-                            "msg": "Access denied invalid login: unknown USER",
-                            "data": {}},
-                            status_code=401)
-
-
-            ars_client = Client(SERVER_URL, USER, PASSWORD,
-                                CERTIFICATE, logger)
-
-            self.assertFalse(ars_client.is_operative(),
-                            "Operative attribute expected to be False")
 
     def test_server_connection_ok(self):
 
         with requests_mock.Mocker() as mock_server:
 
-            mock_login(mock_server)
+            ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
+                                client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
+                                logger = logger)
 
-            ars_client = Client(SERVER_URL, USER, PASSWORD,
-                                CERTIFICATE, logger)
+            the_api_url = "https://%s/%s" % (SERVER_URL,API_URL)
+            mock_server.register_uri("GET",
+                    the_api_url,
+                    text="<!DOCTYPE html>api</html>",
+                    status_code=200)
 
             self.assertTrue(ars_client.is_operative(),
                             "Operative attribute expected to be True")
@@ -118,10 +89,9 @@ class ARSclientTest(unittest.TestCase):
 
         with requests_mock.Mocker() as mock_server:
 
-            mock_login(mock_server)
-
-            ars_client = Client(SERVER_URL, USER, PASSWORD,
-                                CERTIFICATE, logger)
+            ars_client = Client(SERVER_URL, verify_server=False, ca_bundle="",
+                                client_cert = "DUMMY_PATH", client_key = "DUMMY_PATH",
+                                logger = logger)
 
             url = "https://%s/test" % (SERVER_URL)
             mock_server.register_uri("DELETE",
@@ -148,8 +118,6 @@ class PlayBookExecutionTests(unittest.TestCase):
 
             self.assertEqual(test_pb.play_uuid, PB_UUID,
                              "Found Unexpected playbook uuid")
-
-
 
     def test_playbook_execution_error(self):
         """Check playbook id is not set when the playbook is not present

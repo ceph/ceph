@@ -1,3 +1,4 @@
+import os
 import pytest
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap
@@ -90,6 +91,22 @@ class TestEnsureAssociatedLVs(object):
         result = zap.ensure_associated_lvs(volumes)
         assert result == ['/dev/VolGroup/block']
 
+    def test_success_message_for_fsid(self, factory, is_root, capsys):
+        cli_zap = zap.Zap([])
+        args = factory(devices=[], osd_id=None, osd_fsid='asdf-lkjh')
+        cli_zap.args = args
+        cli_zap.zap()
+        out, err = capsys.readouterr()
+        assert "Zapping successful for OSD: asdf-lkjh" in err
+
+    def test_success_message_for_id(self, factory, is_root, capsys):
+        cli_zap = zap.Zap([])
+        args = factory(devices=[], osd_id='1', osd_fsid=None)
+        cli_zap.args = args
+        cli_zap.zap()
+        out, err = capsys.readouterr()
+        assert "Zapping successful for OSD: 1" in err
+
     def test_block_and_partition_are_found(self, volumes, monkeypatch):
         monkeypatch.setattr(zap.disk, 'get_device_from_partuuid', lambda x: '/dev/sdb1')
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=block'
@@ -151,3 +168,26 @@ class TestEnsureAssociatedLVs(object):
         assert '/dev/VolGroup/lvjournal' in result
         assert '/dev/VolGroup/lvwal' in result
         assert '/dev/VolGroup/lvdb' in result
+
+
+class TestWipeFs(object):
+
+    def setup(self):
+        os.environ['CEPH_VOLUME_WIPEFS_INTERVAL'] = '0'
+
+    def test_works_on_second_try(self, stub_call):
+        os.environ['CEPH_VOLUME_WIPEFS_TRIES'] = '2'
+        stub_call([('wiping /dev/sda', '', 1), ('', '', 0)])
+        result = zap.wipefs('/dev/sda')
+        assert result is None
+
+    def test_does_not_work_after_several_tries(self, stub_call):
+        os.environ['CEPH_VOLUME_WIPEFS_TRIES'] = '2'
+        stub_call([('wiping /dev/sda', '', 1), ('', '', 1)])
+        with pytest.raises(RuntimeError):
+            zap.wipefs('/dev/sda')
+
+    def test_does_not_work_default_tries(self, stub_call):
+        stub_call([('wiping /dev/sda', '', 1)]*8)
+        with pytest.raises(RuntimeError):
+            zap.wipefs('/dev/sda')

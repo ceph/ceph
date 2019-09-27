@@ -18,6 +18,7 @@
 
 #include "include/int_types.h"
 
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -138,6 +139,7 @@ static Command cmd = None;
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Command *command, Config *cfg);
+static int netlink_resize(int nbd_index, uint64_t size);
 
 class NBDServer
 {
@@ -149,16 +151,15 @@ public:
   NBDServer(int _fd, librbd::Image& _image)
     : fd(_fd)
     , image(_image)
-    , disconnect_lock("NBDServer::DisconnectLocker")
-    , lock("NBDServer::Locker")
     , reader_thread(*this, &NBDServer::reader_entry)
     , writer_thread(*this, &NBDServer::writer_entry)
     , started(false)
   {}
 
 private:
-  Mutex disconnect_lock;
-  Cond disconnect_cond;
+  ceph::mutex disconnect_lock =
+    ceph::make_mutex("NBDServer::DisconnectLocker");
+  ceph::condition_variable disconnect_cond;
   std::atomic<bool> terminated = { false };
 
   void shutdown()
@@ -167,8 +168,8 @@ private:
     if (terminated.compare_exchange_strong(expected, true)) {
       ::shutdown(fd, SHUT_RDWR);
 
-      Mutex::Locker l(lock);
-      cond.Signal();
+      std::lock_guard l{lock};
+      cond.notify_all();
     }
   }
 
@@ -188,31 +189,30 @@ private:
 
   friend std::ostream &operator<<(std::ostream &os, const IOContext &ctx);
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("NBDServer::Locker");
+  ceph::condition_variable cond;
   xlist<IOContext*> io_pending;
   xlist<IOContext*> io_finished;
 
   void io_start(IOContext *ctx)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     io_pending.push_back(&ctx->item);
   }
 
   void io_finish(IOContext *ctx)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     ceph_assert(ctx->item.is_on_list());
     ctx->item.remove_myself();
     io_finished.push_back(&ctx->item);
-    cond.Signal();
+    cond.notify_all();
   }
 
   IOContext *wait_io_finish()
   {
-    Mutex::Locker l(lock);
-    while(io_finished.empty() && !terminated)
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return !io_finished.empty() || terminated; });
 
     if (io_finished.empty())
       return NULL;
@@ -226,9 +226,8 @@ private:
   void wait_clean()
   {
     ceph_assert(!reader_thread.is_started());
-    Mutex::Locker l(lock);
-    while(!io_pending.empty())
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return io_pending.empty(); });
 
     while(!io_finished.empty()) {
       std::unique_ptr<IOContext> free_ctx(io_finished.front());
@@ -346,8 +345,8 @@ private:
     dout(20) << __func__ << ": terminated" << dendl;
 
 signal:
-    Mutex::Locker l(disconnect_lock);
-    disconnect_cond.Signal();
+    std::lock_guard l{disconnect_lock};
+    disconnect_cond.notify_all();
   }
 
   void writer_entry()
@@ -421,8 +420,8 @@ public:
     if (!started)
       return;
 
-    Mutex::Locker l(disconnect_lock);
-    disconnect_cond.Wait(disconnect_lock);
+    std::unique_lock l{disconnect_lock};
+    disconnect_cond.wait(l);
   }
 
   ~NBDServer()
@@ -475,15 +474,21 @@ class NBDWatchCtx : public librbd::UpdateWatchCtx
 {
 private:
   int fd;
+  int nbd_index;
+  bool use_netlink;
   librados::IoCtx &io_ctx;
   librbd::Image &image;
   unsigned long size;
 public:
   NBDWatchCtx(int _fd,
+              int _nbd_index,
+              bool _use_netlink,
               librados::IoCtx &_io_ctx,
               librbd::Image &_image,
               unsigned long _size)
     : fd(_fd)
+    , nbd_index(_nbd_index)
+    , use_netlink(_use_netlink)
     , io_ctx(_io_ctx)
     , image(_image)
     , size(_size)
@@ -496,23 +501,30 @@ public:
     librbd::image_info_t info;
     if (image.stat(info, sizeof(info)) == 0) {
       unsigned long new_size = info.size;
+      int ret;
 
       if (new_size != size) {
         dout(5) << "resize detected" << dendl;
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-            derr << "invalidate page cache failed: " << cpp_strerror(errno)
-                 << dendl;
-        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0) {
+          derr << "invalidate page cache failed: " << cpp_strerror(errno)
+               << dendl;
+	if (use_netlink) {
+	  ret = netlink_resize(nbd_index, new_size);
+	} else {
+          ret = ioctl(fd, NBD_SET_SIZE, new_size);
+          if (ret < 0)
             derr << "resize failed: " << cpp_strerror(errno) << dendl;
-        } else {
+	}
+
+        if (!ret)
           size = new_size;
-        }
+
         if (ioctl(fd, BLKRRPART, NULL) < 0) {
           derr << "rescan of partition table failed: " << cpp_strerror(errno)
                << dendl;
         }
         if (image.invalidate_cache() < 0)
-            derr << "invalidate rbd cache failed" << dendl;
+          derr << "invalidate rbd cache failed" << dendl;
       }
     }
   }
@@ -562,7 +574,7 @@ private:
     ifs >> cmdline;
 
     for (unsigned i = 0; i < cmdline.size(); i++) {
-      const char *arg = &cmdline[i];
+      char *arg = &cmdline[i];
       if (i == 0) {
         if (strcmp(basename(arg) , "rbd-nbd") != 0) {
           return -EINVAL;
@@ -861,6 +873,53 @@ static int netlink_disconnect_by_path(const std::string& devpath)
     return index;
 
   return netlink_disconnect(index);
+}
+
+static int netlink_resize(int nbd_index, uint64_t size)
+{
+  struct nl_sock *sock;
+  struct nl_msg *msg;
+  int nl_id, ret;
+
+  sock = netlink_init(&nl_id);
+  if (!sock) {
+    cerr << "rbd-nbd: Netlink interface not supported." << std::endl;
+    return 1;
+  }
+
+  nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, genl_handle_msg, NULL);
+
+  msg = nlmsg_alloc();
+  if (!msg) {
+    cerr << "rbd-nbd: Could not allocate netlink message." << std::endl;
+    goto free_sock;
+  }
+
+  if (!genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, nl_id, 0, 0,
+                   NBD_CMD_RECONFIGURE, 0)) {
+    cerr << "rbd-nbd: Could not setup message." << std::endl;
+    goto free_msg;
+  }
+
+  NLA_PUT_U32(msg, NBD_ATTR_INDEX, nbd_index);
+  NLA_PUT_U64(msg, NBD_ATTR_SIZE_BYTES, size);
+
+  ret = nl_send_sync(sock, msg);
+  if (ret < 0) {
+    cerr << "rbd-nbd: netlink resize failed: " << nl_geterror(ret) << std::endl;
+    goto free_sock;
+  }
+
+  netlink_cleanup(sock);
+  dout(10) << "netlink resize complete for nbd" << nbd_index << dendl;
+  return 0;
+
+nla_put_failure:
+free_msg:
+  nlmsg_free(msg);
+free_sock:
+  netlink_cleanup(sock);
+  return -EIO;
 }
 
 static int netlink_connect_cb(struct nl_msg *msg, void *arg)
@@ -1193,7 +1252,8 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   {
     uint64_t handle;
 
-    NBDWatchCtx watch_ctx(nbd, io_ctx, image, info.size);
+    NBDWatchCtx watch_ctx(nbd, nbd_index, use_netlink, io_ctx, image,
+                          info.size);
     r = image.update_watch(&watch_ctx, &handle);
     if (r < 0)
       goto close_nbd;

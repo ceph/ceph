@@ -412,6 +412,7 @@ void Objecter::start(const OSDMap* o)
   start_tick();
   if (o) {
     osdmap->deepish_copy_from(*o);
+    prune_pg_mapping(osdmap->get_pools());
   } else if (osdmap->get_epoch() == 0) {
     _maybe_request_map();
   }
@@ -1034,8 +1035,7 @@ void Objecter::_scan_requests(
   map<ceph_tid_t, Op*>& need_resend,
   list<LingerOp*>& need_resend_linger,
   map<ceph_tid_t, CommandOp*>& need_resend_command,
-  shunique_lock& sul,
-  const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps)
+  shunique_lock& sul)
 {
   ceph_assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
@@ -1085,9 +1085,6 @@ void Objecter::_scan_requests(
     ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
     _prune_snapc(osdmap->get_new_removed_snaps(), op);
-    if (skipped_map) {
-      _prune_snapc(*gap_removed_snaps, op);
-    }
     bool force_resend_writes = cluster_full;
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
@@ -1208,13 +1205,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	else if (m->maps.count(e)) {
 	  ldout(cct, 3) << "handle_osd_map decoding full epoch " << e << dendl;
-          OSDMap *new_osdmap = new OSDMap();
+          auto new_osdmap = std::make_unique<OSDMap>();
           new_osdmap->decode(m->maps[e]);
 
           emit_blacklist_events(*osdmap, *new_osdmap);
-
-	  delete osdmap;
-          osdmap = new_osdmap;
+          osdmap = std::move(new_osdmap);
 
 	  logger->inc(l_osdc_map_full);
 	}
@@ -1234,27 +1229,23 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
 
+        prune_pg_mapping(osdmap->get_pools());
 	cluster_full = cluster_full || _osdmap_full_flag();
 	update_pool_full_map(pool_full_map);
 
 	// check all outstanding requests on every epoch
 	for (auto& i : need_resend) {
 	  _prune_snapc(osdmap->get_new_removed_snaps(), i.second);
-	  if (skipped_map) {
-	    _prune_snapc(m->gap_removed_snaps, i.second);
-	  }
 	}
 	_scan_requests(homeless_session, skipped_map, cluster_full,
 		       &pool_full_map, need_resend,
-		       need_resend_linger, need_resend_command, sul,
-		       &m->gap_removed_snaps);
+		       need_resend_linger, need_resend_command, sul);
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
 	     p != osd_sessions.end(); ) {
 	  OSDSession *s = p->second;
 	  _scan_requests(s, skipped_map, cluster_full,
 			 &pool_full_map, need_resend,
-			 need_resend_linger, need_resend_command, sul,
-			 &m->gap_removed_snaps);
+			 need_resend_linger, need_resend_command, sul);
 	  ++p;
 	  // osd down or addr change?
 	  if (!osdmap->is_up(s->osd) ||
@@ -1274,16 +1265,16 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p != osd_sessions.end(); ++p) {
 	  OSDSession *s = p->second;
 	  _scan_requests(s, false, false, NULL, need_resend,
-			 need_resend_linger, need_resend_command, sul,
-			 nullptr);
+			 need_resend_linger, need_resend_command, sul);
 	}
 	ldout(cct, 3) << "handle_osd_map decoding full epoch "
 		      << m->get_last() << dendl;
 	osdmap->decode(m->maps[m->get_last()]);
+        prune_pg_mapping(osdmap->get_pools());
 
 	_scan_requests(homeless_session, false, false, NULL,
 		       need_resend, need_resend_linger,
-		       need_resend_command, sul, nullptr);
+		       need_resend_command, sul);
       } else {
 	ldout(cct, 3) << "handle_osd_map hmm, i want a full map, requesting"
 		      << dendl;
@@ -1928,16 +1919,14 @@ void Objecter::wait_for_osd_map()
   }
 
   // Leave this since it goes with C_SafeCond
-  Mutex lock("");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("");
+  ceph::condition_variable cond;
   bool done;
-  lock.Lock();
-  C_SafeCond *context = new C_SafeCond(&lock, &cond, &done, NULL);
+  std::unique_lock mlock{lock};
+  C_SafeCond *context = new C_SafeCond(lock, cond, &done, NULL);
   waiting_for_map[0].push_back(pair<Context*, int>(context, 0));
   l.unlock();
-  while (!done)
-    cond.Wait(lock);
-  lock.Unlock();
+  cond.wait(mlock, [&done] { return done; });
 }
 
 struct C_Objecter_GetVersion : public Context {
@@ -2766,7 +2755,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
 
 void Objecter::_prune_snapc(
   const mempool::osdmap::map<int64_t,
-  OSDMap::snap_interval_set_t>& new_removed_snaps,
+  snap_interval_set_t>& new_removed_snaps,
   Op *op)
 {
   bool match = false;
@@ -2862,11 +2851,26 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
+  unsigned pg_num_mask = pi->get_pg_num_mask();
   unsigned pg_num_pending = pi->get_pg_num_pending();
   int up_primary, acting_primary;
   vector<int> up, acting;
-  osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary,
-			       &acting, &acting_primary);
+  ps_t actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
+  pg_t actual_pgid(actual_ps, pgid.pool());
+  pg_mapping_t pg_mapping;
+  pg_mapping.epoch = osdmap->get_epoch();
+  if (lookup_pg_mapping(actual_pgid, &pg_mapping)) {
+    up = pg_mapping.up;
+    up_primary = pg_mapping.up_primary;
+    acting = pg_mapping.acting;
+    acting_primary = pg_mapping.acting_primary;
+  } else {
+    osdmap->pg_to_up_acting_osds(actual_pgid, &up, &up_primary,
+                                 &acting, &acting_primary);
+    pg_mapping_t pg_mapping(osdmap->get_epoch(),
+                            up, up_primary, acting, acting_primary);
+    update_pg_mapping(actual_pgid, std::move(pg_mapping));
+  }
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   bool recovery_deletes = osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
@@ -2925,11 +2929,18 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
-    t->pg_num_mask = pi->get_pg_num_mask();
+    t->pg_num_mask = pg_num_mask;
     t->pg_num_pending = pg_num_pending;
-    osdmap->get_primary_shard(
-      pg_t(ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask), pgid.pool()),
-      &t->actual_pgid);
+    spg_t spgid(actual_pgid);
+    if (pi->is_erasure()) {
+      for (uint8_t i = 0; i < acting.size(); ++i) {
+        if (acting[i] == acting_primary) {
+          spgid.reset_shard(shard_id_t(i));
+          break;
+        }
+      }
+    }
+    t->actual_pgid = spgid;
     t->sort_bitwise = sort_bitwise;
     t->recovery_deletes = recovery_deletes;
     ldout(cct, 10) << __func__ << " "
@@ -3788,10 +3799,11 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 
   auto iter = list_context->bl.cbegin();
   pg_nls_response_t response;
-  ceph::buffer::list extra_info;
   decode(response, iter);
   if (!iter.end()) {
-    decode(extra_info, iter);
+    // we do this as legacy.
+    ceph::buffer::list legacy_extra_info;
+    decode(legacy_extra_info, iter);
   }
 
   // if the osd returns 1 (newer code), or handle MAX, it means we
@@ -3818,7 +3830,6 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 		 << ", response.entries " << response.entries
 		 << ", handle " << response.handle
 		 << ", tentative new pos " << list_context->pos << dendl;
-  list_context->extra_info.append(extra_info);
   if (response_size) {
     list_context->list.splice(list_context->list.end(), response.entries);
   }
@@ -4162,6 +4173,7 @@ void Objecter::_finish_pool_op(PoolOp *op, int r)
 
 void Objecter::get_pool_stats(list<string>& pools,
 			      map<string,pool_stat_t> *result,
+			      bool *per_pool,
 			      Context *onfinish)
 {
   ldout(cct, 10) << "get_pool_stats " << pools << dendl;
@@ -4170,6 +4182,7 @@ void Objecter::get_pool_stats(list<string>& pools,
   op->tid = ++last_tid;
   op->pools = pools;
   op->pool_stats = result;
+  op->per_pool = per_pool;
   op->onfinish = onfinish;
   if (mon_timeout > timespan(0)) {
     op->ontimeout = timer.add_event(mon_timeout,
@@ -4216,6 +4229,7 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     PoolStatOp *op = poolstat_ops[tid];
     ldout(cct, 10) << "have request " << tid << " at " << op << dendl;
     *op->pool_stats = m->pool_stats;
+    *op->per_pool = m->per_pool;
     if (m->version > last_seen_pgmap_version) {
       last_seen_pgmap_version = m->version;
     }
@@ -4525,10 +4539,12 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
        p != s->ops.end();
        ++p) {
     Op *op = p->second;
+    auto age = std::chrono::duration<double>(coarse_mono_clock::now() - op->stamp);
     fmt->open_object_section("op");
     fmt->dump_unsigned("tid", op->tid);
     op->target.dump(fmt);
     fmt->dump_stream("last_sent") << op->stamp;
+    fmt->dump_float("age", age.count());
     fmt->dump_int("attempts", op->attempts);
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("snap_context") << op->snapc;
@@ -4957,10 +4973,24 @@ Objecter::OSDSession::~OSDSession()
   ceph_assert(command_ops.empty());
 }
 
+Objecter::Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
+		   Finisher *fin,
+		   double mon_timeout,
+		   double osd_timeout) :
+  Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
+  trace_endpoint("0.0.0.0", 0, "Objecter"),
+  osdmap{std::make_unique<OSDMap>()},
+  homeless_session(new OSDSession(cct, -1)),
+  mon_timeout(ceph::make_timespan(mon_timeout)),
+  osd_timeout(ceph::make_timespan(osd_timeout)),
+  op_throttle_bytes(cct, "objecter_bytes",
+		    cct->_conf->objecter_inflight_op_bytes),
+  op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
+  retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
+{}
+
 Objecter::~Objecter()
 {
-  delete osdmap;
-
   ceph_assert(homeless_session->get_nref() == 1);
   ceph_assert(num_homeless_ops == 0);
   homeless_session->put();
@@ -5129,11 +5159,12 @@ void Objecter::_enumerate_reply(
   auto iter = bl.cbegin();
   pg_nls_response_t response;
 
-  // XXX extra_info doesn't seem used anywhere?
-  ceph::buffer::list extra_info;
   decode(response, iter);
   if (!iter.end()) {
-    decode(extra_info, iter);
+    // extra_info isn't used anywhere. We do this solely to preserve
+    // backward compatibility
+    ceph::buffer::list legacy_extra_info;
+    decode(legacy_extra_info, iter);
   }
 
   ldout(cct, 10) << __func__ << ": got " << response.entries.size()

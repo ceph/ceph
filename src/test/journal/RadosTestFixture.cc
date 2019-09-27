@@ -9,7 +9,8 @@
 #include "journal/Settings.h"
 
 RadosTestFixture::RadosTestFixture()
-  : m_timer_lock("m_timer_lock"), m_timer(NULL), m_listener(this) {
+  : m_timer_lock(ceph::make_mutex("m_timer_lock")),
+    m_listener(this) {
 }
 
 void RadosTestFixture::SetUpTestCase() {
@@ -53,7 +54,7 @@ void RadosTestFixture::TearDown() {
   }
 
   {
-    Mutex::Locker locker(m_timer_lock);
+    std::lock_guard locker{m_timer_lock};
     m_timer->shutdown();
   }
   delete m_timer;
@@ -67,17 +68,15 @@ int RadosTestFixture::create(const std::string &oid, uint8_t order,
   return cls::journal::client::create(m_ioctx, oid, order, splay_width, -1);
 }
 
-journal::JournalMetadataPtr RadosTestFixture::create_metadata(
+ceph::ref_t<journal::JournalMetadata> RadosTestFixture::create_metadata(
     const std::string &oid, const std::string &client_id,
-    double commit_interval, uint64_t max_fetch_bytes,
-    int max_concurrent_object_sets) {
+    double commit_interval, int max_concurrent_object_sets) {
   journal::Settings settings;
   settings.commit_interval = commit_interval;
-  settings.max_fetch_bytes = max_fetch_bytes;
   settings.max_concurrent_object_sets = max_concurrent_object_sets;
 
-  journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-    m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id, settings));
+  auto metadata = ceph::make_ref<journal::JournalMetadata>(
+    m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id, settings);
   m_metadatas.push_back(metadata);
   return metadata;
 }
@@ -110,17 +109,16 @@ bufferlist RadosTestFixture::create_payload(const std::string &payload) {
   return bl;
 }
 
-int RadosTestFixture::init_metadata(journal::JournalMetadataPtr metadata) {
+int RadosTestFixture::init_metadata(const ceph::ref_t<journal::JournalMetadata>& metadata) {
   C_SaferCond cond;
   metadata->init(&cond);
   return cond.wait();
 }
 
-bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
-  Mutex::Locker locker(m_listener.mutex);
+bool RadosTestFixture::wait_for_update(const ceph::ref_t<journal::JournalMetadata>& metadata) {
+  std::unique_lock locker{m_listener.mutex};
   while (m_listener.updates[metadata.get()] == 0) {
-    if (m_listener.cond.WaitInterval(
-	  m_listener.mutex, utime_t(10, 0)) != 0) {
+    if (m_listener.cond.wait_for(locker, 10s) == std::cv_status::timeout) {
       return false;
     }
   }

@@ -85,7 +85,7 @@ void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
 {
   dout(10) << __func__ << " with {" << *in << "}"
            << ", on_finish=" << on_finish << ", top=" << top << dendl;
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   in->scrub_initialize(parent, header, on_finish);
   if (top)
     push_inode(in);
@@ -108,7 +108,7 @@ void ScrubStack::enqueue_inode(CInode *in, ScrubHeaderRef& header,
 
 void ScrubStack::kick_off_scrubs()
 {
-  ceph_assert(mdcache->mds->mds_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(mdcache->mds->mds_lock));
   dout(20) << __func__ << ": state=" << state << dendl;
 
   if (clear_inode_stack || state == STATE_PAUSING || state == STATE_PAUSED) {
@@ -480,6 +480,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
 
   if (in == header->get_origin()) {
     scrub_origins.erase(in);
+    clog_scrub_summary(in);
     if (!header->get_recursive()) {
       if (r >= 0) { // we got into the scrubbing dump it
         result.dump(&(header->get_formatter()));
@@ -499,7 +500,7 @@ ScrubStack::C_KickOffScrubs::C_KickOffScrubs(MDCache *mdcache, ScrubStack *s)
   : MDSInternalContext(mdcache->mds), stack(s) { }
 
 void ScrubStack::complete_control_contexts(int r) {
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
 
   for (auto &ctx : control_ctxs) {
     ctx->complete(r);
@@ -512,11 +513,12 @@ void ScrubStack::set_state(State next_state) {
       dout(20) << __func__ << ", from state=" << state << ", to state="
                << next_state << dendl;
       state = next_state;
+      clog_scrub_summary();
     }
 }
 
 bool ScrubStack::scrub_in_transition_state() {
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   dout(20) << __func__ << ": state=" << state << dendl;
 
   // STATE_RUNNING is considered as a transition state so as to
@@ -528,8 +530,56 @@ bool ScrubStack::scrub_in_transition_state() {
   return false;
 }
 
+std::string_view ScrubStack::scrub_summary() {
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
+
+  bool have_more = false;
+  CachedStackStringStream cs;
+
+  if (state == STATE_IDLE) {
+    return "idle";
+  }
+
+  if (state == STATE_RUNNING) {
+    if (clear_inode_stack) {
+      *cs << "aborting";
+    } else {
+      *cs << "active";
+    }
+  } else {
+    if (state == STATE_PAUSING) {
+      have_more = true;
+      *cs << "pausing";
+    } else if (state == STATE_PAUSED) {
+      have_more = true;
+      *cs << "paused";
+    }
+
+    if (clear_inode_stack) {
+      if (have_more) {
+        *cs << "+";
+      }
+      *cs << "aborting";
+    }
+  }
+
+  if (!scrub_origins.empty()) {
+    *cs << " [paths:";
+    for (auto inode = scrub_origins.begin(); inode != scrub_origins.end(); ++inode) {
+      if (inode != scrub_origins.begin()) {
+        *cs << ",";
+      }
+
+      *cs << scrub_inode_path(*inode);
+    }
+    *cs << "]";
+  }
+
+  return cs->strv();
+}
+
 void ScrubStack::scrub_status(Formatter *f) {
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
 
   f->open_object_section("result");
 
@@ -569,9 +619,7 @@ void ScrubStack::scrub_status(Formatter *f) {
     std::string tag(header->get_tag());
     f->open_object_section(tag.c_str()); // scrub id
 
-    std::string path;
-    inode->make_path_string(path, true);
-    f->dump_string("path", path.empty() ? "/" : path.c_str());
+    f->dump_string("path", scrub_inode_path(inode));
 
     std::stringstream optss;
     if (header->get_recursive()) {
@@ -600,13 +648,14 @@ void ScrubStack::scrub_status(Formatter *f) {
 }
 
 void ScrubStack::abort_pending_scrubs() {
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   ceph_assert(clear_inode_stack);
 
   for (auto inode = inode_stack.begin(); !inode.end(); ++inode) {
     CInode *in = *inode;
     if (in == in->scrub_info()->header->get_origin()) {
       scrub_origins.erase(in);
+      clog_scrub_summary(in);
     }
 
     MDSContext *ctx = nullptr;
@@ -622,7 +671,7 @@ void ScrubStack::abort_pending_scrubs() {
 }
 
 void ScrubStack::scrub_abort(Context *on_finish) {
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   ceph_assert(on_finish != nullptr);
 
   dout(10) << __func__ << ": aborting with " << scrubs_in_progress
@@ -643,7 +692,7 @@ void ScrubStack::scrub_abort(Context *on_finish) {
 }
 
 void ScrubStack::scrub_pause(Context *on_finish) {
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   ceph_assert(on_finish != nullptr);
 
   dout(10) << __func__ << ": pausing with " << scrubs_in_progress
@@ -668,7 +717,7 @@ void ScrubStack::scrub_pause(Context *on_finish) {
 }
 
 bool ScrubStack::scrub_resume() {
-  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   dout(20) << __func__ << ": state=" << state << dendl;
 
   int r = 0;
@@ -684,4 +733,21 @@ bool ScrubStack::scrub_resume() {
   }
 
   return r;
+}
+
+// send current scrub summary to cluster log
+void ScrubStack::clog_scrub_summary(CInode *in) {
+  if (in) {
+    std::string what;
+    if (clear_inode_stack) {
+      what = "aborted";
+    } else if (scrub_origins.count(in)) {
+      what = "queued";
+    } else {
+      what = "completed";
+    }
+    clog->info() << "scrub " << what << " for path: " << scrub_inode_path(in);
+  }
+
+  clog->info() << "scrub summary: " << scrub_summary();
 }

@@ -6,8 +6,11 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 
+#include "osd_operation.h"
 #include "msg/MessageRef.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
+#include "osd/PeeringState.h"
+#include "crimson/osd/osdmap_service.h"
 
 namespace ceph::net {
   class Messenger;
@@ -28,6 +31,7 @@ namespace ceph::os {
 class PerfCounters;
 class OSDMap;
 class PeeringCtx;
+class BufferedRecoveryMessages;
 
 namespace ceph::osd {
 
@@ -36,6 +40,7 @@ namespace ceph::osd {
  */
 class ShardServices {
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
+  OSDMapService &osdmap_service;
   ceph::net::Messenger &cluster_msgr;
   ceph::net::Messenger &public_msgr;
   ceph::mon::Client &monc;
@@ -49,6 +54,7 @@ class ShardServices {
 
 public:
   ShardServices(
+    OSDMapService &osdmap_service,
     ceph::net::Messenger &cluster_msgr,
     ceph::net::Messenger &public_msgr,
     ceph::mon::Client &monc,
@@ -68,6 +74,20 @@ public:
     return &cct;
   }
 
+  // OSDMapService
+  const OSDMapService &get_osdmap_service() const {
+    return osdmap_service;
+  }
+
+  // Op Tracking
+  OperationRegistry registry;
+
+  template <typename T, typename... Args>
+  auto start_operation(Args&&... args) {
+    auto op = registry.create_operation<T>(std::forward<Args>(args)...);
+    return std::make_pair(op, op->start());
+  }
+
   // Loggers
   PerfCounters &get_recoverystate_perf_logger() {
     return *recoverystate_perf;
@@ -82,7 +102,7 @@ public:
 
   /// Dispatch and reset ctx messages
   seastar::future<> dispatch_context_messages(
-    PeeringCtx &ctx);
+    BufferedRecoveryMessages &&ctx);
 
   /// Dispatch ctx and dispose of context
   seastar::future<> dispatch_context(
@@ -112,18 +132,14 @@ public:
 			  bool forced = false);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
-  void send_pg_temp();
+  seastar::future<> send_pg_temp();
 
   // Shard-local OSDMap
 private:
   cached_map_t osdmap;
 public:
-  void update_map(cached_map_t new_osdmap) {
-    osdmap = std::move(new_osdmap);
-  }
-  cached_map_t &get_osdmap() {
-    return osdmap;
-  }
+  void update_map(cached_map_t new_osdmap);
+  cached_map_t &get_osdmap();
 
   // PG Created State
 private:
@@ -132,6 +148,15 @@ public:
   seastar::future<> send_pg_created(pg_t pgid);
   seastar::future<> send_pg_created();
   void prune_pg_created();
+
+  seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
+
+  // Time state
+  ceph::mono_time startup_time = ceph::mono_clock::now();
+  ceph::signedspan get_mnow() const {
+    return ceph::mono_clock::now() - startup_time;
+  }
+  HeartbeatStampsRef get_hb_stamps(int peer);
 };
 
 

@@ -5,6 +5,100 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { ApiModule } from './api.module';
 
+export interface SmartAttribute {
+  flags: object;
+  id: number;
+  name: string;
+  raw: { string: string; value: number };
+  thresh: number;
+  value: number;
+  when_failed: string;
+  worst: number;
+}
+
+export interface SmartError {
+  dev: string;
+  error: string;
+  nvme_smart_health_information_add_log_error: string;
+  nvme_smart_health_information_add_log_error_code: number;
+  nvme_vendor: string;
+  smartctl_error_code: number;
+  smartctl_output: string;
+}
+
+export interface SmartDataV1 {
+  ata_sct_capabilities: object;
+  ata_smart_attributes: {
+    revision: number;
+    table: SmartAttribute[];
+  };
+  ata_smart_data: {
+    capabilities: {
+      attribute_autosave_enabled: boolean;
+      conveyance_self_test_supported: boolean;
+      error_logging_supported: boolean;
+      exec_offline_immediate_supported: boolean;
+      gp_logging_supported: boolean;
+      offline_is_aborted_upon_new_cmd: boolean;
+      offline_surface_scan_supported: boolean;
+      selective_self_test_supported: boolean;
+      self_tests_supported: boolean;
+      values: boolean;
+    };
+    offline_data_collection: {
+      completion_seconds: number;
+      status: {
+        string: string;
+        value: number;
+      };
+    };
+    self_test: {
+      polling_minutes: {
+        conveyance: number;
+        extended: number;
+        short: number;
+      };
+      status: {
+        passed: boolean;
+        string: string;
+        value: number;
+      };
+    };
+  };
+  ata_smart_error_log: object;
+  ata_smart_selective_self_test_log: object;
+  ata_smart_self_test_log: object;
+  ata_version: object;
+  device: {
+    name: string;
+    info_name: string;
+    type: string;
+    protocol: string;
+  };
+  firmware_version: string;
+  in_smartctl_database: boolean;
+  interface_speed: object;
+  json_format_version: number[];
+  local_time: object;
+  logical_block_size: number;
+  model_family: string;
+  model_name: string;
+  nvme_smart_health_information_add_log_error: string;
+  nvme_smart_health_information_add_log_error_code: number;
+  nvme_vendor: string;
+  physical_block_size: number;
+  power_cycle_count: number;
+  power_on_time: object;
+  rotation_rate: number;
+  sata_version: object;
+  serial_number: string;
+  smart_status: object;
+  smartctl: object;
+  temperature: object;
+  user_capacity: object;
+  wwn: object;
+}
+
 @Injectable({
   providedIn: ApiModule
 })
@@ -63,7 +157,22 @@ export class OsdService {
   }
 
   getDetails(id: number) {
-    return this.http.get(`${this.path}/${id}`);
+    interface OsdData {
+      osd_map: { [key: string]: any };
+      osd_metadata: { [key: string]: any };
+      histogram: { [key: string]: object };
+      smart: { [device_identifier: string]: any };
+    }
+    return this.http.get<OsdData>(`${this.path}/${id}`);
+  }
+
+  /**
+   * @param id OSD ID
+   */
+  getSmartData(id: number) {
+    return this.http.get<{ [deviceId: string]: SmartDataV1 | SmartError }>(
+      `${this.path}/${id}/get_smart_data`
+    );
   }
 
   scrub(id, deep) {
@@ -106,11 +215,11 @@ export class OsdService {
     return this.http.post(`${this.path}/${id}/destroy`, null);
   }
 
-  safeToDestroy(id: number) {
+  safeToDestroy(ids: string) {
     interface SafeToDestroyResponse {
       'safe-to-destroy': boolean;
       message?: string;
     }
-    return this.http.get<SafeToDestroyResponse>(`${this.path}/${id}/safe_to_destroy`);
+    return this.http.get<SafeToDestroyResponse>(`${this.path}/${ids}/safe_to_destroy`);
   }
 }

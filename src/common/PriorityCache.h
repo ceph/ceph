@@ -116,9 +116,11 @@ namespace PriorityCache {
     uint64_t max_mem = 0;
     uint64_t target_mem = 0;
     uint64_t tuned_mem = 0;
+    bool reserve_extra;
 
   public:
-    Manager(CephContext *c, uint64_t min, uint64_t max, uint64_t target);
+    Manager(CephContext *c, uint64_t min, uint64_t max, uint64_t target,
+            bool reserve_extra);
     ~Manager();
     void set_min_memory(uint64_t min) {
       min_mem = min;
@@ -132,7 +134,8 @@ namespace PriorityCache {
     uint64_t get_tuned_mem() const {
       return tuned_mem;
     }
-    void insert(const std::string& name, const std::shared_ptr<PriCache> c);
+    void insert(const std::string& name, const std::shared_ptr<PriCache> c,
+                bool enable_perf_counters);
     void erase(const std::string& name);
     void clear();
     void tune_memory();

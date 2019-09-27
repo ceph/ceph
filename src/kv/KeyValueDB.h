@@ -215,6 +215,9 @@ public:
     virtual bool valid() = 0;
     virtual int next() = 0;
     virtual std::string key() = 0;
+    virtual std::string tail_key() {
+      return "";
+    }
     virtual ceph::buffer::list value() = 0;
     virtual int status() = 0;
     virtual ~SimplestIteratorImpl() {}
@@ -364,7 +367,8 @@ public:
   virtual ~KeyValueDB() {}
 
   /// estimate space utilization for a prefix (in bytes)
-  virtual int64_t estimate_prefix_size(const string& prefix) {
+  virtual int64_t estimate_prefix_size(const string& prefix,
+				       const string& key_prefix) {
     return 0;
   }
 

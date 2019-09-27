@@ -113,7 +113,8 @@ class C_tick_wakeup : public EventCallback {
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
                                  Worker *w, bool m2, bool local)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
+  : Connection(cct, m),
+    delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
     logger(w->get_perf_counter()),
     state(STATE_NONE), port(-1),
     dispatch_queue(q), recv_buf(NULL),
@@ -523,6 +524,13 @@ int AsyncConnection::send_message(Message *m)
 		      << *m << " -- " << m << " con "
 		      << this
 		      << dendl;
+
+  if (is_blackhole()) {
+    lgeneric_subdout(async_msgr->cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
+      << " blackhole " << *m << dendl;
+    m->put();
+    return 0;
+  }
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())

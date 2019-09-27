@@ -1,8 +1,9 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
-import { Observable } from 'rxjs';
+import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
@@ -10,6 +11,7 @@ import { CriticalConfirmationModalComponent } from '../../../../shared/component
 import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
@@ -28,32 +30,41 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
   styleUrls: ['./osd-list.component.scss']
 })
 export class OsdListComponent implements OnInit {
-  @ViewChild('statusColor')
+  @ViewChild('statusColor', { static: true })
   statusColor: TemplateRef<any>;
-  @ViewChild('osdUsageTpl')
+  @ViewChild('osdUsageTpl', { static: true })
   osdUsageTpl: TemplateRef<any>;
-  @ViewChild('markOsdConfirmationTpl')
+  @ViewChild('markOsdConfirmationTpl', { static: true })
   markOsdConfirmationTpl: TemplateRef<any>;
-  @ViewChild('criticalConfirmationTpl')
+  @ViewChild('criticalConfirmationTpl', { static: true })
   criticalConfirmationTpl: TemplateRef<any>;
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   tableComponent: TableComponent;
-  @ViewChild('reweightBodyTpl')
+  @ViewChild('reweightBodyTpl', { static: false })
   reweightBodyTpl: TemplateRef<any>;
-  @ViewChild('safeToDestroyBodyTpl')
+  @ViewChild('safeToDestroyBodyTpl', { static: false })
   safeToDestroyBodyTpl: TemplateRef<any>;
 
   permissions: Permissions;
   tableActions: CdTableAction[];
   bsModalRef: BsModalRef;
   columns: CdTableColumn[];
-  advancedTableActions: any[];
+  clusterWideActions: CdTableAction[];
+  icons = Icons;
 
-  osds = [];
   selection = new CdTableSelection();
+  osds = [];
 
   protected static collectStates(osd) {
-    return [osd['in'] ? 'in' : 'out', osd['up'] ? 'up' : 'down'];
+    const states = [osd['in'] ? 'in' : 'out'];
+    if (osd['up']) {
+      states.push('up');
+    } else if (osd.state.includes('destroyed')) {
+      states.push('destroyed');
+    } else {
+      states.push('down');
+    }
+    return states;
   }
 
   constructor(
@@ -69,14 +80,14 @@ export class OsdListComponent implements OnInit {
       {
         name: this.actionLabels.SCRUB,
         permission: 'update',
-        icon: 'fa-stethoscope',
+        icon: Icons.analyse,
         click: () => this.scrubAction(false),
         disable: () => !this.hasOsdSelected
       },
       {
         name: this.actionLabels.DEEP_SCRUB,
         permission: 'update',
-        icon: 'fa-cog',
+        icon: Icons.deepCheck,
         click: () => this.scrubAction(true),
         disable: () => !this.hasOsdSelected
       },
@@ -84,29 +95,29 @@ export class OsdListComponent implements OnInit {
         name: this.actionLabels.REWEIGHT,
         permission: 'update',
         click: () => this.reweight(),
-        disable: () => !this.hasOsdSelected,
-        icon: 'fa-balance-scale'
+        disable: () => !this.hasOsdSelected || !this.selection.hasSingleSelection,
+        icon: Icons.reweight
       },
       {
         name: this.actionLabels.MARK_OUT,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('out'), this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
-        icon: 'fa-arrow-left'
+        icon: Icons.left
       },
       {
         name: this.actionLabels.MARK_IN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('in'), this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
-        icon: 'fa-arrow-right'
+        icon: Icons.right
       },
       {
         name: this.actionLabels.MARK_DOWN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('down'), this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
-        icon: 'fa-arrow-down'
+        icon: Icons.down
       },
       {
         name: this.actionLabels.MARK_LOST,
@@ -119,7 +130,7 @@ export class OsdListComponent implements OnInit {
             this.osdService.markLost
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-unlink'
+        icon: Icons.flatten
       },
       {
         name: this.actionLabels.PURGE,
@@ -129,10 +140,13 @@ export class OsdListComponent implements OnInit {
             this.i18n('Purge'),
             this.i18n('OSD'),
             this.i18n('purged'),
-            this.osdService.purge
+            (id) => {
+              this.selection = new CdTableSelection();
+              return this.osdService.purge(id);
+            }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-eraser'
+        icon: Icons.erase
       },
       {
         name: this.actionLabels.DESTROY,
@@ -142,35 +156,41 @@ export class OsdListComponent implements OnInit {
             this.i18n('destroy'),
             this.i18n('OSD'),
             this.i18n('destroyed'),
-            this.osdService.destroy
+            (id) => {
+              this.selection = new CdTableSelection();
+              return this.osdService.destroy(id);
+            }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-remove'
-      }
-    ];
-    this.advancedTableActions = [
-      {
-        name: this.i18n('Cluster-wide Flags'),
-        icon: 'fa-flag',
-        click: () => this.configureFlagsAction(),
-        permission: this.permissions.osd.read
-      },
-      {
-        name: this.i18n('Cluster-wide Recovery Priority'),
-        icon: 'fa-cog',
-        click: () => this.configureQosParamsAction(),
-        permission: this.permissions.configOpt.read
-      },
-      {
-        name: this.i18n('PG scrub'),
-        icon: 'fa-stethoscope',
-        click: () => this.configurePgScrubAction(),
-        permission: this.permissions.configOpt.read
+        icon: Icons.destroy
       }
     ];
   }
 
   ngOnInit() {
+    this.clusterWideActions = [
+      {
+        name: this.i18n('Flags'),
+        icon: Icons.flag,
+        click: () => this.configureFlagsAction(),
+        permission: 'read',
+        visible: () => this.permissions.osd.read
+      },
+      {
+        name: this.i18n('Recovery Priority'),
+        icon: Icons.deepCheck,
+        click: () => this.configureQosParamsAction(),
+        permission: 'read',
+        visible: () => this.permissions.configOpt.read
+      },
+      {
+        name: this.i18n('PG scrub'),
+        icon: Icons.analyse,
+        click: () => this.configurePgScrubAction(),
+        permission: 'read',
+        visible: () => this.permissions.configOpt.read
+      }
+    ];
     this.columns = [
       { prop: 'host.name', name: this.i18n('Host') },
       { prop: 'id', name: this.i18n('ID'), cellTransformation: CellTemplate.bold },
@@ -199,17 +219,25 @@ export class OsdListComponent implements OnInit {
         cellTransformation: CellTemplate.perSecond
       }
     ];
-
-    this.removeActionsWithNoPermissions();
   }
 
-  get hasOsdSelected() {
-    if (this.selection.hasSelection) {
-      const osdId = this.selection.first().id;
-      const osd = this.osds.filter((o) => o.id === osdId).pop();
-      return !!osd;
-    }
-    return false;
+  /**
+   * Only returns valid IDs, e.g. if an OSD is falsely still selected after being deleted, it won't
+   * get returned.
+   */
+  getSelectedOsdIds(): number[] {
+    const osdIds = this.osds.map((osd) => osd.id);
+    return this.selection.selected.map((row) => row.id).filter((id) => osdIds.includes(id));
+  }
+
+  getSelectedOsds(): any[] {
+    return this.osds.filter(
+      (osd) => !_.isUndefined(osd) && this.getSelectedOsdIds().includes(osd.id)
+    );
+  }
+
+  get hasOsdSelected(): boolean {
+    return this.getSelectedOsdIds().length > 0;
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -217,31 +245,23 @@ export class OsdListComponent implements OnInit {
   }
 
   /**
-   * Returns true if no row is selected or if the selected row is in the given
+   * Returns true if no rows are selected or if *any* of the selected rows are in the given
    * state. Useful for deactivating the corresponding menu entry.
    */
   isNotSelectedOrInState(state: 'in' | 'up' | 'down' | 'out'): boolean {
-    if (!this.hasOsdSelected) {
+    const selectedOsds = this.getSelectedOsds();
+    if (selectedOsds.length === 0) {
       return true;
     }
-
-    const osdId = this.selection.first().id;
-    const osd = this.osds.filter((o) => o.id === osdId).pop();
-
-    if (!osd) {
-      // `osd` is undefined if the selected OSD has been removed.
-      return true;
-    }
-
     switch (state) {
       case 'in':
-        return osd.in === 1;
+        return selectedOsds.some((osd) => osd.in === 1);
       case 'out':
-        return osd.in !== 1;
+        return selectedOsds.some((osd) => osd.in !== 1);
       case 'down':
-        return osd.up !== 1;
+        return selectedOsds.some((osd) => osd.up !== 1);
       case 'up':
-        return osd.up === 1;
+        return selectedOsds.some((osd) => osd.up === 1);
     }
   }
 
@@ -264,7 +284,7 @@ export class OsdListComponent implements OnInit {
     }
 
     const initialState = {
-      selected: this.tableComponent.selection.selected,
+      selected: this.getSelectedOsdIds(),
       deep: deep
     };
 
@@ -285,9 +305,9 @@ export class OsdListComponent implements OnInit {
           markActionDescription: markAction
         },
         onSubmit: () => {
-          onSubmit
-            .call(this.osdService, this.selection.first().id)
-            .subscribe(() => this.bsModalRef.hide());
+          observableForkJoin(
+            this.getSelectedOsdIds().map((osd: any) => onSubmit.call(this.osdService, osd))
+          ).subscribe(() => this.bsModalRef.hide());
         }
       }
     });
@@ -309,7 +329,7 @@ export class OsdListComponent implements OnInit {
     templateItemDescription: string,
     action: (id: number) => Observable<any>
   ): void {
-    this.osdService.safeToDestroy(this.selection.first().id).subscribe((result) => {
+    this.osdService.safeToDestroy(JSON.stringify(this.getSelectedOsdIds())).subscribe((result) => {
       const modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
         initialState: {
           actionDescription: actionDescription,
@@ -320,9 +340,15 @@ export class OsdListComponent implements OnInit {
             actionDescription: templateItemDescription
           },
           submitAction: () => {
-            action
-              .call(this.osdService, this.selection.first().id)
-              .subscribe(() => modalRef.hide());
+            observableForkJoin(
+              this.getSelectedOsdIds().map((osd: any) => action.call(this.osdService, osd))
+            ).subscribe(
+              () => {
+                this.getOsdList();
+                modalRef.hide();
+              },
+              () => modalRef.hide()
+            );
           }
         }
       });
@@ -335,17 +361,5 @@ export class OsdListComponent implements OnInit {
 
   configurePgScrubAction() {
     this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, { class: 'modal-lg' });
-  }
-
-  /**
-   * Removes all actions from 'advancedTableActions' that need a permission the user doesn't have.
-   */
-  private removeActionsWithNoPermissions() {
-    if (!this.permissions) {
-      this.advancedTableActions = [];
-      return;
-    }
-
-    this.advancedTableActions = this.advancedTableActions.filter((action) => action.permission);
   }
 }

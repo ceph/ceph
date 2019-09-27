@@ -5,8 +5,10 @@ import * as _ from 'lodash';
 import { NodeEvent, TreeModel } from 'ng2-tree';
 
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { BooleanTextPipe } from '../../../shared/pipes/boolean-text.pipe';
 import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
 
 @Component({
@@ -19,12 +21,14 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   selection: CdTableSelection;
   @Input()
   settings: any;
+  @Input()
+  cephIscsiConfigVersion: number;
 
-  @ViewChild('highlightTpl')
+  @ViewChild('highlightTpl', { static: true })
   highlightTpl: TemplateRef<any>;
 
   private detailTable: TableComponent;
-  @ViewChild('detailTable')
+  @ViewChild('detailTable', { static: false })
   set content(content: TableComponent) {
     this.detailTable = content;
     if (content) {
@@ -39,7 +43,11 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   title: string;
   tree: TreeModel;
 
-  constructor(private i18n: I18n, private iscsiBackstorePipe: IscsiBackstorePipe) {}
+  constructor(
+    private i18n: I18n,
+    private iscsiBackstorePipe: IscsiBackstorePipe,
+    private booleanTextPipe: BooleanTextPipe
+  ) {}
 
   ngOnInit() {
     this.columns = [
@@ -74,27 +82,36 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   }
 
   private generateTree() {
-    this.metadata = { root: this.selectedItem.target_controls };
-
+    const target_meta = _.cloneDeep(this.selectedItem.target_controls);
+    // Target level authentication was introduced in ceph-iscsi config v11
+    if (this.cephIscsiConfigVersion > 10) {
+      _.extend(target_meta, _.cloneDeep(this.selectedItem.auth));
+    }
+    this.metadata = { root: target_meta };
     const cssClasses = {
       target: {
-        expanded: 'fa fa-fw fa-bullseye fa-lg'
+        expanded: _.join(
+          this.selectedItem.cdExecuting
+            ? [Icons.large, Icons.spinner, Icons.spin]
+            : [Icons.large, Icons.bullseye],
+          ' '
+        )
       },
       initiators: {
-        expanded: 'fa fa-fw fa-user fa-lg',
-        leaf: 'fa fa-fw fa-user'
+        expanded: _.join([Icons.large, Icons.user], ' '),
+        leaf: _.join([Icons.user], ' ')
       },
       groups: {
-        expanded: 'fa fa-fw fa-users fa-lg',
-        leaf: 'fa fa-fw fa-users'
+        expanded: _.join([Icons.large, Icons.user], ' '),
+        leaf: _.join([Icons.user], ' ')
       },
       disks: {
-        expanded: 'fa fa-fw fa-hdd-o fa-lg',
-        leaf: 'fa fa-fw fa-hdd-o'
+        expanded: _.join([Icons.large, Icons.disk], ' '),
+        leaf: _.join([Icons.disk], ' ')
       },
       portals: {
-        expanded: 'fa fa-fw fa-server fa-lg',
-        leaf: 'fa fa-fw fa-server fa-lg'
+        expanded: _.join([Icons.large, Icons.server], ' '),
+        leaf: _.join([Icons.large, Icons.server], ' ')
       }
     };
 
@@ -119,7 +136,15 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
     const clients = [];
     _.forEach(this.selectedItem.clients, (client) => {
-      this.metadata['client_' + client.client_iqn] = client.auth;
+      const client_metadata = _.cloneDeep(client.auth);
+      if (client.info) {
+        _.extend(client_metadata, client.info);
+        delete client_metadata['state'];
+        _.forEach(Object.keys(client.info.state), (state) => {
+          client_metadata[state.toLowerCase()] = client.info.state[state];
+        });
+      }
+      this.metadata['client_' + client.client_iqn] = client_metadata;
 
       const luns = [];
       client.luns.forEach((lun) => {
@@ -132,8 +157,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         });
       });
 
+      let status = '';
+      if (client.info) {
+        status = Object.keys(client.info.state).includes('LOGGED_IN') ? 'logged_in' : 'logged_out';
+      }
       clients.push({
         value: client.client_iqn,
+        status: status,
         id: 'client_' + client.client_iqn,
         children: luns
       });
@@ -224,6 +254,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     };
   }
 
+  private format(value) {
+    if (typeof value === 'boolean') {
+      return this.booleanTextPipe.transform(value);
+    }
+    return value;
+  }
+
   onNodeSelected(e: NodeEvent) {
     if (e.node.id) {
       this.title = e.node.value;
@@ -232,19 +269,33 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       if (e.node.id === 'root') {
         this.columns[2].isHidden = false;
         this.data = _.map(this.settings.target_default_controls, (value, key) => {
+          value = this.format(value);
           return {
             displayName: key,
             default: value,
-            current: tempData[key] || value
+            current: !_.isUndefined(tempData[key]) ? this.format(tempData[key]) : value
           };
         });
+        // Target level authentication was introduced in ceph-iscsi config v11
+        if (this.cephIscsiConfigVersion > 10) {
+          ['user', 'password', 'mutual_user', 'mutual_password'].forEach((key) => {
+            this.data.push({
+              displayName: key,
+              default: null,
+              current: tempData[key]
+            });
+          });
+        }
       } else if (e.node.id.toString().startsWith('disk_')) {
         this.columns[2].isHidden = false;
         this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
+          value = this.format(value);
           return {
             displayName: key,
             default: value,
-            current: !_.isUndefined(tempData.controls[key]) ? tempData.controls[key] : value
+            current: !_.isUndefined(tempData.controls[key])
+              ? this.format(tempData.controls[key])
+              : value
           };
         });
         this.data.push({
@@ -258,7 +309,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
           return {
             displayName: key,
             default: undefined,
-            current: value
+            current: this.format(value)
           };
         });
       }

@@ -37,7 +37,7 @@ class DPDKServerSocketImpl : public ServerSocketImpl {
   typename Protocol::listener _listener;
  public:
   DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt,
-		       int type);
+		       int type, unsigned addr_slot);
   int listen() {
     return _listener.listen();
   }
@@ -176,16 +176,13 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int fd() const override {
     return _conn.fd();
   }
-  virtual int socket_fd() const override {
-    return _conn.fd();
-  }
-
 };
 
 template <typename Protocol>
 DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
-  Protocol& proto, uint16_t port, const SocketOptions &opt, int type)
-  : ServerSocketImpl(type), _listener(proto.listen(port)) {}
+  Protocol& proto, uint16_t port, const SocketOptions &opt,
+  int type, unsigned addr_slot)
+  : ServerSocketImpl(type, addr_slot), _listener(proto.listen(port)) {}
 
 template <typename Protocol>
 int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out, Worker *w) {
@@ -229,7 +226,8 @@ class DPDKWorker : public Worker {
 
  public:
   explicit DPDKWorker(CephContext *c, unsigned i): Worker(c, i) {}
-  virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
+  virtual int listen(entity_addr_t &addr, unsigned addr_slot,
+		     const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _impl->_inet.learn(l2, l3);

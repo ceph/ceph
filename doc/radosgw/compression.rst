@@ -18,7 +18,7 @@ by providing the ``--compression=<type>`` option to the command
 The compression ``type`` refers to the name of the compression plugin to use
 when writing new object data. Each compressed object remembers which plugin
 was used, so changing this setting does not hinder the ability to decompress
-existing objects, not does it force existing objects to be recompressed.
+existing objects, nor does it force existing objects to be recompressed.
 
 This compression setting applies to all new objects uploaded to buckets using
 this placement target. Compression can be disabled by setting the ``type`` to

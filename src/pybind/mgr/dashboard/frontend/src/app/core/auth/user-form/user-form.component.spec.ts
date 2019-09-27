@@ -5,8 +5,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { ButtonsModule } from 'ngx-bootstrap/buttons';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -47,8 +48,9 @@ describe('UserFormComponent', () => {
         HttpClientTestingModule,
         ReactiveFormsModule,
         ComponentsModule,
-        ToastModule.forRoot(),
-        SharedModule
+        ToastrModule.forRoot(),
+        SharedModule,
+        ButtonsModule.forRoot()
       ],
       declarations: [UserFormComponent, FakeComponent],
       providers: i18nProviders
@@ -113,7 +115,8 @@ describe('UserFormComponent', () => {
         password: 'pass0',
         name: 'User 0',
         email: 'user0@email.com',
-        roles: ['administrator']
+        roles: ['administrator'],
+        enabled: true
       };
       formHelper.setMultipleValues(user);
       formHelper.setValue('confirmpassword', user.password);
@@ -132,7 +135,8 @@ describe('UserFormComponent', () => {
       password: undefined,
       name: 'User 1',
       email: 'user1@email.com',
-      roles: ['administrator']
+      roles: ['administrator'],
+      enabled: true
     };
     const roles = [
       {
@@ -222,7 +226,8 @@ describe('UserFormComponent', () => {
         password: '',
         name: 'User 1',
         email: 'user1@email.com',
-        roles: ['administrator']
+        roles: ['administrator'],
+        enabled: true
       });
       userReq.flush({});
       expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);

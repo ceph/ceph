@@ -18,6 +18,9 @@
                                     can be opened in the resulted comma
                                     delimited search list.
     -D|--dump-all                   dump all variables.
+    --show-config-value <key>       Print the corresponding ceph.conf value
+                                    that matches the specified key. Also searches
+                                    global defaults.
   
   FLAGS
     --name name                     Set type.id
@@ -37,4 +40,4 @@
   
   RETURN CODE
   Return code will be 0 on success; error code otherwise.
-  [1]
+

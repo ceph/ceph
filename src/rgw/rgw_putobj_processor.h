@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -20,6 +20,7 @@
 #include "rgw_putobj.h"
 #include "rgw_rados.h"
 #include "services/svc_rados.h"
+#include "services/svc_tier_rados.h"
 
 namespace rgw {
 
@@ -31,7 +32,7 @@ namespace putobj {
 class ObjectProcessor : public DataProcessor {
  public:
   // prepare to start processing object data
-  virtual int prepare() = 0;
+  virtual int prepare(optional_yield y) = 0;
 
   // complete the operation and make its result visible to clients
   virtual int complete(size_t accounted_size, const std::string& etag,
@@ -40,7 +41,8 @@ class ObjectProcessor : public DataProcessor {
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled) = 0;
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) = 0;
 };
 
 // an object processor with special handling for the first chunk of the head.
@@ -77,7 +79,7 @@ using RawObjSet = std::set<rgw_raw_obj>;
 // a data sink that writes to rados objects and deletes them on cancelation
 class RadosWriter : public DataProcessor {
   Aio *const aio;
-  RGWRados *const store;
+  rgw::sal::RGWRadosStore *const store;
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   const rgw_obj head_obj;
@@ -87,7 +89,8 @@ class RadosWriter : public DataProcessor {
   optional_yield y;
 
  public:
-  RadosWriter(Aio *aio, RGWRados *store, const RGWBucketInfo& bucket_info,
+  RadosWriter(Aio *aio, rgw::sal::RGWRadosStore *store,
+	      const RGWBucketInfo& bucket_info,
               RGWObjectCtx& obj_ctx, const rgw_obj& head_obj,
               const DoutPrefixProvider *dpp, optional_yield y)
     : aio(aio), store(store), bucket_info(bucket_info),
@@ -116,7 +119,7 @@ class RadosWriter : public DataProcessor {
 class ManifestObjectProcessor : public HeadObjectProcessor,
                                 public StripeGenerator {
  protected:
-  RGWRados *const store;
+  rgw::sal::RGWRadosStore *const store;
   const RGWBucketInfo& bucket_info;
   rgw_placement_rule tail_placement_rule;
   const rgw_user& owner;
@@ -134,7 +137,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   int next(uint64_t offset, uint64_t *stripe_size) override;
 
  public:
-  ManifestObjectProcessor(Aio *aio, RGWRados *store,
+  ManifestObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                           const RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -167,7 +170,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
-  AtomicObjectProcessor(Aio *aio, RGWRados *store,
+  AtomicObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                         const RGWBucketInfo& bucket_info,
                         const rgw_placement_rule *ptail_placement_rule,
                         const rgw_user& owner,
@@ -181,7 +184,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   {}
 
   // prepare a trivial manifest
-  int prepare() override;
+  int prepare(optional_yield y) override;
   // write the head object atomically in a bucket index transaction
   int complete(size_t accounted_size, const std::string& etag,
                ceph::real_time *mtime, ceph::real_time set_mtime,
@@ -189,7 +192,8 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                ceph::real_time delete_at,
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
-               rgw_zone_set *zones_trace, bool *canceled) override;
+               rgw_zone_set *zones_trace, bool *canceled,
+               optional_yield y) override;
 
 };
 
@@ -210,7 +214,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // prepare the head stripe and manifest
   int prepare_head();
  public:
-  MultipartObjectProcessor(Aio *aio, RGWRados *store,
+  MultipartObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                            const RGWBucketInfo& bucket_info,
                            const rgw_placement_rule *ptail_placement_rule,
                            const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -226,7 +230,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   {}
 
   // prepare a multipart manifest
-  int prepare() override;
+  int prepare(optional_yield y) override;
   // write the head object attributes in a bucket index transaction, then
   // register the completed part with the multipart meta object
   int complete(size_t accounted_size, const std::string& etag,
@@ -235,7 +239,8 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                ceph::real_time delete_at,
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
-               rgw_zone_set *zones_trace, bool *canceled) override;
+               rgw_zone_set *zones_trace, bool *canceled,
+               optional_yield y) override;
 
 };
 
@@ -252,7 +257,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
 
   public:
-    AppendObjectProcessor(Aio *aio, RGWRados *store, const RGWBucketInfo& bucket_info,
+    AppendObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,const rgw_obj& head_obj,
                           const std::string& unique_tag, uint64_t position,
@@ -263,12 +268,13 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
               unique_tag(unique_tag), cur_manifest(nullptr)
     {}
-    int prepare() override;
+    int prepare(optional_yield y) override;
     int complete(size_t accounted_size, const string& etag,
                  ceph::real_time *mtime, ceph::real_time set_mtime,
                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
                  const char *if_match, const char *if_nomatch, const string *user_data,
-                 rgw_zone_set *zones_trace, bool *canceled) override;
+                 rgw_zone_set *zones_trace, bool *canceled,
+                 optional_yield y) override;
   };
 
 } // namespace putobj

@@ -244,14 +244,14 @@ extern "C" int _rados_conf_read_file(rados_t cluster, const char *path_list)
   if (ret) {
     if (warnings.tellp() > 0)
       lderr(client->cct) << warnings.str() << dendl;
-    client->cct->_conf.complain_about_parse_errors(client->cct);
+    client->cct->_conf.complain_about_parse_error(client->cct);
     tracepoint(librados, rados_conf_read_file_exit, ret);
     return ret;
   }
   conf.parse_env(client->cct->get_module_type()); // environment variables override
 
   conf.apply_changes(nullptr);
-  client->cct->_conf.complain_about_parse_errors(client->cct);
+  client->cct->_conf.complain_about_parse_error(client->cct);
   tracepoint(librados, rados_conf_read_file_exit, 0);
   return 0;
 }
@@ -1010,18 +1010,21 @@ extern "C" int _rados_ioctx_pool_stat(rados_ioctx_t io,
   ls.push_back(pool_name);
 
   map<string, ::pool_stat_t> rawresult;
-  err = io_ctx_impl->client->get_pool_stats(ls, rawresult);
+  bool per_pool = false;
+  err = io_ctx_impl->client->get_pool_stats(ls, &rawresult, &per_pool);
   if (err) {
     tracepoint(librados, rados_ioctx_pool_stat_exit, err, stats);
     return err;
   }
 
   ::pool_stat_t& r = rawresult[pool_name];
-  uint64_t allocated_bytes = r.get_allocated_bytes();
+  uint64_t allocated_bytes = r.get_allocated_data_bytes(per_pool) +
+    r.get_allocated_omap_bytes(per_pool);
   // FIXME: raw_used_rate is unknown hence use 1.0 here
   // meaning we keep net amount aggregated over all replicas
   // Not a big deal so far since this field isn't exposed
-  uint64_t user_bytes = r.get_user_bytes(1.0);
+  uint64_t user_bytes = r.get_user_data_bytes(1.0, per_pool) +
+    r.get_user_omap_bytes(1.0, per_pool);
 
   stats->num_kb = shift_round_up(allocated_bytes, 10);
   stats->num_bytes = allocated_bytes;
@@ -3360,6 +3363,20 @@ extern "C" void _rados_write_op_omap_rm_keys2(rados_write_op_t write_op,
   tracepoint(librados, rados_write_op_omap_rm_keys_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_rm_keys2);
+
+extern "C" void _rados_write_op_omap_rm_range2(rados_write_op_t write_op,
+                                               const char *key_begin,
+                                               size_t key_begin_len,
+                                               const char *key_end,
+                                               size_t key_end_len)
+{
+  tracepoint(librados, rados_write_op_omap_rm_range_enter,
+             write_op, key_begin, key_end);
+  ((::ObjectOperation *)write_op)->omap_rm_range({key_begin, key_begin_len},
+                                                 {key_end, key_end_len});
+  tracepoint(librados, rados_write_op_omap_rm_range_exit);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_rm_range2);
 
 extern "C" void _rados_write_op_omap_clear(rados_write_op_t write_op)
 {

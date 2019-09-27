@@ -9,6 +9,7 @@
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
+#include "librbd/cache/ParentCacheObjectDispatch.cc"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -475,13 +476,19 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
     *result = util::create_ioctx(m_image_ctx->md_ctx, "data pool", data_pool_id,
                                  {}, &m_image_ctx->data_ctx);
     if (*result < 0) {
-      send_close_image(*result);
-      return nullptr;
+      if (*result != -ENOENT) {
+        send_close_image(*result);
+        return nullptr;
+      }
+      m_image_ctx->data_ctx.close();
+    } else {
+      m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
     }
-    m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
+  } else {
+    data_pool_id = m_image_ctx->md_ctx.get_id();
   }
 
-  m_image_ctx->init_layout();
+  m_image_ctx->init_layout(data_pool_id);
   send_refresh();
   return nullptr;
 }
@@ -508,6 +515,41 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(*result)
                << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  return send_parent_cache(result);
+}
+
+template <typename I>
+Context* OpenRequest<I>::send_parent_cache(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
+    "rbd_parent_cache_enabled");
+
+  if (m_image_ctx->child == nullptr || !parent_cache_enabled) {
+    return send_init_cache(result);
+  }
+
+  auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
+  using klass = OpenRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_parent_cache>(this);
+
+  parent_cache->init(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context* OpenRequest<I>::handle_parent_cache(int* result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to parent cache " << dendl;
     send_close_image(*result);
     return nullptr;
   }
@@ -602,7 +644,7 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   uint64_t snap_id = CEPH_NOSNAP;
   std::swap(m_image_ctx->open_snap_id, snap_id);
   if (snap_id == CEPH_NOSNAP) {
-    RWLock::RLocker image_locker(m_image_ctx->image_lock);
+    std::shared_lock image_locker{m_image_ctx->image_lock};
     snap_id = m_image_ctx->get_snap_id(m_image_ctx->snap_namespace,
                                        m_image_ctx->snap_name);
   }

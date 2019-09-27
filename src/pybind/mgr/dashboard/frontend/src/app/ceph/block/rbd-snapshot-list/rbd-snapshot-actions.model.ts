@@ -1,6 +1,8 @@
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
@@ -17,29 +19,29 @@ export class RbdSnapshotActionsModel {
   deleteSnap: CdTableAction;
   ordering: CdTableAction[];
 
-  constructor(i18n: I18n, actionLabels: ActionLabelsI18n) {
+  constructor(i18n: I18n, actionLabels: ActionLabelsI18n, featuresName: string[]) {
     this.i18n = i18n;
 
     this.create = {
       permission: 'create',
-      icon: 'fa-plus',
+      icon: Icons.add,
       name: actionLabels.CREATE
     };
     this.rename = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: Icons.edit,
       name: actionLabels.RENAME
     };
     this.protect = {
       permission: 'update',
-      icon: 'fa-lock',
+      icon: Icons.lock,
       visible: (selection: CdTableSelection) =>
         selection.hasSingleSelection && !selection.first().is_protected,
       name: actionLabels.PROTECT
     };
     this.unprotect = {
       permission: 'update',
-      icon: 'fa-unlock',
+      icon: Icons.unlock,
       visible: (selection: CdTableSelection) =>
         selection.hasSingleSelection && selection.first().is_protected,
       name: actionLabels.UNPROTECT
@@ -48,8 +50,11 @@ export class RbdSnapshotActionsModel {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting,
-      icon: 'fa-clone',
+        !selection.hasSingleSelection ||
+        selection.first().cdExecuting ||
+        !_.isUndefined(this.getCloneDisableDesc(featuresName)),
+      disableDesc: () => this.getCloneDisableDesc(featuresName),
+      icon: Icons.clone,
       name: actionLabels.CLONE
     };
     this.copy = {
@@ -57,17 +62,17 @@ export class RbdSnapshotActionsModel {
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting,
-      icon: 'fa-copy',
+      icon: Icons.copy,
       name: actionLabels.COPY
     };
     this.rollback = {
       permission: 'update',
-      icon: 'fa-undo',
+      icon: Icons.undo,
       name: actionLabels.ROLLBACK
     };
     this.deleteSnap = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       disable: (selection: CdTableSelection) => {
         const first = selection.first();
         return !selection.hasSingleSelection || first.cdExecuting || first.is_protected;
@@ -85,5 +90,11 @@ export class RbdSnapshotActionsModel {
       this.rollback,
       this.deleteSnap
     ];
+  }
+
+  getCloneDisableDesc(featuresName: string[]): string | undefined {
+    if (!featuresName.includes('layering')) {
+      return this.i18n('Parent image must support Layering');
+    }
   }
 }

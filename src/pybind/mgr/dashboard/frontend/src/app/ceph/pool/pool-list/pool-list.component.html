@@ -5,16 +5,19 @@
                    [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
 
     <cd-table #table
+              id="pool-list"
               [data]="pools"
               [columns]="columns"
               selectionType="single"
               (updateSelection)="updateSelection($event)">
-      <cd-table-actions class="table-actions"
+      <cd-table-actions id="pool-list-actions"
+                        class="table-actions"
                         [permission]="permissions.pool"
                         [selection]="selection"
                         [tableActions]="tableActions">
       </cd-table-actions>
       <cd-pool-details cdTableDetail
+                       id="pool-list-details"
                        [selection]="selection"
                        [permissions]="permissions"
                        [cacheTiers]="selectionCacheTiers">

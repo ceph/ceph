@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
 
@@ -7,6 +7,8 @@
 
 #include "svc_rados.h"
 
+
+class Context;
 
 class RGWSI_Zone;
 class RGWSI_Finisher;
@@ -28,7 +30,7 @@ private:
   RGWSI_RADOS *rados_svc{nullptr};
   RGWSI_Finisher *finisher_svc{nullptr};
 
-  RWLock watchers_lock{"watchers_lock"};
+  ceph::shared_mutex watchers_lock = ceph::make_shared_mutex("watchers_lock");
   rgw_pool control_pool;
 
   int num_watchers{0};

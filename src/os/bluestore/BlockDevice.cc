@@ -27,7 +27,7 @@
 #include "NVMEDevice.h"
 #endif
 
-#if defined(HAVE_PMEM)
+#if defined(HAVE_BLUESTORE_PMEM)
 #include "PMEMDevice.h"
 #include "libpmem.h"
 #endif
@@ -96,7 +96,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
       type = "ust-nvme";
   }
 
-#if defined(HAVE_PMEM)
+#if defined(HAVE_BLUESTORE_PMEM)
   if (type == "kernel") {
     int is_pmem = 0;
     size_t map_len = 0;
@@ -115,7 +115,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 
   dout(1) << __func__ << " path " << path << " type " << type << dendl;
 
-#if defined(HAVE_PMEM)
+#if defined(HAVE_BLUESTORE_PMEM)
   if (type == "pmem") {
     return new PMEMDevice(cct, cb, cbpriv);
   }

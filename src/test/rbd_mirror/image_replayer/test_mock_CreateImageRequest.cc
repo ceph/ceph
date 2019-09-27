@@ -122,7 +122,7 @@ namespace mirror {
 
 template <>
 struct Threads<librbd::MockTestImageCtx> {
-  Mutex &timer_lock;
+  ceph::mutex &timer_lock;
   SafeTimer *timer;
   ContextWQ *work_queue;
 

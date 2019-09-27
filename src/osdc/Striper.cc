@@ -406,7 +406,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 
     ceph_assert(s->first <= *bl_off);
     size_t left = (s->first + s->second) - *bl_off;
-    size_t actual = std::min(left, tlen);
+    size_t actual = std::min<size_t>(left, tlen);
 
     if (actual > 0) {
       ldout(cct, 20) << "  s has " << actual << ", copying" << dendl;

@@ -16,7 +16,6 @@
 #
 
 SCRIPTNAME="$(basename $0)"
-PYTHON_BINARY="python2.7"
 if [ `uname` == FreeBSD ]; then
     GETOPT="/usr/local/bin/getopt"
 else
@@ -31,7 +30,6 @@ function usage {
     echo "Usage:"
     echo "    $SCRIPTNAME [--python=PYTHON_BINARY] TARGET_DIRECTORY"
     echo
-    echo "    PYTHON_BINARY defaults to \"$PYTHON_BINARY\""
     echo "    TARGET_DIRECTORY will be created if it doesn't exist,"
     echo "        and completely destroyed and re-created if it does!"
     echo
@@ -42,10 +40,11 @@ TEMP=$($GETOPT --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
 test $? != 0 && usage
 eval set -- "$TEMP"
 
+PYTHON_OPTION=""
 while true ; do
     case "$1" in
         -h|--help) usage ;;  # does not return
-        --python) PYTHON_BINARY="$2" ; shift ; shift ;;
+        --python) PYTHON_OPTION="--python=$2" ; shift ; shift ;;
         --) shift ; break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -58,7 +57,7 @@ if [ -z "$DIR" ] ; then
 fi
 rm -fr $DIR
 mkdir -p $DIR
-virtualenv --python $PYTHON_BINARY $DIR
+virtualenv $PYTHON_OPTION $DIR
 . $DIR/bin/activate
 
 if pip --help | grep -q disable-pip-version-check; then
@@ -82,9 +81,16 @@ if test -d wheelhouse ; then
 fi
 
 pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=2.9.1'
-if test -f requirements.txt ; then
-    if ! test -f wheelhouse/md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
+
+require_files=$(ls *requirements*.txt 2>/dev/null) || true
+constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
+md5=wheelhouse/md5
+if test "$require"; then
+    if ! test -f $md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
         NO_INDEX=''
     fi
-    pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse -r requirements.txt
+    pip --exists-action i $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX \
+      --find-links=file://$(pwd)/wheelhouse $require $constraint 
 fi

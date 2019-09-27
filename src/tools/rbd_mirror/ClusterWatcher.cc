@@ -10,6 +10,7 @@
 #include "librbd/internal.h"
 #include "librbd/api/Mirror.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
+#include "json_spirit/json_spirit.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -30,7 +31,7 @@ using librados::IoCtx;
 namespace rbd {
 namespace mirror {
 
-ClusterWatcher::ClusterWatcher(RadosRef cluster, Mutex &lock,
+ClusterWatcher::ClusterWatcher(RadosRef cluster, ceph::mutex &lock,
                                ServiceDaemon<librbd::ImageCtx>* service_daemon)
   : m_cluster(cluster), m_lock(lock), m_service_daemon(service_daemon)
 {
@@ -38,7 +39,7 @@ ClusterWatcher::ClusterWatcher(RadosRef cluster, Mutex &lock,
 
 const ClusterWatcher::PoolPeers& ClusterWatcher::get_pool_peers() const
 {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   return m_pool_peers;
 }
 
@@ -49,7 +50,7 @@ void ClusterWatcher::refresh_pools()
   PoolPeers pool_peers;
   read_pool_peers(&pool_peers);
 
-  Mutex::Locker l(m_lock);
+  std::lock_guard l{m_lock};
   m_pool_peers = pool_peers;
   // TODO: perhaps use a workqueue instead, once we get notifications
   // about config changes for existing pools

@@ -89,7 +89,7 @@ namespace mirror {
 template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
-  Mutex &timer_lock;
+  ceph::mutex &timer_lock;
 
   MockContextWQ *work_queue;
 
@@ -173,8 +173,7 @@ public:
     }
   };
 
-  TestMockPoolWatcher() : m_lock("TestMockPoolWatcher::m_lock") {
-  }
+  TestMockPoolWatcher() = default;
 
   void expect_work_queue(MockThreads &mock_threads) {
     EXPECT_CALL(*mock_threads.work_queue, queue(_, _))
@@ -217,9 +216,9 @@ public:
     EXPECT_CALL(mock_listener, mock_handle_update(mirror_uuid, added_image_ids,
                                                   removed_image_ids))
       .WillOnce(WithoutArgs(Invoke([this]() {
-          Mutex::Locker locker(m_lock);
+          std::lock_guard locker{m_lock};
           ++m_update_count;
-          m_cond.Signal();
+          m_cond.notify_all();
         })));
   }
 
@@ -241,8 +240,8 @@ public:
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillOnce(DoAll(WithArg<1>(Invoke([this](Context *ctx) {
                         auto wrapped_ctx =
-			  new FunctionContext([this, ctx](int r) {
-			      Mutex::Locker timer_locker(m_threads->timer_lock);
+			  new LambdaContext([this, ctx](int r) {
+			      std::lock_guard timer_locker{m_threads->timer_lock};
 			      ctx->complete(r);
 			    });
 			m_threads->work_queue->queue(wrapped_ctx, 0);
@@ -257,22 +256,18 @@ public:
   }
 
   bool wait_for_update(uint32_t count) {
-    Mutex::Locker locker(m_lock);
-    while (m_update_count < count) {
-      if (m_cond.WaitInterval(m_lock, utime_t(10, 0)) != 0) {
-        break;
-      }
-    }
-    if (m_update_count < count) {
+    std::unique_lock locker{m_lock};
+    if (m_cond.wait_for(locker, 10s,
+			[count, this] { return m_update_count >= count; })) {
+      m_update_count -= count;
+      return true;
+    } else {
       return false;
     }
-
-    m_update_count -= count;
-    return true;
   }
 
-  Mutex m_lock;
-  Cond m_cond;
+  ceph::mutex m_lock = ceph::make_mutex("TestMockPoolWatcher::m_lock");
+  ceph::condition_variable m_cond;
   uint32_t m_update_count = 0;
 };
 
@@ -352,9 +347,9 @@ TEST_F(TestMockPoolWatcher, NotifyDuringRefresh) {
                       &refresh_sent]() {
        *mock_refresh_images_request.image_ids = image_ids;
 
-        Mutex::Locker locker(m_lock);
+        std::lock_guard locker{m_lock};
         refresh_sent = true;
-        m_cond.Signal();
+        m_cond.notify_all();
       }));
 
   expect_mirror_uuid_get(m_remote_io_ctx, "remote uuid", 0);
@@ -370,10 +365,8 @@ TEST_F(TestMockPoolWatcher, NotifyDuringRefresh) {
   mock_pool_watcher.init(nullptr);
 
   {
-    Mutex::Locker locker(m_lock);
-    while (!refresh_sent) {
-      m_cond.Wait(m_lock);
-    }
+    std::unique_lock locker{m_lock};
+    m_cond.wait(locker, [&] { return refresh_sent; });
   }
 
   MirroringWatcher::get_instance().handle_image_updated(
@@ -416,10 +409,10 @@ TEST_F(TestMockPoolWatcher, Notify) {
   Context *notify_ctx = nullptr;
   EXPECT_CALL(*mock_threads.work_queue, queue(_, _))
     .WillOnce(Invoke([this, &notify_ctx](Context *ctx, int r) {
-        Mutex::Locker locker(m_lock);
+        std::lock_guard locker{m_lock};
         ASSERT_EQ(nullptr, notify_ctx);
         notify_ctx = ctx;
-        m_cond.Signal();
+        m_cond.notify_all();
       }));
   expect_listener_handle_update(
     mock_listener, "remote uuid",

@@ -58,9 +58,9 @@ For example::
 
 To create a pool, execute::
 
-	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated] \
+	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
              [crush-rule-name] [expected-num-objects]
-	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
+	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]]   erasure \
              [erasure-code-profile] [crush-rule-name] [expected_num_objects]
 
 Where:
@@ -345,7 +345,7 @@ You may set values for the following keys:
 ``crush_rule``
 
 :Description: The rule to use for mapping object placement in the cluster.
-:Type: Integer
+:Type: String
 
 .. _allow_ec_overwrites:
 

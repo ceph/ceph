@@ -7,13 +7,18 @@ The external Orchestrator is the Ansible runner service (RESTful https service)
 # pylint: disable=abstract-method, no-member, bad-continuation
 
 import json
+import os
+import errno
+import tempfile
 import requests
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option, CLIWriteCommand
 import orchestrator
+from mgr_util import verify_tls_files, ServerConfigException
 
 from .ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
-                                AnsibleRunnerServiceError
+                                AnsibleRunnerServiceError, InventoryGroup,\
+                                URL_MANAGE_GROUP, URL_ADD_RM_HOSTS
 
 from .output_wizards import ProcessInventory, ProcessPlaybookResult, \
                             ProcessHostsList
@@ -34,17 +39,22 @@ ADD_OSD_PLAYBOOK = "add-osd.yml"
 # Used in the remove_osds method
 REMOVE_OSD_PLAYBOOK = "shrink-osd.yml"
 
+# General multi purpose cluster playbook
+SITE_PLAYBOOK = "site.yml"
+
+# General multi-purpose playbook for removing daemons
+PURGE_PLAYBOOK = "purge-cluster.yml"
+
 # Default name for the inventory group for hosts managed by the Orchestrator
 ORCHESTRATOR_GROUP = "orchestrator"
 
 # URLs for Ansible Runner Operations
-# Add or remove host in one group
-URL_ADD_RM_HOSTS = "api/v1/hosts/{host_name}/groups/{inventory_group}"
 
 # Retrieve the groups where the host is included in.
 URL_GET_HOST_GROUPS = "api/v1/hosts/{host_name}"
-# Manage groups
-URL_MANAGE_GROUP = "api/v1/groups/{group_name}"
+
+
+
 # URLs for Ansible Runner Operations
 URL_GET_HOSTS = "api/v1/hosts"
 
@@ -77,8 +87,8 @@ class AnsibleReadOperation(orchestrator.ReadCompletion):
         # Logger
         self.log = logger
 
-        # OutputWizard object used to process the result
-        self.output_wizard = None
+    def __str__(self):
+        return "Playbook {playbook_name}".format(playbook_name=self.playbook)
 
     @property
     def is_complete(self):
@@ -184,7 +194,11 @@ class PlaybookOperation(AnsibleReadOperation):
         self.playbook = playbook
 
         # An aditional filter of result events based in the event
-        self.event_filter = ""
+        self.event_filter_list = [""]
+
+        # A dict with groups and hosts to remove from inventory if operation is
+        # succesful. Ex: {"group1": ["host1"], "group2": ["host3", "host4"]}
+        self.clean_hosts_on_success = {}
 
         # Playbook execution object
         self.pb_execution = PlayBookExecution(client,
@@ -215,6 +229,10 @@ class PlaybookOperation(AnsibleReadOperation):
         if self._is_complete:
             self.update_result()
 
+            # Clean hosts if operation is succesful
+            if self._status == ExecutionStatusCode.SUCCESS:
+                self.clean_inventory()
+
         return self._status
 
     def execute_playbook(self):
@@ -237,16 +255,31 @@ class PlaybookOperation(AnsibleReadOperation):
 
         processed_result = []
 
-        if self._is_complete:
-            raw_result = self.pb_execution.get_result(self.event_filter)
+        if self._is_errored:
+            raw_result = self.pb_execution.get_result(["runner_on_failed",
+                                                       "runner_on_unreachable",
+                                                       "runner_on_no_hosts",
+                                                       "runner_on_async_failed",
+                                                       "runner_item_on_failed"])
+        elif self._is_complete:
+            raw_result = self.pb_execution.get_result(self.event_filter_list)
 
-            if self.output_wizard:
-                processed_result = self.output_wizard.process(self.pb_execution.play_uuid,
-                                                              raw_result)
-            else:
-                processed_result = raw_result
+        if self.output_wizard:
+            processed_result = self.output_wizard.process(self.pb_execution.play_uuid,
+                                                          raw_result)
+        else:
+            processed_result = raw_result
 
         self._result = processed_result
+
+    def clean_inventory(self):
+        """ Remove hosts from inventory groups
+        """
+
+        for group, hosts in self.clean_hosts_on_success.items():
+            InventoryGroup(group, self.ar_client).clean(hosts)
+            del self.clean_hosts_on_success[group]
+
 
 
 class AnsibleChangeOperation(orchestrator.WriteCompletion):
@@ -392,10 +425,12 @@ class Module(MgrModule, orchestrator.Orchestrator):
     """
 
     MODULE_OPTIONS = [
-        {'name': 'server_url'},
-        {'name': 'username'},
-        {'name': 'password'},
-        {'name': 'verify_server'} # Check server identity (Boolean/path to CA bundle)
+        # url:port of the Ansible Runner Service
+        Option(name="server_location", type="str", default=""),
+        # Check server identity (True by default)
+        Option(name="verify_server", type="bool", default=True),
+        # Path to an alternative CA bundle
+        Option(name="ca_bundle", type="str", default="")
     ]
 
     def __init__(self, *args, **kwargs):
@@ -407,11 +442,38 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         self.ar_client = None
 
+        # TLS certificate and key file names used to connect with the external
+        # Ansible Runner Service
+        self.client_cert_fname = ""
+        self.client_key_fname = ""
+
+        # used to provide more verbose explanation of errors in status method
+        self.status_message = ""
+
     def available(self):
         """ Check if Ansible Runner service is working
         """
-        # TODO
-        return (True, "Everything ready")
+        available = False
+        msg = ""
+        try:
+
+            if self.ar_client:
+                available = self.ar_client.is_operative()
+                if not available:
+                    msg = "No response from Ansible Runner Service"
+            else:
+                msg = "Not possible to initialize connection with Ansible "\
+                      "Runner service."
+
+        except AnsibleRunnerServiceError as ex:
+            available = False
+            msg = str(ex)
+
+        # Add more details to the detected problem
+        if self.status_message:
+            msg = "{}:\n{}".format(msg, self.status_message)
+
+        return (available, msg)
 
     def wait(self, completions):
         """Given a list of Completion instances, progress any which are
@@ -438,16 +500,19 @@ class Module(MgrModule, orchestrator.Orchestrator):
         """
         self.log.info("Starting Ansible Orchestrator module ...")
 
-        # Verify config options (Just that settings are available)
-        self.verify_config()
-
-        # Ansible runner service client
         try:
-            self.ar_client = Client(server_url=self.get_module_option('server_url', ''),
-                                    user=self.get_module_option('username', ''),
-                                    password=self.get_module_option('password', ''),
-                                    verify_server=self.get_module_option('verify_server', True),
-                                    logger=self.log)
+            # Verify config options and client certificates
+            self.verify_config()
+
+            # Ansible runner service client
+            self.ar_client = Client(
+                server_url=self.get_module_option('server_location', ''),
+                verify_server=self.get_module_option('verify_server', True),
+                ca_bundle=self.get_module_option('ca_bundle', ''),
+                client_cert=self.client_cert_fname,
+                client_key=self.client_key_fname,
+                logger=self.log)
+
         except AnsibleRunnerServiceError:
             self.log.exception("Ansible Runner Service not available. "
                           "Check external server status/TLS identity or "
@@ -482,7 +547,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # Assign the process_output function
         playbook_operation.output_wizard = ProcessInventory(self.ar_client,
                                                             self.log)
-        playbook_operation.event_filter = "runner_on_ok"
+        playbook_operation.event_filter_list = ["runner_on_ok"]
 
         # Execute the playbook to obtain data
         self._launch_operation(playbook_operation)
@@ -494,7 +559,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         If no host provided the operation affects all the host in the OSDS role
 
 
-        :param drive_group: (orchestrator.DriveGroupSpec),
+        :param drive_group: (ceph.deployment.drive_group.DriveGroupSpec),
                             Drive group with the specification of drives to use
         :param all_hosts  : (List[str]),
                             List of hosts where the OSD's must be created
@@ -514,18 +579,20 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # Filter to get the result
         playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
                                                                   self.log)
-        playbook_operation.event_filter = "playbook_on_stats"
+        playbook_operation.event_filter_list = ["playbook_on_stats"]
 
         # Execute the playbook
         self._launch_operation(playbook_operation)
 
         return playbook_operation
 
-    def remove_osds(self, osd_ids):
+    def remove_osds(self, osd_ids, destroy=False):
         """Remove osd's.
 
         :param osd_ids: List of osd's to be removed (List[int])
+        :param destroy: unsupported.
         """
+        assert not destroy
 
         extravars = {'osd_to_kill': ",".join([str(osd_id) for osd_id in osd_ids]),
                      'ireallymeanit':'yes'}
@@ -540,7 +607,8 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # Filter to get the result
         playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
                                                                  self.log)
-        playbook_operation.event_filter = "playbook_on_stats"
+        playbook_operation.event_filter_list = ["playbook_on_stats"]
+
 
         # Execute the playbook
         self._launch_operation(playbook_operation)
@@ -579,13 +647,14 @@ class Module(MgrModule, orchestrator.Orchestrator):
             add_url = URL_ADD_RM_HOSTS.format(host_name=host,
                                               inventory_group=ORCHESTRATOR_GROUP)
 
-            operations = [HttpOperation(add_url, "post")]
+            operations = [HttpOperation(add_url, "post", "", None)]
 
         except AnsibleRunnerServiceError as ex:
             # Problems with the external orchestrator.
             # Prepare the operation to return the error in a Completion object.
-            self.log.exception("Error checking <orchestrator> group: %s", ex)
-            operations = [HttpOperation(url_group, "post")]
+            self.log.exception("Error checking <orchestrator> group: %s",
+                               str(ex))
+            operations = [HttpOperation(url_group, "post", "", None)]
 
         return ARSChangeOperation(self.ar_client, self.log, operations)
 
@@ -628,6 +697,125 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return ARSChangeOperation(self.ar_client, self.log, operations)
 
+    def add_rgw(self, spec):
+        # type: (orchestrator.RGWSpec) -> PlaybookOperation
+        """ Add a RGW service in the cluster
+
+        : spec        : an Orchestrator.RGWSpec object
+
+        : returns     : Completion object
+        """
+
+
+        # Add the hosts to the inventory in the right group
+        hosts = spec.hosts
+        if not hosts:
+            raise orchestrator.OrchestratorError("No hosts provided. "
+                "At least one destination host is needed to install the RGW "
+                "service")
+
+        def set_rgwspec_defaults(spec):
+            spec.rgw_multisite = spec.rgw_multisite if spec.rgw_multisite is not None else True
+            spec.rgw_zonemaster = spec.rgw_zonemaster if spec.rgw_zonemaster is not None else True
+            spec.rgw_zonesecondary = spec.rgw_zonesecondary \
+                if spec.rgw_zonesecondary is not None else False
+            spec.rgw_multisite_proto = spec.rgw_multisite_proto \
+                if spec.rgw_multisite_proto is not None else "http"
+            spec.rgw_frontend_port = spec.rgw_frontend_port \
+                if spec.rgw_frontend_port is not None else 8080
+
+            spec.rgw_zonegroup = spec.rgw_zonegroup if spec.rgw_zonegroup is not None else "default"
+            spec.rgw_zone_user = spec.rgw_zone_user if spec.rgw_zone_user is not None else "zone.user"
+            spec.rgw_realm = spec.rgw_realm if spec.rgw_realm is not None else "default"
+
+            spec.system_access_key = spec.system_access_key \
+                if spec.system_access_key is not None else spec.genkey(20)
+            spec.system_secret_key = spec.system_secret_key \
+                if spec.system_secret_key is not None else spec.genkey(40)
+
+        set_rgwspec_defaults(spec)
+        InventoryGroup("rgws", self.ar_client).update(hosts)
+
+        # Limit playbook execution to certain hosts
+        limited = ",".join(hosts)
+
+        # Add the settings for this service
+        extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
+        extravars['rgw_zone'] = spec.name
+        extravars['rgw_multisite_endpoint_addr'] = spec.rgw_multisite_endpoint_addr
+        extravars['rgw_multisite_endpoints_list'] = spec.rgw_multisite_endpoints_list
+        extravars['rgw_frontend_port'] = str(spec.rgw_frontend_port)
+
+        # Group hosts by resource (used in rm ops)
+        resource_group = "rgw_zone_{}".format(spec.name)
+        InventoryGroup(resource_group, self.ar_client).update(hosts)
+
+
+        # Execute the playbook to create the service
+        playbook_operation = PlaybookOperation(client=self.ar_client,
+                                               playbook=SITE_PLAYBOOK,
+                                               logger=self.log,
+                                               result_pattern="",
+                                               params=extravars,
+                                               querystr_dict={"limit": limited})
+
+        # Filter to get the result
+        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
+                                                                 self.log)
+        playbook_operation.event_filter_list = ["playbook_on_stats"]
+
+        # Execute the playbook
+        self._launch_operation(playbook_operation)
+
+        return playbook_operation
+
+    def remove_rgw(self, zone):
+        """ Remove a RGW service providing <zone>
+
+        :zone : <zone name> of the RGW
+                            ...
+        : returns    : Completion object
+        """
+
+
+        # Ansible Inventory group for the kind of service
+        group = "rgws"
+
+        # get the list of hosts where to remove the service
+        # (hosts in resource group)
+        resource_group = "rgw_zone_{}".format(zone)
+
+        hosts_list = list(InventoryGroup(resource_group, self.ar_client))
+        limited = ",".join(hosts_list)
+
+        # Avoid manual confirmation
+        extravars = {"ireallymeanit": "yes"}
+
+        # Execute the playbook to remove the service
+        playbook_operation = PlaybookOperation(client=self.ar_client,
+                                               playbook=PURGE_PLAYBOOK,
+                                               logger=self.log,
+                                               result_pattern="",
+                                               params=extravars,
+                                               querystr_dict={"limit": limited})
+
+        # Filter to get the result
+        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
+                                                                 self.log)
+        playbook_operation.event_filter_list = ["playbook_on_stats"]
+
+        # Cleaning of inventory after a sucessful operation
+        clean_inventory = {}
+        clean_inventory[resource_group] = hosts_list
+        clean_inventory[group] = hosts_list
+        playbook_operation.clean_hosts_on_success = clean_inventory
+
+        # Execute the playbook
+        self.log.info("Removing service rgw for resource %s", zone)
+        self._launch_operation(playbook_operation)
+
+        return playbook_operation
+
     def _launch_operation(self, ansible_operation):
         """Launch the operation and add the operation to the completion objects
         ongoing
@@ -642,49 +830,105 @@ class Module(MgrModule, orchestrator.Orchestrator):
         self.all_completions.append(ansible_operation)
 
     def verify_config(self):
-        """ Verify configuration options for the Ansible orchestrator module
+        """Verify mandatory settings for the module and provide help to
+           configure properly the orchestrator
         """
-        client_msg = ""
 
-        if not self.get_module_option('server_url', ''):
-            msg = "No Ansible Runner Service base URL <server_name>:<port>." \
-            "Try 'ceph config set mgr mgr/{0}/server_url " \
+        # Retrieve TLS content to use and check them
+        # First try to get certiticate and key content for this manager instance
+        # ex: mgr/ansible/mgr0/[crt/key]
+        self.log.info("Tying to use configured specific certificate and key"
+                      "files for this server")
+        the_crt = self.get_store("{}/{}".format(self.get_mgr_id(), "crt"))
+        the_key = self.get_store("{}/{}".format(self.get_mgr_id(), "key"))
+        if the_crt is None or the_key is None:
+            # If not possible... try to get generic certificates and key content
+            # ex: mgr/ansible/[crt/key]
+            self.log.warning("Specific tls files for this manager not "\
+                             "configured, trying to use generic files")
+            the_crt = self.get_store("crt")
+            the_key = self.get_store("key")
+
+        if the_crt is None or the_key is None:
+            self.status_message = "No client certificate configured. Please "\
+                                  "set Ansible Runner Service client "\
+                                  "certificate and key:\n"\
+                                  "ceph ansible set-ssl-certificate-"\
+                                  "{key,certificate} -i <file>"
+            self.log.error(self.status_message)
+            return
+
+        # generate certificate temp files
+        self.client_cert_fname = generate_temp_file("crt", the_crt)
+        self.client_key_fname = generate_temp_file("key", the_key)
+
+        try:
+            verify_tls_files(self.client_cert_fname, self.client_key_fname)
+        except ServerConfigException as e:
+            self.status_message = str(e)
+
+        if self.status_message:
+            self.log.error(self.status_message)
+            return
+
+        # Check module options
+        if not self.get_module_option("server_location", ""):
+            self.status_message = "No Ansible Runner Service base URL "\
+            "<server_name>:<port>."\
+            "Try 'ceph config set mgr mgr/{0}/server_location "\
             "<server name/ip>:<port>'".format(self.module_name)
-            self.log.error(msg)
-            client_msg += msg
+            self.log.error(self.status_message)
+            return
 
-        if not self.get_module_option('username', ''):
-            msg = "No Ansible Runner Service user. " \
-            "Try 'ceph config set mgr mgr/{0}/username " \
-            "<string value>'".format(self.module_name)
-            self.log.error(msg)
-            client_msg += msg
 
-        if not self.get_module_option('password', ''):
-            msg = "No Ansible Runner Service User password. " \
-            "Try 'ceph config set mgr mgr/{0}/password " \
-            "<string value>'".format(self.module_name)
-            self.log.error(msg)
-            client_msg += msg
-
-        if not self.get_module_option('verify_server', ''):
-            msg = "TLS server identity verification is enabled by default." \
-            "Use 'ceph config set mgr mgr/{0}/verify_server False' " \
-            "to disable it. Use 'ceph config set mgr mgr/{0}/verify_server " \
-            "<path>' to point the CA bundle path used for " \
+        if self.get_module_option("verify_server", True):
+            self.status_message = "TLS server identity verification is enabled"\
+            " by default.Use 'ceph config set mgr mgr/{0}/verify_server False'"\
+            "to disable it.Use 'ceph config set mgr mgr/{0}/ca_bundle <path>'"\
+            "to point an alternative CA bundle path used for TLS server "\
             "verification".format(self.module_name)
-            self.log.error(msg)
-            client_msg += msg
+            self.log.error(self.status_message)
+            return
 
-        if client_msg:
-            # Raise error
-            # TODO: Use OrchestratorValidationError
-            raise Exception(client_msg)
+        # Everything ok
+        self.status_message = ""
 
 
+    #---------------------------------------------------------------------------
+    # Ansible Orchestrator self-owned commands
+    #---------------------------------------------------------------------------
+    @CLIWriteCommand("ansible set-ssl-certificate",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_tls_certificate(self, mgr_id=None, inbuf=None):
+        """Load tls certificate in mon k-v store
+        """
+        if inbuf is None:
+            return -errno.EINVAL, \
+                   'Please specify the certificate file with "-i" option', ''
+        if mgr_id is not None:
+            self.set_store("{}/crt".format(mgr_id), inbuf)
+        else:
+            self.set_store("crt", inbuf)
+        return 0, "SSL certificate updated", ""
+
+    @CLIWriteCommand("ansible set-ssl-certificate-key",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_tls_certificate_key(self, mgr_id=None, inbuf=None):
+        """Load tls certificate key in mon k-v store
+        """
+        if inbuf is None:
+            return -errno.EINVAL, \
+                   'Please specify the certificate key file with "-i" option', \
+                   ''
+        if mgr_id is not None:
+            self.set_store("{}/key".format(mgr_id), inbuf)
+        else:
+            self.set_store("key", inbuf)
+        return 0, "SSL certificate key updated", ""
 
 # Auxiliary functions
 #==============================================================================
+
 def dg_2_ansible(drive_group):
     """ Transform a drive group especification into:
 
@@ -727,3 +971,29 @@ def dg_2_ansible(drive_group):
     #osd_spec["osd_objectstore"] = drive_group.objectstore
 
     return host, osd_spec
+
+
+def generate_temp_file(key, content):
+    """ Generates a temporal file with the content passed as parameter
+
+    :param key    : used to build the temp file name
+    :param content: the content that will be dumped to file
+    :returns      : the name of the generated file
+    """
+
+    fname = ""
+
+    if content is not None:
+        fname = "{}/{}.tmp".format(tempfile.gettempdir(), key)
+        try:
+            if os.path.exists(fname):
+                os.remove(fname)
+            with open(fname, "w") as text_file:
+                text_file.write(content)
+        except IOError as ex:
+            raise AnsibleRunnerServiceError("Cannot store TLS certificate/key"
+                                            " content: {}".format(str(ex)))
+
+    return fname
+
+

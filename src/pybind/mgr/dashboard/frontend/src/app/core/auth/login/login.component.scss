@@ -1,31 +1,60 @@
-@import '../../../../defaults';
+@import 'defaults';
 
 ::ng-deep .login {
-  height: 100%;
+  height: 100vh;
+  color: $color-login-row-text;
+  background-color: $color-login-row-bg;
+  margin: 0 -30px;
 
-  .row {
-    color: $color-login-row-text;
-    background-color: $color-login-row-bg;
+  header {
+    position: absolute;
+    width: 100vw;
+
+    .navbar {
+      padding: 1rem 2rem;
+
+      .dropdown-menu {
+        margin-top: 0.2rem;
+
+        li a {
+          &:hover {
+            background-color: $color-brand-teal;
+          }
+        }
+      }
+    }
   }
 
-  h1 {
-    margin-top: 0;
-    margin-bottom: 30px;
-  }
+  section {
+    display: inline-flex;
+    width: 100vw;
+    min-height: 100vh;
 
-  .btn-password,
-  .form-control {
+    h1 {
+      margin: 0 0 30px 0;
+    }
+
+    .btn-password,
+    .form-control {
+      color: $color-password-toggle-text;
+      background-color: $color-password-toggle-bg;
+    }
+
+    .btn-password:focus {
+      outline-color: $color-password-toggle-focus;
+    }
+  }
+}
+
+// This will override the colors applied by chrome
+@keyframes autofill {
+  to {
     color: $color-password-toggle-text;
     background-color: $color-password-toggle-bg;
   }
+}
 
-  .btn-password:focus {
-    outline-color: $color-password-toggle-focus;
-  }
-
-  .checkbox-primary input[type='checkbox']:checked + label::before,
-  .checkbox-primary input[type='radio']:checked + label::before {
-    background-color: $color-login-checkbox-bg;
-    border-color: $color-login-checkbox-border;
-  }
+input:-webkit-autofill {
+  animation-name: autofill;
+  animation-fill-mode: both;
 }

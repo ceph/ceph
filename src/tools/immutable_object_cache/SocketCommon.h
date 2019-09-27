@@ -22,6 +22,8 @@ static const int ASIO_ERROR_MSG_INCOMPLETE = 0X05;
 class ObjectCacheRequest;
 class CacheSession;
 
+typedef GenContextURef<ObjectCacheRequest*> CacheGenContextURef;
+
 typedef std::function<void(CacheSession*, ObjectCacheRequest*)> ProcessMsg;
 
 }  // namespace immutable_obj_cache

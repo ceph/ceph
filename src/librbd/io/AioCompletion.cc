@@ -95,15 +95,20 @@ void AioCompletion::complete() {
     // must destroy ImageCtx prior to invoking callback
     delete ictx;
     ictx = nullptr;
+    external_callback = false;
   }
 
   state = AIO_STATE_CALLBACK;
   if (complete_cb) {
-    complete_cb(rbd_comp, complete_arg);
+    if (external_callback) {
+      complete_external_callback();
+    } else {
+      complete_cb(rbd_comp, complete_arg);
+    }
   }
 
   if (ictx != nullptr && event_notify && ictx->event_socket.is_valid()) {
-    ictx->completed_reqs.push(this);
+    ictx->event_socket_completions.push(this);
     ictx->event_socket.notify();
   }
   state = AIO_STATE_COMPLETE;
@@ -240,6 +245,31 @@ ssize_t AioCompletion::get_return_value() {
   ssize_t r = rval;
   tracepoint(librbd, aio_get_return_value_exit, r);
   return r;
+}
+
+void AioCompletion::complete_external_callback() {
+  // ensure librbd external users never experience concurrent callbacks
+  // from multiple librbd-internal threads.
+  ictx->external_callback_completions.push(this);
+
+  while (true) {
+    if (ictx->external_callback_in_progress.exchange(true)) {
+      // another thread is concurrently invoking external callbacks
+      break;
+    }
+
+    AioCompletion* aio_comp;
+    while (ictx->external_callback_completions.pop(aio_comp)) {
+      aio_comp->complete_cb(aio_comp->rbd_comp, aio_comp->complete_arg);
+    }
+
+    ictx->external_callback_in_progress.store(false);
+    if (ictx->external_callback_completions.empty()) {
+      // queue still empty implies we didn't have a race between the last failed
+      // pop and resetting the in-progress state
+      break;
+    }
+  }
 }
 
 } // namespace io

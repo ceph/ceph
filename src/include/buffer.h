@@ -73,9 +73,6 @@ class packet;
 }
 #endif // HAVE_SEASTAR
 class deleter;
-template<uint8_t S>
-struct sha_digest_t;
-using sha1_digest_t = sha_digest_t<20>;
 
 template<typename T> class DencDumper;
 
@@ -102,6 +99,8 @@ struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
 };
 
 namespace buffer CEPH_BUFFER_API {
+inline namespace v14_2_0 {
+
   /*
    * exceptions
    */
@@ -180,8 +179,6 @@ namespace buffer CEPH_BUFFER_API {
   /// destructed on this cpu
   raw* create(seastar::temporary_buffer<char>&& buf);
 #endif
-
-inline namespace v14_2_0 {
 
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
@@ -1041,6 +1038,7 @@ inline namespace v14_2_0 {
     }
 
     bool contents_equal(const buffer::list& other) const;
+    bool contents_equal(const void* other, size_t length) const;
 
     bool is_provided_buffer(const char *dst) const;
     bool is_aligned(unsigned align) const;
@@ -1230,7 +1228,6 @@ inline namespace v14_2_0 {
     }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
-    sha1_digest_t sha1();
 
     // These functions return a bufferlist with a pointer to a single
     // static buffer. They /must/ not outlive the memory they
@@ -1300,7 +1297,7 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 
 std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
-std::ostream& operator<<(std::ostream& out, const raw &r);
+std::ostream& operator<<(std::ostream& out, const buffer::raw &r);
 
 std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 

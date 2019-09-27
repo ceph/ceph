@@ -669,8 +669,8 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, trash_undelete_enter, io_ctx.get_pool_name().c_str(),
                io_ctx.get_id(), id, name);
-    int r = librbd::api::Trash<>::restore(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER,
-                                          id, name);
+    int r = librbd::api::Trash<>::restore(
+      io_ctx, librbd::api::Trash<>::RESTORE_SOURCE_WHITELIST, id, name);
     tracepoint(librbd, trash_undelete_exit, r);
     return r;
   }
@@ -868,8 +868,29 @@ namespace librbd {
     return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
   }
 
+  int RBD::mirror_site_name_get(librados::Rados& rados,
+                                std::string* site_name) {
+    return librbd::api::Mirror<>::site_name_get(rados, site_name);
+  }
+
+  int RBD::mirror_site_name_set(librados::Rados& rados,
+                                const std::string& site_name) {
+    return librbd::api::Mirror<>::site_name_set(rados, site_name);
+  }
+
   int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
     return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
+  }
+
+  int RBD::mirror_peer_bootstrap_create(IoCtx& io_ctx, std::string* token) {
+    return librbd::api::Mirror<>::peer_bootstrap_create(io_ctx, token);
+  }
+
+  int RBD::mirror_peer_bootstrap_import(IoCtx& io_ctx,
+                                        rbd_mirror_peer_direction_t direction,
+                                        const std::string& token) {
+    return librbd::api::Mirror<>::peer_bootstrap_import(io_ctx, direction,
+                                                        token);
   }
 
   int RBD::mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
@@ -1155,8 +1176,10 @@ namespace librbd {
 
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
   {
-    pc = reinterpret_cast<void*>(librbd::io::AioCompletion::create(
-      cb_arg, complete_cb, this));
+    auto aio_comp = librbd::io::AioCompletion::create(
+      cb_arg, complete_cb, this);
+    aio_comp->external_callback = true;
+    pc = reinterpret_cast<void*>(aio_comp);
   }
 
   bool RBD::AioCompletion::is_complete()
@@ -1428,7 +1451,7 @@ namespace librbd {
     tracepoint(librbd, get_access_timestamp_enter, ictx, ictx->name.c_str(),
                ictx->read_only);
     {
-      RWLock::RLocker timestamp_locker(ictx->timestamp_lock);
+      std::shared_lock timestamp_locker{ictx->timestamp_lock};
       utime_t time = ictx->get_access_timestamp();
       time.to_timespec(timestamp);
     }
@@ -1442,7 +1465,7 @@ namespace librbd {
     tracepoint(librbd, get_modify_timestamp_enter, ictx, ictx->name.c_str(),
                ictx->read_only);
     {
-      RWLock::RLocker timestamp_locker(ictx->timestamp_lock);
+      std::shared_lock timestamp_locker{ictx->timestamp_lock};
       utime_t time = ictx->get_modify_timestamp();
       time.to_timespec(timestamp);
     }
@@ -1485,7 +1508,7 @@ namespace librbd {
   int64_t Image::get_data_pool_id()
   {
     ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
-    return ictx->data_ctx.get_id();
+    return librbd::api::Image<>::get_data_pool_id(ictx);
   }
 
   int Image::parent_info(string *parent_pool_name, string *parent_name,
@@ -2230,7 +2253,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-    if (len > std::numeric_limits<int32_t>::max()) {
+    if (len > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
         tracepoint(librbd, discard_exit, -EINVAL);
         return -EINVAL;
     }
@@ -2247,7 +2270,7 @@ namespace librbd {
                ictx->read_only, ofs, len, bl.length() <= 0 ? NULL : bl.c_str(), bl.length(),
                op_flags);
     if (bl.length() <= 0 || len % bl.length() ||
-        len > std::numeric_limits<int>::max()) {
+        len > static_cast<size_t>(std::numeric_limits<int>::max())) {
       tracepoint(librbd, writesame_exit, -EINVAL);
       return -EINVAL;
     }
@@ -2716,6 +2739,34 @@ extern "C" int rbd_image_options_is_empty(rbd_image_options_t opts)
 }
 
 /* pool mirroring */
+extern "C" int rbd_mirror_site_name_get(rados_t cluster, char *name,
+                                        size_t *max_len) {
+  librados::Rados rados;
+  librados::Rados::from_rados_t(cluster, rados);
+
+  std::string site_name;
+  int r = librbd::api::Mirror<>::site_name_get(rados, &site_name);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = site_name.size() + 1;
+  if (*max_len < total_len) {
+    *max_len = total_len;
+    return -ERANGE;
+  }
+  *max_len = total_len;
+
+  strcpy(name, site_name.c_str());
+  return 0;
+}
+
+extern "C" int rbd_mirror_site_name_set(rados_t cluster, const char *name) {
+  librados::Rados rados;
+  librados::Rados::from_rados_t(cluster, rados);
+  return librbd::api::Mirror<>::site_name_set(rados, name);
+}
+
 extern "C" int rbd_mirror_mode_get(rados_ioctx_t p,
                                    rbd_mirror_mode_t *mirror_mode) {
   librados::IoCtx io_ctx;
@@ -2728,6 +2779,37 @@ extern "C" int rbd_mirror_mode_set(rados_ioctx_t p,
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
+}
+
+extern "C" int rbd_mirror_peer_bootstrap_create(rados_ioctx_t p, char *token,
+                                                size_t *max_len) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::string token_str;
+  int r = librbd::api::Mirror<>::peer_bootstrap_create(io_ctx, &token_str);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = token_str.size() + 1;
+  if (*max_len < total_len) {
+    *max_len = total_len;
+    return -ERANGE;
+  }
+  *max_len = total_len;
+
+  strcpy(token, token_str.c_str());
+  return 0;
+}
+
+extern "C" int rbd_mirror_peer_bootstrap_import(
+    rados_ioctx_t p, rbd_mirror_peer_direction_t direction,
+    const char *token) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  return librbd::api::Mirror<>::peer_bootstrap_import(io_ctx, direction, token);
 }
 
 extern "C" int rbd_mirror_peer_add(rados_ioctx_t p, char *uuid,
@@ -3329,8 +3411,8 @@ extern "C" int rbd_trash_restore(rados_ioctx_t p, const char *id,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, trash_undelete_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), id, name);
-  int r = librbd::api::Trash<>::restore(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER,
-                                        id, name);
+  int r = librbd::api::Trash<>::restore(
+      io_ctx, librbd::api::Trash<>::RESTORE_SOURCE_WHITELIST, id, name);
   tracepoint(librbd, trash_undelete_exit, r);
   return r;
 }
@@ -4259,7 +4341,7 @@ extern "C" int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
 extern "C" int64_t rbd_get_data_pool_id(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx *>(image);
-  return ictx->data_ctx.get_id();
+  return librbd::api::Image<>::get_data_pool_id(ictx);
 }
 
 extern "C" int rbd_get_parent_info(rbd_image_t image,
@@ -5147,7 +5229,7 @@ extern "C" int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-  if (len > std::numeric_limits<int>::max()) {
+  if (len > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
     tracepoint(librbd, discard_exit, -EINVAL);
     return -EINVAL;
   }
@@ -5166,7 +5248,7 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
              ictx->read_only, ofs, len, data_len == 0 ? NULL : buf, data_len, op_flags);
 
   if (data_len == 0 || len % data_len ||
-      len > std::numeric_limits<int>::max()) {
+      len > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
     tracepoint(librbd, writesame_exit, -EINVAL);
     return -EINVAL;
   }

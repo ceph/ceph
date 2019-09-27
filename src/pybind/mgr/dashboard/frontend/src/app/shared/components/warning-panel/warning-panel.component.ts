@@ -1,4 +1,5 @@
 import { Component, Input } from '@angular/core';
+import { Icons } from '../../../shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-warning-panel',
@@ -12,4 +13,6 @@ export class WarningPanelComponent {
    */
   @Input()
   title = 'Warning';
+
+  icons = Icons;
 }

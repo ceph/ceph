@@ -448,7 +448,7 @@ class Module(MgrModule):
                     self.log.exception("RADOS error reading omap: {0}".format(e))
                     raise
 
-        return 0, json.dumps(res, indent=4), ''
+        return 0, json.dumps(res, indent=4, sort_keys=True), ''
 
     def check_health(self):
         self.log.info('Check health')
@@ -553,6 +553,7 @@ class Module(MgrModule):
                 checks[warning] = {
                     'severity': 'warning',
                     'summary': HEALTH_MESSAGES[warning] % n,
+                    'count': len(ls),
                     'detail': ls,
                 }
         self.set_health_checks(checks)
@@ -631,3 +632,7 @@ class Module(MgrModule):
                 return self.remote(plugin_name, 'predict_all_devices')
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
+
+    def gather_device_report(self):
+        # write me
+        return {}

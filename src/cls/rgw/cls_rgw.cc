@@ -283,7 +283,11 @@ static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_ke
   }
 
   string obj_index_key;
-  encode_obj_index_key(key, &obj_index_key);
+  cls_rgw_obj_key tmp_key(key);
+  if (tmp_key.instance == "null") {
+    tmp_key.instance.clear();
+  }
+  encode_obj_versioned_data_key(tmp_key, &obj_index_key);
 
   rgw_bucket_dir_entry entry;
 
@@ -433,7 +437,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     if (rc < 0)
       return rc;
 
-    std::map<string, rgw_bucket_dir_entry>& m = new_dir.m;
+    auto& m = new_dir.m;
 
     done = keys.empty();
 
@@ -711,30 +715,10 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   info.op = op.op;
   entry.pending_map.insert(pair<string, rgw_bucket_pending_info>(op.tag, info));
 
-  rgw_bucket_dir_header header;
-  rc = read_bucket_header(hctx, &header);
-  if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_prepare_op(): failed to read header\n");
-    return rc;
-  }
-
-  if (op.log_op && !header.syncstopped) {
-    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
-                             entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
-    if (rc < 0)
-      return rc;
-  }
-
   // write out new key to disk
   bufferlist info_bl;
   encode(entry, info_bl);
-  rc = cls_cxx_map_set_val(hctx, idx, &info_bl);
-  if (rc < 0)
-    return rc;
-
-  if (op.log_op && !header.syncstopped)
-    return write_bucket_header(hctx, &header);
-  return 0;
+  return cls_cxx_map_set_val(hctx, idx, &info_bl);
 }
 
 static void unaccount_entry(rgw_bucket_dir_header& header,
@@ -890,23 +874,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   bufferlist op_bl;
   if (cancel) {
-    if (op.log_op && !header.syncstopped) {
-      rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
-      if (rc < 0)
-        return rc;
-    }
-
     if (op.tag.size()) {
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
-      rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-      if (rc < 0)
-        return rc;
-    }
-
-    if (op.log_op && !header.syncstopped) {
-      return write_bucket_header(hctx, &header);
+      return cls_cxx_map_set_val(hctx, idx, &new_key_bl);
     }
     return 0;
   }
@@ -2737,35 +2708,6 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
-static int bi_log_list_trim_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
-{
-  list<rgw_bi_log_entry> *entries = (list<rgw_bi_log_entry> *)param;
-
-  entries->push_back(info);
-  return 0;
-}
-
-static int bi_log_remove_entry(cls_method_context_t hctx, rgw_bi_log_entry& entry)
-{
-  string key;
-  key = BI_PREFIX_CHAR;
-  key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
-  key.append(entry.id);
-  return cls_cxx_map_remove_key(hctx, key);
-}
-
-static int bi_log_list_trim_entries(cls_method_context_t hctx,
-                                    const string& start_marker, const string& end_marker,
-			            list<rgw_bi_log_entry>& entries, bool *truncated)
-{
-  string key_iter;
-#define MAX_TRIM_ENTRIES 1000 /* max entries to trim in a single operation */
-  int ret = bi_log_iterate_entries(hctx, start_marker, end_marker,
-                              key_iter, MAX_TRIM_ENTRIES, truncated,
-                              bi_log_list_trim_cb, &entries);
-  return ret;
-}
-
 static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
@@ -2778,26 +2720,52 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-  cls_rgw_bi_log_list_ret op_ret;
-  list<rgw_bi_log_entry> entries;
-#define MAX_TRIM_ENTRIES 1000 /* don't do more than that in a single operation */
-  bool truncated;
-  int ret = bi_log_list_trim_entries(hctx, op.start_marker, op.end_marker, entries, &truncated);
-  if (ret < 0)
-    return ret;
+  string key_begin(1, BI_PREFIX_CHAR);
+  key_begin.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+  key_begin.append(op.start_marker);
 
-  if (entries.empty())
-    return -ENODATA;
-
-  list<rgw_bi_log_entry>::iterator iter;
-  for (iter = entries.begin(); iter != entries.end(); ++iter) {
-    rgw_bi_log_entry& entry = *iter;
-
-    ret = bi_log_remove_entry(hctx, entry);
-    if (ret < 0)
-      return ret;
+  string key_end;
+  if (op.end_marker.empty()) {
+    key_end = BI_PREFIX_CHAR;
+    key_end.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX + 1]);
+  } else {
+    key_end = BI_PREFIX_CHAR;
+    key_end.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+    key_end.append(op.end_marker);
+    // cls_cxx_map_remove_range() expects one-past-end
+    key_end.append(1, '\0');
   }
 
+  // list a single key to detect whether the range is empty
+  const size_t max_entries = 1;
+  std::set<std::string> keys;
+  bool more = false;
+
+  int rc = cls_cxx_map_get_keys(hctx, key_begin, max_entries, &keys, &more);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_get_keys failed rc=%d", rc);
+    return rc;
+  }
+
+  if (keys.empty()) {
+    CLS_LOG(20, "range is empty key_begin=%s", key_begin.c_str());
+    return -ENODATA;
+  }
+
+  const std::string& first_key = *keys.begin();
+  if (key_end < first_key) {
+    CLS_LOG(20, "listed key %s past key_end=%s", first_key.c_str(), key_end.c_str());
+    return -ENODATA;
+  }
+
+  CLS_LOG(20, "listed key %s, removing through %s",
+          first_key.c_str(), key_end.c_str());
+
+  rc = cls_cxx_map_remove_range(hctx, first_key, key_end);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_remove_range failed rc=%d", rc);
+    return rc;
+  }
   return 0;
 }
 
@@ -3151,7 +3119,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   string iter;
   bool more;
   bool found = false;
-#define MAX_USAGE_TRIM_ENTRIES 128
+#define MAX_USAGE_TRIM_ENTRIES 1000
   ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
   if (ret < 0)
     return ret;

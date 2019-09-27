@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class NfsPage {
-  navigateTo() {
-    return browser.get('/#/nfs');
-  }
+export class NfsPageHelper extends PageHelper {
+  pages = { index: '/#/nfs' };
 }

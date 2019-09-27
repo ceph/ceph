@@ -25,12 +25,11 @@
 
 int EpollDriver::init(EventCenter *c, int nevent)
 {
-  events = (struct epoll_event*)malloc(sizeof(struct epoll_event)*nevent);
+  events = (struct epoll_event*)calloc(nevent, sizeof(struct epoll_event));
   if (!events) {
     lderr(cct) << __func__ << " unable to malloc memory. " << dendl;
     return -ENOMEM;
   }
-  memset(events, 0, sizeof(struct epoll_event)*nevent);
 
   epfd = epoll_create(1024); /* 1024 is just an hint for the kernel */
   if (epfd == -1) {
@@ -47,7 +46,7 @@ int EpollDriver::init(EventCenter *c, int nevent)
     return -e;
   }
 
-  size = nevent;
+  this->nevent = nevent;
 
   return 0;
 }
@@ -121,23 +120,22 @@ int EpollDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval
 {
   int retval, numevents = 0;
 
-  retval = epoll_wait(epfd, events, size,
+  retval = epoll_wait(epfd, events, nevent,
                       tvp ? (tvp->tv_sec*1000 + tvp->tv_usec/1000) : -1);
   if (retval > 0) {
-    int j;
-
     numevents = retval;
     fired_events.resize(numevents);
-    for (j = 0; j < numevents; j++) {
+
+    for (int event_id = 0; event_id < numevents; event_id++) {
       int mask = 0;
-      struct epoll_event *e = events + j;
+      struct epoll_event *e = &events[event_id];
 
       if (e->events & EPOLLIN) mask |= EVENT_READABLE;
       if (e->events & EPOLLOUT) mask |= EVENT_WRITABLE;
       if (e->events & EPOLLERR) mask |= EVENT_READABLE|EVENT_WRITABLE;
       if (e->events & EPOLLHUP) mask |= EVENT_READABLE|EVENT_WRITABLE;
-      fired_events[j].fd = e->data.fd;
-      fired_events[j].mask = mask;
+      fired_events[event_id].fd = e->data.fd;
+      fired_events[event_id].mask = mask;
     }
   }
   return numevents;

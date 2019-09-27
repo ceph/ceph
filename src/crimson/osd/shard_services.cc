@@ -27,16 +27,19 @@ namespace {
 namespace ceph::osd {
 
 ShardServices::ShardServices(
+  OSDMapService &osdmap_service,
   ceph::net::Messenger &cluster_msgr,
   ceph::net::Messenger &public_msgr,
   ceph::mon::Client &monc,
   ceph::mgr::Client &mgrc,
   ceph::os::FuturizedStore &store)
-    : cluster_msgr(cluster_msgr),
+    : osdmap_service(osdmap_service),
+      cluster_msgr(cluster_msgr),
       public_msgr(public_msgr),
       monc(monc),
       mgrc(mgrc),
-      store(store) {
+      store(store)
+{
   perf = build_osd_logger(&cct);
   cct.get_perfcounters_collection()->add(perf);
 
@@ -46,7 +49,12 @@ ShardServices::ShardServices(
 
 seastar::future<> ShardServices::send_to_osd(
   int peer, Ref<Message> m, epoch_t from_epoch) {
-  if (osdmap->is_down(peer) || osdmap->get_info(peer).up_from > from_epoch) {
+  if (osdmap->is_down(peer)) {
+    logger().info("{}: osd.{} is_down", __func__, peer);
+    return seastar::now();
+  } else if (osdmap->get_info(peer).up_from > from_epoch) {
+    logger().info("{}: osd.{} {} > {}", __func__, peer,
+		    osdmap->get_info(peer).up_from, from_epoch);
     return seastar::now();
   } else {
     return cluster_msgr.connect(osdmap->get_cluster_addrs(peer).front(),
@@ -67,36 +75,17 @@ seastar::future<> ShardServices::dispatch_context_transaction(
 }
 
 seastar::future<> ShardServices::dispatch_context_messages(
-  PeeringCtx &ctx)
+  BufferedRecoveryMessages &&ctx)
 {
-  auto ret = seastar::when_all_succeed(
-    seastar::parallel_for_each(std::move(ctx.notify_list),
-      [this](auto& osd_notifies) {
-	auto& [peer, notifies] = osd_notifies;
-	auto m = make_message<MOSDPGNotify>(osdmap->get_epoch(),
-					    std::move(notifies));
-	logger().debug("dispatch_context_messages sending notify to {}", peer);
-	return send_to_osd(peer, m, osdmap->get_epoch());
-      }),
-    seastar::parallel_for_each(std::move(ctx.query_map),
-      [this](auto& osd_queries) {
-	auto& [peer, queries] = osd_queries;
-	auto m = make_message<MOSDPGQuery>(osdmap->get_epoch(),
-					   std::move(queries));
-	logger().debug("dispatch_context_messages sending query to {}", peer);
-	return send_to_osd(peer, m, osdmap->get_epoch());
-      }),
-    seastar::parallel_for_each(std::move(ctx.info_map),
-      [this](auto& osd_infos) {
-	auto& [peer, infos] = osd_infos;
-	auto m = make_message<MOSDPGInfo>(osdmap->get_epoch(),
-					  std::move(infos));
-	logger().debug("dispatch_context_messages sending info to {}", peer);
-	return send_to_osd(peer, m, osdmap->get_epoch());
-      }));
-  ctx.notify_list.clear();
-  ctx.query_map.clear();
-  ctx.info_map.clear();
+  auto ret = seastar::parallel_for_each(std::move(ctx.message_map),
+    [this](auto& osd_messages) {
+      auto& [peer, messages] = osd_messages;
+      logger().debug("dispatch_context_messages sending messages to {}", peer);
+      return seastar::parallel_for_each(std::move(messages), [=](auto& m) {
+        return send_to_osd(peer, m, osdmap->get_epoch());
+      });
+    });
+  ctx.message_map.clear();
   return ret;
 }
 
@@ -105,13 +94,9 @@ seastar::future<> ShardServices::dispatch_context(
   PeeringCtx &&ctx)
 {
   ceph_assert(col || ctx.transaction.empty());
-  return seastar::do_with(
-    PeeringCtx{ctx},
-    [this, col](auto& todo) {
-      return seastar::when_all_succeed(
-	dispatch_context_messages(todo),
-	col ? dispatch_context_transaction(col, todo) : seastar::now());
-    });
+  return seastar::when_all_succeed(
+    dispatch_context_messages(BufferedRecoveryMessages(ctx)),
+    col ? dispatch_context_transaction(col, ctx) : seastar::now());
 }
 
 void ShardServices::queue_want_pg_temp(pg_t pgid,
@@ -168,10 +153,10 @@ std::ostream& operator<<(
   return out;
 }
 
-void ShardServices::send_pg_temp()
+seastar::future<> ShardServices::send_pg_temp()
 {
   if (pg_temp_wanted.empty())
-    return;
+    return seastar::now();
   logger().debug("{}: {}", __func__, pg_temp_wanted);
   boost::intrusive_ptr<MOSDPGTemp> ms[2] = {nullptr, nullptr};
   for (auto& [pgid, pg_temp] : pg_temp_wanted) {
@@ -182,12 +167,26 @@ void ShardServices::send_pg_temp()
     }
     m->pg_temp.emplace(pgid, pg_temp.acting);
   }
-  for (auto &m : ms) {
-    if (m) {
-      monc.send_message(m);
-    }
-  }
-  _sent_pg_temp();
+  return seastar::parallel_for_each(std::begin(ms), std::end(ms),
+    [this](auto m) {
+      if (m) {
+	return monc.send_message(m);
+      } else {
+	return seastar::now();
+      }
+    }).then([this] {
+      _sent_pg_temp();
+    });
+}
+
+void ShardServices::update_map(cached_map_t new_osdmap)
+{
+  osdmap = std::move(new_osdmap);
+}
+
+ShardServices::cached_map_t &ShardServices::get_osdmap()
+{
+  return osdmap;
 }
 
 seastar::future<> ShardServices::send_pg_created(pg_t pgid)
@@ -196,7 +195,7 @@ seastar::future<> ShardServices::send_pg_created(pg_t pgid)
   auto o = get_osdmap();
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   pg_created.insert(pgid);
-  return monc.send_message(new MOSDPGCreated(pgid));
+  return monc.send_message(make_message<MOSDPGCreated>(pgid));
 }
 
 seastar::future<> ShardServices::send_pg_created()
@@ -206,7 +205,7 @@ seastar::future<> ShardServices::send_pg_created()
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   return seastar::parallel_for_each(pg_created,
     [this](auto &pgid) {
-      return monc.send_message(new MOSDPGCreated(pgid));
+      return monc.send_message(make_message<MOSDPGCreated>(pgid));
     });
 }
 
@@ -225,6 +224,23 @@ void ShardServices::prune_pg_created()
       ++i;
     }
   }
+}
+
+seastar::future<> ShardServices::osdmap_subscribe(version_t epoch, bool force_request)
+{
+  logger().info("{}({})", __func__, epoch);
+  if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
+      force_request) {
+    return monc.renew_subs();
+  } else {
+    return seastar::now();
+  }
+}
+
+HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
+{
+#warning writeme
+  return HeartbeatStampsRef();
 }
 
 };

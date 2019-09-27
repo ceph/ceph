@@ -1,20 +1,20 @@
 <div class="modal-header">
   <h4 i18n="form title|Example: Create Pool@@formTitle"
-      class="modal-title pull-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+      class="modal-title float-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+
   <button type="button"
-          class="close pull-right"
+          class="close float-right"
           aria-label="Close"
           (click)="bsModalRef.hide()">
     <span aria-hidden="true">&times;</span>
   </button>
 </div>
 <div class="modal-body">
-  <form class="form-horizontal"
-        novalidate>
+  <form novalidate>
 
     <!-- Username -->
-    <div class="form-group">
-      <label class="control-label col-sm-3"
+    <div class="form-group row">
+      <label class="col-form-label col-sm-3"
              for="user"
              i18n>Username</label>
       <div class="col-sm-9">
@@ -28,8 +28,8 @@
     </div>
 
     <!-- Secret key -->
-    <div class="form-group">
-      <label class="control-label col-sm-3"
+    <div class="form-group row">
+      <label class="col-form-label col-sm-3"
              for="secret_key"
              i18n>Secret key</label>
       <div class="col-sm-9">
@@ -40,13 +40,13 @@
                  type="password"
                  [(ngModel)]="secret_key"
                  [readonly]="true">
-          <span class="input-group-btn">
+          <span class="input-group-append">
             <button type="button"
-                    class="btn btn-default"
+                    class="btn btn-light"
                     cdPasswordButton="secret_key">
             </button>
             <button type="button"
-                    class="btn btn-default"
+                    class="btn btn-light"
                     cdCopy2ClipboardButton="secret_key">
             </button>
           </span>

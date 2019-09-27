@@ -384,6 +384,12 @@ class TestIoctx(object):
             stored_xattrs[key] = value
         eq(stored_xattrs, xattrs)
 
+    def test_get_pool_id(self):
+        eq(self.ioctx.get_pool_id(), self.rados.pool_lookup('test_pool'))
+
+    def test_get_pool_name(self):
+        eq(self.ioctx.get_pool_name(), 'test_pool')
+
     def test_create_snap(self):
         assert_raises(ObjectNotFound, self.ioctx.remove_snap, 'foo')
         self.ioctx.create_snap('foo')
@@ -875,8 +881,11 @@ class TestIoctx(object):
         assert_raises(Error, self.ioctx.application_metadata_set, "dne", "key",
                       "key")
         self.ioctx.application_metadata_set("app1", "key1", "val1")
+        eq("val1", self.ioctx.application_metadata_get("app1", "key1"))
         self.ioctx.application_metadata_set("app1", "key2", "val2")
+        eq("val2", self.ioctx.application_metadata_get("app1", "key2"))
         self.ioctx.application_metadata_set("app2", "key1", "val1")
+        eq("val1", self.ioctx.application_metadata_get("app2", "key1"))
 
         eq([("key1", "val1"), ("key2", "val2")],
            self.ioctx.application_metadata_list("app1"))

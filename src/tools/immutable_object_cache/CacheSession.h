@@ -33,7 +33,7 @@ class CacheSession : public std::enable_shared_from_this<CacheSession> {
                           const boost::system::error_code& err,
                           size_t bytes_transferred);
   void process(ObjectCacheRequest* req);
-  void fault();
+  void fault(const boost::system::error_code& ec);
   void send(ObjectCacheRequest* msg);
 
  private:

@@ -2,6 +2,7 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -13,10 +14,11 @@ import { AboutComponent } from '../about/about.component';
   styleUrls: ['./dashboard-help.component.scss']
 })
 export class DashboardHelpComponent implements OnInit {
-  @ViewChild('docsForm')
+  @ViewChild('docsForm', { static: true })
   docsFormElement;
   docsUrl: string;
   modalRef: BsModalRef;
+  icons = Icons;
 
   constructor(
     private summaryService: SummaryService,
@@ -42,6 +44,7 @@ export class DashboardHelpComponent implements OnInit {
 
   openAboutModal() {
     this.modalRef = this.modalService.show(AboutComponent);
+    this.modalRef.setClass('modal-lg');
   }
 
   goToApiDocs() {

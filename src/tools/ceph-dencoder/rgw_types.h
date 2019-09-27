@@ -4,6 +4,7 @@
 TYPE(RGWOLHInfo)
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
+TYPE(objexp_hint_entry)
 
 #include "rgw/rgw_zone.h"
 TYPE(RGWZoneParams)
@@ -108,7 +109,6 @@ TYPE(RGWUserInfo)
 TYPE(rgw_bucket)
 TYPE(RGWBucketInfo)
 TYPE(RGWBucketEnt)
-TYPE(RGWUploadPartInfo)
 TYPE(rgw_obj)
 
 #include "rgw/rgw_log.h"
@@ -118,6 +118,9 @@ TYPE(rgw_log_entry)
 TYPE(rgw_meta_sync_info)
 TYPE(rgw_meta_sync_marker)
 TYPE(rgw_meta_sync_status)
+
+#include "rgw/rgw_multi.h"
+TYPE(RGWUploadPartInfo)
 
 #include "rgw/rgw_data_sync.h"
 TYPE(rgw_data_sync_info)

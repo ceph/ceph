@@ -18,7 +18,7 @@ export class TablePerformanceCounterComponent implements OnInit {
   columns: Array<CdTableColumn> = [];
   counters: Array<object> = [];
 
-  @ViewChild('valueTpl')
+  @ViewChild('valueTpl', { static: false })
   public valueTpl: TemplateRef<any>;
 
   /**

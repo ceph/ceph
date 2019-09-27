@@ -3,8 +3,7 @@
 #ifndef CACHE_TEST_COMMON_H
 #define CACHE_TEST_COMMON_H
 
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include <pthread.h>
 
 class WaitEvent {
 public:

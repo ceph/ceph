@@ -9,14 +9,14 @@
 Synopsis
 ========
 
-| **mount.ceph** *monaddr1*\ [,\ *monaddr2*\ ,...]:/[*subdir*] *dir* [
+| **mount.ceph** [*monaddr1*\ ,\ *monaddr2*\ ,...]:/[*subdir*] *dir* [
   -o *options* ]
 
 
 Description
 ===========
 
-**mount.ceph** is a simple helper for mounting the Ceph file system on
+**mount.ceph** is a helper for mounting the Ceph file system on
 a Linux host. It serves to resolve monitor hostname(s) into IP
 addresses and read authentication keys from disk; the Linux kernel
 client component does most of the real work. In fact, it is possible
@@ -33,6 +33,10 @@ responsible monitor is needed to successfully mount; the client will
 learn about all monitors from any responsive monitor. However, it is a
 good idea to specify more than one in case one happens to be down at
 the time of mount.
+
+If the host portion of the device is left blank, then **mount.ceph** will
+attempt to determine monitor addresses using local configuration files
+and/or DNS SRV records.
 
 A subdirectory subdir may be specified if a subset of the file system
 is to be mounted.
@@ -126,6 +130,16 @@ Options
 :command:`noasyncreaddir`
   no dcache readdir
 
+:command:`conf`
+  Path to a ceph.conf file. This is used to initialize the ceph context
+  for autodiscovery of monitor addresses and auth secrets. The default is
+  to use the standard search path for ceph.conf files.
+
+Mount Secrets
+=============
+If the `secret` and `secretfile` options are not specified on the command-line
+then the mount helper will spawn a child process that will use the standard
+ceph library routines to find a keyring and fetch the secret from it.
 
 Examples
 ========
@@ -142,6 +156,10 @@ If :doc:`ceph-mon <ceph-mon>`\(8) is running on a non-standard
 port::
 
         mount.ceph monhost1:7000,monhost2:7000,monhost3:7000:/ /mnt/foo
+
+To automatically determine the monitor addresses from local configuration::
+
+        mount.ceph :/ /mnt/foo
 
 To mount only part of the namespace::
 

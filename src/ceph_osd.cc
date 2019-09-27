@@ -321,25 +321,21 @@ int main(int argc, const char **argv)
 
   if (mkkey) {
     common_init_finish(g_ceph_context);
-    KeyRing *keyring = KeyRing::create_empty();
-    if (!keyring) {
-      derr << "Unable to get a Ceph keyring." << dendl;
-      forker.exit(1);
-    }
+    KeyRing keyring;
 
     EntityName ename{g_conf()->name};
     EntityAuth eauth;
 
     std::string keyring_path = g_conf().get_val<std::string>("keyring");
-    int ret = keyring->load(g_ceph_context, keyring_path);
+    int ret = keyring.load(g_ceph_context, keyring_path);
     if (ret == 0 &&
-	keyring->get_auth(ename, eauth)) {
+	keyring.get_auth(ename, eauth)) {
       derr << "already have key in keyring " << keyring_path << dendl;
     } else {
       eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
-      keyring->add(ename, eauth);
+      keyring.add(ename, eauth);
       bufferlist bl;
-      keyring->encode_plaintext(bl);
+      keyring.encode_plaintext(bl);
       int r = bl.write_file(keyring_path.c_str(), 0600);
       if (r)
 	derr << TEXT_RED << " ** ERROR: writing new keyring to "

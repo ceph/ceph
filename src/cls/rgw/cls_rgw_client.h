@@ -9,10 +9,10 @@
 #include "cls_rgw_ops.h"
 #include "cls_rgw_const.h"
 #include "common/RefCountedObj.h"
+#include "common/strtol.h"
 #include "include/compat.h"
 #include "common/ceph_time.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 
 // Forward declaration
 class BucketIndexAioManager;
@@ -38,9 +38,9 @@ private:
   map<int, librados::AioCompletion*> completions;
   map<int, string> pending_objs;
   map<int, string> completion_objs;
-  int next;
-  Mutex lock;
-  Cond cond;
+  int next = 0;
+  ceph::mutex lock = ceph::make_mutex("BucketIndexAioManager::lock");
+  ceph::condition_variable cond;
   /*
    * Callback implementation for AIO request.
    */
@@ -73,8 +73,7 @@ public:
   /*
    * Create a new instance.
    */
-  BucketIndexAioManager() : next(0), lock("BucketIndexAioManager::lock") {}
-
+  BucketIndexAioManager() = default;
 
   /*
    * Do completion for the given AIO request.
@@ -98,7 +97,7 @@ public:
    * Do aio read operation.
    */
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectReadOperation *op) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
@@ -114,7 +113,7 @@ public:
    * Do aio write operation.
    */
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectWriteOperation *op) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
@@ -276,14 +275,14 @@ public:
         break;
     }
 
-    int num_completions, r = 0;
+    int num_completions = 0, r = 0;
     map<int, string> objs;
     map<int, string> *pobjs = (need_multiple_rounds() ? &objs : NULL);
     while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r, pobjs)) {
       if (r >= 0 && ret >= 0) {
-        for(int i = 0; i < num_completions && iter != objs_container.end(); ++i, ++iter) {
+        for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
           int issue_ret = issue_op(iter->first, iter->second);
-          if(issue_ret < 0) {
+          if (issue_ret < 0) {
             ret = issue_ret;
             break;
           }
@@ -295,6 +294,14 @@ public:
         // For those objects which need another round, use them to reset
         // the container
         reset_container(objs);
+        iter = objs_container.begin();
+        for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
+          int issue_ret = issue_op(iter->first, iter->second);
+          if (issue_ret < 0) {
+            ret = issue_ret;
+            break;
+          }
+        }
       }
     }
 
@@ -429,6 +436,10 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             bool list_versions,
                             rgw_cls_list_ret* result);
 
+void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
+                        const std::string& marker, uint32_t max,
+                        cls_rgw_bi_log_list_ret *pdata, int *ret = nullptr);
+
 class CLSRGWIssueBILogList : public CLSRGWConcurrentIO {
   map<int, cls_rgw_bi_log_list_ret>& result;
   BucketIndexShardsManager& marker_mgr;
@@ -442,6 +453,10 @@ public:
     CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(bi_log_lists),
     marker_mgr(_marker_mgr), max(_max) {}
 };
+
+void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
+                        const std::string& start_marker,
+                        const std::string& end_marker);
 
 class CLSRGWIssueBILogTrim : public CLSRGWConcurrentIO {
   BucketIndexShardsManager& start_marker_mgr;

@@ -2,9 +2,9 @@
   $ env CEPH_CONF=from-env ceph-conf -s foo bar
   did not load config file, using default settings.
   .* \-1 Errors while parsing config file! (re)
-  .* \-1 parse_file: cannot open from-env: \(2\) No such file or directory (re)
+  .* \-1 parse_file: filesystem error: .* file.size: (No such file or directory )?\[from-env\] (re)
   .* \-1 Errors while parsing config file! (re)
-  .* \-1 parse_file: cannot open from-env: \(2\) No such file or directory (re)
+  .* \-1 parse_file: filesystem error: .* file.size: (No such file or directory )?\[from-env\] (re)
   [1]
 
 # command-line arguments should override environment

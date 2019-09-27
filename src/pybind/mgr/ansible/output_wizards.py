@@ -5,8 +5,6 @@ Output wizards are used to process results in different ways in
 completion objects
 """
 
-# pylint: disable=bad-continuation
-
 import json
 
 
@@ -66,7 +64,7 @@ class ProcessInventory(OutputWizard):
         for event_key, dummy_data in inventory_events.items():
 
             event_response = self.ar_client.http_get(EVENT_DATA_URL %
-                            (operation_id, event_key))
+                                                     (operation_id, event_key))
 
             # self.pb_execution.play_uuid
 
@@ -99,16 +97,14 @@ class ProcessPlaybookResult(OutputWizard):
         """
         # Just making more readable the method
         inventory_events = raw_result
-
         result = ""
 
         # Loop over the result events and request the data
         for event_key, dummy_data in inventory_events.items():
             event_response = self.ar_client.http_get(EVENT_DATA_URL %
-                            (operation_id, event_key))
+                                                     (operation_id, event_key))
 
             result += event_response.text
-
         return result
 
 

@@ -4,38 +4,18 @@ Copyright (C) 2019 Red Hat, Inc.
 LGPL2.1.  See file COPYING.
 """
 
-import errno
 import logging
 import os
+import errno
 
 import cephfs
-import rados
 
+from .subvolspec import SubvolumeSpec
+from .exception import VolumeException
 
 log = logging.getLogger(__name__)
 
-# Reserved subvolume group name which we use in paths for subvolumes
-# that are not assigned to a group (i.e. created with group=None)
-NO_GROUP_NAME = "_nogroup"
-
-
-class SubvolumePath(object):
-    """
-    Identify a subvolume's path as group->subvolume
-    The Subvolume ID is a unique identifier, but this is a much more
-    helpful thing to pass around.
-    """
-    def __init__(self, group_id, subvolume_id):
-        self.group_id = group_id
-        self.subvolume_id = subvolume_id
-        assert self.group_id != NO_GROUP_NAME
-        assert self.subvolume_id != "" and self.subvolume_id is not None
-
-    def __str__(self):
-        return "{0}/{1}".format(self.group_id, self.subvolume_id)
-
-
-class SubvolumeClient(object):
+class SubVolume(object):
     """
     Combine libcephfs and librados interfaces to implement a
     'Subvolume' concept implemented as a cephfs directory.
@@ -52,160 +32,121 @@ class SubvolumeClient(object):
     or cephfs.Error exceptions in unexpected situations.
     """
 
-    # Where shall we create our subvolumes?
-    DEFAULT_SUBVOL_PREFIX = "/volumes"
-    DEFAULT_NS_PREFIX = "fsvolumens_"
 
-    def __init__(self, mgr, subvolume_prefix=None, pool_ns_prefix=None, fs_name=None):
-        self.fs = None
-        self.fs_name = fs_name
-        self.connected = False
-
+    def __init__(self, mgr, fs_handle):
+        self.fs = fs_handle
         self.rados = mgr.rados
 
-        self.subvolume_prefix = subvolume_prefix if subvolume_prefix else self.DEFAULT_SUBVOL_PREFIX
-        self.pool_ns_prefix = pool_ns_prefix if pool_ns_prefix else self.DEFAULT_NS_PREFIX
-
-    def _subvolume_path(self, subvolume_path):
+    def _get_single_dir_entry(self, dir_path, exclude=[]):
         """
-        Determine the path within CephFS where this subvolume will live
-        :return: absolute path (string)
+        Return a directory entry in a given directory excluding passed
+        in entries.
         """
-        return os.path.join(
-            self.subvolume_prefix,
-            subvolume_path.group_id if subvolume_path.group_id is not None else NO_GROUP_NAME,
-            subvolume_path.subvolume_id)
-
-    def _group_path(self, group_id):
-        """
-        Determine the path within CephFS where this subvolume group will live
-        :return: absolute path (string)
-        """
-        if group_id is None:
-            raise ValueError("group_id may not be None")
-
-        return os.path.join(
-            self.subvolume_prefix,
-            group_id
-        )
-
-    def connect(self):
-        log.debug("Connecting to cephfs...")
-        self.fs = cephfs.LibCephFS(rados_inst=self.rados)
-        log.debug("CephFS initializing...")
-        self.fs.init()
-        log.debug("CephFS mounting...")
-        self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
-        log.debug("Connection to cephfs complete")
-
-    def disconnect(self):
-        log.info("disconnect")
-        if self.fs:
-            log.debug("Disconnecting cephfs...")
-            self.fs.shutdown()
-            self.fs = None
-            log.debug("Disconnecting cephfs complete")
-
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.disconnect()
-
-    def __del__(self):
-        self.disconnect()
-
-    def _mkdir_p(self, path, mode=0o755):
+        exclude.extend((b".", b".."))
         try:
-            self.fs.stat(path)
-        except cephfs.ObjectNotFound:
-            pass
-        else:
-            return
+            with self.fs.opendir(dir_path) as d:
+                entry = self.fs.readdir(d)
+                while entry:
+                    if entry.d_name not in exclude and entry.is_dir():
+                        return entry.d_name
+                    entry = self.fs.readdir(d)
+            return None
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
-        parts = path.split(os.path.sep)
 
-        for i in range(1, len(parts) + 1):
-            subpath = os.path.join(*parts[0:i])
-            try:
-                self.fs.stat(subpath)
-            except cephfs.ObjectNotFound:
-                self.fs.mkdir(subpath, mode)
+    ### basic subvolume operations
 
-    def create_group(self, group_id, mode=0o755):
-        path = self._group_path(group_id)
-        self._mkdir_p(path, mode)
-
-    def delete_group(self, group_id):
-        path = self._group_path(group_id)
-        self.fs.rmdir(path)
-
-    def create_subvolume(self, subvolume_path, size=None, namespace_isolated=True, mode=0o755):
+    def create_subvolume(self, spec, size=None, namespace_isolated=True, mode=0o755, pool=None):
         """
         Set up metadata, pools and auth for a subvolume.
 
         This function is idempotent.  It is safe to call this again
         for an already-created subvolume, even if it is in use.
 
-        :param subvolume_path: SubvolumePath instance
+        :param spec: subvolume path specification
         :param size: In bytes, or None for no size limit
         :param namespace_isolated: If true, use separate RADOS namespace for this subvolume
+        :param pool: the RADOS pool where the data objects of the subvolumes will be stored
         :return: None
         """
-        path = self._subvolume_path(subvolume_path)
-        log.info("creating subvolume with path: {0}".format(path))
+        subvolpath = spec.subvolume_path
+        log.info("creating subvolume with path: {0}".format(subvolpath))
 
-        self._mkdir_p(path, mode)
+        self.fs.mkdirs(subvolpath, mode)
 
-        if size is not None:
-            self.fs.setxattr(path, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
+        try:
+            if size is not None:
+                try:
+                    self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
+                except cephfs.InvalidValue as e:
+                    raise VolumeException(-errno.EINVAL, "Invalid size: '{0}'".format(size))
+            if pool:
+                try:
+                    self.fs.setxattr(subvolpath, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+                except cephfs.InvalidValue:
+                    raise VolumeException(-errno.EINVAL,
+                                          "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
 
-        # enforce security isolation, use separate namespace for this subvolume
-        if namespace_isolated:
-            namespace = "{0}{1}".format(self.pool_ns_prefix, subvolume_path.subvolume_id)
-            log.info("creating subvolume with path: {0}, using rados namespace {1} to isolate data.".format(subvolume_path, namespace))
-            self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace',
-                             namespace.encode('utf-8'), 0)
-        else:
-            # If subvolume's namespace layout is not set, then the subvolume's pool
-            # layout remains unset and will undesirably change with ancestor's
-            # pool layout changes.
-            pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
-            self.fs.setxattr(path, 'ceph.dir.layout.pool',
-                             pool_name.encode('utf-8'), 0)
+            xattr_key = xattr_val = None
+            if namespace_isolated:
+                # enforce security isolation, use separate namespace for this subvolume
+                xattr_key = 'ceph.dir.layout.pool_namespace'
+                xattr_val = spec.fs_namespace
+            elif not pool:
+                # If subvolume's namespace layout is not set, then the subvolume's pool
+                # layout remains unset and will undesirably change with ancestor's
+                # pool layout changes.
+                xattr_key = 'ceph.dir.layout.pool'
+                xattr_val = self._get_ancestor_xattr(subvolpath, "ceph.dir.layout.pool")
+            # TODO: handle error...
+            self.fs.setxattr(subvolpath, xattr_key, xattr_val.encode('utf-8'), 0)
+        except Exception as e:
+            try:
+                # cleanup subvol path on best effort basis
+                log.debug("cleaning up subvolume with path: {0}".format(subvolpath))
+                self.fs.rmdir(subvolpath)
+            except Exception:
+                log.debug("failed to clean up subvolume with path: {0}".format(subvolpath))
+                pass
+            finally:
+                raise e
 
-    def delete_subvolume(self, subvolume_path):
+    def remove_subvolume(self, spec, force):
         """
         Make a subvolume inaccessible to guests.  This function is idempotent.
-        This is the fast part of tearing down a subvolume: you must also later
-        call purge_subvolume, which is the slow part.
+        This is the fast part of tearing down a subvolume. The subvolume will
+        get purged in the background.
 
-        :param subvolume_path: Same identifier used in create_subvolume
+        :param spec: subvolume path specification
+        :param force: flag to ignore non-existent path (never raise exception)
         :return: None
         """
 
-        path = self._subvolume_path(subvolume_path)
-        log.info("deleting subvolume with path: {0}".format(path))
+        subvolpath = spec.subvolume_path
+        log.info("deleting subvolume with path: {0}".format(subvolpath))
 
-        # Create the trash folder if it doesn't already exist
-        trash = os.path.join(self.subvolume_prefix, "_deleting")
-        self._mkdir_p(trash)
+        # Create the trash directory if it doesn't already exist
+        trashdir = spec.trash_dir
+        self.fs.mkdirs(trashdir, 0o700)
 
-        # We'll move it to here
-        trashed_subvolume = os.path.join(trash, subvolume_path.subvolume_id)
+        # mangle the trash directroy entry to a random string so that subsequent
+        # subvolume create and delete with same name moves the subvolume directory
+        # to a unique trash dir (else, rename() could fail if the trash dir exist).
+        trashpath = spec.unique_trash_path
+        try:
+            self.fs.rename(subvolpath, trashpath)
+        except cephfs.ObjectNotFound:
+            if not force:
+                raise VolumeException(
+                    -errno.ENOENT, "Subvolume '{0}' not found, cannot remove it".format(spec.subvolume_id))
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
-        # Move the subvolume to the trash folder
-        self.fs.rename(path, trashed_subvolume)
-
-    def purge_subvolume(self, subvolume_path):
+    def purge_subvolume(self, spec, should_cancel):
         """
-        Finish clearing up a subvolume that was previously passed to delete_subvolume.  This
-        function is idempotent.
+        Finish clearing up a subvolume from the trash directory.
         """
-
-        trash = os.path.join(self.subvolume_prefix, "_deleting")
-        trashed_subvolume = os.path.join(trash, subvolume_path.subvolume_id)
 
         def rmtree(root_path):
             log.debug("rmtree {0}".format(root_path))
@@ -213,14 +154,12 @@ class SubvolumeClient(object):
                 dir_handle = self.fs.opendir(root_path)
             except cephfs.ObjectNotFound:
                 return
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
             d = self.fs.readdir(dir_handle)
-            while d:
-                d_name = d.d_name.decode('utf-8')
-                if d_name not in [".", ".."]:
-                    # Do not use os.path.join because it is sensitive
-                    # to string encoding, we just pass through dnames
-                    # as byte arrays
-                    d_full = "{0}/{1}".format(root_path, d_name)
+            while d and not should_cancel():
+                if d.d_name not in (b".", b".."):
+                    d_full = os.path.join(root_path, d.d_name)
                     if d.is_dir():
                         rmtree(d_full)
                     else:
@@ -228,11 +167,69 @@ class SubvolumeClient(object):
 
                 d = self.fs.readdir(dir_handle)
             self.fs.closedir(dir_handle)
+            # remove the directory only if we were not asked to cancel
+            # (else we would fail to remove this anyway)
+            if not should_cancel():
+                self.fs.rmdir(root_path)
 
-            self.fs.rmdir(root_path)
+        trashpath = spec.trash_path
+        # catch any unlink errors
+        try:
+            rmtree(trashpath)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
-        rmtree(trashed_subvolume)
+    def get_subvolume_path(self, spec):
+        path = spec.subvolume_path
+        try:
+            self.fs.stat(path)
+        except cephfs.ObjectNotFound:
+            return None
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+        return path
 
+    ### group operations
+
+    def create_group(self, spec, mode=0o755, pool=None):
+        path = spec.group_path
+        self.fs.mkdirs(path, mode)
+        try:
+            if not pool:
+                pool = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
+            try:
+                self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL,
+                                      "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
+        except Exception as e:
+            try:
+                # cleanup group path on best effort basis
+                log.debug("cleaning up subvolumegroup with path: {0}".format(path))
+                self.fs.rmdir(path)
+            except Exception:
+                log.debug("failed to clean up subvolumegroup with path: {0}".format(path))
+                pass
+            finally:
+                raise e
+
+    def remove_group(self, spec, force):
+        path = spec.group_path
+        try:
+            self.fs.rmdir(path)
+        except cephfs.ObjectNotFound:
+            if not force:
+                raise VolumeException(-errno.ENOENT, "Subvolume group '{0}' not found".format(spec.group_id))
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    def get_group_path(self, spec):
+        path = spec.group_path
+        try:
+            self.fs.stat(path)
+        except cephfs.ObjectNotFound:
+            return None
+        return path
 
     def _get_ancestor_xattr(self, path, attr):
         """
@@ -240,68 +237,71 @@ class SubvolumeClient(object):
         on the requested path, keep checking parents until we find it.
         """
         try:
-            result = self.fs.getxattr(path, attr).decode('utf-8')
-            if result == "":
-                # Annoying!  cephfs gives us empty instead of an error when attr not found
-                raise cephfs.NoData()
-            else:
-                return result
+            return self.fs.getxattr(path, attr).decode('utf-8')
         except cephfs.NoData:
             if path == "/":
                 raise
             else:
                 return self._get_ancestor_xattr(os.path.split(path)[0], attr)
 
-    def get_group_path(self, group_id):
-        path = self._group_path(group_id)
-        try:
-            self.fs.stat(path)
-        except cephfs.ObjectNotFound:
-            return None
-        return path
+    ### snapshot operations
 
-    def get_subvolume_path(self, subvolume_path):
-        path = self._subvolume_path(subvolume_path)
-        try:
-            self.fs.stat(path)
-        except cephfs.ObjectNotFound:
-            return None
-        return path
-
-    def _snapshot_path(self, dir_path, snapshot_name):
-        return os.path.join(
-            dir_path, self.rados.conf_get('client_snapdir'), snapshot_name
-        )
-
-    def _snapshot_create(self, dir_path, snapshot_name, mode=0o755):
+    def _snapshot_create(self, snappath, mode=0o755):
         """
         Create a snapshot, or do nothing if it already exists.
         """
-        snapshot_path = self._snapshot_path(dir_path, snapshot_name)
         try:
-            self.fs.stat(snapshot_path)
+            self.fs.stat(snappath)
         except cephfs.ObjectNotFound:
-            self.fs.mkdir(snapshot_path, mode)
+            self.fs.mkdir(snappath, mode)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
         else:
-            log.warn("Snapshot '{0}' already exists".format(snapshot_name))
+            log.warn("Snapshot '{0}' already exists".format(snappath))
 
-
-    def _snapshot_delete(self, dir_path, snapshot_name):
+    def _snapshot_delete(self, snappath, force):
         """
         Remove a snapshot, or do nothing if it doesn't exist.
         """
-        snapshot_path = self._snapshot_path(dir_path, snapshot_name)
-        self.fs.stat(snapshot_path)
-        self.fs.rmdir(snapshot_path)
+        try:
+            self.fs.stat(snappath)
+            self.fs.rmdir(snappath)
+        except cephfs.ObjectNotFound:
+            if not force:
+                raise VolumeException(-errno.ENOENT, "Snapshot '{0}' not found, cannot remove it".format(snappath))
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
-    def create_subvolume_snapshot(self, subvolume_path, snapshot_name, mode=0o755):
-        return self._snapshot_create(self._subvolume_path(subvolume_path), snapshot_name, mode)
+    def create_subvolume_snapshot(self, spec, snapname, mode=0o755):
+        snappath = spec.make_subvol_snap_path(self.rados.conf_get('client_snapdir'), snapname)
+        self._snapshot_create(snappath, mode)
 
-    def delete_subvolume_snapshot(self, subvolume_path, snapshot_name):
-        return self._snapshot_delete(self._subvolume_path(subvolume_path), snapshot_name)
+    def remove_subvolume_snapshot(self, spec, snapname, force):
+        snappath = spec.make_subvol_snap_path(self.rados.conf_get('client_snapdir'), snapname)
+        self._snapshot_delete(snappath, force)
 
-    def create_group_snapshot(self, group_id, snapshot_name, mode=0o755):
-        return self._snapshot_create(self._group_path(group_id), snapshot_name, mode)
+    def create_group_snapshot(self, spec, snapname, mode=0o755):
+        snappath = spec.make_group_snap_path(self.rados.conf_get('client_snapdir'), snapname)
+        self._snapshot_create(snappath, mode)
 
-    def delete_group_snapshot(self, group_id, snapshot_name):
-        return self._snapshot_delete(self._group_path(group_id), snapshot_name)
+    def remove_group_snapshot(self, spec, snapname, force):
+        snappath = spec.make_group_snap_path(self.rados.conf_get('client_snapdir'), snapname)
+        return self._snapshot_delete(snappath, force)
+
+    def get_trash_entry(self, spec, exclude):
+        try:
+            trashdir = spec.trash_dir
+            return self._get_single_dir_entry(trashdir, exclude)
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT:
+                # trash dir does not exist yet, signal success
+                return None
+            raise
+
+    ### context manager routines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass

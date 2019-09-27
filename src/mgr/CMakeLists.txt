@@ -15,6 +15,7 @@ set(mgr_srcs
   OSDPerfMetricTypes.cc
   OSDPerfMetricCollector.cc
   PyFormatter.cc
+  PyUtil.cc
   PyModule.cc
   PyModuleRegistry.cc
   PyModuleRunner.cc
@@ -22,7 +23,7 @@ set(mgr_srcs
   StandbyPyModules.cc
   mgr_commands.cc)
 add_executable(ceph-mgr ${mgr_srcs})
-target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
+target_include_directories(ceph-mgr SYSTEM PRIVATE "${Python_INCLUDE_DIRS}")
 target_link_libraries(ceph-mgr
   osdc client heap_profiler
   global-static ceph-common

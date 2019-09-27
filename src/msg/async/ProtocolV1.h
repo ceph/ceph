@@ -108,6 +108,7 @@ protected:
   // priority queue for outbound msgs
   std::map<int, std::list<std::pair<bufferlist, Message *>>> out_q;
   bool keepalive;
+  bool write_in_progress = false;
 
   __u32 connect_seq, peer_global_seq;
   std::atomic<uint64_t> in_seq{0};

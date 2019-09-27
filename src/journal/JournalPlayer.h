@@ -8,9 +8,9 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
 #include "journal/JournalMetadata.h"
 #include "journal/ObjectPlayer.h"
+#include "journal/Types.h"
 #include "cls/journal/cls_journal_types.h"
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
@@ -20,6 +20,7 @@ class SafeTimer;
 
 namespace journal {
 
+class CacheManagerHandler;
 class Entry;
 class ReplayHandler;
 
@@ -29,9 +30,10 @@ public:
   typedef cls::journal::ObjectPositions ObjectPositions;
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
 
-  JournalPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-                const JournalMetadataPtr& journal_metadata,
-                ReplayHandler *replay_handler);
+  JournalPlayer(librados::IoCtx &ioctx, std::string_view object_oid_prefix,
+                ceph::ref_t<JournalMetadata> journal_metadata,
+                ReplayHandler* replay_handler,
+                CacheManagerHandler *cache_manager_handler);
   ~JournalPlayer();
 
   void prefetch();
@@ -42,12 +44,13 @@ public:
 
 private:
   typedef std::set<uint8_t> PrefetchSplayOffsets;
-  typedef std::map<uint8_t, ObjectPlayerPtr> SplayedObjectPlayers;
+  typedef std::map<uint8_t, ceph::ref_t<ObjectPlayer>> SplayedObjectPlayers;
   typedef std::map<uint8_t, ObjectPosition> SplayedObjectPositions;
   typedef std::set<uint64_t> ObjectNumbers;
 
   enum State {
     STATE_INIT,
+    STATE_WAITCACHE,
     STATE_PREFETCH,
     STATE_PLAYBACK,
     STATE_ERROR
@@ -89,22 +92,37 @@ private:
     }
   };
 
-  librados::IoCtx m_ioctx;
-  CephContext *m_cct;
-  std::string m_object_oid_prefix;
-  JournalMetadataPtr m_journal_metadata;
+  struct CacheRebalanceHandler : public journal::CacheRebalanceHandler {
+    JournalPlayer *player;
 
-  ReplayHandler *m_replay_handler;
+    CacheRebalanceHandler(JournalPlayer *player) : player(player) {
+    }
+
+    void handle_cache_rebalanced(uint64_t new_cache_bytes) override {
+      player->handle_cache_rebalanced(new_cache_bytes);
+    }
+  };
+
+  librados::IoCtx m_ioctx;
+  CephContext *m_cct = nullptr;
+  std::string m_object_oid_prefix;
+  ceph::ref_t<JournalMetadata> m_journal_metadata;
+  ReplayHandler* m_replay_handler;
+  CacheManagerHandler *m_cache_manager_handler;
+
+  std::string m_cache_name;
+  CacheRebalanceHandler m_cache_rebalance_handler;
+  uint64_t m_max_fetch_bytes;
 
   AsyncOpTracker m_async_op_tracker;
 
-  mutable Mutex m_lock;
-  State m_state;
-  uint8_t m_splay_offset;
+  mutable ceph::mutex m_lock = ceph::make_mutex("JournalPlayer::m_lock");
+  State m_state = STATE_INIT;
+  uint8_t m_splay_offset = 0;
 
-  bool m_watch_enabled;
-  bool m_watch_scheduled;
-  double m_watch_interval;
+  bool m_watch_enabled = false;
+  bool m_watch_scheduled = false;
+  double m_watch_interval = 0;
   WatchStep m_watch_step = WATCH_STEP_FETCH_CURRENT;
   bool m_watch_prune_active_tag = false;
 
@@ -131,16 +149,16 @@ private:
   void prune_tag(uint64_t tag_tid);
   void prune_active_tag(const boost::optional<uint64_t>& tag_tid);
 
-  ObjectPlayerPtr get_object_player() const;
-  ObjectPlayerPtr get_object_player(uint64_t object_number) const;
-  bool remove_empty_object_player(const ObjectPlayerPtr &object_player);
+  ceph::ref_t<ObjectPlayer> get_object_player() const;
+  ceph::ref_t<ObjectPlayer> get_object_player(uint64_t object_number) const;
+  bool remove_empty_object_player(const ceph::ref_t<ObjectPlayer> &object_player);
 
   void process_state(uint64_t object_number, int r);
   int process_prefetch(uint64_t object_number);
   int process_playback(uint64_t object_number);
 
   void fetch(uint64_t object_num);
-  void fetch(const ObjectPlayerPtr &object_player);
+  void fetch(const ceph::ref_t<ObjectPlayer> &object_player);
   void handle_fetched(uint64_t object_num, int r);
   void refetch(bool immediate);
 
@@ -150,6 +168,8 @@ private:
 
   void notify_entries_available();
   void notify_complete(int r);
+
+  void handle_cache_rebalanced(uint64_t new_cache_bytes);
 };
 
 } // namespace journal

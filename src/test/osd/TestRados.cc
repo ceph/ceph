@@ -1,6 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "common/version.h"
@@ -31,14 +30,16 @@ public:
 			bool ec_pool,
 			bool balance_reads,
 			bool set_redirect,
-			bool set_chunk) :
+			bool set_chunk,
+			bool enable_dedup) :
     m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds),
     m_objects(objects), m_stats(stats),
     m_total_weight(0),
     m_ec_pool(ec_pool),
     m_balance_reads(balance_reads),
     m_set_redirect(set_redirect),
-    m_set_chunk(set_chunk)
+    m_set_chunk(set_chunk),
+    m_enable_dedup(enable_dedup)
   {
     m_start = time(0);
     for (map<TestOpType, unsigned int>::const_iterator it = op_weights.begin();
@@ -66,10 +67,10 @@ public:
     if (m_op <= m_objects && !m_set_redirect && !m_set_chunk ) {
       stringstream oid;
       oid << m_op;
-      if (m_op % 2) {
+      /*if (m_op % 2) {
 	// make it a long name
 	oid << " " << string(300, 'o');
-      }
+	}*/
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
@@ -138,9 +139,9 @@ public:
     if (m_op <= m_objects) {
       stringstream oid;
       oid << m_op;
-      if (m_op % 2) {
+      /*if (m_op % 2) {
 	oid << " " << string(300, 'o');
-      }
+	}*/
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
@@ -154,9 +155,9 @@ public:
 	//int _oid = m_op-m_objects;
 	int _oid = m_op % m_objects + 1;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
-	}
+	  }*/
 
         if (context.oid_in_use.count(oid.str())) {
           /* previous write is not finished */
@@ -183,9 +184,9 @@ public:
 	stringstream oid, oid2;
 	int _oid = m_op-copy_manifest_end;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
-	}
+	  }*/
 	oid2 << _oid << " " << context.low_tier_pool_name;
 	if ((_oid) % 2) {
 	  oid2 << " " << string(300, 'm');
@@ -205,9 +206,9 @@ public:
 	stringstream oid;
 	int _oid = m_op % m_objects +1;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
-	}
+	  }*/
 	if (context.oid_in_use.count(oid.str())) {
 	  /* previous set-chunk is not finished */
 	  op = NULL;
@@ -243,7 +244,7 @@ public:
 	     << " length: " << rand_length <<  " target oid " << oid2.str() 
 	     << " tgt_offset: " << rand_tgt_offset << std::endl;
 	op = new SetChunkOp(m_op, &context, oid.str(), rand_offset, rand_length, oid2.str(), 
-			      context.low_tier_pool_name, rand_tgt_offset, m_stats);
+			      context.low_tier_pool_name, rand_tgt_offset, m_stats, m_enable_dedup);
 	return true;
       }
     } else if (m_op == make_manifest_end + 1) {
@@ -266,7 +267,7 @@ public:
 	cout << " redirect_not_in_use: " << oid.str() << std::endl;
 	context.oid_redirect_not_in_use.insert(oid.str());
       }
-    }
+    } 
 
     return false;
   }
@@ -420,6 +421,11 @@ private:
       cout << m_op << ": " << "tier_promote oid " << oid << std::endl;
       return new TierPromoteOp(m_op, &context, oid, m_stats);
 
+    case TEST_OP_TIER_FLUSH:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "tier_flush oid " << oid << std::endl;
+      return new TierFlushOp(m_op, &context, oid, m_stats);
+
     case TEST_OP_SET_REDIRECT:
       oid = *(rand_choose(context.oid_not_in_use));
       oid2 = *(rand_choose(context.oid_redirect_not_in_use));
@@ -451,6 +457,7 @@ private:
   bool m_balance_reads;
   bool m_set_redirect;
   bool m_set_chunk;
+  bool m_enable_dedup;
 };
 
 int main(int argc, char **argv)
@@ -493,6 +500,7 @@ int main(int argc, char **argv)
     { TEST_OP_UNSET_REDIRECT, "unset_redirect", true },
     { TEST_OP_CHUNK_READ, "chunk_read", true },
     { TEST_OP_TIER_PROMOTE, "tier_promote", true },
+    { TEST_OP_TIER_FLUSH, "tier_flush", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
@@ -505,6 +513,7 @@ int main(int argc, char **argv)
   bool balance_reads = false;
   bool set_redirect = false;
   bool set_chunk = false;
+  bool enable_dedup = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -585,6 +594,8 @@ int main(int argc, char **argv)
        * to prevent the race. see https://github.com/ceph/ceph/pull/20096
        */
       low_tier_pool_name = argv[++i];
+    } else if (strcmp(argv[i], "--enable_dedup") == 0) {
+      enable_dedup = true;
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       exit(1);
@@ -647,13 +658,14 @@ int main(int argc, char **argv)
     pool_snaps,
     write_fadvise_dontneed,
     low_tier_pool_name,
+    enable_dedup,
     id);
 
   TestOpStat stats;
   WeightedTestGenerator gen = WeightedTestGenerator(
     ops, objects,
     op_weights, &stats, max_seconds,
-    ec_pool, balance_reads, set_redirect, set_chunk);
+    ec_pool, balance_reads, set_redirect, set_chunk, enable_dedup);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "

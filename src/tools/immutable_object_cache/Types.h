@@ -15,7 +15,7 @@ namespace {
 struct HeaderHelper {
   uint8_t v;
   uint8_t c_v;
-  uint32_t len;
+  ceph_le32 len;
 }__attribute__((packed));
 
 inline uint8_t get_header_size() {
@@ -35,7 +35,7 @@ class ObjectCacheRequest {
 
   bufferlist payload;
 
-  GenContext<ObjectCacheRequest*>* process_msg;
+  CacheGenContextURef process_msg;
 
   ObjectCacheRequest();
   ObjectCacheRequest(uint16_t type, uint64_t seq);

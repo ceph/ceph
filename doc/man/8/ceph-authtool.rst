@@ -179,7 +179,7 @@ To create a new keyring containing a key for client.foo with a 0644 file mode::
         ceph-authtool -C -n client.foo --gen-key keyring --mode 0644
 
 To associate some capabilities with the key (namely, the ability to
-mount a Ceph filesystem)::
+mount a Ceph file system)::
 
         ceph-authtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring
 

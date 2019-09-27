@@ -169,7 +169,7 @@ setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
 this path to an SSD or to an SSD partition so that it is not merely a file on
 the same disk as the object data.
 
-One way Ceph accelerates CephFS filesystem performance is to segregate the
+One way Ceph accelerates CephFS file system performance is to segregate the
 storage of CephFS metadata from the storage of the CephFS file contents. Ceph
 provides a default ``metadata`` pool for CephFS metadata. You will never have to
 create a pool for CephFS metadata, but you can create a CRUSH map hierarchy for
@@ -204,16 +204,6 @@ When you run multiple OSDs per host, you also need to ensure that the kernel
 is up to date. See `OS Recommendations`_ for notes on ``glibc`` and
 ``syncfs(2)`` to ensure that your hardware performs as expected when running
 multiple OSDs per host.
-
-Hosts with high numbers of OSDs (e.g., > 20) may spawn a lot of threads, 
-especially during recovery and rebalancing. Many Linux kernels default to 
-a relatively small maximum number of threads (e.g., 32k). If you encounter
-problems starting up OSDs on hosts with a high number of OSDs, consider
-setting ``kernel.pid_max`` to a higher number of threads. The theoretical
-maximum is 4,194,303 threads. For example, you could add the following to
-the ``/etc/sysctl.conf`` file:: 
-
-	kernel.pid_max = 4194303
 
 
 Networks

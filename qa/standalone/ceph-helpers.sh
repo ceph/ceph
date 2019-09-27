@@ -481,6 +481,7 @@ function run_mon() {
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
 	--mon-allow-pool-delete \
+	--osd-pool-default-pg-autoscale-mode off \
 	--mon-osd-backfillfull-ratio .99 \
         "$@" || return 1
 
@@ -646,6 +647,8 @@ function run_osd() {
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --admin-socket=$(get_asok_path)"
     ceph_args+=" --debug-osd=20"
+    ceph_args+=" --debug-ms=1"
+    ceph_args+=" --debug-monc=20"
     ceph_args+=" --log-file=$dir/\$name.log"
     ceph_args+=" --pid-file=$dir/\$name.pid"
     ceph_args+=" --osd-max-object-name-len=460"
@@ -699,6 +702,8 @@ function run_osd_filestore() {
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --admin-socket=$(get_asok_path)"
     ceph_args+=" --debug-osd=20"
+    ceph_args+=" --debug-ms=1"
+    ceph_args+=" --debug-monc=20"
     ceph_args+=" --log-file=$dir/\$name.log"
     ceph_args+=" --pid-file=$dir/\$name.pid"
     ceph_args+=" --osd-max-object-name-len=460"

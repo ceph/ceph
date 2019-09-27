@@ -17,11 +17,12 @@ from teuthology import misc
 from teuthology.exceptions import CommandFailedError
 from teuthology.task import Task
 from teuthology.orchestra import run
+from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
 
-class RBDMirrorThrasher(Greenlet):
+class RBDMirrorThrasher(Greenlet, Thrasher):
     """
     RBDMirrorThrasher::
 
@@ -63,14 +64,13 @@ class RBDMirrorThrasher(Greenlet):
     """
 
     def __init__(self, ctx, config, cluster, daemons):
-        Greenlet.__init__(self)
+        super(RBDMirrorThrasher, self).__init__()
 
         self.ctx = ctx
         self.config = config
         self.cluster = cluster
         self.daemons = daemons
 
-        self.e = None
         self.logger = log
         self.name = 'thrasher.rbd_mirror.[{cluster}]'.format(cluster = cluster)
         self.stopping = Event()
@@ -85,8 +85,11 @@ class RBDMirrorThrasher(Greenlet):
         try:
             self.do_thrash()
         except Exception as e:
-            self.e = e
+            # See _run exception comment for MDSThrasher
+            self.exception = e
             self.logger.exception("exception:")
+            # Allow successful completion so gevent doesn't see an exception.
+            # The DaemonWatchdog will observe the error and tear down the test.
 
     def log(self, x):
         """Write data to logger assigned to this RBDMirrorThrasher"""
@@ -203,6 +206,7 @@ def task(ctx, config):
 
     thrasher = RBDMirrorThrasher(ctx, config, cluster, daemons)
     thrasher.start()
+    ctx.ceph[cluster].thrashers.append(thrasher)
 
     try:
         log.debug('Yielding')
@@ -210,7 +214,7 @@ def task(ctx, config):
     finally:
         log.info('joining rbd_mirror_thrash')
         thrasher.stop()
-        if thrasher.e:
+        if thrasher.exception is not None:
             raise RuntimeError('error during thrashing')
         thrasher.join()
         log.info('done joining')

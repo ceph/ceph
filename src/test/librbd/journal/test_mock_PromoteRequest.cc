@@ -33,7 +33,7 @@ struct OpenRequest<MockTestImageCtx> {
   static OpenRequest *s_instance;
   static OpenRequest *create(MockTestImageCtx *image_ctx,
                              ::journal::MockJournalerProxy *journaler,
-                             Mutex *lock, ImageClientMeta *client_meta,
+                             ceph::mutex *lock, ImageClientMeta *client_meta,
                              uint64_t *tag_tid, journal::TagData *tag_data,
                              Context *on_finish) {
     ceph_assert(s_instance != nullptr);
@@ -120,7 +120,7 @@ public:
   }
 
   void expect_start_append(::journal::MockJournaler &mock_journaler) {
-    EXPECT_CALL(mock_journaler, start_append(_, _, _, _));
+    EXPECT_CALL(mock_journaler, start_append(_));
   }
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {

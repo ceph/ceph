@@ -493,6 +493,7 @@ inline namespace v14_2_0 {
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
+    void tier_flush();
 
 
     friend class IoCtx;
@@ -734,6 +735,8 @@ inline namespace v14_2_0 {
     IoCtx& operator=(IoCtx&& rhs) noexcept;
 
     ~IoCtx();
+
+    bool is_valid() const;
 
     // Close our pool handle
     void close();
@@ -1320,6 +1323,7 @@ inline namespace v14_2_0 {
     Rados();
     explicit Rados(IoCtx& ioctx);
     ~Rados();
+    static void from_rados_t(rados_t cluster, Rados &rados);
 
     int init(const char * const id);
     int init2(const char * const name, const char * const clustername,

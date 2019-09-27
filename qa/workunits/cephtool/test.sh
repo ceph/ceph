@@ -360,12 +360,15 @@ function test_tiering_1()
   expect_false ceph osd tier add slow2 cache
   # test some state transitions
   ceph osd tier cache-mode cache writeback
+  # forward is removed/deprecated
   expect_false ceph osd tier cache-mode cache forward
-  ceph osd tier cache-mode cache forward --yes-i-really-mean-it
+  expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
   expect_false ceph osd tier cache-mode cache readonly
+  ceph osd tier cache-mode cache proxy
+  ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   expect_false ceph osd tier cache-mode cache forward
-  ceph osd tier cache-mode cache forward --yes-i-really-mean-it
+  expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
   ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache writeback
   ceph osd tier cache-mode cache proxy
@@ -603,9 +606,12 @@ function test_auth()
   ceph auth caps client.xx osd "allow rw"
   expect_false sh <<< "ceph auth get client.xx | grep caps | grep mon"
   ceph auth get client.xx | grep osd | grep "allow rw"
+  ceph auth caps client.xx mon 'allow command "osd tree"'
   ceph auth export | grep client.xx
   ceph auth export -o authfile
-  ceph auth import -i authfile
+  ceph auth import -i authfile 2>$TMPFILE
+  check_response "imported keyring"
+
   ceph auth export -o authfile2
   diff authfile authfile2
   rm authfile authfile2
@@ -723,15 +729,6 @@ function test_mon_misc()
   ceph --concise osd dump | grep '^epoch'
 
   ceph osd df | grep 'MIN/MAX VAR'
-  osd_class=$(ceph osd crush get-device-class 0)
-  ceph osd df tree class $osd_class | grep 'osd.0'
-  ceph osd crush rm-device-class 0
-  # create class first in case old device class may
-  # have already been automatically destroyed
-  ceph osd crush class create $osd_class
-  ceph osd df tree class $osd_class | expect_false grep 'osd.0'
-  ceph osd crush set-device-class $osd_class 0
-  ceph osd df tree name osd.0 | grep 'osd.0'
 
   # df
   ceph df > $TMPFILE
@@ -969,10 +966,10 @@ function test_mon_mds()
   expect_false ceph fs set cephfs max_mds 257
   expect_false ceph fs set cephfs max_mds asdf
   expect_false ceph fs set cephfs inline_data true
-  ceph fs set cephfs inline_data true --yes-i-really-mean-it
-  ceph fs set cephfs inline_data yes --yes-i-really-mean-it
-  ceph fs set cephfs inline_data 1 --yes-i-really-mean-it
-  expect_false ceph fs set cephfs inline_data --yes-i-really-mean-it
+  ceph fs set cephfs inline_data true --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data yes --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data 1 --yes-i-really-really-mean-it
+  expect_false ceph fs set cephfs inline_data --yes-i-really-really-mean-it
   ceph fs set cephfs inline_data false
   ceph fs set cephfs inline_data no
   ceph fs set cephfs inline_data 0
@@ -1532,6 +1529,31 @@ function test_mon_osd()
   ceph osd in 0
   ceph osd dump | grep 'osd.0.*in'
   ceph osd find 0
+
+  ceph osd info 0
+  ceph osd info osd.0
+  expect_false ceph osd info osd.xyz
+  expect_false ceph osd info xyz
+  expect_false ceph osd info 42
+  expect_false ceph osd info osd.42
+
+  ceph osd info
+  info_json=$(ceph osd info --format=json | jq -cM '.')
+  dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
+  [[ "${info_json}" == "${dump_json}" ]]
+
+  info_json=$(ceph osd info 0 --format=json | jq -cM '.')
+  dump_json=$(ceph osd dump --format=json | \
+	  jq -cM '.osds[] | select(.osd == 0)')
+  [[ "${info_json}" == "${dump_json}" ]]
+  
+  info_plain="$(ceph osd info)"
+  dump_plain="$(ceph osd dump | grep '^osd')"
+  [[ "${info_plain}" == "${dump_plain}" ]]
+
+  info_plain="$(ceph osd info 0)"
+  dump_plain="$(ceph osd dump | grep '^osd.0')"
+  [[ "${info_plain}" == "${dump_plain}" ]]
 
   ceph osd add-nodown 0 1
   ceph health detail | grep 'NODOWN'

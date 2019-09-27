@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 
 import json
-import sys
 from contextlib import contextmanager
+import six
 
 import cherrypy
 
@@ -15,7 +15,7 @@ from ..services.ceph_service import SendCommandError
 from ..exceptions import ViewCacheNoDataException, DashboardException
 from ..tools import wraps
 
-if sys.version_info < (3, 0):
+if six.PY2:
     # Monkey-patch a __call__ method into @contextmanager to make
     # it compatible to Python 3
 
@@ -50,7 +50,7 @@ if sys.version_info < (3, 0):
     GeneratorContextManager.__call__ = call
 
     # pylint: disable=function-redefined
-    def contextmanager(func):
+    def contextmanager(func):  # noqa: F811
 
         @wraps(func)
         def helper(*args, **kwds):
@@ -119,4 +119,13 @@ def handle_send_command_error(component):
     try:
         yield
     except SendCommandError as e:
+        raise DashboardException(e, component=component)
+
+
+@contextmanager
+def handle_orchestrator_error(component):
+    try:
+        yield
+    except RuntimeError as e:
+        # how to catch remote error e.g. NotImplementedError ?
         raise DashboardException(e, component=component)

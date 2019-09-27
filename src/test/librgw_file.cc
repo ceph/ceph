@@ -72,6 +72,7 @@ TEST(LibRGW, GETATTR_ROOT) {
 
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset,
+		    struct stat* st, uint32_t st_mask,
 		    uint32_t flags) {
     // don't need arg--it would point to fids1
     fids1.push_back(fid_type(name, offset, nullptr /* handle */));
@@ -110,7 +111,7 @@ TEST(LibRGW, LOOKUP_BUCKETS) {
     // auto& obj_vector = get<1>(fid_row);
     struct rgw_file_handle *rgw_fh = nullptr;
     ASSERT_EQ(0, rgw_lookup(fs, fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
-			    0 /* flags */));
+			    nullptr /* stat */, 0 /* mask */, 0 /* flags */));
     get<2>(fid) = rgw_fh;
     ASSERT_NE(get<2>(fid), nullptr);
   }
@@ -135,6 +136,7 @@ TEST(LibRGW, GETATTR_BUCKETS) {
 
 extern "C" {
   static bool r2_cb(const char* name, void *arg, uint64_t offset,
+		    struct stat* st, uint32_t st_mask,
 		    uint32_t flags) {
     std::vector<fid_type>& obj_vector = *(static_cast<std::vector<fid_type>*>(arg));
     obj_vector.push_back(fid_type(name, offset, nullptr));
@@ -188,7 +190,7 @@ TEST(LibRGW, GETATTR_OBJECTS) {
 	struct rgw_file_handle *obj_fh = nullptr;
 	std::string object_name = get<0>(obj);
 	ret = rgw_lookup(fs, bucket_fh, get<0>(obj).c_str(), &obj_fh,
-			0 /* flags */);
+			 nullptr /* stat */, 0 /* mask */, 0 /* flags */);
 	ASSERT_EQ(ret, 0);
 	get<2>(obj) = obj_fh; // stash obj_fh for cleanup
 	ASSERT_NE(get<2>(obj), nullptr);

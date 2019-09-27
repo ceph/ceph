@@ -9,21 +9,22 @@ set(rbd_mirror_internal
   ImageMap.cc
   ImageReplayer.cc
   ImageSync.cc
-  ImageSyncThrottler.cc
   InstanceReplayer.cc
   InstanceWatcher.cc
   Instances.cc
   LeaderWatcher.cc
   Mirror.cc
   MirrorStatusWatcher.cc
+  NamespaceReplayer.cc
   PoolReplayer.cc
   PoolWatcher.cc
   ServiceDaemon.cc
   Threads.cc
+  Throttler.cc
   Types.cc
-  image_deleter/RemoveRequest.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc
+  image_deleter/TrashRemoveRequest.cc
   image_deleter/TrashWatcher.cc
   image_map/LoadRequest.cc
   image_map/Policy.cc
@@ -48,7 +49,8 @@ set(rbd_mirror_internal
   service_daemon/Types.cc)
 
 add_library(rbd_mirror_internal STATIC
-  ${rbd_mirror_internal})
+  ${rbd_mirror_internal}
+  $<TARGET_OBJECTS:common_prioritycache_obj>)
 
 add_executable(rbd-mirror
   main.cc)
@@ -64,5 +66,7 @@ target_link_libraries(rbd-mirror
   cls_rbd_client
   cls_lock_client
   cls_journal_client
-  global)
+  global
+  heap_profiler
+  ${ALLOC_LIBS})
 install(TARGETS rbd-mirror DESTINATION bin)

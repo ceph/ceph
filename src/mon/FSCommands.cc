@@ -254,6 +254,15 @@ class FsNewHandler : public FileSystemCommandHandler
     mon->osdmon()->do_application_enable(metadata,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
 					 "metadata", fs_name);
+    mon->osdmon()->do_set_pool_opt(metadata,
+				   pool_opts_t::RECOVERY_PRIORITY,
+				   static_cast<int64_t>(5));
+    mon->osdmon()->do_set_pool_opt(metadata,
+				   pool_opts_t::PG_NUM_MIN,
+				   static_cast<int64_t>(16));
+    mon->osdmon()->do_set_pool_opt(metadata,
+				   pool_opts_t::PG_AUTOSCALE_BIAS,
+				   static_cast<double>(4.0));
     mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
@@ -358,9 +367,10 @@ public:
 
       if (enable_inline) {
         bool confirm = false;
-        cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", confirm);
+        cmd_getval(g_ceph_context, cmdmap, "yes_i_really_really_mean_it", confirm);
 	if (!confirm) {
-	  ss << EXPERIMENTAL_WARNING;
+	  ss << "Inline data support is deprecated and will be removed in a future release. "
+	     << "Add --yes-i-really-really-mean-it if you are certain you want this enabled.";
 	  return -EPERM;
 	}
 	ss << "inline data enabled";

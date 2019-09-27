@@ -11,8 +11,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "include/ceph_assert.h"
+#include "common/ceph_mutex.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
 #include "Types.h"
 #include "SocketCommon.h"
 
@@ -31,15 +31,17 @@ class CacheClient {
   void close();
   int stop();
   int connect();
+  void connect(Context* on_finish);
   void lookup_object(std::string pool_nspace, uint64_t pool_id,
                      uint64_t snap_id, std::string oid,
-                     GenContext<ObjectCacheRequest*>* on_finish);
+                     CacheGenContextURef&& on_finish);
   int register_client(Context* on_finish);
 
  private:
   void send_message();
   void try_send();
   void fault(const int err_type, const boost::system::error_code& err);
+  void handle_connect(Context* on_finish, const boost::system::error_code& err);
   void try_receive();
   void receive_message();
   void process(ObjectCacheRequest* reply, uint64_t seq_id);
@@ -71,7 +73,8 @@ class CacheClient {
   std::atomic<bool> m_writing;
   std::atomic<bool> m_reading;
   std::atomic<uint64_t> m_sequence_id;
-  Mutex m_lock;
+  ceph::mutex m_lock =
+    ceph::make_mutex("ceph::cache::cacheclient::m_lock");
   std::map<uint64_t, ObjectCacheRequest*> m_seq_to_req;
   bufferlist m_outcoming_bl;
   bufferptr m_bp_header;

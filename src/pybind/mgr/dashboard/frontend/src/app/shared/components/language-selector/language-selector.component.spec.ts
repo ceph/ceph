@@ -21,7 +21,7 @@ describe('LanguageSelectorComponent', () => {
     fixture = TestBed.createComponent(LanguageSelectorComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    spyOn(window.location, 'reload').and.callFake(() => component.ngOnInit());
+    spyOn(component, 'reloadWindow').and.callFake(() => component.ngOnInit());
   });
 
   it('should create', () => {
@@ -59,15 +59,27 @@ describe('LanguageSelectorComponent', () => {
     expectLanguageChange('id-ID');
   });
 
+  it('should change to it-IT', () => {
+    expectLanguageChange('it-IT');
+  });
+
+  it('should change to ja-JP', () => {
+    expectLanguageChange('ja-JP');
+  });
+
   it('should change to pl-PL', () => {
     expectLanguageChange('pl-PL');
   });
 
-  it('should change to pt-PT', () => {
-    expectLanguageChange('pt-PT');
+  it('should change to pt-BR', () => {
+    expectLanguageChange('pt-BR');
   });
 
   it('should change to zh-CN', () => {
     expectLanguageChange('zh-CN');
+  });
+
+  it('should change to zh-TW', () => {
+    expectLanguageChange('zh-TW');
   });
 });

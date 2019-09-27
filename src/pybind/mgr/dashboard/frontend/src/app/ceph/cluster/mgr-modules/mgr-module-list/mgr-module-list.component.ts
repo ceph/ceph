@@ -7,6 +7,7 @@ import { timer as observableTimer } from 'rxjs';
 import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
@@ -21,7 +22,7 @@ import { NotificationService } from '../../../../shared/services/notification.se
   styleUrls: ['./mgr-module-list.component.scss']
 })
 export class MgrModuleListComponent {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   @BlockUI()
   blockUI: NgBlockUI;
@@ -67,21 +68,22 @@ export class MgrModuleListComponent {
           return Object.values(this.selection.first().options).length === 0;
         },
         routerLink: () => `/mgr-modules/edit/${getModuleUri()}`,
-        icon: 'fa-pencil'
+        icon: Icons.edit
       },
       {
         name: this.i18n('Enable'),
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('enabled'),
-        icon: 'fa-play'
+        icon: Icons.start
       },
       {
         name: this.i18n('Disable'),
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('disabled'),
-        icon: 'fa-stop'
+        disableDesc: () => this.getTableActionDisabledDesc(),
+        icon: Icons.stop
       }
     ];
   }
@@ -111,17 +113,31 @@ export class MgrModuleListComponent {
     if (!this.selection.hasSelection) {
       return true;
     }
+    const selected = this.selection.first();
     // Make sure the user can't modify the run state of the 'Dashboard' module.
     // This check is only done in the UI because the REST API should still be
     // able to do so.
-    if (this.selection.first().name === 'dashboard') {
+    if (selected.name === 'dashboard') {
+      return true;
+    }
+    // Always-on modules can't be disabled.
+    if (selected.always_on) {
       return true;
     }
     switch (state) {
       case 'enabled':
-        return this.selection.first().enabled;
+        return selected.enabled;
       case 'disabled':
-        return !this.selection.first().enabled;
+        return !selected.enabled;
+    }
+  }
+
+  getTableActionDisabledDesc(): string | undefined {
+    if (this.selection.hasSelection) {
+      const selected = this.selection.first();
+      if (selected.always_on) {
+        return this.i18n('This Manager module is always on.');
+      }
     }
   }
 

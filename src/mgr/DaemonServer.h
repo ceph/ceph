@@ -19,7 +19,7 @@
 #include <set>
 #include <string>
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
 
@@ -36,6 +36,7 @@ class MMgrOpen;
 class MMgrClose;
 class MMonMgrReport;
 class MCommand;
+class MMgrCommand;
 struct MonCommand;
 class CommandContext;
 struct OSDPerfMetricQuery;
@@ -76,7 +77,7 @@ protected:
 
   epoch_t pending_service_map_dirty = 0;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("DaemonServer");
 
   static void _generate_command_map(cmdmap_t& cmdmap,
                                     map<string,string> &param_str_map);
@@ -147,8 +148,8 @@ public:
   bool handle_close(const ceph::ref_t<MMgrClose>& m);
   bool handle_report(const ceph::ref_t<MMgrReport>& m);
   bool handle_command(const ceph::ref_t<MCommand>& m);
-  bool _handle_command(const ceph::ref_t<MCommand>& m,
-		       std::shared_ptr<CommandContext>& cmdctx);
+  bool handle_command(const ceph::ref_t<MMgrCommand>& m);
+  bool _handle_command(std::shared_ptr<CommandContext>& cmdctx);
   void send_report();
   void got_service_map();
   void got_mgr_map();

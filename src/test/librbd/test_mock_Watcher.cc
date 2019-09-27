@@ -7,7 +7,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "librados/AioCompletionImpl.h"
 #include "librbd/Watcher.h"
 #include "librbd/watcher/RewatchRequest.h"
@@ -49,8 +49,7 @@ using ::testing::WithArgs;
 
 class TestMockWatcher : public TestMockFixture {
 public:
-  TestMockWatcher() : m_lock("TestMockWatcher::m_lock") {
-  }
+  TestMockWatcher() =  default;
 
   virtual void SetUp() {
     TestMockFixture::SetUp();
@@ -77,7 +76,7 @@ public:
           }
 
           c->get();
-          mock_image_ctx.image_ctx->op_work_queue->queue(new FunctionContext([mock_rados_client, action, c](int r) {
+          mock_image_ctx.image_ctx->op_work_queue->queue(new LambdaContext([mock_rados_client, action, c](int r) {
               if (action) {
                 action();
               }
@@ -98,7 +97,7 @@ public:
       .WillOnce(DoAll(Invoke([this, &mock_image_ctx, mock_rados_client, r, action](
               uint64_t handle, librados::AioCompletionImpl *c) {
           c->get();
-          mock_image_ctx.image_ctx->op_work_queue->queue(new FunctionContext([mock_rados_client, action, c](int r) {
+          mock_image_ctx.image_ctx->op_work_queue->queue(new LambdaContext([mock_rados_client, action, c](int r) {
               if (action) {
                 action();
               }
@@ -113,15 +112,15 @@ public:
   librados::WatchCtx2 *m_watch_ctx = nullptr;
 
   void notify_watch() {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     ++m_watch_count;
-    m_cond.Signal();
+    m_cond.notify_all();
   }
 
   bool wait_for_watch(MockImageCtx &mock_image_ctx, size_t count) {
-    Mutex::Locker locker(m_lock);
+    std::unique_lock locker{m_lock};
     while (m_watch_count < count) {
-      if (m_cond.WaitInterval(m_lock, utime_t(10, 0)) != 0) {
+      if (m_cond.wait_for(locker, 10s) == std::cv_status::timeout) {
         return false;
       }
     }
@@ -129,8 +128,8 @@ public:
     return true;
   }
 
-  Mutex m_lock;
-  Cond m_cond;
+  ceph::mutex m_lock = ceph::make_mutex("TestMockWatcher::m_lock");
+  ceph::condition_variable m_cond;
   size_t m_watch_count = 0;
 };
 

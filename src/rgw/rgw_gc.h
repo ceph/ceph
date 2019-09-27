@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_GC_H
 #define CEPH_RGW_GC_H
@@ -7,7 +7,7 @@
 
 #include "include/types.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "rgw_common.h"
@@ -31,11 +31,11 @@ class RGWGC : public DoutPrefixProvider {
     const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWGC *gc;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("GCWorker");
+    ceph::condition_variable cond;
 
   public:
-    GCWorker(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp), cct(_cct), gc(_gc), lock("GCWorker") {}
+    GCWorker(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp), cct(_cct), gc(_gc) {}
     void *entry() override;
     void stop();
   };

@@ -6,6 +6,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
+import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
@@ -26,12 +27,15 @@ export class RgwBucketFormComponent implements OnInit {
   owners = null;
   action: string;
   resource: string;
+  zonegroup: string;
+  placementTargets: Object[] = [];
 
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private formBuilder: CdFormBuilder,
     private rgwBucketService: RgwBucketService,
+    private rgwSiteService: RgwSiteService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
     private i18n: I18n,
@@ -46,8 +50,10 @@ export class RgwBucketFormComponent implements OnInit {
   createForm() {
     this.bucketForm = this.formBuilder.group({
       id: [null],
-      bid: [null, [Validators.required], [this.bucketNameValidator()]],
-      owner: [null, [Validators.required]]
+      bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
+      owner: [null, [Validators.required]],
+      'placement-target': [null, this.editing ? [] : [Validators.required]],
+      versioning: [null, this.editing ? [Validators.required] : []]
     });
   }
 
@@ -56,6 +62,24 @@ export class RgwBucketFormComponent implements OnInit {
     this.rgwUserService.enumerate().subscribe((resp: string[]) => {
       this.owners = resp.sort();
     });
+
+    if (!this.editing) {
+      // Get placement targets:
+      this.rgwSiteService.getPlacementTargets().subscribe((placementTargets) => {
+        this.zonegroup = placementTargets['zonegroup'];
+        _.forEach(placementTargets['placement_targets'], (placementTarget) => {
+          placementTarget['description'] = `${placementTarget['name']} (${this.i18n('pool')}: ${
+            placementTarget['data_pool']
+          })`;
+          this.placementTargets.push(placementTarget);
+        });
+
+        // If there is only 1 placement target, select it by default:
+        if (this.placementTargets.length === 1) {
+          this.bucketForm.get('placement-target').setValue(this.placementTargets[0]['name']);
+        }
+      });
+    }
 
     // Process route parameters.
     this.route.params.subscribe(
@@ -72,6 +96,7 @@ export class RgwBucketFormComponent implements OnInit {
           const defaults = _.clone(this.bucketForm.value);
           // Extract the values displayed in the form.
           let value = _.pick(resp, _.keys(this.bucketForm.value));
+          value['placement-target'] = resp['placement_rule'];
           // Append default values.
           value = _.merge(defaults, value);
           // Update the form.
@@ -96,37 +121,43 @@ export class RgwBucketFormComponent implements OnInit {
     }
     const bidCtl = this.bucketForm.get('bid');
     const ownerCtl = this.bucketForm.get('owner');
+    const placementTargetCtl = this.bucketForm.get('placement-target');
     if (this.editing) {
       // Edit
       const idCtl = this.bucketForm.get('id');
-      this.rgwBucketService.update(bidCtl.value, idCtl.value, ownerCtl.value).subscribe(
-        () => {
-          this.notificationService.show(
-            NotificationType.success,
-            this.i18n('Updated Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
-          );
-          this.goToListView();
-        },
-        () => {
-          // Reset the 'Submit' button.
-          this.bucketForm.setErrors({ cdSubmitButton: true });
-        }
-      );
+      const versioningCtl = this.bucketForm.get('versioning');
+      this.rgwBucketService
+        .update(bidCtl.value, idCtl.value, ownerCtl.value, versioningCtl.value)
+        .subscribe(
+          () => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Updated Object Gateway bucket "{{bid}}".', { bid: bidCtl.value })
+            );
+            this.goToListView();
+          },
+          () => {
+            // Reset the 'Submit' button.
+            this.bucketForm.setErrors({ cdSubmitButton: true });
+          }
+        );
     } else {
       // Add
-      this.rgwBucketService.create(bidCtl.value, ownerCtl.value).subscribe(
-        () => {
-          this.notificationService.show(
-            NotificationType.success,
-            this.i18n('Created Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
-          );
-          this.goToListView();
-        },
-        () => {
-          // Reset the 'Submit' button.
-          this.bucketForm.setErrors({ cdSubmitButton: true });
-        }
-      );
+      this.rgwBucketService
+        .create(bidCtl.value, ownerCtl.value, this.zonegroup, placementTargetCtl.value)
+        .subscribe(
+          () => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Created Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
+            );
+            this.goToListView();
+          },
+          () => {
+            // Reset the 'Submit' button.
+            this.bucketForm.setErrors({ cdSubmitButton: true });
+          }
+        );
     }
   }
 

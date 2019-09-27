@@ -374,11 +374,13 @@ int md_config_t::parse_config_files(ConfigValues& values,
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
     cf.clear();
     string fn = *c;
-
-    int ret = cf.parse_file(fn.c_str(), &parse_errors, warnings);
-    if (ret == 0)
+    ostringstream oss;
+    int ret = cf.parse_file(fn.c_str(), &oss);
+    parse_error = oss.str();
+    if (ret == 0) {
       break;
-    else if (ret != -ENOENT)
+    }
+    if (ret != -ENOENT)
       return ret;
   }
   // it must have been all ENOENTs, that's the only way we got here
@@ -426,12 +428,10 @@ int md_config_t::parse_config_files(ConfigValues& values,
 
   // Warn about section names that look like old-style section names
   std::deque < std::string > old_style_section_names;
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    const string &str(s->first);
-    if (((str.find("mds") == 0) || (str.find("mon") == 0) ||
-	 (str.find("osd") == 0)) && (str.size() > 3) && (str[3] != '.')) {
-      old_style_section_names.push_back(str);
+  for (auto& [name, section] : cf) {
+    if (((name.find("mds") == 0) || (name.find("mon") == 0) ||
+	 (name.find("osd") == 0)) && (name.size() > 3) && (name[3] != '.')) {
+      old_style_section_names.push_back(name);
     }
   }
   if (!old_style_section_names.empty()) {
@@ -473,19 +473,93 @@ void md_config_t::parse_env(unsigned entity_type,
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
-  if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
+
+  // Apply pod memory limits:
+  //
+  // There are two types of resource requests: `limits` and `requests`.
+  //
+  // - Requests: Used by the K8s scheduler to determine on which nodes to
+  //   schedule the pods. This helps spread the pods to different nodes. This
+  //   value should be conservative in order to make sure all the pods are
+  //   schedulable. This corresponds to POD_MEMORY_REQUEST (set by the Rook
+  //   CRD) and is the target memory utilization we try to maintain for daemons
+  //   that respect it.
+  //
+  //   If POD_MEMORY_REQUEST is present, we use it as the target.
+  //
+  // - Limits: At runtime, the container runtime (and Linux) will use the
+  //   limits to see if the pod is using too many resources. In that case, the
+  //   pod will be killed/restarted automatically if the pod goes over the limit.
+  //   This should be higher than what is specified for requests (potentially
+  //   much higher). This corresponds to the cgroup memory limit that will
+  //   trigger the Linux OOM killer.
+  //
+  //   If POD_MEMORY_LIMIT is present, we use it as the /default/ value for
+  //   the target, which means it will only apply if the *_memory_target option
+  //   isn't set via some other path (e.g., POD_MEMORY_REQUEST, or the cluster
+  //   config, or whatever.)
+  //
+  // Here are the documented best practices:
+  //   https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#motivation-for-cpu-requests-and-limits
+  //
+  // When the operator creates the CephCluster CR, it will need to generate the
+  // desired requests and limits. As long as we are conservative in our choice
+  // for requests and generous with the limits we should be in a good place to
+  // get started.
+  //
+  // The support in Rook is already there for applying the limits as seen in
+  // these links.
+  //
+  // Rook docs on the resource requests and limits:
+  //   https://rook.io/docs/rook/v1.0/ceph-cluster-crd.html#cluster-wide-resources-configuration-settings
+  // Example CR settings:
+  //   https://github.com/rook/rook/blob/6d2ef936698593036185aabcb00d1d74f9c7bfc1/cluster/examples/kubernetes/ceph/cluster.yaml#L90
+  //
+  uint64_t pod_limit = 0, pod_request = 0;
+  if (auto pod_lim = getenv("POD_MEMORY_LIMIT"); pod_lim) {
     string err;
-    uint64_t v = atoll(pod_req);
+    uint64_t v = atoll(pod_lim);
     if (v) {
       switch (entity_type) {
       case CEPH_ENTITY_TYPE_OSD:
-	_set_val(values, tracker, stringify(v),
-		 *find_option("osd_memory_target"),
-		 CONF_ENV, &err);
-	break;
+        {
+	  double cgroup_ratio = get_val<double>(
+	    values, "osd_memory_target_cgroup_limit_ratio");
+	  if (cgroup_ratio > 0.0) {
+	    pod_limit = v * cgroup_ratio;
+	    // set osd_memory_target *default* based on cgroup limit, so that
+	    // it can be overridden by any explicit settings elsewhere.
+	    set_val_default(values, tracker,
+			    "osd_memory_target", stringify(pod_limit));
+	  }
+	}
       }
     }
   }
+  if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
+    if (uint64_t v = atoll(pod_req); v) {
+      pod_request = v;
+    }
+  }
+  if (pod_request && pod_limit) {
+    // If both LIMIT and REQUEST are set, ensure that we use the
+    // min of request and limit*ratio.  This is important
+    // because k8s set set LIMIT == REQUEST if only LIMIT is
+    // specified, and we want to apply the ratio in that case,
+    // even though REQUEST is present.
+    pod_request = std::min<uint64_t>(pod_request, pod_limit);
+  }
+  if (pod_request) {
+    string err;
+    switch (entity_type) {
+    case CEPH_ENTITY_TYPE_OSD:
+      _set_val(values, tracker, stringify(pod_request),
+	       *find_option("osd_memory_target"),
+	       CONF_ENV, &err);
+      break;
+    }
+  }
+
   if (getenv(args_var)) {
     vector<const char *> env_args;
     env_to_vec(env_args, args_var);
@@ -1240,9 +1314,9 @@ void md_config_t::_get_my_sections(const ConfigValues& values,
 // Return a list of all sections
 int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 {
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    sections.push_back(s->first);
+  for (auto [section_name, section] : cf) {
+    sections.push_back(section_name);
+    std::ignore = section;
   }
   return 0;
 }
@@ -1454,14 +1528,16 @@ void md_config_t::diff(
   string name) const
 {
   values.for_each([this, f, &values] (auto& name, auto& configs) {
-    if (configs.size() == 1 &&
-	configs.begin()->first == CONF_DEFAULT) {
-      // we only have a default value; exclude from diff
+    if (configs.empty()) {
       return;
     }
     f->open_object_section(std::string{name}.c_str());
     const Option *o = find_option(name);
-    dump(f, CONF_DEFAULT, _get_val_default(*o));
+    if (configs.size() &&
+	configs.begin()->first != CONF_DEFAULT) {
+      // show compiled-in default only if an override default wasn't provided
+      dump(f, CONF_DEFAULT, _get_val_default(*o));
+    }
     for (auto& j : configs) {
       dump(f, j.first, j.second);
     }
@@ -1470,7 +1546,7 @@ void md_config_t::diff(
   });
 }
 
-void md_config_t::complain_about_parse_errors(CephContext *cct)
+void md_config_t::complain_about_parse_error(CephContext *cct)
 {
-  ::complain_about_parse_errors(cct, &parse_errors);
+  ::complain_about_parse_error(cct, parse_error);
 }

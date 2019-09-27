@@ -77,7 +77,7 @@ Edit the Ceph configuration file to make use of QAT based crypto plugin::
 
 2. QAT Support for Compression
 
-One CMake option have to be used to triger QAT based compression::
+One CMake option have to be used to trigger QAT based compression::
 
     -DWITH_QATZIP=ON
 

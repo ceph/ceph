@@ -10,7 +10,9 @@
 
 BitmapAllocator::BitmapAllocator(CephContext* _cct,
 					 int64_t capacity,
-					 int64_t alloc_unit) :
+					 int64_t alloc_unit,
+					 const std::string& name) :
+    Allocator(name),
     cct(_cct)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << capacity << "/"
@@ -23,7 +25,7 @@ int64_t BitmapAllocator::allocate(
   int64_t hint, PExtentVector *extents)
 {
   uint64_t allocated = 0;
-
+  size_t old_size = extents->size();
   ldout(cct, 10) << __func__ << std::hex << " 0x" << want_size
 		 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		 << std::dec << dendl;
@@ -34,9 +36,10 @@ int64_t BitmapAllocator::allocate(
   if (!allocated) {
     return -ENOSPC;
   }
-  for (auto e : *extents) {
+  for (auto i = old_size; i < extents->size(); ++i) {
+    auto& e = (*extents)[i];
     ldout(cct, 10) << __func__
-                   << " 0x" << std::hex << e.offset << "~" << e.length
+                   << " extent: 0x" << std::hex << e.offset << "~" << e.length
 		   << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		   << std::dec << dendl;
   }
@@ -98,4 +101,14 @@ void BitmapAllocator::dump()
 		    << dendl;
     ++it;
   }
+}
+
+void BitmapAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  size_t alloc_size = get_min_alloc_size();
+  auto multiply_by_alloc_size = [alloc_size, notify](size_t off, size_t len) {
+    notify(off * alloc_size, len * alloc_size);
+  };
+  std::lock_guard lck(lock);
+  l1.dump(multiply_by_alloc_size);
 }

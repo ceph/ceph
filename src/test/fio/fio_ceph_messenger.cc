@@ -300,8 +300,10 @@ static Messenger *create_messenger(struct ceph_msgr_options *o)
     ceph_msgr_types[o->ms_type] :
     g_ceph_context->_conf.get_val<std::string>("ms_type");
 
+  /* o->td__>pid doesn't set value, so use getpid() instead*/
+  auto nonce = o->is_receiver ? 0 : (getpid() + o->td__->thread_number);
   Messenger *msgr = Messenger::create(g_ceph_context, ms_type.c_str(),
-				      ename, lname, 0, flags);
+				      ename, lname, nonce, flags);
   if (o->is_receiver) {
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     msgr->bind(hostname_to_addr(o));
@@ -385,6 +387,7 @@ static void put_messenger(struct ceph_msgr_data *data)
 static int fio_ceph_msgr_setup(struct thread_data *td)
 {
   struct ceph_msgr_options *o = (decltype(o))td->eo;
+  o->td__ = td;
   ceph_msgr_data *data;
 
   /* We have to manage global resources so we use threads */

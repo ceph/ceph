@@ -8,9 +8,10 @@ std::unique_ptr<FuturizedStore> FuturizedStore::create(const std::string& type,
 {
   if (type == "memstore") {
     return std::make_unique<ceph::os::CyanStore>(data);
+  } else {
+    ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
+    return {};
   }
-
-  return nullptr;
 }
 
 }

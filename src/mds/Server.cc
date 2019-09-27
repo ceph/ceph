@@ -77,6 +77,46 @@ class ServerContext : public MDSContext {
   }
 };
 
+class Batch_Getattr_Lookup : public BatchOp {
+protected:
+  Server* server;
+  ceph::ref_t<MDRequestImpl> mdr;
+  MDCache* mdcache;
+  int res = 0;
+public:
+  Batch_Getattr_Lookup(Server* s, ceph::ref_t<MDRequestImpl> r, MDCache* mdc) : server(s), mdr(std::move(r)), mdcache(mdc) {}
+  void add_request(const ceph::ref_t<MDRequestImpl>& m) override {
+    mdr->batch_reqs.push_back(m);
+  }
+  void set_request(const ceph::ref_t<MDRequestImpl>& m) override {
+    mdr = m;
+  }
+  void _forward(mds_rank_t t) override {
+    mdcache->mds->forward_message_mds(mdr->release_client_request(), t);
+    mdr->set_mds_stamp(ceph_clock_now());
+    for (auto& m : mdr->batch_reqs) {
+      if (!m->killed)
+	mdcache->request_forward(m, t);
+    }
+    mdr->batch_reqs.clear();
+  }
+  void _respond(int r) override {
+    mdr->set_mds_stamp(ceph_clock_now());
+    for (auto& m : mdr->batch_reqs) {
+      if (!m->killed) {
+	m->tracei = mdr->tracei;
+	m->tracedn = mdr->tracedn;
+	server->respond_to_request(m, r);
+      }
+    }
+    mdr->batch_reqs.clear();
+    server->reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
+  }
+  void print(std::ostream& o) {
+    o << "[batch front=" << *mdr << "]";
+  }
+};
+
 class ServerLogContext : public MDSLogContextBase {
 protected:
   Server *server;
@@ -380,8 +420,8 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
     Context *send_reply;
     if (reply) {
       int64_t session_id = session->get_client().v;
-      send_reply = new FunctionContext([this, session_id, reply](int r) {
-	    assert(mds->mds_lock.is_locked_by_me());
+      send_reply = new LambdaContext([this, session_id, reply](int r) {
+	    assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
 	      return;
@@ -442,6 +482,9 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
+    auto reply = make_message<MClientSession>(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     return;
   }
 
@@ -589,7 +632,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
       pv = mds->sessionmap.mark_projected(session);
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
       mds->sessionmap.touch_session(session);
-      auto fin = new FunctionContext([log_session_status = std::move(log_session_status)](int r){
+      auto fin = new LambdaContext([log_session_status = std::move(log_session_status)](int r){
         ceph_assert(r == 0);
         log_session_status("ACCEPTED", "");
       });
@@ -732,7 +775,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->locker->remove_client_cap(in, cap);
+      mds->locker->remove_client_cap(in, cap, true);
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
@@ -933,8 +976,16 @@ void Server::find_idle_sessions()
   double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
   double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
 
+  // don't kick clients if we've been laggy
+  if (last_cleared_laggy < cutoff) {
+    dout(10) << " last cleared laggy " << last_cleared_laggy << "s ago (< cutoff " << cutoff
+	     << "), not marking any client stale" << dendl;
+    return;
+  }
+
   std::vector<Session*> to_evict;
 
+  bool defer_session_stale = g_conf().get_val<bool>("mds_defer_session_stale");
   const auto sessions_p1 = mds->sessionmap.by_state.find(Session::STATE_OPEN);
   if (sessions_p1 != mds->sessionmap.by_state.end() && !sessions_p1->second->empty()) {
     std::vector<Session*> new_stale;
@@ -954,6 +1005,22 @@ void Server::find_idle_sessions()
 		   << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
 	  continue;
 	}
+      }
+
+      if (last_cap_renew_span >= mds->mdsmap->get_session_autoclose()) {
+	dout(20) << "evicting session " << session->info.inst << " since autoclose "
+		    "has arrived" << dendl;
+	// evict session without marking it stale
+	to_evict.push_back(session);
+	continue;
+      }
+
+      if (defer_session_stale &&
+	  !session->is_any_flush_waiter() &&
+	  !mds->locker->is_revoking_any_caps_from(session->get_client())) {
+	dout(20) << "deferring marking session " << session->info.inst << " stale "
+		    "since it holds no caps" << dendl;
+	continue;
       }
 
       auto it = session->info.client_metadata.find("timeout");
@@ -983,27 +1050,19 @@ void Server::find_idle_sessions()
 
     for (auto session : new_stale) {
       mds->sessionmap.set_state(session, Session::STATE_STALE);
-      mds->locker->revoke_stale_caps(session);
-      mds->locker->remove_stale_leases(session);
-      mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq()), session);
-      finish_flush_session(session, session->get_push_seq());
+      if (mds->locker->revoke_stale_caps(session)) {
+	mds->locker->remove_stale_leases(session);
+	finish_flush_session(session, session->get_push_seq());
+	auto m = make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq());
+	mds->send_message_client(m, session);
+      } else {
+	to_evict.push_back(session);
+      }
     }
   }
 
   // autoclose
   cutoff = queue_max_age + mds->mdsmap->get_session_autoclose();
-
-  // don't kick clients if we've been laggy
-  if (last_cleared_laggy < cutoff) {
-    dout(10) << " last cleared laggy " << last_cleared_laggy << "s ago (< cutoff " << cutoff
-	     << "), not kicking any clients to be safe" << dendl;
-    return;
-  }
-
-  if (mds->sessionmap.get_sessions().size() == 1 && mds->mdsmap->get_num_in_mds() == 1) {
-    dout(20) << "skipping client eviction because there is only one" << dendl;
-    return;
-  }
 
   // Collect a list of sessions exceeding the autoclose threshold
   const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);
@@ -1065,8 +1124,7 @@ void Server::evict_cap_revoke_non_responders() {
   }
 }
 
-void Server::handle_conf_change(const ConfigProxy& conf,
-                                const std::set <std::string> &changed) {
+void Server::handle_conf_change(const std::set<std::string>& changed) {
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
@@ -1083,7 +1141,7 @@ void Server::handle_conf_change(const ConfigProxy& conf,
  */
 void Server::kill_session(Session *session, Context *on_safe)
 {
-  ceph_assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
   if ((session->is_opening() ||
        session->is_open() ||
@@ -1108,9 +1166,14 @@ void Server::kill_session(Session *session, Context *on_safe)
 
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
+  bool prenautilus = mds->objecter->with_osdmap(
+      [&](const OSDMap& o) {
+	return o.require_osd_release < ceph_release_t::nautilus;
+      });
+
   std::vector<Session*> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
-  for (const auto& p : sessions)  {
+  for (const auto& p : sessions) {
     if (!p.first.is_client()) {
       // Do not apply OSDMap blacklist to MDS daemons, we find out
       // about their death via MDSMap.
@@ -1118,8 +1181,19 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
     }
 
     Session *s = p.second;
-    if (blacklist.count(s->info.inst.addr)) {
+    auto inst_addr = s->info.inst.addr;
+    // blacklist entries are always TYPE_ANY for nautilus+
+    inst_addr.set_type(entity_addr_t::TYPE_ANY);
+    if (blacklist.count(inst_addr)) {
       victims.push_back(s);
+      continue;
+    }
+    if (prenautilus) {
+      // ...except pre-nautilus, they were TYPE_LEGACY
+      inst_addr.set_type(entity_addr_t::TYPE_LEGACY);
+      if (blacklist.count(inst_addr)) {
+	victims.push_back(s);
+      }
     }
   }
 
@@ -1176,6 +1250,7 @@ void Server::reconnect_clients(MDSContext *reconnect_done_)
   for (auto session : sessions) {
     if (session->is_open()) {
       client_reconnect_gather.insert(session->get_client());
+      session->set_reconnecting(true);
       session->last_cap_renew = now;
     }
   }
@@ -1199,8 +1274,13 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 	  << (m->has_more() ? " (more)" : "") << dendl;
   client_t from = m->get_source().num();
   Session *session = mds->get_session(m);
-  if (!session)
+  if (!session) {
+    dout(0) << " ignoring sessionless msg " << *m << dendl;
+    auto reply = make_message<MClientSession>(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     return;
+  }
 
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
     dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
@@ -1325,6 +1405,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 
     // remove from gather set
     client_reconnect_gather.erase(from);
+    session->set_reconnecting(false);
     if (client_reconnect_gather.empty())
       reconnect_gather_finish();
   }
@@ -1496,7 +1577,7 @@ void Server::reconnect_tick()
 
   if (gather.has_subs()) {
     dout(1) << "reconnect will complete once clients are evicted" << dendl;
-    gather.set_finisher(new MDSInternalContextWrapper(mds, new FunctionContext(
+    gather.set_finisher(new MDSInternalContextWrapper(mds, new LambdaContext(
 	    [this](int r){reconnect_gather_finish();})));
     gather.activate();
     reconnect_evicting = true;
@@ -1535,27 +1616,31 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, RecallFlags flags)
 {
   const auto now = clock::now();
-  const bool steady = flags&RecallFlags::STEADY;
-  const bool enforce_max = flags&RecallFlags::ENFORCE_MAX;
+  const bool steady = !!(flags&RecallFlags::STEADY);
+  const bool enforce_max = !!(flags&RecallFlags::ENFORCE_MAX);
+  const bool enforce_liveness = !!(flags&RecallFlags::ENFORCE_LIVENESS);
+  const bool trim = !!(flags&RecallFlags::TRIM);
 
   const auto max_caps_per_client = g_conf().get_val<uint64_t>("mds_max_caps_per_client");
   const auto min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
   const auto recall_global_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_global_max_decay_threshold");
   const auto recall_max_caps = g_conf().get_val<Option::size_t>("mds_recall_max_caps");
   const auto recall_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_max_decay_threshold");
+  const auto cache_liveness_magnitude = g_conf().get_val<Option::size_t>("mds_session_cache_liveness_magnitude");
 
   dout(7) << __func__ << ":"
            << " min=" << min_caps_per_client
            << " max=" << max_caps_per_client
            << " total=" << Capability::count()
-           << " flags=0x" << std::hex << flags
+           << " flags=" << flags
            << dendl;
 
   /* trim caps of sessions with the most caps first */
   std::multimap<uint64_t, Session*> caps_session;
-  auto f = [&caps_session, enforce_max, max_caps_per_client](auto& s) {
+  auto f = [&caps_session, enforce_max, enforce_liveness, trim, max_caps_per_client, cache_liveness_magnitude](auto& s) {
     auto num_caps = s->caps.size();
-    if (!enforce_max || num_caps > max_caps_per_client) {
+    auto cache_liveness = s->get_session_cache_liveness();
+    if (trim || (enforce_max && num_caps > max_caps_per_client) || (enforce_liveness && cache_liveness < (num_caps>>cache_liveness_magnitude))) {
       caps_session.emplace(std::piecewise_construct, std::forward_as_tuple(num_caps), std::forward_as_tuple(s));
     }
   };
@@ -1719,7 +1804,26 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestR
 void Server::respond_to_request(MDRequestRef& mdr, int r)
 {
   if (mdr->client_request) {
-    reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
+    if (mdr->is_batch_op() && mdr->is_batch_head) {
+      int mask = mdr->client_request->head.args.getattr.mask;
+
+      std::unique_ptr<BatchOp> bop;
+      if (mdr->client_request->get_op() == CEPH_MDS_OP_GETATTR) {
+	dout(20) << __func__ << ": respond other getattr ops. " << *mdr << dendl;
+        auto it = mdr->in[0]->batch_ops.find(mask);
+        bop = std::move(it->second);
+	mdr->in[0]->batch_ops.erase(it);
+      } else {
+	dout(20) << __func__ << ": respond other lookup ops. " << *mdr << dendl;
+	auto it = mdr->dn[0].back()->batch_ops.find(mask);
+        bop = std::move(it->second);
+	mdr->dn[0].back()->batch_ops.erase(it);
+      }
+
+      bop->respond(r);
+    } else {
+     reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
+    }
   } else if (mdr->internal_op > -1) {
     dout(10) << "respond_to_request on internal request " << mdr << dendl;
     if (!mdr->internal_op_finish)
@@ -1946,7 +2050,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
-    if (client_inst.name.is_client()) {
+    if (session && client_inst.name.is_client()) {
       mds->sessionmap.hit_session(session);
     }
     perf_gather_op_latency(req, lat);
@@ -1962,7 +2066,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   mdcache->request_drop_non_rdlocks(mdr);
 
   // reply at all?
-  if (!(client_inst.name.is_mds() || !session)) {
+  if (session && !client_inst.name.is_mds()) {
     // send reply.
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) {
@@ -2236,6 +2340,16 @@ void Server::handle_osd_map()
     });
 }
 
+void Server::clear_batch_ops(const MDRequestRef& mdr)
+{
+  int mask = mdr->client_request->head.args.getattr.mask;
+  if (mdr->client_request->get_op() == CEPH_MDS_OP_GETATTR && mdr->in[0]) {
+    mdr->in[0]->batch_ops.erase(mask);
+  } else if (mdr->client_request->get_op() == CEPH_MDS_OP_LOOKUP && mdr->dn[0].size()) {
+    mdr->dn[0].back()->batch_ops.erase(mask);
+  }
+}
+
 void Server::dispatch_client_request(MDRequestRef& mdr)
 {
   // we shouldn't be waiting on anyone.
@@ -2243,7 +2357,44 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
   if (mdr->killed) {
     dout(10) << "request " << *mdr << " was killed" << dendl;
-    return;
+    //if the mdr is a "batch_op" and it has followers, pick a follower as
+    //the new "head of the batch ops" and go on processing the new one.
+    if (mdr->is_batch_op() && mdr->is_batch_head ) {
+      if (!mdr->batch_reqs.empty()) {
+	MDRequestRef new_batch_head;
+	for (auto itr = mdr->batch_reqs.cbegin(); itr != mdr->batch_reqs.cend();) {
+	  auto req = *itr;
+	  itr = mdr->batch_reqs.erase(itr);
+	  if (!req->killed) {
+	    new_batch_head = req;
+	    break;
+	  }
+	}
+
+	if (!new_batch_head) {
+	  clear_batch_ops(mdr);
+	  return;
+	}
+
+	new_batch_head->batch_reqs = std::move(mdr->batch_reqs);
+
+	mdr = new_batch_head;
+	mdr->is_batch_head = true;
+	int mask = mdr->client_request->head.args.getattr.mask;
+	if (mdr->client_request->get_op() == CEPH_MDS_OP_GETATTR) {
+	  auto& fin = mdr->in[0]->batch_ops[mask];
+	  fin->set_request(new_batch_head);
+	} else if (mdr->client_request->get_op() == CEPH_MDS_OP_LOOKUP) {
+	  auto& fin = mdr->dn[0].back()->batch_ops[mask];
+	  fin->set_request(new_batch_head);
+	}
+      } else {
+	clear_batch_ops(mdr);
+	return;
+      }
+    } else {
+      return;
+    }
   } else if (mdr->aborted) {
     mdr->aborted = false;
     mdcache->request_kill(mdr);
@@ -2422,7 +2573,7 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
 
   CDentry *straydn = NULL;
   if (m->straybl.length() > 0) {
-    straydn = mdcache->add_replica_stray(m->straybl, from);
+    mdcache->decode_replica_stray(straydn, m->straybl, from);
     ceph_assert(straydn);
     m->straybl.clear();
   }
@@ -3184,7 +3335,7 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
     ceph_assert(session);
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
-    mds->sessionmap.mark_dirty(session);
+    mds->sessionmap.mark_dirty(session, !mdr->used_prealloc_ino);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
@@ -3513,6 +3664,32 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   CInode *ref = rdlock_path_pin_ref(mdr, 0, lov, want_auth, false, NULL,
 				    !is_lookup);
   if (!ref) return;
+
+  mdr->getattr_caps = mask;
+
+  if (!mdr->is_batch_head && mdr->is_batch_op()) {
+    if (!is_lookup) {
+      auto em = ref->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
+      if (em.second) {
+        em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr, mdcache);
+      } else {
+	dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
+	em.first->second->add_request(mdr);
+	return;
+      }
+    } else {
+      CDentry* dn = mdr->dn[0].back();
+      auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
+      if (em.second) {
+        em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr, mdcache);
+      } else {
+	dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
+	em.first->second->add_request(mdr);
+	return;
+      }
+    }
+  }
+  mdr->is_batch_head = true;
 
   /*
    * if client currently holds the EXCL cap on a field, do not rdlock
@@ -5744,6 +5921,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   le->metablob.add_primary_dentry(dn, newi, true, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+  mds->balancer->maybe_fragment(dn->get_dir(), false);
 }
 
 
@@ -5890,6 +6068,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   le->metablob.add_primary_dentry(dn, newi, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+  mds->balancer->maybe_fragment(dir, false);
 }
 
 
@@ -5958,6 +6137,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
     _link_local(mdr, dn, targeti);
   else 
     _link_remote(mdr, true, dn, targeti);
+  mds->balancer->maybe_fragment(dir, false);  
 }
 
 
@@ -6908,7 +7088,7 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CD
   req->srcdnpath = filepath(trace.front()->get_dir()->ino());
   for (auto dn : trace)
     req->srcdnpath.push_dentry(dn->get_name());
-  mdcache->replicate_stray(straydn, who, req->straybl);
+  mdcache->encode_replica_stray(straydn, who, req->straybl);
   if (mdr->more()->desti_srnode)
     encode(*mdr->more()->desti_srnode, req->desti_snapbl);
 
@@ -7832,7 +8012,7 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_
   for (auto dn : dsttrace)
     req->destdnpath.push_dentry(dn->get_name());
   if (straydn)
-    mdcache->replicate_stray(straydn, who, req->straybl);
+    mdcache->encode_replica_stray(straydn, who, req->straybl);
 
   if (mdr->more()->srci_srnode)
     encode(*mdr->more()->srci_srnode, req->srci_snapbl);

@@ -114,29 +114,13 @@ endif()
 
 
 # require c++17
-if(CMAKE_VERSION VERSION_LESS "3.8")
-  CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
-  if(NOT COMPILER_SUPPORTS_CXX17)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support.")
-  endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-  include(CheckCCompilerFlag)
-  CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
-  if(NOT COMPILER_SUPPORTS_GNU99)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_C_COMPILER} has no GNU C99 support.")
-  endif()
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-else()
-  set(CMAKE_CXX_STANDARD 17)
-  set(CMAKE_CXX_EXTENSIONS OFF)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_C_STANDARD 99)
-  # we use `asm()` to inline assembly, so enable the GNU extension
-  set(CMAKE_C_EXTENSIONS ON)
-  set(C_STANDARD_REQUIRED ON)
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 99)
+# we use `asm()` to inline assembly, so enable the GNU extension
+set(CMAKE_C_EXTENSIONS ON)
+set(C_STANDARD_REQUIRED ON)
 
 include(CheckCXXSourceCompiles)
 CHECK_CXX_SOURCE_COMPILES("
@@ -178,8 +162,6 @@ if(${ENABLE_COVERAGE})
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
   list(APPEND EXTRALIBS gcov)
 endif(${ENABLE_COVERAGE})
-
-include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR})
 
 set(GCOV_PREFIX_STRIP 4)
 
@@ -225,8 +207,8 @@ endif()
 # Python stuff
 option(WITH_PYTHON2 "build python2 bindings" ON)
 if(WITH_PYTHON2)
-  find_package(PythonInterp 2 REQUIRED)
-  find_package(PythonLibs ${PYTHON_VERSION_STRING} EXACT REQUIRED)
+  find_package(Python2 REQUIRED
+    COMPONENTS Interpreter Development)
 endif()
 
 set(WITH_PYTHON3 "OFF" CACHE STRING "build python3 bindings with specified python3 version")
@@ -234,16 +216,31 @@ if(WITH_PYTHON3)
   if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
     set(WITH_PYTHON3 "3")
   endif()
-  find_package(Python3Interp ${WITH_PYTHON3} REQUIRED)
-  find_package(Python3Libs ${PYTHON3_VERSION_STRING} EXACT REQUIRED)
+  if(NOT WITH_PYTHON3 STREQUAL "3")
+    set(find_python3_exact "EXACT")
+  endif()
+  find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
+    COMPONENTS Interpreter Development)
+  unset(find_python3_exact)
 endif()
 
 # the major version of the python bindings as a dependency of other
 # targets
 if(WITH_PYTHON2)
-  set(PY_BINDING_INFIX "")
+  set(PY_BINDING_INFIX 2)
 else()
   set(PY_BINDING_INFIX 3)
+endif()
+# use python2 by default for python bindings, tools and tests, before
+# switching to python3
+# Python_EXECUTABLE` can be set by `find_package(Python ...)` also. and we do
+# call `find_package(Python ...)` in `ceph/CMakeLists.txt`. but we do so before
+# `add_subdirectory(src)` where `Python_EXECUTABLE` is set. so it's safe to
+# use this variable name and call `find_package(Python ...)`.
+if(WITH_PYTHON2)
+  set(Python_EXECUTABLE ${Python2_EXECUTABLE})
+else()
+  set(Python_EXECUTABLE ${Python3_EXECUTABLE})
 endif()
 
 # sort out which allocator to use
@@ -282,12 +279,13 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+find_package(fmt 5.2.1 QUIET)
+if(NOT fmt_FOUND)
+  message(STATUS "Could not find fmt, will build it")
+  add_subdirectory(fmt)
+endif()
+
 if(WITH_SEASTAR)
-  find_package(fmt 5.2.1 QUIET)
-  if(NOT fmt_FOUND)
-    message(STATUS "Could not find fmt, will build it")
-    add_subdirectory(fmt)
-  endif()
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
     message(STATUS "Could not find c-ares, will build it")
@@ -363,6 +361,7 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
+  StdFilesystem::filesystem
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
@@ -394,6 +393,15 @@ if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()
 
+if(WITH_BLUESTORE_PMEM)
+  if(WITH_SYSTEM_PMDK)
+    find_package(pmem REQUIRED)
+  else()
+    include(Buildpmem)
+    build_pmem()
+  endif()
+endif()
+
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
 
@@ -402,7 +410,7 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
-  INSTALL_RPATH "")
+  SKIP_RPATH TRUE)
 if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
@@ -471,6 +479,7 @@ endif()
 
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
+add_subdirectory(python-common)
 
 # Monitor
 add_subdirectory(mon)
@@ -504,6 +513,10 @@ add_subdirectory(os)
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
+  # Link the Object Class API implementation directly as intermediary
+  # static library (like libosd.a) nullifies the effect of `-rdynamic`.
+  osd/objclass.cc
+  objclass/class_api.cc
   ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
@@ -513,7 +526,8 @@ if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
 set_target_properties(ceph-osd PROPERTIES
-  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
+  INSTALL_RPATH "")
 install(TARGETS ceph-osd DESTINATION bin)
 
 if (WITH_CEPHFS)
@@ -626,6 +640,8 @@ add_subdirectory(bash_completion)
 add_subdirectory(client)
 
 if(WITH_LIBCEPHFS)
+  find_package(PkgConfig QUIET REQUIRED)
+  pkg_check_modules(CAPNG REQUIRED libcap-ng)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs PRIVATE client ceph-common
@@ -751,7 +767,7 @@ if (WITH_RBD)
   add_dependencies(vstart cython${PY_BINDING_INFIX}_rbd)
 endif()
 if (WITH_CEPHFS)
-  add_dependencies(vstart ceph-mds)
+  add_dependencies(vstart ceph-mds cephfs cython${PY_BINDING_INFIX}_cephfs)
 endif()
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <map>
 #include <string>
@@ -8,6 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "rgw_tag.h"
+#include "rgw_common.h"
 
 bool RGWObjTags::add_tag(const string&key, const string& val){
   return tag_map.emplace(std::make_pair(key,val)).second;

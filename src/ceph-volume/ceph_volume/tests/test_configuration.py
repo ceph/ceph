@@ -28,13 +28,13 @@ class TestConf(object):
     def test_get_non_existing_list(self):
         cfg = configuration.Conf()
         cfg.is_valid = lambda: True
-        cfg.readfp(self.conf_file)
+        cfg.read_conf(self.conf_file)
         assert cfg.get_list('global', 'key') == []
 
     def test_get_non_existing_list_get_default(self):
         cfg = configuration.Conf()
         cfg.is_valid = lambda: True
-        cfg.readfp(self.conf_file)
+        cfg.read_conf(self.conf_file)
         assert cfg.get_list('global', 'key', ['a']) == ['a']
 
     def test_get_rid_of_comments(self):
@@ -45,7 +45,7 @@ class TestConf(object):
         default = 0  # this is a comment
         """))
 
-        cfg.readfp(conf_file)
+        cfg.read_conf(conf_file)
         assert cfg.get_list('foo', 'default') == ['0']
 
     def test_gets_split_on_commas(self):
@@ -56,7 +56,7 @@ class TestConf(object):
         default = 0,1,2,3  # this is a comment
         """))
 
-        cfg.readfp(conf_file)
+        cfg.read_conf(conf_file)
         assert cfg.get_list('foo', 'default') == ['0', '1', '2', '3']
 
     def test_spaces_and_tabs_are_ignored(self):
@@ -67,7 +67,7 @@ class TestConf(object):
         default = 0,        1,  2 ,3  # this is a comment
         """))
 
-        cfg.readfp(conf_file)
+        cfg.read_conf(conf_file)
         assert cfg.get_list('foo', 'default') == ['0', '1', '2', '3']
 
 
@@ -106,7 +106,7 @@ class TestLoad(object):
         with pytest.raises(RuntimeError):
             configuration.load(ceph_conf)
         stdout, stderr = capsys.readouterr()
-        assert 'File contains no section headers' in stdout
+        assert 'File contains no section headers' in stderr
 
     @pytest.mark.parametrize('commented', ['colon','hash'])
     def test_coment_as_a_value(self, tmpdir, commented):

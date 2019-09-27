@@ -4,7 +4,10 @@ from __future__ import absolute_import
 import uuid
 from contextlib import contextmanager
 
-from mock import patch
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
 
 from . import ControllerTestCase
 from ..controllers.osd import Osd
@@ -236,5 +239,5 @@ class OsdTest(ControllerTestCase):
         with self._mock_osd_list(osd_stat_ids=osds_actual, osdmap_tree_node_ids=osds_leftover,
                                  osdmap_ids=osds_actual):
             self._get('/api/osd')
-            self.assertEqual(len(self.jsonBody()), 2, 'It should display two OSDs without failure')
+            self.assertEqual(len(self.json_body()), 2, 'It should display two OSDs without failure')
             self.assertStatus(200)

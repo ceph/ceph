@@ -49,7 +49,7 @@ protected:
   LogClient log_client;
   LogChannelRef clog, audit_clog;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("MgrStandby::lock");
   Finisher finisher;
   SafeTimer timer;
 

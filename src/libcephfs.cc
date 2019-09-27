@@ -20,7 +20,6 @@
 #include "auth/Crypto.h"
 #include "client/Client.h"
 #include "librados/RadosClient.h"
-#include "common/Mutex.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -235,7 +234,7 @@ public:
     if (ret)
       return ret;
     cct->_conf.apply_changes(nullptr);
-    cct->_conf.complain_about_parse_errors(cct);
+    cct->_conf.complain_about_parse_error(cct);
     return 0;
   }
 
@@ -362,7 +361,7 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
     *pminor = (n >= 2) ? minor : 0;
   if (ppatch)
     *ppatch = (n >= 3) ? patch : 0;
-  return VERSION;
+  return PROJECT_VERSION;
 }
 
 extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *cct)
@@ -1078,6 +1077,23 @@ extern "C" int ceph_lazyio(class ceph_mount_info *cmount,
 {
   return (cmount->get_client()->lazyio(fd, enable));
 }
+
+extern "C" int ceph_lazyio_propagate(class ceph_mount_info *cmount,
+                           int fd, int64_t offset, size_t count)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return (cmount->get_client()->lazyio_propagate(fd, offset, count));
+}
+
+extern "C" int ceph_lazyio_synchronize(class ceph_mount_info *cmount,
+                           int fd, int64_t offset, size_t count)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return (cmount->get_client()->lazyio_synchronize(fd, offset, count));
+}
+
 
 extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
 {

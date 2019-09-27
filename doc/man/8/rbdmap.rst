@@ -94,7 +94,7 @@ commands::
     rbd map foopool/bar2 --id admin --keyring /etc/ceph/ceph.client.admin.keyring
     rbd map foopool/bar2 --id admin --keyring /etc/ceph/ceph.client.admin.keyring --options lock_on_read,queue_depth=1024
 
-If the images had XFS filesystems on them, the corresponding ``/etc/fstab``
+If the images had XFS file systems on them, the corresponding ``/etc/fstab``
 entries might look like this::
 
     /dev/rbd/foopool/bar1 /mnt/bar1 xfs noauto 0 0

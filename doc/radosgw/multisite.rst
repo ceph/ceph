@@ -230,7 +230,7 @@ the default zone group first.
 
     # radosgw-admin zonegroup remove --rgw-zonegroup=default --rgw-zone=default
     # radosgw-admin period update --commit
-    # radosgw-admin zone delete --rgw-zone=default
+    # radosgw-admin zone rm --rgw-zone=default
     # radosgw-admin period update --commit
     # radosgw-admin zonegroup delete --rgw-zonegroup=default
     # radosgw-admin period update --commit
@@ -345,13 +345,16 @@ Pull the Realm
 --------------
 
 Using the URL path, access key and secret of the master zone in the
-master zone group, pull the realm to the host. To pull a non-default
-realm, specify the realm using the ``--rgw-realm`` or ``--realm-id``
-configuration options.
+master zone group, pull the realm configuration to the host. To pull a
+non-default realm, specify the realm using the ``--rgw-realm`` or
+``--realm-id`` configuration options.
 
 ::
 
     # radosgw-admin realm pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
+
+.. note:: Pulling the realm also retrieves the remote's current period
+          configuration, and makes it the current period on this host as well.
 
 If this realm is the default realm or the only realm, make the realm the
 default realm.
@@ -359,22 +362,6 @@ default realm.
 ::
 
     # radosgw-admin realm default --rgw-realm={realm-name}
-
-Pull the Period
----------------
-
-Using the URL path, access key and secret of the master zone in the
-master zone group, pull the period to the host. To pull a period from a
-non-default realm, specify the realm using the ``--rgw-realm`` or
-``--realm-id`` configuration options.
-
-::
-
-    # radosgw-admin period pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
-
-
-.. note:: Pulling the period retrieves the latest version of the zone group
-          and zone configurations for the realm.
 
 Create a Secondary Zone
 -----------------------
@@ -420,7 +407,7 @@ Delete the default zone if needed.
 
 ::
 
-    # radosgw-admin zone delete --rgw-zone=default
+    # radosgw-admin zone rm --rgw-zone=default
 
 Finally, delete the default pools in your Ceph storage cluster if
 needed.
@@ -590,7 +577,7 @@ disaster recovery.
    ::
 
        # radosgw-admin zone modify --rgw-zone={zone-name} --master --default \
-                                   --read-only=False
+                                   --read-only=false
 
 2. Update the period to make the changes take effect.
 
@@ -606,13 +593,13 @@ disaster recovery.
 
 If the former master zone recovers, revert the operation.
 
-1. From the recovered zone, pull the period from the current master
-   zone.
+1. From the recovered zone, pull the latest realm configuration
+   from the current master zone.
 
    ::
 
-       # radosgw-admin period pull --url={url-to-master-zone-gateway} \
-                                   --access-key={access-key} --secret={secret}
+       # radosgw-admin realm pull --url={url-to-master-zone-gateway} \
+                                  --access-key={access-key} --secret={secret}
 
 2. Make the recovered zone the master and default zone.
 
@@ -1293,7 +1280,7 @@ Next, delete the zone. Execute the following:
 
 ::
 
-    # radosgw-admin zone delete --rgw-zone<name>
+    # radosgw-admin zone rm --rgw-zone<name>
 
 Finally, update the period:
 

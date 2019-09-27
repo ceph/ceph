@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
@@ -9,11 +10,12 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permissions } from '../../../shared/models/permissions';
+import { Permission } from '../../../shared/models/permissions';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -28,20 +30,22 @@ import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-mo
   providers: [TaskListService]
 })
 export class IscsiTargetListComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
   available: boolean = undefined;
   columns: CdTableColumn[];
   docsUrl: string;
   modalRef: BsModalRef;
-  permissions: Permissions;
+  permission: Permission;
   selection = new CdTableSelection();
+  cephIscsiConfigVersion: number;
   settings: any;
   status: string;
   summaryDataSubscription: Subscription;
   tableActions: CdTableAction[];
   targets = [];
+  icons = Icons;
 
   builders = {
     'iscsi/target/create': (metadata) => {
@@ -62,26 +66,28 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
-    this.permissions = this.authStorageService.getPermissions();
+    this.permission = this.authStorageService.getPermissions().iscsi;
 
     this.tableActions = [
       {
         permission: 'create',
-        icon: 'fa-plus',
+        icon: Icons.add,
         routerLink: () => '/block/iscsi/targets/create',
         name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: 'fa-pencil',
+        icon: Icons.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
         name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
-        icon: 'fa-times',
+        icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
-        name: this.actionLabels.DELETE
+        name: this.actionLabels.DELETE,
+        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
+        disableDesc: () => this.getDeleteDisableDesc()
       }
     ];
   }
@@ -115,15 +121,18 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
       this.available = result.available;
 
       if (result.available) {
-        this.taskListService.init(
-          () => this.iscsiService.listTargets(),
-          (resp) => this.prepareResponse(resp),
-          (targets) => (this.targets = targets),
-          () => this.onFetchError(),
-          this.taskFilter,
-          this.itemFilter,
-          this.builders
-        );
+        this.iscsiService.version().subscribe((res: any) => {
+          this.cephIscsiConfigVersion = res['ceph_iscsi_config_version'];
+          this.taskListService.init(
+            () => this.iscsiService.listTargets(),
+            (resp) => this.prepareResponse(resp),
+            (targets) => (this.targets = targets),
+            () => this.onFetchError(),
+            this.taskFilter,
+            this.itemFilter,
+            this.builders
+          );
+        });
 
         this.iscsiService.settings().subscribe((settings: any) => {
           this.settings = settings;
@@ -140,6 +149,13 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.summaryDataSubscription) {
       this.summaryDataSubscription.unsubscribe();
+    }
+  }
+
+  getDeleteDisableDesc(): string | undefined {
+    const first = this.selection.first();
+    if (first && first['info'] && first['info']['num_sessions']) {
+      return this.i18n('Target has active sessions');
     }
   }
 

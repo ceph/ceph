@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
 #include <vector>
@@ -74,6 +74,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_CORS_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError" }},
+    { ERR_INVALID_RETENTION_PERIOD,{400, "InvalidRetentionPeriod"}},
     { ERR_LIMIT_EXCEEDED, {400, "LimitExceeded" }},
     { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
     { EACCES, {403, "AccessDenied" }},
@@ -97,6 +98,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser"}},
     { ERR_NO_SUCH_ENTITY, {404, "NoSuchEntity"}},
     { ERR_NO_SUCH_CORS_CONFIGURATION, {404, "NoSuchCORSConfiguration"}},
+    { ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION, {404, "ObjectLockConfigurationNotFoundError"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
@@ -431,6 +433,23 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 {
   oss << "rgw_err(http_ret=" << err.http_ret << ", err_code='" << err.err_code << "') ";
   return oss;
+}
+
+void rgw_add_amz_meta_header(
+  std::map<std::string, std::string>& x_meta_map,
+  const std::string& k,
+  const std::string& v)
+{
+  auto it = x_meta_map.find(k);
+  if (it != x_meta_map.end()) {
+    std::string old = it->second;
+    boost::algorithm::trim_right(old);
+    old.append(",");
+    old.append(v);
+    x_meta_map[k] = old;
+  } else {
+    x_meta_map[k] = v;
+  }
 }
 
 string rgw_string_unquote(const string& s)
@@ -938,8 +957,8 @@ void RGWHTTPArgs::append(const string& name, const string& val)
               (name.compare("policy") == 0) ||
               (name.compare("quota") == 0) ||
               (name.compare("list") == 0) ||
-              (name.compare("object") == 0)) {
-
+              (name.compare("object") == 0) ||
+              (name.compare("sync") == 0)) {
     if (!admin_subresource_added) {
       sub_resources[name] = "";
       admin_subresource_added = true;

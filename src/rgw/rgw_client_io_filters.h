@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_CLIENT_IO_DECOIMPL_H
 #define CEPH_RGW_CLIENT_IO_DECOIMPL_H
@@ -291,7 +291,7 @@ public:
       // extensions/trailing headers.
       char chunk_size[32];
       const auto chunk_size_len = snprintf(chunk_size, sizeof(chunk_size),
-                                           "%" PRIx64 "\r\n", len);
+                                           "%zx\r\n", len);
       size_t sent = 0;
 
       sent += DecoratedRestfulClient<T>::send_body(chunk_size, chunk_size_len);

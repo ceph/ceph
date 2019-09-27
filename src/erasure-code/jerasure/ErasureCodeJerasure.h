@@ -117,6 +117,7 @@ public:
     matrix(0)
   {
     DEFAULT_K = "7";
+    DEFAULT_M = "2";
     DEFAULT_W = "8";
   }
   ~ErasureCodeJerasureReedSolomonRAID6() override {

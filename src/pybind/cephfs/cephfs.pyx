@@ -21,6 +21,8 @@ if sys.version_info[0] < 3:
 else:
     str_type = str
 
+cdef int AT_SYMLINK_NOFOLLOW = 0x100
+cdef int CEPH_STATX_BASIC_STATS = 0x7ffu
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -139,6 +141,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_mkdirs(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)
+    void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_chdir(ceph_mount_info *cmount, const char *path)
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
@@ -158,11 +161,12 @@ class Error(Exception):
 
 class OSError(Error):
     def __init__(self, errno, strerror):
+        super(OSError, self).__init__(errno, strerror)
         self.errno = errno
         self.strerror = strerror
 
     def __str__(self):
-        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+        return '{0}: {1} [Errno {2}]'.format(self.strerror, os.strerror(self.errno), self.errno)
 
 
 class PermissionError(OSError):
@@ -209,6 +213,10 @@ class OutOfRange(OSError):
     pass
 
 
+class ObjectNotEmpty(OSError):
+    pass
+
+
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
         errno.EPERM      : PermissionError,
@@ -221,6 +229,7 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.EOPNOTSUPP : OperationNotSupported,
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
+        errno.ENOTEMPTY  : ObjectNotEmpty,
     }
 ELSE:
     cdef errno_to_exception =  {
@@ -234,6 +243,7 @@ ELSE:
         errno.EOPNOTSUPP : OperationNotSupported,
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
+        errno.ENOTEMPTY  : ObjectNotEmpty,
     }
 
 
@@ -251,7 +261,7 @@ cdef make_ex(ret, msg):
     if ret in errno_to_exception:
         return errno_to_exception[ret](ret, msg)
     else:
-        return Error(ret, msg + (": error code %d" % ret))
+        return Error(msg + ': {} [Errno {:d}]'.format(os.strerror(ret), ret))
 
 
 class DirEntry(namedtuple('DirEntry',
@@ -274,8 +284,54 @@ StatResult = namedtuple('StatResult',
                          "st_blocks", "st_atime", "st_mtime", "st_ctime"])
 
 cdef class DirResult(object):
-    cdef ceph_dir_result *handler
+    cdef LibCephFS lib
+    cdef ceph_dir_result* handle
 
+# Bug in older Cython instances prevents this from being a static method.
+#    @staticmethod
+#    cdef create(LibCephFS lib, ceph_dir_result* handle):
+#        d = DirResult()
+#        d.lib = lib
+#        d.handle = handle
+#        return d
+
+    def __dealloc__(self):
+        self.close()
+
+    def __enter__(self):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        self.lib.require_state("mounted")
+        with nogil:
+            ceph_rewinddir(self.lib.cluster, self.handle)
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.close()
+        return False
+
+    def readdir(self):
+        self.lib.require_state("mounted")
+
+        with nogil:
+            dirent = ceph_readdir(self.lib.cluster, self.handle)
+        if not dirent:
+            return None
+
+        return DirEntry(d_ino=dirent.d_ino,
+                        d_off=dirent.d_off,
+                        d_reclen=dirent.d_reclen,
+                        d_type=dirent.d_type,
+                        d_name=dirent.d_name)
+
+    def close(self):
+        if self.handle:
+            self.lib.require_state("mounted")
+            with nogil:
+                ret = ceph_closedir(self.lib.cluster, self.handle)
+            if ret < 0:
+                raise make_ex(ret, "closedir failed")
+            self.handle = NULL
 
 def cstr(val, name, encoding="utf-8", opt=False):
     """
@@ -292,11 +348,13 @@ def cstr(val, name, encoding="utf-8", opt=False):
         return None
     if isinstance(val, bytes):
         return val
-    elif isinstance(val, unicode):
-        return val.encode(encoding)
     else:
-        raise TypeError('%s must be a string' % name)
-
+        try:
+            v = val.encode(encoding)
+        except:
+            raise TypeError('%s must be encodeable as a bytearray' % name)
+        assert isinstance(v, bytes)
+        return v
 
 def cstr_list(list_str, name, encoding="utf-8"):
     return [cstr(s, name) for s in list_str]
@@ -551,6 +609,8 @@ cdef class LibCephFS(object):
         # Configure which filesystem to mount if one was specified
         if filesystem_name is None:
             filesystem_name = b""
+        else:
+            filesystem_name = cstr(filesystem_name, 'filesystem_name')
         cdef:
             char *_filesystem_name = filesystem_name
         if filesystem_name:
@@ -687,60 +747,47 @@ cdef class LibCephFS(object):
         
         :param path: the path name of the directory to open.  Must be either an absolute path
                      or a path relative to the current working directory.
-        :param dir_handler: the directory result pointer structure to fill in.
+        :rtype handle: the open directory stream handle
         """
         self.require_state("mounted")
 
         path = cstr(path, 'path')
         cdef:
             char* _path = path
-            ceph_dir_result *dir_handler
+            ceph_dir_result* handle
         with nogil:
-            ret = ceph_opendir(self.cluster, _path, &dir_handler);
+            ret = ceph_opendir(self.cluster, _path, &handle);
         if ret < 0:
             raise make_ex(ret, "opendir failed")
         d = DirResult()
-        d.handler = dir_handler
+        d.lib = self
+        d.handle = handle
         return d
 
-    def readdir(self, DirResult dir_handler):
+    def readdir(self, DirResult handle):
         """
         Get the next entry in an open directory.
         
-        :param dir_handler: the directory stream pointer from an opendir holding the state of the
-                            next entry to return.
-        :rtype dir_handler: the next directory entry or NULL if at the end of the directory (or the directory is empty.
-                            This pointer should not be freed by the caller, and is only safe to access between return and
-                            the next call to readdir or closedir.
+        :param handle: the open directory stream handle
+        :rtype dentry: the next directory entry or None if at the end of the
+                       directory (or the directory is empty.  This pointer
+                       should not be freed by the caller, and is only safe to
+                       access between return and the next call to readdir or
+                       closedir.
         """
         self.require_state("mounted")
 
-        cdef ceph_dir_result *_dir_handler = dir_handler.handler
-        with nogil:
-            dirent = ceph_readdir(self.cluster, _dir_handler)
-        if not dirent:
-            return None
+        return handle.readdir()
 
-        return DirEntry(d_ino=dirent.d_ino,
-                        d_off=dirent.d_off,
-                        d_reclen=dirent.d_reclen,
-                        d_type=dirent.d_type,
-                        d_name=dirent.d_name)
-
-    def closedir(self, DirResult dir_handler):
+    def closedir(self, DirResult handle):
         """
         Close the open directory.
         
-        :param dir_handler: the directory result pointer (set by ceph_opendir) to close
+        :param handle: the open directory stream handle
         """
         self.require_state("mounted")
-        cdef:
-            ceph_dir_result *_dir_handler = dir_handler.handler
 
-        with nogil:
-            ret = ceph_closedir(self.cluster, _dir_handler)
-        if ret < 0:
-            raise make_ex(ret, "closedir failed")
+        return handle.close()
 
     def mkdir(self, path, mode):
         """
@@ -761,7 +808,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_mkdir(self.cluster, _path, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in mkdir '%s'" % path)
+            raise make_ex(ret, "error in mkdir {}".format(path.decode('utf-8')))
 
     def chmod(self, path, mode) :
         """
@@ -780,7 +827,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_chmod(self.cluster, _path, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in chmod '%s'" % path)
+            raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
     def mkdirs(self, path, mode):
         """
@@ -801,7 +848,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_mkdirs(self.cluster, _path, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in mkdirs '%s'" % path)
+            raise make_ex(ret, "error in mkdirs {}".format(path.decode('utf-8')))
 
     def rmdir(self, path):
         """
@@ -814,7 +861,7 @@ cdef class LibCephFS(object):
         cdef char* _path = path
         ret = ceph_rmdir(self.cluster, _path)
         if ret < 0:
-            raise make_ex(ret, "error in rmdir '%s'" % path)
+            raise make_ex(ret, "error in rmdir {}".format(path.decode('utf-8')))
 
     def open(self, path, flags, mode=0):
         """
@@ -869,7 +916,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_open(self.cluster, _path, _flags, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in open '%s'" % path)
+            raise make_ex(ret, "error in open {}".format(path.decode('utf-8')))
         return ret
 
     def close(self, fd):
@@ -1050,7 +1097,7 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in setxattr")
 
 
-    def stat(self, path):
+    def stat(self, path, follow_symlink=True):
         """
         Get a file's extended statistics and attributes.
         
@@ -1063,11 +1110,17 @@ cdef class LibCephFS(object):
             char* _path = path
             statx stx
 
-        with nogil:
-            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
-            ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu, 0)
+        if follow_symlink:
+            with nogil:
+                ret = ceph_statx(self.cluster, _path, &stx,
+                                 CEPH_STATX_BASIC_STATS, 0)
+        else:
+            with nogil:
+                ret = ceph_statx(self.cluster, _path, &stx,
+                                 CEPH_STATX_BASIC_STATS, AT_SYMLINK_NOFOLLOW)
+
         if ret < 0:
-            raise make_ex(ret, "error in stat: %s" % path)
+            raise make_ex(ret, "error in stat: {}".format(path.decode('utf-8')))
         return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
                           st_mode=stx.stx_mode, st_nlink=stx.stx_nlink,
                           st_uid=stx.stx_uid, st_gid=stx.stx_gid,
@@ -1077,6 +1130,16 @@ cdef class LibCephFS(object):
                           st_atime=datetime.fromtimestamp(stx.stx_atime.tv_sec),
                           st_mtime=datetime.fromtimestamp(stx.stx_mtime.tv_sec),
                           st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
+
+    def lstat(self, path):
+        """
+        Get a file's extended statistics and attributes. When file's a
+        symbolic link, return the informaion of the link itself rather
+        than that of the file it points too.
+
+        :param path: the file or directory to get the statistics of.
+        """
+        return self.stat(path, follow_symlink=False)
 
     def fstat(self, fd):
         """
@@ -1093,8 +1156,8 @@ cdef class LibCephFS(object):
             statx stx
 
         with nogil:
-            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
-            ret = ceph_fstatx(self.cluster, _fd, &stx, 0x7ffu, 0)
+            ret = ceph_fstatx(self.cluster, _fd, &stx,
+                              CEPH_STATX_BASIC_STATS, 0)
         if ret < 0:
             raise make_ex(ret, "error in fsat")
         return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
@@ -1185,7 +1248,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_unlink(self.cluster, _path)
         if ret < 0:
-            raise make_ex(ret, "error in unlink: %s" % path)
+            raise make_ex(ret, "error in unlink: {}".format(path.decode('utf-8')))
 
     def rename(self, src, dst):
         """
@@ -1207,7 +1270,8 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_rename(self.cluster, _src, _dst)
         if ret < 0:
-            raise make_ex(ret, "error in rename '%s' to '%s'" % (src, dst))
+            raise make_ex(ret, "error in rename {} to {}".format(src.decode(
+                          'utf-8'), dst.decode('utf-8')))
 
     def mds_command(self, mds_spec, args, input_data):
         """

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * create rgw admin user
@@ -19,23 +19,24 @@
 #include <string>
 #include "common/config.h"
 
-#include "rgw_rados.h"
+#include <boost/intrusive_ptr.hpp>
+#include "rgw_sal.h"
 
 namespace rgw {
 
   class RGWLibAdmin
   {
-    RGWRados *store;
+    rgw::sal::RGWRadosStore *store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
-    RGWRados* get_store()
+    rgw::sal::RGWRadosStore* get_store()
     {
       return store;
     }
 
     int init();
-    int init(vector<const char *>& args);
+    int init(std::vector<const char *>& args);
     int stop();
   };
 }

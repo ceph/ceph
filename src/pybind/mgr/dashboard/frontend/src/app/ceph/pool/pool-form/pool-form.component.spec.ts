@@ -5,9 +5,10 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import {
@@ -146,9 +147,10 @@ describe('PoolFormComponent', () => {
     imports: [
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       TabsModule.forRoot(),
-      PoolModule
+      PoolModule,
+      NgBootstrapFormValidationModule.forRoot()
     ],
     providers: [
       ErasureCodeProfileService,
@@ -300,6 +302,15 @@ describe('PoolFormComponent', () => {
 
     it('validates compression mode default value', () => {
       expect(form.getValue('mode')).toBe('none');
+    });
+
+    it('validate quotas', () => {
+      formHelper.expectValid('max_bytes');
+      formHelper.expectValid('max_objects');
+      formHelper.expectValidChange('max_bytes', '10 Gib');
+      formHelper.expectValidChange('max_bytes', '');
+      formHelper.expectValidChange('max_objects', '');
+      formHelper.expectErrorChange('max_objects', -1, 'min');
     });
 
     describe('compression form', () => {
@@ -930,6 +941,23 @@ describe('PoolFormComponent', () => {
           size: 2
         });
       });
+
+      it('with quotas', () => {
+        setMultipleValues({
+          name: 'RepPoolWithQuotas',
+          poolType: 'replicated',
+          max_bytes: 1024 * 1024,
+          max_objects: 3000,
+          pgNum: 8
+        });
+        testCreate({
+          pool: 'RepPoolWithQuotas',
+          pool_type: 'replicated',
+          quota_max_bytes: 1024 * 1024,
+          quota_max_objects: 3000,
+          pg_num: 8
+        });
+      });
     });
 
     it('pool with compression', () => {
@@ -992,6 +1020,8 @@ describe('PoolFormComponent', () => {
       pool.options.compression_required_ratio = 0.8;
       pool.flags_names = 'someFlag1,someFlag2';
       pool.application_metadata = ['rbd', 'rgw'];
+      pool.quota_max_bytes = 1024 * 1024 * 1024;
+      pool.quota_max_objects = 3000;
 
       createCrushRule({ name: 'someRule' });
       spyOn(poolService, 'get').and.callFake(() => of(pool));
@@ -1025,7 +1055,9 @@ describe('PoolFormComponent', () => {
           'algorithm',
           'minBlobSize',
           'maxBlobSize',
-          'ratio'
+          'ratio',
+          'max_bytes',
+          'max_objects'
         ];
         enabled.forEach((controlName) => {
           return expect(form.get(controlName).enabled).toBeTruthy();
@@ -1043,6 +1075,8 @@ describe('PoolFormComponent', () => {
         expect(form.getValue('minBlobSize')).toBe('512 KiB');
         expect(form.getValue('maxBlobSize')).toBe('1 MiB');
         expect(form.getValue('ratio')).toBe(pool.options.compression_required_ratio);
+        expect(form.getValue('max_bytes')).toBe('1 GiB');
+        expect(form.getValue('max_objects')).toBe(pool.quota_max_objects);
       });
 
       it('updates pgs on every change', () => {

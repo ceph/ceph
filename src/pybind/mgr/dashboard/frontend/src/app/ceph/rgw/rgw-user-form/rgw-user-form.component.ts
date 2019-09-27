@@ -9,6 +9,7 @@ import { concat as observableConcat, forkJoin as observableForkJoin, Observable 
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -35,7 +36,7 @@ export class RgwUserFormComponent implements OnInit {
   error = false;
   loading = false;
   submitObservables: Observable<Object>[] = [];
-
+  icons = Icons;
   subusers: RgwUserSubuser[] = [];
   s3Keys: RgwUserS3Key[] = [];
   swiftKeys: RgwUserSwiftKey[] = [];
@@ -256,14 +257,13 @@ export class RgwUserFormComponent implements OnInit {
   }
 
   /**
-   * Validate the quota maximum size, e.g. 1096, 1K, 30M. Only integer numbers are valid,
-   * something like 1.9M is not recognized as valid.
+   * Validate the quota maximum size, e.g. 1096, 1K, 30M or 1.9MiB.
    */
   quotaMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
     if (isEmptyInputValue(control.value)) {
       return null;
     }
-    const m = RegExp('^(\\d+)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
+    const m = RegExp('^(\\d+(\\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
       control.value
     );
     if (m === null) {

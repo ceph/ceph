@@ -167,27 +167,28 @@ A preselection of pg_num
 
 When creating a new pool with::
 
-        ceph osd pool create {pool-name} pg_num
+        ceph osd pool create {pool-name} [pg_num]
 
-it is mandatory to choose the value of ``pg_num`` because it cannot (currently) be
-calculated automatically. Here are a few values commonly used:
+it is optional to choose the value of ``pg_num``.  If you do not
+specify ``pg_num``, the cluster can (by default) automatically tune it
+for you based on how much data is stored in the pool (see above, :ref:`pg-autoscaler`).
 
-- Less than 5 OSDs set ``pg_num`` to 128
+Alternatively, ``pg_num`` can be explicitly provided.  However,
+whether you specify a ``pg_num`` value or not does not affect whether
+the value is automatically tuned by the cluster after the fact.  To
+enable or disable auto-tuning,::
 
-- Between 5 and 10 OSDs set ``pg_num`` to 512
+  ceph osd pool set {pool-name} pg_autoscaler_mode (on|off|warn)
 
-- Between 10 and 50 OSDs set ``pg_num`` to 1024
+The "rule of thumb" for PGs per OSD has traditionally be 100.  With
+the additional of the balancer (which is also enabled by default), a
+value of more like 50 PGs per OSD is probably reasonable.  The
+challenge (which the autoscaler normally does for you), is to:
 
-- If you have more than 50 OSDs, you need to understand the tradeoffs
-  and how to calculate the ``pg_num`` value by yourself
-
-- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool
-
-As the number of OSDs increases, choosing the right value for pg_num
-becomes more important because it has a significant influence on the
-behavior of the cluster as well as the durability of the data when
-something goes wrong (i.e. the probability that a catastrophic event
-leads to data loss).
+- have the PGs per pool proportional to the data in the pool, and
+- end up with 50-100 PGs per OSDs, after the replication or
+  erasuring-coding fan-out of each PG across OSDs is taken into
+  consideration
 
 How are Placement Groups used ?
 ===============================
@@ -382,14 +383,15 @@ makes every effort to evenly spread OSDs among all existing Placement
 Groups.
 
 As long as there are one or two orders of magnitude more Placement
-Groups than OSDs, the distribution should be even. For instance, 300
-placement groups for 3 OSDs, 1000 placement groups for 10 OSDs etc.
+Groups than OSDs, the distribution should be even. For instance, 256
+placement groups for 3 OSDs, 512 or 1024 placement groups for 10 OSDs
+etc.
 
 Uneven data distribution can be caused by factors other than the ratio
 between OSDs and placement groups. Since CRUSH does not take into
 account the size of the objects, a few very large objects may create
 an imbalance. Let say one million 4K objects totaling 4GB are evenly
-spread among 1000 placement groups on 10 OSDs. They will use 4GB / 10
+spread among 1024 placement groups on 10 OSDs. They will use 4GB / 10
 = 400MB on each OSD. If one 400MB object is added to the pool, the
 three OSDs supporting the placement group in which the object has been
 placed will be filled with 400MB + 400MB = 800MB while the seven
@@ -433,9 +435,12 @@ You should then check if the result makes sense with the way you
 designed your Ceph cluster to maximize `data durability`_,
 `object distribution`_ and minimize `resource usage`_.
 
-The result should be **rounded up to the nearest power of two.**
-Rounding up is optional, but recommended for CRUSH to more evenly balance
-the number of objects among placement groups.
+The result should always be **rounded up to the nearest power of two**.
+
+Only a power of two will evenly balance the number of objects among
+placement groups. Other values will result in an uneven distribution of
+data across your OSDs. Their use should be limited to incrementally
+stepping from one power of two to another.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
 replicas, you would estimate your number of PGs as follows::

@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_CACHE_OBJECT_CACHER_OBJECT_DISPATCH_H
 
 #include "librbd/io/ObjectDispatchInterface.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "osdc/ObjectCacher.h"
 
 struct WritebackHandler;
@@ -99,7 +99,7 @@ private:
   size_t m_max_dirty;
   bool m_writethrough_until_flush;
 
-  Mutex m_cache_lock;
+  ceph::mutex m_cache_lock;
   ObjectCacher *m_object_cacher = nullptr;
   ObjectCacher::ObjectSet *m_object_set = nullptr;
 

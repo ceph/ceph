@@ -29,7 +29,7 @@ For example::
 	sudo mkdir /home/username/cephfs
 	sudo ceph-fuse -m 192.168.0.1:6789 /home/username/cephfs
 
-If you have more than one filesystem, specify which one to mount using
+If you have more than one file system, specify which one to mount using
 the ``--client_mds_namespace`` command line argument, or add a
 ``client_mds_namespace`` setting to your ``ceph.conf``.
 
@@ -46,6 +46,8 @@ recommended execution context for ``ceph-fuse``. An example ceph-fuse mount on
 A persistent mount point can be setup via::
 
 	sudo systemctl enable ceph-fuse@/mnt.service
+
+For troubleshooting, see :ref:`ceph_fuse_debugging`.
 
 .. _ceph-fuse: ../../man/8/ceph-fuse/
 .. _fstab: ../fstab/#fuse

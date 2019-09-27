@@ -4,6 +4,7 @@
 
 #include <seastar/core/future-util.hh>
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/shared_future.hh>
 #include <seastar/util/log.hh>
 
 #include "auth/AuthClientHandler.h"
@@ -83,7 +84,7 @@ public:
   // v1 and v2
   seastar::future<> close();
   bool is_my_peer(const entity_addr_t& addr) const;
-  AuthAuthorizer* get_authorizer(peer_type_t peer) const;
+  AuthAuthorizer* get_authorizer(entity_type_t peer) const;
   KeyStore& get_keys();
   seastar::future<> renew_tickets();
   seastar::future<> renew_rotating_keyring();
@@ -107,7 +108,7 @@ private:
 private:
   bool closed = false;
   // v1
-  seastar::promise<Ref<MAuthReply>> reply;
+  seastar::shared_promise<Ref<MAuthReply>> reply;
   // v2
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point auth_start;
@@ -176,7 +177,7 @@ seastar::future<> Connection::renew_rotating_keyring()
   });
 }
 
-AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
+AuthAuthorizer* Connection::get_authorizer(entity_type_t peer) const
 {
   if (auth) {
     return auth->build_authorizer(peer);
@@ -251,7 +252,7 @@ Connection::do_auth_single(Connection::request_t what)
   logger().info("sending {}", *m);
   return conn->send(m).then([this] {
     logger().info("waiting");
-    return reply.get_future();
+    return reply.get_shared_future();
   }).then([this] (Ref<MAuthReply> m) {
     if (!m) {
       ceph_assert(closed);
@@ -297,7 +298,7 @@ Connection::authenticate_v1(epoch_t epoch,
   return conn->keepalive().then([epoch, name, this] {
     return setup_session(epoch, name);
   }).then([this] {
-    return reply.get_future();
+    return reply.get_shared_future();
   }).then([name, want_keys, this](Ref<MAuthReply> m) {
     if (!m) {
       logger().error("authenticate_v1 canceled on {}", name);
@@ -500,7 +501,7 @@ seastar::future<> Client::load_keyring()
 
 void Client::tick()
 {
-  seastar::with_gate(tick_gate, [this] {
+  (void) seastar::with_gate(tick_gate, [this] {
     if (active_con) {
       return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),
@@ -600,7 +601,7 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
     if (con->get_messenger()->get_require_authorizer()) {
       return -EACCES;
     } else {
-      auth_handler.handle_authentication({}, {}, {});
+      auth_handler.handle_authentication({}, {});
       return 1;
     }
   }
@@ -619,7 +620,6 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
   ceph_assert(active_con);
   bool was_challenge = (bool)auth_meta->authorizer_challenge;
   EntityName name;
-  uint64_t global_id;
   AuthCapsInfo caps_info;
   bool is_valid = ah->verify_authorizer(
     &cct,
@@ -628,13 +628,13 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
     auth_meta->get_connection_secret_length(),
     reply,
     &name,
-    &global_id,
+    &active_con->get_conn()->peer_global_id,
     &caps_info,
     &auth_meta->session_key,
     &auth_meta->connection_secret,
     &auth_meta->authorizer_challenge);
   if (is_valid) {
-    auth_handler.handle_authentication(name, global_id, caps_info);
+    auth_handler.handle_authentication(name, caps_info);
     return 1;
   }
   if (!more && !was_challenge && auth_meta->authorizer_challenge) {

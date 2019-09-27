@@ -118,7 +118,7 @@ void ListWatchersRequest<I>::finish(int r) {
     m_watchers->clear();
 
     if (m_object_watchers.size() > 0) {
-      RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+      std::shared_lock owner_locker{m_image_ctx.owner_lock};
       uint64_t watch_handle = m_image_ctx.image_watcher != nullptr ?
         m_image_ctx.image_watcher->get_watch_handle() : 0;
 

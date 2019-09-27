@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_STS_H
 #define CEPH_RGW_STS_H
@@ -107,7 +107,7 @@ class AssumedRoleUser {
   string assumeRoleId;
 public:
   int generateAssumedRoleUser( CephContext* cct,
-                                RGWRados *store,
+                                rgw::sal::RGWRadosStore *store,
                                 const string& roleId,
                                 const rgw::ARN& roleArn,
                                 const string& roleSessionName);
@@ -203,14 +203,14 @@ using AssumeRoleWithWebIdentityResponse = struct AssumeRoleWithWebIdentityRespon
 
 class STSService {
   CephContext* cct;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   rgw_user user_id;
   RGWRole role;
   rgw::auth::Identity* identity;
   int storeARN(string& arn);
 public:
   STSService() = default;
-  STSService(CephContext* cct, RGWRados *store, rgw_user user_id, rgw::auth::Identity* identity) : cct(cct), store(store), user_id(user_id), identity(identity) {}
+  STSService(CephContext* cct, rgw::sal::RGWRadosStore *store, rgw_user user_id, rgw::auth::Identity* identity) : cct(cct), store(store), user_id(user_id), identity(identity) {}
   std::tuple<int, RGWRole> getRoleInfo(const string& arn);
   AssumeRoleResponse assumeRole(AssumeRoleRequest& req);
   GetSessionTokenResponse getSessionToken(GetSessionTokenRequest& req);

@@ -10,6 +10,7 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -38,15 +39,15 @@ const BASE_URL = 'block/rbd';
   ]
 })
 export class RbdListComponent implements OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('usageTpl')
+  @ViewChild('usageTpl', { static: false })
   usageTpl: TemplateRef<any>;
-  @ViewChild('parentTpl')
+  @ViewChild('parentTpl', { static: true })
   parentTpl: TemplateRef<any>;
-  @ViewChild('nameTpl')
+  @ViewChild('nameTpl', { static: false })
   nameTpl: TemplateRef<any>;
-  @ViewChild('flattenTpl')
+  @ViewChild('flattenTpl', { static: true })
   flattenTpl: TemplateRef<any>;
 
   permission: Permission;
@@ -61,6 +62,8 @@ export class RbdListComponent implements OnInit {
 
   builders = {
     'rbd/create': (metadata) =>
+      this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
+    'rbd/delete': (metadata) =>
       this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
     'rbd/clone': (metadata) =>
       this.createRbdFromTask(metadata['child_pool_name'], metadata['child_image_name']),
@@ -96,20 +99,20 @@ export class RbdListComponent implements OnInit {
       )}`;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: 'fa-plus',
+      icon: Icons.add,
       routerLink: () => this.urlBuilder.getCreate(),
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: Icons.edit,
       routerLink: () => this.urlBuilder.getEdit(getImageUri()),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       click: () => this.deleteRbdModal(),
       name: this.actionLabels.DELETE
     };
@@ -118,7 +121,7 @@ export class RbdListComponent implements OnInit {
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting,
-      icon: 'fa-copy',
+      icon: Icons.copy,
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
       name: this.actionLabels.COPY
     };
@@ -126,13 +129,13 @@ export class RbdListComponent implements OnInit {
       permission: 'update',
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent,
-      icon: 'fa-chain-broken',
+      icon: Icons.flatten,
       click: () => this.flattenRbdModal(),
       name: this.actionLabels.FLATTEN
     };
     const moveAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-trash-o',
+      icon: Icons.trash,
       click: () => this.trashRbdModal(),
       name: this.actionLabels.TRASH
     };

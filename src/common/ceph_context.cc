@@ -29,6 +29,7 @@
 #include "common/debug.h"
 #include "common/config.h"
 #include "common/ceph_crypto.h"
+#include "common/lockdep.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/Graylog.h"
@@ -749,7 +750,7 @@ void CephContext::put() {
 void CephContext::init_crypto()
 {
   if (_crypto_inited++ == 0) {
-    ceph::crypto::init(this);
+    ceph::crypto::init();
   }
 }
 

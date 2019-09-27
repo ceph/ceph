@@ -23,9 +23,9 @@ overrides:
           - restful
         cephfs_pools:
           - name: "cephfs_data"
-            pgs: "64"
+            pg_num: "64"
           - name: "cephfs_metadata"
-            pgs: "64"
+            pg_num: "64"
 tasks:
 - ssh-keys:
 - ceph_ansible:

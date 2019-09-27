@@ -89,7 +89,7 @@ public:
   struct fuse_session *se;
   char *mountpoint;
 
-  Mutex stag_lock;
+  ceph::mutex stag_lock = ceph::make_mutex("fuse_ll.cc stag_lock");
   int last_stag;
 
   ceph::unordered_map<uint64_t,int> snap_stag_map;
@@ -657,7 +657,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
 }
 #endif
 
-#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 
 static void fuse_ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
                               off_t offset, off_t length,
@@ -1036,7 +1036,7 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  forget_multi: 0,
  flock: fuse_ll_flock,
 #endif
-#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
  fallocate: fuse_ll_fallocate
 #endif
 };
@@ -1048,7 +1048,6 @@ CephFuse::Handle::Handle(Client *c, int fd) :
   ch(NULL),
   se(NULL),
   mountpoint(NULL),
-  stag_lock("fuse_ll.cc stag_lock"),
   last_stag(0)
 {
   snap_stag_map[CEPH_NOSNAP] = 0;

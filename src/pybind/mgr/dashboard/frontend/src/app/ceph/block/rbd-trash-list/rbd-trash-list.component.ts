@@ -10,6 +10,7 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -31,12 +32,14 @@ import { RbdTrashRestoreModalComponent } from '../rbd-trash-restore-modal/rbd-tr
   providers: [TaskListService]
 })
 export class RbdTrashListComponent implements OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('expiresTpl')
+  @ViewChild('expiresTpl', { static: true })
   expiresTpl: TemplateRef<any>;
-  @ViewChild('deleteTpl')
+  @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
+
+  icons = Icons;
 
   columns: CdTableColumn[];
   executingTasks: ExecutingTask[] = [];
@@ -59,16 +62,15 @@ export class RbdTrashListComponent implements OnInit {
     public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
-
     const restoreAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-undo',
+      icon: Icons.undo,
       click: () => this.restoreModal(),
       name: this.actionLabels.RESTORE
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       click: () => this.deleteModal(),
       name: this.actionLabels.DELETE
     };

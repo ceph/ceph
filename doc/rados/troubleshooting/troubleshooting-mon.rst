@@ -412,23 +412,23 @@ Recovery using OSDs
 But what if all monitors fail at the same time? Since users are encouraged to
 deploy at least three (and preferably five) monitors in a Ceph cluster, the chance of simultaneous
 failure is rare. But unplanned power-downs in a data center with improperly
-configured disk/fs settings could fail the underlying filesystem, and hence
+configured disk/fs settings could fail the underlying file system, and hence
 kill all the monitors. In this case, we can recover the monitor store with the
 information stored in OSDs.::
 
   ms=/root/mon-store
   mkdir $ms
   
-  # collect the cluster map from OSDs
+  # collect the cluster map from stopped OSDs
   for host in $hosts; do
-    rsync -avz $ms/. user@host:$ms.remote
+    rsync -avz $ms/. user@$host:$ms.remote
     rm -rf $ms
-    ssh user@host <<EOF
+    ssh user@$host <<EOF
       for osd in /var/lib/ceph/osd/ceph-*; do
-        ceph-objectstore-tool --data-path \$osd --op update-mon-db --mon-store-path $ms.remote
+        ceph-objectstore-tool --data-path \$osd --no-mon-config --op update-mon-db --mon-store-path $ms.remote
       done
-    EOF
-    rsync -avz user@host:$ms.remote/. $ms
+  EOF
+    rsync -avz user@$host:$ms.remote/. $ms
   done
   
   # rebuild the monitor store from the collected map, if the cluster does not

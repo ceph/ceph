@@ -12,11 +12,6 @@ logger = logging.getLogger(__name__)
 class MgrModuleTestCase(DashboardTestCase):
     MGRS_REQUIRED = 1
 
-    @classmethod
-    def tearDownClass(cls):
-        cls._ceph_cmd(['mgr', 'module', 'disable', 'telemetry'])
-        super(MgrModuleTestCase, cls).tearDownClass()
-
     def wait_until_rest_api_accessible(self):
         """
         Wait until the REST API is accessible.
@@ -37,7 +32,7 @@ class MgrModuleTestCase(DashboardTestCase):
 
 class MgrModuleTest(MgrModuleTestCase):
     def test_list_disabled_module(self):
-        self._ceph_cmd(['mgr', 'module', 'disable', 'telemetry'])
+        self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'])
         self.wait_until_rest_api_accessible()
         data = self._get('/api/mgr/module')
         self.assertStatus(200)
@@ -47,6 +42,7 @@ class MgrModuleTest(MgrModuleTestCase):
                 JObj(sub_elems={
                     'name': JLeaf(str),
                     'enabled': JLeaf(bool),
+                    'always_on': JLeaf(bool),
                     'options': JObj(
                         {},
                         allow_unknown=True,
@@ -65,12 +61,12 @@ class MgrModuleTest(MgrModuleTestCase):
                             'tags': JList(str)
                         }))
                 })))
-        module_info = self.find_object_in_list('name', 'telemetry', data)
+        module_info = self.find_object_in_list('name', 'iostat', data)
         self.assertIsNotNone(module_info)
         self.assertFalse(module_info['enabled'])
 
     def test_list_enabled_module(self):
-        self._ceph_cmd(['mgr', 'module', 'enable', 'telemetry'])
+        self._ceph_cmd(['mgr', 'module', 'enable', 'iostat'])
         self.wait_until_rest_api_accessible()
         data = self._get('/api/mgr/module')
         self.assertStatus(200)
@@ -80,6 +76,7 @@ class MgrModuleTest(MgrModuleTestCase):
                 JObj(sub_elems={
                     'name': JLeaf(str),
                     'enabled': JLeaf(bool),
+                    'always_on': JLeaf(bool),
                     'options': JObj(
                         {},
                         allow_unknown=True,
@@ -98,7 +95,7 @@ class MgrModuleTest(MgrModuleTestCase):
                             'tags': JList(str)
                         }))
                 })))
-        module_info = self.find_object_in_list('name', 'telemetry', data)
+        module_info = self.find_object_in_list('name', 'iostat', data)
         self.assertIsNotNone(module_info)
         self.assertTrue(module_info['enabled'])
 
@@ -110,15 +107,21 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
         self.assertSchema(
             data,
             JObj(
+                allow_unknown=True,
                 sub_elems={
-                    'contact': JLeaf(str),
-                    'description': JLeaf(str),
-                    'enabled': JLeaf(bool),
-                    'interval': JLeaf(int),
-                    'leaderboard': JLeaf(bool),
-                    'organization': JLeaf(str),
-                    'proxy': JLeaf(str),
-                    'url': JLeaf(str)
+                    'channel_basic': bool,
+                    'channel_ident': bool,
+                    'channel_crash': bool,
+                    'channel_device': bool,
+                    'contact': str,
+                    'description': str,
+                    'enabled': bool,
+                    'interval': int,
+                    'last_opt_revision': int,
+                    'leaderboard': bool,
+                    'organization': str,
+                    'proxy': str,
+                    'url': str
                 }))
 
     def test_put(self):
@@ -155,37 +158,3 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
         self.assertEqual(data['organization'], 'SUSE Linux')
         self.assertEqual(data['proxy'], 'foo')
         self.assertEqual(data['url'], 'https://foo.bar/report')
-
-    def test_enable(self):
-        self._ceph_cmd(['mgr', 'module', 'disable', 'telemetry'])
-        self.wait_until_rest_api_accessible()
-        try:
-            # Note, an exception is thrown because the Ceph Mgr
-            # modules are reloaded.
-            self._post('/api/mgr/module/telemetry/enable')
-        except requests.ConnectionError:
-            pass
-        self.wait_until_rest_api_accessible()
-        data = self._get('/api/mgr/module')
-        self.assertStatus(200)
-        module_info = self.find_object_in_list('name', 'telemetry', data)
-        self.assertIsNotNone(module_info)
-        self.assertTrue(module_info['enabled'])
-
-    def test_disable(self):
-        # Enable the 'telemetry' module (all CephMgr modules are restarted)
-        # and wait until the Dashboard REST API is accessible.
-        self._ceph_cmd(['mgr', 'module', 'enable', 'telemetry'])
-        self.wait_until_rest_api_accessible()
-        try:
-            # Note, an exception is thrown because the Ceph Mgr
-            # modules are reloaded.
-            self._post('/api/mgr/module/telemetry/disable')
-        except requests.ConnectionError:
-            pass
-        self.wait_until_rest_api_accessible()
-        data = self._get('/api/mgr/module')
-        self.assertStatus(200)
-        module_info = self.find_object_in_list('name', 'telemetry', data)
-        self.assertIsNotNone(module_info)
-        self.assertFalse(module_info['enabled'])

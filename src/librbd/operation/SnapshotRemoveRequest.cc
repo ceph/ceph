@@ -4,6 +4,7 @@
 #include "librbd/operation/SnapshotRemoveRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/ceph_assert.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -36,9 +37,9 @@ void SnapshotRemoveRequest<I>::send_op() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
-  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
   {
-    RWLock::RLocker image_locker(image_ctx.image_lock);
+    std::shared_lock image_locker{image_ctx.image_lock};
     if (image_ctx.snap_info.find(m_snap_id) == image_ctx.snap_info.end()) {
       lderr(cct) << "snapshot doesn't exist" << dendl;
       this->async_complete(-ENOENT);
@@ -119,6 +120,7 @@ void SnapshotRemoveRequest<I>::get_snap() {
   auto aio_comp = create_rados_callback<
     SnapshotRemoveRequest<I>,
     &SnapshotRemoveRequest<I>::handle_get_snap>(this);
+  m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op,
                                        &m_out_bl);
   ceph_assert(r == 0);
@@ -136,8 +138,10 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
 
     auto it = m_out_bl.cbegin();
     r = cls_client::snapshot_get_finish(&it, &snap_info);
-    if (r == 0) {
-      m_child_attached = (snap_info.child_count > 0);
+    m_child_attached = (snap_info.child_count > 0);
+    if (r == 0 && m_child_attached) {
+      list_children();
+      return;
     }
   }
 
@@ -152,13 +156,105 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
 }
 
 template <typename I>
+void SnapshotRemoveRequest<I>::list_children() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::children_list_start(&op, m_snap_id);
+
+  m_out_bl.clear();
+  m_child_images.clear();
+  auto aio_comp = create_rados_callback<
+    SnapshotRemoveRequest<I>,
+    &SnapshotRemoveRequest<I>::handle_list_children>(this);
+  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op,
+                                       &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::handle_list_children(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = cls_client::children_list_finish(&it, &m_child_images);
+  }
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve child: " << cpp_strerror(r)
+               << dendl;
+    this->complete(r);
+    return;
+  }
+
+  detach_stale_child();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::detach_stale_child() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  for (auto& child_image : m_child_images) {
+    m_child_attached = true;
+    IoCtx ioctx;
+    int r = util::create_ioctx(image_ctx.md_ctx, "child image",
+                               child_image.pool_id,
+                               child_image.pool_namespace, &ioctx);
+    if (r == -ENOENT) {
+      librados::ObjectWriteOperation op;
+      cls_client::child_detach(&op, m_snap_id,
+                               {child_image.pool_id,
+                                child_image.pool_namespace,
+                                child_image.image_id});
+      auto aio_comp = create_rados_callback<
+        SnapshotRemoveRequest<I>,
+        &SnapshotRemoveRequest<I>::handle_detach_stale_child>(this);
+      r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op);
+      ceph_assert(r == 0);
+      aio_comp->release();
+      return;
+    } else if (r < 0) {
+      this->async_complete(r);
+      return;
+    }
+  }
+
+  detach_child();
+}
+
+template <typename I>
+void SnapshotRemoveRequest<I>::handle_detach_stale_child(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to detach stale child: " << cpp_strerror(r)
+               << dendl;
+    this->complete(r);
+    return;
+  }
+
+  m_child_attached = false;
+  list_children();
+}
+
+template <typename I>
 void SnapshotRemoveRequest<I>::detach_child() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
   bool detach_child = false;
   {
-    RWLock::RLocker image_locker(image_ctx.image_lock);
+    std::shared_lock image_locker{image_ctx.image_lock};
 
     cls::rbd::ParentImageSpec our_pspec;
     int r = image_ctx.get_parent_spec(m_snap_id, &our_pspec);
@@ -223,8 +319,8 @@ void SnapshotRemoveRequest<I>::remove_object_map() {
   CephContext *cct = image_ctx.cct;
 
   {
-    RWLock::RLocker owner_lock(image_ctx.owner_lock);
-    RWLock::WLocker image_locker(image_ctx.image_lock);
+    std::shared_lock owner_lock{image_ctx.owner_lock};
+    std::unique_lock image_locker{image_ctx.image_lock};
     if (image_ctx.object_map != nullptr) {
       ldout(cct, 5) << dendl;
 
@@ -259,6 +355,11 @@ void SnapshotRemoveRequest<I>::handle_remove_object_map(int r) {
 template <typename I>
 void SnapshotRemoveRequest<I>::release_snap_id() {
   I &image_ctx = this->m_image_ctx;
+
+  if (!image_ctx.data_ctx.is_valid()) {
+    remove_snap();
+    return;
+  }
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << "snap_name=" << m_snap_name << ", "
@@ -330,7 +431,7 @@ void SnapshotRemoveRequest<I>::remove_snap_context() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << dendl;
 
-  RWLock::WLocker image_locker(image_ctx.image_lock);
+  std::unique_lock image_locker{image_ctx.image_lock};
   image_ctx.rm_snap(m_snap_namespace, m_snap_name, m_snap_id);
 }
 
@@ -338,7 +439,7 @@ template <typename I>
 int SnapshotRemoveRequest<I>::scan_for_parents(
     cls::rbd::ParentImageSpec &pspec) {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.image_lock));
 
   if (pspec.pool_id != -1) {
     map<uint64_t, SnapInfo>::iterator it;

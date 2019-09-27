@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/python3
 
 # README:
 #
@@ -215,8 +215,8 @@ def build_branch(args):
         log.info("Detaching HEAD onto base: {}".format(base))
         try:
             base_path = args.base_path + base
-            base = filter(lambda r: r.path == base_path, G.refs)[0]
-        except IndexError:
+            base = next(ref for ref in G.refs if ref.path == base_path)
+        except StopIteration:
             log.error("Branch " + base + " does not exist!")
             sys.exit(1)
 
@@ -291,7 +291,7 @@ def build_branch(args):
                         indications.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
                     except KeyError as e:
                         try:
-                            name = raw_input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
+                            name = input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
                             name = name.strip()
                             if len(name) == 0:
                                 continue

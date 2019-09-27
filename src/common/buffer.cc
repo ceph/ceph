@@ -13,6 +13,7 @@
  */
 
 #include <atomic>
+#include <cstring>
 #include <errno.h>
 #include <limits.h>
 
@@ -1001,6 +1002,27 @@ static ceph::spinlock debug_lock;
       }
       return true;
     }
+  }
+
+  bool buffer::list::contents_equal(const void* const other,
+                                    size_t length) const
+  {
+    if (this->length() != length) {
+      return false;
+    }
+
+    const auto* other_buf = reinterpret_cast<const char*>(other);
+    for (const auto& bp : buffers()) {
+      const auto round_length = std::min<size_t>(length, bp.length());
+      if (std::memcmp(bp.c_str(), other_buf, round_length) != 0) {
+        return false;
+      } else {
+        length -= round_length;
+        other_buf += round_length;
+      }
+    }
+
+    return true;
   }
 
   bool buffer::list::is_provided_buffer(const char* const dst) const
@@ -2039,20 +2061,6 @@ void buffer::list::invalidate_crc()
       r->invalidate_crc();
     }
   }
-}
-
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
-
-sha1_digest_t buffer::list::sha1()
-{
-  unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE];
-  SHA1 sha1_gen;
-  for (auto& p : _buffers) {
-    sha1_gen.Update((const unsigned char *)p.c_str(), p.length());
-  }
-  sha1_gen.Final(fingerprint);
-  return sha1_digest_t(fingerprint);
 }
 
 /**

@@ -1,5 +1,8 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
+import base64
+import errno
 import functools
+import json
 import socket
 import os
 import time
@@ -15,6 +18,7 @@ from rados import (Rados,
 from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
+                 ECANCELED, OperationCanceled,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
@@ -26,7 +30,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
                  RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
-                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY)
+                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
+                 RBD_MIRROR_PEER_DIRECTION_RX)
 
 rados = None
 ioctx = None
@@ -323,6 +328,24 @@ def test_list():
     with Image(ioctx, image_name) as image:
         image_id = image.id()
     eq([{'id': image_id, 'name': image_name}], list(RBD().list2(ioctx)))
+
+@with_setup(create_image)
+def test_remove_with_progress():
+    d = {'received_callback': False}
+    def progress_cb(current, total):
+        d['received_callback'] = True
+        return 0
+
+    RBD().remove(ioctx, image_name, on_progress=progress_cb)
+    eq(True, d['received_callback'])
+
+@with_setup(create_image)
+def test_remove_canceled():
+    def progress_cb(current, total):
+        return -ECANCELED
+
+    assert_raises(OperationCanceled, RBD().remove, ioctx, image_name,
+                  on_progress=progress_cb)
 
 @with_setup(create_image, remove_image)
 def test_rename():
@@ -1117,6 +1140,20 @@ class TestImage(object):
             for option in image.config_list():
                 eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
+    def test_image_config_set_and_get_and_remove(self):
+        with Image(ioctx, image_name) as image:
+            for option in image.config_list():
+                eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+            image.config_set("rbd_request_timed_out_seconds", "100")
+            modify_value = image.config_get("rbd_request_timed_out_seconds")
+            eq(modify_value, '100')
+
+            image.config_remove("rbd_request_timed_out_seconds")
+
+            for option in image.config_list():
+                eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
     def test_sparsify(self):
         assert_raises(InvalidArgument, self.image.sparsify, 16)
         self.image.sparsify(4096)
@@ -1519,6 +1556,22 @@ class TestClone(object):
         self.clone.remove_snap('snap2')
         self.rbd.remove(ioctx, clone_name3)
 
+    def test_flatten_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        global ioctx
+        global features
+        clone_name = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name,
+                       features, 0)
+        with Image(ioctx, clone_name) as clone:
+            clone.flatten(on_progress=progress_cb)
+        self.rbd.remove(ioctx, clone_name)
+        eq(True, d['received_callback'])
+
     def test_resize_flatten_multi_level(self):
         self.clone.create_snap('snap2')
         self.clone.protect_snap('snap2')
@@ -1739,6 +1792,30 @@ class TestMirroring(object):
         remove_image()
         self.rbd.mirror_mode_set(ioctx, self.initial_mirror_mode)
 
+    def test_site_name(self):
+        site_name = "us-west-1"
+        self.rbd.mirror_site_name_set(rados, site_name)
+        eq(site_name, self.rbd.mirror_site_name_get(rados))
+        self.rbd.mirror_site_name_set(rados, "")
+        eq(rados.get_fsid(), self.rbd.mirror_site_name_get(rados))
+
+    def test_mirror_peer_bootstrap(self):
+        eq([], list(self.rbd.mirror_peer_list(ioctx)))
+
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        assert_raises(InvalidArgument, self.rbd.mirror_peer_bootstrap_create,
+                      ioctx);
+
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL)
+        token_b64 = self.rbd.mirror_peer_bootstrap_create(ioctx)
+        token = base64.b64decode(token_b64)
+        token_dict = json.loads(token)
+        eq(sorted(['fsid', 'client_id', 'key', 'mon_host']),
+            sorted(list(token_dict.keys())))
+
+        # requires different cluster
+        assert_raises(InvalidArgument, self.rbd.mirror_peer_bootstrap_import,
+            ioctx, RBD_MIRROR_PEER_DIRECTION_RX, token_b64)
 
     def test_mirror_peer(self):
         eq([], list(self.rbd.mirror_peer_list(ioctx)))
@@ -1918,6 +1995,20 @@ class TestTrash(object):
 
         RBD().trash_move(ioctx, image_name, 0)
         RBD().trash_remove(ioctx, image_id)
+
+    def test_remove_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 0)
+        RBD().trash_remove(ioctx, image_id, on_progress=progress_cb)
+        eq(True, d['received_callback'])
 
     def test_get(self):
         create_image()
@@ -2165,10 +2256,42 @@ class TestMigration(object):
         RBD().migration_commit(ioctx, image_name)
         remove_image()
 
+    def test_migration_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        create_image()
+        RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
+                                order=23, stripe_unit=1<<23, stripe_count=1,
+                                data_pool=None)
+        RBD().migration_execute(ioctx, image_name, on_progress=progress_cb)
+        eq(True, d['received_callback'])
+        d['received_callback'] = False
+
+        RBD().migration_commit(ioctx, image_name, on_progress=progress_cb)
+        eq(True, d['received_callback'])
+        remove_image()
+
     def test_migrate_abort(self):
         create_image()
         RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
                                 order=23, stripe_unit=1<<23, stripe_count=1,
                                 data_pool=None)
         RBD().migration_abort(ioctx, image_name)
+        remove_image()
+
+    def test_migrate_abort_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        create_image()
+        RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
+                                order=23, stripe_unit=1<<23, stripe_count=1,
+                                data_pool=None)
+        RBD().migration_abort(ioctx, image_name, on_progress=progress_cb)
+        eq(True, d['received_callback'])
         remove_image()

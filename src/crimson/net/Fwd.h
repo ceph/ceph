@@ -17,10 +17,10 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sharded.hh>
 
+#include "msg/Connection.h"
+#include "msg/MessageRef.h"
 #include "msg/msg_types.h"
-#include "msg/Message.h"
 
-using peer_type_t = int;
 using auth_proto_t = int;
 
 class AuthConnectionMeta;

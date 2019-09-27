@@ -14,6 +14,10 @@ import fnmatch
 import math
 import re
 import shlex
+import stat
+
+if sys.version_info.major < 3:
+    raise RuntimeError("cephfs-shell is only compatible with python3")
 
 try:
     from cmd2 import with_argparser
@@ -52,12 +56,16 @@ shell = None
 
 
 def poutput(s, end='\n'):
-    shell.poutput(s, end)
+    shell.poutput(s, end=end)
+
+
+def perror(msg):
+    shell.perror(msg, end='\n', apply_style=True)
 
 
 def setup_cephfs(config_file):
     """
-    Mouting a cephfs
+    Mounting a cephfs
     """
     global cephfs
     cephfs = libcephfs.LibCephFS(conffile=config_file)
@@ -70,7 +78,7 @@ def mode_notation(mode):
     permission_bits = {'0': '---',
                        '1': '--x',
                        '2': '-w-',
-                       '3':  '-wx',
+                       '3': '-wx',
                        '4': 'r--',
                        '5': 'r-x',
                        '6': 'rw-',
@@ -94,50 +102,57 @@ def get_chunks(file_size):
     yield(chunk_start, final_chunk_size)
 
 
-def to_bytes(string):
-    return bytes(string, encoding='utf-8')
+def to_bytes(param):
+    # don't convert as follows as it can lead unusable results like coverting
+    # [1, 2, 3, 4] to '[1, 2, 3, 4]' -
+    # str(param).encode('utf-8')
+    if isinstance(param, bytes):
+        return param
+    elif isinstance(param, str):
+        return bytes(param, encoding='utf-8')
+    elif isinstance(param, list):
+        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for \
+                i in param]
+    elif isinstance(param, int) or isinstance(param, float):
+        return str(param).encode('utf-8')
+    elif param is None:
+        return None
+
+def ls(path, opts=''):
+    # opts tries to be like /bin/ls opts
+    almost_all = 'A' in opts
+    try:
+        with cephfs.opendir(path) as d:
+            while True:
+                dent = cephfs.readdir(d)
+                if dent is None:
+                    return
+                elif almost_all and dent.d_name in (b'.', b'..'):
+                    continue
+                yield dent
+    except libcephfs.ObjectNotFound:
+        perror('{}: no such directory exists'.format(path), end='\n',
+               apply_style=True)
 
 
-def list_items(dir_name=''):
-    d = None
-    if not isinstance(dir_name, bytes):
-        dir_name = to_bytes(dir_name)
-    if dir_name == '':
-        d = cephfs.opendir(cephfs.getcwd())
-    else:
-        try:
-            d = cephfs.opendir(dir_name)
-        except libcephfs.Error:
-            dir_name = dir_name.decode('utf-8')
-            return []
-    dent = cephfs.readdir(d)
-    items = []
-    while dent:
-        items.append(dent)
-        dent = cephfs.readdir(d)
-    cephfs.closedir(d)
-    return items
-
-
-def glob(dir_name, pattern):
-    if isinstance(dir_name, bytes):
-        dir_name = dir_name.decode('utf-8')
+def glob(path, pattern):
     paths = []
-    parent_dir = os.path.dirname(dir_name)
-    if parent_dir == '':
-        parent_dir = '/'
-    if dir_name == '/' or is_dir_exists(os.path.basename(dir_name), parent_dir):
-        for i in list_items(dir_name)[2:]:
+    parent_dir = os.path.dirname(path)
+    if parent_dir == b'':
+        parent_dir = b'/'
+    if path == b'/' or is_dir_exists(os.path.basename(path), parent_dir):
+        for i in ls(path, opts='A'):
             if fnmatch.fnmatch(i.d_name, pattern):
-                paths.append(os.path.join(dir_name, i.d_name))
+                paths.append(os.path.join(path, i.d_name))
     return paths
 
 
 def locate_file(name, case_sensitive=True):
+    dir_list = sorted(set(dirwalk(cephfs.getcwd())))
     if not case_sensitive:
-        return [i for i in sorted(set(dirwalk(cephfs.getcwd().decode('utf-8')))) if name.lower() in i.lower()]
+        return [dname for dname in dir_list if name.lower() in dname.lower()]
     else:
-        return [i for i in sorted(set(dirwalk(cephfs.getcwd().decode('utf-8')))) if name in i]
+        return [dname for dname in dir_list if name in dname]
 
 
 def get_all_possible_paths(pattern):
@@ -147,15 +162,16 @@ def get_all_possible_paths(pattern):
     if is_rel_path:
         dir_ = cephfs.getcwd()
     else:
-        dir_ = '/'
+        dir_ = b'/'
         pattern = pattern[1:]
-    patterns = pattern.split('/')
+    patterns = pattern.split(b'/')
     paths.extend(glob(dir_, patterns[0]))
     patterns.pop(0)
     for pattern in patterns:
         for path in paths:
             paths.extend(glob(path, pattern))
-    return [path for path in paths if fnmatch.fnmatch(path, os.path.join(cephfs.getcwd().decode('utf-8'), complete_pattern))]
+    return [path for path in paths if fnmatch.fnmatch(path,
+            os.path.join(cephfs.getcwd(), complete_pattern))]
 
 
 suffixes = ['B', 'K', 'M', 'G', 'T', 'P']
@@ -163,7 +179,7 @@ suffixes = ['B', 'K', 'M', 'G', 'T', 'P']
 
 def humansize(nbytes):
     i = 0
-    while nbytes >= 1024 and i < len(suffixes)-1:
+    while nbytes >= 1024 and i < len(suffixes) - 1:
         nbytes /= 1024.
         i += 1
     nbytes = math.ceil(nbytes)
@@ -171,22 +187,21 @@ def humansize(nbytes):
     return '%s%s' % (f, suffixes[i])
 
 
-def print_long(file_name, is_dir, human_readable):
-    if not isinstance(file_name, bytes):
-        file_name = to_bytes(file_name)
-    info = cephfs.stat(file_name)
-    file_name = os.path.basename(file_name.decode('utf-8'))
+def print_long(path, is_dir, human_readable):
+    info = cephfs.stat(path)
+    pretty = os.path.basename(path.decode('utf-8'))
     if is_dir:
-        file_name = colorama.Style.BRIGHT + colorama.Fore.CYAN + file_name + '/' + colorama.Style.RESET_ALL
+        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + '/'
+        pretty += colorama.Style.RESET_ALL
     if human_readable:
         poutput('{}\t{:10s} {} {} {} {}'.format(
             mode_notation(info.st_mode),
             humansize(info.st_size), info.st_uid,
-            info.st_gid, info.st_mtime, file_name, sep='\t'))
+            info.st_gid, info.st_mtime, pretty, sep='\t'))
     else:
         poutput('{} {:12d} {} {} {} {}'.format(
             mode_notation(info.st_mode), info.st_size, info.st_uid,
-            info.st_gid, info.st_mtime, file_name, sep='\t'))
+            info.st_gid, info.st_mtime, pretty, sep='\t'))
 
 
 def word_len(word):
@@ -198,26 +213,18 @@ def word_len(word):
     return len(word)
 
 
-def is_dir_exists(dir_name, dir_=''):
-    if isinstance(dir_name, bytes):
-        dir_name = dir_name.decode('utf-8')
-    if isinstance(dir_, bytes):
-        dir_ = dir_.decode('utf-8')
-    path_to_stat = os.path.join(dir_, dir_name)
+def is_dir_exists(path, dir_=b''):
+    path_to_stat = os.path.join(dir_, path)
     try:
         return ((cephfs.stat(path_to_stat).st_mode & 0o0040000) != 0)
     except libcephfs.Error:
         return False
 
 
-def is_file_exists(file_name, dir_=''):
-    if isinstance(file_name, bytes):
-        file_name = file_name.decode('utf-8')
-    if isinstance(dir_, bytes):
-        dir_ = dir_.decode('utf-8')
+def is_file_exists(path, dir_=b''):
     try:
         # if its not a directory, then its a file
-        return ((cephfs.stat(os.path.join(dir_, file_name)).st_mode & 0o0040000) == 0)
+        return ((cephfs.stat(os.path.join(dir_, path)).st_mode & 0o0040000) == 0)
     except libcephfs.Error:
         return False
 
@@ -225,6 +232,7 @@ def is_file_exists(file_name, dir_=''):
 def print_list(words, termwidth=79):
     if not words:
         return
+    words = [word.decode('utf-8') if isinstance(word, bytes) else word for word in words]
     width = max([word_len(word) for word in words]) + 2
     nwords = len(words)
     ncols = max(1, (termwidth + 1) // (width + 1))
@@ -232,12 +240,12 @@ def print_list(words, termwidth=79):
     for row in range(nrows):
         for i in range(row, nwords, nrows):
             word = words[i]
+            print_width = width
             if word[0] == '\x1b':
-                poutput(
-                    '%-*s' % (width + 10, words[i]), end='\n' if i + nrows >= nwords else '')
-            else:
-                poutput(
-                    '%-*s' % (width, words[i]), end='\n' if i + nrows >= nwords else '')
+                print_width = print_width + 10
+
+            poutput('%-*s' % (print_width, words[i]),
+                    end='\n' if i + nrows >= nwords else '')
 
 
 def copy_from_local(local_path, remote_path):
@@ -245,20 +253,22 @@ def copy_from_local(local_path, remote_path):
     file_ = None
     fd = None
     convert_to_bytes = False
-    if local_path == '-':
+    if local_path == b'-':
         file_ = sys.stdin
         convert_to_bytes = True
     else:
         try:
             file_ = open(local_path, 'rb')
         except PermissionError:
-            poutput("error: no permission to read local file %s" % local_path)
+            perror('error: no permission to read local file {}'.format(
+                   local_path.decode('utf-8')), end='\n', apply_style=True)
             return
         stdin = 1
     try:
-        fd = cephfs.open(to_bytes(remote_path), 'w', 0o666)
+        fd = cephfs.open(remote_path, 'w', 0o666)
     except libcephfs.Error:
-        poutput("error: no permission to write remote file %s" % remote_path)
+        perror('error: no permission to write remote file {}'.format(
+               remote_path.decode('utf-8')), end='\n', apply_style=True)
         return
     progress = 0
     while True:
@@ -279,14 +289,15 @@ def copy_from_local(local_path, remote_path):
 
 def copy_to_local(remote_path, local_path):
     fd = None
-    if local_path != '-':
+    if local_path != b'-':
         local_dir = os.path.dirname(local_path)
+        dir_list = remote_path.rsplit(b'/', 1)
         if not os.path.exists(local_dir):
             os.makedirs(local_dir)
-        if len(remote_path.rsplit('/', 1)) > 2 and remote_path.rsplit('/', 1)[1] == '':
+        if len(dir_list) > 2 and dir_list[1] == b'':
             return
         fd = open(local_path, 'wb+')
-    file_ = cephfs.open(to_bytes(remote_path), 'r')
+    file_ = cephfs.open(remote_path, 'r')
     file_size = cephfs.stat(remote_path).st_size
     if file_size <= 0:
         return
@@ -303,14 +314,14 @@ def copy_to_local(remote_path, local_path):
         fd.close()
 
 
-def dirwalk(dir_name):
+def dirwalk(path):
     """
     walk a directory tree, using a generator
     """
-    dir_name = os.path.normpath(dir_name)
-    for item in list_items(dir_name)[2:]:
-        fullpath = os.path.join(dir_name, item.d_name.decode('utf-8'))
-        src_path = fullpath.rsplit('/', 1)[0]
+    path = os.path.normpath(path)
+    for item in ls(path, opts='A'):
+        fullpath = os.path.join(path, item.d_name)
+        src_path = fullpath.rsplit(b'/', 1)[0]
 
         yield os.path.normpath(fullpath)
         if is_dir_exists(item.d_name, src_path):
@@ -328,11 +339,12 @@ class CephFSShell(Cmd):
         self.umask = '2'
 
     def default(self, line):
-        self.poutput('Unrecognized command')
+        self.perror('Unrecognized command', end='\n', apply_style=True)
 
     def set_prompt(self):
-        self.prompt = ('\033[01;33mCephFS:~' + colorama.Fore.LIGHTCYAN_EX +
-                       self.working_dir + colorama.Style.RESET_ALL + '\033[01;33m>>>\033[00m ')
+        self.prompt = ('\033[01;33mCephFS:~' + colorama.Fore.LIGHTCYAN_EX
+                       + self.working_dir + colorama.Style.RESET_ALL
+                       + '\033[01;33m>>>\033[00m ')
 
     def create_argparser(self, command):
         try:
@@ -360,38 +372,64 @@ class CephFSShell(Cmd):
 
     def complete_filenames(self, text, line, begidx, endidx):
         if not text:
-            completions = [x.d_name.decode(
-                'utf-8') + '/' * int(x.is_dir()) for x in list_items(cephfs.getcwd())[2:]]
+            completions = [x.d_name.decode('utf-8') + '/' * int(x.is_dir())
+                           for x in ls(b".", opts='A')]
         else:
             if text.count('/') > 0:
-                completions = [text.rsplit('/', 1)[0] + '/' + x.d_name.decode('utf-8') + '/'*int(x.is_dir()) for x in list_items(
-                    '/' + text.rsplit('/', 1)[0])[2:] if x.d_name.decode('utf-8').startswith(text.rsplit('/', 1)[1])]
+                completions = [text.rsplit('/', 1)[0] + '/'
+                               + x.d_name.decode('utf-8') + '/'
+                               * int(x.is_dir()) for x in ls('/'
+                               + text.rsplit('/', 1)[0], opts='A')
+                               if x.d_name.decode('utf-8').startswith(
+                                   text.rsplit('/', 1)[1])]
             else:
-                completions = [x.d_name.decode('utf-8') + '/' * int(x.is_dir()) for x in list_items()[
-                    2:] if x.d_name.decode('utf-8').startswith(text)]
+                completions = [x.d_name.decode('utf-8') + '/'
+                               * int(x.is_dir()) for x in ls(b".", opts='A')
+                               if x.d_name.decode('utf-8').startswith(text)]
             if len(completions) == 1 and completions[0][-1] == '/':
                 dir_, file_ = completions[0].rsplit('/', 1)
-                completions.extend([dir_ + '/' + x.d_name.decode('utf-8') + '/' * int(x.is_dir())
-                                    for x in list_items('/' + dir_)[2:] if x.d_name.decode('utf-8').startswith(file_)])
+                completions.extend([dir_ + '/' + x.d_name.decode('utf-8')
+                                    + '/' * int(x.is_dir()) for x in
+                                    ls('/' + dir_, opts='A')
+                                    if x.d_name.decode('utf-8').startswith(file_)])
             return self.delimiter_complete(text, line, begidx, endidx, completions, '/')
         return completions
 
-    def onecmd(self, line):
+    def onecmd(self, line, **kwargs):
         """
         Global error catcher
         """
         try:
-            res = Cmd.onecmd(self, line)
+            res = Cmd.onecmd(self, line, **kwargs)
             if self.interactive:
                 self.set_prompt()
             return res
         except ConnectionError as e:
-            self.poutput('***', e)
+            self.perror('***\n{}'.format(e), end='\n', apply_style=True)
         except KeyboardInterrupt:
-            self.poutput('Command aborted')
+            self.perror('Command aborted', end='\n', apply_style=True)
         except Exception as e:
-            self.poutput(e)
+            self.perror(e, end='\n', apply_style=True)
             traceback.print_exc(file=sys.stdout)
+
+    class path_to_bytes(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = to_bytes(values)
+            setattr(namespace, self.dest, values)
+
+    # TODO: move the necessary contents from here to `class path_to_bytes`.
+    class get_list_of_bytes_path(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = to_bytes(values)
+
+            if values == b'.':
+                values = cephfs.getcwd()
+            else:
+                for i in values:
+                    if i == b'.':
+                        values[values.index(i)] = cephfs.getcwd()
+
+            setattr(namespace, self.dest, values)
 
     def complete_mkdir(self, text, line, begidx, endidx):
         """
@@ -401,7 +439,7 @@ class CephFSShell(Cmd):
 
     class ModeAction(argparse.Action):
         def __init__(self, option_strings, dest, nargs=None, **kwargs):
-            if nargs is not None and nargs is not '?':
+            if nargs is not None and nargs != '?':
                 raise ValueError("more than one modes not allowed")
             super().__init__(option_strings, dest, **kwargs)
 
@@ -410,7 +448,7 @@ class CephFSShell(Cmd):
             res = None
             try:
                 o_mode = int(values, base=8)
-            except ValueError as e:
+            except ValueError:
                 res = re.match('((u?g?o?)|(a?))(=)(r?w?x?)', values)
                 if res is None:
                     parser.error("invalid mode: %s\n"
@@ -469,6 +507,7 @@ class CephFSShell(Cmd):
     mkdir_parser = argparse.ArgumentParser(
         description='Create the directory(ies), if they do not already exist.')
     mkdir_parser.add_argument('dirs', type=str,
+                              action=path_to_bytes,
                               metavar='DIR_NAME',
                               help='Name of new_directory.',
                               nargs='+')
@@ -485,9 +524,7 @@ exists.')
         """
         Create directory.
         """
-        for dir_name in args.dirs:
-            path = to_bytes(dir_name)
-
+        for path in args.dirs:
             if args.mode:
                 permission = int(args.mode, 8)
             else:
@@ -498,8 +535,9 @@ exists.')
                 try:
                     cephfs.mkdir(path, permission)
                 except libcephfs.Error:
-                    self.poutput("directory missing in the path; "
-                                 "you may want to pass the -p argument")
+                    self.perror('directory missing in the path; '
+                                'you may want to pass the -p argument',
+                                end='\n', apply_style=True)
                     return
 
     def complete_put(self, text, line, begidx, endidx):
@@ -511,88 +549,98 @@ exists.')
 
     put_parser = argparse.ArgumentParser(
         description='Copy a file/directory to Ceph File System from Local File System.')
-    put_parser.add_argument('local_path', type=str,
+    put_parser.add_argument('local_path', type=str, action=path_to_bytes,
                             help='Path of the file in the local system')
-    put_parser.add_argument(
-        'remote_path', type=str, help='Path of the file in the remote system.', nargs='?', default='.')
+    put_parser.add_argument('remote_path', type=str, action=path_to_bytes,
+                            help='Path of the file in the remote system.',
+                            nargs='?', default='.')
     put_parser.add_argument('-f', '--force', action='store_true',
                             help='Overwrites the destination if it already exists.')
 
     @with_argparser(put_parser)
     def do_put(self, args):
         """
-        Copy a file to Ceph File System from Local Directory.
+        Copy a local file/directory to CephFS.
         """
         root_src_dir = args.local_path
         root_dst_dir = args.remote_path
-        if args.local_path == '.' or args.local_path == './':
-            root_src_dir = os.getcwd()
-        elif len(args.local_path.rsplit('/', 1)) < 2:
-            root_src_dir = os.path.join(os.getcwd(), args.local_path)
+        if args.local_path == b'.' or args.local_path == b'./':
+            root_src_dir = os.getcwdb()
+        elif len(args.local_path.rsplit(b'/', 1)) < 2:
+            root_src_dir = os.path.join(os.getcwdb(), args.local_path)
         else:
-            p = args.local_path.split('/')
-            if p[0] == '.':
-                root_src_dir = os.getcwd()
+            p = args.local_path.split(b'/')
+            if p[0] == b'.':
+                root_src_dir = os.getcwdb()
                 p.pop(0)
                 while len(p) > 0:
-                    root_src_dir += '/' + p.pop(0)
+                    root_src_dir += b'/' + p.pop(0)
 
-        if root_dst_dir == '.':
-            if args.local_path != '-':
-                root_dst_dir = root_src_dir.rsplit('/', 1)[1]
-                if root_dst_dir == "":
-                    root_dst_dir = root_src_dir.rsplit('/', 1)[0]
-                    a = root_dst_dir.rsplit('/', 1)
+        if root_dst_dir == b'.':
+            if args.local_path != b'-':
+                root_dst_dir = root_src_dir.rsplit(b'/', 1)[1]
+                if root_dst_dir == b'':
+                    root_dst_dir = root_src_dir.rsplit(b'/', 1)[0]
+                    a = root_dst_dir.rsplit(b'/', 1)
                     if len(a) > 1:
                         root_dst_dir = a[1]
                     else:
                         root_dst_dir = a[0]
             else:
-                self.poutput("error: no filename specified for destination")
+                self.perror('error: no filename specified for destination',
+                            end='\n', apply_style=True)
                 return
 
-        if root_dst_dir[-1] != '/':
-            root_dst_dir += '/'
+        if root_dst_dir[-1] != b'/':
+            root_dst_dir += b'/'
 
-        if args.local_path == '-' or os.path.isfile(root_src_dir):
+        if args.local_path == b'-' or os.path.isfile(root_src_dir):
             if not args.force:
                 if os.path.isfile(root_src_dir):
                     dst_file = root_dst_dir
                     if is_file_exists(dst_file):
-                        self.poutput("%s: file exists! use --force to overwrite" % dst_file)
+                        self.perror('{}: file exists! use --force to overwrite'.format(
+                                    dst_file.decode('utf-8')), end='\n',
+                                    apply_style=True)
                         return
-            if args.local_path == '-':
-                root_src_dir = '-'
+            if args.local_path == b'-':
+                root_src_dir = b'-'
             copy_from_local(root_src_dir, root_dst_dir)
         else:
             for src_dir, dirs, files in os.walk(root_src_dir):
+                if isinstance(src_dir, str):
+                    src_dir = to_bytes(src_dir)
                 dst_dir = src_dir.replace(root_src_dir, root_dst_dir, 1)
-                dst_dir = re.sub(r'\/+', '/', cephfs.getcwd().decode('utf-8') + dst_dir)
-                if args.force and dst_dir != '/' and not is_dir_exists(dst_dir[:-1]) and len(locate_file(dst_dir)) == 0:
+                dst_dir = re.sub(rb'\/+', b'/', cephfs.getcwd()
+                                 + dst_dir)
+                if args.force and dst_dir != b'/' and not is_dir_exists(
+                        dst_dir[:-1]) and not locate_file(dst_dir):
                     try:
-                        cephfs.mkdirs(to_bytes(dst_dir), 0o777)
-                    except:
+                        cephfs.mkdirs(dst_dir, 0o777)
+                    except libcephfs.Error:
                         pass
-                if (not args.force) and dst_dir != '/' and not is_dir_exists(dst_dir) and not os.path.isfile(root_src_dir):
+                if (not args.force) and dst_dir != b'/' and not is_dir_exists(
+                        dst_dir) and not os.path.isfile(root_src_dir):
                     try:
-                        cephfs.mkdirs(to_bytes(dst_dir), 0o777)
-                    except:
+                        cephfs.mkdirs(dst_dir, 0o777)
+                    except libcephfs.Error:
                         pass
 
                 for dir_ in dirs:
-                    if not is_dir_exists(os.path.join(dst_dir, dir_)):
+                    dir_name = os.path.join(dst_dir, dir_)
+                    if not is_dir_exists(dir_name):
                         try:
-                            cephfs.mkdirs(to_bytes(os.path.join(dst_dir, dir_)), 0o777)
-                        except:
+                            cephfs.mkdirs(dir_name, 0o777)
+                        except libcephfs.Error:
                             pass
 
                 for file_ in files:
                     src_file = os.path.join(src_dir, file_)
-                    dst_file = re.sub(r'\/+', '/', '/' + dst_dir + '/' + file_)
+                    dst_file = re.sub(rb'\/+', b'/', b'/' + dst_dir + b'/' + file_)
                     if (not args.force) and is_file_exists(dst_file):
                         return
-                    copy_from_local(src_file, os.path.join(
-                        cephfs.getcwd().decode('utf-8'), dst_file))
+                    copy_from_local(src_file, os.path.join(cephfs.getcwd(),
+                                    dst_file))
 
     def complete_get(self, text, line, begidx, endidx):
         """
@@ -602,48 +650,53 @@ exists.')
 
     get_parser = argparse.ArgumentParser(
         description='Copy a file from Ceph File System from Local Directory.')
-    get_parser.add_argument('remote_path', type=str,
+    get_parser.add_argument('remote_path', type=str, action=path_to_bytes,
                             help='Path of the file in the remote system')
-    get_parser.add_argument(
-        'local_path', type=str, help='Path of the file in the local system',  nargs='?', default='.')
+    get_parser.add_argument('local_path', type=str, action=path_to_bytes,
+                            help='Path of the file in the local system',
+                            nargs='?', default='.')
     get_parser.add_argument('-f', '--force', action='store_true',
                             help='Overwrites the destination if it already exists.')
 
     @with_argparser(get_parser)
     def do_get(self, args):
         """
-        Copy a file/directory  from Ceph File System to Local Directory.
+        Copy a file/directory from CephFS to given path.
         """
         root_src_dir = args.remote_path
         root_dst_dir = args.local_path
-        if args.local_path == '.':
-            root_dst_dir = os.getcwd()
-        if args.remote_path == '.':
-            root_src_dir = cephfs.getcwd().decode('utf-8')
-        if args.local_path == '-':
-            if args.remote_path == '.' or args.remote_path == './':
-                self.poutput("error: no remote file name specified")
+        fname = root_src_dir.rsplit(b'/', 1)
+        if args.local_path == b'.':
+            root_dst_dir = os.getcwdb()
+        if args.remote_path == b'.':
+            root_src_dir = cephfs.getcwd()
+        if args.local_path == b'-':
+            if args.remote_path == b'.' or args.remote_path == b'./':
+                self.perror('error: no remote file name specified', end='\n',
+                            apply_style=True)
                 return
-            copy_to_local(root_src_dir, '-')
+            copy_to_local(root_src_dir, b'-')
         elif is_file_exists(args.remote_path):
             copy_to_local(root_src_dir,
-                          root_dst_dir + '/' + root_src_dir)
-        elif '/'in root_src_dir and is_file_exists(root_src_dir.rsplit('/', 1)[1], root_src_dir.rsplit('/', 1)[0]):
+                          root_dst_dir + b'/' + root_src_dir)
+        elif b'/'in root_src_dir and is_file_exists(fname[1], fname[0]):
             copy_to_local(root_src_dir, root_dst_dir)
         else:
             files = list(reversed(sorted(dirwalk(root_src_dir))))
             if len(files) == 0:
                 try:
-                    os.makedirs(root_dst_dir + '/' + root_src_dir)
-                except:
+                    os.makedirs(root_dst_dir + b'/' + root_src_dir)
+                except OSError:
                     if args.force:
                         pass
                     else:
-                        self.poutput("%s: already exists! use --force to overwrite" % root_src_dir)
+                        self.perror('{}: already exists! use --force to overwrite'.format(
+                                    root_src_dir.decode('utf-8')), end='\n',
+                                    apply_style=True)
                         return
 
             for file_ in files:
-                dst_dirpath, dst_file = file_.rsplit('/', 1)
+                dst_dirpath, dst_file = file_.rsplit(b'/', 1)
                 if dst_dirpath in files:
                     files.remove(dst_dirpath)
                 dst_path = os.path.join(root_dst_dir, dst_dirpath, dst_file)
@@ -651,15 +704,17 @@ exists.')
                 if is_dir_exists(file_):
                     try:
                         os.makedirs(dst_path)
-                    except:
+                    except OSError:
                         pass
                 else:
                     if not args.force:
                         try:
                             os.stat(dst_path)
-                            self.poutput("%s: file already exists! use --force to override" % file_)
+                            self.perror('{}: file already exists! use --force to override'.format(
+                                        file_.decode('utf-8')), end='\n',
+                                        apply_style=True)
                             return
-                        except:
+                        except OSError:
                             copy_to_local(file_, dst_path)
                     else:
                         copy_to_local(file_, dst_path)
@@ -682,81 +737,81 @@ exists.')
     ls_parser.add_argument('-a', '--all', action='store_true',
                            help='Do not Ignore entries starting with .')
     ls_parser.add_argument('-S', action='store_true', help='Sort by file_size')
-    ls_parser.add_argument(
-        'dir_names', help='Name of Directories', nargs='*', default=[''])
+    ls_parser.add_argument('paths', help='Name of Directories',
+                           action=path_to_bytes, nargs='*', default=['.'])
 
     @with_argparser(ls_parser)
     def do_ls(self, args):
         """
         List all the files and directories in the current working directory
         """
-        directories = args.dir_names
-        for dir_name in directories:
+        paths = args.paths
+        for path in paths:
             values = []
             items = []
-            if dir_name.count('*') > 0:
-                all_items = get_all_possible_paths(dir_name)
+            if path.count(b'*') > 0:
+                all_items = get_all_possible_paths(path)
                 if len(all_items) == 0:
                     continue
-                dir_name = all_items[0].rsplit('/', 1)[0]
-                if dir_name == '':
-                    dir_name = '/'
+                path = all_items[0].rsplit(b'/', 1)[0]
+                if path == b'':
+                    path = b'/'
                 dirs = []
                 for i in all_items:
-                    for item in list_items(dir_name):
-                        d_name = item.d_name.decode('utf-8')
+                    for item in ls(path):
+                        d_name = item.d_name
                         if os.path.basename(i) == d_name:
                             if item.is_dir():
-                                dirs.append(os.path.join(dir_name, d_name))
+                                dirs.append(os.path.join(path, d_name))
                             else:
                                 items.append(item)
                 if dirs:
-                    directories.extend(dirs)
+                    paths.extend(dirs)
                 else:
-                    self.poutput(dir_name, ':\n')
+                    self.poutput(path.decode('utf-8'), end=':\n')
                 items = sorted(items, key=lambda item: item.d_name)
             else:
-                if dir_name != '' and dir_name != cephfs.getcwd().decode('utf-8') and len(directories) > 1:
-                    self.poutput(dir_name, ':\n')
-                items = sorted(list_items(dir_name),
+                if path != b'' and path != cephfs.getcwd() and len(paths) > 1:
+                    self.poutput(path.decode('utf-8'), end=':\n')
+                items = sorted(ls(path),
                                key=lambda item: item.d_name)
             if not args.all:
                 items = [i for i in items if not i.d_name.startswith(b'.')]
 
             if args.S:
                 items = sorted(items, key=lambda item: cephfs.stat(
-                    to_bytes(dir_name + '/' + item.d_name.decode('utf-8'))).st_size)
+                    path + b'/' + item.d_name).st_size)
 
             if args.reverse:
                 items = reversed(items)
             for item in items:
-                path = item
-                is_dir = False
-                if not isinstance(item, str):
-                    path = item.d_name.decode('utf-8')
-                    is_dir = item.is_dir()
+                filepath = item.d_name
+                is_dir = item.is_dir()
 
                 if args.long and args.H:
-                    print_long(cephfs.getcwd().decode(
-                        'utf-8') + dir_name + '/' + path, is_dir, True)
+                    print_long(cephfs.getcwd()
+                               + path
+                               + b'/'
+                               + filepath,
+                               is_dir, True)
                 elif args.long:
-                    print_long(cephfs.getcwd().decode('utf-8') +
-                               dir_name +
-                               '/' +
-                               path,
+                    print_long(cephfs.getcwd()
+                               + path
+                               + b'/'
+                               + filepath,
                                is_dir, False)
                 elif is_dir:
-                    values.append(colorama.Style.BRIGHT +
-                                  colorama.Fore.CYAN +
-                                  path +
-                                  '/' +
-                                  colorama.Style.RESET_ALL)
+                    values.append(colorama.Style.BRIGHT
+                                  + colorama.Fore.CYAN
+                                  + filepath.decode('utf-8')
+                                  + '/'
+                                  + colorama.Style.RESET_ALL)
                 else:
-                    values.append(path)
+                    values.append(filepath)
             if not args.long:
                 print_list(values, shutil.get_terminal_size().columns)
-                if dir_name != directories[-1]:
-                    self.poutput('\n')
+                if path != paths[-1]:
+                    self.poutput('')
 
     def complete_rmdir(self, text, line, begidx, endidx):
         """
@@ -765,7 +820,8 @@ exists.')
         return self.complete_filenames(text, line, begidx, endidx)
 
     rmdir_parser = argparse.ArgumentParser(description='Remove Directory.')
-    rmdir_parser.add_argument('dir_paths', help='Directory Path.', nargs='+')
+    rmdir_parser.add_argument('paths', help='Directory Path.', nargs='+',
+                              action=path_to_bytes)
     rmdir_parser.add_argument('-p', '--parent', action='store_true',
                               help='Remove parent directories as necessary. \
 When this option is specified, no error is reported if a directory has any \
@@ -777,44 +833,43 @@ sub-directories, files')
         Remove a specific Directory
         """
         is_pattern = False
-        directories = args.dir_paths
-        for dir_path in directories:
-            if dir_path.count('*') > 0:
+        paths = args.paths
+        for path in paths:
+            if path.count(b'*') > 0:
                 is_pattern = True
-                all_items = get_all_possible_paths(dir_path)
+                all_items = get_all_possible_paths(path)
                 if len(all_items) > 0:
-                    dir_path = all_items[0].rsplit('/', 1)[0]
-                if dir_path == '':
-                    dir_path = '/'
+                    path = all_items[0].rsplit(b'/', 1)[0]
+                if path == b'':
+                    path = b'/'
                 dirs = []
                 for i in all_items:
-                    for item in list_items(dir_path):
+                    for item in ls(path):
                         d_name = item.d_name
                         if os.path.basename(i) == d_name:
                             if item.is_dir():
-                                dirs.append(os.path.join(dir_path, d_name))
-                directories.extend(dirs)
+                                dirs.append(os.path.join(path, d_name))
+                paths.extend(dirs)
                 continue
             else:
                 is_pattern = False
-            path = ''
-            dir_path = os.path.normpath(os.path.join(
-                cephfs.getcwd().decode('utf-8'), dir_path))
+            path = os.path.normpath(os.path.join(cephfs.getcwd(), path))
             if args.parent:
-                files = reversed(
-                    sorted(set(dirwalk(dir_path))))
-                for path in files:
-                    path = os.path.normpath(path)
-                    if path[1:] != dir_path:
+                files = reversed(sorted(set(dirwalk(path))))
+                for filepath in files:
+                    filepath = os.path.normpath(filepath)
+                    if filepath[1:] != path:
                         try:
-                            cephfs.rmdir(to_bytes(path))
+                            cephfs.rmdir(filepath)
                         except libcephfs.Error:
-                            cephfs.unlink(to_bytes(path))
-            if not is_pattern and dir_path != os.path.normpath(path):
+                            cephfs.unlink(filepath)
+            if not is_pattern and path != os.path.normpath(b''):
                 try:
-                    cephfs.rmdir(to_bytes(dir_path))
+                    cephfs.rmdir(path)
                 except libcephfs.Error:
-                    self.poutput('error: no such directory "%s"' % dir_path)
+                    self.perror('error: no such directory {} exists'.format(
+                                path.decode('utf-8')), end='\n',
+                                apply_style=True)
 
     def complete_rm(self, text, line, begidx, endidx):
         """
@@ -823,23 +878,25 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     rm_parser = argparse.ArgumentParser(description='Remove File.')
-    rm_parser.add_argument('file_paths', help='File Path.', nargs='+')
+    rm_parser.add_argument('paths', help='File Path.', nargs='+',
+                           action=path_to_bytes)
 
     @with_argparser(rm_parser)
     def do_rm(self, args):
         """
         Remove a specific file
         """
-        files = args.file_paths
-        for file_path in files:
-            if file_path.count('*') > 0:
-                files.extend([i for i in get_all_possible_paths(
-                    file_path) if is_file_exists(i)])
+        file_paths = args.paths
+        for path in file_paths:
+            if path.count(b'*') > 0:
+                file_paths.extend([i for i in get_all_possible_paths(
+                    path) if is_file_exists(i)])
             else:
                 try:
-                    cephfs.unlink(to_bytes(file_path))
+                    cephfs.unlink(path)
                 except libcephfs.Error:
-                    self.poutput('%s: no such file' % file_path)
+                    self.perror('{}: no such file'.format(path.decode('utf-8')),
+                                end='\n', apply_style=True)
 
     def complete_mv(self, text, line, begidx, endidx):
         """
@@ -848,8 +905,9 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     mv_parser = argparse.ArgumentParser(description='Move File.')
-    mv_parser.add_argument('src_path', type=str, help='Source File Path.')
-    mv_parser.add_argument('dest_path', type=str,
+    mv_parser.add_argument('src_path', type=str, action=path_to_bytes,
+                           help='Source File Path.')
+    mv_parser.add_argument('dest_path', type=str, action=path_to_bytes,
                            help='Destination File Path.')
 
     @with_argparser(mv_parser)
@@ -858,9 +916,9 @@ sub-directories, files')
         Rename a file or Move a file from source path to the destination
         """
         try:
-            cephfs.rename(to_bytes(args.src_path), to_bytes(args.dest_path))
+            cephfs.rename(args.src_path, args.dest_path)
         except libcephfs.Error:
-            self.poutput("error: need a file name to move to")
+            self.perror('error: invalid file name', end='\n', apply_style=True)
 
     def complete_cd(self, text, line, begidx, endidx):
         """
@@ -869,29 +927,21 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     cd_parser = argparse.ArgumentParser(description='Change working directory')
-    cd_parser.add_argument('dir_name', type=str,
-                           help='Name of the directory.', default='')
+    cd_parser.add_argument('path', type=str, help='Name of the directory.',
+                           action=path_to_bytes, nargs='?', default='/')
 
     @with_argparser(cd_parser)
     def do_cd(self, args):
         """
         Change working directory
         """
-        if args.dir_name == '':
-            cephfs.chdir(b'/')
-        if args.dir_name == '..':
-            dir_name = cephfs.getcwd().decode('utf-8').rsplit('/', 1)[0]
-            if dir_name != '':
-                cephfs.chdir(to_bytes(dir_name))
-            else:
-                cephfs.chdir(b'/')
-        else:
-            try:
-                cephfs.chdir(to_bytes(args.dir_name))
-            except libcephfs.Error:
-                self.poutput("%s: no such directory" % args.dir_name)
-        self.working_dir = cephfs.getcwd().decode('utf-8')
-        self.set_prompt()
+        try:
+            cephfs.chdir(args.path)
+            self.working_dir = cephfs.getcwd().decode('utf-8')
+            self.set_prompt()
+        except libcephfs.Error:
+            self.perror('{}: no such directory'.format(args.path.decode('utf-8')),
+                        end='\n', apply_style=True)
 
     def do_cwd(self, arglist):
         """
@@ -907,18 +957,21 @@ sub-directories, files')
 
     chmod_parser = argparse.ArgumentParser(description='Create Directory.')
     chmod_parser.add_argument('mode', type=str, action=ModeAction, help='Mode')
-    chmod_parser.add_argument('file_name', type=str, help='Name of the file')
+    chmod_parser.add_argument('paths', type=str, action=path_to_bytes,
+                              help='Name of the file', nargs='+')
 
     @with_argparser(chmod_parser)
     def do_chmod(self, args):
         """
         Change permission of a file
         """
-        mode = int(args.mode, base=8)
-        try:
-            cephfs.chmod(args.file_name, mode)
-        except libcephfs.Error:
-            self.poutput('%s: no such file or directory' % args.file_name)
+        for path in args.paths:
+            mode = int(args.mode, base=8)
+            try:
+                cephfs.chmod(path, mode)
+            except libcephfs.Error:
+                self.perror('{}: no such file or directory'.format(
+                            path.decode('utf-8')), end='\n', apply_style=True)
 
     def complete_cat(self, text, line, begidx, endidx):
         """
@@ -927,18 +980,20 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     cat_parser = argparse.ArgumentParser(description='')
-    cat_parser.add_argument('file_names', help='Name of Files', nargs='+')
+    cat_parser.add_argument('paths', help='Name of Files', action=path_to_bytes,
+                            nargs='+')
 
     @with_argparser(cat_parser)
     def do_cat(self, args):
         """
         Print contents of a file
         """
-        for file_name in args.file_names:
-            if is_file_exists(file_name):
-                copy_to_local(file_name, '-')
+        for path in args.paths:
+            if is_file_exists(path):
+                copy_to_local(path, b'-')
             else:
-                self.poutput('%s: no such file' % file_name)
+                self.perror('{}: no such file'.format(path.decode('utf-8')),
+                            end='\n', apply_style=True)
 
     umask_parser = argparse.ArgumentParser(description='Set umask value.')
     umask_parser.add_argument('mode', help='Mode', type=str, action=ModeAction,
@@ -961,8 +1016,9 @@ sub-directories, files')
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    write_parser = argparse.ArgumentParser(description='')
-    write_parser.add_argument('file_name', type=str, help='Name of File')
+    write_parser = argparse.ArgumentParser(description='Writes data into a file')
+    write_parser.add_argument('path', type=str, action=path_to_bytes,
+                              help='Name of File')
 
     @with_argparser(write_parser)
     def do_write(self, args):
@@ -970,7 +1026,7 @@ sub-directories, files')
         Write data into a file.
         """
 
-        copy_from_local('-', args.file_name)
+        copy_from_local(b'-', args.path)
 
     def complete_lcd(self, text, line, begidx, endidx):
         """
@@ -980,20 +1036,18 @@ sub-directories, files')
         return self.index_based_complete(text, line, begidx, endidx, index_dict)
 
     lcd_parser = argparse.ArgumentParser(description='')
-    lcd_parser.add_argument('path', type=str, help='Path')
+    lcd_parser.add_argument('path', type=str, action=path_to_bytes, help='Path')
 
     @with_argparser(lcd_parser)
     def do_lcd(self, args):
         """
         Moves into the given local directory
         """
-
-        path = os.path.expanduser(args.path)
-        if os.path.isdir(path):
-            os.chdir(path)
-            # self.poutput(get_all_possible_paths(args.path))
-        else:
-            self.poutput("%s: no such directory" % path)
+        try:
+            os.chdir(os.path.expanduser(args.path))
+        except OSError as e:
+            self.perror("Cannot change to {}: {}".format(e.filename,
+                        e.strerror), end='\n', apply_style=True)
 
     def complete_lls(self, text, line, begidx, endidx):
         """
@@ -1004,28 +1058,25 @@ sub-directories, files')
 
     lls_parser = argparse.ArgumentParser(
         description='List files in local system.')
-    lls_parser.add_argument('paths', help='Paths', nargs='*', default=[''])
+    lls_parser.add_argument('paths', help='Paths', action=path_to_bytes,
+                            nargs='*')
 
     @with_argparser(lls_parser)
     def do_lls(self, args):
         """
         Lists all files and folders in the current local directory
         """
-
-        if len(args.paths) == 0 or (len(args.paths) == 1 and
-                                    args.paths[0] == ''):
-            if len(args.paths) > 0:
-                args.paths.pop(0)
-            args.paths.append(os.getcwd())
-        for path in args.paths:
-            if not os.path.isabs(path):
-                path = os.path.relpath(path)
-            if os.path.isdir(path):
-                self.poutput("%s:" % path)
-                items = os.listdir(path)
-                print_list(items)
-            else:
-                self.poutput("%s: no such directory" % path)
+        if not args.paths:
+            print_list(os.listdir(os.getcwdb()))
+        else:
+            for path in args.paths:
+                try:
+                    items = os.listdir(path)
+                    self.poutput("{}:".format(path.decode('utf-8')))
+                    print_list(items)
+                except OSError as e:
+                    self.perror("'{}': {}".format(e.filename, e.strerror),
+                                end='\n', apply_style=True)
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
@@ -1042,27 +1093,28 @@ sub-directories, files')
         """
         Display the amount of available disk space for file systems
         """
-        for index, i in enumerate(list_items(cephfs.getcwd())[2:]):
+        for index, i in enumerate(ls(b".", opts='A')):
             if index == 0:
                 self.poutput('{:25s}\t{:5s}\t{:15s}{:10s}{}'.format(
                     "1K-blocks", "Used", "Available", "Use%", "Stored on"))
             if not is_dir_exists(i.d_name):
                 statfs = cephfs.statfs(i.d_name)
                 stat = cephfs.stat(i.d_name)
-                block_size = statfs['f_blocks']*statfs['f_bsize'] // 1024
+                block_size = statfs['f_blocks'] * statfs['f_bsize'] // 1024
                 available = block_size - stat.st_size
                 use = 0
                 if block_size > 0:
-                    use = (stat.st_size*100 // block_size)
+                    use = (stat.st_size * 100 // block_size)
                 self.poutput('{:25d}\t{:5d}\t{:10d}\t{:5s} {}'.format(
                     statfs['f_fsid'], stat.st_size, available,
                     str(int(use)) + '%', i.d_name.decode('utf-8')))
 
     locate_parser = argparse.ArgumentParser(
         description='Find file within file system')
-    locate_parser.add_argument('name', help='name', type=str)
-    locate_parser.add_argument(
-        '-c', '--count', action='store_true', help='Count list of items located.')
+    locate_parser.add_argument('name', help='name', type=str,
+                               action=path_to_bytes)
+    locate_parser.add_argument('-c', '--count', action='store_true',
+                               help='Count list of items located.')
     locate_parser.add_argument(
         '-i', '--ignorecase', action='store_true', help='Ignore case')
 
@@ -1071,12 +1123,12 @@ sub-directories, files')
         """
         Find a file within the File System
         """
-        if args.name.count('*') == 1:
-            if args.name[0] == '*':
-                args.name += '/'
+        if args.name.count(b'*') == 1:
+            if args.name[0] == b'*':
+                args.name += b'/'
             elif args.name[-1] == '*':
-                args.name = '/' + args.name
-        args.name = args.name.replace('*', '')
+                args.name = b'/' + args.name
+        args.name = args.name.replace(b'*', b'')
         if args.ignorecase:
             locations = locate_file(args.name, False)
         else:
@@ -1084,7 +1136,7 @@ sub-directories, files')
         if args.count:
             self.poutput(len(locations))
         else:
-            self.poutput('\n'.join(locations))
+            self.poutput((b'\n'.join(locations)).decode('utf-8'))
 
     def complete_du(self, text, line, begidx, endidx):
         """
@@ -1094,38 +1146,54 @@ sub-directories, files')
 
     du_parser = argparse.ArgumentParser(
         description='Disk Usage of a Directory')
-    du_parser.add_argument(
-        'dirs', type=str, help='Name of the directory.', nargs='?', default='')
+    du_parser.add_argument('paths', type=str, action=get_list_of_bytes_path,
+                           help='Name of the directory.', nargs='*',
+                           default=[b'.'])
     du_parser.add_argument('-r', action='store_true',
                            help='Recursive Disk usage of all directories.')
 
     @with_argparser(du_parser)
     def do_du(self, args):
         """
-        Disk Usage of a Directory
+        Print disk usage of a given path(s).
         """
-        if args.dirs == '':
-            args.dirs = cephfs.getcwd().decode('utf-8')
-        for dir_ in args.dirs:
+        def print_disk_usage(files):
+            if isinstance(files, bytes):
+                files = (files, )
+
+            for f in files:
+                try:
+                    st = cephfs.lstat(f)
+
+                    if stat.S_ISDIR(st.st_mode):
+                        dusage = int(cephfs.getxattr(f,
+                                     'ceph.dir.rbytes').decode('utf-8'))
+                    else:
+                        dusage = st.st_size
+
+                    # print path in local context
+                    f = os.path.normpath(f)
+                    if f[0] is ord('/'):
+                        f = b'.' + f
+                    self.poutput('{:10s} {}'.format(humansize(dusage),
+                        f.decode('utf-8')))
+                except (libcephfs.Error, OSError):
+                    self.perror('{} : no such directory exists'.format(f.\
+                        decode('utf-8')), apply_style=True)
+                    continue
+
+        for path in args.paths:
             if args.r:
-                for i in reversed(sorted(set(dirwalk(dir_)))):
-                    i = os.path.normpath(i)
-                    try:
-                        xattr = cephfs.getxattr(to_bytes(i), 'ceph.dir.rbytes')
-                        self.poutput('{:10s} {}'.format(
-                            humansize(int(xattr.decode('utf-8'))), '.' + i))
-                    except libcephfs.Error:
-                        continue
+                print_disk_usage(sorted(set(dirwalk(path)).union({path})))
             else:
-                dir_ = os.path.normpath(dir_)
-                self.poutput('{:10s} {}'.format(humansize(int(cephfs.getxattr(to_bytes(
-                    dir_), 'ceph.dir.rbytes').decode('utf-8'))), '.' + dir_))
+                print_disk_usage(path)
 
     quota_parser = argparse.ArgumentParser(
         description='Quota management for a Directory')
     quota_parser.add_argument('op', choices=['get', 'set'],
                               help='Quota operation type.')
-    quota_parser.add_argument('dir', type=str, help='Name of the directory.')
+    quota_parser.add_argument('path', type=str, action=path_to_bytes,
+                              help='Name of the directory.')
     quota_parser.add_argument('--max_bytes', type=int, default=-1, nargs='?',
                               help='Max cumulative size of the data under '
                                    'this directory.')
@@ -1138,60 +1206,62 @@ sub-directories, files')
         """
         Quota management.
         """
-        if not is_dir_exists(args.dir):
-            self.poutput("error: no such directory '%s'" % args.dir)
+        if not is_dir_exists(args.path):
+            self.perror('error: no such directory {}'.format(args.path.decode('utf-8')),
+                        end='\n', apply_style=True)
             return
 
         if args.op == 'set':
             if (args.max_bytes == -1) and (args.max_files == -1):
-                self.poutput('please specify either --max_bytes or '
-                             '--max_files or both')
+                self.perror('please specify either --max_bytes or '
+                            '--max_files or both', end='\n', apply_style=True)
                 return
 
             if args.max_bytes >= 0:
                 max_bytes = to_bytes(str(args.max_bytes))
                 try:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_bytes',
+                    cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_CREATE)
                     self.poutput('max_bytes set to %d' % args.max_bytes)
-                except:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_bytes',
+                except libcephfs.Error:
+                    cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_REPLACE)
-                    self.poutput('max_bytes reset to %d' % args.max_bytes)
+                    self.perror('max_bytes reset to %d' % args.max_bytes,
+                                end='\n', apply_style=True)
 
             if args.max_files >= 0:
                 max_files = to_bytes(str(args.max_files))
                 try:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_files',
+                    cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_CREATE)
                     self.poutput('max_files set to %d' % args.max_files)
-                except:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_files',
+                except libcephfs.Error:
+                    cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_REPLACE)
-                    self.poutput('max_files reset to %d' % args.max_files)
+                    self.perror('max_files reset to %d' % args.max_files,
+                                end='\n', apply_style=True)
         elif args.op == 'get':
             max_bytes = '0'
             max_files = '0'
             try:
-                max_bytes = cephfs.getxattr(to_bytes(args.dir),
+                max_bytes = cephfs.getxattr(args.path,
                                             'ceph.quota.max_bytes')
                 self.poutput('max_bytes: %s' % max_bytes)
-            except:
-                self.poutput('max_bytes is not set')
+            except libcephfs.Error:
+                self.perror('max_bytes is not set', end='\n', apply_style=True)
                 pass
 
             try:
-                max_files = cephfs.getxattr(to_bytes(args.dir),
+                max_files = cephfs.getxattr(args.path,
                                             'ceph.quota.max_files')
                 self.poutput('max_files: %s' % max_files)
-            except:
-                self.poutput('max_files is not set')
+            except libcephfs.Error:
+                self.perror('max_files is not set', end='\n', apply_style=True)
                 pass
-
 
     def do_help(self, line):
         """
@@ -1202,7 +1272,7 @@ sub-directories, files')
         if line == 'all':
             for k in dir(self):
                 if k.startswith('do_'):
-                    self.poutput('-'*80)
+                    self.poutput('-' * 80)
                     super().do_help(k[3:])
             return
         parser = self.create_argparser(line)
@@ -1218,42 +1288,45 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     stat_parser = argparse.ArgumentParser(
-                  description='Display file or file system status')
-    stat_parser.add_argument('name', type=str, help='Name of the file', nargs='+')
+        description='Display file or file system status')
+    stat_parser.add_argument('paths', type=str, help='file paths',
+                             action=path_to_bytes, nargs='+')
 
     @with_argparser(stat_parser)
     def do_stat(self, args):
         """
         Display file or file system status
         """
-        for files in args.name:
+        for path in args.paths:
             try:
-                stat = cephfs.stat(files)
+                stat = cephfs.stat(path)
                 atime = stat.st_atime.isoformat(' ')
                 mtime = stat.st_mtime.isoformat(' ')
                 ctime = stat.st_mtime.isoformat(' ')
 
                 self.poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n\
 Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: {:o}/{}\tUid: {:d}\tGid: {:d}\n\
-Access: {}\nModify: {}\nChange: {}".format(files, stat.st_size, stat.st_blocks,
-                             stat.st_blksize, stat.st_dev, stat.st_ino,
-                             stat.st_nlink, stat.st_mode,
+Access: {}\nModify: {}\nChange: {}".format(path.decode('utf-8'), stat.st_size,
+                             stat.st_blocks, stat.st_blksize, stat.st_dev,
+                             stat.st_ino, stat.st_nlink, stat.st_mode,
                              mode_notation(stat.st_mode), stat.st_uid,
                              stat.st_gid, atime, mtime, ctime))
             except libcephfs.Error:
-                self.poutput("{}: no such file or directory".format(files))
+                self.perror('{}: no such file or directory'.format(path.decode('utf-8')),
+                            end='\n', apply_style=True)
 
 
 if __name__ == '__main__':
     config_file = ''
     exe = sys.argv[0]
     main_parser = argparse.ArgumentParser(description='')
-    main_parser.add_argument(
-        '-c', '--config', action='store', help='Configuration file_path', type=str)
+    main_parser.add_argument('-c', '--config', action='store',
+                             help='Configuration file_path', type=str)
     main_parser.add_argument(
         '-b', '--batch', action='store', help='Batch File path.', type=str)
     main_parser.add_argument('-t', '--test', action='store',
-                             help='Test against transcript(s) in FILE', nargs='+')
+                             help='Test against transcript(s) in FILE',
+                             nargs='+')
     main_parser.add_argument('commands', nargs='*',
                              help='comma delimited commands', default=[])
     args = main_parser.parse_args()
@@ -1262,7 +1335,7 @@ if __name__ == '__main__':
     if args.batch:
         args.commands = ['load ' + args.batch, ',quit']
     if args.test:
-        args.commands.extend(['-t,'] + [arg+',' for arg in args.test])
+        args.commands.extend(['-t,'] + [arg + ',' for arg in args.test])
     sys.argv.clear()
     sys.argv.append(exe)
     sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])

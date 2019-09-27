@@ -27,7 +27,7 @@ ReplayStatusFormatter<I>::ReplayStatusFormatter(Journaler *journaler,
 						const std::string &mirror_uuid)
   : m_journaler(journaler),
     m_mirror_uuid(mirror_uuid),
-    m_lock(unique_lock_name("ReplayStatusFormatter::m_lock", this)) {
+    m_lock(ceph::make_mutex(unique_lock_name("ReplayStatusFormatter::m_lock", this))) {
 }
 
 template <typename I>
@@ -37,7 +37,7 @@ bool ReplayStatusFormatter<I>::get_or_send_update(std::string *description,
 
   bool in_progress = false;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     if (m_on_finish) {
       in_progress = true;
     } else {
@@ -88,7 +88,7 @@ bool ReplayStatusFormatter<I>::get_or_send_update(std::string *description,
   format(description);
 
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     ceph_assert(m_on_finish == on_finish);
     m_on_finish = nullptr;
   }
@@ -158,7 +158,7 @@ void ReplayStatusFormatter<I>::send_update_tag_cache(uint64_t master_tag_tid,
       m_tag_cache.find(master_tag_tid) != m_tag_cache.end()) {
     Context *on_finish = nullptr;
     {
-      Mutex::Locker locker(m_lock);
+      std::lock_guard locker{m_lock};
       std::swap(m_on_finish, on_finish);
     }
 
@@ -170,7 +170,7 @@ void ReplayStatusFormatter<I>::send_update_tag_cache(uint64_t master_tag_tid,
   dout(20) << "master_tag_tid=" << master_tag_tid << ", mirror_tag_tid="
 	   << mirror_tag_tid << dendl;
 
-  FunctionContext *ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, master_tag_tid, mirror_tag_tid](int r) {
       handle_update_tag_cache(master_tag_tid, mirror_tag_tid, r);
     });

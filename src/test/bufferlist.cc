@@ -843,7 +843,7 @@ TEST(BufferListIterator, iterate_with_empties) {
   EXPECT_EQ(bl.length(), 0u);
   EXPECT_EQ(bl.get_num_buffers(), 1u);
 
-  encode(42l, bl);
+  encode(int64_t(42), bl);
   EXPECT_EQ(bl.get_num_buffers(), 2u);
 
   bl.push_back(ceph::buffer::create(0));
@@ -859,11 +859,11 @@ TEST(BufferListIterator, iterate_with_empties) {
     bl.append(bl_with_empty_ptr);
   }
 
-  encode(24l, bl);
+  encode(int64_t(24), bl);
   EXPECT_EQ(bl.get_num_buffers(), 5u);
 
   auto i = bl.cbegin();
-  long val;
+  int64_t val;
   decode(val, i);
   EXPECT_EQ(val, 42l);
 
@@ -871,7 +871,7 @@ TEST(BufferListIterator, iterate_with_empties) {
   EXPECT_EQ(val, 24l);
 
   val = 0;
-  i.seek(sizeof(long));
+  i.seek(sizeof(val));
   decode(val, i);
   EXPECT_EQ(val, 24l);
   EXPECT_TRUE(i == bl.end());
@@ -2671,7 +2671,7 @@ TEST(BufferList, InternalCarriage) {
   ceph::bufferlist bl;
   EXPECT_EQ(bl.get_num_buffers(), 0u);
 
-  encode(42l, bl);
+  encode(int64_t(42), bl);
   EXPECT_EQ(bl.get_num_buffers(), 1u);
 
   {
@@ -2684,7 +2684,7 @@ TEST(BufferList, InternalCarriage) {
     EXPECT_EQ(bl.get_num_buffers(), 2u);
   }
 
-  encode(24l, bl);
+  encode(int64_t(24), bl);
   EXPECT_EQ(bl.get_num_buffers(), 3u);
 }
 
@@ -2696,7 +2696,7 @@ TEST(BufferList, ContiguousAppender) {
   {
     auto ap = bl.get_contiguous_appender(100);
 
-    denc(42l, ap);
+    denc(int64_t(42), ap);
     EXPECT_EQ(bl.get_num_buffers(), 1u);
 
     // append bufferlist with single ptr inside. This should
@@ -2713,11 +2713,11 @@ TEST(BufferList, ContiguousAppender) {
       EXPECT_EQ(bl.get_num_buffers(), 3u);
     }
 
-    denc(24l, ap);
+    denc(int64_t(24), ap);
     EXPECT_EQ(bl.get_num_buffers(), 3u);
-    EXPECT_EQ(bl.length(), sizeof(long) + 3u);
+    EXPECT_EQ(bl.length(), sizeof(int64_t) + 3u);
   }
-  EXPECT_EQ(bl.length(), 2u * sizeof(long) + 3u);
+  EXPECT_EQ(bl.length(), 2u * sizeof(int64_t) + 3u);
 }
 
 TEST(BufferList, TestPtrAppend) {
@@ -2869,46 +2869,6 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_TRUE(bl.is_provided_buffer(buff));
   bl.append_zero(100);
   ASSERT_FALSE(bl.is_provided_buffer(buff));
-}
-
-TEST(BufferList, TestSHA1) {
-  {
-    bufferlist bl;
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
-  }
-  {
-    bufferlist bl;
-    bl.append("");
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
-  }
-  {
-    bufferlist bl;
-    bl.append("Hello");
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0", sha1.to_str());
-  }
-  {
-    bufferlist bl, bl2;
-    bl.append("Hello");
-    bl2.append(", world!");
-    bl.claim_append(bl2);
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("943a702d06f34599aee1f8da8ef9f7296031d699", sha1.to_str());
-    bl2.append("  How are you today?");
-    bl.claim_append(bl2);
-    sha1 = bl.sha1();
-    EXPECT_EQ("778b5d10e5133aa28fb8de71d35b6999b9a25eb4", sha1.to_str());
-  }
-  {
-    bufferptr p(65536);
-    memset(p.c_str(), 0, 65536);
-    bufferlist bl;
-    bl.append(p);
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("1adc95bebe9eea8c112d40cd04ab7a8d75c4f961", sha1.to_str());
-  }
 }
 
 TEST(BufferHash, all) {

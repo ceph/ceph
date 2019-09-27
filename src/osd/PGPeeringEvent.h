@@ -53,16 +53,16 @@ public:
     }
     desc = out.str();
   }
-  epoch_t get_epoch_sent() {
+  epoch_t get_epoch_sent() const {
     return epoch_sent;
   }
-  epoch_t get_epoch_requested() {
+  epoch_t get_epoch_requested() const {
     return epoch_requested;
   }
-  const boost::statechart::event_base &get_event() {
+  const boost::statechart::event_base &get_event() const {
     return *evt;
   }
-  const std::string& get_desc() {
+  const std::string& get_desc() const {
     return desc;
   }
 };
@@ -94,14 +94,11 @@ struct MNotifyRec : boost::statechart::event< MNotifyRec > {
   pg_shard_t from;
   pg_notify_t notify;
   uint64_t features;
-  PastIntervals past_intervals;
-  MNotifyRec(spg_t p, pg_shard_t from, const pg_notify_t &notify, uint64_t f,
-	     const PastIntervals& pi)
-    : pgid(p), from(from), notify(notify), features(f), past_intervals(pi) {}
+  MNotifyRec(spg_t p, pg_shard_t from, const pg_notify_t &notify, uint64_t f)
+    : pgid(p), from(from), notify(notify), features(f) {}
   void print(std::ostream *out) const {
     *out << "MNotifyRec " << pgid << " from " << from << " notify: " << notify
-	 << " features: 0x" << std::hex << features << std::dec
-	 << " " << past_intervals;
+	 << " features: 0x" << std::hex << features << std::dec;
   }
 };
 
@@ -165,7 +162,7 @@ struct RequestRecoveryPrio : boost::statechart::event< RequestRecoveryPrio > {
 
 TrivialEvent(NullEvt)
 TrivialEvent(RemoteBackfillReserved)
-TrivialEvent(RemoteReservationRejected)
+TrivialEvent(RemoteReservationRejectedTooFull)
 TrivialEvent(RemoteReservationRevokedTooFull)
 TrivialEvent(RemoteReservationRevoked)
 TrivialEvent(RemoteReservationCanceled)

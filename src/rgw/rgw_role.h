@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_ROLE_H
 #define CEPH_RGW_ROLE_H
@@ -8,7 +8,7 @@
 
 #include "common/ceph_context.h"
 
-#include "rgw/rgw_rados.h"
+class RGWCtl;
 
 class RGWRole
 {
@@ -23,7 +23,7 @@ class RGWRole
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 
   CephContext *cct;
-  RGWRados *store;
+  RGWCtl *ctl;
   string id;
   string name;
   string path;
@@ -46,14 +46,14 @@ class RGWRole
 
 public:
   RGWRole(CephContext *cct,
-          RGWRados *store,
+          RGWCtl *ctl,
           string name,
           string path,
           string trust_policy,
           string tenant,
           string max_session_duration_str="")
   : cct(cct),
-    store(store),
+    ctl(ctl),
     name(std::move(name)),
     path(std::move(path)),
     trust_policy(std::move(trust_policy)),
@@ -69,27 +69,27 @@ public:
   }
 
   RGWRole(CephContext *cct,
-          RGWRados *store,
+          RGWCtl *ctl,
           string name,
           string tenant)
   : cct(cct),
-    store(store),
+    ctl(ctl),
     name(std::move(name)),
     tenant(std::move(tenant)) {
     extract_name_tenant(this->name);
   }
 
   RGWRole(CephContext *cct,
-          RGWRados *store,
+          RGWCtl *ctl,
           string id)
   : cct(cct),
-    store(store),
+    ctl(ctl),
     id(std::move(id)) {}
 
   RGWRole(CephContext *cct,
-          RGWRados *store)
+          RGWCtl *ctl)
   : cct(cct),
-    store(store) {}
+    ctl(ctl) {}
 
   RGWRole() {}
 

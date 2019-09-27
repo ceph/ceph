@@ -10,6 +10,7 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -27,12 +28,12 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   providers: [TaskListService]
 })
 export class NfsListComponent implements OnInit, OnDestroy {
-  @ViewChild('nfsState')
+  @ViewChild('nfsState', { static: false })
   nfsState: TemplateRef<any>;
-  @ViewChild('nfsFsal')
+  @ViewChild('nfsFsal', { static: true })
   nfsFsal: TemplateRef<any>;
 
-  @ViewChild('table')
+  @ViewChild('table', { static: true })
   table: TableComponent;
 
   columns: CdTableColumn[];
@@ -74,7 +75,7 @@ export class NfsListComponent implements OnInit, OnDestroy {
 
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: 'fa-plus',
+      icon: Icons.add,
       routerLink: () => '/nfs/create',
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
@@ -82,14 +83,14 @@ export class NfsListComponent implements OnInit, OnDestroy {
 
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: Icons.edit,
       routerLink: () => `/nfs/edit/${getNfsUri()}`,
       name: this.actionLabels.EDIT
     };
 
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       click: () => this.deleteNfsModal(),
       name: this.actionLabels.DELETE
     };
@@ -100,10 +101,15 @@ export class NfsListComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Export'),
+        name: this.i18n('Path'),
         prop: 'path',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
+      },
+      {
+        name: this.i18n('Pseudo'),
+        prop: 'pseudo',
+        flexGrow: 2
       },
       {
         name: this.i18n('Cluster'),
@@ -136,7 +142,7 @@ export class NfsListComponent implements OnInit, OnDestroy {
           .value();
 
         this.isDefaultCluster = clusters.length === 1 && clusters[0] === '_default_';
-        this.columns[1].isHidden = this.isDefaultCluster;
+        this.columns[2].isHidden = this.isDefaultCluster;
         if (this.table) {
           this.table.updateColumns();
         }

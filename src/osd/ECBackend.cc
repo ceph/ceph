@@ -803,7 +803,7 @@ bool ECBackend::_handle_message(
     return true;
   }
   case MSG_OSD_EC_READ: {
-    const MOSDECSubOpRead *op = static_cast<const MOSDECSubOpRead*>(_op->get_req());
+    auto op = _op->get_req<MOSDECSubOpRead>();
     MOSDECSubOpReadReply *reply = new MOSDECSubOpReadReply;
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = get_osdmap_epoch();
@@ -825,7 +825,7 @@ bool ECBackend::_handle_message(
     return true;
   }
   case MSG_OSD_PG_PUSH: {
-    const MOSDPGPush *op = static_cast<const MOSDPGPush *>(_op->get_req());
+    auto op = _op->get_req<MOSDPGPush>();
     RecoveryMessages rm;
     for (vector<PushOp>::const_iterator i = op->pushes.begin();
 	 i != op->pushes.end();
@@ -1980,7 +1980,8 @@ bool ECBackend::try_reads_to_commit()
       &trans,
       &(op->temp_added),
       &(op->temp_cleared),
-      get_parent()->get_dpp());
+      get_parent()->get_dpp(),
+      get_osdmap()->require_osd_release);
   }
 
   dout(20) << __func__ << ": " << cache << dendl;

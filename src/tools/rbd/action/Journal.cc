@@ -378,7 +378,7 @@ class Journaler : public ::journal::Journaler {
 public:
   Journaler(librados::IoCtx& io_ctx, const std::string& journal_id,
 	    const std::string &client_id) :
-    ::journal::Journaler(io_ctx, journal_id, client_id, {}) {
+    ::journal::Journaler(io_ctx, journal_id, client_id, {}, nullptr) {
   }
 
   int init() {
@@ -460,9 +460,6 @@ protected:
   struct ReplayHandler : public ::journal::ReplayHandler {
     JournalPlayer *journal;
     explicit ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
-
-    void get() override {}
-    void put() override {}
 
     void handle_entries_available() override {
       journal->handle_replay_ready();
@@ -832,7 +829,7 @@ public:
     if (r < 0) {
       return r;
     }
-    m_journaler.start_append(0, 0, 0, 0);
+    m_journaler.start_append(0);
 
     int r1 = 0;
     bufferlist bl;
