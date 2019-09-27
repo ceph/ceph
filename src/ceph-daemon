@@ -10,10 +10,10 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import sys
 import tempfile
 from distutils.spawn import find_executable
-from subprocess import check_output, CalledProcessError
 
 logging.basicConfig(level=logging.INFO)
 
@@ -55,12 +55,12 @@ def get_unit_name(fsid, daemon_type, daemon_id):
 
 def check_unit(unit_name):
     try:
-        out = check_output(['systemctl', 'is-enabled', unit_name])
+        out = subprocess.check_output(['systemctl', 'is-enabled', unit_name])
         enabled = out.decode('utf-8').strip() == 'enabled'
     except:
         enabled = False
     try:
-        out = check_output(['systemctl', 'is-active', unit_name])
+        out = subprocess.check_output(['systemctl', 'is-active', unit_name])
         active = out.decode('utf-8').strip() == 'active'
     except:
         active = False
@@ -232,11 +232,11 @@ def deploy_daemon_units(fsid, daemon_type, daemon_id, c):
         f.write(unit)
         os.rename(args.unit_dir + '/' + unit_file + '.new',
                   args.unit_dir + '/' + unit_file)
-    check_output(['systemctl', 'daemon-reload'])
+    subprocess.check_output(['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(fsid, daemon_type, daemon_id)
-    check_output(['systemctl', 'enable', unit_name])
-    check_output(['systemctl', 'start', unit_name])
+    subprocess.check_output(['systemctl', 'enable', unit_name])
+    subprocess.check_output(['systemctl', 'start', unit_name])
 
 def install_base_units(fsid):
     """
@@ -251,8 +251,8 @@ def install_base_units(fsid):
         os.rename(args.unit_dir + '/ceph.target.new',
                   args.unit_dir + '/ceph.target')
     if not existed:
-        check_output(['systemctl', 'enable', 'ceph.target'])
-        check_output(['systemctl', 'start', 'ceph.target'])
+        subprocess.check_output(['systemctl', 'enable', 'ceph.target'])
+        subprocess.check_output(['systemctl', 'start', 'ceph.target'])
 
     existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % fsid)
     with open(args.unit_dir + '/ceph-%s.target.new' % fsid, 'w') as f:
@@ -267,8 +267,8 @@ def install_base_units(fsid):
         os.rename(args.unit_dir + '/ceph-%s.target.new' % fsid,
                   args.unit_dir + '/ceph-%s.target' % fsid)
     if not existed:
-        check_output(['systemctl', 'enable', 'ceph-%s.target' % fsid])
-        check_output(['systemctl', 'start', 'ceph-%s.target' % fsid])
+        subprocess.check_output(['systemctl', 'enable', 'ceph-%s.target' % fsid])
+        subprocess.check_output(['systemctl', 'start', 'ceph-%s.target' % fsid])
 
 def get_unit_file(fsid):
     u = """[Unit]
@@ -350,7 +350,7 @@ class CephContainer:
 
     def run(self):
         logging.debug(self.run_cmd())
-        return check_output(self.run_cmd())
+        return subprocess.check_output(self.run_cmd())
 
 ##################################
 
@@ -566,10 +566,10 @@ def command_rm_daemon():
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
-    check_output(['systemctl', 'stop', unit_name])
-    check_output(['systemctl', 'disable', unit_name])
+    subprocess.check_output(['systemctl', 'stop', unit_name])
+    subprocess.check_output(['systemctl', 'disable', unit_name])
     data_dir = get_data_dir(args.data_dir, args.fsid, daemon_type, daemon_id)
-    check_output(['rm', '-rf', data_dir])
+    subprocess.check_output(['rm', '-rf', data_dir])
 
 ##################################
 
@@ -578,17 +578,17 @@ def command_rm_cluster():
         raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
     unit_name = 'ceph-%s.target' % args.fsid
     try:
-        check_output(['systemctl', 'stop', unit_name])
-        check_output(['systemctl', 'disable', unit_name])
-    except CalledProcessError:
+        subprocess.check_output(['systemctl', 'stop', unit_name])
+        subprocess.check_output(['systemctl', 'disable', unit_name])
+    except subprocess.CalledProcessError:
         pass
-    check_output(['rm', '-f', args.unit_dir + '/ceph-%s@.service' % args.fsid])
-    check_output(['rm', '-f', args.unit_dir + '/ceph-%s.target' % args.fsid])
-    check_output(['rm', '-rf',
+    subprocess.check_output(['rm', '-f', args.unit_dir + '/ceph-%s@.service' % args.fsid])
+    subprocess.check_output(['rm', '-f', args.unit_dir + '/ceph-%s.target' % args.fsid])
+    subprocess.check_output(['rm', '-rf',
                   args.unit_dir + '/ceph-%s.target.wants' % args.fsid])
-    check_output(['rm', '-rf', args.data_dir + '/' + args.fsid])
-    check_output(['rm', '-rf', args.log_dir + '/' + args.fsid])
-    check_output(['rm', '-rf', args.log_dir + '/*.wants/ceph-%s@*' % args.fsid])
+    subprocess.check_output(['rm', '-rf', args.data_dir + '/' + args.fsid])
+    subprocess.check_output(['rm', '-rf', args.log_dir + '/' + args.fsid])
+    subprocess.check_output(['rm', '-rf', args.log_dir + '/*.wants/ceph-%s@*' % args.fsid])
 
     # FIXME: disable individual daemon units, too
 
