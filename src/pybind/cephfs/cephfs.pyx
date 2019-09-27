@@ -233,6 +233,8 @@ class OutOfRange(OSError):
 class ObjectNotEmpty(OSError):
     pass
 
+class NotDirectory(OSError):
+    pass
 
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
@@ -261,6 +263,7 @@ ELSE:
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
         errno.ENOTEMPTY  : ObjectNotEmpty,
+        errno.ENOTDIR    : NotDirectory
     }
 
 
