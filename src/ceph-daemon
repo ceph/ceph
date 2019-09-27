@@ -46,9 +46,8 @@ def get_log_dir(base, fsid):
 def get_daemon_args(fsid, daemon_type, daemon_id):
     r = [
         '--default-admin-socket', '/var/run/ceph/' + fsid + '-' + daemon_type + '.' + daemon_id + '.asok',
-#        '--default-log-to-file=false',
-#        '--log-dir', args.log_dir,
-#        '--data-dir', args.data_dir,
+        '--default-log-to-file=false',
+        '--default-log-to-stderr=true',
         ]
     if args.uid != 0:
         r = r + ['--setuser', str(args.uid)]
