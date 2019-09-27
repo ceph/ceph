@@ -69,7 +69,10 @@ ceph_config_get(BaseMgrStandbyModule *self, PyObject *args)
     return nullptr;
   }
 
+  PyThreadState *tstate = PyEval_SaveThread();
   std::string value;
+  PyEval_RestoreThread(tstate);
+
   bool found = self->this_module->get_config(what, &value);
   if (found) {
     dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
