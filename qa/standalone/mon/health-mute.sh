@@ -31,7 +31,7 @@ function TEST_mute() {
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
 
-    ceph osd pool create foo 10
+    ceph osd pool create foo 8
     ceph osd pool application enable foo rbd --yes-i-really-mean-it
     wait_for_clean || return 1
 
