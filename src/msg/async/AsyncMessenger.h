@@ -147,7 +147,8 @@ public:
    * @{
    */
   ConnectionRef connect_to(int type,
-			   const entity_addrvec_t& addrs) override;
+			   const entity_addrvec_t& addrs,
+			   bool anon) override;
   ConnectionRef get_loopback_connection() override;
   void mark_down(const entity_addr_t& addr) override {
     mark_down_addrs(entity_addrvec_t(addr));
@@ -196,7 +197,8 @@ private:
    * @return a pointer to the newly-created connection. Caller does not own a
    * reference; take one if you need it.
    */
-  AsyncConnectionRef create_connect(const entity_addrvec_t& addrs, int type);
+  AsyncConnectionRef create_connect(const entity_addrvec_t& addrs, int type,
+				    bool anon);
 
   /**
    * Queue up a Message for delivery to the entity specified
@@ -281,6 +283,9 @@ private:
    * These are not yet in the conns map.
    */
   set<AsyncConnectionRef> accepting_conns;
+
+  /// anonymous outgoing connections
+  set<AsyncConnectionRef> anon_conns;
 
   /**
    * list of connection are closed which need to be clean up
