@@ -47,7 +47,7 @@ namespace rgw { namespace request {
     }
   }; /* request::Config */
 
-  static Config request_config;
+  extern Config request_config;
     
   }} /* namespace rgw::request */
 

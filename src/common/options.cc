@@ -7218,7 +7218,8 @@ std::vector<Option> get_rgw_options() {
     .add_see_also("rgw_dmclock_metadata_wgt"),
 
     Option("rgw_cksum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
+    .set_default("none")
+    .set_enum_allowed({"none", "SHA256", "SHA512", "Blake2B"})
     .set_description("Secondary cryptographic digest algorithm")
     .set_long_description(
         "One of SHA256, SHA512, or Blake2B.  If set, the corresponding digest "

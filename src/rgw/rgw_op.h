@@ -46,7 +46,6 @@
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
 #include "rgw_tag.h"
-#include "rgw_cksum.h"
 #include "rgw_object_lock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
