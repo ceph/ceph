@@ -3041,7 +3041,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
     io_ctx.set_namespace(all_nspaces);
-    io_ctx.set_osdmap_full_try();
+    io_ctx.set_pool_full_try();
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up_slow("", concurrent_ios);
     if (ret >= 0) {
