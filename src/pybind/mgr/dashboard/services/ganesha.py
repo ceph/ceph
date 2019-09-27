@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
 import re
 
 from orchestrator import OrchestratorError
@@ -8,9 +9,12 @@ from .cephfs import CephFS
 from .cephx import CephX
 from .orchestrator import OrchClient
 from .rgw_client import RgwClient, RequestException, NoCredentialsException
-from .. import mgr, logger
+from .. import mgr
 from ..settings import Settings
 from ..exceptions import DashboardException
+
+
+logger = logging.getLogger('ganesha')
 
 
 class NFSException(DashboardException):
@@ -128,9 +132,9 @@ class Ganesha(object):
 
     @classmethod
     def reload_daemons(cls, cluster_id, daemons_id):
-        logger.debug("[NFS] issued reload of daemons: %s", daemons_id)
+        logger.debug("issued reload of daemons: %s", daemons_id)
         if not OrchClient.instance().available():
-            logger.debug("[NFS] orchestrator not available")
+            logger.debug("orchestrator not available")
             return
         reload_list = []
         daemons = cls.get_daemons_status()
@@ -636,7 +640,7 @@ class Export(object):
 
     @classmethod
     def from_export_block(cls, export_block, cluster_id, defaults):
-        logger.debug("[NFS] parsing export block: %s", export_block)
+        logger.debug("parsing export block: %s", export_block)
 
         fsal_block = [b for b in export_block['_blocks_']
                       if b['block_name'] == "FSAL"]
@@ -795,7 +799,7 @@ class GaneshaConf(object):
                     size, _ = obj.stat()
                     raw_config = obj.read(size)
                     raw_config = raw_config.decode("utf-8")
-                    logger.debug("[NFS] read export configuration from rados "
+                    logger.debug("read export configuration from rados "
                                  "object %s/%s/%s:\n%s", self.rados_pool,
                                  self.rados_namespace, obj.key, raw_config)
                     self.export_conf_blocks.extend(
@@ -804,7 +808,7 @@ class GaneshaConf(object):
                     size, _ = obj.stat()
                     raw_config = obj.read(size)
                     raw_config = raw_config.decode("utf-8")
-                    logger.debug("[NFS] read daemon configuration from rados "
+                    logger.debug("read daemon configuration from rados "
                                  "object %s/%s/%s:\n%s", self.rados_pool,
                                  self.rados_namespace, obj.key, raw_config)
                     idx = obj.key.find('-')
@@ -818,7 +822,7 @@ class GaneshaConf(object):
                 ioctx.set_namespace(self.rados_namespace)
             ioctx.write_full(obj, raw_config.encode('utf-8'))
             logger.debug(
-                "[NFS] write configuration into rados object %s/%s/%s:\n%s",
+                "write configuration into rados object %s/%s/%s:\n%s",
                 self.rados_pool, self.rados_namespace, obj, raw_config)
 
     @classmethod
@@ -847,7 +851,7 @@ class GaneshaConf(object):
         if squash.lower() in ["all", "all_squash", "allsquash",
                               "all_anonymous", "allanonymous"]:
             return "all_squash"
-        logger.error("[NFS] could not parse squash value: %s", squash)
+        logger.error("could not parse squash value: %s", squash)
         raise NFSException("'{}' is an invalid squash option".format(squash))
 
     @classmethod
@@ -856,7 +860,7 @@ class GaneshaConf(object):
             return 3
         if str(protocol) in ["NFSV4", "4", "V4", "NFS4"]:
             return 4
-        logger.error("[NFS] could not parse protocol value: %s", protocol)
+        logger.error("could not parse protocol value: %s", protocol)
         raise NFSException("'{}' is an invalid NFS protocol version identifier"
                            .format(protocol))
 

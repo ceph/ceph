@@ -9,23 +9,12 @@ import os
 
 
 if 'UNITTEST' not in os.environ:
-    class _LoggerProxy(object):
-        def __init__(self):
-            self._logger = None
-
-        def __getattr__(self, item):
-            if self._logger is None:
-                raise AttributeError("logger not initialized")
-            return getattr(self._logger, item)
-
     class _ModuleProxy(object):
         def __init__(self):
             self._mgr = None
 
         def init(self, module_inst):
-            global logger
             self._mgr = module_inst
-            logger._logger = self._mgr._logger
 
         def __getattr__(self, item):
             if self._mgr is None:
@@ -33,14 +22,12 @@ if 'UNITTEST' not in os.environ:
             return getattr(self._mgr, item)
 
     mgr = _ModuleProxy()
-    logger = _LoggerProxy()
 
     # DO NOT REMOVE: required for ceph-mgr to load a module
     from .module import Module, StandbyModule  # noqa: F401
 else:
     import logging
     logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
     logging.root.handlers[0].setLevel(logging.DEBUG)
     os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
                                         os.environ['PATH'])

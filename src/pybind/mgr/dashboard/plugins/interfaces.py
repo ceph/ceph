@@ -10,8 +10,8 @@ class CanMgr(Mixin):
 
 
 class CanLog(Mixin):
-    from .. import logger
-    log = logger
+    import logging
+    log = logging.getLogger()
 
 
 class CanCherrypy(Mixin):

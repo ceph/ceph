@@ -13,18 +13,21 @@
 """
 from __future__ import absolute_import
 
-from .settings import Settings
-from .tools import build_url
 import inspect
+import logging
 import re
 import requests
 from requests.exceptions import ConnectionError, InvalidURL, Timeout
-from . import logger
+from .settings import Settings
+from .tools import build_url
 
 try:
     from requests.packages.urllib3.exceptions import SSLError
 except ImportError:
     from urllib3.exceptions import SSLError
+
+
+logger = logging.getLogger('rest_client')
 
 
 class TimeoutRequestsSession(requests.Session):

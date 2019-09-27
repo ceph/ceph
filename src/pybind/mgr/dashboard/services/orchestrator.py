@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
+
 from orchestrator import InventoryFilter
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
-from .. import mgr, logger
+from .. import mgr
 from ..tools import wraps
+
+
+logger = logging.getLogger('orchestrator')
 
 
 # pylint: disable=abstract-method
@@ -16,7 +21,7 @@ class OrchestratorAPI(OrchestratorClientMixin):
     def status(self):
         try:
             status, desc = super(OrchestratorAPI, self).available()
-            logger.info("[ORCH] is orchestrator available: %s, %s", status, desc)
+            logger.info("is orchestrator available: %s, %s", status, desc)
             return dict(available=status, description=desc)
         except (RuntimeError, OrchestratorError, ImportError):
             return dict(available=False,
