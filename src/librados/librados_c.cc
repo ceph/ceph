@@ -445,14 +445,14 @@ LIBRADOS_C_API_BASE_DEFAULT(rados_blacklist_add);
 extern "C" void _rados_set_osdmap_full_try(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  ctx->objecter->set_osdmap_full_try();
+  ctx->objecter->set_pool_full_try();
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_set_osdmap_full_try);
 
 extern "C" void _rados_unset_osdmap_full_try(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  ctx->objecter->unset_osdmap_full_try();
+  ctx->objecter->unset_pool_full_try();
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_unset_osdmap_full_try);
 
