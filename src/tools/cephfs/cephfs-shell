@@ -560,7 +560,7 @@ exists.')
     @with_argparser(put_parser)
     def do_put(self, args):
         """
-        Copy a file to Ceph File System from Local Directory.
+        Copy a local file/directory to CephFS.
         """
         root_src_dir = args.local_path
         root_dst_dir = args.remote_path
@@ -661,7 +661,7 @@ exists.')
     @with_argparser(get_parser)
     def do_get(self, args):
         """
-        Copy a file/directory  from Ceph File System to Local Directory.
+        Copy a file/directory from CephFS to given path.
         """
         root_src_dir = args.remote_path
         root_dst_dir = args.local_path

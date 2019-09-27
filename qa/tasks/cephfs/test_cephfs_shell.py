@@ -1,3 +1,7 @@
+"""
+Before running this testsuite, add path to cephfs-shell module to $PATH and
+export $PATH.
+"""
 from os import path
 import crypt
 import logging
