@@ -385,8 +385,8 @@ struct rgw_cls_list_op
   cls_rgw_obj_key start_obj;
   uint32_t num_entries;
   string filter_prefix;
-  string delimiter;
   bool list_versions;
+  string delimiter;
 
   rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 
@@ -428,18 +428,27 @@ struct rgw_cls_list_ret {
   rgw_bucket_dir dir;
   bool is_truncated;
 
-  rgw_cls_list_ret() : is_truncated(false) {}
+  // cls_filtered is not transmitted; it is assumed true for versions
+  // on/after 3 and false for prior versions; this allows the rgw
+  // layer to know when an older osd (cls) does not do the filtering
+  bool cls_filtered;
+
+  rgw_cls_list_ret() :
+    is_truncated(false),
+    cls_filtered(true)
+  {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     encode(dir, bl);
     encode(is_truncated, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     decode(dir, bl);
     decode(is_truncated, bl);
+    cls_filtered = struct_v >= 3;
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

@@ -1007,6 +1007,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   string empty_delimiter;
   rgw_obj_index_key marker;
   bool is_truncated = true;
+  bool cls_filtered = true;
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
@@ -1016,8 +1017,8 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
     int r = store->getRados()->cls_bucket_list_ordered(
       bucket_info, RGW_NO_SHARD, marker, prefix, empty_delimiter,
-      listing_max_entries, true, result, &is_truncated, &marker, y,
-      rgw_bucket_object_check_filter);
+      listing_max_entries, true, result, &is_truncated, &cls_filtered,
+      &marker, y, rgw_bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {

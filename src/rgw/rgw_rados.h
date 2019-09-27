@@ -1356,7 +1356,8 @@ public:
 			      uint32_t num_entries,
 			      bool list_versions,
 			      ent_map_t& m,
-			      bool *is_truncated,
+			      bool* is_truncated,
+			      bool* cls_filtered,
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
 			      check_filter_t force_check_filter = nullptr);
