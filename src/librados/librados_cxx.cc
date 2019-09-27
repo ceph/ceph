@@ -2240,12 +2240,12 @@ librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
 
 void librados::IoCtx::set_osdmap_full_try()
 {
-  io_ctx_impl->objecter->set_osdmap_full_try();
+  io_ctx_impl->objecter->set_pool_full_try();
 }
 
 void librados::IoCtx::unset_osdmap_full_try()
 {
-  io_ctx_impl->objecter->unset_osdmap_full_try();
+  io_ctx_impl->objecter->unset_pool_full_try();
 }
 
 ///////////////////////////// Rados //////////////////////////////
