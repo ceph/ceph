@@ -3758,6 +3758,12 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
+	auto ch = fs->open_collection(coll_t(pgid));
+	if (!ghobj.match(fs->collection_bits(ch), pgid.ps())) {
+	  stringstream ss;
+	  ss << "object " << ghobj << " not contained by pg " << pgid;
+	  throw std::runtime_error(ss.str());
+	}
       }
     } catch (std::runtime_error& e) {
       cerr << e.what() << std::endl;
