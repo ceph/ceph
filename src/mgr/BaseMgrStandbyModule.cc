@@ -69,6 +69,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
+  PyThreadState *tstate = PyEval_SaveThread();
   std::string final_key;
   std::string value;
   bool found = false;
@@ -80,6 +81,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
     final_key = what;
     found = self->this_module->get_config(final_key, &value);
   }
+  PyEval_RestoreThread(tstate);
   if (found) {
     dout(10) << __func__ << " " << final_key << " found: " << value
 	     << dendl;
