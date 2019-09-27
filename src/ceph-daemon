@@ -100,6 +100,16 @@ def get_container(fsid, daemon_type, daemon_id, uid, gid):
     cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
     extra_args = []
 
+    mounts = {
+        log_dir: '/var/log/ceph:z',
+        data_dir: cdata_dir + ':z',
+    }
+    if daemon_type in ['mon', 'osd']:
+        mounts['/run/udev'] = '/run/udev:z'
+        mounts['/dev'] = '/dev:z'  # FIXME: narrow this down?
+    if daemon_type == 'osd':
+        mounts['/sys'] = '/sys:z'  # for numa.cc, pick_address, cgroups, ...
+
     return CephContainer(
         image=args.image,
         entrypoint='ceph-' + daemon_type,
@@ -107,10 +117,7 @@ def get_container(fsid, daemon_type, daemon_id, uid, gid):
               '-c', cdata_dir + '/conf',
               '-f', # foreground
         ] + extra_args + get_daemon_args(fsid, daemon_type, daemon_id, uid, gid),
-        volume_mounts={
-            log_dir: '/var/log/ceph:z',
-            data_dir: cdata_dir + ':z',
-        },
+        volume_mounts=mounts,
         dname=daemon_type + '.' + daemon_id,
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
