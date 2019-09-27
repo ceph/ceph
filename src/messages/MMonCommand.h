@@ -22,6 +22,10 @@
 
 class MMonCommand : public PaxosServiceMessage {
 public:
+  // weird note: prior to octopus, MgrClient would leave fsid blank when
+  // sending commands to the mgr.  Starting with octopus, this is either
+  // populated with a valid fsid (tell command) or an MMgrCommand is sent
+  // instead.
   uuid_d fsid;
   std::vector<std::string> cmd;
 

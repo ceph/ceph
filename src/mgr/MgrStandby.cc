@@ -48,7 +48,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 		     0)),
   objecter{g_ceph_context, client_messenger.get(), &monc, NULL, 0, 0},
   client{client_messenger.get(), &monc, &objecter},
-  mgrc(g_ceph_context, client_messenger.get()),
+  mgrc(g_ceph_context, client_messenger.get(), &monc.monmap),
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),

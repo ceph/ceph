@@ -146,7 +146,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_supported.empty() ?
 			cct->_conf->auth_service_required : cct->_conf->auth_supported),
   mgr_messenger(mgr_m),
-  mgr_client(cct_, mgr_m),
+  mgr_client(cct_, mgr_m, monmap),
   gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   store(s),
   

@@ -776,7 +776,9 @@ public:
 bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 {
   std::lock_guard l(lock);
-  if (HAVE_FEATURE(m->get_connection()->get_features(), SERVER_OCTOPUS)) {
+  // a blank fsid in MCommand signals a legacy client sending a "mon-mgr" CLI
+  // command.
+  if (m->fsid != uuid_d()) {
     cct->get_admin_socket()->queue_tell_command(m);
     return true;
   } else {
