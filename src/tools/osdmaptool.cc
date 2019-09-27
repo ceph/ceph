@@ -659,7 +659,7 @@ int main(int argc, const char **argv)
 
   if (health) {
     health_check_map_t checks;
-    osdmap.check_health(&checks);
+    osdmap.check_health(cct.get(), &checks);
     JSONFormatter jf(true);
     jf.dump_object("checks", checks);
     jf.flush(cout);
