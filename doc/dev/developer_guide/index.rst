@@ -1632,10 +1632,14 @@ it would execute a single test.
 
 vstart_runner.py can take 3 options -
 
+--clear-old-log             deletes old log file before running the test
 --create                    create Ceph cluster before running a test
 --create-cluster-only       creates the cluster and quits; tests can be issued
                             later
 --interactive               drops a Python shell when a test fails
+--log-ps-output             logs ps output; might be useful while debugging
+--teardown                  tears Ceph cluster down after test(s) has finished
+                            runnng
 
 Internal working of vstart_runner.py -
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
