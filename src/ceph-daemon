@@ -7,6 +7,7 @@ UNIT_DIR='/etc/systemd/system'
 VERSION='unknown development version'
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -26,6 +27,14 @@ def make_fsid():
     import uuid
     return str(uuid.uuid1())
 
+def is_fsid(s):
+    import uuid
+    try:
+        uuid.UUID(s)
+    except:
+        return False
+    return True
+
 def makedirs(dir):
     os.makedirs(dir, exist_ok=True)
 
@@ -40,6 +49,33 @@ def get_data_dir(base, fsid, t, n):
 
 def get_log_dir(base, fsid):
     return base + '/' + fsid
+
+def get_unit_name(fsid, daemon_type, daemon_id):
+    return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
+
+def check_unit(unit_name):
+    try:
+        out = check_output(['systemctl', 'is-enabled', unit_name])
+        enabled = out.decode('utf-8').strip() == 'enabled'
+    except:
+        enabled = False
+    try:
+        out = check_output(['systemctl', 'is-active', unit_name])
+        active = out.decode('utf-8').strip() == 'active'
+    except:
+        active = False
+    return (enabled, active)
+
+def get_legacy_fsid(cluster):
+    try:
+        import configparser
+        config = configparser.ConfigParser()
+        config.read('/etc/ceph/%s.conf' % cluster)
+        if 'global' in config and 'fsid' in config['global']:
+            return config['global']['fsid']
+    except:
+        return 'unknown'
+    return 'unknown'
 
 def get_daemon_args(fsid, daemon_type, daemon_id):
     r = [
@@ -154,7 +190,8 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         os.rename(args.unit_dir + '/' + unit_file + '.new',
                   args.unit_dir + '/' + unit_file)
     check_output(['systemctl', 'daemon-reload'])
-    unit_name = 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
+
+    unit_name = get_unit_name(fsid, daemon_type, daemon_id)
     check_output(['systemctl', 'enable', unit_name])
     check_output(['systemctl', 'start', unit_name])
 
@@ -426,9 +463,53 @@ def command_run():
 ##################################
 
 def command_ls():
-    import prettytable
     ls = []
-    print('write me')
+
+    # /var/lib/ceph
+    for i in os.listdir(args.data_dir):
+        if i in ['mon', 'osd', 'mds', 'mgr']:
+            daemon_type = i
+            for j in os.listdir(os.path.join(args.data_dir, i)):
+                if '-' not in j:
+                    continue
+                (cluster, daemon_id) = j.split('-', 1)
+                fsid = None
+                if daemon_type == 'osd':
+                    try:
+                        with open(os.path.join(args.data_dir, i, j,
+                                               'ceph_fsid')) as f:
+                            fsid = f.read().strip()
+                    except:
+                        pass
+                if not fsid:
+                    fsid = get_legacy_fsid(cluster)
+                (enabled, active) = check_unit('ceph-%s@%s' % (daemon_type,
+                                                               daemon_id))
+                ls.append({
+                    'style': 'legacy',
+                    'name': '%s.%s' % (daemon_type, daemon_id),
+                    'fsid': fsid,
+                    'enabled': enabled,
+                    'active': active,
+                })
+        elif is_fsid(i):
+            fsid = i
+            for j in os.listdir(os.path.join(args.data_dir, i)):
+                (daemon_type, daemon_id) = j.split('.', 1)
+                (enabled, active) = check_unit(get_unit_name(fsid, daemon_type,
+                                                             daemon_id))
+                ls.append({
+                    'style': 'ceph-daemon:v1',
+                    'name': '%s.%s' % (daemon_type, daemon_id),
+                    'fsid': fsid,
+                    'enabled': enabled,
+                    'active': active,
+                })
+
+    # /var/lib/rook
+    # WRITE ME
+
+    print(json.dumps(ls, indent=4))
 
 ##################################
 
@@ -436,7 +517,7 @@ def command_rm_daemon():
     (daemon_type, daemon_id) = args.name.split('.')
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
-    unit_name='ceph-%s@%s.%s' % (args.fsid, daemon_type, daemon_id)
+    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
     check_output(['systemctl', 'stop', unit_name])
     check_output(['systemctl', 'disable', unit_name])
     data_dir = get_data_dir(args.data_dir, args.fsid, daemon_type, daemon_id)
@@ -447,7 +528,7 @@ def command_rm_daemon():
 def command_rm_cluster():
     if not args.force:
         raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
-    unit_name='ceph-%s.target' % args.fsid
+    unit_name = 'ceph-%s.target' % args.fsid
     try:
         check_output(['systemctl', 'stop', unit_name])
         check_output(['systemctl', 'disable', unit_name])
