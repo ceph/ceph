@@ -106,7 +106,7 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
     os.chown(log_dir, uid, gid)
 
     if config:
-        with open(data_dir + '/conf', 'w') as f:
+        with open(data_dir + '/config', 'w') as f:
             f.write(config)
             os.fchown(f.fileno(), uid, gid)
     if keyring:
@@ -159,7 +159,7 @@ def get_container(fsid, daemon_type, daemon_id):
         image=args.image,
         entrypoint='ceph-' + daemon_type,
         args=['-i', daemon_id,
-              '-c', cdata_dir + '/conf',
+              '-c', cdata_dir + '/config',
               '-f', # foreground
         ] + extra_args + get_daemon_args(fsid, daemon_type, daemon_id),
         volume_mounts=mounts,
@@ -215,7 +215,7 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         ).run()
 
         # write conf
-        with open(mon_dir + '/conf', 'w') as f:
+        with open(mon_dir + '/config', 'w') as f:
             f.write(config)
     else:
         # dirs, conf, keyring
@@ -490,7 +490,7 @@ def command_bootstrap():
         },
     ).run()
 
-    with open(mon_dir + '/conf', 'w') as f:
+    with open(mon_dir + '/config', 'w') as f:
         f.write(config)
 
     mon_c = get_container(fsid, 'mon', mon_id)
@@ -508,10 +508,10 @@ def command_bootstrap():
                     '\tkey = ' + admin_key + '\n')
             os.fchmod(f.fileno(), 0o600)
         logging.info('wrote keyring to %s' % args.output_keyring)
-    if args.output_conf:
-        with open(args.output_conf, 'w') as f:
+    if args.output_config:
+        with open(args.output_config, 'w') as f:
             f.write(config)
-        logging.info('wrote config to %s' % args.output_conf)
+        logging.info('wrote config to %s' % args.output_config)
 
     return 0
 
@@ -750,7 +750,7 @@ parser_bootstrap.add_argument(
     '--output-keyring',
     help='location to write keyring file with new cluster admin and mon keys')
 parser_bootstrap.add_argument(
-    '--output-conf',
+    '--output-config',
     help='location to write conf file to connect to new cluster')
 
 parser_deploy = subparsers.add_parser(
