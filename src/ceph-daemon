@@ -16,7 +16,7 @@ import tempfile
 from distutils.spawn import find_executable
 from subprocess import check_output, CalledProcessError
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 ##################################
 
@@ -43,9 +43,9 @@ def get_data_dir(base, fsid, t, n):
 def get_log_dir(base, fsid):
     return base + '/' + fsid
 
-def get_daemon_args(daemon_type, daemon_id):
+def get_daemon_args(fsid, daemon_type, daemon_id):
     r = [
-        '--default-admin-socket', '/var/run/ceph/' + args.fsid + '-' + daemon_type + '.' + daemon_id + '.asok',
+        '--default-admin-socket', '/var/run/ceph/' + fsid + '-' + daemon_type + '.' + daemon_id + '.asok',
 #        '--default-log-to-file=false',
 #        '--log-dir', args.log_dir,
 #        '--data-dir', args.data_dir,
@@ -116,41 +116,41 @@ def get_container(fsid, daemon_type, daemon_id):
         args=['-i', daemon_id,
               '-c', cdata_dir + '/conf',
               '-f', # foreground
-        ] + extra_args + get_daemon_args(daemon_type, daemon_id),
+        ] + extra_args + get_daemon_args(fsid, daemon_type, daemon_id),
         volume_mounts={
             log_dir: '/var/log/ceph:z',
             data_dir: cdata_dir + ':z',
         },
         dname=daemon_type + '.' + daemon_id,
-        cname='ceph-%s-%s.%s' % (args.fsid, daemon_type, daemon_id),
+        cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
 
-def deploy_daemon(daemon_type, daemon_id, c, config=None, keyring=None):
+def deploy_daemon(fsid, daemon_type, daemon_id, c, config=None, keyring=None):
     # dirs, conf, keyring
     create_daemon_dirs(
-        args.fsid, daemon_type, daemon_id,
+        fsid, daemon_type, daemon_id,
         config, keyring)
 
     # cmd
-    data_dir = get_data_dir(args.data_dir, args.fsid, daemon_type, daemon_id)
+    data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
     with open(data_dir + '/cmd', 'w') as f:
         f.write('#!/bin/sh\n' + ' '.join(c.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o700)
 
     # systemd
-    install_base_units()
-    unit = get_unit_file()
-    unit_file = 'ceph-%s@.service' % (args.fsid)
+    install_base_units(fsid)
+    unit = get_unit_file(fsid)
+    unit_file = 'ceph-%s@.service' % (fsid)
     with open(args.unit_dir + '/' + unit_file + '.new', 'w') as f:
         f.write(unit)
         os.rename(args.unit_dir + '/' + unit_file + '.new',
                   args.unit_dir + '/' + unit_file)
     check_output(['systemctl', 'daemon-reload'])
-    unit_name = 'ceph-%s@%s.%s' % (args.fsid, daemon_type, daemon_id)
+    unit_name = 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
     check_output(['systemctl', 'enable', unit_name])
     check_output(['systemctl', 'start', unit_name])
 
-def install_base_units():
+def install_base_units(fsid):
     """
     Set up ceph.target and ceph-$fsid.target units.
     """
@@ -166,23 +166,23 @@ def install_base_units():
         check_output(['systemctl', 'enable', 'ceph.target'])
         check_output(['systemctl', 'start', 'ceph.target'])
 
-    existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % args.fsid)
-    with open(args.unit_dir + '/ceph-%s.target.new' % args.fsid, 'w') as f:
+    existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % fsid)
+    with open(args.unit_dir + '/ceph-%s.target.new' % fsid, 'w') as f:
         f.write('[Unit]\n'
                 'Description=ceph cluster {fsid}\n'
                 'PartOf=ceph.target\n'
                 'Before=ceph.target\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target ceph.target\n'.format(
-                    fsid=args.fsid)
+                    fsid=fsid)
         )
-        os.rename(args.unit_dir + '/ceph-%s.target.new' % args.fsid,
-                  args.unit_dir + '/ceph-%s.target' % args.fsid)
+        os.rename(args.unit_dir + '/ceph-%s.target.new' % fsid,
+                  args.unit_dir + '/ceph-%s.target' % fsid)
     if not existed:
-        check_output(['systemctl', 'enable', 'ceph-%s.target' % args.fsid])
-        check_output(['systemctl', 'start', 'ceph-%s.target' % args.fsid])
+        check_output(['systemctl', 'enable', 'ceph-%s.target' % fsid])
+        check_output(['systemctl', 'start', 'ceph-%s.target' % fsid])
 
-def get_unit_file():
+def get_unit_file(fsid):
     u = """[Unit]
 Description=Ceph daemon for {fsid}
 
@@ -214,7 +214,7 @@ StartLimitBurst=5
 
 [Install]
 WantedBy=ceph-{fsid}.target
-""".format(fsid=args.fsid, data_dir=args.data_dir)
+""".format(fsid=fsid, data_dir=args.data_dir)
     return u
 
 ##################################
@@ -262,7 +262,6 @@ class CephContainer:
 
     def run(self):
         logging.debug(self.run_cmd())
-        print(' '.join(self.run_cmd()))
         return check_output(self.run_cmd())
 
 ##################################
@@ -278,7 +277,7 @@ def command_bootstrap():
     fsid = args.fsid or make_fsid()
     mon_id = args.mon_id or get_hostname()
     mgr_id = args.mgr_id or get_hostname()
-    logging.debug('fsid %s, mon_id %s, mgr_id %s' % (fsid, mon_id, mgr_id))
+    logging.info('cluster fsid: %s' % fsid)
 
     # create some initial keys
     mon_key = CephContainer(
@@ -328,7 +327,7 @@ def command_bootstrap():
         addr_arg = args.mon_addrv
     else:
         raise RuntimeError('must specify --mon-ip or --mon-addrv')
-    config = '[global]\n\tfsid = %s\n\tmon host = %s\n' % (args.fsid, addr_arg)
+    config = '[global]\n\tfsid = %s\n\tmon host = %s\n' % (fsid, addr_arg)
 
     # create initial monmap, tmp monmap file
     tmp_monmap = tempfile.NamedTemporaryFile(mode='w')
@@ -347,7 +346,7 @@ def command_bootstrap():
     ).run()
 
     # create mon
-    create_daemon_dirs(args.fsid, 'mon', mon_id)
+    create_daemon_dirs(fsid, 'mon', mon_id)
     mon_dir = get_data_dir(args.data_dir, fsid, 'mon', mon_id)
     log_dir = get_log_dir(args.log_dir, fsid)
     out = CephContainer(
@@ -360,7 +359,7 @@ def command_bootstrap():
               '--monmap', '/tmp/monmap',
               '--keyring', '/tmp/keyring',
               '--debug-mon', '20',
-              ] + get_daemon_args('mon', mon_id),
+              ] + get_daemon_args(fsid, 'mon', mon_id),
         volume_mounts={
             log_dir: '/var/log/ceph:z',
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
@@ -368,18 +367,17 @@ def command_bootstrap():
             tmp_monmap.name: '/tmp/monmap:z',
         },
     ).run()
-    print(out.decode('utf-8'))
 
     with open(mon_dir + '/conf', 'w') as f:
-        f.write('[global]\n\tfsid = %s\n' % (args.fsid))
+        f.write('[global]\n\tfsid = %s\n' % (fsid))
 
-    mon_c = get_container(args.fsid, 'mon', mon_id)
-    deploy_daemon('mon', mon_id, mon_c)
+    mon_c = get_container(fsid, 'mon', mon_id)
+    deploy_daemon(fsid, 'mon', mon_id, mon_c)
 
     # create mgr
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
-    mgr_c = get_container(args.fsid, 'mgr', mgr_id)
-    deploy_daemon('mgr', mgr_id, mgr_c, config, mgr_keyring)
+    mgr_c = get_container(fsid, 'mgr', mgr_id)
+    deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, config, mgr_keyring)
 
     # output files
     if args.output_keyring:
@@ -387,9 +385,11 @@ def command_bootstrap():
             f.write('[client.admin]\n'
                     '\tkey = ' + admin_key + '\n')
             os.fchmod(f.fileno(), 0o600)
+        logging.info('wrote keyring to %s' % args.output_keyring)
     if args.output_conf:
         with open(args.output_conf, 'w') as f:
             f.write(config)
+        logging.info('wrote config to %s' % args.output_conf)
 
     return 0
 
@@ -402,7 +402,7 @@ def command_deploy():
     (config, keyring) = get_config_and_keyring()
 
     c = get_container(args.fsid, daemon_type, daemon_id)
-    deploy_daemon(daemon_type, daemon_id, c, config, keyring)
+    deploy_daemon(args.fsid, daemon_type, daemon_id, c, config, keyring)
 
 ##################################
 
