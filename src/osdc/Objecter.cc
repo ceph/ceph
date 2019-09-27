@@ -2415,7 +2415,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   ceph_assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
-  if (osdmap_full_try) {
+  if (pool_full_try) {
     op->target.flags |= CEPH_OSD_FLAG_FULL_TRY;
   }
 
@@ -2707,7 +2707,7 @@ bool Objecter::_osdmap_has_pool_full() const
 
 bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
 {
-  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_osdmap_full;
+  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_pool_full;
 }
 
 /**
@@ -2716,7 +2716,7 @@ bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
 bool Objecter::_osdmap_full_flag() const
 {
   // Ignore the FULL flag if the caller does not have honor_osdmap_full
-  return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_osdmap_full;
+  return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_pool_full;
 }
 
 void Objecter::update_pool_full_map(map<int64_t, bool>& pool_full_map)
@@ -3191,7 +3191,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   // pre-luminous osds
   flags |= CEPH_OSD_FLAG_ONDISK;
 
-  if (!honor_osdmap_full)
+  if (!honor_pool_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   op->target.paused = false;

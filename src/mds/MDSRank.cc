@@ -522,7 +522,7 @@ MDSRank::MDSRank(
 
   purge_queue.update_op_limit(*mdsmap);
 
-  objecter->unset_honor_osdmap_full();
+  objecter->unset_honor_pool_full();
 
   finisher = new Finisher(cct, "MDSRank", "MR_Finisher");
 
