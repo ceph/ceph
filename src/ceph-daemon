@@ -421,6 +421,39 @@ def command_ls():
 
 ##################################
 
+def command_rm_daemon():
+    (daemon_type, daemon_id) = args.name.split('.')
+    if daemon_type in ['mon', 'osd'] and not args.force:
+        raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
+    unit_name='ceph-%s@%s.%s' % (args.fsid, daemon_type, daemon_id)
+    check_output(['systemctl', 'stop', unit_name])
+    check_output(['systemctl', 'disable', unit_name])
+    data_dir = get_data_dir(args.data_dir, args.fsid, daemon_type, daemon_id)
+    check_output(['rm', '-rf', data_dir])
+
+##################################
+
+def command_rm_cluster():
+    if not args.force:
+        raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
+    unit_name='ceph-%s.target' % args.fsid
+    try:
+        check_output(['systemctl', 'stop', unit_name])
+        check_output(['systemctl', 'disable', unit_name])
+    except CalledProcessError:
+        pass
+    check_output(['rm', '-f', args.unit_dir + '/ceph-%s@.service' % args.fsid])
+    check_output(['rm', '-f', args.unit_dir + '/ceph-%s.target' % args.fsid])
+    check_output(['rm', '-rf',
+                  args.unit_dir + '/ceph-%s.target.wants' % args.fsid])
+    check_output(['rm', '-rf', args.data_dir + '/' + args.fsid])
+    check_output(['rm', '-rf', args.log_dir + '/' + args.fsid])
+    check_output(['rm', '-rf', args.log_dir + '/*.wants/ceph-%s@*' % args.fsid])
+
+    # FIXME: disable individual daemon units, too
+
+##################################
+
 parser = argparse.ArgumentParser(
     description='Bootstrap Ceph daemons with systemd and containers.',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -460,6 +493,34 @@ parser_version.set_defaults(func=command_version)
 parser_ls = subparsers.add_parser(
     'ls', help='list daemon instances on this host')
 parser_ls.set_defaults(func=command_ls)
+
+parser_rm_daemon = subparsers.add_parser(
+    'rm-daemon', help='remove daemon instance')
+parser_rm_daemon.set_defaults(func=command_rm_daemon)
+parser_rm_daemon.add_argument(
+    '--name', '-n',
+    required=True,
+    help='daemon name (type.id)')
+parser_rm_daemon.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+parser_rm_daemon.add_argument(
+    '--force',
+    action='store_true',
+    help='proceed, even though this may destroy valuable data')
+
+parser_rm_cluster = subparsers.add_parser(
+    'rm-cluster', help='remove all daemons for a cluster')
+parser_rm_cluster.set_defaults(func=command_rm_cluster)
+parser_rm_cluster.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+parser_rm_cluster.add_argument(
+    '--force',
+    action='store_true',
+    help='proceed, even though this may destroy valuable data')
 
 parser_run = subparsers.add_parser(
     'run', help='run a ceph daemon, in a container, in the foreground')
