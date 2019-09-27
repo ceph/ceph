@@ -375,6 +375,7 @@ Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          lvm2,
+         python-pkg-resources,
 	 sudo,
          ${misc:Depends},
          ${python:Depends},
