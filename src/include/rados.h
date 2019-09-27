@@ -641,7 +641,7 @@ struct ceph_osd_op {
 			__le32 chunk_size;
 			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
 		} __attribute__ ((packed)) checksum;
-	};
+	} __attribute__ ((packed));
 	__le32 payload_len;
 } __attribute__ ((packed));
 
