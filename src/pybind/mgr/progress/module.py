@@ -30,13 +30,16 @@ class Event(object):
         self.started_at = started_at if started_at else time.time()
         self.id = None
         self.update_duration_event()
+        self._time_remaining_str = "(time remaining: N/A)"
 
     def _refresh(self):
         global _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
                                                                 self.progress))
         self.update_duration_event()
-        _module.update_progress_event(self.id, self._message, self.progress, self._duration_str)
+        self.update_time_remaining()
+        _module.update_progress_event(
+            self.id, self.twoline_progress(6), self.progress)
 
     @property
     def message(self):
@@ -75,16 +78,19 @@ class Event(object):
 
         return out
 
-    def twoline_progress(self):
+    def twoline_progress(self, indent=4):
         """
         e.g.
 
-        - Eating my delicious strudel
-            [===============..............]
+        - Eating my delicious strudel (since: 00h 00m 30s)
+            [===============..............] (time remaining: 00h 03m 57s)
 
         """
-        return "{0} {1}\n    {2}".format(
-            self._message, self._duration_str, self._progress_str(30))
+        return "{0} {1}\n{2}{3} {4}".format(self._message,
+                                            self._duration_str,
+                                            " " * indent,
+                                            self._progress_str(30),
+                                            self._time_remaining_str)
 
     def to_json(self):
         return {
@@ -93,7 +99,8 @@ class Event(object):
             "duration": self.duration_str,
             "refs": self._refs,
             "progress": self.progress,
-            "started_at": self.started_at
+            "started_at": self.started_at,
+            "time_remaining": self.estimated_time_remaining()
         }
 
     def update_duration_event(self):
@@ -101,6 +108,22 @@ class Event(object):
 
         duration = time.time() - self.started_at
         self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
+
+
+    def estimated_time_remaining(self):
+        elapsed = time.time() - self.started_at
+        progress = self.progress
+        if progress == 0.0:
+            return None
+        return int(elapsed * (1 - progress) / progress)
+
+    def update_time_remaining(self):
+        time_remaining = self.estimated_time_remaining()
+        if time_remaining:
+            self._time_remaining_str = time.strftime(
+                "(time remaining: %Hh %Mm %Ss)", time.gmtime(time_remaining))
+        else:
+            self._time_remaining_str = "(time remaining: N/A)"
 
 class GhostEvent(Event):
     """
