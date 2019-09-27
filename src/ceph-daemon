@@ -348,6 +348,24 @@ class CephContainer:
             self.image
         ] + self.args
 
+    def shell_cmd(self):
+        vols = sum(
+            [['-v', f'{host_dir}:{container_dir}']
+             for host_dir, container_dir in self.volume_mounts.items()], [])
+        envs = [
+            '-e', f'CONTAINER_IMAGE={self.image}',
+            '-e', f'NODE_NAME={get_hostname()}',
+        ]
+        return [
+            find_program('podman'),
+            'run',
+            '-it',
+            '--net=host',
+        ] + self.podman_args + envs + vols + [
+            '--entrypoint', '/bin/bash',
+            self.image
+        ]
+
     def run(self):
         logging.debug(self.run_cmd())
         return subprocess.check_output(self.run_cmd())
@@ -510,6 +528,14 @@ def command_run():
 
 ##################################
 
+def command_shell():
+    (daemon_type, daemon_id) = args.name.split('.')
+    (uid, gid) = extract_uid_gid()
+    c = get_container(args.fsid, daemon_type, daemon_id)
+    subprocess.call(c.shell_cmd())
+
+##################################
+
 def command_ls():
     ls = []
 
@@ -665,6 +691,18 @@ parser_run.add_argument(
     '--fsid',
     required=True,
     help='cluster FSID')
+
+parser_shell = subparsers.add_parser(
+    'shell', help='run an interactive shel inside a daemon container')
+parser_shell.set_defaults(func=command_shell)
+parser_shell.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+parser_shell.add_argument(
+    '--name', '-n',
+    required=True,
+    help='daemon name (type.id)')
 
 parser_bootstrap = subparsers.add_parser(
     'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
