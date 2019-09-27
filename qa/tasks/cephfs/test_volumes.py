@@ -3,6 +3,7 @@ import json
 import errno
 import random
 import logging
+import collections
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -232,6 +233,36 @@ class TestVolumes(CephFSTestCase):
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+    def test_subvolume_ls(self):
+        # tests the 'fs subvolume ls' command
+
+        subvolumes = []
+
+        # create subvolumes
+        for i in range(3):
+            svname = self._generate_random_subvolume_name()
+            self._fs_cmd("subvolume", "create", self.volname, svname)
+            subvolumes.append(svname)
+
+        # list subvolumes
+        subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
+        if len(subvolumels) == 0:
+            raise RuntimeError("Expected the 'fs subvolume ls' command to list the created subvolumes.")
+        else:
+            subvolnames = [subvolume['name'] for subvolume in subvolumels]
+            if collections.Counter(subvolnames) != collections.Counter(subvolumes):
+                raise RuntimeError("Error creating or listing subvolumes")
+
+    def test_subvolume_ls_for_notexistent_default_group(self):
+        # tests the 'fs subvolume ls' command when the default group '_nogroup' doesn't exist
+        # prerequisite: we expect that the volume is created and the default group _nogroup is
+        # NOT created (i.e. a subvolume without group is not created)
+
+        # list subvolumes
+        subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
+        if len(subvolumels) > 0:
+            raise RuntimeError("Expected the 'fs subvolume ls' command to output an empty list.")
+
     ### subvolume group operations
 
     def test_subvolume_create_and_rm_in_group(self):
@@ -431,6 +462,34 @@ class TestVolumes(CephFSTestCase):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_subvolume_group_ls(self):
+        # tests the 'fs subvolumegroup ls' command
+
+        subvolumegroups = []
+
+        #create subvolumegroups
+        for i in range(3):
+            groupname = self._generate_random_group_name()
+            self._fs_cmd("subvolumegroup", "create", self.volname, groupname)
+            subvolumegroups.append(groupname)
+
+        subvolumegroupls = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname))
+        if len(subvolumegroupls) == 0:
+            raise RuntimeError("Expected the 'fs subvolumegroup ls' command to list the created subvolume groups")
+        else:
+            subvolgroupnames = [subvolumegroup['name'] for subvolumegroup in subvolumegroupls]
+            if collections.Counter(subvolgroupnames) != collections.Counter(subvolumegroups):
+                raise RuntimeError("Error creating or listing subvolume groups")
+
+    def test_subvolume_group_ls_for_nonexistent_volume(self):
+        # tests the 'fs subvolumegroup ls' command when /volume doesn't exist
+        # prerequisite: we expect that the test volume is created and a subvolumegroup is NOT created
+
+        # list subvolume groups
+        subvolumegroupls = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname))
+        if len(subvolumegroupls) > 0:
+            raise RuntimeError("Expected the 'fs subvolumegroup ls' command to output an empty list")
+
     ### snapshot operations
 
     def test_subvolume_snapshot_create_and_rm(self):
@@ -529,6 +588,29 @@ class TestVolumes(CephFSTestCase):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_subvolume_snapshot_ls(self):
+        # tests the 'fs subvolume snapshot ls' command
+
+        snapshots = []
+
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # create subvolume snapshots
+        for i in range(3):
+            sname = self._generate_random_snapshot_name()
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, sname)
+            snapshots.append(sname)
+
+        subvolsnapshotls = json.loads(self._fs_cmd('subvolume', 'snapshot', 'ls', self.volname, subvolume))
+        if len(subvolsnapshotls) == 0:
+            raise RuntimeError("Expected the 'fs subvolume snapshot ls' command to list the created subvolume snapshots")
+        else:
+            snapshotnames = [snapshot['name'] for snapshot in subvolsnapshotls]
+            if collections.Counter(snapshotnames) != collections.Counter(snapshots):
+                raise RuntimeError("Error creating or listing subvolume snapshots")
+
     def test_subvolume_group_snapshot_create_and_rm(self):
         subvolume = self._generate_random_subvolume_name()
         group = self._generate_random_group_name()
@@ -616,6 +698,29 @@ class TestVolumes(CephFSTestCase):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_snapshot_ls(self):
+        # tests the 'fs subvolumegroup snapshot ls' command
+
+        snapshots = []
+
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolumegroup snapshots
+        for i in range(3):
+            sname = self._generate_random_snapshot_name()
+            self._fs_cmd("subvolumegroup", "snapshot", "create", self.volname, group, sname)
+            snapshots.append(sname)
+
+        subvolgrpsnapshotls = json.loads(self._fs_cmd('subvolumegroup', 'snapshot', 'ls', self.volname, group))
+        if len(subvolgrpsnapshotls) == 0:
+            raise RuntimeError("Expected the 'fs subvolumegroup snapshot ls' command to list the created subvolume group snapshots")
+        else:
+            snapshotnames = [snapshot['name'] for snapshot in subvolgrpsnapshotls]
+            if collections.Counter(snapshotnames) != collections.Counter(snapshots):
+                raise RuntimeError("Error creating or listing subvolume group snapshots")
 
     def test_async_subvolume_rm(self):
         subvolume = self._generate_random_subvolume_name()
