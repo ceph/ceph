@@ -605,7 +605,8 @@ def command_ls():
 def command_rm_daemon():
     (daemon_type, daemon_id) = args.name.split('.')
     if daemon_type in ['mon', 'osd'] and not args.force:
-        raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
+        raise RuntimeError('must pass --force to proceed: '
+                           'this command may destroy precious data!')
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
     subprocess.check_output(['systemctl', 'stop', unit_name])
     subprocess.check_output(['systemctl', 'disable', unit_name])
@@ -616,22 +617,28 @@ def command_rm_daemon():
 
 def command_rm_cluster():
     if not args.force:
-        raise RuntimeError('must pass --force to proceed: this command may destroy precious data!')
+        raise RuntimeError('must pass --force to proceed: '
+                           'this command may destroy precious data!')
     unit_name = 'ceph-%s.target' % args.fsid
     try:
         subprocess.check_output(['systemctl', 'stop', unit_name])
         subprocess.check_output(['systemctl', 'disable', unit_name])
     except subprocess.CalledProcessError:
         pass
-    subprocess.check_output(['rm', '-f', args.unit_dir + '/ceph-%s@.service' % args.fsid])
-    subprocess.check_output(['rm', '-f', args.unit_dir + '/ceph-%s.target' % args.fsid])
+    # FIXME: disable individual daemon units, too?
+    subprocess.check_output(['rm', '-f', args.unit_dir +
+                             '/ceph-%s@.service' % args.fsid])
+    subprocess.check_output(['rm', '-f', args.unit_dir +
+                             '/ceph-%s.target' % args.fsid])
     subprocess.check_output(['rm', '-rf',
                   args.unit_dir + '/ceph-%s.target.wants' % args.fsid])
+    # data
     subprocess.check_output(['rm', '-rf', args.data_dir + '/' + args.fsid])
+    # logs
     subprocess.check_output(['rm', '-rf', args.log_dir + '/' + args.fsid])
-    subprocess.check_output(['rm', '-rf', args.log_dir + '/*.wants/ceph-%s@*' % args.fsid])
+    subprocess.check_output(['rm', '-rf', args.log_dir +
+                             '/*.wants/ceph-%s@*' % args.fsid])
 
-    # FIXME: disable individual daemon units, too
 
 ##################################
 
