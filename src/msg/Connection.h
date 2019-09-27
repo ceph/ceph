@@ -48,6 +48,7 @@ struct Connection : public RefCountedObjectSafe {
   int64_t peer_id = -1;  // [msgr2 only] the 0 of osd.0, 4567 or client.4567
   safe_item_history<entity_addrvec_t> peer_addrs;
   utime_t last_keepalive, last_keepalive_ack;
+  bool anon = false;  ///< anonymous outgoing connection
 private:
   uint64_t features = 0;
 public:
@@ -97,6 +98,10 @@ public:
 
   virtual bool is_msgr2() const {
     return false;
+  }
+
+  bool is_anon() const {
+    return anon;
   }
 
   Messenger *get_messenger() {
