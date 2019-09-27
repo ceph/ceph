@@ -1465,6 +1465,8 @@ namespace rgw {
 
     flags &= ~FLAG_OPEN;
     flags &= ~FLAG_STATELESS_OPEN;
+    flags &= ~FLAG_READ_OPEN; 
+    flags &= ~FLAG_WRITE_OPEN; 
 
     return rc;
   } /* RGWFileHandle::close */
