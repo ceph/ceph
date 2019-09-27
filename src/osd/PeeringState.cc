@@ -463,17 +463,11 @@ void PeeringState::complete_flush()
 
 void PeeringState::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
 {
-  bool changed = false;
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
-      !lastmap->test_flag(CEPH_OSDMAP_FULL)) {
-    psdout(10) << " cluster was marked full in "
-	       << osdmap->get_epoch() << dendl;
-    changed = true;
-  }
   const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
   if (!pi) {
     return; // pool deleted
   }
+  bool changed = false;
   if (pi->has_flag(pg_pool_t::FLAG_FULL)) {
     const pg_pool_t *opi = lastmap->get_pg_pool(info.pgid.pool());
     if (!opi || !opi->has_flag(pg_pool_t::FLAG_FULL)) {
