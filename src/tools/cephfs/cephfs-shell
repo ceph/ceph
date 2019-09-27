@@ -537,7 +537,6 @@ exists.')
                     cephfs.mkdir(path, permission)
                 except libcephfs.Error as e:
                     perror(e)
-                    return
 
     def complete_put(self, text, line, begidx, endidx):
         """
