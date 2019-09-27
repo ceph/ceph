@@ -369,7 +369,7 @@ def command_bootstrap():
     ).run()
 
     with open(mon_dir + '/conf', 'w') as f:
-        f.write('[global]\n\tfsid = %s\n' % (fsid))
+        f.write(config)
 
     mon_c = get_container(fsid, 'mon', mon_id)
     deploy_daemon(fsid, 'mon', mon_id, mon_c)
