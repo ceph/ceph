@@ -53,15 +53,25 @@ from teuthology.config import config as teuth_config
 
 import logging
 
-log = logging.getLogger(__name__)
+def init_log():
+    global log
+    if log is not None:
+        del log
+    log = logging.getLogger(__name__)
 
-handler = logging.FileHandler("./vstart_runner.log")
-formatter = logging.Formatter(
-    fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S')
-handler.setFormatter(formatter)
-log.addHandler(handler)
-log.setLevel(logging.INFO)
+    global logpath
+    logpath = './vstart_runner.log'
+
+    handler = logging.FileHandler(logpath)
+    formatter = logging.Formatter(
+        fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S')
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+
+log = None
+init_log()
 
 
 def respawn_in_path(lib_path, python_paths):
@@ -390,10 +400,13 @@ class LocalDaemon(object):
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.info("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[0])
-        log.info("No match for {0} {1}: {2}".format(
-            self.daemon_type, self.daemon_id, ps_txt
-            ))
-        return None
+        if opt_log_ps_output:
+            log.info("No match for {0} {1}: {2}".format(
+                self.daemon_type, self.daemon_id, ps_txt))
+        else:
+            log.info("No match for {0} {1}".format(self.daemon_type,
+                     self.daemon_id))
+            return None
 
     def wait(self, timeout):
         waited = 0
@@ -987,25 +1000,57 @@ class LocalContext(object):
     def __del__(self):
         shutil.rmtree(self.teuthology_config['test_path'])
 
+def teardown_cluster():
+    log.info('\ntearing down the cluster...')
+    remote.run(args = [os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
+    remote.run(args = ['rm', '-rf', './dev', './out'])
+
+def clear_old_log():
+    from os import stat
+
+    try:
+        stat(logpath)
+    # would need an update when making this py3 compatible. Use FileNotFound
+    # instead.
+    except OSError:
+        return
+    else:
+        os.remove(logpath)
+        with open(logpath, 'w') as logfile:
+            logfile.write('')
+        init_log()
+        log.info('logging in a fresh file now...')
+
 def exec_test():
     # Parse arguments
-    interactive_on_error = False
-    create_cluster = False
-    create_cluster_only = False
-    ignore_missing_binaries = False
+    opt_interactive_on_error = False
+    opt_create_cluster = False
+    opt_create_cluster_only = False
+    opt_ignore_missing_binaries = False
+    opt_teardown_cluster = False
+    global opt_log_ps_output
+    opt_log_ps_output = False
+    opt_clear_old_log = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
     modules = [a for a in args if not a.startswith("-")]
     for f in flags:
         if f == "--interactive":
-            interactive_on_error = True
+            opt_interactive_on_error = True
         elif f == "--create":
-            create_cluster = True
+            opt_create_cluster = True
         elif f == "--create-cluster-only":
-            create_cluster_only = True
+            opt_create_cluster_only = True
         elif f == "--ignore-missing-binaries":
-            ignore_missing_binaries = True
+            opt_ignore_missing_binaries = True
+        elif f == '--teardown':
+            opt_teardown_cluster = True
+        elif f == '--log-ps-output':
+            opt_log_ps_output = True
+        elif f == '--clear-old-log':
+            opt_clear_old_log = True
+            clear_old_log()
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1015,13 +1060,14 @@ def exec_test():
     require_binaries = ["ceph-dencoder", "cephfs-journal-tool", "cephfs-data-scan",
                         "cephfs-table-tool", "ceph-fuse", "rados"]
     missing_binaries = [b for b in require_binaries if not os.path.exists(os.path.join(BIN_PREFIX, b))]
-    if missing_binaries and not ignore_missing_binaries:
+    if missing_binaries and not opt_ignore_missing_binaries:
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
         sys.exit(-1)
 
     max_required_mds, max_required_clients, \
             max_required_mgr, require_memstore = scan_tests(modules)
 
+    global remote
     remote = LocalRemote()
 
     # Tolerate no MDSs or clients running at start
@@ -1036,12 +1082,10 @@ def exec_test():
             os.kill(pid, signal.SIGKILL)
 
     # Fire up the Ceph cluster if the user requested it
-    if create_cluster or create_cluster_only:
+    if opt_create_cluster or opt_create_cluster_only:
         log.info("Creating cluster with {0} MDS daemons".format(
             max_required_mds))
-        remote.run([os.path.join(SRC_PREFIX, "stop.sh")], check_status=False)
-        remote.run(["rm", "-rf", "./out"])
-        remote.run(["rm", "-rf", "./dev"])
+        teardown_cluster()
         vstart_env = os.environ.copy()
         vstart_env["FS"] = "0"
         vstart_env["MDS"] = max_required_mds.__str__()
@@ -1053,13 +1097,15 @@ def exec_test():
         if require_memstore:
             args.append("--memstore")
 
-        remote.run(args, env=vstart_env)
+        # usually, i get vstart.sh running completely in less than 100
+        # seconds.
+        remote.run(args, env=vstart_env, timeout=(3 * 60))
 
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed
         LocalCephCluster(LocalContext()).mon_manager.wait_for_all_osds_up(timeout=30)
 
-    if create_cluster_only:
+    if opt_create_cluster_only:
         return
 
     # List of client mounts, sufficient to run the selected tests
@@ -1179,7 +1225,7 @@ def exec_test():
     for s, method in victims:
         s._tests.remove(method)
 
-    if interactive_on_error:
+    if opt_interactive_on_error:
         result_class = InteractiveFailureResult
     else:
         result_class = unittest.TextTestResult
@@ -1210,6 +1256,9 @@ def exec_test():
         resultclass=LoggingResult,
         verbosity=2,
         failfast=True).run(overall_suite)
+
+    if opt_teardown_cluster:
+        teardown_cluster()
 
     if not result.wasSuccessful():
         result.printErrors()  # duplicate output at end for convenience
