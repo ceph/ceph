@@ -7327,7 +7327,7 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
   auto used_omap_head = ctx.used_omap_head;
   auto used_pgmeta_omap_head = ctx.used_pgmeta_omap_head;
   auto sb_info_lock = ctx.sb_info_lock;
-  auto sb_info = ctx.sb_info;
+  auto& sb_info = ctx.sb_info;
   auto repairer = ctx.repairer;
 
   uint64_t_btree_t used_nids;
