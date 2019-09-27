@@ -3735,6 +3735,7 @@ void PeeringState::force_object_missing(
       peer_missing[peer].add(soid, version, eversion_t(), false);
     } else {
       pg_log.missing_add(soid, version, eversion_t());
+      pg_log.reset_complete_to(&info);
       pg_log.set_last_requested(0);
     }
   }
