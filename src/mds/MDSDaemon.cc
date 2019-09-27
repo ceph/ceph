@@ -71,7 +71,7 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   name(n),
   messenger(m),
   monc(mc),
-  mgrc(m->cct, m),
+  mgrc(m->cct, m, &mc->monmap),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
   asok_hook(NULL),
