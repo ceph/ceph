@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+      - \(MON_DOWN\)
     conf:
       global:
         ms type: async
