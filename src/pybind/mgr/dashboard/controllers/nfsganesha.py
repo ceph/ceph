@@ -289,7 +289,7 @@ class NFSGaneshaUi(BaseController):
         try:
             cfs = CephFS()
             root_dir = root_dir.encode()
-            paths = cfs.get_dir_list(root_dir, depth)
+            paths = cfs.ls_dir(root_dir, depth)
             # Convert (bytes => string) and prettify paths (strip slashes).
             paths = [p.decode().rstrip('/') for p in paths if p != root_dir]
         except (cephfs.ObjectNotFound, cephfs.PermissionError):
