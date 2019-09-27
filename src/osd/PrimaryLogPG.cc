@@ -8287,8 +8287,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   // check for full
   if ((ctx->delta_stats.num_bytes > 0 ||
        ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
-      (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
-       get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
+      pool.info.has_flag(pg_pool_t::FLAG_FULL)) {
     auto m = ctx->op->get_req<MOSDOp>();
     if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
 	m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {

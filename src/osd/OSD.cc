@@ -8963,11 +8963,6 @@ void OSD::activate_map()
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
-    dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
-    osdmap_subscribe(osdmap->get_epoch() + 1, false);
-  }
-
   // norecover?
   if (osdmap->test_flag(CEPH_OSDMAP_NORECOVER)) {
     if (!service.recovery_is_paused()) {
