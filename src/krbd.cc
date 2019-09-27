@@ -41,9 +41,6 @@
 #include <blkid/blkid.h>
 #include <libudev.h>
 
-
-const static int POLL_TIMEOUT=120000;
-
 struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
@@ -185,7 +182,6 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
 {
   struct udev_device *bus_dev = nullptr;
   std::vector<struct udev_device*> block_dev_vec;
-  int r;
 
   /*
    * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
@@ -198,12 +194,8 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    r = poll(fds, 1, POLL_TIMEOUT);
-    if (r > 0) {
-      r = 0;
-    } else {
-      r = (r == 0) ? -ETIMEDOUT : -errno;
-      break;
+    if (poll(fds, 1, -1) < 0) {
+      ceph_abort();
     }
 
     dev = udev_monitor_receive_device(mon);
@@ -267,7 +259,7 @@ done:
     udev_device_unref(p);
   }
 
-  return r;
+  return 0;
 }
 
 static int do_map(struct udev *udev, const char *pool, const char *image,
@@ -509,16 +501,12 @@ static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
   for (;;) {
     struct pollfd fds[1];
     struct udev_device *dev;
-    int r;
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    r = poll(fds, 1, POLL_TIMEOUT);
-    if (r < 0)
-      return -errno;
-
-    if (r == 0)
-      return -ETIMEDOUT;
+    if (poll(fds, 1, -1) < 0) {
+      ceph_abort();
+    }
 
     dev = udev_monitor_receive_device(mon);
     if (!dev)
