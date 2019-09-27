@@ -1250,11 +1250,23 @@ class Module(MgrModule):
 
         # upmap
         incdump = plan.inc.dump()
-        for pgid in incdump.get('old_pg_upmap_items', []):
-            self.log.info('ceph osd rm-pg-upmap-items %s', pgid)
+        for item in incdump.get('new_pg_upmap', []):
+            self.log.info('ceph osd pg-upmap %s mappings %s', item['pgid'],
+                          item['osds'])
             result = CommandResult('foo')
             self.send_command(result, 'mon', '', json.dumps({
-                'prefix': 'osd rm-pg-upmap-items',
+                'prefix': 'osd pg-upmap',
+                'format': 'json',
+                'pgid': item['pgid'],
+                'id': item['osds'],
+            }), 'foo')
+            commands.append(result)
+
+        for pgid in incdump.get('old_pg_upmap', []):
+            self.log.info('ceph osd rm-pg-upmap %s', pgid)
+            result = CommandResult('foo')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd rm-pg-upmap',
                 'format': 'json',
                 'pgid': pgid,
             }), 'foo')
@@ -1272,6 +1284,16 @@ class Module(MgrModule):
                 'format': 'json',
                 'pgid': item['pgid'],
                 'id': osdlist,
+            }), 'foo')
+            commands.append(result)
+
+        for pgid in incdump.get('old_pg_upmap_items', []):
+            self.log.info('ceph osd rm-pg-upmap-items %s', pgid)
+            result = CommandResult('foo')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd rm-pg-upmap-items',
+                'format': 'json',
+                'pgid': pgid,
             }), 'foo')
             commands.append(result)
 
