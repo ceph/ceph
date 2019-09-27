@@ -252,7 +252,7 @@ class TestScheduleSuite(object):
         )
         frags = (frag1_read_output, frag2_read_output)
         expected_job = dict(
-            yaml=yaml.load('\n'.join(frags)),
+            yaml=yaml.safe_load('\n'.join(frags)),
             sha1='ceph_sha1',
             args=[
                 '--description',
