@@ -7,6 +7,7 @@ UNIT_DIR='/etc/systemd/system'
 VERSION='unknown development version'
 
 import argparse
+import configparser
 import json
 import logging
 import os
@@ -14,6 +15,15 @@ import subprocess
 import sys
 import tempfile
 from distutils.spawn import find_executable
+
+try:
+    from StringIO import StringIO
+except:
+    pass
+try:
+    from io import StringIO
+except:
+    pass
 
 logging.basicConfig(level=logging.INFO)
 
@@ -68,7 +78,6 @@ def check_unit(unit_name):
 
 def get_legacy_fsid(cluster):
     try:
-        import configparser
         config = configparser.ConfigParser()
         config.read('/etc/ceph/%s.conf' % cluster)
         if 'global' in config and 'fsid' in config['global']:
@@ -107,12 +116,12 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             os.fchown(f.fileno(), uid, gid)
 
 def get_config_and_keyring():
-    if args.conf_and_key:
+    if args.config_and_key:
         import json
-        if args.conf_and_key == '-':
+        if args.config_and_key == '-':
             j = sys.stdin.read()
         else:
-            with open(args.conf_and_key, 'r') as f:
+            with open(args.config_and_key, 'r') as f:
                 j = f.read()
         d = json.loads(j)
         config = d.get('config')
@@ -125,7 +134,7 @@ def get_config_and_keyring():
                 keyring = f.read()
         else:
             raise RuntimeError('no keyring')
-        with open(args.conf, 'r') as f:
+        with open(args.config, 'r') as f:
             config = f.read()
     return (config, keyring)
 
@@ -428,13 +437,20 @@ def command_bootstrap():
     tmp_keyring.flush()
 
     # config
+    cp = configparser.ConfigParser()
+    if args.config:
+        cp.read(args.config)
     if args.mon_ip:
         addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
     elif args.mon_addrv:
         addr_arg = args.mon_addrv
     else:
         raise RuntimeError('must specify --mon-ip or --mon-addrv')
-    config = '[global]\n\tfsid = %s\n\tmon host = %s\n' % (fsid, addr_arg)
+    cp['global']['fsid'] = fsid;
+    cp['global']['mon host'] = addr_arg
+    with StringIO() as f:
+        cp.write(f)
+        config = f.getvalue()
 
     # create initial monmap, tmp monmap file
     tmp_monmap = tempfile.NamedTemporaryFile(mode='w')
@@ -465,7 +481,6 @@ def command_bootstrap():
               '-c', '/dev/null',
               '--monmap', '/tmp/monmap',
               '--keyring', '/tmp/keyring',
-              '--debug-mon', '20',
               ] + get_daemon_args(fsid, 'mon', mon_id),
         volume_mounts={
             log_dir: '/var/log/ceph:z',
@@ -628,9 +643,6 @@ parser.add_argument(
     default=DEFAULT_IMAGE,
     help='container image')
 parser.add_argument(
-    '--conf', '-c',
-    help='ceph conf file to incorporate')
-parser.add_argument(
     '--data-dir',
     default=DATA_DIR,
     help='base directory for daemon data')
@@ -708,6 +720,9 @@ parser_bootstrap = subparsers.add_parser(
     'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
 parser_bootstrap.set_defaults(func=command_bootstrap)
 parser_bootstrap.add_argument(
+    '--config', '-c',
+    help='ceph conf file to incorporate')
+parser_bootstrap.add_argument(
     '--mon-id',
     required=False,
     help='mon id (default: local hostname)')
@@ -743,7 +758,7 @@ parser_deploy.add_argument(
     required=True,
     help='cluster FSID')
 parser_deploy.add_argument(
-    '--conf',
+    '--config', '-c',
     help='config file for new daemon')
 parser_deploy.add_argument(
     '--keyring',
@@ -752,7 +767,7 @@ parser_deploy.add_argument(
     '--key',
     help='key for new daemon')
 parser_deploy.add_argument(
-    '--conf-and-key',
+    '--config-and-key',
     help='JSON file with config and key')
 parser_deploy.add_argument(
     '--mon-ip',
