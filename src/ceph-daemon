@@ -314,6 +314,24 @@ WantedBy=ceph-{fsid}.target
 """.format(fsid=fsid, data_dir=args.data_dir)
     return u
 
+def gen_ssh_key(fsid):
+    tmp_dir = tempfile.TemporaryDirectory()
+    path = tmp_dir.name + '/key'
+    subprocess.check_output([
+        'ssh-keygen',
+        '-C', 'ceph-%s' % fsid,
+        '-N', '',
+        '-f', path
+    ])
+    with open(path, 'r') as f:
+        secret = f.read()
+    with open(path + '.pub', 'r') as f:
+        pub = f.read()
+    os.unlink(path)
+    os.unlink(path + '.pub')
+    tmp_dir.cleanup()
+    return (secret, pub)
+
 ##################################
 
 class CephContainer:
@@ -392,11 +410,13 @@ def command_bootstrap():
     fsid = args.fsid or make_fsid()
     mon_id = args.mon_id or get_hostname()
     mgr_id = args.mgr_id or get_hostname()
-    logging.info('cluster fsid: %s' % fsid)
+    logging.info('Cluster fsid: %s' % fsid)
 
+    logging.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid()
 
     # create some initial keys
+    logging.info('Creating initial keys...')
     mon_key = CephContainer(
         image=args.image,
         entrypoint='ceph-authtool',
@@ -453,6 +473,7 @@ def command_bootstrap():
         config = f.getvalue()
 
     # create initial monmap, tmp monmap file
+    logging.info('Creating initial monmap...')
     tmp_monmap = tempfile.NamedTemporaryFile(mode='w')
     os.fchmod(tmp_monmap.fileno(), 0o644)
     out = CephContainer(
@@ -469,6 +490,7 @@ def command_bootstrap():
     ).run()
 
     # create mon
+    logging.info('Creating mon...')
     create_daemon_dirs(fsid, 'mon', mon_id, uid, gid)
     mon_dir = get_data_dir(args.data_dir, fsid, 'mon', mon_id)
     log_dir = get_log_dir(args.log_dir, fsid)
@@ -497,9 +519,38 @@ def command_bootstrap():
     deploy_daemon_units(fsid, 'mon', mon_id, mon_c)
 
     # create mgr
+    logging.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
+
+    # ssh
+    if not args.skip_ssh:
+        logging.info('Generating ssh key...')
+        (ssh_key, ssh_pub) = gen_ssh_key(fsid)
+        ssh_config = ('Host *\n'
+                      'IdentifyFile /var/lib/ceph/ssh/id_rsa\n'
+                      'User root\n'
+                      'StrictHostKeyChecking no\n')
+        mgr_dir = get_data_dir(args.data_dir, fsid, 'mgr', mgr_id)
+        makedirs(os.path.join(mgr_dir, 'ssh'))
+        os.chown(os.path.join(mgr_dir, 'ssh'), uid, gid)
+        with open(os.path.join(mgr_dir, 'ssh', 'config'), 'w') as f:
+            os.fchown(f.fileno(), uid, gid)
+            f.write(ssh_config)
+        with open(os.path.join(mgr_dir, 'ssh', 'id_rsa'), 'w') as f:
+            os.fchown(f.fileno(), uid, gid)
+            os.fchmod(f.fileno(), 0o600)
+            f.write(ssh_key)
+        with open(os.path.join(mgr_dir, 'ssh', 'id_rsa.pub'), 'w') as f:
+            os.fchown(f.fileno(), uid, gid)
+            os.fchmod(f.fileno(), 0o600)
+            f.write(ssh_pub)
+
+        logging.info('Adding key to root@localhost\'s authorized_keys...')
+        with open('/root/.ssh/authorized_keys', 'a') as f:
+            os.fchmod(f.fileno(), 0o600)  # just in case we created it
+            f.write(ssh_pub + '\n')
 
     # output files
     if args.output_keyring:
@@ -752,6 +803,10 @@ parser_bootstrap.add_argument(
 parser_bootstrap.add_argument(
     '--output-config',
     help='location to write conf file to connect to new cluster')
+parser_bootstrap.add_argument(
+    '--skip-ssh',
+    action='store_true',
+    help='skip setup of ssh key on local host')
 
 parser_deploy = subparsers.add_parser(
     'deploy', help='deploy a daemon')
