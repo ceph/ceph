@@ -77,7 +77,7 @@ class TestRun(object):
         config = {"tasks": [{"kernel": "can't be here"}]}
         with pytest.raises(AssertionError) as excinfo:
             run.validate_tasks(config)
-        assert excinfo.value.message.startswith("kernel installation")
+        assert excinfo.value.args[0].startswith("kernel installation")
 
     def test_validate_task_no_tasks(self):
         result = run.validate_tasks({})
@@ -91,13 +91,13 @@ class TestRun(object):
     def test_validate_tasks_is_list(self):
         with pytest.raises(AssertionError) as excinfo:
             run.validate_tasks({"tasks": {"foo": "bar"}})
-        assert excinfo.value.message.startswith("Expected list")
+        assert excinfo.value.args[0].startswith("Expected list")
 
     def test_get_initial_tasks_invalid(self):
         with pytest.raises(AssertionError) as excinfo:
             run.get_initial_tasks(True, {"targets": "can't be here",
                                          "roles": "roles" }, "machine_type")
-        assert excinfo.value.message.startswith("You cannot")
+        assert excinfo.value.args[0].startswith("You cannot")
 
     def test_get_inital_tasks(self):
         config = {"roles": range(2), "kernel": "the_kernel", "use_existing_cluster": False}
