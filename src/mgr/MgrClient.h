@@ -32,6 +32,7 @@ class MMgrClose;
 class Messenger;
 class MCommandReply;
 class MPGStats;
+class MonMap;
 
 class MgrSessionState
 {
@@ -59,6 +60,7 @@ protected:
   CephContext *cct;
   MgrMap map;
   Messenger *msgr;
+  MonMap *monmap;
 
   std::unique_ptr<MgrSessionState> session;
 
@@ -105,7 +107,7 @@ protected:
   bool mgr_optional = false;
 
 public:
-  MgrClient(CephContext *cct_, Messenger *msgr_);
+  MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap);
 
   void set_messenger(Messenger *msgr_) { msgr = msgr_; }
 

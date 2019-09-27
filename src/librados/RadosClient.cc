@@ -62,7 +62,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     conf(cct_->_conf),
     state(DISCONNECTED),
     monclient(cct_),
-    mgrclient(cct_, nullptr),
+    mgrclient(cct_, nullptr, &monclient.monmap),
     messenger(NULL),
     instance_id(0),
     objecter(NULL),

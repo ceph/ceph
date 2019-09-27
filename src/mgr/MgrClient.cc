@@ -15,6 +15,7 @@
 #include "MgrClient.h"
 
 #include "mgr/MgrContext.h"
+#include "mon/MonMap.h"
 
 #include "msg/Messenger.h"
 #include "messages/MMgrMap.h"
@@ -37,9 +38,12 @@ using ceph::bufferlist;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgrc " << __func__ << " "
 
-MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
-    : Dispatcher(cct_), cct(cct_), msgr(msgr_),
-      timer(cct_, lock)
+MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap_)
+  : Dispatcher(cct_),
+    cct(cct_),
+    msgr(msgr_),
+    monmap(monmap_),
+    timer(cct_, lock)
 {
   ceph_assert(cct != nullptr);
 }
@@ -472,7 +476,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   op.on_finish = onfinish;
 
   if (session && session->con) {
-    // Leaving fsid argument null because it isn't used.
+    // Leaving fsid argument null because it isn't used historically, and
+    // we can use it as a signal that we are sending a non-tell command.
     auto m = op.get_message(
       {},
       HAVE_FEATURE(map.active_mgr_features, SERVER_OCTOPUS));
@@ -508,10 +513,9 @@ int MgrClient::start_tell_command(
   op.on_finish = onfinish;
 
   if (session && session->con && (name.size() == 0 || map.active_name == name)) {
-    // Leaving fsid argument null because it isn't used.
-    // Note: this simply won't work we pre-octopus mgrs because they route
-    // MCommand to the cluster command handler.
-    auto m = op.get_message({}, false);
+    // Set fsid argument to signal that this is really a tell message (and
+    // we are not a legacy client sending a non-tell command via MCommand).
+    auto m = op.get_message(monmap->fsid, false);
     session->con->send_message2(std::move(m));
   } else {
     ldout(cct, 5) << "no mgr session (no running mgr daemon?), or "
