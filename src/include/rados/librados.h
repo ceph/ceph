@@ -3653,6 +3653,10 @@ CEPH_RADOS_API void rados_set_osdmap_full_try(rados_ioctx_t io)
 CEPH_RADOS_API void rados_unset_osdmap_full_try(rados_ioctx_t io)
   __attribute__((deprecated));
 
+CEPH_RADOS_API void rados_set_pool_full_try(rados_ioctx_t io);
+
+CEPH_RADOS_API void rados_unset_pool_full_try(rados_ioctx_t io);
+
 /**
  * Enable an application on a pool
  *
