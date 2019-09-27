@@ -103,7 +103,7 @@ where:
 
 For example, consider::
 
-     teuthology-suite -s rbd -c wip-fix -k jewel -e bob.smith@foo.com -f basic -t jewel -m mira
+     teuthology-suite -s rbd -c wip-fix -k distro -e bob.smith@foo.com -f basic -t jewel -m mira
 
 The above command runs the rbd suite using the wip-fix branch of ceph, the
 jewel kernel, with a 'basic' kernel flavor, and the teuthology jewel branch
