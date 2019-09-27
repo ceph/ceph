@@ -1556,6 +1556,9 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
 
     get_contype_from_attrs(attrs, content_type);
     dump_object_metadata(this, s, attrs);
+
+    /* RGW extension */
+    dump_header_if_nonempty(s, "X-Rgw-Cksum", cksum);
   }
 
   end_header(s, this, !content_type.empty() ? content_type.c_str()
