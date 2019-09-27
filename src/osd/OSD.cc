@@ -4687,6 +4687,16 @@ void OSD::maybe_update_heartbeat_peers()
   }
 
   dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;
+
+  // clean up stale failure pending
+  for (auto it = failure_pending.begin(); it != failure_pending.end();) {
+    if (heartbeat_peers.count(it->first) == 0) {
+      send_still_alive(osdmap->get_epoch(), it->first, it->second.second);
+      failure_pending.erase(it++);
+    } else {
+      it++;
+    }
+  }
 }
 
 void OSD::reset_heartbeat_peers(bool all)
