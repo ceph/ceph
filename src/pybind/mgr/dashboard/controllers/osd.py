@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 import json
+import logging
 from . import ApiController, RESTController, Endpoint, ReadPermission, UpdatePermission
-from .. import mgr, logger
+from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_send_command_error
@@ -11,6 +12,9 @@ try:
     from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
+
+
+logger = logging.getLogger('controllers.osd')
 
 
 @ApiController('/osd', Scope.OSD)
@@ -83,7 +87,7 @@ class Osd(RESTController):
                     for _, dev_data in dev_smart_data.items():
                         if 'error' in dev_data:
                             logger.warning(
-                                '[OSD] Error retrieving smartctl data for device ID %s: %s', dev_id,
+                                'Error retrieving smartctl data for device ID %s: %s', dev_id,
                                 dev_smart_data)
                     smart_data.update(dev_smart_data)
         return smart_data

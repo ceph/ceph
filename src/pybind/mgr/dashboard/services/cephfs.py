@@ -2,13 +2,17 @@
 from __future__ import absolute_import
 
 from contextlib import contextmanager
+import logging
 
 import datetime
 import os
 import six
 import cephfs
 
-from .. import mgr, logger
+from .. import mgr
+
+
+logger = logging.getLogger('cephfs')
 
 
 class CephFS(object):
@@ -35,17 +39,17 @@ class CephFS(object):
         return fs_info[0]['mdsmap']['fs_name']
 
     def __init__(self, fs_name=None):
-        logger.debug("[CephFS] initializing cephfs connection")
+        logger.debug("initializing cephfs connection")
         self.cfs = cephfs.LibCephFS(rados_inst=mgr.rados)
-        logger.debug("[CephFS] mounting cephfs filesystem: %s", fs_name)
+        logger.debug("mounting cephfs filesystem: %s", fs_name)
         if fs_name:
             self.cfs.mount(filesystem_name=fs_name)
         else:
             self.cfs.mount()
-        logger.debug("[CephFS] mounted cephfs filesystem")
+        logger.debug("mounted cephfs filesystem")
 
     def __del__(self):
-        logger.debug("[CephFS] shutting down cephfs filesystem")
+        logger.debug("shutting down cephfs filesystem")
         self.cfs.shutdown()
 
     @contextmanager
@@ -75,21 +79,21 @@ class CephFS(object):
         """
         if isinstance(path, six.string_types):
             path = path.encode()
-        logger.debug("[CephFS] get_dir_list dir_path=%s level=%s",
-                     path, level)
+        logger.debug("get_dir_list dirpath=%s level=%s", path,
+                     level)
         if level == 0:
             return [path]
-        logger.debug("[CephFS] opening dir_path=%s", path)
+        logger.debug("opening dirpath=%s", path)
         with self.opendir(path) as d:
             dent = self.cfs.readdir(d)
             paths = [path]
             while dent:
-                logger.debug("[CephFS] found entry=%s", dent.d_name)
+                logger.debug("found entry=%s", dent.d_name)
                 if dent.d_name in [b'.', b'..']:
                     dent = self.cfs.readdir(d)
                     continue
                 if dent.is_dir():
-                    logger.debug("[CephFS] found dir=%s", dent.d_name)
+                    logger.debug("found dir=%s", dent.d_name)
                     subdir_path = os.path.join(path, dent.d_name)
                     paths.extend(self.ls_dir(subdir_path, level - 1))
                 dent = self.cfs.readdir(d)
@@ -111,7 +115,7 @@ class CephFS(object):
             raise Exception('Cannot create root directory "/"')
         if self.dir_exists(path):
             return
-        logger.info("[CephFS] Creating directory: %s", path)
+        logger.info("Creating directory: %s", path)
         self.cfs.mkdirs(path, 0o755)
 
     def rm_dir(self, path):
@@ -123,7 +127,7 @@ class CephFS(object):
             raise Exception('Cannot remove root directory "/"')
         if not self.dir_exists(path):
             return
-        logger.info("[CephFS] Removing directory: %s", path)
+        logger.info("Removing directory: %s", path)
         self.cfs.rmdir(path)
 
     def mk_snapshot(self, path, name=None, mode=0o755):
@@ -147,7 +151,7 @@ class CephFS(object):
             name = now.replace(tzinfo=tz).isoformat('T')
         client_snapdir = self.cfs.conf_get('client_snapdir')
         snapshot_path = os.path.join(path, client_snapdir, name)
-        logger.info("[CephFS] Creating snapshot: %s", snapshot_path)
+        logger.info("Creating snapshot: %s", snapshot_path)
         self.cfs.mkdir(snapshot_path, mode)
         return name
 
@@ -188,7 +192,7 @@ class CephFS(object):
         """
         client_snapdir = self.cfs.conf_get('client_snapdir')
         snapshot_path = os.path.join(path, client_snapdir, name)
-        logger.info("[CephFS] Removing snapshot: %s", snapshot_path)
+        logger.info("Removing snapshot: %s", snapshot_path)
         self.cfs.rmdir(snapshot_path)
 
     def get_quotas(self, path):

@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import json
 import re
+import logging
 
 from functools import partial
 
@@ -14,12 +15,15 @@ from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
     RESTController
 from .rbd import _rbd_call
 
-from .. import logger, mgr
+from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
 from ..services.exception import handle_rados_error, handle_rbd_error, \
     serialize_dashboard_exception
+
+
+logger = logging.getLogger('controllers.rbd_mirror')
 
 
 # pylint: disable=not-callable

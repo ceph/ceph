@@ -6,6 +6,7 @@ import collections
 import importlib
 import inspect
 import json
+import logging
 import os
 import pkgutil
 import re
@@ -17,7 +18,6 @@ from six.moves.urllib.parse import unquote
 # pylint: disable=wrong-import-position
 import cherrypy
 
-from .. import logger
 from ..security import Scope, Permission
 from ..tools import wraps, getargspec, TaskManager, get_request_body_params
 from ..exceptions import ScopeNotValid, PermissionNotValid
@@ -133,8 +133,6 @@ class ControllerDoc(object):
 class Controller(object):
     def __init__(self, path, base_url=None, security_scope=None, secure=True):
         if security_scope and not Scope.valid_scope(security_scope):
-            logger.debug("Invalid security scope name: %s\n Possible values: "
-                         "%s", security_scope, Scope.all_scopes())
             raise ScopeNotValid(security_scope)
         self.path = path
         self.base_url = base_url
@@ -254,19 +252,20 @@ def Proxy(path=None):  # noqa: N802
 
 
 def load_controllers():
+    logger = logging.getLogger('controller.load')
     # setting sys.path properly when not running under the mgr
     controllers_dir = os.path.dirname(os.path.realpath(__file__))
     dashboard_dir = os.path.dirname(controllers_dir)
     mgr_dir = os.path.dirname(dashboard_dir)
-    logger.debug("LC: controllers_dir=%s", controllers_dir)
-    logger.debug("LC: dashboard_dir=%s", dashboard_dir)
-    logger.debug("LC: mgr_dir=%s", mgr_dir)
+    logger.debug("controllers_dir=%s", controllers_dir)
+    logger.debug("dashboard_dir=%s", dashboard_dir)
+    logger.debug("mgr_dir=%s", mgr_dir)
     if mgr_dir not in sys.path:
         sys.path.append(mgr_dir)
 
     controllers = []
     mods = [mod for _, mod, _ in pkgutil.iter_modules([controllers_dir])]
-    logger.debug("LC: mods=%s", mods)
+    logger.debug("mods=%s", mods)
     for mod_name in mods:
         mod = importlib.import_module('.controllers.{}'.format(mod_name),
                                       package='dashboard')
@@ -320,6 +319,7 @@ def generate_controller_routes(endpoint, mapper, base_url):
 
     url = "{}{}".format(base_url, endp_url)
 
+    logger = logging.getLogger('controller')
     logger.debug("Mapped [%s] to %s:%s restricted to %s",
                  url, ctrl_class.__name__, endpoint.action,
                  endpoint.method)
@@ -357,6 +357,7 @@ def generate_routes(url_prefix):
         parent_urls.add(generate_controller_routes(endpoint, mapper,
                                                    "{}".format(url_prefix)))
 
+    logger = logging.getLogger('controller')
     logger.debug("list of parent paths: %s", parent_urls)
     return mapper, parent_urls
 
@@ -586,6 +587,7 @@ class BaseController(object):
                                                  self.action)
 
     def __init__(self):
+        logger = logging.getLogger('controller')
         logger.info('Initializing controller: %s -> %s',
                     self.__class__.__name__, self._cp_path_)
 
@@ -896,6 +898,7 @@ def _set_func_permissions(func, permissions):
 
     for perm in permissions:
         if not Permission.valid_permission(perm):
+            logger = logging.getLogger('controller.set_func_perms')
             logger.debug("Invalid security permission: %s\n "
                          "Possible values: %s", perm,
                          Permission.all_permissions())
