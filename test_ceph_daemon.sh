@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-fsid=0a464092-dfd0-11e9-b903-002590e526e8
+fsid=2a833e3f-53e4-49a7-a7a0-bd89d193ab62
 
 ../src/ceph-daemon rm-cluster --fsid $fsid --force
 
@@ -36,5 +36,17 @@ bin/ceph -c c -k k auth get-or-create mgr.y \
 		   --keyring k-mgr.y \
 		   --config c
 
+# mds.{k,j}
+for id in k j; do
+    bin/ceph -c c -k k auth get-or-create mds.$id \
+	     mon 'allow profile mds' \
+	     mgr 'allow profile mds' \
+	     osd 'allow *' \
+	     mds 'allow *' > k-mds.$id
+    ../src/ceph-daemon deploy --name mds.$id \
+		       --fsid $fsid \
+		       --keyring k-mds.$id \
+		       --config c
+done
 
 bin/ceph -c c -k k -s
