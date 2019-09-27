@@ -42,6 +42,7 @@
 #include "rgw_common.h"
 #include "rgw_reshard.h"
 #include "rgw_lc.h"
+#include "rgw_cksum.h"
 
 // stolen from src/cls/version/cls_version.cc
 #define VERSION_ATTR "ceph.objclass.version"
@@ -1386,6 +1387,8 @@ static int bucket_stats(RGWRadosStore *store, const std::string& tenant_name, st
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
   formatter->dump_string("max_marker", max_marker);
+  formatter->dump_string("cksum_type",
+			 rgw::cksum::to_string(bucket_info.cksum_type));
   dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket_info.quota, formatter);
 
@@ -1530,8 +1533,9 @@ int RGWBucketAdminOp::limit_check(RGWRadosStore *store,
   return ret;
 } /* RGWBucketAdminOp::limit_check */
 
-int RGWBucketAdminOp::info(RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWBucketAdminOp::info(RGWRadosStore *store,
+			   RGWBucketAdminOpState& op_state,
+			   RGWFormatterFlusher& flusher)
 {
   int ret = 0;
   string bucket_name = op_state.get_bucket_name();
