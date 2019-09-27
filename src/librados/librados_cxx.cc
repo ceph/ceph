@@ -2248,6 +2248,16 @@ void librados::IoCtx::unset_osdmap_full_try()
   io_ctx_impl->objecter->unset_pool_full_try();
 }
 
+void librados::IoCtx::set_pool_full_try()
+{
+  io_ctx_impl->objecter->set_pool_full_try();
+}
+
+void librados::IoCtx::unset_pool_full_try()
+{
+  io_ctx_impl->objecter->unset_pool_full_try();
+}
+
 ///////////////////////////// Rados //////////////////////////////
 void librados::Rados::version(int *major, int *minor, int *extra)
 {
