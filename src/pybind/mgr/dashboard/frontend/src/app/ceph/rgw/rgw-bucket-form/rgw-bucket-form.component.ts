@@ -12,6 +12,7 @@ import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.consta
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { CdValidators } from '../../../shared/forms/cd-validators';
 import { NotificationService } from '../../../shared/services/notification.service';
 
 @Component({
@@ -156,6 +157,19 @@ export class RgwBucketFormComponent implements OnInit {
     }
   }
 
+  /**
+   * Validate the bucket name. In general, bucket names should follow domain
+   * name constraints:
+   * - Bucket names must be unique.
+   * - Bucket names cannot be formatted as IP address.
+   * - Bucket names can be between 3 and 63 characters long.
+   * - Bucket names must not contain uppercase characters or underscores.
+   * - Bucket names must start with a lowercase letter or number.
+   * - Bucket names must be a series of one or more labels. Adjacent
+   *   labels are separated by a single period (.). Bucket names can
+   *   contain lowercase letters, numbers, and hyphens. Each label must
+   *   start and end with a lowercase letter or a number.
+   */
   bucketNameValidator(): AsyncValidatorFn {
     const rgwBucketService = this.rgwBucketService;
     return (control: AbstractControl): Promise<ValidationErrors | null> => {
@@ -166,13 +180,42 @@ export class RgwBucketFormComponent implements OnInit {
           resolve(null);
           return;
         }
-        // Validate the bucket name.
-        const nameRe = /^[0-9A-Za-z][\w-\.]{2,254}$/;
-        if (!nameRe.test(control.value)) {
+        const constraints = [];
+        // - Bucket names cannot be formatted as IP address.
+        constraints.push((name) => {
+          const validatorFn = CdValidators.ip();
+          return !validatorFn(name);
+        });
+        // - Bucket names can be between 3 and 63 characters long.
+        constraints.push((name) => _.inRange(name.length, 3, 64));
+        // - Bucket names must not contain uppercase characters or underscores.
+        // - Bucket names must start with a lowercase letter or number.
+        // - Bucket names must be a series of one or more labels. Adjacent
+        //   labels are separated by a single period (.). Bucket names can
+        //   contain lowercase letters, numbers, and hyphens. Each label must
+        //   start and end with a lowercase letter or a number.
+        constraints.push((name) => {
+          const labels = _.split(name, '.');
+          return _.every(labels, (label) => {
+            // Bucket names must not contain uppercase characters or underscores.
+            if (label !== _.toLower(label) || label.includes('_')) {
+              return false;
+            }
+            // Bucket names can contain lowercase letters, numbers, and hyphens.
+            if (!/[0-9a-z-]/.test(label)) {
+              return false;
+            }
+            // Each label must start and end with a lowercase letter or a number.
+            return _.every([0, label.length], (index) => {
+              return /[a-z]/.test(label[index]) || _.isInteger(_.parseInt(label[index]));
+            });
+          });
+        });
+        if (!_.every(constraints, (func) => func(control.value))) {
           resolve({ bucketNameInvalid: true });
           return;
         }
-        // Does any bucket with the given name already exist?
+        // - Bucket names must be unique.
         rgwBucketService.exists(control.value).subscribe((resp: boolean) => {
           if (!resp) {
             resolve(null);
