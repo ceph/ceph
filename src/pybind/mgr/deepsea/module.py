@@ -150,7 +150,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             return result
 
         with self._completion_lock:
-            c = DeepSeaReadCompletion(process_result)
+            c = DeepSeaReadCompletion(on_complete=process_result)
 
             nodes = []
             roles = []
@@ -249,7 +249,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             return result
 
         with self._completion_lock:
-            c = DeepSeaReadCompletion(process_result)
+            c = DeepSeaReadCompletion(on_complete=process_result)
 
             # Always request all services, so we always have all services cached.
             resp = self._do_request_with_login("POST", data = {
