@@ -2225,12 +2225,22 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     return replace(existing, reply, authorizer_reply);
   }  // existing
   else if (!replacing && connect_msg.connect_seq > 0) {
-    // we reset, and they are opening a new session
-    ldout(cct, 0) << __func__ << " accept we reset (peer sent cseq "
-                  << connect_msg.connect_seq << "), sending RESETSESSION"
-                  << dendl;
-    return send_connect_message_reply(CEPH_MSGR_TAG_RESETSESSION, reply,
-                                      authorizer_reply);
+    if (connection->policy.lossy) {
+      // we reset, and they are opening a new session
+      ldout(cct, 0) << __func__ << " accept we reset (peer sent cseq "
+                    << connect_msg.connect_seq << "), sending RESETSESSION"
+                    << dendl;
+      return send_connect_message_reply(CEPH_MSGR_TAG_RESETSESSION, reply,
+                                        authorizer_reply);
+    } else {
+      // if connection policy is lossless, send a retry session message 
+      ldout(cct, 0) << __func__ << " accept we reset (peer sent cseq "
+                    << connect_msg.connect_seq << "), sending RETRY_SESSION"
+                    << dendl;
+      reply.connect_seq = 0;
+      return send_connect_message_reply(CEPH_MSGR_TAG_RETRY_SESSION, reply,
+                                         authorizer_reply); 
+    }
   } else {
     // new session
     ldout(cct, 10) << __func__ << " accept new session" << dendl;
