@@ -448,7 +448,7 @@ int execute_remove(const po::variables_map &vm,
     return r;
   }
 
-  io_ctx.set_osdmap_full_try();
+  io_ctx.set_pool_full_try();
   if (image_id.empty()) {
     r = utils::open_image(io_ctx, image_name, false, &image);
   } else {
@@ -521,7 +521,7 @@ int execute_purge(const po::variables_map &vm,
     return r;
   }
 
-  io_ctx.set_osdmap_full_try();
+  io_ctx.set_pool_full_try();
   if (image_id.empty()) {
     r = utils::open_image(io_ctx, image_name, false, &image);
   } else {
@@ -671,7 +671,7 @@ int execute_unprotect(const po::variables_map &vm,
     return r;
   }
 
-  io_ctx.set_osdmap_full_try();
+  io_ctx.set_pool_full_try();
   if (image_id.empty()) {
     r = utils::open_image(io_ctx, image_name, false, &image);
   } else {
