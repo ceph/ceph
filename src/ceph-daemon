@@ -169,12 +169,55 @@ def extract_uid_gid():
 
 def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
                   config=None, keyring=None):
-    # dirs, conf, keyring
-    create_daemon_dirs(
-        fsid, daemon_type, daemon_id,
-        uid, gid,
-        config, keyring)
+    if daemon_type == 'mon':
+        # tmp keyring file
+        tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
+        os.fchmod(tmp_keyring.fileno(), 0o600)
+        os.fchown(tmp_keyring.fileno(), uid, gid)
+        tmp_keyring.write(keyring)
+        tmp_keyring.flush()
 
+        # tmp config file
+        tmp_config = tempfile.NamedTemporaryFile(mode='w')
+        os.fchmod(tmp_config.fileno(), 0o600)
+        os.fchown(tmp_config.fileno(), uid, gid)
+        tmp_config.write(config)
+        tmp_config.flush()
+
+        # --mkfs
+        create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid)
+        mon_dir = get_data_dir(args.data_dir, fsid, 'mon', daemon_id)
+        log_dir = get_log_dir(args.log_dir, fsid)
+        out = CephContainer(
+            image=args.image,
+            entrypoint='ceph-mon',
+            args=['--mkfs',
+                  '-i', daemon_id,
+                  '--fsid', fsid,
+                  '-c', '/tmp/config',
+                  '--keyring', '/tmp/keyring',
+            ] + get_daemon_args(fsid, 'mon', daemon_id),
+            volume_mounts={
+                log_dir: '/var/log/ceph:z',
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (daemon_id),
+                tmp_keyring.name: '/tmp/keyring:z',
+                tmp_config.name: '/tmp/config:z',
+            },
+        ).run()
+
+        # write conf
+        with open(mon_dir + '/conf', 'w') as f:
+            f.write(config)
+    else:
+        # dirs, conf, keyring
+        create_daemon_dirs(
+            fsid, daemon_type, daemon_id,
+            uid, gid,
+            config, keyring)
+
+    deploy_daemon_units(fsid, daemon_type, daemon_id, c)
+
+def deploy_daemon_units(fsid, daemon_type, daemon_id, c):
     # cmd
     data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
     with open(data_dir + '/cmd', 'w') as f:
@@ -418,7 +461,7 @@ def command_bootstrap():
         f.write(config)
 
     mon_c = get_container(fsid, 'mon', mon_id)
-    deploy_daemon(fsid, 'mon', mon_id, mon_c, uid, gid)
+    deploy_daemon_units(fsid, 'mon', mon_id, mon_c)
 
     # create mgr
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
@@ -446,6 +489,11 @@ def command_deploy():
     if daemon_type not in ['mon', 'mgr', 'mds', 'osd', 'rgw']:
         raise RuntimeError('daemon type %s not recognized' % daemon_type)
     (config, keyring) = get_config_and_keyring()
+    if daemon_type == 'mon':
+        if args.mon_ip:
+            config += '[mon.%s]\n\tpublic_addr = %s\n' % (daemon_id, args.mon_ip)
+        else:
+            raise RuntimeError('must specify --mon-ip')
     (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
@@ -668,6 +716,9 @@ parser_deploy.add_argument(
 parser_deploy.add_argument(
     '--conf-and-key',
     help='JSON file with config and key')
+parser_deploy.add_argument(
+    '--mon-ip',
+    help='mon IP')
 
 args = parser.parse_args()
 
