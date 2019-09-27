@@ -16,7 +16,7 @@ EOF
 		   --mon-ip 10.3.64.23 \
 		   --config c \
 		   --output-keyring k \
-		   --output-conf c
+		   --output-config c
 chmod 644 k c
 
 # mon.b
