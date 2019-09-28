@@ -85,6 +85,7 @@ void PGLog::IndexedLog::trim(
 	  auto it = e.extra_reqid_return_codes.find(idx);
 	  if (it != e.extra_reqid_return_codes.end()) {
 	    return_code = it->second;
+	    // FIXME: we aren't setting op_returns for these extra_reqids
 	  }
 	}
 	++idx;

@@ -1174,7 +1174,7 @@ protected:
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
-  void finish_ctx(OpContext *ctx, int log_op_type);
+  void finish_ctx(OpContext *ctx, int log_op_type, int result=0);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
@@ -1502,7 +1502,8 @@ public:
     ThreadPool::TPHandle &handle) override;
   void do_op(OpRequestRef& op);
   void record_write_error(OpRequestRef op, const hobject_t &soid,
-			  MOSDOpReply *orig_reply, int r);
+			  MOSDOpReply *orig_reply, int r,
+			  OpContext *ctx_for_op_returns=nullptr);
   void do_pg_op(OpRequestRef op);
   void do_scan(
     OpRequestRef op,
@@ -1526,7 +1527,7 @@ public:
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
-  int do_scrub_ls(MOSDOp *op, OSDOp *osd_op);
+  int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
   hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
 
