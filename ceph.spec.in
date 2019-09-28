@@ -30,11 +30,16 @@
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
+%if 0%{?rhel} >= 8
+%bcond_with cephfs_java
+%bcond_with amqp_endpoint
+%else
 %bcond_without cephfs_java
+%bcond_without amqp_endpoint
+%endif
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
-%bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
