@@ -205,13 +205,15 @@ BuildRequires:  librdkafka-devel
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
 BuildRequires:	python%{_python_buildid}-bcrypt
-BuildRequires:	python%{_python_buildid}-coverage
 BuildRequires:	python%{_python_buildid}-nose
-BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-requests
 BuildRequires:	python%{_python_buildid}-six
-BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	python%{_python_buildid}-virtualenv
+%if 0%{?rhel} < 8
+BuildRequires:	python%{_python_buildid}-coverage
+BuildRequires:	python%{_python_buildid}-pecan
+BuildRequires:	python%{_python_buildid}-tox
+%endif
 %if 0%{?rhel} == 7
 BuildRequires:  pyOpenSSL%{_python_buildid}
 %else
@@ -286,7 +288,7 @@ BuildRequires:	lz4-devel >= 1.7
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
-%if 0%{?fedora} || 0%{?rhel}
+%if 0%{?fedora} || 0%{?rhel} == 7
 BuildRequires:	python%{_python_buildid}-cherrypy
 BuildRequires:	python%{_python_buildid}-jwt
 BuildRequires:	python%{_python_buildid}-routes
