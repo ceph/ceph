@@ -2321,6 +2321,8 @@ public:
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
     o->reqid = reqid;
     return o;
   }
