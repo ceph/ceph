@@ -74,14 +74,14 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 #endif
 
   logger().debug("calling method {}.{}", cname, mname);
-  return call_errorator::errorize{ seastar::async(
+  return seastar::async(
     [this, method, indata=std::move(indata)]() mutable {
       ceph::bufferlist outdata;
       auto cls_context = reinterpret_cast<cls_method_context_t>(this);
       const auto ret = method->exec(cls_context, indata, outdata);
       return std::make_pair(ret, std::move(outdata));
     }
-  )}.then(
+  ).then(
     [prev_rd = num_read, prev_wr = num_write, this, &osd_op, flags]
     (auto outcome) -> call_errorator::future<> {
       auto& [ret, outdata] = outcome;
@@ -369,7 +369,7 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
                           osd_op.op.extent.truncate_size,
                           osd_op.op.extent.truncate_seq,
                           osd_op.op.flags).safe_then(
-        [&osd_op](bufferlist bl) {
+        [&osd_op](ceph::bufferlist&& bl) {
           osd_op.rval = bl.length();
           osd_op.outdata = std::move(bl);
           return seastar::now();
