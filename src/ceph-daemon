@@ -393,6 +393,14 @@ class CephContainer:
             self.image
         ]
 
+    def exec_cmd(self, cmd):
+        return [
+            find_program('podman'),
+            'exec',
+            '-it',
+            self.cname,
+        ] + cmd
+
     def run(self):
         logging.debug(self.run_cmd())
         return subprocess.check_output(self.run_cmd())
@@ -602,6 +610,22 @@ def command_shell():
 
 ##################################
 
+def command_enter():
+    (daemon_type, daemon_id) = args.name.split('.')
+    (uid, gid) = extract_uid_gid()
+    c = get_container(args.fsid, daemon_type, daemon_id)
+    subprocess.call(c.exec_cmd(['bash']))
+
+##################################
+
+def command_exec():
+    (daemon_type, daemon_id) = args.name.split('.')
+    (uid, gid) = extract_uid_gid()
+    c = get_container(args.fsid, daemon_type, daemon_id)
+    subprocess.call(c.exec_cmd(args.command))
+
+##################################
+
 def command_ls():
     ls = []
 
@@ -763,7 +787,7 @@ parser_run.add_argument(
     help='cluster FSID')
 
 parser_shell = subparsers.add_parser(
-    'shell', help='run an interactive shel inside a daemon container')
+    'shell', help='run an interactive shell inside a daemon container')
 parser_shell.set_defaults(func=command_shell)
 parser_shell.add_argument(
     '--fsid',
@@ -773,6 +797,33 @@ parser_shell.add_argument(
     '--name', '-n',
     required=True,
     help='daemon name (type.id)')
+
+parser_enter = subparsers.add_parser(
+    'enter', help='run an interactive shell inside a running daemon container')
+parser_enter.set_defaults(func=command_enter)
+parser_enter.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+parser_enter.add_argument(
+    '--name', '-n',
+    required=True,
+    help='daemon name (type.id)')
+
+parser_exec = subparsers.add_parser(
+    'exec', help='run command inside a running daemon container')
+parser_exec.set_defaults(func=command_exec)
+parser_exec.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+parser_exec.add_argument(
+    '--name', '-n',
+    required=True,
+    help='daemon name (type.id)')
+parser_exec.add_argument(
+    'command', nargs='+',
+    help='command')
 
 parser_bootstrap = subparsers.add_parser(
     'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
