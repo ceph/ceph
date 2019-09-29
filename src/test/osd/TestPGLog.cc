@@ -2204,8 +2204,9 @@ TEST_F(PGLogTest, get_request) {
     eversion_t replay_version;
     version_t user_version;
     int return_code = 0;
+    vector<pg_log_op_return_item_t> op_returns;
     bool got = log.get_request(
-      entry.reqid, &replay_version, &user_version, &return_code);
+      entry.reqid, &replay_version, &user_version, &return_code, &op_returns);
     EXPECT_TRUE(got);
     EXPECT_EQ(entry.return_code, return_code);
     EXPECT_EQ(entry.version, replay_version);
@@ -2887,6 +2888,7 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
   eversion_t version;
   version_t user_version;
   int return_code;
+  vector<pg_log_op_return_item_t> op_returns;
 
   osd_reqid_t log_reqid = osd_reqid_t(client, 8, 5);
   osd_reqid_t dup_reqid = osd_reqid_t(client, 8, 3);
@@ -2894,15 +2896,18 @@ TEST_F(PGLogTrimTest, TestGetRequest) {
 
   bool result;
 
-  result = log.get_request(log_reqid, &version, &user_version, &return_code);
+  result = log.get_request(log_reqid, &version, &user_version, &return_code,
+			   &op_returns);
   EXPECT_EQ(true, result);
   EXPECT_EQ(mk_evt(21, 165), version);
 
-  result = log.get_request(dup_reqid, &version, &user_version, &return_code);
+  result = log.get_request(dup_reqid, &version, &user_version, &return_code,
+			   &op_returns);
   EXPECT_EQ(true, result);
   EXPECT_EQ(mk_evt(15, 155), version);
 
-  result = log.get_request(bad_reqid, &version, &user_version, &return_code);
+  result = log.get_request(bad_reqid, &version, &user_version, &return_code,
+			   &op_returns);
   EXPECT_FALSE(result);
 }
 
