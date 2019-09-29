@@ -598,7 +598,7 @@ def command_run():
     (daemon_type, daemon_id) = args.name.split('.')
     (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
-    c.run()
+    subprocess.call(c.run_cmd())
 
 
 ##################################
