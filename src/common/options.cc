@@ -4051,12 +4051,6 @@ std::vector<Option> get_global_options() {
     .set_default(255)
     .set_description(""),
 
-    Option("osd_kick_recovery_op_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(64)
-    .set_description("priority for recovery ops instantized by client ops, "
-                     "default to 64 to use strict priority ordering")
-    .add_see_also("osd_recovery_op_priority"),
-
     Option("osd_snap_trim_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description(""),
