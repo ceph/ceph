@@ -275,6 +275,9 @@ static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
   };
 }
 
+template <class... ValuesT>
+struct errorated_future_marker{};
+
 template <class... AllowedErrors>
 struct errorator {
   template <class T>
@@ -298,8 +301,13 @@ struct errorator {
   static_assert((... && contains_once_v<AllowedErrors>),
                 "no error type in errorator can be duplicated");
 
+private:
+  // see the comment for `using future = _future` below.
+  template <class>
+  class _future {};
   template <class... ValuesT>
-  class future : private seastar::future<ValuesT...> {
+  class _future<::crimson::errorated_future_marker<ValuesT...>>
+    : private seastar::future<ValuesT...> {
     using base_t = seastar::future<ValuesT...>;
     // we need the friendship for the sake of `get_exception() &&` when
     // `safe_then()` is going to return an errorated future as a result of
@@ -362,16 +370,18 @@ struct errorator {
     using errorator_type = ::crimson::errorator<AllowedErrors...>;
 
     [[gnu::always_inline]]
-    future(base_t&& base)
+    _future(base_t&& base)
       : base_t(std::move(base)) {
     }
 
     template <template <class...> class ErroratedFuture,
               class = std::void_t<
-                typename ErroratedFuture<ValuesT...>::errorator_type>>
-    operator ErroratedFuture<ValuesT...> () && {
+                typename ErroratedFuture<
+                  ::crimson::errorated_future_marker<ValuesT...>>::errorator_type>>
+    operator ErroratedFuture<errorated_future_marker<ValuesT...>> () && {
       using dest_errorator_t = \
-        typename ErroratedFuture<ValuesT...>::errorator_type;
+        typename ErroratedFuture<
+          ::crimson::errorated_future_marker<ValuesT...>>::errorator_type;
       static_assert(dest_errorator_t::template contains_once_v<errorator_type>,
                     "conversion is possible to more-or-eq errorated future!");
       return static_cast<base_t&&>(*this);
@@ -407,7 +417,7 @@ struct errorator {
               class DecayedT = std::decay_t<ErrorT>,
               bool IsError = is_error_v<DecayedT>,
               class = std::enable_if_t<IsError>>
-    future(ErrorT&& e)
+    _future(ErrorT&& e)
       : base_t(
           seastar::make_exception_future<ValuesT...>(
             errorator_type::make_exception_ptr(e))) {
@@ -439,29 +449,61 @@ struct errorator {
       // finally could use `.then()`!
       using futurator_t = \
         typename return_errorator_t::template futurize<value_func_result_t>;
-      // `seastar::futurize`, used internally by `then_wrapped()`, wraps
-      // any non-`seastar::future` in `seastar::future`. We really don't
-      // want to end with e.g. `seastar::future<errorator::future<...>>`,
-      // so the lambda converts errorated future into plain one and here
-      // we're converting it back. As there is absolutely no difference
-      // between these types from the memory layout's POV (casting could
-      // be used instead), I count on compiler's ability to elide copies.
-      return typename futurator_t::type{ this->then_wrapped(
+      // `seastar::futurize`, used internally by `then_wrapped()`, would
+      // wrap any non-`seastar::future` type coming from Value Func into
+      // `seastar::future`. As we really don't want to end with things
+      // like `seastar::future<errorator::future<...>>`, we need either:
+      //   * convert the errorated future into plain in the lambda below
+      //     and back here or
+      //   * specialize the `seastar::futurize<T>` to get proper kind of
+      //     future directly from `::then_wrapped()`.
+      // As C++17 doesn't guarantee copy elision when non-same types are
+      // involved while examination of assemblies from GCC 8.1 confirmed
+      // extra copying, switch to the second approach has been made.
+      return this->then_wrapped(
         [ valfunc = std::forward<ValueFuncT>(valfunc),
           errfunc = std::forward<ErrorVisitorT>(errfunc)
-        ] (auto future) mutable {
+        ] (auto&& future) mutable [[gnu::always_inline]] noexcept {
           if (__builtin_expect(future.failed(), false)) {
             maybe_handle_error_t<ErrorVisitorT, futurator_t> maybe_handle_error(
               std::forward<ErrorVisitorT>(errfunc),
               std::move(future).get_exception()
             );
             (maybe_handle_error.template handle<AllowedErrors>() , ...);
-            return plainify(std::move(maybe_handle_error).get_result());
+            return std::move(maybe_handle_error).get_result();
           } else {
-            return plainify(futurator_t::apply(std::forward<ValueFuncT>(valfunc),
-                                               std::move(future).get()));
+            // NOTE: using `seastar::future::get()` here is a bit bloaty
+            // as the method rechecks availability of future's value and,
+            // if it's unavailable, does the `::do_wait()` path (yes, it
+            // targets `seastar::thread`). Actually this is dead code as
+            // `then_wrapped()` executes the lambda only when the future
+            // is available (which means: failed or ready). However, GCC
+            // hasn't optimized it out:
+            //
+            //          if (__builtin_expect(future.failed(), false)) {
+            //    ea25:       48 83 bd c8 fe ff ff    cmpq   $0x2,-0x138(%rbp)
+            //    ea2c:       02
+            //    ea2d:       0f 87 f0 05 00 00       ja     f023 <ceph::osd::
+            // ...
+            //    /// If get() is called in a \ref seastar::thread context,
+            //    /// then it need not be available; instead, the thread will
+            //    /// be paused until the future becomes available.
+            //    [[gnu::always_inline]]
+            //    std::tuple<T...> get() {
+            //        if (!_state.available()) {
+            //    ea3a:       0f 85 1b 05 00 00       jne    ef5b <ceph::osd::
+            //    }
+            // ...
+            //
+            // I don't perceive this as huge issue. Though, it cannot be
+            // claimed errorator has 0 overhead on hot path. The perfect
+            // solution here would be mark the `::get_available_state()`
+            // as `protected` and use dedicated `get_value()` exactly as
+            // `::then()` already does.
+            return futurator_t::apply(std::forward<ValueFuncT>(valfunc),
+                                      std::move(future).get());
           }
-        })};
+        });
     }
 
     // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail
@@ -506,7 +548,21 @@ struct errorator {
     template <class...>
     friend class errorator;
 
+    template <class...>
+    friend class ::seastar::future;
   };
+
+public:
+  // HACK: `errorated_future_marker` and `_future` is just a hack to
+  // specialize `seastar::futurize` for category of class templates:
+  // `future<...>` from distinct errorators. Such tricks are usually
+  // performed basing on SFINAE and `std::void_t` to check existence
+  // of a trait/member (`future<...>::errorator_type` in our case).
+  // Unfortunately, this technique can't be applied as the `futurize`
+  // lacks the optional parameter. The problem looks awfully similar
+  // to following SO item:  https://stackoverflow.com/a/38860413.
+  template <class... ValuesT>
+  using future = _future<::crimson::errorated_future_marker<ValuesT...>>;
 
   // the visitor that forwards handling of all errors to next continuation
   struct pass_further {
@@ -575,26 +631,6 @@ struct errorator {
     using type = errorator<AllowedErrors...>;
   };
 
-  template <class... ValuesT>
-  class errorize {
-    seastar::future<ValuesT...> fut;
-  public:
-    errorize(seastar::future<ValuesT...>&& fut) : fut(std::move(fut)) {
-    }
-
-    template <class Func>
-    auto then(Func&& func) && {
-      using FuncResult = std::result_of_t<Func(ValuesT&&...)>;
-      using Futurator = futurize<FuncResult>;
-      return typename Futurator::type{ std::move(fut).then([
-        this, func = std::forward<Func>(func)
-      ] (ValuesT&&... args) mutable {
-        return plainify(std::invoke(std::forward<Func>(func),
-                                    std::forward<ValuesT>(args)...));
-      })};
-    }
-  };
-
 private:
   template <class... Args>
   static decltype(auto) plainify(seastar::future<Args...>&& fut) {
@@ -633,9 +669,10 @@ private:
   };
   template <template <class...> class ErroratedFutureT,
             class... ValuesT>
-  class futurize<ErroratedFutureT<ValuesT...>,
+  class futurize<ErroratedFutureT<::crimson::errorated_future_marker<ValuesT...>>,
                  std::void_t<
-                   typename ErroratedFutureT<ValuesT...>::errorator_type>> {
+                   typename ErroratedFutureT<
+                     ::crimson::errorated_future_marker<ValuesT...>>::errorator_type>> {
   public:
     using type = ::crimson::errorator<AllowedErrors...>::future<ValuesT...>;
 
@@ -664,8 +701,11 @@ private:
   // needed because of:
   //  * return_errorator_t::template futurize<...> in `safe_then()`,
   //  * conversion to `std::exception_ptr` in `future::future(ErrorT&&)`.
-  template <class... ValueT>
-  friend class future;
+  // the friendship with all errorators is an idea from Kefu to fix build
+  // issues on GCC 9. This version likely fixes some access violation bug
+  // we were exploiting before.
+  template <class...>
+  friend class errorator;
 
   template<typename T, typename F>
   friend inline auto do_with(T&&, F&&);
@@ -741,3 +781,48 @@ using stateful_errint = stateful_error_t<int>;
 using stateful_ec = stateful_error_t<std::error_code>;
 
 } // namespace crimson
+
+
+// open the `seastar` namespace to specialize `futurize`. This is not
+// pretty for sure. I just hope it's not worse than e.g. specializing
+// `hash` in the `std` namespace. The justification is copy avoidance
+// in `future<...>::safe_then()`. See the comments there for details.
+namespace seastar {
+
+template <template <class...> class Container,
+          class... Values>
+struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
+  using errorator_type = typename Container<
+    ::crimson::errorated_future_marker<Values...>>::errorator_type;
+
+  using type = typename errorator_type::template future<Values...>;
+  using value_type = std::tuple<Values...>;
+
+  template<typename Func, typename... FuncArgs>
+  [[gnu::always_inline]]
+  static inline type apply(Func&& func, std::tuple<FuncArgs...>&& args) noexcept {
+    try {
+      return ::seastar::apply(std::forward<Func>(func),
+                              std::forward<std::tuple<FuncArgs...>>(args));
+    } catch (...) {
+      return make_exception_future(std::current_exception());
+    }
+  }
+
+  template<typename Func, typename... FuncArgs>
+  static inline type apply(Func&& func, FuncArgs&&... args) noexcept {
+    try {
+        return func(std::forward<FuncArgs>(args)...);
+    } catch (...) {
+        return make_exception_future(std::current_exception());
+    }
+  }
+
+  template <typename Arg>
+  [[gnu::always_inline]]
+  static type make_exception_future(Arg&& arg) {
+    return ::seastar::make_exception_future<Values...>(std::forward<Arg>(arg));
+  }
+};
+
+} // namespace seastar
