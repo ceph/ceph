@@ -168,9 +168,6 @@ void *StandbyPyModules::LoadConfigThread::entry()
 bool StandbyPyModule::get_config(const std::string &key,
                                  std::string *value) const
 {
-  PyThreadState *tstate = PyEval_SaveThread();
-  PyEval_RestoreThread(tstate);
-
   const std::string global_key = PyModuleRegistry::config_prefix
     + module_name + "/" + key;
 
