@@ -491,10 +491,11 @@ def command_bootstrap():
               '--clobber',
               '--fsid', fsid,
               '--addv', mon_id, addr_arg,
-              '/tmp/monmap'],
+              '/tmp/monmap'
+        ],
         volume_mounts={
             tmp_monmap.name: '/tmp/monmap:z',
-            },
+        },
     ).run()
 
     # create mon
@@ -511,7 +512,7 @@ def command_bootstrap():
               '-c', '/dev/null',
               '--monmap', '/tmp/monmap',
               '--keyring', '/tmp/keyring',
-              ] + get_daemon_args(fsid, 'mon', mon_id),
+        ] + get_daemon_args(fsid, 'mon', mon_id),
         volume_mounts={
             log_dir: '/var/log/ceph:z',
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
