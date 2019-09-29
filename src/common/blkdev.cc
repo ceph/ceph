@@ -542,15 +542,22 @@ std::string get_device_id(const std::string& devname,
   if (!blkdev.model(buf, sizeof(buf))) {
     model = buf;
   }
-  if (blkdev.serial(buf, sizeof(buf))) {
+  if (!blkdev.serial(buf, sizeof(buf))) {
     serial = buf;
   }
-  if (!model.size() || serial.size()) {
-    if (err) {
+  if (err) {
+    if (model.empty() && serial.empty()) {
+      *err = std::string("fallback method has no model nor serial'");
+      return {};
+    } else if (model.empty()) {
       *err = std::string("fallback method has serial '") + serial
-	+ "'but no model";
+        + "' but no model'";
+      return {};
+    } else if (serial.empty()) {
+      *err = std::string("fallback method has model '") + model
+        + "' but no serial'";
+      return {};
     }
-    return {};
   }
 
   device_id = model + "_" + serial;
