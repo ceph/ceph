@@ -1183,7 +1183,6 @@ protected:
   void execute_ctx(OpContext *ctx);
   void finish_ctx(OpContext *ctx, int log_op_type, int result=0);
   void reply_ctx(OpContext *ctx, int err);
-  void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 
