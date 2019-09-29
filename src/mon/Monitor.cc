@@ -6268,14 +6268,14 @@ int Monitor::handle_auth_request(
 	entity_name.get_type() == CEPH_ENTITY_TYPE_MGR) {
       if (!auth_cluster_required.is_supported_auth(auth_method)) {
 	dout(10) << __func__ << " entity " << entity_name << " method "
-		 << auth_method << " not among supported "
+		 << auth_method << " not along supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
 	return -EOPNOTSUPP;
       }
     } else {
       if (!auth_service_required.is_supported_auth(auth_method)) {
 	dout(10) << __func__ << " entity " << entity_name << " method "
-		 << auth_method << " not among supported "
+		 << auth_method << " not along supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
 	return -EOPNOTSUPP;
       }
