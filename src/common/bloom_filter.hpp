@@ -180,13 +180,6 @@ public:
     ++insert_count_;
   }
 
-  template<typename T>
-  inline void insert(const T& t)
-  {
-    // Note: T must be a C++ POD type.
-    insert(reinterpret_cast<const unsigned char*>(&t),sizeof(T));
-  }
-
   inline void insert(const std::string& key)
   {
     insert(reinterpret_cast<const unsigned char*>(key.c_str()),key.size());
@@ -249,12 +242,6 @@ public:
       }
     }
     return true;
-  }
-
-  template<typename T>
-  inline bool contains(const T& t) const
-  {
-    return contains(reinterpret_cast<const unsigned char*>(&t),static_cast<std::size_t>(sizeof(T)));
   }
 
   inline bool contains(const std::string& key) const
