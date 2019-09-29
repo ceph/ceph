@@ -372,7 +372,7 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
         [&osd_op](ceph::bufferlist&& bl) {
           osd_op.rval = bl.length();
           osd_op.outdata = std::move(bl);
-          return seastar::now();
+          return osd_op_errorator::now();
         });
     });
   case CEPH_OSD_OP_GETXATTR:
@@ -392,7 +392,7 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       return backend.writefull(os, osd_op, txn);
     });
   case CEPH_OSD_OP_SETALLOCHINT:
-    return seastar::now();
+    return osd_op_errorator::now();
   case CEPH_OSD_OP_SETXATTR:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.setxattr(os, osd_op, txn);
@@ -428,9 +428,11 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       return backend.omap_get_vals_by_keys(os, osd_op);
     });
   case CEPH_OSD_OP_OMAPSETVALS:
+#if 0
     if (!pg.get_pool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
+#endif
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_set_vals(os, osd_op, txn);
     });
@@ -439,7 +441,7 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
   case CEPH_OSD_OP_WATCH:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       logger().warn("CEPH_OSD_OP_WATCH is not implemented yet; ignoring");
-      return seastar::now();
+      return osd_op_errorator::now();
     });
 
   default:

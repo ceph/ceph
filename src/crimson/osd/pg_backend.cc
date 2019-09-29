@@ -121,12 +121,12 @@ PGBackend::_load_os(const hobject_t& oid)
       // decode existing OI_ATTR's value
       ceph::bufferlist bl;
       bl.push_back(std::move(bp));
-      return seastar::make_ready_future<cached_os_t>(
+      return get_os_errorator::make_ready_future<cached_os_t>(
         os_cache.insert(oid,
           std::make_unique<ObjectState>(object_info_t{bl}, true /* exists */)));
     }, crimson::errorator<crimson::ct_error::enoent,
                           crimson::ct_error::enodata>::all_same_way([oid, this] {
-      return seastar::make_ready_future<cached_os_t>(
+      return get_os_errorator::make_ready_future<cached_os_t>(
         os_cache.insert(oid,
           std::make_unique<ObjectState>(object_info_t{oid}, false)));
     }));
@@ -146,7 +146,7 @@ PGBackend::_load_ss(const hobject_t& oid)
       // decode existing SS_ATTR's value
       ceph::bufferlist bl;
       bl.push_back(std::move(bp));
-      return seastar::make_ready_future<cached_ss_t>(
+      return get_os_errorator::make_ready_future<cached_ss_t>(
         ss_cache.insert(oid, std::make_unique<SnapSet>(bl)));
     }, crimson::errorator<crimson::ct_error::enoent,
                           crimson::ct_error::enodata>::all_same_way([oid, this] {
@@ -154,7 +154,7 @@ PGBackend::_load_ss(const hobject_t& oid)
       //   `get_attr_errorator::all_same_way(...)`.
       // however, this way is more explicit and resilient to unexpected
       // changes in the alias definition.
-      return seastar::make_ready_future<cached_ss_t>(
+      return get_os_errorator::make_ready_future<cached_ss_t>(
         ss_cache.insert(oid, std::make_unique<SnapSet>()));
     }));
 }
@@ -240,12 +240,12 @@ PGBackend::read(const object_info_t& oi,
   }
   if (offset >= size) {
     // read size was trimmed to zero and it is expected to do nothing,
-    return seastar::make_ready_future<bufferlist>();
+    return read_errorator::make_ready_future<bufferlist>();
   }
   return _read(oi.soid, offset, length, flags).safe_then(
     [&oi](auto&& bl) -> read_errorator::future<ceph::bufferlist> {
       if (const bool is_fine = _read_verify_data(oi, bl); is_fine) {
-        return seastar::make_ready_future<bufferlist>(std::move(bl));
+        return read_errorator::make_ready_future<bufferlist>(std::move(bl));
       } else {
         return crimson::ct_error::object_corrupted::make();
       }
@@ -264,7 +264,7 @@ PGBackend::stat_errorator::future<> PGBackend::stat(
     logger().debug("stat object does not exist");
     return crimson::ct_error::enoent::make();
   }
-  return seastar::now();
+  return stat_errorator::now();
   // TODO: ctx->delta_stats.num_rd++;
 }
 
@@ -483,7 +483,7 @@ PGBackend::get_attr_errorator::future<> PGBackend::getxattr(
     osd_op.outdata.clear();
     osd_op.outdata.push_back(std::move(val));
     osd_op.op.xattr.value_len = osd_op.outdata.length();
-    return seastar::now();
+    return get_attr_errorator::now();
     //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   });
   //ctx->delta_stats.num_rd++;

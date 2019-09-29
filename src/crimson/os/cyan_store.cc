@@ -189,13 +189,13 @@ CyanStore::read_errorator::future<ceph::bufferlist> CyanStore::read(
     return crimson::ct_error::enoent::make();
   }
   if (offset >= o->get_size())
-    return seastar::make_ready_future<ceph::bufferlist>();
+    return read_errorator::make_ready_future<ceph::bufferlist>();
   size_t l = len;
   if (l == 0 && offset == 0)  // note: len == 0 means read the entire object
     l = o->get_size();
   else if (offset + l > o->get_size())
     l = o->get_size() - offset;
-  return seastar::make_ready_future<ceph::bufferlist>(o->read(offset, l));
+  return read_errorator::make_ready_future<ceph::bufferlist>(o->read(offset, l));
 }
 
 CyanStore::get_attr_errorator::future<ceph::bufferptr> CyanStore::get_attr(
@@ -211,7 +211,7 @@ CyanStore::get_attr_errorator::future<ceph::bufferptr> CyanStore::get_attr(
     return crimson::ct_error::enoent::make();
   }
   if (auto found = o->xattr.find(name); found != o->xattr.end()) {
-    return seastar::make_ready_future<ceph::bufferptr>(found->second);
+    return get_attr_errorator::make_ready_future<ceph::bufferptr>(found->second);
   } else {
     return crimson::ct_error::enodata::make();
   }
