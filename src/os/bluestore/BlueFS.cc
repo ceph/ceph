@@ -2748,7 +2748,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 void BlueFS::sync_metadata()
 {
   std::unique_lock l(lock);
-  if (log_t.empty()) {
+  if (log_t.empty() && dirty_files.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
   } else {
     dout(10) << __func__ << dendl;
