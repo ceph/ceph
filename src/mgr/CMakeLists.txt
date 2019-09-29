@@ -7,6 +7,7 @@ set(mgr_srcs
   BaseMgrStandbyModule.cc
   ClusterState.cc
   DaemonHealthMetricCollector.cc
+  DaemonKey.cc
   DaemonServer.cc
   DaemonState.cc
   Gil.cc

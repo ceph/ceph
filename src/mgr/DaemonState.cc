@@ -13,6 +13,8 @@
 
 #include "DaemonState.h"
 
+#include <experimental/iterator>
+
 #include "MgrSession.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
@@ -103,7 +105,7 @@ void DeviceState::dump(Formatter *f) const
   f->close_section();
   f->open_array_section("daemons");
   for (auto& i : daemons) {
-    f->dump_string("daemon", to_string(i));
+    f->dump_stream("daemon") << i;
   }
   f->close_section();
   if (life_expectancy.first != utime_t()) {
@@ -120,11 +122,9 @@ void DeviceState::print(ostream& out) const
   for (auto& i : devnames) {
     out << "attachment " << i.first << ":" << i.second << "\n";
   }
-  set<string> d;
-  for (auto& j : daemons) {
-    d.insert(to_string(j));
-  }
-  out << "daemons " << d << "\n";
+  std::copy(std::begin(daemons), std::end(daemons),
+            std::experimental::make_ostream_joiner(out, ","));
+  out << '\n';
   if (life_expectancy.first != utime_t()) {
     out << "life_expectancy " << life_expectancy.first << " to "
 	<< life_expectancy.second
@@ -188,9 +188,9 @@ DaemonStateCollection DaemonStateIndex::get_by_service(
 
   DaemonStateCollection result;
 
-  for (const auto &i : all) {
-    if (i.first.first == svc) {
-      result[i.first] = i.second;
+  for (const auto& [key, state] : all) {
+    if (key.type == svc) {
+      result[key] = state;
     }
   }
 
@@ -251,10 +251,10 @@ void DaemonStateIndex::cull(const std::string& svc_name,
   auto end = all.end();
   for (auto &i = begin; i != end; ++i) {
     const auto& daemon_key = i->first;
-    if (daemon_key.first != svc_name)
+    if (daemon_key.type != svc_name)
       break;
-    if (names_exist.count(daemon_key.second) == 0) {
-      victims.push_back(daemon_key.second);
+    if (names_exist.count(daemon_key.name) == 0) {
+      victims.push_back(daemon_key.name);
     }
   }
 
