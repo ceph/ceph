@@ -15,7 +15,13 @@ int main() {
   std::atomic<uint16_t> w2;
   std::atomic<uint32_t> w4;
   std::atomic<uint64_t> w8;
-  return w1 + w2 + w4 + w8;
+#ifdef __s390x__
+  // Boost needs 16-byte atomics for tagged pointers.
+  std::atomic<unsigned __int128> w16;
+#else
+  #define w16 0
+#endif
+  return w1 + w2 + w4 + w8 + w16;
 }
 " ${var})
 endfunction(check_cxx_atomics)
