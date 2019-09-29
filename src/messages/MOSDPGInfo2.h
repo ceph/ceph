@@ -16,6 +16,8 @@ public:
   epoch_t epoch_sent;
   epoch_t min_epoch;
   pg_info_t info;
+  std::optional<pg_lease_t> lease;
+  std::optional<pg_lease_ack_t> lease_ack;
 
   spg_t get_spg() const override {
     return spgid;
@@ -34,7 +36,9 @@ public:
       MInfoRec(
 	pg_shard_t(get_source().num(), info.pgid.shard),
 	info,
-	epoch_sent));
+	epoch_sent,
+	lease,
+	lease_ack));
   }
 
   MOSDPGInfo2() : MOSDPeeringOp{MSG_OSD_PG_INFO2,
@@ -45,12 +49,16 @@ public:
     spg_t s,
     pg_info_t q,
     epoch_t sent,
-    epoch_t min)
+    epoch_t min,
+    std::optional<pg_lease_t> l,
+    std::optional<pg_lease_ack_t> la)
     : MOSDPeeringOp{MSG_OSD_PG_INFO2, HEAD_VERSION, COMPAT_VERSION},
       spgid(s),
       epoch_sent(sent),
       min_epoch(min),
-      info(q) {
+      info(q),
+      lease(l),
+      lease_ack(la) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 
@@ -71,6 +79,8 @@ public:
     encode(epoch_sent, payload);
     encode(min_epoch, payload);
     encode(info, payload);
+    encode(lease, payload);
+    encode(lease_ack, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -79,6 +89,8 @@ public:
     decode(epoch_sent, p);
     decode(min_epoch, p);
     decode(info, p);
+    decode(lease, p);
+    decode(lease_ack, p);
   }
 private:
   template<class T, typename... Args>

@@ -1807,6 +1807,22 @@ HeartbeatStampsRef PG::get_hb_stamps(int peer)
   return osd->get_hb_stamps(peer);
 }
 
+void PG::schedule_renew_lease(epoch_t lpr, ceph::timespan delay)
+{
+  auto spgid = info.pgid;
+  auto o = osd;
+  osd->mono_timer.add_event(
+    delay,
+    [o, lpr, spgid]() {
+      o->queue_renew_lease(lpr, spgid);
+    });
+}
+
+void PG::queue_check_readable(epoch_t lpr, ceph::timespan delay)
+{
+  osd->queue_check_readable(info.pgid, lpr, delay);
+}
+
 void PG::rebuild_missing_set_with_deletes(PGLog &pglog)
 {
   pglog.rebuild_missing_set_with_deletes(

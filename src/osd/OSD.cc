@@ -455,6 +455,16 @@ HeartbeatStampsRef OSDService::get_hb_stamps(unsigned peer)
   return hb_stamps[peer];
 }
 
+void OSDService::queue_renew_lease(epoch_t epoch, spg_t spgid)
+{
+  osd->enqueue_peering_evt(
+    spgid,
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+	epoch, epoch,
+	RenewLease())));
+}
+
 void OSDService::start_shutdown()
 {
   {
@@ -481,6 +491,8 @@ void OSDService::shutdown_reserver()
 
 void OSDService::shutdown()
 {
+  mono_timer.suspend();
+
   {
     std::lock_guard l(watch_lock);
     watch_timer.shutdown();
@@ -509,6 +521,7 @@ void OSDService::init()
 
   watch_timer.init();
   agent_timer.init();
+  mono_timer.resume();
 
   agent_thread.create("osd_srv_agent");
 
@@ -4094,8 +4107,8 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
   // update pg count now since we might not get an osdmap any time soon.
   if (pg->is_primary())
     service.logger->dec(l_osd_pg_primary);
-  else if (pg->is_replica())
-    service.logger->dec(l_osd_pg_replica);
+  else if (pg->is_nonprimary())
+    service.logger->dec(l_osd_pg_replica); // misnomver
   else
     service.logger->dec(l_osd_pg_stray);
 
@@ -7268,6 +7281,8 @@ void OSD::ms_fast_dispatch(Message *m)
   case MSG_OSD_PG_INFO2:
   case MSG_OSD_BACKFILL_RESERVE:
   case MSG_OSD_RECOVERY_RESERVE:
+  case MSG_OSD_PG_LEASE:
+  case MSG_OSD_PG_LEASE_ACK:
     {
       MOSDPeeringOp *pm = static_cast<MOSDPeeringOp*>(m);
       if (require_osd_peer(pm)) {
@@ -8704,8 +8719,8 @@ bool OSD::advance_pg(
 	      // any time soon.
 	      if (pg->is_primary())
 		logger->dec(l_osd_pg_primary);
-	      else if (pg->is_replica())
-		logger->dec(l_osd_pg_replica);
+	      else if (pg->is_nonprimary())
+		logger->dec(l_osd_pg_replica); // misnomer
 	      else
 		logger->dec(l_osd_pg_stray);
 	    }
@@ -8912,8 +8927,8 @@ void OSD::consume_map()
     // racy, but we don't want to take pg lock here.
     if (pg->is_primary())
       num_pg_primary++;
-    else if (pg->is_replica())
-      num_pg_replica++;
+    else if (pg->is_nonprimary())
+      num_pg_replica++;  // misnomer
     else
       num_pg_stray++;
   }
@@ -9553,6 +9568,26 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
     }
     service.maybe_share_map(con.get(), osdmap);
     con->send_message(m);
+  }
+}
+
+void OSDService::queue_check_readable(spg_t spgid,
+				      epoch_t lpr,
+				      ceph::signedspan delay)
+{
+  if (delay == ceph::signedspan::zero()) {
+    osd->enqueue_peering_evt(
+      spgid,
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	  lpr, lpr,
+	  PeeringState::CheckReadable())));
+  } else {
+    mono_timer.add_event(
+      delay,
+      [this, spgid, lpr]() {
+	queue_check_readable(spgid, lpr);
+      });
   }
 }
 

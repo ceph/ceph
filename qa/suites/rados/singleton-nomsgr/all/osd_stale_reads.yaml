@@ -1,0 +1,26 @@
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+overrides:
+  ceph:
+    log-whitelist:
+      - \(OSD_DOWN\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(SLOW_OPS\)
+      - \(PG_AVAILABILITY\)
+      - \(PG_DEGRADED\)
+      - application not enabled
+    conf:
+      osd:
+        osd scrub backoff ratio: 0
+        osd deep scrub large omap object value sum threshold: 8800000
+        osd deep scrub large omap object key threshold: 20000
+tasks:
+- install:
+- ceph:
+- exec:
+    client.0:
+      - ceph_test_osd_stale_read

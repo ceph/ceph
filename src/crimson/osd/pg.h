@@ -258,6 +258,12 @@ public:
     // Not needed yet
   }
 
+  void queue_check_readable(epoch_t lpr, ceph::timespan delay) final {
+#warning write me
+  }
+  void recheck_readable() final {
+#warning write me
+  }
 
   void on_pool_change() final {
     // Not needed yet
@@ -388,6 +394,8 @@ public:
 
   ceph::signedspan get_mnow() final;
   HeartbeatStampsRef get_hb_stamps(int peer) final;
+  void schedule_renew_lease(epoch_t plr, ceph::timespan delay) final;
+
 
   // Utility
   bool is_primary() const {
