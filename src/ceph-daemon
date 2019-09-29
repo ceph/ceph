@@ -627,6 +627,16 @@ def command_exec():
 
 ##################################
 
+def command_unit():
+    (daemon_type, daemon_id) = args.name.split('.')
+    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+    subprocess.call([
+        'systemctl',
+        args.command,
+        unit_name])
+
+##################################
+
 def command_ls():
     ls = []
 
@@ -825,6 +835,21 @@ parser_exec.add_argument(
 parser_exec.add_argument(
     'command', nargs='+',
     help='command')
+
+parser_unit = subparsers.add_parser(
+    'unit', help='operate on the daemon\'s systemd unit')
+parser_unit.set_defaults(func=command_unit)
+parser_unit.add_argument(
+    'command',
+    help='systemd command (start, stop, restart, enable, disable, ...)')
+parser_unit.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+parser_unit.add_argument(
+    '--name', '-n',
+    required=True,
+    help='daemon name (type.id)')
 
 parser_bootstrap = subparsers.add_parser(
     'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
