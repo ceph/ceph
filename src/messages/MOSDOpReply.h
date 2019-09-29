@@ -106,6 +106,16 @@ public:
     o.swap(ops);
     bdata_encode = false;
   }
+  void set_op_returns(const vector<pg_log_op_return_item_t>& op_returns) {
+    if (op_returns.size()) {
+      ceph_assert(ops.empty() || ops.size() == op_returns.size());
+      ops.resize(op_returns.size());
+      for (unsigned i = 0; i < op_returns.size(); ++i) {
+	ops[i].rval = op_returns[i].rval;
+	ops[i].outdata = op_returns[i].bl;
+      }
+    }
+  }
 
   /**
    * get retry attempt
