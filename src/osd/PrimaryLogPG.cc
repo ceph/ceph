@@ -806,7 +806,7 @@ void PrimaryLogPG::recheck_readable()
     if (mnow < prior_readable_until_ub) {
       dout(10) << __func__ << " still wait (mnow " << mnow
 	       << " < prior_readable_until_ub " << prior_readable_until_ub
-	       << dendl;
+	       << ")" << dendl;
     } else {
       dout(10) << __func__ << " no longer wait (mnow " << mnow
 	       << " >= prior_readable_until_ub " << prior_readable_until_ub
