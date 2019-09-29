@@ -1021,8 +1021,6 @@ protected:
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v);
-  /// true if we can send an ack for v
-  bool already_ack(eversion_t v);
 
   // projected object info
   SharedLRU<hobject_t, ObjectContext> object_contexts;
