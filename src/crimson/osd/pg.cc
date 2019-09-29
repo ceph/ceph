@@ -256,9 +256,18 @@ HeartbeatStampsRef PG::get_hb_stamps(int peer)
   return shard_services.get_hb_stamps(peer);
 }
 
-void PG::schedule_renew_lease(epoch_t plr, ceph::timespan delay)
+void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
 {
-#warning implement me
+  seastar::sleep(delay).then([last_peering_reset, this] {
+    shard_services.start_operation<LocalPeeringEvent>(
+      this,
+      shard_services,
+      pg_whoami,
+      pgid,
+      last_peering_reset,
+      last_peering_reset,
+      RenewLease{});
+    });
 }
 
 
