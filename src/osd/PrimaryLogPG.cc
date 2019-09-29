@@ -3976,13 +3976,6 @@ void PrimaryLogPG::reply_ctx(OpContext *ctx, int r)
   close_op_ctx(ctx);
 }
 
-void PrimaryLogPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
-{
-  if (ctx->op)
-    osd->reply_op_error(ctx->op, r, v, uv);
-  close_op_ctx(ctx);
-}
-
 void PrimaryLogPG::log_op_stats(const OpRequest& op,
 				const uint64_t inb,
 				const uint64_t outb)
