@@ -14508,28 +14508,6 @@ bool PrimaryLogPG::already_complete(eversion_t v)
   return true;
 }
 
-bool PrimaryLogPG::already_ack(eversion_t v)
-{
-  dout(20) << __func__ << ": " << v << dendl;
-  for (xlist<RepGather*>::iterator i = repop_queue.begin();
-       !i.end();
-       ++i) {
-    // skip copy from temp object ops
-    if ((*i)->v == eversion_t()) {
-      dout(20) << __func__ << ": " << **i
-	       << " version is empty" << dendl;
-      continue;
-    }
-    if ((*i)->v > v) {
-      dout(20) << __func__ << ": " << **i
-	       << " (*i)->v past v" << dendl;
-      break;
-    }
-  }
-  dout(20) << __func__ << ": returning true" << dendl;
-  return true;
-}
-
 
 // ==========================================================================================
 // SCRUB
