@@ -258,12 +258,9 @@ public:
     // Not needed yet
   }
 
-  void queue_check_readable(epoch_t lpr, ceph::timespan delay) final {
-#warning write me
-  }
-  void recheck_readable() final {
-#warning write me
-  }
+  void queue_check_readable(epoch_t last_peering_reset,
+			    ceph::timespan delay) final;
+  void recheck_readable() final;
 
   void on_pool_change() final {
     // Not needed yet
