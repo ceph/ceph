@@ -288,6 +288,8 @@ struct errorator {
   static_assert((... && contains_once_v<AllowedErrors>),
                 "no error type in errorator can be duplicated");
 
+  struct ready_future_marker{};
+
 private:
   // see the comment for `using future = _future` below.
   template <class>
@@ -375,6 +377,12 @@ private:
     [[gnu::always_inline]]
     _future(base_t&& base)
       : base_t(std::move(base)) {
+    }
+
+    template <class... A>
+    [[gnu::always_inline]]
+    _future(ready_future_marker, A&&... a)
+      : base_t(::seastar::make_ready_future<ValuesT...>(std::forward<A>(a)...)) {
     }
 
     template <template <class...> class ErroratedFuture,
@@ -624,6 +632,15 @@ public:
     static_assert(sizeof...(EmptyPack) == 0);
     using type = errorator<AllowedErrors...>;
   };
+
+  template <typename... T, typename... A>
+  static future<T...> make_ready_future(A&&... value) {
+    return future<T...>(ready_future_marker(), std::forward<A>(value)...);
+  }
+
+  static auto now() {
+    return make_ready_future<>();
+  }
 
 private:
   template <class T, class = std::void_t<T>>
