@@ -910,6 +910,15 @@ protected:
 	    p.second,
 	    p.second.begin(),
 	    p.second.end());
+	} else if (is_laggy()) {
+          for (auto& op : p.second) {
+            op->mark_delayed("waiting for readable");
+          }
+	  waiting_for_readable.splice(
+	    waiting_for_readable.begin(),
+	    p.second,
+	    p.second.begin(),
+	    p.second.end());
 	} else {
 	  requeue_ops(p.second);
 	}
@@ -1864,6 +1873,10 @@ public:
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
+
+  bool check_laggy(OpRequestRef& op);
+  bool check_laggy_requeue(OpRequestRef& op);
+  void recheck_readable() override;
 
   bool is_backfill_target(pg_shard_t osd) const {
     return recovery_state.is_backfill_target(osd);

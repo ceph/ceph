@@ -2635,6 +2635,13 @@ std::vector<Option> get_global_options() {
     .set_enum_allowed({"off", "warn", "on"})
     .set_description("Default PG autoscaling behavior for new pools"),
 
+    Option("osd_pool_default_read_lease_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(.8)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Default read_lease_ratio for a pool, as a multiple of osd_heartbeat_grace")
+    .set_long_description("This should be <= 1.0 so that the read lease will have expired by the time we decide to mark a peer OSD down.")
+    .add_see_also("osd_heartbeat_grace"),
+
     Option("osd_hit_set_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description(""),

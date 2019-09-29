@@ -45,6 +45,17 @@ struct PGPool {
   }
 
   void update(CephContext *cct, OSDMapRef map);
+
+  ceph::timespan get_readable_interval() const {
+    double v = 0;
+    if (info.opts.get(pool_opts_t::READ_LEASE_INTERVAL, &v)) {
+      return ceph::make_timespan(v);
+    } else {
+      auto hbi = cct->_conf->osd_heartbeat_grace;
+      auto fac = cct->_conf->osd_pool_default_read_lease_ratio;
+      return ceph::make_timespan(hbi * fac);
+    }
+  }
 };
 
 class PeeringCtx;
@@ -77,7 +88,9 @@ struct BufferedRecoveryMessages {
   void send_query(int to, spg_t spgid, const pg_query_t &q);
   void send_info(int to, spg_t to_spgid,
 		 epoch_t min_epoch, epoch_t cur_epoch,
-		 const pg_info_t &info);
+		 const pg_info_t &info,
+		 std::optional<pg_lease_t> lease = {},
+		 std::optional<pg_lease_ack_t> lease_ack = {});
 };
 
 struct HeartbeatStamps : public RefCountedObject {
@@ -225,8 +238,11 @@ struct PeeringCtxWrapper {
   }
   void send_info(int to, spg_t to_spgid,
 		 epoch_t min_epoch, epoch_t cur_epoch,
-		 const pg_info_t &info) {
-    msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info);
+		 const pg_info_t &info,
+		 std::optional<pg_lease_t> lease = {},
+		 std::optional<pg_lease_ack_t> lease_ack = {}) {
+    msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info,
+		   lease, lease_ack);
   }
 };
 
@@ -261,6 +277,9 @@ public:
 
     virtual ceph::signedspan get_mnow() = 0;
     virtual HeartbeatStampsRef get_hb_stamps(int peer) = 0;
+    virtual void schedule_renew_lease(epoch_t plr, ceph::timespan delay) = 0;
+    virtual void queue_check_readable(epoch_t lpr, ceph::timespan delay) = 0;
+    virtual void recheck_readable() = 0;
 
     // ============ Flush state ==================
     /**
@@ -522,6 +541,8 @@ public:
   TrivialEvent(DeleteReserved)
   TrivialEvent(DeleteInterrupted)
 
+  TrivialEvent(CheckReadable)
+
   void start_handle(PeeringCtx *new_ctx);
   void end_handle();
   void begin_block_outgoing();
@@ -685,6 +706,7 @@ public:
       boost::statechart::custom_reaction<SetForceBackfill>,
       boost::statechart::custom_reaction<UnsetForceBackfill>,
       boost::statechart::custom_reaction<RequestScrub>,
+      boost::statechart::custom_reaction<CheckReadable>,
       // crash
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
@@ -801,7 +823,10 @@ public:
       boost::statechart::custom_reaction< UnfoundBackfill >,
       boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
       boost::statechart::custom_reaction< RemoteReservationRevoked>,
-      boost::statechart::custom_reaction< DoRecovery>
+      boost::statechart::custom_reaction< DoRecovery>,
+      boost::statechart::custom_reaction< RenewLease>,
+      boost::statechart::custom_reaction< MLeaseAck>,
+      boost::statechart::custom_reaction< CheckReadable>
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const ActMap&);
@@ -815,6 +840,8 @@ public:
     }
     boost::statechart::result react(const ActivateCommitted&);
     boost::statechart::result react(const AllReplicasActivated&);
+    boost::statechart::result react(const RenewLease&);
+    boost::statechart::result react(const MLeaseAck&);
     boost::statechart::result react(const DeferRecovery& evt) {
       return discard_event();
     }
@@ -836,6 +863,7 @@ public:
     boost::statechart::result react(const DoRecovery&) {
       return discard_event();
     }
+    boost::statechart::result react(const CheckReadable&);
     void all_activated_and_committed();
   };
 
@@ -967,7 +995,8 @@ public:
       boost::statechart::custom_reaction< RemoteBackfillPreempted >,
       boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
       boost::statechart::custom_reaction< RecoveryDone >,
-      boost::statechart::transition<DeleteStart, ToDelete>
+      boost::statechart::transition<DeleteStart, ToDelete>,
+      boost::statechart::custom_reaction< MLease >
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const MInfoRec& infoevt);
@@ -977,6 +1006,7 @@ public:
     boost::statechart::result react(const MQuery&);
     boost::statechart::result react(const Activate&);
     boost::statechart::result react(const ActivateCommitted&);
+    boost::statechart::result react(const MLease&);
     boost::statechart::result react(const RecoveryDone&) {
       return discard_event();
     }
@@ -1332,6 +1362,29 @@ public:
 
   vector<HeartbeatStampsRef> hb_stamps;
 
+  ceph::signedspan readable_interval = ceph::signedspan::zero();
+
+  /// how long we can service reads in this interval
+  ceph::signedspan readable_until = ceph::signedspan::zero();
+
+  /// upper bound on any acting OSDs' readable_until in this interval
+  ceph::signedspan readable_until_ub = ceph::signedspan::zero();
+
+  /// upper bound from prior interval(s)
+  ceph::signedspan prior_readable_until_ub = ceph::signedspan::zero();
+
+  /// pg instances from prior interval(s) that may still be readable
+  set<int> prior_readable_down_osds;
+
+  /// [replica] upper bound we got from the primary (primary's clock)
+  ceph::signedspan readable_until_ub_from_primary = ceph::signedspan::zero();
+
+  /// [primary] last upper bound shared by primary to replicas
+  ceph::signedspan readable_until_ub_sent = ceph::signedspan::zero();
+
+  /// [primary] readable ub acked by acting set members
+  vector<ceph::signedspan> acting_readable_until_ub;
+
   bool send_notify = false; ///< True if a notify needs to be sent to the primary
 
   bool dirty_info = false;          ///< small info structu on disk out of date
@@ -1447,6 +1500,8 @@ public:
   unsigned get_backfill_priority();
   /// get priority for pg deletion
   unsigned get_delete_priority();
+
+  bool check_prior_readable_down_osds(const OSDMapRef& map);
 
   bool adjust_need_up_thru(const OSDMapRef osdmap);
   PastIntervals::PriorSet build_prior();
@@ -1905,6 +1960,52 @@ public:
     write_if_dirty(t);
   }
 
+  /// Get current interval's readable_until
+  ceph::signedspan get_readable_until() const {
+    return readable_until;
+  }
+
+  /// Get prior intervals' readable_until upper bound
+  ceph::signedspan get_prior_readable_until_ub() const {
+    return prior_readable_until_ub;
+  }
+
+  /// Get prior intervals' readable_until down OSDs of note
+  const set<int>& get_prior_readable_down_osds() const {
+    return prior_readable_down_osds;
+  }
+
+  /// Reset prior intervals' readable_until upper bound (e.g., bc it passed)
+  void clear_prior_readable_until_ub() {
+    prior_readable_until_ub = ceph::signedspan::zero();
+    prior_readable_down_osds.clear();
+  }
+
+  void renew_lease(ceph::signedspan now) {
+    bool was_min = (readable_until_ub == readable_until);
+    readable_until_ub_sent = now + readable_interval;
+    if (was_min) {
+      recalc_readable_until();
+    }
+  }
+
+  void send_lease();
+  void schedule_renew_lease();
+
+  pg_lease_t get_lease() {
+    return pg_lease_t(readable_until, readable_until_ub_sent, readable_interval);
+  }
+
+  void proc_lease(const pg_lease_t& l);
+  void proc_lease_ack(int from, const pg_lease_ack_t& la);
+
+  pg_lease_ack_t get_lease_ack() {
+    return pg_lease_ack_t(readable_until_ub_from_primary);
+  }
+
+  /// [primary] recalc readable_until[_ub] for the current interval
+  void recalc_readable_until();
+
   //============================ const helpers ================================
   const char *get_current_state() const {
     return state_history.get_current_state();
@@ -1963,9 +2064,11 @@ public:
   const PastIntervals& get_past_intervals() const {
     return past_intervals;
   }
-  bool is_replica() const {
-    return role > 0;
+  /// acting osd that is not the primary
+  bool is_nonprimary() const {
+    return role >= 0 && pg_whoami != primary;
   }
+  /// primary osd
   bool is_primary() const {
     return pg_whoami == primary;
   }
@@ -2022,7 +2125,7 @@ public:
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
-  int get_state() const { return state; }
+  uint64_t get_state() const { return state; }
   bool is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool is_peering() const { return state_test(PG_STATE_PEERING); }

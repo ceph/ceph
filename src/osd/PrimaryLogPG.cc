@@ -752,6 +752,93 @@ void PrimaryLogPG::maybe_force_recovery()
     maybe_kick_recovery(soid);
 }
 
+bool PrimaryLogPG::check_laggy(OpRequestRef& op)
+{
+  if (state_test(PG_STATE_WAIT)) {
+    dout(10) << __func__ << " PG is WAIT state" << dendl;
+  } else if (!state_test(PG_STATE_LAGGY)) {
+    auto mnow = osd->get_mnow();
+    auto ru = recovery_state.get_readable_until();
+    if (mnow <= ru) {
+      // not laggy
+      return true;
+    }
+    dout(10) << __func__
+	     << " mnow " << mnow
+	     << " > readable_until " << ru << dendl;
+
+    if (!is_primary()) {
+      osd->reply_op_error(op, -EAGAIN);
+      return false;
+    }
+
+    // go to laggy state
+    state_set(PG_STATE_LAGGY);
+    publish_stats_to_osd();
+  }
+  dout(10) << __func__ << " not readable" << dendl;
+  waiting_for_readable.push_back(op);
+  op->mark_delayed("waiting for readable");
+  return false;
+}
+
+bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
+{
+  if (!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) {
+    return true; // not laggy
+  }
+  dout(10) << __func__ << " not readable" << dendl;
+  waiting_for_readable.push_front(op);
+  op->mark_delayed("waiting for readable");
+  return false;
+}
+
+void PrimaryLogPG::recheck_readable()
+{
+  if (!is_wait() && !is_laggy()) {
+    dout(20) << __func__ << " wasn't wait or laggy" << dendl;
+    return;
+  }
+  auto mnow = osd->get_mnow();
+  bool pub = false;
+  if (is_wait()) {
+    auto prior_readable_until_ub = recovery_state.get_prior_readable_until_ub();
+    if (mnow < prior_readable_until_ub) {
+      dout(10) << __func__ << " still wait (mnow " << mnow
+	       << " < prior_readable_until_ub " << prior_readable_until_ub
+	       << dendl;
+    } else {
+      dout(10) << __func__ << " no longer wait (mnow " << mnow
+	       << " >= prior_readable_until_ub " << prior_readable_until_ub
+	       << ")" << dendl;
+      state_clear(PG_STATE_WAIT);
+      recovery_state.clear_prior_readable_until_ub();
+      pub = true;
+    }
+  }
+  if (is_laggy()) {
+    auto ru = recovery_state.get_readable_until();
+    if (ru == ceph::signedspan::zero()) {
+      dout(10) << __func__ << " still laggy (mnow " << mnow
+	       << ", readable_until zero)" << dendl;
+    } else if (mnow >= ru) {
+      dout(10) << __func__ << " still laggy (mnow " << mnow
+	       << " >= readable_until " << ru << ")" << dendl;
+    } else {
+      dout(10) << __func__ << " no longer laggy (mnow " << mnow
+	       << " < readable_until " << ru << ")" << dendl;
+      state_clear(PG_STATE_LAGGY);
+      pub = true;
+    }
+  }
+  if (pub) {
+    publish_stats_to_osd();
+  }
+  if (!is_laggy() && !is_wait()) {
+    requeue_ops(waiting_for_readable);
+  }
+}
+
 bool PrimaryLogPG::pgls_filter(const PGLSFilter& filter, const hobject_t& sobj)
 {
   bufferlist bl;
@@ -1705,7 +1792,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
-    if (!(is_primary() || is_replica())) {
+    if (!(is_primary() || is_nonprimary())) {
       osd->handle_misdirected_op(this, op);
       return;
     }
@@ -1715,6 +1802,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+  }
+
+  if (!check_laggy(op)) {
+    return;
   }
 
   if (!op_has_sufficient_caps(op)) {
@@ -1864,6 +1955,9 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       dout(20) << __func__ << ": waiting for scrub" << dendl;
       waiting_for_scrub.push_back(op);
       op->mark_delayed("waiting for scrub");
+      return;
+    }
+    if (!check_laggy_requeue(op)) {
       return;
     }
 
@@ -2221,6 +2315,9 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 	dout(20) << __func__ << ": waiting for scrub" << dendl;
 	waiting_for_scrub.push_back(op);
 	op->mark_delayed("waiting for scrub");
+	return cache_result_t::BLOCKED_RECOVERY;
+      }
+      if (!check_laggy_requeue(op)) {
 	return cache_result_t::BLOCKED_RECOVERY;
       }
       
@@ -3580,6 +3677,9 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
       dout(10) << __func__ << " " << hoid
 	       << " no op, dropping on the floor" << dendl;
     }
+    return;
+  }
+  if (op && !check_laggy_requeue(op)) {
     return;
   }
   if (!obc) { // we need to create an ObjectContext
@@ -11986,6 +12086,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   requeue_ops(waiting_for_peered);
   requeue_ops(waiting_for_flush);
   requeue_ops(waiting_for_active);
+  requeue_ops(waiting_for_readable);
 
   clear_scrub_reserved();
 
@@ -14309,6 +14410,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 	requeue_op(op);
       requeue_ops(waiting_for_flush);
       requeue_ops(waiting_for_active);
+      requeue_ops(waiting_for_readable);
       requeue_ops(waiting_for_scrub);
       requeue_ops(waiting_for_cache_not_full);
       objects_blocked_on_cache_full.clear();
