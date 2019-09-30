@@ -566,34 +566,6 @@ def command_bootstrap():
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
 
-    # ssh
-    if not args.skip_ssh:
-        logging.info('Generating ssh key...')
-        (ssh_key, ssh_pub) = gen_ssh_key(fsid)
-        ssh_config = ('Host *\n'
-                      'IdentifyFile /var/lib/ceph/ssh/id_rsa\n'
-                      'User root\n'
-                      'StrictHostKeyChecking no\n')
-        mgr_dir = get_data_dir(args.data_dir, fsid, 'mgr', mgr_id)
-        makedirs(os.path.join(mgr_dir, 'ssh'))
-        os.chown(os.path.join(mgr_dir, 'ssh'), uid, gid)
-        with open(os.path.join(mgr_dir, 'ssh', 'config'), 'w') as f:
-            os.fchown(f.fileno(), uid, gid)
-            f.write(ssh_config)
-        with open(os.path.join(mgr_dir, 'ssh', 'id_rsa'), 'w') as f:
-            os.fchown(f.fileno(), uid, gid)
-            os.fchmod(f.fileno(), 0o600)
-            f.write(ssh_key)
-        with open(os.path.join(mgr_dir, 'ssh', 'id_rsa.pub'), 'w') as f:
-            os.fchown(f.fileno(), uid, gid)
-            os.fchmod(f.fileno(), 0o600)
-            f.write(ssh_pub)
-
-        logging.info('Adding key to root@localhost\'s authorized_keys...')
-        with open('/root/.ssh/authorized_keys', 'a') as f:
-            os.fchmod(f.fileno(), 0o600)  # just in case we created it
-            f.write(ssh_pub + '\n')
-
     # output files
     if args.output_keyring:
         with open(args.output_keyring, 'w') as f:
@@ -605,6 +577,60 @@ def command_bootstrap():
         with open(args.output_config, 'w') as f:
             f.write(config)
         logging.info('wrote config to %s' % args.output_config)
+
+    # ssh
+    if not args.skip_ssh:
+        logging.info('Generating ssh key...')
+        (ssh_key, ssh_pub) = gen_ssh_key(fsid)
+
+        tmp_key = tempfile.NamedTemporaryFile(mode='w')
+        os.fchmod(tmp_key.fileno(), 0o600)
+        os.fchown(tmp_key.fileno(), uid, gid)
+        tmp_key.write(ssh_key)
+        tmp_key.flush()
+        tmp_pub = tempfile.NamedTemporaryFile(mode='w')
+        os.fchmod(tmp_pub.fileno(), 0o600)
+        os.fchown(tmp_pub.fileno(), uid, gid)
+        tmp_pub.write(ssh_pub)
+        tmp_pub.flush()
+
+        CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'config-key',
+                'set',
+                'mgr/ssh/ssh_identity_key',
+                '-i', '/tmp/key'],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+               tmp_key.name: '/tmp/key:z',
+            },
+        ).run()
+        CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'config-key',
+                'set',
+                'mgr/ssh/ssh_identity_pub',
+                '-i', '/tmp/pub'],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+                tmp_pub.name: '/tmp/pub:z',
+            },
+        ).run()
+
+        logging.info('Adding key to root@localhost\'s authorized_keys...')
+        with open('/root/.ssh/authorized_keys', 'a') as f:
+            os.fchmod(f.fileno(), 0o600)  # just in case we created it
+            f.write(ssh_pub + '\n')
 
     return 0
 
