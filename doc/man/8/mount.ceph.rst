@@ -135,6 +135,14 @@ Options
   for autodiscovery of monitor addresses and auth secrets. The default is
   to use the standard search path for ceph.conf files.
 
+:command:`recover_session=<no|clean>`
+  Set auto reconnect mode in the case where the client is blacklisted. The
+  available modes are ``no`` and ``clean``. The default is ``no``.
+
+  - ``no``: never attempt to reconnect when client detects that it has been blacklisted. Blacklisted clients will not attempt to reconnect and their operations will fail too.
+
+  - ``clean``: client reconnects to the ceph cluster automatically when it detects that it has been blacklisted. During reconnect, client drops dirty data/metadata, invalidates page caches and writable file handles.  After reconnect, file locks become stale because the MDS loses track of them. If an inode contains any stale file locks, read/write on the inode is not allowed until applications release all stale file locks.
+
 Mount Secrets
 =============
 If the `secret` and `secretfile` options are not specified on the command-line
