@@ -2130,7 +2130,6 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
   bufferlist bl;
   mds_rank_t whoami = mds->get_nodeid();
   Session *session = mdr->session;
-  client_t client = mdr->get_client();
   snapid_t snapid = mdr->snapid;
   utime_t now = ceph_clock_now();
 
@@ -2170,13 +2169,19 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
     dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
     encode(dn->get_name(), bl);
-    if (snapid == CEPH_NOSNAP)
-      mds->locker->issue_client_lease(dn, client, bl, now, session);
-    else {
-      //null lease
-      LeaseStat e;
-      mds->locker->encode_lease(bl, session->info, e);
+
+    int lease_mask = 0;
+    CDentry::linkage_t *dnl = dn->get_linkage(mdr->get_client(), mdr);
+    if (dnl->is_primary()) {
+      ceph_assert(dnl->get_inode() == in);
+      lease_mask = CEPH_LEASE_PRIMARY_LINK;
+    } else {
+      if (dnl->is_remote())
+	ceph_assert(dnl->get_remote_ino() == in->ino());
+      else
+	ceph_assert(!in);
     }
+    mds->locker->issue_client_lease(dn, mdr, lease_mask, now, bl);
     dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
   } else
     reply->head.is_dentry = 0;
@@ -4547,7 +4552,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     encode(dn->get_name(), dnbl);
-    mds->locker->issue_client_lease(dn, client, dnbl, now, mdr->session);
+    int lease_mask = dnl->is_primary() ? CEPH_LEASE_PRIMARY_LINK : 0;
+    mds->locker->issue_client_lease(dn, mdr, lease_mask, now, dnbl);
 
     // inode
     dout(12) << "including inode " << *in << dendl;
@@ -6287,7 +6293,8 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
     dn->push_projected_linkage();
   }
 
-  journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
+  journal_and_reply(mdr, (inc ? targeti : nullptr), dn, le,
+		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
 }
 
 void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
