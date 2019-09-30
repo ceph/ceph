@@ -4113,24 +4113,28 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 }
 
 
-void Locker::issue_client_lease(CDentry *dn, client_t client,
-			       bufferlist &bl, utime_t now, Session *session)
+void Locker::issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask,
+			        utime_t now, bufferlist &bl)
 {
+  client_t client = mdr->get_client();
+  Session *session = mdr->session;
+
   CInode *diri = dn->get_dir()->get_inode();
-  if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
-      ((!diri->filelock.can_lease(client) &&
-	(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)) == 0)) &&
-      dn->lock.can_lease(client)) {
-    int pool = 1;   // fixme.. do something smart!
+  if (mdr->snapid == CEPH_NOSNAP &&
+      dn->lock.can_lease(client) &&
+      !diri->is_stray() &&  // do not issue dn leases in stray dir!
+      !diri->filelock.can_lease(client) &&
+      !(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL))) {
     // issue a dentry lease
     ClientLease *l = dn->add_client_lease(client, session);
     session->touch_lease(l);
     
+    int pool = 1;   // fixme.. do something smart!
     now += mdcache->client_lease_durations[pool];
     mdcache->touch_client_lease(l, pool, now);
 
     LeaseStat lstat;
-    lstat.mask = CEPH_LEASE_VALID;
+    lstat.mask = CEPH_LEASE_VALID | mask;
     lstat.duration_ms = (uint32_t)(1000 * mdcache->client_lease_durations[pool]);
     lstat.seq = ++l->seq;
     encode_lease(bl, session->info, lstat);
@@ -4139,6 +4143,7 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
   } else {
     // null lease
     LeaseStat lstat;
+    lstat.mask = mask;
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }

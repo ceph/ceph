@@ -694,6 +694,7 @@ struct ceph_mds_reply_lease {
 } __attribute__ ((packed));
 
 #define CEPH_LEASE_VALID	(1 | 2) /* old and new bit values */
+#define CEPH_LEASE_PRIMARY_LINK	4	/* primary linkage */
 
 struct ceph_mds_reply_dirfrag {
 	__le32 frag;            /* fragment */
