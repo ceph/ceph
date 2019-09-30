@@ -127,6 +127,7 @@ try:
     from teuthology.exceptions import CommandFailedError
     from tasks.ceph_manager import CephManager
     from tasks.cephfs.fuse_mount import FuseMount
+    from tasks.cephfs.kernel_mount import KernelMount
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
     from mgr.mgr_test_case import MgrCluster
     from teuthology.contextutil import MaxWhileTries
@@ -473,6 +474,191 @@ def safe_kill(pid):
         else:
             raise
 
+
+class LocalKernelMount(KernelMount):
+    def __init__(self, ctx, test_dir, client_id):
+        super(LocalKernelMount, self).__init__(ctx, test_dir, client_id, LocalRemote(), None, None, None)
+
+    @property
+    def config_path(self):
+        return "./ceph.conf"
+
+    def get_keyring_path(self):
+        # This is going to end up in a config file, so use an absolute path
+        # to avoid assumptions about daemons' pwd
+        return os.path.abspath("./client.{0}.keyring".format(self.client_id))
+
+    def run_shell(self, args, wait=True, stdin=None, check_status=True, omit_sudo=True):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+                                      stdin=stdin, check_status=check_status,
+                                      omit_sudo=omit_sudo)
+
+    def run_as_user(self, args, user, wait=True, stdin=None, check_status=True):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        if isinstance(args, str):
+            args = 'sudo -u %s -s /bin/bash -c %s' % (user, args)
+        elif isinstance(args, list):
+            cmdlist = args
+            cmd = ''
+            for i in cmdlist:
+                cmd = cmd + i + ' '
+            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c']
+            args.append(cmd)
+
+        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+                                      check_status=check_status, stdin=stdin,
+                                      omit_sudo=False)
+
+    def run_as_root(self, args, wait=True, stdin=None, check_status=True):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        if isinstance(args, str):
+            args = 'sudo ' + args
+        if isinstance(args, list):
+            args.insert(0, 'sudo')
+
+        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+                                      check_status=check_status,
+                                      omit_sudo=False)
+
+    def testcmd(self, args, wait=True, stdin=None, omit_sudo=True):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        return self.run_shell(args, wait=wait, stdin=stdin, check_status=False,
+                              omit_sudo=omit_sudo)
+
+    def testcmd_as_user(self, args, user, wait=True, stdin=None):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        return self.run_as_user(args, user=user, wait=wait, stdin=stdin,
+                                check_status=False)
+
+    def testcmd_as_root(self, args, wait=True, stdin=None):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        return self.run_as_root(args, wait=wait, stdin=stdin,
+                                check_status=False)
+
+    def setupfs(self, name=None):
+        if name is None and self.fs is not None:
+            # Previous mount existed, reuse the old name
+            name = self.fs.name
+        self.fs = LocalFilesystem(self.ctx, name=name)
+        log.info('Wait for MDS to reach steady state...')
+        self.fs.wait_for_daemons()
+        log.info('Ready to start {}...'.format(type(self).__name__))
+
+    @property
+    def _prefix(self):
+        return BIN_PREFIX
+
+    def _asok_path(self):
+        # In teuthology, the asok is named after the PID of the ceph-fuse process, because it's
+        # run foreground.  When running it daemonized however, the asok is named after
+        # the PID of the launching process, not the long running ceph-fuse process.  Therefore
+        # we need to give an exact path here as the logic for checking /proc/ for which
+        # asok is alive does not work.
+
+        # Load the asok path from ceph.conf as vstart.sh now puts admin sockets
+        # in a tmpdir. All of the paths are the same, so no need to select
+        # based off of the service type.
+        d = "./out"
+        with open(self.config_path) as f:
+            for line in f:
+                asok_conf = re.search("^\s*admin\s+socket\s*=\s*(.*?)[^/]+$", line)
+                if asok_conf:
+                    d = asok_conf.groups(1)[0]
+                    break
+        path = "{0}/client.{1}.{2}.asok".format(d, self.client_id, self.fuse_daemon.subproc.pid)
+        log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
+        return path
+
+    def umount(self, force=False):
+        log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
+
+        cmd=['sudo', 'umount', self.mountpoint]
+        if force:
+            cmd.append('-f')
+
+        try:
+            self.client_remote.run(args=cmd, timeout=(15*60), omit_sudo=False)
+        except Exception as e:
+            self.client_remote.run(args=[
+                'sudo',
+                run.Raw('PATH=/usr/sbin:$PATH'),
+                'lsof',
+                run.Raw(';'),
+                'ps', 'auxf',
+            ], timeout=(15*60), omit_sudo=False)
+            raise e
+
+        rproc = self.client_remote.run(args=[
+                'rmdir',
+                '--',
+                self.mountpoint,
+            ])
+        rproc.wait()
+        self.mounted = False
+
+    def mount(self, mount_path=None, mount_fs_name=None):
+        self.setupfs(name=mount_fs_name)
+
+        log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
+            id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
+
+        self.client_remote.run(
+            args=[
+                'mkdir',
+                '--',
+                self.mountpoint,
+            ],
+            timeout=(5*60),
+        )
+
+        if mount_path is None:
+            mount_path = "/"
+
+        opts = 'name={id},norequire_active_mds,conf={conf}'.format(id=self.client_id,
+                                                        conf=self.config_path)
+
+        if mount_fs_name is not None:
+            opts += ",mds_namespace={0}".format(mount_fs_name)
+
+        self.client_remote.run(
+            args=[
+                'sudo',
+                './bin/mount.ceph',
+                ':{mount_path}'.format(mount_path=mount_path),
+                self.mountpoint,
+                '-v',
+                '-o',
+                opts
+            ],
+            timeout=(30*60),
+            omit_sudo=False,
+        )
+
+        self.client_remote.run(
+            args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
+
+        self.mounted = True
+
+    def _run_python(self, pyscript, py_version='python'):
+        """
+        Override this to remove the daemon-helper prefix that is used otherwise
+        to make the process killable.
+        """
+        return self.client_remote.run(args=[py_version, '-c', pyscript],
+                                      wait=False)
 
 class LocalFuseMount(FuseMount):
     def __init__(self, ctx, test_dir, client_id):
@@ -1031,6 +1217,7 @@ def exec_test():
     global opt_log_ps_output
     opt_log_ps_output = False
     opt_clear_old_log = False
+    use_kernel_client = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1051,6 +1238,8 @@ def exec_test():
         elif f == '--clear-old-log':
             opt_clear_old_log = True
             clear_old_log()
+        elif f == "--kclient":
+            use_kernel_client = True
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1134,7 +1323,11 @@ def exec_test():
 
             open("./keyring", "a").write(p.stdout.getvalue())
 
-        mount = LocalFuseMount(ctx, test_dir, client_id)
+        if use_kernel_client:
+            mount = LocalKernelMount(ctx, test_dir, client_id)
+        else:
+            mount = LocalFuseMount(ctx, test_dir, client_id)
+
         mounts.append(mount)
         if mount.is_mounted():
             log.warn("unmounting {0}".format(mount.mountpoint))

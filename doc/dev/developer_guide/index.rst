@@ -1630,7 +1630,7 @@ it would execute a single test.
           compatible with ``python2``. Therefore, use ``python2`` to run the
           tests locally.
 
-vstart_runner.py can take 3 options -
+vstart_runner.py can take the following options -
 
 --clear-old-log             deletes old log file before running the test
 --create                    create Ceph cluster before running a test
@@ -1640,6 +1640,16 @@ vstart_runner.py can take 3 options -
 --log-ps-output             logs ps output; might be useful while debugging
 --teardown                  tears Ceph cluster down after test(s) has finished
                             runnng
+--kclient                   use the kernel cephfs client instead of FUSE
+
+.. note:: If using the FUSE client, ensure that the fuse package is installed
+          and enabled on the system and that ``user_allow_other`` is added
+          to ``/etc/fuse.conf``.
+
+.. note:: If using the kernel client, the user must have the ability to run
+          commands with passwordless sudo access. A failure on the kernel
+          client may crash the host, so it's recommended to use this
+          functionality within a virtual machine.
 
 Internal working of vstart_runner.py -
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1665,12 +1675,6 @@ vstart_runner.py primarily does three things -
     ``LocalCephManager`` provides methods to run Ceph cluster commands with
     and without admin socket and ``LocalCephCluster`` provides methods to set
     or clear ``ceph.conf``.
-
-.. note:: vstart_runner.py can mount CephFS only with FUSE. Therefore, make
-          sure that the package for FUSE is installed and enabled on your
-          system.
-
-.. note:: Make sure that ``use_allow_other`` is added to ``/etc/fuse.conf``.
 
 .. _vstart_runner.py: https://github.com/ceph/ceph/blob/master/qa/tasks/vstart_runner.py
 .. _test_reconnect_timeout: https://github.com/ceph/ceph/blob/master/qa/tasks/cephfs/test_client_recovery.py#L133
