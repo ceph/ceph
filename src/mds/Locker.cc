@@ -380,6 +380,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       if (mdr->lock_cache) {
 	CDir *dir;
 	if (CInode *in = dynamic_cast<CInode*>(object)) {
+	  ceph_assert(!in->is_frozen_inode() && !in->is_frozen_auth_pin());
 	  dir = in->get_projected_parent_dir();
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(object)) {
 	  dir = dn->get_dir();
@@ -783,6 +784,14 @@ void Locker::put_lock_cache(MDLockCache* lock_cache)
     return;
 
   ceph_assert(lock_cache->invalidating);
+
+  CInode *diri = lock_cache->get_dir_inode();
+  for (auto dir : lock_cache->auth_pinned_dirfrags) {
+    if (dir->get_inode() != diri)
+      continue;
+    dir->enable_frozen_inode();
+  }
+
   mds->queue_waiter(new C_MDL_DropCache(this, lock_cache));
 }
 
@@ -879,6 +888,10 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
       dout(10) << " can't auth_pin(!auth|freezing?) dirfrag " << *dir << ", noop" << dendl;
       return;
     }
+    if (dir->is_any_freezing_or_frozen_inode()) {
+      dout(10) << " there is freezing/frozen inode in " << *dir << ", noop" << dendl;
+      return;
+    }
   }
 
   for (auto& p : mdr->locks) {
@@ -893,9 +906,12 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
 
   auto lock_cache = new MDLockCache(cap, opcode);
 
-  // prevent subtree migration
-  for (auto dir : dfv)
+  for (auto dir : dfv) {
+    // prevent subtree migration
     lock_cache->auth_pin(dir);
+    // prevent frozen inode
+    dir->disable_frozen_inode();
+  }
 
   for (auto& p : mdr->object_states) {
     if (p.first != diri && !ancestors.count(p.first))
@@ -2154,7 +2170,6 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   return cap;
 }
-
 
 void Locker::issue_caps_set(set<CInode*>& inset)
 {
