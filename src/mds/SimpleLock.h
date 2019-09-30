@@ -28,6 +28,9 @@
 struct MutationImpl;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
+struct MDLockCache;
+struct MDLockCacheItem;
+
 extern "C" {
 #include "locks.h"
 }
@@ -188,6 +191,7 @@ protected:
   enum {
     LEASED		= 1 << 0,
     NEED_RECOVER	= 1 << 1,
+    CACHED		= 1 << 2,
   };
 
 private:
@@ -203,6 +207,8 @@ private:
     client_t xlock_by_client = -1;
     client_t excl_client = -1;
 
+    elist<MDLockCacheItem*> lock_caches;
+
     bool empty() {
       return
 	gather_set.empty() &&
@@ -210,10 +216,10 @@ private:
 	num_xlock == 0 &&
 	xlock_by.get() == NULL &&
 	xlock_by_client == -1 &&
-	excl_client == -1;
+	excl_client == -1 &&
+	lock_caches.empty();
     }
-
-    unstable_bits_t() {}
+    unstable_bits_t();
   };
 
   mutable std::unique_ptr<unstable_bits_t> _unstable;
@@ -315,8 +321,13 @@ public:
   bool is_waiter_for(uint64_t mask) const {
     return parent->is_waiter_for(mask << get_wait_shift());
   }
-  
-  
+
+  bool is_cached() const {
+    return state_flags & CACHED;
+  }
+  void add_cache(MDLockCacheItem& item);
+  void remove_cache(MDLockCacheItem& item);
+  MDLockCache* get_first_cache();
 
   // state
   int get_state() const { return state; }

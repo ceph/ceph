@@ -41,3 +41,32 @@ void SimpleLock::dump(Formatter *f) const {
   }
   f->close_section();
 }
+
+SimpleLock::unstable_bits_t::unstable_bits_t() :
+  lock_caches(member_offset(MDLockCache::LockItem, item_lock)) {}
+
+void SimpleLock::add_cache(MDLockCacheItem& item)
+{
+  more()->lock_caches.push_back(&item.item_lock);
+  state_flags |= CACHED;
+}
+
+void SimpleLock::remove_cache(MDLockCacheItem& item) {
+  auto& lock_caches = more()->lock_caches;
+  item.item_lock.remove_myself();
+  if (lock_caches.empty()) {
+    state_flags &= ~CACHED;
+    try_clear_more();
+  }
+}
+
+MDLockCache* SimpleLock::get_first_cache()
+{
+  if (have_more()) {
+    auto& lock_caches = more()->lock_caches;
+    if (!lock_caches.empty()) {
+      return lock_caches.front()->parent;
+    }
+  }
+  return nullptr;
+}
