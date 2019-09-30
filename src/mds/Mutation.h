@@ -138,6 +138,11 @@ public:
   lock_set locks;  // full ordering
 
   MDLockCache* lock_cache = nullptr;
+  bool lock_cache_disabled = false;
+
+  void disable_lock_cache() {
+    lock_cache_disabled = true;
+  }
 
   lock_iterator emplace_lock(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) {
     last_locked = l;
@@ -493,6 +498,7 @@ struct MDLockCache : public MutationImpl {
   CInode *diri;
   Capability *client_cap;
   int opcode;
+  file_layout_t dir_layout;
 
   elist<MDLockCache*>::item item_cap_lock_cache;
 
@@ -517,6 +523,13 @@ struct MDLockCache : public MutationImpl {
   }
 
   CInode *get_dir_inode() { return diri; }
+  void set_dir_layout(file_layout_t& layout) {
+    dir_layout = layout;
+  }
+  const file_layout_t& get_dir_layout() const {
+    return dir_layout;
+  }
+
   void attach_locks();
   void attach_dirfrags(std::vector<CDir*>&& dfv);
   void detach_all();

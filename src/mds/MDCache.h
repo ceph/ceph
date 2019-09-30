@@ -121,6 +121,7 @@ static const int MDS_TRAVERSE_WANT_DIRLAYOUT	= (1 << 6);
 static const int MDS_TRAVERSE_RDLOCK_PATH	= (1 << 7);
 static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
 static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
+static const int MDS_TRAVERSE_CHECK_LOCKCACHE	= (1 << 10);
 
 
 // flags for predirty_journal_parents()
