@@ -294,10 +294,10 @@ class Module(MgrModule):
             'runtime': True,
         },
         {
-            'name': 'upmap_max_iterations',
+            'name': 'upmap_max_optimizations',
             'type': 'uint',
             'default': 10,
-            'desc': 'maximum upmap optimization iterations',
+            'desc': 'maximum upmap optimizations to make per attempt',
             'runtime': True,
         },
         {
@@ -901,11 +901,10 @@ class Module(MgrModule):
                 detail = 'Unrecognized mode %s' % plan.mode
                 self.log.info(detail)
                 return -errno.EINVAL, detail
-        ##
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = self.get_module_option('upmap_max_iterations')
+        max_optimizations = self.get_module_option('upmap_max_optimizations')
         max_deviation = self.get_module_option('upmap_max_deviation')
 
         ms = plan.initial
@@ -920,7 +919,7 @@ class Module(MgrModule):
 
         inc = plan.inc
         total_did = 0
-        left = max_iterations
+        left = max_optimizations
         osdmap_dump = self.get_osdmap().dump()
         pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
                                if p['pg_num'] > p['pg_num_target']]
@@ -941,12 +940,29 @@ class Module(MgrModule):
         # shuffle so all pools get equal (in)attention
         random.shuffle(classified_pools)
         for it in classified_pools:
-            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, left, it)
+            pool_dump = osdmap_dump.get('pools', [])
+            num_pg = 0
+            for p in pool_dump:
+                if p['pool_name'] in it:
+                    num_pg += p['pg_num']
+
+            # note that here we deliberately exclude any scrubbing pgs too
+            # since scrubbing activities have significant impacts on performance
+            pool_ids = list(p['pool'] for p in pool_dump if p['pool_name'] in it)
+            num_pg_active_clean = 0
+            pg_dump = self.get('pg_dump')
+            for p in pg_dump['pg_stats']:
+                pg_pool = p['pgid'].split('.')[0]
+                if len(pool_ids) and int(pg_pool) not in pool_ids:
+                    continue
+                if p['state'] == 'active+clean':
+                    num_pg_active_clean += 1
+
+            available = max_optimizations - (num_pg - num_pg_active_clean)
+            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, available, it)
+            self.log.info('prepared %d changes for pool(s) %s' % (did, it))
             total_did += did
-            left -= did
-            if left <= 0:
-                break
-        self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
+        self.log.info('prepared %d changes in total' % total_did)
         if total_did == 0:
             return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or pool(s)\' pg_num is decreasing, ' \
