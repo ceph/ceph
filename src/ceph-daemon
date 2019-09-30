@@ -403,6 +403,7 @@ class CephContainer:
             'run',
             '-it',
             '--net=host',
+            '--privileged',
         ] + self.podman_args + envs + vols + [
             '--entrypoint', '/bin/bash',
             self.image
