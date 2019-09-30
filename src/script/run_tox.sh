@@ -27,15 +27,15 @@ example:
 
 following command will run tox with envlist of "py27,py3" using the "tox.ini" in current directory.
 
-  $prog_name --tox-env py27,py3
+  $prog_name --tox-envs py27,py3
 
 following command will run tox with envlist of "py27" using "src/pybind/mgr/ansible/tox.ini"
 
-  $prog_name --tox-env py27 ansible
+  $prog_name --tox-envs py27 ansible
 
 following command will run tox with envlist of "py27" using "/ceph/src/python-common/tox.ini"
 
-  $prog_name --tox-env py27 --tox-path /ceph/src/python-common
+  $prog_name --tox-envs py27 --tox-path /ceph/src/python-common
 EOF
 }
 
@@ -115,6 +115,11 @@ function main() {
     fi
 
     if [ ! -f ${venv_path}/bin/activate ]; then
+        if [ -d "$venv_path" ]; then
+            cd $venv_path
+            echo "$PWD already exists, but it's not a virtualenv. test_name empty?"
+            exit 1
+        fi
         $source_dir/src/tools/setup-virtualenv.sh ${venv_path}
     fi
     source ${venv_path}/bin/activate
