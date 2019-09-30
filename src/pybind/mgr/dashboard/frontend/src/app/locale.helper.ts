@@ -55,6 +55,7 @@ export class LocaleHelper {
   }
 
   static setLocale(lang: string) {
+    document.cookie = `cd-lang=${lang}`;
     window.localStorage.setItem('lang', lang);
   }
 
