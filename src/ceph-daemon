@@ -161,7 +161,7 @@ def get_container(fsid, daemon_type, daemon_id):
 
     return CephContainer(
         image=args.image,
-        entrypoint='ceph-' + daemon_type,
+        entrypoint='/usr/bin/ceph-' + daemon_type,
         args=['-i', daemon_id,
               '-f', # foreground
         ] + extra_args + get_daemon_args(fsid, daemon_type, daemon_id),
@@ -173,7 +173,7 @@ def get_container(fsid, daemon_type, daemon_id):
 def extract_uid_gid():
     out = CephContainer(
         image=args.image,
-        entrypoint='grep',
+        entrypoint='/usr/bin/grep',
         args=['ceph', '/etc/passwd'],
     ).run().decode('utf-8')
     (uid, gid) = out.split(':')[2:4]
@@ -202,7 +202,7 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         log_dir = get_log_dir(args.log_dir, fsid)
         out = CephContainer(
             image=args.image,
-            entrypoint='ceph-mon',
+            entrypoint='/usr/bin/ceph-mon',
             args=['--mkfs',
                   '-i', daemon_id,
                   '--fsid', fsid,
@@ -374,7 +374,7 @@ class CephContainer:
             '--rm',
             '--net=host',
         ] + self.podman_args + cname + envs + vols + [
-            '--entrypoint', f'/usr/bin/{self.entrypoint}',
+            '--entrypoint', self.entrypoint,
             self.image
         ] + self.args
 
@@ -430,17 +430,17 @@ def command_bootstrap():
     logging.info('Creating initial keys...')
     mon_key = CephContainer(
         image=args.image,
-        entrypoint='ceph-authtool',
+        entrypoint='/usr/bin/ceph-authtool',
         args=['--gen-print-key'],
     ).run().decode('utf-8').strip()
     admin_key = CephContainer(
         image=args.image,
-        entrypoint='ceph-authtool',
+        entrypoint='/usr/bin/ceph-authtool',
         args=['--gen-print-key'],
     ).run().decode('utf-8').strip()
     mgr_key = CephContainer(
         image=args.image,
-        entrypoint='ceph-authtool',
+        entrypoint='/usr/bin/ceph-authtool',
         args=['--gen-print-key'],
     ).run().decode('utf-8').strip()
 
@@ -489,7 +489,7 @@ def command_bootstrap():
     os.fchmod(tmp_monmap.fileno(), 0o644)
     out = CephContainer(
         image=args.image,
-        entrypoint='monmaptool',
+        entrypoint='/usr/bin/monmaptool',
         args=['--create',
               '--clobber',
               '--fsid', fsid,
@@ -508,7 +508,7 @@ def command_bootstrap():
     log_dir = get_log_dir(args.log_dir, fsid)
     out = CephContainer(
         image=args.image,
-        entrypoint='ceph-mon',
+        entrypoint='/usr/bin/ceph-mon',
         args=['--mkfs',
               '-i', mon_id,
               '--fsid', fsid,
