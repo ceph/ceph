@@ -1340,7 +1340,17 @@ void MonClient::start_mon_command(const string &mon_name,
     return;
   }
   MonCommand *r = new MonCommand(++last_mon_command_tid);
-  r->target_name = mon_name;
+
+  // detect/tolerate mon *rank* passed as a string
+  string err;
+  int rank = strict_strtoll(mon_name.c_str(), 10, &err);
+  if (err.size() == 0 && rank >= 0) {
+    ldout(cct,10) << __func__ << " interpreting name '" << mon_name
+		  << "' as rank " << rank << dendl;
+    r->target_rank = rank;
+  } else {
+    r->target_name = mon_name;
+  }
   r->cmd = cmd;
   r->inbl = inbl;
   r->poutbl = outbl;
