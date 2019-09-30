@@ -711,6 +711,20 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
   }
 
   if (op.ofs >= part_header.max_ofs) {
+    if (part_header.max_ofs > part_header.params.full_size_threshold) {
+      /*
+       * trim full part completely: remove object
+       */
+
+      r = cls_cxx_remove(hctx);
+      if (r < 0) {
+        CLS_LOG(0, "%s(): ERROR: cls_cxx_remove() returned r=%d", __func__, r);
+        return r;
+      }
+
+      return 0;
+    }
+    
     part_header.min_ofs = part_header.max_ofs;
     part_header.min_index = part_header.max_index;
   } else {
@@ -722,8 +736,14 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
       return r;
     }
 
-    part_header.min_ofs = op.ofs;
-    part_header.min_index = pre_header.index;
+    r = reader.get_next_entry(nullptr, nullptr, nullptr);
+    if (r < 0) {
+      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d", __func__, r);
+      return r;
+    }
+
+    part_header.min_ofs = reader.get_ofs();
+    part_header.min_index = pre_header.index + 1;
   }
 
   r = write_part_header(hctx, part_header);
@@ -764,7 +784,7 @@ static int fifo_part_list_op(cls_method_context_t hctx,
 
   EntryReader reader(hctx, part_header, op.ofs);
 
-  if (op.ofs > 0 &&
+  if (op.ofs >= part_header.min_ofs &&
       !reader.end()) {
     r = reader.get_next_entry(nullptr, nullptr, nullptr);
     if (r < 0) {
