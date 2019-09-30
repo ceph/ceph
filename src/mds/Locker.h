@@ -68,7 +68,7 @@ public:
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
   int get_cap_bit_for_lock_cache(int op);
-  void create_lock_cache(MDRequestRef& mdr, CInode *diri);
+  void create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout=nullptr);
   bool find_and_attach_lock_cache(MDRequestRef& mdr, CInode *diri);
   void invalidate_lock_caches(CDir *dir);
   void invalidate_lock_caches(SimpleLock *lock);

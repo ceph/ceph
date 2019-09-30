@@ -362,10 +362,16 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     if (!object->is_auth()) {
-      ceph_assert(!mdr->lock_cache);
+      if (mdr->lock_cache) { // debug
+	ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
+	CDentry *dn = mdr->dn[0].back();
+	ceph_assert(dn->get_projected_linkage()->is_remote());
+      }
+
       if (object->is_ambiguous_auth()) {
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
+	mdr->disable_lock_cache();
 	drop_locks(mdr.get());
 	mdr->drop_local_auth_pins();
 	marker.message = "waiting for single auth, object is being migrated";
@@ -387,12 +393,20 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	} else {
 	  ceph_assert(0 == "unknown type of lock parent");
 	}
-	ceph_assert(dir->get_inode() == mdr->lock_cache->get_dir_inode());
-	/* forcibly auth pin if lock cache is used */
-	continue;
+	if (dir->get_inode() == mdr->lock_cache->get_dir_inode()) {
+	  // forcibly auth pin if there is lock cache on parent dir
+	  continue;
+	}
+
+	{ // debug
+	  ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
+	  CDentry *dn = mdr->dn[0].back();
+	  ceph_assert(dn->get_projected_linkage()->is_remote());
+	}
       }
 
       // wait
+      mdr->disable_lock_cache();
       drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
       if (auth_pin_nonblocking) {
@@ -868,7 +882,7 @@ void Locker::invalidate_lock_caches(SimpleLock *lock)
   }
 }
 
-void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
+void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout)
 {
   if (mdr->lock_cache)
     return;
@@ -955,6 +969,8 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
   }
 
   auto lock_cache = new MDLockCache(cap, opcode);
+  if (dir_layout)
+    lock_cache->set_dir_layout(*dir_layout);
   cap->set_lock_cache_allowed(get_cap_bit_for_lock_cache(opcode));
 
   for (auto dir : dfv) {

@@ -8111,7 +8111,13 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     return 1;
   }
 
-  if (rdlock_snap) {
+  if (flags & MDS_TRAVERSE_CHECK_LOCKCACHE)
+    mds->locker->find_and_attach_lock_cache(mdr, cur);
+
+  if (mdr && mdr->lock_cache) {
+    if (flags & MDS_TRAVERSE_WANT_DIRLAYOUT)
+      mdr->dir_layout = mdr->lock_cache->get_dir_layout();
+  } else if (rdlock_snap) {
     int n = (flags & MDS_TRAVERSE_RDLOCK_SNAP2) ? 1 : 0;
     if ((n == 0 && !(mdr->locking_state & MutationImpl::SNAP_LOCKED)) ||
 	(n == 1 && !(mdr->locking_state & MutationImpl::SNAP2_LOCKED))) {
@@ -8129,8 +8135,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 
   MutationImpl::LockOpVec lov;
 
-  unsigned depth = 0;
-  while (depth < path.depth()) {
+  for (unsigned depth = 0; depth < path.depth(); ) {
     dout(12) << "traverse: path seg depth " << depth << " '" << path[depth]
 	     << "' snapid " << snapid << dendl;
     
@@ -8236,13 +8241,17 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       if (rdlock_path) {
 	lov.clear();
 	if (xlock_dentry && depth == path.depth() - 1) {
-	  lov.add_wrlock(&cur->filelock);
-	  lov.add_wrlock(&cur->nestlock);
-	  if (rdlock_authlock)
-	    lov.add_rdlock(&cur->authlock);
-
+	  if (depth > 0 || !mdr->lock_cache) {
+	    lov.add_wrlock(&cur->filelock);
+	    lov.add_wrlock(&cur->nestlock);
+	    if (rdlock_authlock)
+	      lov.add_rdlock(&cur->authlock);
+	  }
 	  lov.add_xlock(&dn->lock);
 	} else {
+	  // force client to flush async dir operation if necessary
+	  if (cur->filelock.is_cached())
+	    lov.add_wrlock(&cur->filelock);
 	  lov.add_rdlock(&dn->lock);
 	}
 	if (!mds->locker->acquire_locks(mdr, lov)) {
@@ -8356,12 +8365,17 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	    if (rdlock_path) {
 	      lov.clear();
 	      if (xlock_dentry) {
-		lov.add_wrlock(&cur->filelock);
-		lov.add_wrlock(&cur->nestlock);
-		if (rdlock_authlock)
-		  lov.add_rdlock(&cur->authlock);
+		if (depth > 0 || !mdr->lock_cache) {
+		  lov.add_wrlock(&cur->filelock);
+		  lov.add_wrlock(&cur->nestlock);
+		  if (rdlock_authlock)
+		    lov.add_rdlock(&cur->authlock);
+		}
 		lov.add_xlock(&dn->lock);
 	      } else {
+		// force client to flush async dir operation if necessary
+		if (cur->filelock.is_cached())
+		  lov.add_wrlock(&cur->filelock);
 		lov.add_rdlock(&dn->lock);
 	      }
 	      if (!mds->locker->acquire_locks(mdr, lov)) {

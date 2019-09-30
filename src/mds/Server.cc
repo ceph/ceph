@@ -2995,6 +2995,7 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlave
   mds_rank_t from = mds_rank_t(ack->get_source().num());
 
   if (ack->is_req_blocked()) {
+    mdr->disable_lock_cache();
     // slave auth pin is blocked, drop locks to avoid deadlock
     mds->locker->drop_locks(mdr.get(), nullptr);
     return;
@@ -3411,6 +3412,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
   int flags = MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_PATH |
 	      MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_XLOCK_DENTRY |
 	      MDS_TRAVERSE_WANT_AUTH;
+  if (refpath.depth() == 1 && !mdr->lock_cache_disabled)
+    flags |= MDS_TRAVERSE_CHECK_LOCKCACHE;
   if (create)
     flags |= MDS_TRAVERSE_RDLOCK_AUTHLOCK;
   if (want_layout)
@@ -4295,6 +4298,9 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   if (!check_fragment_space(mdr, dir))
     return;
+
+  if (mdr->dn[0].size() == 1)
+    mds->locker->create_lock_cache(mdr, diri, &mdr->dir_layout);
 
   // create inode.
   CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
@@ -5836,6 +5842,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if ((mode & S_IFMT) == 0)
     mode |= S_IFREG;
 
+  mdr->disable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, false, S_ISREG(mode));
   if (!dn)
     return;
@@ -5920,6 +5927,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
 
+  mdr->disable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
   if (!dn)
     return;
@@ -6000,6 +6008,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
 void Server::handle_client_symlink(MDRequestRef& mdr)
 {
+  mdr->disable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
   if (!dn)
     return;
@@ -6699,6 +6708,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   // rmdir or unlink?
   bool rmdir = (req->get_op() == CEPH_MDS_OP_RMDIR);
 
+  if (rmdir)
+    mdr->disable_lock_cache();
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, true);
   if (!dn)
     return;
@@ -6830,6 +6841,9 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (!mdr->more()->waiting_on_slave.empty())
       return;  // we're waiting for a witness.
   }
+
+  if (!rmdir && dnl->is_primary() && mdr->dn[0].size() == 1)
+    mds->locker->create_lock_cache(mdr, diri);
 
   // ok!
   if (dnl->is_remote() && !dnl->get_inode()->is_auth()) 
