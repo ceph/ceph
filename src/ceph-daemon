@@ -163,13 +163,13 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
 
     return mounts
 
-def get_container(fsid, daemon_type, daemon_id):
+def get_container(fsid, daemon_type, daemon_id, privileged=False):
     if daemon_id:
         dname = daemon_type + '.' + daemon_id
     else:
         dname = daemon_type
     podman_args = []
-    if daemon_type == 'osd':
+    if daemon_type == 'osd' or privileged:
         podman_args += ['--privileged']
     return CephContainer(
         image=args.image,
@@ -659,7 +659,8 @@ def command_enter():
 def command_exec():
     (daemon_type, daemon_id) = args.name.split('.')
     (uid, gid) = extract_uid_gid()
-    c = get_container(args.fsid, daemon_type, daemon_id)
+    c = get_container(args.fsid, daemon_type, daemon_id,
+                      privileged=args.privileged)
     subprocess.call(c.exec_cmd(args.command))
 
 ##################################
@@ -869,6 +870,10 @@ parser_exec.add_argument(
     '--name', '-n',
     required=True,
     help='daemon name (type.id)')
+parser_exec.add_argument(
+    '--privileged',
+    action='store_true',
+    help='use a privileged container')
 parser_exec.add_argument(
     'command', nargs='+',
     help='command')
