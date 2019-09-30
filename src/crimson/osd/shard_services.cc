@@ -239,8 +239,11 @@ seastar::future<> ShardServices::osdmap_subscribe(version_t epoch, bool force_re
 
 HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
 {
-#warning writeme
-  return HeartbeatStampsRef();
+  auto [stamps, added] = heartbeat_stamps.try_emplace(peer);
+  if (added) {
+    stamps->second = ceph::make_ref<HeartbeatStamps>(peer);
+  }
+  return stamps->second;
 }
 
 };
