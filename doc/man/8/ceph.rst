@@ -13,6 +13,8 @@ Synopsis
 
 | **ceph** **compact**
 
+| **ceph** **config** [ *dump* | *ls* | *help* | *get* | *show* | *show-with-defaults* | *set* | *rm* | *log* | *reset* | *assimilate-conf* | *generate-minimal-conf* ] ...
+
 | **ceph** **config-key** [ *rm* | *exists* | *get* | *ls* | *dump* | *set* ] ...
 
 | **ceph** **daemon** *<name>* \| *<path>* *<command>* ...
@@ -172,6 +174,99 @@ Causes compaction of monitor's leveldb storage.
 Usage::
 
 	ceph compact
+
+
+config
+------
+
+Configure the cluster. By default, Ceph daemons and clients retrieve their
+configuration options from monitor when they start, and are updated if any of
+the tracked options is changed at run time. It uses following additional
+subcommand.
+
+Subcommand ``dump`` to dump all options for the cluster
+
+Usage::
+
+	ceph config dump
+
+Subcommand ``ls`` to list all option names for the cluster
+
+Usage::
+
+	ceph config ls
+
+Subcommand ``help`` to describe the specified configuration option
+
+Usage::
+
+    ceph config help <option>
+
+Subcommand ``get`` to dump the option(s) for the specified entity.
+
+Usage::
+
+    ceph config get <who> {<option>}
+
+Subcommand ``show`` to display the running configuration of the specified
+entity. Please note, unlike ``get``, which only shows the options managed
+by monitor, ``show`` displays all the configurations being actively used.
+These options are pulled from several sources, for instance, the compiled-in
+default value, the monitor's configuration database, ``ceph.conf`` file on
+the host. The options can even be overridden at runtime. So, there is chance
+that the configuration options in the output of ``show`` could be different
+from those in the output of ``get``.
+
+Usage::
+
+	ceph config show {<who>}
+
+Subcommand ``show-with-defaults`` to display the running configuration along with the compiled-in defaults of the specified entity
+
+Usage::
+
+	ceph config show {<who>}
+
+Subcommand ``set`` to set an option for one or more specified entities
+
+Usage::
+
+    ceph config set <who> <option> <value> {--force}
+
+Subcommand ``rm`` to clear an option for one or more entities
+
+Usage::
+
+    ceph config rm <who> <option>
+
+Subcommand ``log`` to show recent history of config changes. If `count` option
+is omitted it defeaults to 10.
+
+Usage::
+
+    ceph config log {<count>}
+
+Subcommand ``reset`` to revert configuration to the specified historical version
+
+Usage::
+
+    ceph config reset <version>
+
+
+Subcommand ``assimilate-conf`` to assimilate options from stdin, and return a
+new, minimal conf file
+
+Usage::
+
+    ceph config assimilate-conf -i <input-config-path> > <output-config-path>
+    ceph config assimilate-conf < <input-config-path>
+
+Subcommand ``generate-minimal-conf`` to generate a minimal ``ceph.conf`` file,
+which can be used for bootstrapping a daemon or a client.
+
+Usage::
+
+    ceph config generate-minimal-conf > <minimal-config-path>
 
 
 config-key
