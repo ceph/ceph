@@ -13,6 +13,7 @@ class Args(object):
         self.filestore = False
         self.no_systemd = False
         self.auto_detect_objectstore = None
+        self.no_tmpfs = False
         for k, v in kw.items():
             setattr(self, k, v)
 
@@ -322,6 +323,22 @@ class TestActivateFlags(object):
         parsed_args = capture.calls[0]['args'][0]
         assert parsed_args.filestore is False
         assert parsed_args.bluestore is True
+
+    def test_no_tmpfs(self, capture):
+        args = ['--no-tmpfs', '0', 'asdf-ljh-asdf']
+        activation = activate.Activate(args)
+        activation.activate = capture
+        activation.main()
+        parsed_args = capture.calls[0]['args'][0]
+        assert parsed_args.no_tmpfs is True
+
+    def test_default_no_tmpfs(self, capture):
+        args = ['0', 'asdf-ljh-asdf']
+        activation = activate.Activate(args)
+        activation.activate = capture
+        activation.main()
+        parsed_args = capture.calls[0]['args'][0]
+        assert parsed_args.no_tmpfs is False
 
 
 class TestActivateAll(object):
