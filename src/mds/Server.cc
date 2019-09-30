@@ -1981,8 +1981,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
     if (tracedn)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
 
-    set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->snapid,
-		   req->get_dentry_wanted(), mdr);
+    set_trace_dist(reply, tracei, tracedn, mdr);
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
@@ -2039,14 +2038,12 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   apply_allocated_inos(mdr, session);
 
   // get tracei/tracedn from mdr?
-  snapid_t snapid = mdr->snapid;
   CInode *tracei = mdr->tracei;
   CDentry *tracedn = mdr->tracedn;
 
   bool is_replay = mdr->client_request->is_replay();
   bool did_early_reply = mdr->did_early_reply;
   entity_inst_t client_inst = req->get_source_inst();
-  int dentry_wanted = req->get_dentry_wanted();
 
   if (!did_early_reply && !is_replay) {
 
@@ -2078,9 +2075,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
 	  mdcache->try_reconnect_cap(tracei, session);
       } else {
 	// include metadata in reply
-	set_trace_dist(session, reply, tracei, tracedn,
-	               snapid, dentry_wanted,
-		       mdr);
+	set_trace_dist(reply, tracei, tracedn, mdr);
       }
     }
 
@@ -2119,10 +2114,8 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
  *
  * trace is in reverse order (i.e. root inode comes last)
  */
-void Server::set_trace_dist(Session *session, const ref_t<MClientReply> &reply,
+void Server::set_trace_dist(const ref_t<MClientReply> &reply,
 			    CInode *in, CDentry *dn,
-			    snapid_t snapid,
-			    int dentry_wanted,
 			    MDRequestRef& mdr)
 {
   // skip doing this for debugging purposes?
@@ -2136,12 +2129,12 @@ void Server::set_trace_dist(Session *session, const ref_t<MClientReply> &reply,
   // inode, dentry, dir, ..., inode
   bufferlist bl;
   mds_rank_t whoami = mds->get_nodeid();
-  client_t client = session->get_client();
+  Session *session = mdr->session;
+  client_t client = mdr->get_client();
+  snapid_t snapid = mdr->snapid;
   utime_t now = ceph_clock_now();
 
   dout(20) << "set_trace_dist snapid " << snapid << dendl;
-
-  //assert((bool)dn == (bool)dentry_wanted);  // not true for snapshot lookups
 
   // realm
   if (snapid == CEPH_NOSNAP) {
