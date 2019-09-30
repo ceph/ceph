@@ -327,13 +327,7 @@ class Module(MgrModule, CherryPyConfig):
 
         mapper, parent_urls = generate_routes(self.url_prefix)
 
-        config = {
-            self.url_prefix or '/': {
-                'tools.staticdir.on': True,
-                'tools.staticdir.dir': self.get_frontend_path(),
-                'tools.staticdir.index': 'index.html'
-            }
-        }
+        config = {}
         for purl in parent_urls:
             config[purl] = {
                 'request.dispatch': mapper
