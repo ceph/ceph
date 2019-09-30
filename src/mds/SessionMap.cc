@@ -891,13 +891,8 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 size_t Session::get_request_count() const
 {
   size_t result = 0;
-
-  auto it = requests.begin(member_offset(MDRequestImpl, item_session_request));
-  while (!it.end()) {
+  for (auto p = requests.begin(); !p.end(); ++p)
     ++result;
-    ++it;
-  }
-
   return result;
 }
 
