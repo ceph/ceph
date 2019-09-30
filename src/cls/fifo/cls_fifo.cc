@@ -22,6 +22,9 @@ using namespace rados::cls::fifo;
 CLS_VER(1,0)
 CLS_NAME(fifo)
 
+
+#define CLS_FIFO_MAX_PART_HEADER_SIZE 512
+
 struct cls_fifo_part_header {
   string tag;
 
@@ -120,18 +123,13 @@ static int write_header(cls_method_context_t hctx,
   return cls_cxx_write_full(hctx, &bl);
 }
 
-const char *part_header_xattr_name = "fifo.part.header";
-
 static int read_part_header(cls_method_context_t hctx,
                             cls_fifo_part_header *part_header)
 {
   bufferlist bl;
-  int r = cls_cxx_getxattr(hctx, part_header_xattr_name, &bl);
+  int r = cls_cxx_read2(hctx, 0, CLS_FIFO_MAX_PART_HEADER_SIZE, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
-    if (r != -ENOENT &&
-        r != -ENODATA) {
-      CLS_ERR("ERROR: %s(): cls_cxx_getxattr(%s) returned r=%d", __func__, part_header_xattr_name, r);
-    }
+    CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
     return r;
   }
 
@@ -153,7 +151,20 @@ static int write_part_header(cls_method_context_t hctx,
   bufferlist bl;
   encode(part_header, bl);
 
-  return cls_cxx_setxattr(hctx, part_header_xattr_name, &bl);
+  if (bl.length() > CLS_FIFO_MAX_PART_HEADER_SIZE) {
+    CLS_LOG(10, "%s(): cannot write part header, buffer exceeds max size", __func__);
+    return -EIO;
+  }
+
+  int r = cls_cxx_write2(hctx, 0, bl.length(),
+                     &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to write part header: r=%d",
+            __func__, r);
+    return r;
+  }
+
+  return 0;
 }
 
 static int read_header(cls_method_context_t hctx,
@@ -409,6 +420,9 @@ static int fifo_part_init_op(cls_method_context_t hctx,
   part_header.tag = op.tag;
   part_header.params = op.data_params;
 
+  part_header.min_ofs = CLS_FIFO_MAX_PART_HEADER_SIZE;
+  part_header.max_ofs = part_header.min_ofs;
+
   cls_gen_random_bytes((char *)&part_header.magic, sizeof(part_header.magic));
 
   r = write_part_header(hctx, part_header);
@@ -520,6 +534,10 @@ public:
     if (ofs < part_header.min_ofs) {
       ofs = part_header.min_ofs;
     }
+  }
+
+  uint64_t get_ofs() const {
+    return ofs;
   }
 
   bool end() const {
