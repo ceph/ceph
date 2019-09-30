@@ -566,6 +566,23 @@ void MDLockCache::attach_locks()
   }
 }
 
+void MDLockCache::attach_dirfrags(std::vector<CDir*>&& dfv)
+{
+  std::sort(dfv.begin(), dfv.end());
+  auto last = std::unique(dfv.begin(), dfv.end());
+  dfv.erase(last, dfv.end());
+  auth_pinned_dirfrags = std::move(dfv);
+
+  ceph_assert(!items_dir);
+  items_dir.reset(new DirItem[auth_pinned_dirfrags.size()]);
+  int i = 0;
+  for (auto dir : auth_pinned_dirfrags) {
+    items_dir[i].parent = this;
+    dir->lock_caches_with_auth_pins.push_back(&items_dir[i].item_dir);
+    ++i;
+  }
+}
+
 void MDLockCache::detach_all()
 {
   ceph_assert(items_lock);
@@ -576,4 +593,13 @@ void MDLockCache::detach_all()
     ++i;
   }
   items_lock.reset();
+
+  ceph_assert(items_dir);
+  i = 0;
+  for (auto dir : auth_pinned_dirfrags) {
+    (void)dir;
+    items_dir[i].item_dir.remove_myself();
+    ++i;
+  }
+  items_dir.reset();
 }

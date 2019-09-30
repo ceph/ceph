@@ -797,6 +797,16 @@ void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
   put_lock_cache(lock_cache);
 }
 
+// ask lock caches to release auth pins
+void Locker::invalidate_lock_caches(CDir *dir)
+{
+  dout(10) << "invalidate_lock_caches on " << *dir << dendl;
+  auto &lock_caches = dir->lock_caches_with_auth_pins;
+  while (!lock_caches.empty()) {
+    invalidate_lock_cache(lock_caches.front()->parent);
+  }
+}
+
 // ask lock caches to release locks
 void Locker::invalidate_lock_caches(SimpleLock *lock)
 {
@@ -845,9 +855,18 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
     if (p.first != diri && !ancestors.count(p.first))
       continue;
     auto& stat = p.second;
-    if (stat.auth_pinned && !p.first->can_auth_pin()) {
-      dout(10) << " can't auth_pin(freezing?) lock parent " << *p.first << ", noop" << dendl;
-      return;
+    if (stat.auth_pinned) {
+      if (!p.first->can_auth_pin()) {
+	dout(10) << " can't auth_pin(freezing?) lock parent " << *p.first << ", noop" << dendl;
+	return;
+      }
+      if (CInode *in = dynamic_cast<CInode*>(p.first); in->is_parent_projected()) {
+	CDir *dir = in->get_projected_parent_dir();
+	if (!dir->can_auth_pin()) {
+	  dout(10) << " can't auth_pin(!auth|freezing?) dirfrag " << *dir << ", noop" << dendl;
+	  return;
+	}
+      }
     }
   }
 
@@ -886,7 +905,18 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
       lock_cache->auth_pin(p.first);
     else
       lock_cache->pin(p.first);
+
+    if (CInode *in = dynamic_cast<CInode*>(p.first)) {
+      CDentry *pdn = in->get_projected_parent_dn();
+      if (pdn)
+	dfv.push_back(pdn->get_dir());
+    } else if (CDentry *dn = dynamic_cast<CDentry*>(p.first)) {
+	dfv.push_back(dn->get_dir());
+    } else {
+      ceph_assert(0 == "unknown type of lock parent");
+    }
   }
+  lock_cache->attach_dirfrags(std::move(dfv));
 
   for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
     MDSCacheObject *obj = it->lock->get_parent();

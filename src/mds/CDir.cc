@@ -195,6 +195,7 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   dirty_dentries(member_offset(CDentry, item_dir_dirty)),
   item_dirty(this), item_new(this),
+  lock_caches_with_auth_pins(member_offset(MDLockCache::DirItem, item_dir)),
   dir_rep(REP_NONE),
   pop_me(mdcache->decayrate),
   pop_nested(mdcache->decayrate),
@@ -2868,14 +2869,18 @@ bool CDir::freeze_tree()
   // gets decreased. Subtree become 'frozen' when the counter reaches zero.
   freeze_tree_state = std::make_shared<freeze_tree_state_t>(this);
   freeze_tree_state->auth_pins += get_auth_pins() + get_dir_auth_pins();
+  if (!lock_caches_with_auth_pins.empty())
+    cache->mds->locker->invalidate_lock_caches(this);
 
   _walk_tree([this](CDir *dir) {
       if (dir->freeze_tree_state)
 	return false;
       dir->freeze_tree_state = freeze_tree_state;
       freeze_tree_state->auth_pins += dir->get_auth_pins() + dir->get_dir_auth_pins();
+      if (!dir->lock_caches_with_auth_pins.empty())
+	cache->mds->locker->invalidate_lock_caches(dir);
       return true;
-     }
+    }
   );
 
   if (is_freezeable(true)) {
@@ -3118,6 +3123,8 @@ bool CDir::freeze_dir()
     return true;
   } else {
     state_set(STATE_FREEZINGDIR);
+    if (!lock_caches_with_auth_pins.empty())
+      cache->mds->locker->invalidate_lock_caches(this);
     dout(10) << "freeze_dir + wait " << *this << dendl;
     return false;
   } 
