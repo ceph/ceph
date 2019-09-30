@@ -560,13 +560,13 @@ void PrimaryLogPG::maybe_kick_recovery(
     dout(7) << "object " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
     if (is_missing_object(soid)) {
-      recover_missing(soid, v, cct->_conf->osd_kick_recovery_op_priority, h);
+      recover_missing(soid, v, osd->osd->op_prio_cutoff, h);
     } else if (recovery_state.get_missing_loc().is_deleted(soid)) {
       prep_object_replica_deletes(soid, v, h, &work_started);
     } else {
       prep_object_replica_pushes(soid, v, h, &work_started);
     }
-    pgbackend->run_recovery_op(h, cct->_conf->osd_kick_recovery_op_priority);
+    pgbackend->run_recovery_op(h, osd->osd->op_prio_cutoff);
   }
 }
 
