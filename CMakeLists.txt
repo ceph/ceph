@@ -440,7 +440,9 @@ set(HAVE_LIBROCKSDB 1)
 find_package(ZLIB REQUIRED)
 
 #option for EventTrace
-option(WITH_EVENTTRACE "Event tracing support" OFF)
+CMAKE_DEPENDENT_OPTION(
+  WITH_EVENTTRACE "Event tracing support, requires WITH_LTTNG"
+  OFF "USE_LTTNG" OFF)
 
 #option for LTTng
 option(WITH_LTTNG "LTTng tracing is enabled" ON)

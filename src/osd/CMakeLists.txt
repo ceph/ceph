@@ -53,7 +53,7 @@ target_link_libraries(osd
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()
-if(WITH_LTTNG AND WITH_EVENTTRACE)
+if(WITH_EVENTTRACE)
   add_dependencies(osd eventtrace_tp)
 endif()
 if(WITH_OSD_INSTRUMENT_FUNCTIONS)

@@ -177,7 +177,7 @@ struct librados::IoCtxImpl {
   };
 
   struct C_aio_Complete : public Context {
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
     object_t oid;
 #endif
     AioCompletionImpl *c;

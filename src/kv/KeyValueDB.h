@@ -424,6 +424,17 @@ public:
   virtual PerfCounters *get_perf_counters() {
     return nullptr;
   }
+
+  /**
+   * Access implementation specific integral property corresponding
+   * to passed property and prefic.
+   * Return value is true if property is valid for prefix, populates out.
+   */
+  virtual bool get_property(
+    const std::string &property,
+    uint64_t *out) {
+    return false;
+  }
 protected:
   /// List of matching prefixes/ColumnFamilies and merge operators
   std::vector<std::pair<std::string,

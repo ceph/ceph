@@ -20,6 +20,8 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
+#include <ratio>
 #include <mutex>
 #include <condition_variable>
 
@@ -28,12 +30,14 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
+#include <boost/circular_buffer.hpp>
 
 #include "include/cpp-btree/btree_set.h"
 
 #include "include/ceph_assert.h"
 #include "include/unordered_map.h"
 #include "include/mempool.h"
+#include "include/hash.h"
 #include "common/bloom_filter.hpp"
 #include "common/Finisher.h"
 #include "common/ceph_mutex.h"
@@ -1494,7 +1498,7 @@ public:
       return "???";
     }
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_LTTNG)
     const char *get_state_latency_name(int state) {
       switch (state) {
       case l_bluestore_state_prepare_lat: return "prepare";
@@ -1512,25 +1516,11 @@ public:
     }
 #endif
 
-    utime_t log_state_latency(PerfCounters *logger, int state) {
-      utime_t lat, now = ceph_clock_now();
-      lat = now - last_stamp;
-      logger->tinc(state, lat);
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
-      if (state >= l_bluestore_state_prepare_lat && state <= l_bluestore_state_done_lat) {
-        double usecs = (now.to_nsec()-last_stamp.to_nsec())/1000;
-        OID_ELAPSED("", usecs, get_state_latency_name(state));
-      }
-#endif
-      last_stamp = now;
-      return lat;
-    }
-
     CollectionRef ch;
     OpSequencerRef osr;  // this should be ch->osr
     boost::intrusive::list_member_hook<> sequencer_item;
 
-    uint64_t bytes = 0, cost = 0;
+    uint64_t bytes = 0, ios = 0, cost = 0;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
     set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
@@ -1557,6 +1547,10 @@ public:
 
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
+
+#if defined(WITH_LTTNG)
+    bool tracing = false;
+#endif
 
     explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
 			  list<Context*> *on_commits)
@@ -1597,6 +1591,114 @@ public:
       store->txc_aio_finish(this);
     }
   };
+
+  class BlueStoreThrottle {
+#if defined(WITH_LTTNG)
+    const std::chrono::time_point<mono_clock> time_base = mono_clock::now();
+
+    // Time of last chosen io (microseconds)
+    std::atomic<uint64_t> previous_emitted_tp_time_mono_mcs = {0};
+    std::atomic<uint64_t> ios_started_since_last_traced = {0};
+    std::atomic<uint64_t> ios_completed_since_last_traced = {0};
+
+    std::atomic_uint pending_kv_ios = {0};
+    std::atomic_uint pending_deferred_ios = {0};
+
+    // Min period between trace points (microseconds)
+    std::atomic<uint64_t> trace_period_mcs = {0};
+
+    bool should_trace(
+      uint64_t *started,
+      uint64_t *completed) {
+      uint64_t min_period_mcs = trace_period_mcs.load(
+	std::memory_order_relaxed);
+
+      if (min_period_mcs == 0) {
+	*started = 1;
+	*completed = ios_completed_since_last_traced.exchange(0);
+	return true;
+      } else {
+	ios_started_since_last_traced++;
+	auto now_mcs = ceph::to_microseconds<uint64_t>(
+	  mono_clock::now() - time_base);
+	uint64_t previous_mcs = previous_emitted_tp_time_mono_mcs;
+	uint64_t period_mcs = now_mcs - previous_mcs;
+	if (period_mcs > min_period_mcs) {
+	  if (previous_emitted_tp_time_mono_mcs.compare_exchange_strong(
+		previous_mcs, now_mcs)) {
+	    // This would be racy at a sufficiently extreme trace rate, but isn't
+	    // worth the overhead of doing it more carefully.
+	    *started = ios_started_since_last_traced.exchange(0);
+	    *completed = ios_completed_since_last_traced.exchange(0);
+	    return true;
+	  }
+	}
+	return false;
+      }
+    }
+#endif
+
+#if defined(WITH_LTTNG)
+    void emit_initial_tracepoint(
+      KeyValueDB &db,
+      TransContext &txc,
+      mono_clock::time_point);
+#else
+    void emit_initial_tracepoint(
+      KeyValueDB &db,
+      TransContext &txc,
+      mono_clock::time_point) {}
+#endif
+
+    Throttle throttle_bytes;           ///< submit to commit
+    Throttle throttle_deferred_bytes;  ///< submit to deferred complete
+
+  public:
+    BlueStoreThrottle(CephContext *cct) :
+      throttle_bytes(cct, "bluestore_throttle_bytes", 0),
+      throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes", 0)
+    {
+      reset_throttle(cct->_conf);
+    }
+
+#if defined(WITH_LTTNG)
+    void complete_kv(TransContext &txc);
+    void complete(TransContext &txc);
+#else
+    void complete_kv(TransContext &txc) {}
+    void complete(TransContext &txc) {}
+#endif
+
+    utime_t log_state_latency(
+      TransContext &txc, PerfCounters *logger, int state);
+    bool try_start_transaction(
+      KeyValueDB &db,
+      TransContext &txc,
+      mono_clock::time_point);
+    void finish_start_transaction(
+      KeyValueDB &db,
+      TransContext &txc,
+      mono_clock::time_point);
+    void release_kv_throttle(uint64_t cost) {
+      throttle_bytes.put(cost);
+    }
+    void release_deferred_throttle(uint64_t cost) {
+      throttle_deferred_bytes.put(cost);
+    }
+    bool should_submit_deferred() {
+      return throttle_deferred_bytes.past_midpoint();
+    }
+    void reset_throttle(const ConfigProxy &conf) {
+      throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
+      throttle_deferred_bytes.reset_max(
+	conf->bluestore_throttle_bytes +
+	conf->bluestore_throttle_deferred_bytes);
+#if defined(WITH_LTTNG)
+      double rate = conf.get_val<double>("bluestore_throttle_trace_rate");
+      trace_period_mcs = rate > 0 ? floor((1/rate) * 1000000.0) : 0;
+#endif
+    }
+  } throttle;
 
   typedef boost::intrusive::list<
     TransContext,
@@ -1664,6 +1766,12 @@ public:
     std::atomic_int kv_drain_preceding_waiters = {0};
 
     std::atomic_bool zombie = {false};    ///< in zombie_osr set (collection going away)
+
+    const uint32_t sequencer_id;
+
+    uint32_t get_sequencer_id() const {
+      return sequencer_id;
+    }
 
     void queue_new(TransContext *txc) {
       std::lock_guard l(qlock);
@@ -1747,9 +1855,9 @@ public:
     }
   private:
     FRIEND_MAKE_REF(OpSequencer);
-    OpSequencer(BlueStore *store, const coll_t& c)
+    OpSequencer(BlueStore *store, uint32_t sequencer_id, const coll_t& c)
       : RefCountedObject(store->cct),
-	store(store), cid(c) {
+	store(store), cid(c), sequencer_id(sequencer_id) {
     }
     ~OpSequencer() {
       ceph_assert(q.empty());
@@ -1831,15 +1939,13 @@ private:
 
   /// protect zombie_osr_set
   ceph::mutex zombie_osr_lock = ceph::make_mutex("BlueStore::zombie_osr_lock");
+  uint32_t next_sequencer_id = 0;
   std::map<coll_t,OpSequencerRef> zombie_osr_set; ///< set of OpSequencers for deleted collections
 
   std::atomic<uint64_t> nid_last = {0};
   std::atomic<uint64_t> nid_max = {0};
   std::atomic<uint64_t> blobid_last = {0};
   std::atomic<uint64_t> blobid_max = {0};
-
-  Throttle throttle_bytes;          ///< submit to commit
-  Throttle throttle_deferred_bytes;  ///< submit to deferred complete
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
@@ -1888,7 +1994,7 @@ private:
   uint64_t block_mask = 0;     ///< mask to get just the block offset
   size_t block_size_order = 0; ///< bits to shift to get block size
 
-  uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
+  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
   ///< bits for min_alloc_size
   uint8_t min_alloc_size_order = 0;
   static_assert(std::numeric_limits<uint8_t>::max() >
@@ -2202,7 +2308,7 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_applied_kv(TransContext *txc);
+  void _txc_apply_kv(TransContext *txc, bool sync_submit_transaction);
   void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
