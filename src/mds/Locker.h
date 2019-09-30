@@ -69,6 +69,7 @@ public:
 
   void create_lock_cache(MDRequestRef& mdr, CInode *diri);
   bool find_and_attach_lock_cache(MDRequestRef& mdr, CInode *diri);
+  void invalidate_lock_caches(SimpleLock *lock);
   void invalidate_lock_cache(MDLockCache *lock_cache);
   void put_lock_cache(MDLockCache* lock_cache);
 

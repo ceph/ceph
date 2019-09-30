@@ -484,12 +484,21 @@ struct MDSlaveUpdate {
   }
 };
 
+struct MDLockCacheItem {
+  MDLockCache *parent = nullptr;
+  elist<MDLockCacheItem*>::item item_lock;
+};
+
 struct MDLockCache : public MutationImpl {
   CInode *diri;
   Capability *client_cap;
   int opcode;
 
   elist<MDLockCache*>::item item_cap_lock_cache;
+
+  using LockItem = MDLockCacheItem;
+  // link myself to locked locks
+  std::unique_ptr<LockItem[]> items_lock;
 
   int ref = 1;
   bool invalidating = false;
@@ -500,6 +509,9 @@ struct MDLockCache : public MutationImpl {
   }
 
   CInode *get_dir_inode() { return diri; }
+  void attach_locks();
+  void attach_dirfrags(std::vector<CDir*>&& dfv);
+  void detach_all();
 };
 
 #endif

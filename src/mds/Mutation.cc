@@ -553,3 +553,27 @@ void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
     stream << "rejoin:" << reqid;
   }
 }
+
+void MDLockCache::attach_locks()
+{
+  ceph_assert(!items_lock);
+  items_lock.reset(new LockItem[locks.size()]);
+  int i = 0;
+  for (auto& p : locks) {
+    items_lock[i].parent = this;
+    p.lock->add_cache(items_lock[i]);
+    ++i;
+  }
+}
+
+void MDLockCache::detach_all()
+{
+  ceph_assert(items_lock);
+  int i = 0;
+  for (auto& p : locks) {
+    auto& item = items_lock[i];
+    p.lock->remove_cache(item);
+    ++i;
+  }
+  items_lock.reset();
+}

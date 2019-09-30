@@ -791,9 +791,19 @@ void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
   ceph_assert(lock_cache->item_cap_lock_cache.is_on_list());
   ceph_assert(!lock_cache->invalidating);
   lock_cache->invalidating = true;
+  lock_cache->detach_all();
   // XXX check issued caps
   lock_cache->item_cap_lock_cache.remove_myself();
   put_lock_cache(lock_cache);
+}
+
+// ask lock caches to release locks
+void Locker::invalidate_lock_caches(SimpleLock *lock)
+{
+  dout(10) << "invalidate_lock_caches " << *lock << " on " << *lock->get_parent() << dendl;
+  while (lock->is_cached()) {
+    invalidate_lock_cache(lock->get_first_cache());
+  }
 }
 
 void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
@@ -900,6 +910,7 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
       ++it;
     }
   }
+  lock_cache->attach_locks();
 
   lock_cache->ref++;
   mdr->lock_cache = lock_cache;
@@ -1685,7 +1696,13 @@ void Locker::wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *
   else
     mut->locks.erase(it);
 
-  if (!lock->is_wrlocked()) {
+  if (lock->is_wrlocked()) {
+    // Evaluate unstable lock after scatter_writebehind_finish(). Because
+    // eval_gather() does not change lock's state when lock is flushing.
+    if (!lock->is_stable() && lock->is_flushed() &&
+	lock->get_parent()->is_auth())
+      eval_gather(lock, false, pneed_issue);
+  } else {
     if (!lock->is_stable())
       eval_gather(lock, false, pneed_issue);
     else if (lock->get_parent()->is_auth())
@@ -4216,8 +4233,11 @@ void Locker::handle_simple_lock(SimpleLock *lock, const cref_t<MLock> &m)
     if (lock->is_leased())
       revoke_client_leases(lock);
     eval_gather(lock, true);
-    if (lock->is_unstable_and_locked())
+    if (lock->is_unstable_and_locked()) {
+      if (lock->is_cached())
+	invalidate_lock_caches(lock);
       mds->mdlog->flush();
+    }
     break;
 
 
@@ -4364,8 +4384,11 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     }
 
     int gather = 0;
-    if (lock->is_wrlocked())
+    if (lock->is_wrlocked()) {
       gather++;
+      if (lock->is_cached())
+	invalidate_lock_caches(lock);
+    }
     
     if (lock->get_parent()->is_replicated() && old_state == LOCK_MIX) {
       send_lock_message(lock, LOCK_AC_SYNC);
@@ -4446,6 +4469,8 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     gather++;
   if (lock->is_wrlocked())
     gather++;
+  if (gather && lock->is_cached())
+    invalidate_lock_caches(lock);
 
   if (lock->get_parent()->is_replicated() && 
       lock->get_state() != LOCK_LOCK_EXCL &&
@@ -4508,8 +4533,11 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     gather++;
     revoke_client_leases(lock);
   }
-  if (lock->is_rdlocked())
+  if (lock->is_rdlocked()) {
+    if (lock->is_cached())
+      invalidate_lock_caches(lock);
     gather++;
+  }
   if (in && in->is_head()) {
     if (in->issued_caps_need_gather(lock)) {
       if (need_issue)
@@ -4590,6 +4618,8 @@ void Locker::simple_xlock(SimpleLock *lock)
     gather++;
   if (lock->is_wrlocked())
     gather++;
+  if (gather && lock->is_cached())
+    invalidate_lock_caches(lock);
   
   if (in && in->is_head()) {
     if (in->issued_caps_need_gather(lock)) {
@@ -4962,8 +4992,11 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
   }
 
   int gather = 0;
-  if (lock->is_wrlocked())
+  if (lock->is_wrlocked()) {
+    if (lock->is_cached())
+      invalidate_lock_caches(lock);
     gather++;
+  }
 
   if (lock->get_cap_shift() &&
       in->is_head() &&
@@ -5225,8 +5258,11 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     }
 
     int gather = 0;
-    if (lock->is_rdlocked())
+    if (lock->is_rdlocked()) {
+      if (lock->is_cached())
+	invalidate_lock_caches(lock);
       gather++;
+    }
     if (in->is_replicated()) {
       if (lock->get_state() == LOCK_SYNC_MIX) { // for the rest states, replicas are already LOCK
 	send_lock_message(lock, LOCK_AC_MIX);
@@ -5302,6 +5338,8 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
     gather++;
   if (lock->is_wrlocked())
     gather++;
+  if (gather && lock->is_cached())
+    invalidate_lock_caches(lock);
 
   if (in->is_replicated() &&
       lock->get_state() != LOCK_LOCK_EXCL &&
@@ -5355,8 +5393,11 @@ void Locker::file_xsyn(SimpleLock *lock, bool *need_issue)
   }
   
   int gather = 0;
-  if (lock->is_wrlocked())
+  if (lock->is_wrlocked()) {
+    if (lock->is_cached())
+      invalidate_lock_caches(lock);
     gather++;
+  }
 
   if (in->is_head() &&
       in->issued_caps_need_gather(lock)) {
@@ -5443,8 +5484,11 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     if (lock->get_state() == LOCK_MIX) {
       lock->set_state(LOCK_MIX_SYNC);
       eval_gather(lock, true);
-      if (lock->is_unstable_and_locked())
+      if (lock->is_unstable_and_locked()) {
+	if (lock->is_cached())
+	  invalidate_lock_caches(lock);
 	mds->mdlog->flush();
+      }
       break;
     }
 
@@ -5470,8 +5514,11 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     }
 
     eval_gather(lock, true);
-    if (lock->is_unstable_and_locked())
+    if (lock->is_unstable_and_locked()) {
+      if (lock->is_cached())
+	invalidate_lock_caches(lock);
       mds->mdlog->flush();
+    }
 
     break;
 
@@ -5492,8 +5539,11 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
       // MIXED
       lock->set_state(LOCK_SYNC_MIX);
       eval_gather(lock, true);
-      if (lock->is_unstable_and_locked())
+      if (lock->is_unstable_and_locked()) {
+	if (lock->is_cached())
+	  invalidate_lock_caches(lock);
 	mds->mdlog->flush();
+      }
       break;
     } 
 
