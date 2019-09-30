@@ -893,6 +893,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     parent = projected_parent.front();
     projected_parent.pop_front();
   }
+  bool is_parent_projected() const {
+    return !projected_parent.empty();
+  }
 
   void maybe_export_pin(bool update=false);
   void set_export_pin(mds_rank_t rank);

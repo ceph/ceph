@@ -500,6 +500,14 @@ struct MDLockCache : public MutationImpl {
   // link myself to locked locks
   std::unique_ptr<LockItem[]> items_lock;
 
+  struct DirItem {
+    MDLockCache *parent = nullptr;
+    elist<DirItem*>::item item_dir;
+  };
+  // link myself to auth-pinned dirfrags
+  std::unique_ptr<DirItem[]> items_dir;
+  std::vector<CDir*> auth_pinned_dirfrags;
+
   int ref = 1;
   bool invalidating = false;
 

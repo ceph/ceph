@@ -599,6 +599,9 @@ public:
   elist<CDentry*> dirty_dentries;
   elist<CDir*>::item item_dirty, item_new;
 
+  // lock caches that auth-pin me
+  elist<MDLockCache::DirItem*> lock_caches_with_auth_pins;
+
   // all dirfrags within freezing/frozen tree reference the 'state'
   std::shared_ptr<freeze_tree_state_t> freeze_tree_state;
 
