@@ -141,32 +141,44 @@ def get_config_and_keyring():
             config = f.read()
     return (config, keyring)
 
-def get_container(fsid, daemon_type, daemon_id):
-    data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
+def get_container_mounts(fsid, daemon_type, daemon_id):
     log_dir = get_log_dir(args.log_dir, fsid)
-
-    cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
-    extra_args = []
 
     mounts = {
         log_dir: '/var/log/ceph:z',
-        data_dir: cdata_dir + ':z',
-        data_dir + '/config': '/etc/ceph/ceph.conf:z',
     }
+    if daemon_id:
+        data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
+        cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
+        mounts[data_dir] = cdata_dir + ':z'
+        mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
+
     if daemon_type in ['mon', 'osd']:
-        mounts['/run/udev'] = '/run/udev:z'
         mounts['/dev'] = '/dev:z'  # FIXME: narrow this down?
+        mounts['/run/udev'] = '/run/udev:z'
     if daemon_type == 'osd':
         mounts['/sys'] = '/sys:z'  # for numa.cc, pick_address, cgroups, ...
+        mounts['/run/lvm'] = '/run/lvm:z'
+        mounts['/run/lock/lvm'] = '/run/lock/lvm:z'
 
+    return mounts
+
+def get_container(fsid, daemon_type, daemon_id):
+    if daemon_id:
+        dname = daemon_type + '.' + daemon_id
+    else:
+        dname = daemon_type
+    podman_args = []
     return CephContainer(
         image=args.image,
         entrypoint='/usr/bin/ceph-' + daemon_type,
-        args=['-i', daemon_id,
-              '-f', # foreground
-        ] + extra_args + get_daemon_args(fsid, daemon_type, daemon_id),
-        volume_mounts=mounts,
-        dname=daemon_type + '.' + daemon_id,
+        args=[
+            '-i', daemon_id,
+            '-f', # foreground
+        ] + get_daemon_args(fsid, daemon_type, daemon_id),
+        podman_args=podman_args,
+        volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+        dname=dname,
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
 
