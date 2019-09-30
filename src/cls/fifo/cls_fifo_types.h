@@ -151,8 +151,7 @@ namespace rados {
         }
 
         string part_oid(int64_t part_num);
-        static string generate_tag();
-        void prepare_next_journal_entry(fifo_journal_entry_t *entry);
+        void prepare_next_journal_entry(fifo_journal_entry_t *entry, const string& tag);
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);

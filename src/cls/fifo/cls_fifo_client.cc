@@ -16,6 +16,8 @@
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 
+#include "auth/Crypto.h"
+
 using namespace librados;
 
 #include "cls/fifo/cls_fifo_ops.h"
@@ -451,11 +453,34 @@ namespace rados {
         return 0;
       }
 
+      static const char alphanum_plain_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+      void gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
+      {
+        cct->random()->get_bytes(dest, size);
+
+        int i;
+        for (i = 0; i < size - 1; i++) {
+          int pos = (unsigned)dest[i];
+          dest[i] = alphanum_plain_table[pos % (sizeof(alphanum_plain_table) - 1)];
+        }
+        dest[i] = '\0';
+      }
+
+      static string generate_tag(CephContext *cct)
+      {
+#define HEADER_TAG_SIZE 16
+        char buf[HEADER_TAG_SIZE + 1];
+        buf[HEADER_TAG_SIZE] = 0;
+        gen_rand_alphanumeric_plain(cct, buf, sizeof(buf));
+        return string(buf);
+      }
+
       int Manager::prepare_new_part()
       {
         fifo_journal_entry_t jentry;
 
-        meta_info.prepare_next_journal_entry(&jentry);
+        meta_info.prepare_next_journal_entry(&jentry, generate_tag(cct));
 
         int r;
         bool canceled;
