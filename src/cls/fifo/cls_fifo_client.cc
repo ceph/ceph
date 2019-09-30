@@ -620,6 +620,27 @@ namespace rados {
         return 0;
       }
 
+      int Manager::trim_part(int64_t part_num,
+                             uint64_t ofs,
+                             std::optional<string> tag)
+      {
+        librados::ObjectWriteOperation op;
+
+        int r = FIFO::trim_part(&op, FIFO::TrimPartParams()
+                                          .tag(tag)
+                                          .ofs(ofs));
+        if (r < 0) {
+          return r;
+        }
+
+        r = ioctx->operate(meta_info.part_oid(part_num), &op);
+        if (r < 0) {
+          return r;
+        }
+
+        return 0;
+      }
+
       int Manager::push(bufferlist& bl)
       {
         if (!is_open) {
@@ -737,6 +758,69 @@ namespace rados {
 
         return 0;
       }
+
+      int Manager::trim(const string& marker)
+      {
+        if (!is_open) {
+          return -EINVAL;
+        }
+
+        int64_t part_num;
+        uint64_t ofs;
+
+        if (!parse_marker(marker, &part_num, &ofs)) {
+          ldout(cct, 20) << __func__ << "(): failed to parse marker: marker=" << marker << dendl;
+          return -EINVAL;
+        }
+
+        for (int64_t pn = meta_info.tail_part_num; pn < part_num; ++pn) {
+          int r = trim_part(pn, meta_info.data_params.max_part_size, std::nullopt);
+          if (r < 0 &&
+              r != -ENOENT) {
+            ldout(cct, 0) << __func__ << "(): ERROR: trim_part() on part=" << pn << " returned r=" << r << dendl;
+            return r;
+          }
+        }
+
+        int r = trim_part(part_num, ofs, std::nullopt);
+        if (r < 0 &&
+            r != -ENOENT) {
+          ldout(cct, 0) << __func__ << "(): ERROR: trim_part() on part=" << part_num << " returned r=" << r << dendl;
+          return r;
+        }
+
+        if (part_num <= meta_info.tail_part_num) {
+          /* don't need to modify meta info */
+          return 0;
+        }
+
+        int i;
+
+        for (i = 0; i < RACE_RETRY; ++i) {
+          bool canceled;
+          int r = update_meta(FIFO::MetaUpdateParams()
+                              .tail_part_num(part_num),
+                              &canceled);
+          if (r < 0) {
+            return r;
+          }
+
+          if (canceled) {
+            if (meta_info.tail_part_num < part_num) {
+              continue;
+            }
+          }
+          break;
+
+          if (i == RACE_RETRY) {
+            ldout(cct, 0) << "ERROR: " << __func__ << "(): race check failed too many times, likely a bug" << dendl;
+            return -ECANCELED;
+          }
+        }
+
+        return 0;
+      }
+
     } // namespace fifo
   } // namespace cls
 } // namespace rados

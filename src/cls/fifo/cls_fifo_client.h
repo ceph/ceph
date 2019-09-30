@@ -191,7 +191,7 @@ namespace rados {
             uint64_t ofs;
           } state;
 
-          TrimPartParams& tag(const std::string& tag) {
+          TrimPartParams& tag(std::optional<std::string> tag) {
             state.tag = tag;
             return *this;
           }
@@ -275,7 +275,9 @@ namespace rados {
         int prepare_new_head();
 
         int push_entry(int64_t part_num, bufferlist& bl);
-
+        int trim_part(int64_t part_num,
+                      uint64_t ofs,
+                      std::optional<string> tag);
 
       public:
         Manager(CephContext *_cct,
@@ -302,6 +304,8 @@ namespace rados {
                  std::optional<string> marker,
                  vector<fifo_entry> *result,
                  bool *more);
+
+        int trim(const string& marker);
       };
     } // namespace fifo
   }  // namespace cls
