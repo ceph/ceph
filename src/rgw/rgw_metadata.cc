@@ -25,8 +25,6 @@
 
 #include <boost/asio/yield.hpp>
 
-using namespace rgw::sal;
-
 #define dout_subsys ceph_subsys_rgw
 
 const std::string RGWMetadataLogHistory::oid = "meta.history";

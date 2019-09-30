@@ -57,7 +57,7 @@ public:
   void send_response_begin(bool has_buckets) override;
   void send_response_data(rgw::sal::RGWBucketList& buckets) override;
   void send_response_data_reversed(rgw::sal::RGWBucketList& buckets);
-  void dump_bucket_entry(const rgw::sal::RGWSalBucket& obj);
+  void dump_bucket_entry(const rgw::sal::RGWBucket& obj);
   void send_response_end() override;
 
   bool should_get_stats() override { return need_stats; }
