@@ -263,9 +263,6 @@ public:
   void send_message_osd_cluster(Message *m, const ConnectionRef& con) {
     con->send_message(m);
   }
-  void send_message_osd_client(Message *m, Connection *con) {
-    con->send_message(m);
-  }
   void send_message_osd_client(Message *m, const ConnectionRef& con) {
     con->send_message(m);
   }
