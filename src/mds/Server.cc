@@ -1205,11 +1205,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   mdlog->flush();
 
   // clean up requests, too
-  elist<MDRequestImpl*>::iterator p =
-    session->requests.begin(member_offset(MDRequestImpl,
-					  item_session_request));
-  while (!p.end()) {
-    MDRequestRef mdr = mdcache->request_get((*p)->reqid);
+  for (auto p = session->requests.begin(); !p.end(); ) {
+    MDRequestRef mdr(*p);
     ++p;
     mdcache->request_kill(mdr);
   }
