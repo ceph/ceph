@@ -614,7 +614,9 @@ int EntryReader::get_next_entry(bufferlist *pbl,
     return r;
   }
 
-  *pofs = ofs;
+  if (pofs) {
+    *pofs = ofs;
+  }
 
   r = seek(pre_header.pre_size);
   if (r < 0) {
@@ -638,12 +640,22 @@ int EntryReader::get_next_entry(bufferlist *pbl,
     return -EIO;
   }
 
-  *pmtime = entry_header.mtime;
+  if (pmtime) {
+    *pmtime = entry_header.mtime;
+  }
 
-  r = read(pre_header.data_size, pbl);
-  if (r < 0) {
-    CLS_ERR("%s(): failed reading data: r=%d", __func__, r);
-    return r;
+  if (pbl) {
+    r = read(pre_header.data_size, pbl);
+    if (r < 0) {
+      CLS_ERR("%s(): failed reading data: r=%d", __func__, r);
+      return r;
+    }
+  } else {
+    r = seek(pre_header.data_size);
+    if (r < 0) {
+      CLS_ERR("ERROR: %s(): failed to seek: r=%d", __func__, r);
+      return r;
+    }
   }
 
   return 0;
@@ -733,6 +745,15 @@ static int fifo_part_list_op(cls_method_context_t hctx,
   }
 
   EntryReader reader(hctx, part_header, op.ofs);
+
+  if (op.ofs > 0 &&
+      !reader.end()) {
+    r = reader.get_next_entry(nullptr, nullptr, nullptr);
+    if (r < 0) {
+      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d", __func__, r);
+      return r;
+    }
+  }
 
   cls_fifo_part_list_op_reply reply;
 
