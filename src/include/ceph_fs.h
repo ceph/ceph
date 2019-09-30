@@ -763,7 +763,7 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_LINK_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SLINK)
 #define CEPH_CAP_XATTR_SHARED (CEPH_CAP_GSHARED  << CEPH_CAP_SXATTR)
 #define CEPH_CAP_XATTR_EXCL    (CEPH_CAP_GEXCL     << CEPH_CAP_SXATTR)
-#define CEPH_CAP_FILE(x)    (x << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE(x)       ((x) << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_SHARED   (CEPH_CAP_GSHARED   << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_CACHE    (CEPH_CAP_GCACHE    << CEPH_CAP_SFILE)
@@ -817,6 +817,13 @@ int ceph_flags_to_mode(int flags);
 
 #define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE | CEPH_LOCK_IAUTH | CEPH_LOCK_ILINK | \
 			CEPH_LOCK_IXATTR)
+
+/* cap masks async dir operations */
+#define CEPH_CAP_DIR_CREATE    CEPH_CAP_FILE_CACHE
+#define CEPH_CAP_DIR_UNLINK    CEPH_CAP_FILE_RD
+#define CEPH_CAP_ANY_DIR_OPS   (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD | \
+				CEPH_CAP_FILE_WREXTEND | CEPH_CAP_FILE_LAZYIO)
+
 
 int ceph_caps_for_mode(int mode);
 

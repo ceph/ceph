@@ -3442,7 +3442,11 @@ int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
     allowed = get_caps_allowed_by_type(CAP_ANY);
   }
 
-  if (!is_dir()) {
+  if (is_dir()) {
+    allowed &= ~CEPH_CAP_ANY_DIR_OPS;
+    if (cap && (allowed & CEPH_CAP_FILE_EXCL))
+      allowed |= cap->get_lock_cache_allowed();
+  } else {
     if (file_i->inline_data.version == CEPH_INLINE_NONE &&
 	file_i->layout.pool_ns.empty()) {
       // noop

@@ -581,6 +581,9 @@ public:
   bool is_any_freezing_or_frozen_inode() const {
     return num_frozen_inodes || !freezing_inodes.empty();
   }
+  bool is_auth_pinned_by_lock_cache() const {
+    return frozen_inode_suppressed;
+  }
   void disable_frozen_inode() {
     ceph_assert(num_frozen_inodes == 0);
     frozen_inode_suppressed++;
