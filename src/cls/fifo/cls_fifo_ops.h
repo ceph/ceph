@@ -246,17 +246,20 @@ struct cls_fifo_part_list_op_reply
 
   string tag;
   vector<entry> entries;
+  bool more{false};
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
     encode(entries, bl);
+    encode(more, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(entries, bl);
+    decode(more, bl);
     DECODE_FINISH(bl);
   }
 };

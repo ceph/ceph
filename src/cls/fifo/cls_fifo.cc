@@ -738,7 +738,11 @@ static int fifo_part_list_op(cls_method_context_t hctx,
 
   reply.tag = part_header.tag;
 
-  for (int i = 0; i < op.max_entries && !reader.end(); ++i) {
+#define LIST_MAX_ENTRIES 512
+
+  auto max_entries = std::min(op.max_entries, (int)LIST_MAX_ENTRIES);
+
+  for (int i = 0; i < max_entries && !reader.end(); ++i) {
     bufferlist data;
     ceph::real_time mtime;
     uint64_t ofs;
@@ -751,6 +755,8 @@ static int fifo_part_list_op(cls_method_context_t hctx,
 
     reply.entries.emplace_back(std::move(data), ofs, mtime);
   }
+
+  reply.more = !reader.end();
 
   encode(reply, *out);
 

@@ -230,7 +230,14 @@ namespace rados {
                              const string& oid,
                              const ListPartParams& params,
                              std::vector<cls_fifo_part_list_op_reply::entry> *pentries,
+                             bool *more,
                              string *ptag = nullptr);
+      };
+
+      struct fifo_entry {
+        bufferlist data;
+        string marker;
+        ceph::real_time mtime;
       };
 
       class Manager {
@@ -245,6 +252,13 @@ namespace rados {
         fifo_info_t meta_info;
 
         bool is_open{false};
+
+        string craft_marker(int64_t part_num,
+                        uint64_t part_ofs);
+
+        bool parse_marker(const string& marker,
+                          int64_t *part_num,
+                          uint64_t *part_ofs);
 
         int update_meta(FIFO::MetaUpdateParams& update_params,
                         bool *canceled);
@@ -261,6 +275,8 @@ namespace rados {
         int prepare_new_head();
 
         int push_entry(int64_t part_num, bufferlist& bl);
+
+
       public:
         Manager(CephContext *_cct,
                 const string& _id) : cct(_cct),
@@ -281,6 +297,11 @@ namespace rados {
                  std::optional<FIFO::MetaCreateParams> create_params = std::nullopt);
 
         int push(bufferlist& bl);
+
+        int list(int max_entries,
+                 std::optional<string> marker,
+                 vector<fifo_entry> *result,
+                 bool *more);
       };
     } // namespace fifo
   }  // namespace cls

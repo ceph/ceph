@@ -183,6 +183,7 @@ namespace rados {
                           const string& oid,
                           const ListPartParams& params,
                           std::vector<cls_fifo_part_list_op_reply::entry> *pentries,
+                          bool *more,
                           string *ptag)
       {
         cls_fifo_part_list_op op;
@@ -222,11 +223,56 @@ namespace rados {
           *pentries = std::move(reply.entries);
         }
 
+        if (more) {
+          *more = reply.more;
+        }
+
         if (ptag) {
           *ptag = reply.tag;
         }
 
         return 0;
+      }
+
+      string Manager::craft_marker(int64_t part_num,
+                                   uint64_t part_ofs)
+      {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%lld:%lld", (long long)part_num, (long long)part_ofs);
+        return string(buf);
+      }
+
+      bool Manager::parse_marker(const string& marker,
+                                 int64_t *part_num,
+                                 uint64_t *part_ofs)
+      {
+        if (marker.empty()) {
+          *part_num = meta_info.tail_part_num;
+          *part_ofs = 0;
+          return true;
+        }
+
+        auto pos = marker.find(':');
+        if (pos == string::npos) {
+          return false;
+        }
+
+        auto first = marker.substr(0, pos);
+        auto second = marker.substr(pos + 1);
+
+        string err;
+
+        *part_num = (int64_t)strict_strtoll(first.c_str(), 10, &err);
+        if (!err.empty()) {
+          return false;
+        }
+
+        *part_ofs = (uint64_t)strict_strtoll(second.c_str(), 10, &err);
+        if (!err.empty()) {
+          return false;
+        }
+
+        return true;
       }
 
       int Manager::init_ioctx(librados::Rados *rados,
@@ -588,6 +634,84 @@ namespace rados {
         return 0;
       }
 
+      int Manager::list(int max_entries,
+                        std::optional<string> marker,
+                        vector<fifo_entry> *result,
+                       bool *more)
+      {
+        if (!is_open) {
+          return -EINVAL;
+        }
+
+        *more = false;
+
+        int64_t part_num = meta_info.tail_part_num;
+        uint64_t ofs = 0;
+
+        if (marker) {
+          if (!parse_marker(*marker, &part_num, &ofs)) {
+            ldout(cct, 20) << __func__ << "(): failed to parse marker (" << *marker << ")" << dendl;
+            return -EINVAL;
+          }
+        }
+
+        result->clear();
+        result->reserve(max_entries);
+
+        bool part_more{false};
+        while (max_entries > 0 &&
+               part_num <= meta_info.head_part_num) {
+          std::vector<cls_fifo_part_list_op_reply::entry> entries;
+          int r = FIFO::list_part(*ioctx,
+                                  meta_info.part_oid(part_num),
+                                  FIFO::ListPartParams()
+                                  .ofs(ofs)
+                                  .max_entries(max_entries),
+                                  &entries,
+                                  &part_more,
+                                  nullptr);
+          if (r == -ENOENT) {
+            r = read_meta();
+            if (r < 0) {
+              return r;
+            }
+
+            if (part_num < meta_info.tail_part_num) {
+              /* raced with trim? */
+              part_num = meta_info.tail_part_num;
+              ofs = 0;
+              continue;
+            }
+
+            /* assuming part was not written yet, so end of data */
+
+            return 0;
+          }
+          if (r < 0) {
+            ldout(cct, 20) << __func__ << "(): FIFO::list_part() on oid=" << meta_info.part_oid(part_num) << " returned r=" << r << dendl;
+            return r;
+          }
+
+          for (auto& entry : entries) {
+            fifo_entry e;
+            e.data = std::move(entry.data);
+            e.marker = craft_marker(part_num, entry.ofs);
+            e.mtime = entry.mtime;
+
+            result->push_back(e);
+          }
+          max_entries -= entries.size();
+
+          if (!part_more) {
+            ++part_num;
+            ofs = 0;
+          }
+        }
+
+        *more = part_more;
+
+        return 0;
+      }
     } // namespace fifo
   } // namespace cls
 } // namespace rados
