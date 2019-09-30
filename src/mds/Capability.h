@@ -182,8 +182,8 @@ public:
     inc_last_seq();
     return last_sent;
   }
-  void confirm_receipt(ceph_seq_t seq, unsigned caps) {
-    bool was_revoking = (_issued & ~_pending);
+  int confirm_receipt(ceph_seq_t seq, unsigned caps) {
+    int was_revoking = (_issued & ~_pending);
     if (seq == last_sent) {
       _revokes.clear();
       _issued = caps;
@@ -208,7 +208,7 @@ public:
       item_client_revoking_caps.remove_myself();
       maybe_clear_notable();
     }
-    //check_rdcaps_list();
+    return was_revoking & ~_issued; // return revoked
   }
   // we may get a release racing with revocations, which means our revokes will be ignored
   // by the client.  clean them out of our _revokes history so we don't wait on them.
@@ -341,9 +341,10 @@ public:
     set_wanted(wanted() | otherwanted);
   }
 
-  void revoke() {
+  int revoke() {
     if (revoking())
-      confirm_receipt(last_sent, pending());
+      return confirm_receipt(last_sent, pending());
+    return 0;
   }
 
   // serializers
@@ -364,6 +365,10 @@ public:
   xlist<Capability*>::item item_client_revoking_caps;
 
   elist<MDLockCache*> lock_caches;
+  int get_lock_cache_allowed() const { return lock_cache_allowed; }
+  void set_lock_cache_allowed(int c) { lock_cache_allowed |= c; }
+  void clear_lock_cache_allowed(int c) { lock_cache_allowed &= ~c; }
+
 private:
   void calc_issued() {
     _issued = _pending;
@@ -401,6 +406,8 @@ private:
 
   int suppress = 0;
   unsigned state = 0;
+
+  int lock_cache_allowed = 0;
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)
