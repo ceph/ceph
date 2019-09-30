@@ -260,6 +260,23 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     ssh_config_fname))
             ssh_options = "-F {}".format(ssh_config_fname)
 
+        # identity
+        ssh_key = self.get_store("ssh_identity_key")
+        ssh_pub = self.get_store("ssh_identity_pub")
+        if ssh_key and ssh_pub:
+            tkey = tempfile.NamedTemporaryFile()
+            tkey.write(ssh_key.encode('utf-8'))
+            os.fchmod(tkey.fileno(), 0o600);
+            tkey.flush() # make visible to other processes
+            tpub = tempfile.NamedTemporaryFile()
+            os.fchmod(tpub.fileno(), 0o600);
+            tpub.write(ssh_pub.encode('utf-8'))
+            tpub.flush() # make visible to other processes
+            conn.temp_files += [tkey, tpub]
+            if not ssh_options:
+                ssh_options = ''
+            ssh_options += '-i {}'.format(tkey.name)
+
         self.log.info("opening connection to host '{}' with ssh "
                 "options '{}'".format(host, ssh_options))
 
