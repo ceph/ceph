@@ -157,6 +157,7 @@ public:
     return ceph::mono_clock::now() - startup_time;
   }
   HeartbeatStampsRef get_hb_stamps(int peer);
+  std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 };
 
 
