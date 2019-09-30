@@ -20,6 +20,7 @@
 #include "include/counter.h"
 #include "include/mempool.h"
 #include "include/xlist.h"
+#include "include/elist.h"
 
 #include "common/config.h"
 
@@ -62,6 +63,7 @@
 
 class CInode;
 class Session;
+class MDLockCache;
 
 namespace ceph {
   class Formatter;
@@ -361,6 +363,7 @@ public:
   xlist<Capability*>::item item_revoking_caps;
   xlist<Capability*>::item item_client_revoking_caps;
 
+  elist<MDLockCache*> lock_caches;
 private:
   void calc_issued() {
     _issued = _pending;

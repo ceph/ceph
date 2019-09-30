@@ -5969,7 +5969,7 @@ void MDCache::opened_undef_inode(CInode *in) {
   if (in->is_dir()) {
     // FIXME: re-hash dentries if necessary
     ceph_assert(in->inode.dir_layout.dl_dir_hash == g_conf()->mds_default_dir_hash);
-    if (in->has_dirfrags() && !in->dirfragtree.is_leaf(frag_t())) {
+    if (in->get_num_dirfrags() && !in->dirfragtree.is_leaf(frag_t())) {
       CDir *dir = in->get_dirfrag(frag_t());
       ceph_assert(dir);
       rejoin_undef_dirfrags.erase(dir);

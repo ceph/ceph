@@ -513,7 +513,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool has_snap_data(snapid_t s);
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
-  bool has_dirfrags() { return !dirfrags.empty(); }
+  size_t get_num_dirfrags() const { return dirfrags.size(); }
   CDir* get_dirfrag(frag_t fg) {
     auto pi = dirfrags.find(fg);
     if (pi != dirfrags.end()) {

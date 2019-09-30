@@ -148,6 +148,7 @@ void Capability::revoke_info::generate_test_instances(std::list<Capability::revo
 Capability::Capability(CInode *i, Session *s, uint64_t id) :
   item_session_caps(this), item_snaprealm_caps(this),
   item_revoking_caps(this), item_client_revoking_caps(this),
+  lock_caches(member_offset(MDLockCache, item_cap_lock_cache)),
   inode(i), session(s), cap_id(id)
 {
   if (session) {

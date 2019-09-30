@@ -362,6 +362,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     if (!object->is_auth()) {
+      ceph_assert(!mdr->lock_cache);
       if (object->is_ambiguous_auth()) {
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
@@ -376,6 +377,20 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     int err = 0;
     if (!object->can_auth_pin(&err)) {
+      if (mdr->lock_cache) {
+	CDir *dir;
+	if (CInode *in = dynamic_cast<CInode*>(object)) {
+	  dir = in->get_projected_parent_dir();
+	} else if (CDentry *dn = dynamic_cast<CDentry*>(object)) {
+	  dir = dn->get_dir();
+	} else {
+	  ceph_assert(0 == "unknown type of lock parent");
+	}
+	ceph_assert(dir->get_inode() == mdr->lock_cache->get_dir_inode());
+	/* forcibly auth pin if lock cache is used */
+	continue;
+      }
+
       // wait
       drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
@@ -640,6 +655,13 @@ void Locker::_drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue,
     }
   }
 
+  if (drop_rdlocks) {
+    if (mut->lock_cache) {
+      put_lock_cache(mut->lock_cache);
+      mut->lock_cache = nullptr;
+    }
+  }
+
   for (set<mds_rank_t>::iterator p = slaves.begin(); p != slaves.end(); ++p) {
     if (!mds->is_cluster_degraded() ||
 	mds->mdsmap->get_state(*p) >= MDSMap::STATE_REJOIN) {
@@ -740,6 +762,169 @@ void Locker::drop_locks_for_fragment_unfreeze(MutationImpl *mut)
       need_issue.insert(static_cast<CInode*>(lock->get_parent()));
   }
   issue_caps_set(need_issue);
+}
+
+class C_MDL_DropCache : public LockerContext {
+  MDLockCache *lock_cache;
+public:
+  C_MDL_DropCache(Locker *l, MDLockCache *lc) :
+    LockerContext(l), lock_cache(lc) { }
+  void finish(int r) override {
+    locker->drop_locks(lock_cache);
+    lock_cache->cleanup();
+    delete lock_cache;
+  }
+};
+
+void Locker::put_lock_cache(MDLockCache* lock_cache)
+{
+  ceph_assert(lock_cache->ref > 0);
+  if (--lock_cache->ref > 0)
+    return;
+
+  ceph_assert(lock_cache->invalidating);
+  mds->queue_waiter(new C_MDL_DropCache(this, lock_cache));
+}
+
+void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
+{
+  ceph_assert(lock_cache->item_cap_lock_cache.is_on_list());
+  ceph_assert(!lock_cache->invalidating);
+  lock_cache->invalidating = true;
+  // XXX check issued caps
+  lock_cache->item_cap_lock_cache.remove_myself();
+  put_lock_cache(lock_cache);
+}
+
+void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri)
+{
+  if (mdr->lock_cache)
+    return;
+
+  client_t client = mdr->get_client();
+  int opcode = mdr->client_request->get_op();
+  dout(10) << "create_lock_cache for client." << client << "/" << ceph_mds_op_name(opcode)<< " on " << *diri << dendl;
+
+  if (!diri->is_auth()) {
+    dout(10) << " dir inode is not auth, noop" << dendl;
+    return;
+  }
+
+  if (mdr->has_more() && !mdr->more()->slaves.empty()) {
+    dout(10) << " there are slaves requests for " << *mdr << ", noop" << dendl;
+    return;
+  }
+
+  Capability *cap = diri->get_client_cap(client);
+  if (!cap) {
+    dout(10) << " there is no cap for client." << client << ", noop" << dendl;
+    return;
+  }
+
+  set<MDSCacheObject*> ancestors;
+  for (CInode *in = diri; ; ) {
+    CDentry *pdn = in->get_projected_parent_dn();
+    if (!pdn)
+      break;
+    // ancestors.insert(pdn);
+    in = pdn->get_dir()->get_inode();
+    ancestors.insert(in);
+  }
+
+  for (auto& p : mdr->object_states) {
+    if (p.first != diri && !ancestors.count(p.first))
+      continue;
+    auto& stat = p.second;
+    if (stat.auth_pinned && !p.first->can_auth_pin()) {
+      dout(10) << " can't auth_pin(freezing?) lock parent " << *p.first << ", noop" << dendl;
+      return;
+    }
+  }
+
+  std::vector<CDir*> dfv;
+  dfv.reserve(diri->get_num_dirfrags());
+
+  diri->get_dirfrags(dfv);
+  for (auto dir : dfv) {
+    if (!dir->is_auth() || !dir->can_auth_pin()) {
+      dout(10) << " can't auth_pin(!auth|freezing?) dirfrag " << *dir << ", noop" << dendl;
+      return;
+    }
+  }
+
+  for (auto& p : mdr->locks) {
+    MDSCacheObject *obj = p.lock->get_parent();
+    if (obj != diri && !ancestors.count(obj))
+      continue;
+    if (!p.lock->is_stable()) {
+      dout(10) << " unstable " << *p.lock << " on " << *obj << ", noop" << dendl;
+      return;
+    }
+  }
+
+  auto lock_cache = new MDLockCache(cap, opcode);
+
+  // prevent subtree migration
+  for (auto dir : dfv)
+    lock_cache->auth_pin(dir);
+
+  for (auto& p : mdr->object_states) {
+    if (p.first != diri && !ancestors.count(p.first))
+      continue;
+    auto& stat = p.second;
+    if (stat.auth_pinned)
+      lock_cache->auth_pin(p.first);
+    else
+      lock_cache->pin(p.first);
+  }
+
+  for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
+    MDSCacheObject *obj = it->lock->get_parent();
+    if (obj != diri && !ancestors.count(obj)) {
+      ++it;
+      continue;
+    }
+    unsigned lock_flag = 0;
+    if (it->is_wrlock()) {
+      // skip wrlocks that were added by MDCache::predirty_journal_parent()
+      if (obj == diri)
+	lock_flag = MutationImpl::LockOp::WRLOCK;
+    } else {
+      ceph_assert(it->is_rdlock());
+      lock_flag = MutationImpl::LockOp::RDLOCK;
+    }
+    if (lock_flag) {
+      lock_cache->emplace_lock(it->lock, lock_flag);
+      mdr->locks.erase(it++);
+    } else {
+      ++it;
+    }
+  }
+
+  lock_cache->ref++;
+  mdr->lock_cache = lock_cache;
+}
+
+bool Locker::find_and_attach_lock_cache(MDRequestRef& mdr, CInode *diri)
+{
+  if (mdr->lock_cache)
+    return true;
+
+  Capability *cap = diri->get_client_cap(mdr->get_client());
+  if (!cap)
+    return false;
+
+  int opcode = mdr->client_request->get_op();
+  for (auto p = cap->lock_caches.begin(); !p.end(); ++p) {
+    MDLockCache *lock_cache = *p;
+    if (lock_cache->opcode == opcode) {
+      dout(10) << "found lock cache for " << ceph_mds_op_name(opcode) << " on " << *diri << dendl;
+      mdr->lock_cache = lock_cache;
+      mdr->lock_cache->ref++;
+      return true;
+    }
+  }
+  return false;
 }
 
 // generics
@@ -3598,6 +3783,11 @@ void Locker::remove_client_cap(CInode *in, Capability *cap, bool kill)
   // clean out any pending snapflush state
   if (!in->client_need_snapflush.empty())
     _do_null_snapflush(in, client);
+
+  while (!cap->lock_caches.empty()) {
+    MDLockCache* lock_cache = cap->lock_caches.front();
+    invalidate_lock_cache(lock_cache);
+  }
 
   bool notable = cap->is_notable();
   in->remove_client_cap(client);
