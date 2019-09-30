@@ -169,6 +169,8 @@ def get_container(fsid, daemon_type, daemon_id):
     else:
         dname = daemon_type
     podman_args = []
+    if daemon_type == 'osd':
+        podman_args += ['--privileged']
     return CephContainer(
         image=args.image,
         entrypoint='/usr/bin/ceph-' + daemon_type,
@@ -238,6 +240,21 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
             fsid, daemon_type, daemon_id,
             uid, gid,
             config, keyring)
+
+    if daemon_type == 'osd' and args.osd_fsid:
+        pc = CephContainer(
+            image=args.image,
+            entrypoint='/usr/sbin/ceph-volume',
+            args=[
+                'lvm', 'activate',
+                daemon_id, args.osd_fsid,
+                '--no-systemd'
+            ],
+            podman_args=['--privileged'],
+            volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+            cname='ceph-%s-activate-%s.%s' % (fsid, daemon_type, daemon_id),
+        )
+        pc.run()
 
     deploy_daemon_units(fsid, daemon_type, daemon_id, c)
 
@@ -931,6 +948,9 @@ parser_deploy.add_argument(
 parser_deploy.add_argument(
     '--mon-ip',
     help='mon IP')
+parser_deploy.add_argument(
+    '--osd-fsid',
+    help='OSD uuid, if creating an OSD container')
 
 args = parser.parse_args()
 
