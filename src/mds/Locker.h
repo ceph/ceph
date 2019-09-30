@@ -67,6 +67,11 @@ public:
   void drop_rdlocks_for_early_reply(MutationImpl *mut);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
+  void create_lock_cache(MDRequestRef& mdr, CInode *diri);
+  bool find_and_attach_lock_cache(MDRequestRef& mdr, CInode *diri);
+  void invalidate_lock_cache(MDLockCache *lock_cache);
+  void put_lock_cache(MDLockCache* lock_cache);
+
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, MDSContext::vec *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
   void eval_any(SimpleLock *lock, bool *need_issue, MDSContext::vec *pfinishers=0, bool first=false) {

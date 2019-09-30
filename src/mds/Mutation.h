@@ -31,13 +31,13 @@
 #include "messages/MClientReply.h"
 
 class LogSegment;
-class Capability;
 class CInode;
 class CDir;
 class CDentry;
 class Session;
 class ScatterLock;
 struct sr_t;
+struct MDLockCache;
 
 struct MutationImpl : public TrackedOp {
   metareqid_t reqid;
@@ -137,22 +137,18 @@ public:
   using lock_iterator = lock_set::iterator;
   lock_set locks;  // full ordering
 
+  MDLockCache* lock_cache = nullptr;
+
   lock_iterator emplace_lock(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) {
     last_locked = l;
     return locks.emplace(l, f, t).first;
   }
 
-  bool is_rdlocked(SimpleLock *lock) const {
-    auto it = locks.find(lock);
-    return it != locks.end() && it->is_rdlock();
-  }
+  bool is_rdlocked(SimpleLock *lock) const;
+  bool is_wrlocked(SimpleLock *lock) const;
   bool is_xlocked(SimpleLock *lock) const {
     auto it = locks.find(lock);
     return it != locks.end() && it->is_xlock();
-  }
-  bool is_wrlocked(SimpleLock *lock) const {
-    auto it = locks.find(lock);
-    return it != locks.end() && it->is_wrlock();
   }
   bool is_remote_wrlocked(SimpleLock *lock) const {
     auto it = locks.find(lock);
@@ -198,7 +194,8 @@ public:
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
   ~MutationImpl() override {
-    ceph_assert(locking == NULL);
+    ceph_assert(!locking);
+    ceph_assert(!lock_cache);
     ceph_assert(num_pins == 0);
     ceph_assert(num_auth_pins == 0);
   }
@@ -228,8 +225,8 @@ public:
   }
 
   // pin items in cache
-  void pin(MDSCacheObject *o);
-  void unpin(MDSCacheObject *o);
+  void pin(MDSCacheObject *object);
+  void unpin(MDSCacheObject *object);
   void set_stickydirs(CInode *in);
   void put_stickydirs();
   void drop_pins();
@@ -487,5 +484,22 @@ struct MDSlaveUpdate {
   }
 };
 
+struct MDLockCache : public MutationImpl {
+  CInode *diri;
+  Capability *client_cap;
+  int opcode;
+
+  elist<MDLockCache*>::item item_cap_lock_cache;
+
+  int ref = 1;
+  bool invalidating = false;
+
+  MDLockCache(Capability *cap, int op) :
+    MutationImpl(), diri(cap->get_inode()), client_cap(cap), opcode(op) {
+    client_cap->lock_caches.push_back(&item_cap_lock_cache);
+  }
+
+  CInode *get_dir_inode() { return diri; }
+};
 
 #endif

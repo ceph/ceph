@@ -82,6 +82,24 @@ void MutationImpl::finish_locking(SimpleLock *lock)
   locking_target_mds = -1;
 }
 
+bool MutationImpl::is_rdlocked(SimpleLock *lock) const {
+  auto it = locks.find(lock);
+  if (it != locks.end() && it->is_rdlock())
+    return true;
+  if (lock_cache)
+    return static_cast<const MutationImpl*>(lock_cache)->is_rdlocked(lock);
+  return false;
+}
+
+bool MutationImpl::is_wrlocked(SimpleLock *lock) const {
+  auto it = locks.find(lock);
+  if (it != locks.end() && it->is_wrlock())
+    return true;
+  if (lock_cache)
+    return static_cast<const MutationImpl*>(lock_cache)->is_wrlocked(lock);
+  return false;
+}
+
 void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
 {
   for (int i = size() - 1; i >= 0; --i) {
