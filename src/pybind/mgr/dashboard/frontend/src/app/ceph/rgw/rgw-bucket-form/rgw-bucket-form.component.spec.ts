@@ -46,45 +46,81 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('bucketNameValidator', () => {
-    it('should validate name (1/4)', () => {
+    const testValidator = (name, valid) => {
       const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl('');
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
-    });
-
-    it('should validate name (2/4)', () => {
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl('ab');
+      const ctrl = new FormControl(name);
       ctrl.markAsDirty();
       const validatorPromise = validatorFn(ctrl);
       expect(validatorPromise instanceof Promise).toBeTruthy();
       if (validatorPromise instanceof Promise) {
         validatorPromise.then((resp) => {
-          expect(resp.bucketNameInvalid).toBeTruthy();
+          if (valid) {
+            expect(resp).toBe(null);
+          } else {
+            expect(resp instanceof Object).toBeTruthy();
+            expect(resp.bucketNameInvalid).toBeTruthy();
+          }
         });
       }
+    };
+
+    it('should validate empty name', () => {
+      testValidator('', true);
     });
 
-    it('should validate name (3/4)', () => {
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl('abc');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
+    it('bucket names cannot be formatted as IP address', () => {
+      testValidator('172.10.4.51', false);
     });
 
-    it('should validate name (4/4)', () => {
+    it('bucket name must be >= 3 characters long (1/2)', () => {
+      testValidator('ab', false);
+    });
+
+    it('bucket name must be >= 3 characters long (2/2)', () => {
+      testValidator('abc', true);
+    });
+
+    it('bucket name must be <= than 63 characters long (1/2)', () => {
+      testValidator(_.repeat('a', 64), false);
+    });
+
+    it('bucket name must be <= than 63 characters long (2/2)', () => {
+      testValidator(_.repeat('a', 63), true);
+    });
+
+    it('bucket names must not contain uppercase characters or underscores (1/2)', () => {
+      testValidator('iAmInvalid', false);
+    });
+
+    it('bucket names must not contain uppercase characters or underscores (2/2)', () => {
+      testValidator('i_am_invalid', false);
+    });
+
+    it('bucket names with invalid labels (1/3)', () => {
+      testValidator('abc.1def.Ghi2', false);
+    });
+
+    it('bucket names with invalid labels (2/3)', () => {
+      testValidator('abc.1-xy', false);
+    });
+
+    it('bucket names with invalid labels (3/3)', () => {
+      testValidator('abc.*def', false);
+    });
+
+    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', () => {
+      testValidator('xyz.abc', true);
+    });
+
+    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (2/3)', () => {
+      testValidator('abc.1-def', true);
+    });
+
+    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (3/3)', () => {
+      testValidator('abc.ghi2', true);
+    });
+
+    it('bucket names must be unique', () => {
       spyOn(rgwBucketService, 'enumerate').and.returnValue(observableOf(['abcd']));
       const validatorFn = component.bucketNameValidator();
       const ctrl = new FormControl('abcd');
