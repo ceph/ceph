@@ -438,31 +438,6 @@ Operations
 :Valid Range: 1-63
 
 
-``osd kick recovery op priority``
-
-:Description: The priority set for recovery operations that are forced by
-              client operations.
-              The new "mclock_opclass/mclock_client" queue basically prioritizes
-              operations based on the class they belong to. The priority property
-              of an operation, if lower than a specific value (64, by default),
-              will get ignored and hence all operations from the same class will
-              be treated fairly in a FIFO fashion (but still limited by the total
-              IOPS or bandwidth available for the corresponding class).
-              To reduce the impact of performance, a more general strategy would be
-              enforcing some limitations on the IOPS or bandwidth for the background
-              recovery (or backfill) operation class. However, this way we'll end up
-              blocking client operations too if they are currently blocked by some
-              degraded objects which need to be recovered first.
-              We hereby grant recovery operations of this kind a higher priority
-              to force them to use strict priority ordering, which should still
-              be of significance once we switch to the new "mclock_opclass/mclock_client"
-              queue.
-
-:Type: 32-bit Integer
-:Default: ``64``
-:Valid Range: 64-255
-
-
 ``osd scrub priority``
 
 :Description: The default priority set for a scheduled scrub work queue when the
