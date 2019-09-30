@@ -103,7 +103,8 @@ def dmcrypt_close(mapping):
         logger.debug('device mapper path does not exist %s' % mapping)
         logger.debug('will skip cryptsetup removal')
         return
-    process.run(['cryptsetup', 'remove', mapping])
+    # don't be strict about the remove call, but still warn on the terminal if it fails
+    process.run(['cryptsetup', 'remove', mapping], stop_on_error=False)
 
 
 def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
