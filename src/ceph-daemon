@@ -88,10 +88,13 @@ def get_legacy_fsid(cluster):
 
 def get_daemon_args(fsid, daemon_type, daemon_id):
     r = [
-        '--default-admin-socket', '/var/run/ceph/' + fsid + '-' + daemon_type + '.' + daemon_id + '.asok',
         '--default-log-to-file=false',
         '--default-log-to-stderr=true',
         ]
+    if daemon_id:
+        r += ['--default-admin-socket',
+              '/var/run/ceph/' + fsid + '-' + daemon_type + '.' + daemon_id +
+              '.asok']
     r += ['--setuser', 'ceph']
     r += ['--setgroup', 'ceph']
     return r
@@ -604,7 +607,11 @@ def command_run():
 ##################################
 
 def command_shell():
-    (daemon_type, daemon_id) = args.name.split('.')
+    if '.' in args.name:
+        (daemon_type, daemon_id) = args.name.split('.')
+    else:
+        daemon_type = args.name
+        daemon_id = None
     (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     subprocess.call(c.shell_cmd())
