@@ -154,6 +154,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to use EVENTTRACE */
+#cmakedefine WITH_EVENTTRACE
+
 /* Define if you want to OSD function instrumentation */
 #cmakedefine WITH_OSD_INSTRUMENT_FUNCTIONS
 

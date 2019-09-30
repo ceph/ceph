@@ -43,6 +43,16 @@
 #include "common/blkdev.h"
 #include "common/numa.h"
 
+#if defined(WITH_LTTNG)
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#include "tracing/bluestore.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
+#else
+#define tracepoint(...)
+#endif
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
@@ -4102,31 +4112,13 @@ void BlueStore::handle_discard(interval_set<uint64_t>& to_release)
 }
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
-  : ObjectStore(cct, path),
-    throttle_bytes(cct, "bluestore_throttle_bytes",
-		   cct->_conf->bluestore_throttle_bytes),
-    throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
-		       cct->_conf->bluestore_throttle_bytes +
-		       cct->_conf->bluestore_throttle_deferred_bytes),
-    finisher(cct, "commit_finisher", "cfin"),
-    kv_sync_thread(this),
-    kv_finalize_thread(this),
-    mempool_thread(this)
-{
-  _init_logger();
-  cct->_conf.add_observer(this);
-  set_cache_shards(1);
-}
+  : BlueStore(cct, path, 0) {}
 
 BlueStore::BlueStore(CephContext *cct,
   const string& path,
   uint64_t _min_alloc_size)
   : ObjectStore(cct, path),
-    throttle_bytes(cct, "bluestore_throttle_bytes",
-		   cct->_conf->bluestore_throttle_bytes),
-    throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
-		       cct->_conf->bluestore_throttle_bytes +
-		       cct->_conf->bluestore_throttle_deferred_bytes),
+    throttle(cct),
     finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
@@ -4249,14 +4241,10 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       _set_throttle_params();
     }
   }
-  if (changed.count("bluestore_throttle_bytes")) {
-    throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
-    throttle_deferred_bytes.reset_max(
-      conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
-  }
-  if (changed.count("bluestore_throttle_deferred_bytes")) {
-    throttle_deferred_bytes.reset_max(
-      conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
+  if (changed.count("bluestore_throttle_bytes") ||
+      changed.count("bluestore_throttle_deferred_bytes") ||
+      changed.count("bluestore_throttle_trace_rate")) {
+    throttle.reset_throttle(conf);
   }
   if (changed.count("bluestore_max_defer_interval")) {
     if (bdev) {
@@ -10892,6 +10880,7 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   auto ios = 1 + txc->ioc.get_num_ios();
   auto cost = throttle_cost_per_io.load();
   txc->cost = ios * cost + txc->bytes;
+  txc->ios = ios;
   dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
 	   << ios << " ios * " << cost << " + " << txc->bytes
 	   << " bytes)" << dendl;
@@ -10937,7 +10926,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->state) {
     case TransContext::STATE_PREPARE:
-      txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
+      throttle.log_state_latency(*txc, logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
 	txc->had_ios = true;
@@ -10948,7 +10937,8 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_AIO_WAIT:
       {
-	utime_t lat = txc->log_state_latency(logger, l_bluestore_state_aio_wait_lat);
+	utime_t lat = throttle.log_state_latency(
+	  *txc, logger, l_bluestore_state_aio_wait_lat);
 	if (lat >= cct->_conf->bluestore_log_op_age) {
 	  dout(0) << __func__ << " slow aio_wait, txc = " << txc
 		  << ", latency = " << lat
@@ -10964,7 +10954,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       if (txc->had_ios) {
 	++txc->osr->txc_with_unstable_io;
       }
-      txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
+      throttle.log_state_latency(*txc, logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       if (cct->_conf->bluestore_sync_submit_transaction) {
 	if (txc->last_nid >= nid_max ||
@@ -10988,10 +10978,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
 		   << dendl;
 	} else {
-	  txc->state = TransContext::STATE_KV_SUBMITTED;
-	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
-	  ceph_assert(r == 0);
-	  _txc_applied_kv(txc);
+	  _txc_apply_kv(txc, true);
 	}
       }
       {
@@ -11015,7 +11002,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       // ** fall-thru **
 
     case TransContext::STATE_KV_DONE:
-      txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
+      throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_done_lat);
       if (txc->deferred_txn) {
 	txc->state = TransContext::STATE_DEFERRED_QUEUED;
 	_deferred_queue(txc);
@@ -11025,12 +11012,12 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       break;
 
     case TransContext::STATE_DEFERRED_CLEANUP:
-      txc->log_state_latency(logger, l_bluestore_state_deferred_cleanup_lat);
+      throttle.log_state_latency(*txc, logger, l_bluestore_state_deferred_cleanup_lat);
       txc->state = TransContext::STATE_FINISHING;
       // ** fall-thru **
 
     case TransContext::STATE_FINISHING:
-      txc->log_state_latency(logger, l_bluestore_state_finishing_lat);
+      throttle.log_state_latency(*txc, logger, l_bluestore_state_finishing_lat);
       _txc_finish(txc);
       return;
 
@@ -11184,8 +11171,31 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
   _txc_update_store_statfs(txc);
 }
 
-void BlueStore::_txc_applied_kv(TransContext *txc)
+void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 {
+  ceph_assert(txc->state == TransContext::STATE_KV_QUEUED);
+  txc->state = TransContext::STATE_KV_SUBMITTED;
+  {
+#if defined(WITH_LTTNG)
+    auto start = mono_clock::now();
+#endif
+
+    int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
+    ceph_assert(r == 0);
+
+#if defined(WITH_LTTNG)
+    if (txc->tracing) {
+      tracepoint(
+	bluestore,
+	transaction_kv_submit_latency,
+	txc->osr->get_sequencer_id(),
+	txc->seq,
+	sync_submit_transaction,
+	ceph::to_seconds<double>(mono_clock::now() - start));
+    }
+#endif
+  }
+
   for (auto ls : { &txc->onodes, &txc->modified_objects }) {
     for (auto& o : *ls) {
       dout(20) << __func__ << " onode " << o << " had " << o->flushing_count
@@ -11201,6 +11211,7 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
 void BlueStore::_txc_committed_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
+  throttle.complete_kv(*txc);
   {
     std::lock_guard l(txc->osr->qlock);
     txc->state = TransContext::STATE_KV_DONE;
@@ -11210,7 +11221,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
       finisher.queue(txc->oncommits);
     }
   }
-  txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
+  throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_committing_lat);
   log_latency_fn(
     __func__,
     l_bluestore_commit_lat,
@@ -11276,6 +11287,7 @@ void BlueStore::_txc_finish(TransContext *txc)
       osr->qcond.notify_all();
     }
   }
+
   while (!releasing_txc.empty()) {
     // release to allocator only after all preceding txc's have also
     // finished any deferred writes that potentially land in these
@@ -11283,7 +11295,8 @@ void BlueStore::_txc_finish(TransContext *txc)
     auto txc = &releasing_txc.front();
     _txc_release_alloc(txc);
     releasing_txc.pop_front();
-    txc->log_state_latency(logger, l_bluestore_state_done_lat);
+    throttle.log_state_latency(*txc, logger, l_bluestore_state_done_lat);
+    throttle.complete(*txc);
     delete txc;
   }
 
@@ -11302,7 +11315,7 @@ void BlueStore::_txc_finish(TransContext *txc)
 	       << dendl;
     }
   }
- }
+}
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
 {
@@ -11344,7 +11357,7 @@ void BlueStore::_osr_attach(Collection *c)
     std::lock_guard l(zombie_osr_lock);
     auto p = zombie_osr_set.find(c->cid);
     if (p == zombie_osr_set.end()) {
-      c->osr = ceph::make_ref<OpSequencer>(this, c->cid);
+      c->osr = ceph::make_ref<OpSequencer>(this, next_sequencer_id++, c->cid);
       ldout(cct, 10) << __func__ << " " << c->cid
 		     << " fresh osr " << c->osr << dendl;
     } else {
@@ -11636,11 +11649,9 @@ void BlueStore::_kv_sync_thread()
       }
 
       for (auto txc : kv_committing) {
+	throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_queued_lat);
 	if (txc->state == TransContext::STATE_KV_QUEUED) {
-	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
-	  ceph_assert(r == 0);
-	  _txc_applied_kv(txc);
+	  _txc_apply_kv(txc, false);
 	  --txc->osr->kv_committing_serially;
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  if (txc->osr->kv_submitted_waiters) {
@@ -11650,7 +11661,6 @@ void BlueStore::_kv_sync_thread()
 
 	} else {
 	  ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
-	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
@@ -11663,7 +11673,7 @@ void BlueStore::_kv_sync_thread()
       // iteration there will already be ops awake.  otherwise, we
       // end up going to sleep, and then wake up when the very first
       // transaction is ready for commit.
-      throttle_bytes.put(costs);
+      throttle.release_kv_throttle(costs);
 
       if (bluefs &&
 	  after_flush - bluefs_last_balance >
@@ -11684,12 +11694,32 @@ void BlueStore::_kv_sync_thread()
 	}
       }
 
+#if defined(WITH_LTTNG)
+      auto sync_start = mono_clock::now();
+#endif
       // submit synct synchronously (block and wait for it to commit)
       int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
       int committing_size = kv_committing.size();
       int deferred_size = deferred_stable.size();
+
+#if defined(WITH_LTTNG)
+      double sync_latency = ceph::to_seconds<double>(sync_start - mono_clock::now());
+      for (auto txc: kv_committing) {
+	if (txc->tracing) {
+	  tracepoint(
+	    bluestore,
+	    transaction_kv_sync_latency,
+	    txc->osr->get_sequencer_id(),
+	    txc->seq,
+	    kv_committing.size(),
+	    deferred_done.size(),
+	    deferred_stable.size(),
+	    sync_latency);
+	}
+      }
+#endif
 
       {
 	std::unique_lock m{kv_finalize_lock};
@@ -11831,7 +11861,7 @@ void BlueStore::_kv_finalize_thread()
 
       if (!deferred_aggressive) {
 	if (deferred_queue_size >= deferred_batch_ops.load() ||
-	    throttle_deferred_bytes.past_midpoint()) {
+	    throttle.should_submit_deferred()) {
 	  deferred_try_submit();
 	}
       }
@@ -11940,7 +11970,7 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
   deferred_lock.unlock();
 
   for (auto& txc : b->txcs) {
-    txc.log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
+    throttle.log_state_latency(txc, logger, l_bluestore_state_deferred_queued_lat);
   }
   uint64_t start = 0, pos = 0;
   bufferlist bl;
@@ -12018,12 +12048,12 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     {
       for (auto& i : b->txcs) {
 	TransContext *txc = &i;
-	txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
+	throttle.log_state_latency(*txc, logger, l_bluestore_state_deferred_aio_wait_lat);
 	txc->state = TransContext::STATE_DEFERRED_CLEANUP;
 	costs += txc->cost;
       }
     }
-    throttle_deferred_bytes.put(costs);
+    throttle.release_deferred_throttle(costs);
   }
 
   {
@@ -12132,25 +12162,26 @@ int BlueStore::queue_transactions(
     handle->suspend_tp_timeout();
 
   auto tstart = mono_clock::now();
-  throttle_bytes.get(txc->cost);
-  if (txc->deferred_txn) {
+
+  if (!throttle.try_start_transaction(
+	*db,
+	*txc,
+	tstart)) {
     // ensure we do not block here because of deferred writes
-    if (!throttle_deferred_bytes.get_or_fail(txc->cost)) {
-      dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
-	       << dendl;
-      ++deferred_aggressive;
-      deferred_try_submit();
-      {
-	// wake up any previously finished deferred events
-	std::lock_guard l(kv_lock);
-	if (!kv_sync_in_progress) {
-	  kv_sync_in_progress = true;
-	  kv_cond.notify_one();
-	}
+    dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
+	     << dendl;
+    ++deferred_aggressive;
+    deferred_try_submit();
+    {
+      // wake up any previously finished deferred events
+      std::lock_guard l(kv_lock);
+      if (!kv_sync_in_progress) {
+	kv_sync_in_progress = true;
+	kv_cond.notify_one();
       }
-      throttle_deferred_bytes.get(txc->cost);
-      --deferred_aggressive;
-   }
+    }
+    throttle.finish_start_transaction(*db, *txc, tstart);
+    --deferred_aggressive;
   }
   auto tend = mono_clock::now();
 
@@ -14748,6 +14779,168 @@ void BlueStore::log_latency_fn(
   }
 }
 
+#if defined(WITH_LTTNG)
+void BlueStore::BlueStoreThrottle::emit_initial_tracepoint(
+  KeyValueDB &db,
+  TransContext &txc,
+  mono_clock::time_point start_throttle_acquire)
+{
+  pending_kv_ios += txc.ios;
+  if (txc.deferred_txn) {
+    pending_deferred_ios += txc.ios;
+  }
+
+  uint64_t started = 0;
+  uint64_t completed = 0;
+  if (should_trace(&started, &completed)) {
+    txc.tracing = true;
+    uint64_t rocksdb_base_level,
+      rocksdb_estimate_pending_compaction_bytes,
+      rocksdb_cur_size_all_mem_tables,
+      rocksdb_compaction_pending,
+      rocksdb_mem_table_flush_pending,
+      rocksdb_num_running_compactions,
+      rocksdb_num_running_flushes,
+      rocksdb_actual_delayed_write_rate;
+    db.get_property(
+      "rocksdb.base-level",
+      &rocksdb_base_level);
+    db.get_property(
+      "rocksdb.estimate-pending-compaction-bytes",
+      &rocksdb_estimate_pending_compaction_bytes);
+    db.get_property(
+      "rocksdb.cur-size-all-mem-tables",
+      &rocksdb_cur_size_all_mem_tables);
+    db.get_property(
+      "rocksdb.compaction-pending",
+      &rocksdb_compaction_pending);
+    db.get_property(
+      "rocksdb.mem-table-flush-pending",
+      &rocksdb_mem_table_flush_pending);
+    db.get_property(
+      "rocksdb.num-running-compactions",
+      &rocksdb_num_running_compactions);
+    db.get_property(
+      "rocksdb.num-running-flushes",
+      &rocksdb_num_running_flushes);
+    db.get_property(
+      "rocksdb.actual-delayed-write-rate",
+      &rocksdb_actual_delayed_write_rate);
+
+  
+    tracepoint(
+      bluestore,
+      transaction_initial_state,
+      txc.osr->get_sequencer_id(),
+      txc.seq,
+      throttle_bytes.get_current(),
+      throttle_deferred_bytes.get_current(),
+      pending_kv_ios,
+      pending_deferred_ios,
+      started,
+      completed,
+      ceph::to_seconds<double>(mono_clock::now() - start_throttle_acquire));
+
+    tracepoint(
+      bluestore,
+      transaction_initial_state_rocksdb,
+      txc.osr->get_sequencer_id(),
+      txc.seq,
+      rocksdb_base_level,
+      rocksdb_estimate_pending_compaction_bytes,
+      rocksdb_cur_size_all_mem_tables,
+      rocksdb_compaction_pending,
+      rocksdb_mem_table_flush_pending,
+      rocksdb_num_running_compactions,
+      rocksdb_num_running_flushes,
+      rocksdb_actual_delayed_write_rate);
+  }
+}
+#endif
+
+utime_t BlueStore::BlueStoreThrottle::log_state_latency(
+  TransContext &txc, PerfCounters *logger, int state)
+{
+  utime_t now = ceph_clock_now();
+  utime_t lat = now - txc.last_stamp;
+  logger->tinc(state, lat);
+#if defined(WITH_LTTNG)
+  if (txc.tracing &&
+      state >= l_bluestore_state_prepare_lat &&
+      state <= l_bluestore_state_done_lat) {
+    OID_ELAPSED("", lat.to_nsec() / 1000.0, txc.get_state_latency_name(state));
+    tracepoint(
+      bluestore,
+      transaction_state_duration,
+      txc.osr->get_sequencer_id(),
+      txc.seq,
+      state,
+      (double)lat);
+  }
+#endif
+  txc.last_stamp = now;
+  return lat;
+}
+
+bool BlueStore::BlueStoreThrottle::try_start_transaction(
+  KeyValueDB &db,
+  TransContext &txc,
+  mono_clock::time_point start_throttle_acquire)
+{
+  throttle_bytes.get(txc.cost);
+
+  if (!txc.deferred_txn || throttle_deferred_bytes.get_or_fail(txc.cost)) {
+    emit_initial_tracepoint(db, txc, start_throttle_acquire);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+void BlueStore::BlueStoreThrottle::finish_start_transaction(
+  KeyValueDB &db,
+  TransContext &txc,
+  mono_clock::time_point start_throttle_acquire)
+{
+  ceph_assert(txc.deferred_txn);
+  throttle_deferred_bytes.get(txc.cost);
+  emit_initial_tracepoint(db, txc, start_throttle_acquire);
+}
+
+#if defined(WITH_LTTNG)
+void BlueStore::BlueStoreThrottle::complete_kv(TransContext &txc)
+{
+  pending_kv_ios -= 1;
+  ios_completed_since_last_traced++;
+  if (txc.tracing) {
+    tracepoint(
+      bluestore,
+      transaction_commit_latency,
+      txc.osr->get_sequencer_id(),
+      txc.seq,
+      ((double)ceph_clock_now()) - ((double)txc.start));
+  }
+}
+#endif
+
+#if defined(WITH_LTTNG)
+void BlueStore::BlueStoreThrottle::complete(TransContext &txc)
+{
+  if (txc.deferred_txn) {
+    pending_deferred_ios -= 1;
+  }
+  if (txc.tracing) {
+    utime_t now = ceph_clock_now();
+    double usecs = ((double)(now.to_nsec()-txc.start.to_nsec()))/1000;
+    tracepoint(
+      bluestore,
+      transaction_total_duration,
+      txc.osr->get_sequencer_id(),
+      txc.seq,
+      usecs);
+  }
+}
+#endif
 
 // DB key value Histogram
 #define KEY_SLAB 32

@@ -501,9 +501,6 @@ CtPtr ProtocolV1::handle_message(char *buffer, int r) {
   } else if (tag == CEPH_MSGR_TAG_ACK) {
     return READ(sizeof(ceph_le64), handle_tag_ack);
   } else if (tag == CEPH_MSGR_TAG_MSG) {
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
-    ltt_recv_stamp = ceph_clock_now();
-#endif
     recv_stamp = ceph_clock_now();
     ldout(cct, 20) << __func__ << " begin MSG" << dendl;
     return READ(sizeof(ceph_msg_header), handle_message_header);
@@ -977,12 +974,12 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
     }
   }
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   if (message->get_type() == CEPH_MSG_OSD_OP ||
       message->get_type() == CEPH_MSG_OSD_OPREPLY) {
     utime_t ltt_processed_stamp = ceph_clock_now();
     double usecs_elapsed =
-        (ltt_processed_stamp.to_nsec() - ltt_recv_stamp.to_nsec()) / 1000;
+      ((double)(ltt_processed_stamp.to_nsec() - recv_stamp.to_nsec())) / 1000;
     ostringstream buf;
     if (message->get_type() == CEPH_MSG_OSD_OP)
       OID_ELAPSED_WITH_MSG(message, usecs_elapsed, "TIME_TO_DECODE_OSD_OP",
@@ -1177,7 +1174,7 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
                    << (rc ? " continuely." : " done.") << dendl;
   }
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
