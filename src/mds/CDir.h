@@ -578,6 +578,15 @@ public:
     return true;
   }
 
+  bool is_any_freezing_or_frozen_inode() const {
+    return num_frozen_inodes || !freezing_inodes.empty();
+  }
+  void disable_frozen_inode() {
+    ceph_assert(num_frozen_inodes == 0);
+    frozen_inode_suppressed++;
+  }
+  void enable_frozen_inode();
+
   ostream& print_db_line_prefix(ostream& out) override;
   void print(ostream& out) override;
   void dump(Formatter *f, int flags = DUMP_DEFAULT) const;
@@ -682,6 +691,11 @@ protected:
   // lock nesting, freeze
   static int num_frozen_trees;
   static int num_freezing_trees;
+
+  // freezing/frozen inodes in this dirfrag
+  int num_frozen_inodes = 0;
+  int frozen_inode_suppressed = 0;
+  elist<CInode*> freezing_inodes;
 
   int dir_auth_pins = 0;
 

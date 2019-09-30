@@ -197,7 +197,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   friend class MDCache;
   friend class StrayManager;
   friend class CDir;
-  friend class CInodeExport;
+  friend ostream& operator<<(ostream&, const CInode&);
 
   class scrub_stamp_info_t {
   public:
@@ -957,8 +957,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
   elist<CInode*>::item& item_recover_queue_front = item_dirty_dirfrag_nest;
 
-  int auth_pin_freeze_allowance = 0;
-
   inode_load_vec_t pop;
   elist<CInode*>::item item_pop_lru;
 
@@ -1069,6 +1067,11 @@ protected:
   // -- waiting --
   mempool::mds_co::compact_map<frag_t, MDSContext::vec > waiting_on_dir;
 
+
+  // -- freezing inode --
+  int auth_pin_freeze_allowance = 0;
+  elist<CInode*>::item item_freezing_inode;
+  void maybe_finish_freeze_inode();
 private:
 
   friend class ValidationContinuation;
