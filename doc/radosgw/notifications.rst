@@ -17,23 +17,23 @@ user can only manage its own topics, and can only associate them with buckets it
 
 In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
-The notification may also filter out events based on preffix/suffix and/or regular expression matching of the keys. As well as, 
+The notification may also filter out events based on prefix/suffix and/or regular expression matching of the keys. As well as,
 on the metadata attributes attached to the object.
 There can be multiple notifications for any specific topic, and the same topic could be used for multiple notifications.
 
 REST API has been defined to provide configuration and control interfaces for the bucket notification
-mechanism. This API is similar to the one defined as S3-compatible API of the pubsub sync module.
+mechanism. This API is similar to the one defined as the S3-compatible API of the pubsub sync module.
 
 .. toctree::
    :maxdepth: 1
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
-Notificatios Performance Stats
+Notification Performance Stats
 ------------------------------
-Same counters are shared between the pubsub sync module and the bucket notification mechanism.
+The same counters are shared between the pubsub sync module and the bucket notification mechanism.
 
-- ``pubsub_event_triggered``: running counter of events with at lease one topic associated with them
+- ``pubsub_event_triggered``: running counter of events with at least one topic associated with them
 - ``pubsub_event_lost``: running counter of events that had topics associated with them but that were not pushed to any of the endpoints
 - ``pubsub_push_ok``: running counter, for all notifications, of events successfully pushed to their endpoint
 - ``pubsub_push_fail``: running counter, for all notifications, of events failed to be pushed to their endpoint
@@ -55,7 +55,7 @@ Create a Topic
 
 This will create a new topic. The topic should be provided with push endpoint parameters that would be used later
 when a notification is created.
-Upon successful request, the response will include the topic ARN that could be later used to reference this topic in the notification request. 
+Upon a successful request, the response will include the topic ARN that could be later used to reference this topic in the notification request.
 To update a topic, use the same command used for topic creation, with the topic name of an existing topic and different endpoint values.
 
 .. tip:: Any notification already associated with the topic needs to be re-created for the topic update to take effect 
@@ -72,7 +72,7 @@ To update a topic, use the same command used for topic creation, with the topic 
 
 Request parameters:
 
-- push-endpoint: URI of endpoint to send push notification to
+- push-endpoint: URI of an endpoint to send push notification to
 
  - URI schema is: ``http[s]|amqp://[<user>:<password>@]<fqdn>[:<port>][/<amqp-vhost>]``
  - Same schema is used for HTTP and AMQP endpoints (except amqp-vhost which is specific to AMQP)
@@ -89,8 +89,8 @@ Request parameters:
 .. note:: 
 
     - The key/value of a specific parameter does not have to reside in the same line, or in any specific order, but must use the same index
-    - Attribute indexing does not need to be sequntial or start from any specific value
-    - `AWS Create Topic`_ has detailed explanation on endpoint attributes format. However, in our case different keys and values are used
+    - Attribute indexing does not need to be sequential or start from any specific value
+    - `AWS Create Topic`_ has a detailed explanation of the endpoint attributes format. However, in our case different keys and values are used
 
 The response will have the following format:
 
