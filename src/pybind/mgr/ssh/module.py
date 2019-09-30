@@ -22,6 +22,10 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_SSH_CONFIG = ('Host *\n'
+                      'User root\n'
+                      'StrictHostKeyChecking no\n')
+
 # high-level TODO:
 #  - bring over some of the protections from ceph-deploy that guard against
 #    multiple bootstrapping / initialization
@@ -90,7 +94,7 @@ class SSHConnection(object):
     """
     def __init__(self):
         self.conn = None
-        self.temp_file = None
+        self.temp_files = []
 
     # proxy to the remoto connection
     def __getattr__(self, name):
@@ -238,18 +242,22 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         conn = SSHConnection()
 
+        # ssh_config
+        ssh_config_fname = self.get_localized_module_option("ssh_config_file")
         ssh_config = self.get_store("ssh_config")
-        if ssh_config is not None:
-            conn.temp_file = tempfile.NamedTemporaryFile()
-            conn.temp_file.write(ssh_config.encode('utf-8'))
-            conn.temp_file.flush() # make visible to other processes
-            ssh_config_fname = conn.temp_file.name
-        else:
-            ssh_config_fname = self.get_localized_module_option("ssh_config_file")
-
+        if ssh_config is not None or ssh_config_fname is None:
+            if not ssh_config:
+                ssh_config = DEFAULT_SSH_CONFIG
+            f = tempfile.NamedTemporaryFile()
+            os.fchmod(f.fileno(), 0o600);
+            f.write(ssh_config.encode('utf-8'))
+            f.flush() # make visible to other processes
+            conn.temp_files += [f]
+            ssh_config_fname = f.name
         if ssh_config_fname:
             if not os.path.isfile(ssh_config_fname):
-                raise Exception("ssh_config \"{}\" does not exist".format(ssh_config_fname))
+                raise Exception("ssh_config \"{}\" does not exist".format(
+                    ssh_config_fname))
             ssh_options = "-F {}".format(ssh_config_fname)
 
         self.log.info("opening connection to host '{}' with ssh "
