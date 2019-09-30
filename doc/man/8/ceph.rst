@@ -177,7 +177,10 @@ Usage::
 config-key
 ----------
 
-Manage configuration key. It uses some additional subcommands.
+Manage configuration key. Config-key is a general purpose key/value service
+offered by the monitors. This service is mainly used by Ceph tools and daemons
+for persisting various settings. Among which, ceph-mgr modules uses it for
+storing their options. It uses some additional subcommands.
 
 Subcommand ``rm`` deletes configuration key.
 
