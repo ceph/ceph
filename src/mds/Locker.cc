@@ -4130,7 +4130,7 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
     mdcache->touch_client_lease(l, pool, now);
 
     LeaseStat lstat;
-    lstat.mask = 1 | CEPH_LOCK_DN;  // old and new bit values
+    lstat.mask = CEPH_LEASE_VALID;
     lstat.duration_ms = (uint32_t)(1000 * mdcache->client_lease_durations[pool]);
     lstat.seq = ++l->seq;
     encode_lease(bl, session->info, lstat);

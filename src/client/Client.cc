@@ -1004,7 +1004,7 @@ void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, Me
   
   ceph_assert(dn);
 
-  if (dlease->mask & CEPH_LOCK_DN) {
+  if (dlease->mask & CEPH_LEASE_VALID) {
     if (dttl > dn->lease_ttl) {
       ldout(cct, 10) << "got dentry lease on " << dn->name
 	       << " dur " << dlease->duration_ms << "ms ttl " << dttl << dendl;
@@ -2991,7 +2991,7 @@ void Client::handle_lease(const MConstRef<MClientLease>& m)
   }
   in = inode_map[vino];
 
-  if (m->get_mask() & CEPH_LOCK_DN) {
+  if (m->get_mask() & CEPH_LEASE_VALID) {
     if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
       ldout(cct, 10) << " don't have dir|dentry " << m->get_ino() << "/" << m->dname <<dendl;
       goto revoke;
