@@ -11,11 +11,21 @@ from teuthology import misc
 from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.task import console_log
+import teuthology.task.internal
+from teuthology.misc import canonicalize_hostname
 
 import util
 import keys
 
 log = logging.getLogger(__name__)
+
+
+def update_nodes(nodes):
+    for node in nodes:
+        remote = teuthology.orchestra.remote.Remote(
+            canonicalize_hostname(node))
+        inventory_info = remote.inventory_info
+        teuthology.lock.ops.update_inventory(inventory_info)
 
 
 def lock_many_openstack(ctx, num, machine_type, user=None, description=None,
@@ -109,6 +119,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                                   machine)
                         unlock_one(ctx, machine, user)
                     ok_machs = keys.do_update_keys(ok_machs.keys())[1]
+                update_nodes(ok_machs)
                 return ok_machs
             elif machine_type in reimage_types:
                 reimaged = dict()
@@ -124,6 +135,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                             p.spawn(teuthology.provision.reimage, ctx, machine)
                             reimaged[machine] = machines[machine]
                 reimaged = keys.do_update_keys(reimaged.keys())[1]
+                update_nodes(reimaged)
                 return reimaged
             return machines
         elif response.status_code == 503:

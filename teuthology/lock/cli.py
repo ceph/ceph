@@ -178,6 +178,7 @@ def main(ctx):
                 p.spawn(teuthology.provision.reimage, ctx, machine)
         for machine in updatekeys_machines:
             keys.do_update_keys([machine])
+        ops.update_nodes(reimage_machines + machines_to_update)
 
     elif ctx.unlock:
         if ctx.owner is None and user is None:
