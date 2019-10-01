@@ -84,8 +84,9 @@ public:
     return osdmap_service;
   }
 
-  // Op Tracking
+  // Op Management
   OperationRegistry registry;
+  OperationThrottler throttler;
 
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
