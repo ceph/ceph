@@ -682,12 +682,44 @@ def command_exec():
 def command_ceph_volume():
     log_dir = get_log_dir(args.log_dir, args.fsid)
     makedirs(log_dir)
+
+    mounts = get_container_mounts(args.fsid, 'osd', None)
+
+    tmp_config = None
+    tmp_keyring = None
+
+    if args.config_and_keyring:
+        import json
+        if args.config_and_keyring == '-':
+            j = sys.stdin.read()
+        else:
+            with open(args.config_and_keyring, 'r') as f:
+                j = f.read()
+        d = json.loads(j)
+        config = d.get('config')
+        keyring = d.get('keyring')
+
+        # tmp keyring file
+        tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
+        os.fchmod(tmp_keyring.fileno(), 0o600)
+        tmp_keyring.write(keyring)
+        tmp_keyring.flush()
+
+        # tmp config file
+        tmp_config = tempfile.NamedTemporaryFile(mode='w')
+        os.fchmod(tmp_config.fileno(), 0o600)
+        tmp_config.write(config)
+        tmp_config.flush()
+
+        mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
+        mounts[tmp_keyring.name] = '/var/lib/ceph/bootstrap-osd/ceph.keyring:z'
+
     c = CephContainer(
         image=args.image,
         entrypoint='/usr/sbin/ceph-volume',
         args=args.command,
         podman_args=['--privileged'],
-        volume_mounts=get_container_mounts(args.fsid, 'osd', None),
+        volume_mounts=mounts,
     )
     subprocess.call(c.run_cmd())
 
@@ -913,6 +945,9 @@ parser_ceph_volume.add_argument(
     '--fsid',
     required=True,
     help='cluster FSID')
+parser_ceph_volume.add_argument(
+    '--config-and-keyring',
+    help='JSON file with config and (client.bootrap-osd) key')
 parser_ceph_volume.add_argument(
     'command', nargs='+',
     help='command')
