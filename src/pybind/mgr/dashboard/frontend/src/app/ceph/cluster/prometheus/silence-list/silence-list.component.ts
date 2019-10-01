@@ -165,6 +165,7 @@ export class SilenceListComponent {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: i18nSilence,
+        itemNames: [id],
         actionDescription: this.actionLabels.EXPIRE,
         submitActionObservable: () =>
           new Observable((observer: Subscriber<any>) => {
