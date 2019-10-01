@@ -439,15 +439,24 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         conn = self._get_connection(host)
 
         try:
-            ceph_volume_executable = self._executable_path(conn, 'ceph-volume')
+            ceph_volume_executable = self._executable_path(conn, 'podman')
             command = [
                 ceph_volume_executable,
+                'run',
+                '-it',
+                '--net=host',
+                '--privileged',
+                '--entrypoint',
+                '/usr/sbin/ceph-volume',
+                'ceph/daemon-base',
                 "inventory",
                 "--format=json"
             ]
 
             out, err, code = remoto.process.check(conn, command)
-            host_devices = json.loads(out[0])
+            # stdout and stderr get combined; assume last line is the real
+            # output and everything preceding it is an error.
+            host_devices = json.loads(out[-1])
             return host_devices
 
         except Exception as ex:
