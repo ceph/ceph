@@ -301,76 +301,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             executable_path))
         return executable_path
 
-    def _build_ceph_conf(self):
-        """
-        Build a minimal `ceph.conf` containing the current monitor hosts.
-
-        Notes:
-          - ceph-volume complains if no section header (e.g. global) exists
-          - other ceph cli tools complained about no EOF newline
-
-        TODO:
-          - messenger v2 syntax?
-        """
-        mon_map = self.get("mon_map")
-        mon_addrs = map(lambda m: m["addr"], mon_map["mons"])
-        mon_hosts = ", ".join(mon_addrs)
-        return "[global]\nmon host = {}\n".format(mon_hosts)
-
-    def _ensure_ceph_conf(self, conn, network=False):
-        """
-        Install ceph.conf on remote node if it doesn't exist.
-        """
-        conf = self._build_ceph_conf()
-        if network:
-            conf += "public_network = {}\n".format(network)
-        conn.remote_module.write_conf("/etc/ceph/ceph.conf", conf)
-
-    def _get_bootstrap_key(self, service_type):
-        """
-        Fetch a bootstrap key for a service type.
-
-        :param service_type: name (e.g. mds, osd, mon, ...)
-        """
-        identity_dict = {
-            'admin' : 'client.admin',
-            'mds' : 'client.bootstrap-mds',
-            'mgr' : 'client.bootstrap-mgr',
-            'osd' : 'client.bootstrap-osd',
-            'rgw' : 'client.bootstrap-rgw',
-            'mon' : 'mon.'
-        }
-
-        identity = identity_dict[service_type]
-
-        ret, out, err = self.mon_command({
-            "prefix": "auth get",
-            "entity": identity
-        })
-
-        if ret == -errno.ENOENT:
-            raise RuntimeError("Entity '{}' not found: '{}'".format(identity, err))
-        elif ret != 0:
-            raise RuntimeError("Error retrieving key for '{}' ret {}: '{}'".format(
-                identity, ret, err))
-
-        return out
-
-    def _bootstrap_osd(self, conn):
-        """
-        Bootstrap an osd.
-
-          1. install a copy of ceph.conf
-          2. install the osd bootstrap key
-
-        :param conn: remote host connection
-        """
-        self._ensure_ceph_conf(conn)
-        keyring = self._get_bootstrap_key("osd")
-        keyring_path = "/var/lib/ceph/bootstrap-osd/ceph.keyring"
-        conn.remote_module.write_keyring(keyring_path, keyring)
-        return keyring_path
-
     def _get_hosts(self, wanted=None):
         return self.inventory_cache.items_filtered(wanted)
 
@@ -501,30 +431,80 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @log_exceptions
     def _create_osd(self, host, drive_group):
-        conn = self._get_connection(host)
-        try:
-            devices = drive_group.data_devices.paths
-            self._bootstrap_osd(conn)
+        # get bootstrap key
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get',
+            'entity': 'client.bootstrap-osd',
+        })
+        self.log.debug('keyring %s' % keyring)
 
-            for device in devices:
-                ceph_volume_executable = self._executable_path(conn, "ceph-volume")
-                command = [
-                    ceph_volume_executable,
-                    "lvm",
-                    "create",
+        # generate config
+        ret, config, err = self.mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+        self.log.debug('config %s' % config)
+
+        j = json.dumps({
+            'config': config,
+            'keyring': keyring,
+        })
+        self.log.debug('j %s' % j)
+
+        # TODO FIXME
+        conn = self._get_connection(host)
+        conn.remote_module.write_file(
+            '/tmp/foo',
+            j,
+            0o600, None, 0, 0)
+
+        devices = drive_group.data_devices.paths
+        for device in devices:
+            out, code = self._run_ceph_daemon(
+                host, 'osd', 'ceph-volume',
+                [
+                    '--config-and-keyring', '/tmp/foo',
+                    '--',
+                    'lvm', 'prepare',
                     "--cluster-fsid", self._get_cluster_fsid(),
                     "--{}".format(drive_group.objectstore),
-                    "--data", device
-                ]
-                remoto.process.run(conn, command)
+                    "--data", device,
+                ])
+            self.log.debug('ceph-volume prepare: %s' % out)
 
-            return "Created osd on host '{}'".format(host)
+        # check result
+        out, code = self._run_ceph_daemon(
+            host, 'osd', 'ceph-volume',
+            [
+                '--',
+                'lvm', 'list',
+                '--format', 'json',
+            ])
+        self.log.debug('code %s out %s' % (code, out))
+        j = json.loads('\n'.join(out))
+        self.log.debug('j %s' % j)
+        fsid = self.get('mon_map')['fsid']
+        for osd_id, osds in j.items():
+            for osd in osds:
+                if osd['tags']['ceph.cluster_fsid'] != fsid:
+                    self.log.debug('mismatched fsid, skipping %s' % osd)
+                    continue
+                if len(list(set(devices) & set(osd['devices']))) == 0:
+                    self.log.debug('mismatched devices, skipping %s' % osd)
+                    continue
 
-        except:
-            raise
+                # create
+                ret, keyring, err = self.mon_command({
+                    'prefix': 'auth get',
+                    'entity': 'osd.%s' % str(osd_id),
+                })
+                self.log.debug('keyring %s' % keyring)
+                self._create_daemon(
+                    'osd', str(osd_id), host, keyring,
+                    extra_args=[
+                        '--osd-fsid', osd['tags']['ceph.osd_fsid'],
+                    ])
 
-        finally:
-            conn.exit()
+        return "Created osd(s) on host '{}'".format(host)
 
     def create_osds(self, drive_group, all_hosts=None):
         """
