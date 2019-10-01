@@ -66,6 +66,7 @@ set(librgw_common_srcs
   rgw_es_query.cc
   rgw_formats.cc
   rgw_gc.cc
+  rgw_gc_log.cc
   rgw_http_client.cc
   rgw_json_enc.cc
   rgw_keystone.cc
