@@ -147,6 +147,8 @@ format must be edited manually:
   $ vi user.json
   $ radosgw-admin metadata put user:<user-id> < user.json
 
+.. _s3_bucket_placement:
+
 S3 Bucket Placement
 -------------------
 
