@@ -37,8 +37,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs volume rm '
-                   'name=vol_name,type=CephString',
-            'desc': "Delete a CephFS volume",
+                   'name=vol_name,type=CephString '
+                   'name=yes-i-really-mean-it,type=CephString,req=false ',
+            'desc': "Delete a FS volume by passing --yes-i-really-mean-it flag",
             'perm': 'rw'
         },
         {
@@ -194,7 +195,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_fs_volume_rm(self, inbuf, cmd):
         vol_name = cmd['vol_name']
-        return self.vc.delete_volume(vol_name)
+        confirm = cmd.get('yes-i-really-mean-it', None)
+        return self.vc.delete_volume(vol_name, confirm)
 
     def _cmd_fs_volume_ls(self, inbuf, cmd):
         return self.vc.list_volumes()
