@@ -28,6 +28,7 @@ from ceph_detect_init import oraclevms
 import os
 import logging
 import platform
+import re
 
 
 def get(use_rhceph=False):
@@ -87,11 +88,11 @@ def _get_distro(distro, use_rhceph=False):
 
 def _normalized_distro_name(distro):
     distro = distro.lower()
-    if distro.startswith(('redhat', 'red hat')):
+    if distro.startswith(('redhat', 'red hat', 'rhel')):
         return 'redhat'
     elif distro.startswith(('scientific', 'scientific linux')):
         return 'scientific'
-    elif distro.startswith(('suse', 'opensuse')):
+    elif distro.startswith(('suse', 'opensuse', 'sles', 'sled')):
         return 'suse'
     elif distro.startswith('centos'):
         return 'centos'
@@ -104,6 +105,15 @@ def _normalized_distro_name(distro):
     elif distro.startswith('virtuozzo'):
         return 'virtuozzo'
     return distro
+
+
+def _extract_from_os_release(file_contents, key):
+    r = re.compile('^{}\=[\'\"]*([^\'\"\n]*)'.format(key), re.MULTILINE)
+    match = r.search(file_contents)
+    if match:
+        return match.group(1)
+    else:
+        return ''
 
 
 def platform_information():
@@ -123,10 +133,23 @@ def platform_information():
         return ('docker', 'docker', 'docker')
 
     if platform.system() == 'Linux':
-        linux_distro = platform.linux_distribution(
-            supported_dists=platform._supported_dists + ('alpine', 'arch'))
-        logging.debug('platform_information: linux_distribution = ' +
-                      str(linux_distro))
+        linux_distro = ('', '', '')
+        if os.path.isfile('/etc/os-release'):
+            try:
+                with open('/etc/os-release', 'r') as f:
+                    data = f.read()
+                linux_distro = (
+                    _extract_from_os_release(data, 'ID'),
+                    _extract_from_os_release(data, 'VERSION_ID'),
+                    '')
+            except Exception as err:
+                logging.debug("platform_information: ",
+                              "Error while opening %s : %s" % (file_name, err))
+        else:
+            linux_distro = platform.linux_distribution(
+                supported_dists=platform._supported_dists + ('alpine', 'arch'))
+            logging.debug('platform_information: linux_distribution = ' +
+                          str(linux_distro))
         distro, release, codename = linux_distro
     elif platform.system() == 'FreeBSD':
         distro = 'freebsd'

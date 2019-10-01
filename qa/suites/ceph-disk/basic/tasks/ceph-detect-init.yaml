@@ -1,0 +1,11 @@
+openstack:
+- volumes: # attached to each instance
+    count: 0
+roles:
+- [client.0]
+tasks:
+- install:
+- exec:
+    client.0:
+      - ceph-detect-init
+      - test "$(ceph-detect-init)" = "systemd"

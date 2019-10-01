@@ -165,6 +165,7 @@ class TestCephDetectInit(testtools.TestCase):
                                  is_openrc=(lambda: False)):
             self.assertEqual('unknown', gentoo.choose_init())
 
+    @mock.patch('os.path.isfile', lambda path: False)
     def test_get(self):
         with mock.patch.multiple(
                 'platform',
@@ -252,6 +253,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('gentoo', n('exherbo'))
         self.assertEqual('virtuozzo', n('Virtuozzo Linux'))
 
+    @mock.patch('os.path.isfile', lambda path: False)
     @mock.patch('platform.system', lambda: 'Linux')
     def test_platform_information_linux(self):
         with mock.patch('platform.linux_distribution',
@@ -319,12 +321,231 @@ class TestCephDetectInit(testtools.TestCase):
         argv = ['--use-rhceph', '--verbose']
         self.assertEqual(0, main.run(argv))
 
+    @mock.patch('os.path.isfile', lambda path: False)
+    def test_run_unknown_distro(self):
+        argv = ['--use-rhceph', '--verbose']
         with mock.patch.multiple(
                 'platform',
                 system=lambda: 'Linux',
                 linux_distribution=lambda **kwargs: (('unknown', '', ''))):
             self.assertRaises(exc.UnsupportedPlatform, main.run, argv)
             self.assertEqual(0, main.run(argv + ['--default=sysvinit']))
+
+    def test_extract_from_os_release(self):
+        self.assertEqual('', ceph_detect_init._extract_from_os_release(
+                         'bad data', 'ID'))
+        os_release_centos_7 = """
+NAME="CentOS Linux"
+VERSION="7 (Core)"
+ID="centos"
+ID_LIKE="rhel fedora"
+VERSION_ID="7"
+PRETTY_NAME="CentOS Linux 7 (Core)"
+ANSI_COLOR="0;31"
+CPE_NAME="cpe:/o:centos:centos:7"
+HOME_URL="https://www.centos.org/"
+BUG_REPORT_URL="https://bugs.centos.org/"
+
+CENTOS_MANTISBT_PROJECT="CentOS-7"
+CENTOS_MANTISBT_PROJECT_VERSION="7"
+REDHAT_SUPPORT_PRODUCT="centos"
+REDHAT_SUPPORT_PRODUCT_VERSION="7"
+"""
+        self.assertEqual('centos', ceph_detect_init._extract_from_os_release(
+                         os_release_centos_7, 'ID'))
+        self.assertEqual('7', ceph_detect_init._extract_from_os_release(
+                         os_release_centos_7, 'VERSION_ID'))
+        os_release_debian_stretch = """
+PRETTY_NAME="Debian GNU/Linux 9 (stretch)"
+NAME="Debian GNU/Linux"
+VERSION_ID="9"
+VERSION="9 (stretch)"
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+"""
+        self.assertEqual('debian', ceph_detect_init._extract_from_os_release(
+                         os_release_debian_stretch, 'ID'))
+        self.assertEqual('9', ceph_detect_init._extract_from_os_release(
+                         os_release_debian_stretch, 'VERSION_ID'))
+        os_release_fedora_26 = """
+NAME=Fedora
+VERSION="26 (Twenty Six)"
+ID=fedora
+VERSION_ID=26
+PRETTY_NAME="Fedora 26 (Twenty Six)"
+ANSI_COLOR="0;34"
+CPE_NAME="cpe:/o:fedoraproject:fedora:26"
+HOME_URL="https://fedoraproject.org/"
+BUG_REPORT_URL="https://bugzilla.redhat.com/"
+REDHAT_BUGZILLA_PRODUCT="Fedora"
+REDHAT_BUGZILLA_PRODUCT_VERSION=26
+REDHAT_SUPPORT_PRODUCT="Fedora"
+REDHAT_SUPPORT_PRODUCT_VERSION=26
+PRIVACY_POLICY_URL=https://fedoraproject.org/wiki/Legal:PrivacyPolicy
+"""
+        self.assertEqual('fedora', ceph_detect_init._extract_from_os_release(
+                         os_release_fedora_26, 'ID'))
+        self.assertEqual('26', ceph_detect_init._extract_from_os_release(
+                         os_release_fedora_26, 'VERSION_ID'))
+        os_release_opensuse_42_2 = """
+NAME="openSUSE Leap"
+VERSION="42.2"
+ID=opensuse
+ID_LIKE="suse"
+VERSION_ID="42.2"
+PRETTY_NAME="openSUSE Leap 42.2"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:opensuse:leap:42.2"
+BUG_REPORT_URL="https://bugs.opensuse.org"
+HOME_URL="https://www.opensuse.org/"
+"""
+        self.assertEqual('opensuse', ceph_detect_init._extract_from_os_release(
+                         os_release_opensuse_42_2, 'ID'))
+        self.assertEqual('42.2', ceph_detect_init._extract_from_os_release(
+                         os_release_opensuse_42_2, 'VERSION_ID'))
+        os_release_opensuse_42_3 = """
+NAME="openSUSE Leap"
+VERSION="42.3"
+ID=opensuse
+ID_LIKE="suse"
+VERSION_ID="42.3"
+PRETTY_NAME="openSUSE Leap 42.3"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:opensuse:leap:42.3"
+BUG_REPORT_URL="https://bugs.opensuse.org"
+HOME_URL="https://www.opensuse.org/"
+"""
+        self.assertEqual('opensuse', ceph_detect_init._extract_from_os_release(
+                         os_release_opensuse_42_3, 'ID'))
+        self.assertEqual('42.3', ceph_detect_init._extract_from_os_release(
+                         os_release_opensuse_42_3, 'VERSION_ID'))
+        os_release_opensuse_15_0 = """
+NAME="openSUSE Leap"
+VERSION="15.0"
+ID="opensuse-leap"
+ID_LIKE="suse opensuse"
+VERSION_ID="15.0"
+PRETTY_NAME="openSUSE Leap 15.0"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:opensuse:leap:15.0"
+BUG_REPORT_URL="https://bugs.opensuse.org"
+HOME_URL="https://www.opensuse.org/"
+"""
+        self.assertEqual('opensuse-leap',
+                         ceph_detect_init._extract_from_os_release(
+                             os_release_opensuse_15_0, 'ID'))
+        self.assertEqual('15.0', ceph_detect_init._extract_from_os_release(
+                         os_release_opensuse_15_0, 'VERSION_ID'))
+        os_release_sles_12_3 = """
+NAME="SLES"
+VERSION="12-SP3"
+VERSION_ID="12.3"
+PRETTY_NAME="SUSE Linux Enterprise Server 12 SP3"
+ID="sles"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:suse:sles:12:sp3"
+"""
+        self.assertEqual('sles', ceph_detect_init._extract_from_os_release(
+                         os_release_sles_12_3, 'ID'))
+        self.assertEqual('12.3', ceph_detect_init._extract_from_os_release(
+                         os_release_sles_12_3, 'VERSION_ID'))
+        os_release_sled_15 = """
+NAME="SLED"
+VERSION="15"
+VERSION_ID="15"
+PRETTY_NAME="SUSE Linux Enterprise Desktop 15"
+ID="sled"
+ID_LIKE="suse"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:suse:sled:15"
+"""
+        self.assertEqual('sled', ceph_detect_init._extract_from_os_release(
+                         os_release_sled_15, 'ID'))
+        self.assertEqual('15', ceph_detect_init._extract_from_os_release(
+                         os_release_sled_15, 'VERSION_ID'))
+        os_release_sles_15 = """
+NAME="SLES"
+VERSION="15"
+VERSION_ID="15"
+PRETTY_NAME="SUSE Linux Enterprise Server 15"
+ID="sles"
+ID_LIKE="suse"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:suse:sles:15"
+"""
+        self.assertEqual('sles', ceph_detect_init._extract_from_os_release(
+                         os_release_sles_15, 'ID'))
+        self.assertEqual('15', ceph_detect_init._extract_from_os_release(
+                         os_release_sles_15, 'VERSION_ID'))
+        os_release_opensuse_tumbleweed_old_style = """
+NAME="openSUSE Tumbleweed"
+# VERSION="20170502"
+ID=opensuse
+ID_LIKE="suse"
+VERSION_ID="20170502"
+PRETTY_NAME="openSUSE Tumbleweed"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:opensuse:tumbleweed:20170502"
+BUG_REPORT_URL="https://bugs.opensuse.org"
+HOME_URL="https://www.opensuse.org/"
+"""
+        self.assertEqual('opensuse',
+                         ceph_detect_init._extract_from_os_release(
+                             os_release_opensuse_tumbleweed_old_style, 'ID'))
+        self.assertEqual('20170502', ceph_detect_init._extract_from_os_release(
+                         os_release_opensuse_tumbleweed_old_style,
+                         'VERSION_ID'))
+        os_release_opensuse_tumbleweed_new_style = """
+NAME="openSUSE Tumbleweed"
+# VERSION="20180712"
+ID="opensuse-tumbleweed"
+ID_LIKE="opensuse suse"
+VERSION_ID="20180712"
+PRETTY_NAME="openSUSE Tumbleweed"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:opensuse:tumbleweed:20180712"
+BUG_REPORT_URL="https://bugs.opensuse.org"
+HOME_URL="https://www.opensuse.org/"
+"""
+        self.assertEqual('opensuse-tumbleweed',
+                         ceph_detect_init._extract_from_os_release(
+                             os_release_opensuse_tumbleweed_new_style, 'ID'))
+        self.assertEqual('20180712', ceph_detect_init._extract_from_os_release(
+                         os_release_opensuse_tumbleweed_new_style,
+                         'VERSION_ID'))
+        os_release_ubuntu_xenial = """
+NAME="Ubuntu"
+VERSION="16.04 LTS (Xenial Xerus)"
+ID=ubuntu
+ID_LIKE=debian
+PRETTY_NAME="Ubuntu 16.04 LTS"
+VERSION_ID="16.04"
+HOME_URL="http://www.ubuntu.com/"
+SUPPORT_URL="http://help.ubuntu.com/"
+BUG_REPORT_URL="http://bugs.launchpad.net/ubuntu/"
+UBUNTU_CODENAME=xenial
+"""
+        self.assertEqual('ubuntu', ceph_detect_init._extract_from_os_release(
+                         os_release_ubuntu_xenial, 'ID'))
+        self.assertEqual('16.04', ceph_detect_init._extract_from_os_release(
+                         os_release_ubuntu_xenial, 'VERSION_ID'))
+        os_release_ubuntu_trusty = """
+NAME="Ubuntu"
+VERSION="14.04.4 LTS, Trusty Tahr"
+ID=ubuntu
+ID_LIKE=debian
+PRETTY_NAME="Ubuntu 14.04.4 LTS"
+VERSION_ID="14.04"
+HOME_URL="http://www.ubuntu.com/"
+SUPPORT_URL="http://help.ubuntu.com/"
+BUG_REPORT_URL="http://bugs.launchpad.net/ubuntu/"
+"""
+        self.assertEqual('ubuntu', ceph_detect_init._extract_from_os_release(
+                         os_release_ubuntu_trusty, 'ID'))
+        self.assertEqual('14.04', ceph_detect_init._extract_from_os_release(
+                         os_release_ubuntu_trusty, 'VERSION_ID'))
 
 # Local Variables:
 # compile-command: "cd .. ; .tox/py27/bin/py.test tests/test_all.py"

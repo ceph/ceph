@@ -1,13 +1,23 @@
 #!/bin/bash
-if [ -f $(dirname $0)/../ceph-helpers-root.sh ]; then
-    source $(dirname $0)/../ceph-helpers-root.sh
+BASEDIR=$(dirname $0)
+if [ -f $BASEDIR/../ceph-helpers-root.sh ]; then
+    source $BASEDIR/../ceph-helpers-root.sh
 else
-    echo "$(dirname $0)/../ceph-helpers-root.sh does not exist."
+    echo "$BASEDIR/../ceph-helpers-root.sh does not exist."
     exit 1
 fi
 
-install python-pytest || true
-install pytest || true
+PATH=$BASEDIR:$BASEDIR/..:$PATH
+
+: ${PYTHON:=python}
+$PYTHON --version
+
+type pip
+
+# newer versions of pytest (e.g. 3.7.0) seem to work fine with Python 2.7,
+# so just grab the latest version
+sudo -H pip install pytest
+$PYTHON -m pytest --version
 
 # complete the cluster setup done by the teuthology ceph task
 sudo chown $(id -u) /etc/ceph/ceph.conf
@@ -20,27 +30,18 @@ fi
 sudo ceph osd crush rm osd.0 || true
 sudo ceph osd crush rm osd.1 || true
 
-sudo cp $(dirname $0)/60-ceph-by-partuuid.rules /lib/udev/rules.d
+sudo cp $BASEDIR/60-ceph-by-partuuid.rules /lib/udev/rules.d
 sudo udevadm control --reload
 
-perl -pi -e 's|pid file.*|pid file = /var/run/ceph/\$cluster-\$name.pid|' /etc/ceph/ceph.conf
+sudo perl -pi -e 's|pid file.*|pid file = /var/run/ceph/\$cluster-\$name.pid|' /etc/ceph/ceph.conf
 
-PATH=$(dirname $0):$(dirname $0)/..:$PATH
-
-: ${PYTHON:=python}
-PY_VERSION=$($PYTHON --version 2>&1)
-
-if ! ${PYTHON} -m pytest --version > /dev/null 2>&1; then
-    echo "py.test not installed for ${PY_VERSION}"
-    exit 1
-fi
-
-sudo env PATH=$(dirname $0):$(dirname $0)/..:$PATH PYTHONWARNINGS=ignore ${PYTHON} -m pytest -s -v $(dirname $0)/ceph-disk-test.py
+sudo env PATH=$PATH PYTHONWARNINGS=ignore ${PYTHON} -m pytest -s -v --rootdir=$BASEDIR $BASEDIR/ceph-disk-test.py
 result=$?
 
+sudo rm -rf $BASEDIR/.pytest_cache
 sudo rm -f /lib/udev/rules.d/60-ceph-by-partuuid.rules
 # own whatever was created as a side effect of the py.test run
 # so that it can successfully be removed later on by a non privileged
 # process
-sudo chown -R $(id -u) $(dirname $0)
+sudo chown -R $(id -u) $BASEDIR
 exit $result
