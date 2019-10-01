@@ -39,7 +39,7 @@ For example, to restrict client ``foo`` to writing only in the ``bar`` directory
    key: *key*
    caps: [mds] allow r, allow rw path=/bar
    caps: [mon] allow r
-   caps: [osd] allow rw tag cephfs data=cephfs_a
+   caps: [osd] allow rw tag cephfs data=cephfs
 
 To completely restrict the client to the ``bar`` directory, omit the
 root directory ::
@@ -93,7 +93,7 @@ with a "ceph." prefix, as well as restricting other means of setting
 these fields (such as openc operations with layouts).
 
 For example, in the following snippet client.0 can modify layouts and quotas
-on the file system cephfs_a, but client.1 cannot.
+on the file system cephfs, but client.1 cannot.
 
 ::
 
@@ -101,13 +101,13 @@ on the file system cephfs_a, but client.1 cannot.
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
         caps: [mds] allow rwp
         caps: [mon] allow r
-        caps: [osd] allow rw tag cephfs data=cephfs_a
+        caps: [osd] allow rw tag cephfs data=cephfs
 
     client.1
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
         caps: [mds] allow rw
         caps: [mon] allow r
-        caps: [osd] allow rw tag cephfs data=cephfs_a
+        caps: [osd] allow rw tag cephfs data=cephfs
 
 
 Snapshot restriction (the 's' flag)
@@ -118,7 +118,7 @@ Note that when capability string also contains the 'p' flag, the 's' flag must
 appear after it (all flags except 'rw' must be specified in alphabetical order).
 
 For example, in the following snippet client.0 can create or delete snapshots
-in the ``bar`` directory of file system ``cephfs_a``.
+in the ``bar`` directory of file system ``cephfs``.
 
 ::
 
@@ -126,7 +126,7 @@ in the ``bar`` directory of file system ``cephfs_a``.
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
         caps: [mds] allow rw, allow rws path=/bar
         caps: [mon] allow r
-        caps: [osd] allow rw tag cephfs data=cephfs_a
+        caps: [osd] allow rw tag cephfs data=cephfs
 
 
 .. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring
@@ -140,7 +140,7 @@ Network restriction
    key: *key*
    caps: [mds] allow r network 10.0.0.0/8, allow rw path=/bar network 10.0.0.0/8
    caps: [mon] allow r network 10.0.0.0/8
-   caps: [osd] allow rw tag cephfs data=cephfs_a network 10.0.0.0/8
+   caps: [osd] allow rw tag cephfs data=cephfs network 10.0.0.0/8
 
 The optional ``{network/prefix}`` is a standard network name and
 prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
