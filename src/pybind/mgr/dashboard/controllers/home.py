@@ -12,7 +12,7 @@ except ImportError:
 import cherrypy
 from cherrypy.lib.static import serve_file
 
-from . import Controller, BaseController, Proxy
+from . import Controller, UiApiController, BaseController, Proxy, Endpoint
 from .. import mgr, logger
 
 
@@ -106,3 +106,10 @@ class HomeController(BaseController):
         else:
             cherrypy.response.headers['Vary'] = "Accept-Language"
         return serve_file(full_path)
+
+
+@UiApiController("/langs", secure=False)
+class LangsController(BaseController):
+    @Endpoint('GET')
+    def __call__(self):
+        return list(LANGUAGES)
