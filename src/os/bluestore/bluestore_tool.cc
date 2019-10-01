@@ -510,13 +510,15 @@ int main(int argc, char **argv)
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
     fs->dump_block_extents(cout);
     cout << "Expanding..." << std::endl;
-    for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB }) {
+
+    // enumerate BDEV_SLOW to report it's unexpandable only
+    for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB, BlueFS::BDEV_SLOW }) {
       if (!fs->is_device(devid)) {
         continue;
       }
       if (!fs->is_device_expandable(devid)) {
 	cout << devid
-	     << " : can't be expanded. Bypassing..."
+	     << " : unable to expand. Bypassed."
 	     << std::endl;
 	continue;
       }
@@ -553,6 +555,11 @@ int main(int argc, char **argv)
 	cout << devid
 	     <<" : size label updated to " << size
 	     << std::endl;
+      } else {
+	cout << devid
+	     << " : no changes detected. Bypassed."
+	     << std::endl;
+	continue;
       }
     }
     delete fs;
