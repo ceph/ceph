@@ -58,6 +58,7 @@
               "extractLicenses": true,
               "vendorChunk": false,
               "buildOptimizer": true,
+              "i18nMissingTranslation": "ignore",
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
