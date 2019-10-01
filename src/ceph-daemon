@@ -658,10 +658,8 @@ def command_deploy():
 
 def command_run():
     (daemon_type, daemon_id) = args.name.split('.')
-    (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     subprocess.call(c.run_cmd())
-
 
 ##################################
 
@@ -671,7 +669,6 @@ def command_shell():
     else:
         daemon_type = args.name
         daemon_id = None
-    (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     subprocess.call(c.shell_cmd())
 
@@ -679,7 +676,6 @@ def command_shell():
 
 def command_enter():
     (daemon_type, daemon_id) = args.name.split('.')
-    (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     subprocess.call(c.exec_cmd(['bash']))
 
@@ -687,7 +683,6 @@ def command_enter():
 
 def command_exec():
     (daemon_type, daemon_id) = args.name.split('.')
-    (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id,
                       privileged=args.privileged)
     subprocess.call(c.exec_cmd(args.command))
