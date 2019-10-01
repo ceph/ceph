@@ -566,64 +566,52 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         conn = self._get_connection(host)
 
         try:
-            self._ensure_ceph_conf(conn, network)
+            monmap = self.get('mon_map')
+            fsid = monmap['fsid']
+            mon_name = 'mon.%s' % host
 
-            uid = conn.remote_module.path_getuid("/var/lib/ceph")
-            gid = conn.remote_module.path_getgid("/var/lib/ceph")
+            # get container image
+            ret, image, err = self.mon_command({
+                'prefix': 'config get',
+                'who': mon_name,
+                'key': 'image',
+                })
+            image = image.strip()
+            self.log.debug('container image %s' % image)
 
-            # install client admin key on target mon host
-            admin_keyring = self._get_bootstrap_key("admin")
-            admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
-            conn.remote_module.write_keyring(admin_keyring_path, admin_keyring, uid, gid)
+            # generate config
+            ret, config, err = self.mon_command({
+                "prefix": "config generate-minimal-conf",
+            })
+            self.log.debug('config %s' % config)
 
-            mon_path = "/var/lib/ceph/mon/ceph-{name}".format(name=host)
-            conn.remote_module.create_mon_path(mon_path, uid, gid)
+            # get mon. key
+            ret, mon_keyring, err = self.mon_command({
+                'prefix': 'auth get',
+                'entity': 'mon.',
+            })
+            self.log.debug('mon keyring %s' % mon_keyring)
 
-            # bootstrap key
-            conn.remote_module.safe_makedirs("/var/lib/ceph/tmp")
-            monitor_keyring = self._get_bootstrap_key("mon")
-            mon_keyring_path = "/var/lib/ceph/tmp/ceph-{name}.mon.keyring".format(name=host)
+            j = json.dumps({
+                'config': config,
+                'keyring': mon_keyring,
+            })
+            self.log.debug('j %s' % j)
+
             conn.remote_module.write_file(
-                mon_keyring_path,
-                monitor_keyring,
-                0o600,
-                None,
-                uid,
-                gid
-            )
+                '/tmp/foo',
+                j,
+                0o600, None, 0, 0)
 
-            # monitor map
-            monmap_path = "/var/lib/ceph/tmp/ceph.{name}.monmap".format(name=host)
-            remoto.process.run(conn,
-                ['ceph', 'mon', 'getmap', '-o', monmap_path],
-            )
-
-            user_args = []
-            if uid != 0:
-                user_args = user_args + [ '--setuser', str(uid) ]
-            if gid != 0:
-                user_args = user_args + [ '--setgroup', str(gid) ]
-
-            remoto.process.run(conn,
-                ['ceph-mon', '--mkfs', '-i', host,
-                 '--monmap', monmap_path, '--keyring', mon_keyring_path
-                ] + user_args
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph.target'],
-                timeout=7,
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph-mon@{name}'.format(name=host)],
-                timeout=7,
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'start', 'ceph-mon@{name}'.format(name=host)],
-                timeout=7,
-            )
+            remoto.process.run(conn, [
+                '/home/sage/src/ceph5/src/ceph-daemon',
+                '--image', image,
+                'deploy',
+                '--fsid', fsid,
+                '--name', mon_name,
+                '--mon-network', network,
+                '--config-and-keyring', '/tmp/foo',
+            ])
 
             return "Created mon on host '{}'".format(host)
 
