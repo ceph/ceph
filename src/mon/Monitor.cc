@@ -3000,15 +3000,6 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       ss << "\n \n  progress:\n";
       for (auto& i : pem) {
 	ss << "    " << i.second.message << "\n";
-	ss << "      [";
-	unsigned j;
-	for (j = 0; j < (unsigned)(i.second.progress * 30.0); ++j) {
-	  ss << '=';
-	}
-	for (; j < 30; ++j) {
-	  ss << '.';
-	}
-	ss << "]\n";
       }
     }
     ss << "\n ";
