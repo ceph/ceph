@@ -88,19 +88,6 @@ class SSHWriteCompletionReady(SSHWriteCompletion):
     def is_errored(self):
         return False
 
-class SSHConnection(object):
-    """
-    Tie tempfile lifetime (e.g. ssh_config) to a remoto connection.
-    """
-    def __init__(self):
-        self.conn = None
-        self.temp_files = []
-
-    # proxy to the remoto connection
-    def __getattr__(self, name):
-        return getattr(self.conn, name)
-
-
 def log_exceptions(f):
     if six.PY3:
         return f
@@ -145,6 +132,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._cluster_fsid = None
         self._worker_pool = multiprocessing.pool.ThreadPool(1)
 
+        self._reconfig_ssh()
+
         # the keys in inventory_cache are authoritative.
         #   You must not call remove_outdated()
         # The values are cached by instance.
@@ -152,6 +141,52 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         # 1. timeout
         # 2. refresh parameter
         self.inventory_cache = orchestrator.OutdatablePersistentDict(self, self._STORE_HOST_PREFIX)
+
+    def _reconfig_ssh(self):
+        temp_files = []
+        ssh_options = []
+
+        # ssh_config
+        ssh_config_fname = self.get_localized_module_option("ssh_config_file")
+        ssh_config = self.get_store("ssh_config")
+        if ssh_config is not None or ssh_config_fname is None:
+            if not ssh_config:
+                ssh_config = DEFAULT_SSH_CONFIG
+            f = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-conf-')
+            os.fchmod(f.fileno(), 0o600);
+            f.write(ssh_config.encode('utf-8'))
+            f.flush() # make visible to other processes
+            temp_files += [f]
+            ssh_config_fname = f.name
+        if ssh_config_fname:
+            if not os.path.isfile(ssh_config_fname):
+                raise Exception("ssh_config \"{}\" does not exist".format(
+                    ssh_config_fname))
+            ssh_options += ['-F', ssh_config_fname]
+
+        # identity
+        ssh_key = self.get_store("ssh_identity_key")
+        ssh_pub = self.get_store("ssh_identity_pub")
+        tpub = None
+        tkey = None
+        if ssh_key and ssh_pub:
+            tkey = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-identity-')
+            tkey.write(ssh_key.encode('utf-8'))
+            os.fchmod(tkey.fileno(), 0o600);
+            tkey.flush() # make visible to other processes
+            tpub = open(tkey.name + '.pub', 'w')
+            os.fchmod(tpub.fileno(), 0o600);
+            tpub.write(ssh_pub)
+            tpub.flush() # make visible to other processes
+            temp_files += [tkey, tpub]
+            ssh_options += ['-i', tkey.name]
+
+        self._temp_files = temp_files
+        if ssh_options:
+            self._ssh_options = ' '.join(ssh_options)
+        else:
+            self._ssh_options = None
+        self.log.info('ssh_options %s' % ssh_options)
 
     def handle_command(self, inbuf, command):
         if command["prefix"] == "ssh set-ssh-config":
@@ -238,54 +273,15 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         Setup a connection for running commands on remote host.
         """
-        ssh_options = None
-
-        conn = SSHConnection()
-
-        # ssh_config
-        ssh_config_fname = self.get_localized_module_option("ssh_config_file")
-        ssh_config = self.get_store("ssh_config")
-        if ssh_config is not None or ssh_config_fname is None:
-            if not ssh_config:
-                ssh_config = DEFAULT_SSH_CONFIG
-            f = tempfile.NamedTemporaryFile()
-            os.fchmod(f.fileno(), 0o600);
-            f.write(ssh_config.encode('utf-8'))
-            f.flush() # make visible to other processes
-            conn.temp_files += [f]
-            ssh_config_fname = f.name
-        if ssh_config_fname:
-            if not os.path.isfile(ssh_config_fname):
-                raise Exception("ssh_config \"{}\" does not exist".format(
-                    ssh_config_fname))
-            ssh_options = "-F {}".format(ssh_config_fname)
-
-        # identity
-        ssh_key = self.get_store("ssh_identity_key")
-        ssh_pub = self.get_store("ssh_identity_pub")
-        if ssh_key and ssh_pub:
-            tkey = tempfile.NamedTemporaryFile()
-            tkey.write(ssh_key.encode('utf-8'))
-            os.fchmod(tkey.fileno(), 0o600);
-            tkey.flush() # make visible to other processes
-            tpub = tempfile.NamedTemporaryFile()
-            os.fchmod(tpub.fileno(), 0o600);
-            tpub.write(ssh_pub.encode('utf-8'))
-            tpub.flush() # make visible to other processes
-            conn.temp_files += [tkey, tpub]
-            if not ssh_options:
-                ssh_options = ''
-            ssh_options += '-i {}'.format(tkey.name)
-
         self.log.info("opening connection to host '{}' with ssh "
-                "options '{}'".format(host, ssh_options))
+                "options '{}'".format(host, self._ssh_options))
 
-        conn.conn = remoto.Connection(host,
-                logger=self.log,
-                detect_sudo=True,
-                ssh_options=ssh_options)
+        conn = remoto.Connection(
+            'root@' + host,
+            logger=self.log,
+            ssh_options=self._ssh_options)
 
-        conn.conn.import_module(remotes)
+        conn.import_module(remotes)
 
         return conn
 
