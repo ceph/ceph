@@ -78,13 +78,35 @@ _python_autoselect() {
 build_dashboard_frontend() {
   CURR_DIR=`pwd`
   TEMP_DIR=`mktemp -d`
+
   $CURR_DIR/src/tools/setup-virtualenv.sh --python=$(_python_autoselect) $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
   $TEMP_DIR/bin/nodeenv -p --node=10.13.0
   cd src/pybind/mgr/dashboard/frontend
+
+  DEFAULT_LANG=`jq -r .config.locale package.json`
+  if [ -z "$DASHBOARD_FRONTEND_LANGS" ]; then
+    BUILD_TARGET=":${DEFAULT_LANG}"
+  else
+    if [ "$DASHBOARD_FRONTEND_LANGS" == "ALL" ]; then
+      BUILD_TARGET=":*"
+    else
+      DASHBOARD_FRONTEND_LANGS_LIST=`echo "$DASHBOARD_FRONTEND_LANGS" | sed 's/ /,/g'`
+      if [[ $DASHBOARD_FRONTEND_LANGS_LIST != *"${DEFAULT_LANG}"* ]]; then
+        # default language must be always built
+        DASHBOARD_FRONTEND_LANGS_LIST="${DASHBOARD_FRONTEND_LANGS},${DEFAULT_LANG}"
+      fi
+      BUILD_TARGET=":{${DASHBOARD_FRONTEND_LANGS_LIST}}"
+    fi
+  fi
+  [ -z "$MAX_DASHBOARD_PARALLEL_BUILDS" ] && MAX_DASHBOARD_PARALLEL_BUILDS=2
+
   . $TEMP_DIR/bin/activate
   npm ci
-  npm run build -- --prod --progress=false
+  echo "Building ceph-dashboard frontend with build${BUILD_TARGET} script";
+  # we need to use "-- --" because so that "--prod" survives accross all
+  # scripts redirections inside package.json
+  npx npm-run-all --print-label --parallel --max-parallel $MAX_DASHBOARD_PARALLEL_BUILDS "build${BUILD_TARGET} -- -- --prod"
   deactivate
   cd $CURR_DIR
   rm -rf $TEMP_DIR
@@ -135,6 +157,7 @@ download_boost $boost_version 2684c972994ee57fc5632e03bf044746f6eb45d4920c343937
                https://dl.bintray.com/boostorg/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
+
 build_dashboard_frontend
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar
