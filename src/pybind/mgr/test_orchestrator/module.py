@@ -5,7 +5,10 @@ import os
 import threading
 import functools
 from subprocess import check_output, CalledProcessError
-from typing import Callable, TypeVar, List
+try:
+    from typing import Callable, List
+except ImportError:
+    pass  # type checking
 
 import six
 
