@@ -415,7 +415,8 @@ class CephFSShell(Cmd):
                 traceback.print_exc(file=sys.stdout)
         except Exception as e:
             perror(e)
-            traceback.print_exc(file=sys.stdout)
+            if shell.debug:
+                traceback.print_exc(file=sys.stdout)
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
