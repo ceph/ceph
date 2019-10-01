@@ -552,10 +552,11 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return SSHWriteCompletion(result)
 
-    def _create_daemon(self, daemon_type, host, keyring, network=None):
+    def _create_daemon(self, daemon_type, daemon_id, host, keyring,
+                       extra_args=[]):
         conn = self._get_connection(host)
         try:
-            name = '%s.%s' % (daemon_type, host)
+            name = '%s.%s' % (daemon_type, daemon_id)
 
             # generate config
             ret, config, err = self.mon_command({
@@ -574,15 +575,13 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 j,
                 0o600, None, 0, 0)
 
-            extra_args = []
-            if network:
-                extra_args += ['--mon-network', network]
-            self._run_ceph_daemon(
+            out, code = self._run_ceph_daemon(
                 host, name, 'deploy',
                 [
                     '--name', name,
-                    '--config-and-keyring', '/tmp/foo'
+                    '--config-and-keyring', '/tmp/foo',
                 ] + extra_args)
+            self.log.debug('create_daemon code %s out %s' % (code, out))
 
             return "Created {} on host '{}'".format(name, host)
 
@@ -607,7 +606,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         })
         self.log.debug('mon keyring %s' % keyring)
 
-        return self._create_daemon('mon', host, keyring, network=network)
+        return self._create_daemon('mon', host, host, keyring,
+                                   extra_args=['--mon-network', network])
 
     def update_mons(self, num, hosts):
         """
@@ -665,7 +665,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         })
         self.log.debug('keyring %s' % keyring)
 
-        return self._create_daemon('mgr', host, keyring)
+        return self._create_daemon('mgr', host, host, keyring)
 
     def update_mgrs(self, num, hosts):
         """
