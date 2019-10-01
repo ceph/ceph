@@ -62,9 +62,10 @@ extern "C" {
    * Safe functions to read and write an entire file.
    */
   int safe_write_file(const char *base, const char *file,
-			const char *val, size_t vallen);
+		      const char *val, size_t vallen,
+		      unsigned mode);
   int safe_read_file(const char *base, const char *file,
-		       char *val, size_t vallen);
+		     char *val, size_t vallen);
 
 #ifdef __cplusplus
 }
