@@ -562,27 +562,21 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return SSHWriteCompletion(result)
 
-    def _create_mon(self, host, network):
-        """
-        Create a new monitor on the given host.
-        """
-        self.log.info("create_mon({}:{}): starting".format(host, network))
-
+    def _create_daemon(self, daemon_type, host, keyring, network=None):
         conn = self._get_connection(host)
-
         try:
             monmap = self.get('mon_map')
             fsid = monmap['fsid']
-            mon_name = 'mon.%s' % host
+            name = '%s.%s' % (daemon_type, host)
 
             # get container image
             ret, image, err = self.mon_command({
                 'prefix': 'config get',
-                'who': mon_name,
+                'who': name,
                 'key': 'image',
-                })
+            })
             image = image.strip()
-            self.log.debug('container image %s' % image)
+            self.log.debug('%s container image %s' % (name, image))
 
             # generate config
             ret, config, err = self.mon_command({
@@ -590,16 +584,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             })
             self.log.debug('config %s' % config)
 
-            # get mon. key
-            ret, mon_keyring, err = self.mon_command({
-                'prefix': 'auth get',
-                'entity': 'mon.',
-            })
-            self.log.debug('mon keyring %s' % mon_keyring)
-
             j = json.dumps({
                 'config': config,
-                'keyring': mon_keyring,
+                'keyring': keyring,
             })
             self.log.debug('j %s' % j)
 
@@ -608,25 +595,42 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 j,
                 0o600, None, 0, 0)
 
+            extra_args = []
+            if network:
+                extra_args += ['--mon-network', network]
             remoto.process.run(conn, [
                 '/home/sage/src/ceph5/src/ceph-daemon',
                 '--image', image,
                 'deploy',
                 '--fsid', fsid,
-                '--name', mon_name,
-                '--mon-network', network,
+                '--name', name,
                 '--config-and-keyring', '/tmp/foo',
-            ])
+            ] + extra_args)
 
-            return "Created mon on host '{}'".format(host)
+            return "Created {} on host '{}'".format(name, host)
 
         except Exception as e:
-            self.log.error("create_mon({}:{}): error: {}".format(host, network, e))
+            self.log.error("create_mgr({}): error: {}".format(host, e))
             raise
 
         finally:
-            self.log.info("create_mon({}:{}): finished".format(host, network))
+            self.log.info("create_mgr({}): finished".format(host))
             conn.exit()
+
+    def _create_mon(self, host, network):
+        """
+        Create a new monitor on the given host.
+        """
+        self.log.info("create_mon({}:{}): starting".format(host, network))
+
+        # get mon. key
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get',
+            'entity': 'mon.',
+        })
+        self.log.debug('mon keyring %s' % keyring)
+
+        return self._create_daemon('mon', host, keyring, network=network)
 
     def update_mons(self, num, hosts):
         """
