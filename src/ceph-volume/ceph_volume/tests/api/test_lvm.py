@@ -81,10 +81,11 @@ class TestGetAPILvs(object):
 def volumes(monkeypatch):
     monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
     volumes = api.Volumes()
+    volumes_empty = api.Volumes(populate=False)
     volumes._purge()
     # also patch api.Volumes so that when it is called, it will use the newly
     # created fixture, with whatever the test method wants to append to it
-    monkeypatch.setattr(api, 'Volumes', lambda: volumes)
+    monkeypatch.setattr(api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
     return volumes
 
 
@@ -254,9 +255,9 @@ class TestVolumes(object):
         journal = api.Volume(lv_name='volume2', lv_path='/dev/vg/lv', lv_tags='ceph.type=journal')
         volumes.append(osd)
         volumes.append(journal)
-        volumes.filter(lv_tags={'ceph.type': 'data'})
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
+        filtered_lvs = volumes.filter(lv_tags={'ceph.type': 'data'})
+        assert len(filtered_lvs) == 1
+        assert filtered_lvs[0].lv_name == 'volume1'
 
     def test_filter_by_tag_does_not_match_one(self, volumes):
         lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
@@ -265,8 +266,7 @@ class TestVolumes(object):
         volumes.append(osd)
         volumes.append(journal)
         # note the different osd_id!
-        volumes.filter(lv_tags={'ceph.type': 'data', 'ceph.osd_id': '2'})
-        assert volumes == []
+        assert volumes.filter(lv_tags={'ceph.type': 'data', 'ceph.osd_id': '2'}) == []
 
     def test_filter_by_vg_name(self, volumes):
         lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
@@ -274,35 +274,34 @@ class TestVolumes(object):
         journal = api.Volume(lv_name='volume2', vg_name='system_vg', lv_tags='ceph.type=journal')
         volumes.append(osd)
         volumes.append(journal)
-        volumes.filter(vg_name='ceph_vg')
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
+        filtered_lvs = volumes.filter(vg_name='ceph_vg')
+        assert len(filtered_lvs) == 1
+        assert filtered_lvs[0].lv_name == 'volume1'
 
     def test_filter_by_lv_path(self, volumes):
         osd = api.Volume(lv_name='volume1', lv_path='/dev/volume1', lv_tags='')
         journal = api.Volume(lv_name='volume2', lv_path='/dev/volume2', lv_tags='')
         volumes.append(osd)
         volumes.append(journal)
-        volumes.filter(lv_path='/dev/volume1')
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
+        filtered_lvs = volumes.filter(lv_path='/dev/volume1')
+        assert len(filtered_lvs) == 1
+        assert filtered_lvs[0].lv_name == 'volume1'
 
     def test_filter_by_lv_uuid(self, volumes):
         osd = api.Volume(lv_name='volume1', lv_path='/dev/volume1', lv_uuid='1111', lv_tags='')
         journal = api.Volume(lv_name='volume2', lv_path='/dev/volume2', lv_uuid='', lv_tags='')
         volumes.append(osd)
         volumes.append(journal)
-        volumes.filter(lv_uuid='1111')
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
+        filtered_lvs = volumes.filter(lv_uuid='1111')
+        assert len(filtered_lvs) == 1
+        assert filtered_lvs[0].lv_name == 'volume1'
 
     def test_filter_by_lv_uuid_nothing_found(self, volumes):
         osd = api.Volume(lv_name='volume1', lv_path='/dev/volume1', lv_uuid='1111', lv_tags='')
         journal = api.Volume(lv_name='volume2', lv_path='/dev/volume2', lv_uuid='', lv_tags='')
         volumes.append(osd)
         volumes.append(journal)
-        volumes.filter(lv_uuid='22222')
-        assert volumes == []
+        assert volumes.filter(lv_uuid='22222') == []
 
     def test_filter_requires_params(self, volumes):
         with pytest.raises(TypeError):

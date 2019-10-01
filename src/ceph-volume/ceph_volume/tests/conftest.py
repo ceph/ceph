@@ -139,12 +139,16 @@ def conf_ceph_stub(monkeypatch, tmpfile):
 
 
 @pytest.fixture
+def volumes_empty(monkeypatch):
+    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
+    return lvm_api.Volumes(populate=False)
+
+@pytest.fixture
 def volumes(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
     volumes = lvm_api.Volumes()
     volumes._purge()
     return volumes
-
 
 @pytest.fixture
 def volume_groups(monkeypatch):

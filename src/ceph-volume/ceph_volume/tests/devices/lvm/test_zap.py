@@ -6,8 +6,8 @@ from ceph_volume.devices.lvm import zap
 
 class TestFindAssociatedDevices(object):
 
-    def test_no_lvs_found_that_match_id(self, volumes, monkeypatch, device_info):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
+    def test_no_lvs_found_that_match_id(self, volumes, volumes_empty, monkeypatch, device_info):
+        monkeypatch.setattr(zap.api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
         tags = 'ceph.osd_id=9,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', vg_name='vg', lv_tags=tags)
@@ -15,8 +15,8 @@ class TestFindAssociatedDevices(object):
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_id=10)
 
-    def test_no_lvs_found_that_match_fsid(self, volumes, monkeypatch, device_info):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
+    def test_no_lvs_found_that_match_fsid(self, volumes, volumes_empty, monkeypatch, device_info):
+        monkeypatch.setattr(zap.api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
         tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', vg_name='vg', lv_tags=tags)
@@ -24,8 +24,8 @@ class TestFindAssociatedDevices(object):
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_fsid='aaaa-lkjh')
 
-    def test_no_lvs_found_that_match_id_fsid(self, volumes, monkeypatch, device_info):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
+    def test_no_lvs_found_that_match_id_fsid(self, volumes, volumes_empty, monkeypatch, device_info):
+        monkeypatch.setattr(zap.api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
         tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', vg_name='vg', lv_tags=tags)
@@ -33,16 +33,16 @@ class TestFindAssociatedDevices(object):
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_id='9', osd_fsid='aaaa-lkjh')
 
-    def test_no_ceph_lvs_found(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
+    def test_no_ceph_lvs_found(self, volumes, volumes_empty, monkeypatch):
+        monkeypatch.setattr(zap.api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags='')
         volumes.append(osd)
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_id=100)
 
-    def test_lv_is_matched_id(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
+    def test_lv_is_matched_id(self, volumes, volumes_empty, monkeypatch):
+        monkeypatch.setattr(zap.api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/lv', lv_tags=tags)
@@ -50,8 +50,8 @@ class TestFindAssociatedDevices(object):
         result = zap.find_associated_devices(osd_id='0')
         assert result[0].abspath == '/dev/VolGroup/lv'
 
-    def test_lv_is_matched_fsid(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
+    def test_lv_is_matched_fsid(self, volumes, volumes_empty, monkeypatch):
+        monkeypatch.setattr(zap.api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/lv', lv_tags=tags)
@@ -59,8 +59,8 @@ class TestFindAssociatedDevices(object):
         result = zap.find_associated_devices(osd_fsid='asdf-lkjh')
         assert result[0].abspath == '/dev/VolGroup/lv'
 
-    def test_lv_is_matched_id_fsid(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
+    def test_lv_is_matched_id_fsid(self, volumes, volumes_empty, monkeypatch):
+        monkeypatch.setattr(zap.api, 'Volumes', lambda populate=True: volumes if populate else volumes_empty)
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(
             lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/lv', lv_tags=tags)
@@ -107,7 +107,7 @@ class TestEnsureAssociatedLVs(object):
         out, err = capsys.readouterr()
         assert "Zapping successful for OSD: 1" in err
 
-    def test_block_and_partition_are_found(self, volumes, monkeypatch):
+    def test_block_and_partition_are_found(self, volumes, volumes_empty, monkeypatch):
         monkeypatch.setattr(zap.disk, 'get_device_from_partuuid', lambda x: '/dev/sdb1')
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=block'
         osd = api.Volume(
