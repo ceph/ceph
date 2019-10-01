@@ -147,6 +147,27 @@ int RGWObjExpStore::objexp_hint_list(const string& oid,
   return 0;
 }
 
+static int cls_timeindex_trim_repeat(rgw_rados_ref ref,
+                                const string& oid,
+                                const utime_t& from_time,
+                                const utime_t& to_time,
+                                const string& from_marker,
+                                const string& to_marker)
+{
+  bool done = false;
+  do {
+    librados::ObjectWriteOperation op;
+    cls_timeindex_trim(op, from_time, to_time, from_marker, to_marker);
+    int r = rgw_rados_operate(ref.pool.ioctx(), oid, &op, null_yield);
+    if (r == -ENODATA)
+      done = true;
+    else if (r < 0)
+      return r;
+  } while (!done);
+
+  return 0;
+}
+
 int RGWObjExpStore::objexp_hint_trim(const string& oid,
                                const ceph::real_time& start_time,
                                const ceph::real_time& end_time,
@@ -160,7 +181,7 @@ int RGWObjExpStore::objexp_hint_trim(const string& oid,
     return r;
   }
   auto& ref = obj.get_ref();
-  int ret = cls_timeindex_trim(ref.pool.ioctx(), ref.obj.oid, utime_t(start_time), utime_t(end_time),
+  int ret = cls_timeindex_trim_repeat(ref, oid, utime_t(start_time), utime_t(end_time),
           from_marker, to_marker);
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;

@@ -18,17 +18,21 @@ namespace rados {
         static void remove(librados::ObjectWriteOperation *op, const string& id);
         static int get(librados::ObjectReadOperation *op,
                        librados::IoCtx& ioctx, const string& oid,
-                       const list<string> *ids, bool get_all, list<otp_info_t> *result);
-        static int get(librados::ObjectReadOperation *op,
-                       librados::IoCtx& ioctx, const string& oid,
                        const string& id, otp_info_t *result);
         static int get_all(librados::ObjectReadOperation *op,
                            librados::IoCtx& ioctx, const string& oid,
                            list<otp_info_t> *result);
+// these overloads which call io_ctx.operate() or io_ctx.exec() should not be called in the rgw.
+// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()/exec()
+#ifndef CLS_CLIENT_HIDE_IOCTX
+        static int get(librados::ObjectReadOperation *op,
+                       librados::IoCtx& ioctx, const string& oid,
+                       const list<string> *ids, bool get_all, list<otp_info_t> *result);
         static int check(CephContext *cct, librados::IoCtx& ioctx, const string& oid,
                          const string& id, const string& val, otp_check_t *result);
         static int get_current_time(librados::IoCtx& ioctx, const string& oid,
                                     ceph::real_time *result);
+#endif
       };
 
       class TOTPConfig {
