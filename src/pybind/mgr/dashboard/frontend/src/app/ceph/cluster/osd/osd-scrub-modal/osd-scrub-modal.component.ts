@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { forkJoin } from 'rxjs';
 
@@ -16,9 +17,13 @@ import { NotificationService } from '../../../../shared/services/notification.se
   styleUrls: ['./osd-scrub-modal.component.scss']
 })
 export class OsdScrubModalComponent implements OnInit {
+  // Input
   deep: boolean;
-  scrubForm: FormGroup;
   selected = [];
+  onSubmit: Function;
+
+  // Internal
+  scrubForm: FormGroup;
 
   constructor(
     public bsModalRef: BsModalRef,
@@ -32,7 +37,10 @@ export class OsdScrubModalComponent implements OnInit {
     this.scrubForm = new FormGroup({});
   }
 
-  scrub() {
+  submitAction() {
+    if (_.isFunction(this.onSubmit)) {
+      this.onSubmit();
+    }
     forkJoin(this.selected.map((id: any) => this.osdService.scrub(id, this.deep))).subscribe(
       () => {
         const operation = this.deep ? 'Deep scrub' : 'Scrub';

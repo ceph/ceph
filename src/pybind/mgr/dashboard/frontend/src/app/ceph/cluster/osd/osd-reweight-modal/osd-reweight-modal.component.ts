@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Validators } from '@angular/forms';
 
+import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -13,8 +14,12 @@ import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
   styleUrls: ['./osd-reweight-modal.component.scss']
 })
 export class OsdReweightModalComponent implements OnInit {
+  // Input
   currentWeight = 1;
   osdId: number;
+  onSubmit: Function;
+
+  // Internal
   reweightForm: CdFormGroup;
 
   constructor(
@@ -37,9 +42,12 @@ export class OsdReweightModalComponent implements OnInit {
     });
   }
 
-  reweight() {
-    this.osdService
-      .reweight(this.osdId, this.reweightForm.value.weight)
-      .subscribe(() => this.bsModalRef.hide());
+  submitAction() {
+    if (_.isFunction(this.onSubmit)) {
+      this.onSubmit();
+    }
+    this.osdService.reweight(this.osdId, this.reweightForm.value.weight).subscribe(() => {
+      this.bsModalRef.hide();
+    });
   }
 }

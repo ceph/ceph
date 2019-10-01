@@ -472,6 +472,13 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.onSelect();
   }
 
+  /**
+   * Clear the row selections.
+   */
+  clearSelections() {
+    this.table.selected = [];
+  }
+
   onSelect() {
     this.selection.update();
     this.updateSelection.emit(_.clone(this.selection));

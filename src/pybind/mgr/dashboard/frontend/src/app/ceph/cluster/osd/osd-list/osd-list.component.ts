@@ -282,13 +282,15 @@ export class OsdListComponent implements OnInit {
     if (!this.hasOsdSelected) {
       return;
     }
-
-    const initialState = {
-      selected: this.getSelectedOsdIds(),
-      deep: deep
-    };
-
-    this.bsModalRef = this.modalService.show(OsdScrubModalComponent, { initialState });
+    this.bsModalRef = this.modalService.show(OsdScrubModalComponent, {
+      initialState: {
+        selected: this.getSelectedOsdIds(),
+        deep: deep,
+        onSubmit: () => {
+          this.tableComponent.clearSelections();
+        }
+      }
+    });
   }
 
   configureFlagsAction() {
@@ -305,6 +307,7 @@ export class OsdListComponent implements OnInit {
           markActionDescription: markAction
         },
         onSubmit: () => {
+          this.tableComponent.clearSelections();
           observableForkJoin(
             this.getSelectedOsdIds().map((osd: any) => onSubmit.call(this.osdService, osd))
           ).subscribe(() => this.bsModalRef.hide());
@@ -318,7 +321,10 @@ export class OsdListComponent implements OnInit {
     this.modalService.show(OsdReweightModalComponent, {
       initialState: {
         currentWeight: selectedOsd.weight,
-        osdId: selectedOsd.id
+        osdId: selectedOsd.id,
+        onSubmit: () => {
+          this.tableComponent.clearSelections();
+        }
       }
     });
   }
