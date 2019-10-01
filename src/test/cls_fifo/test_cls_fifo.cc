@@ -32,11 +32,12 @@ using namespace rados::cls::fifo;
 
 static int fifo_create(IoCtx& ioctx,
                        const string& oid,
+                       const string& id,
                        const ClsFIFO::MetaCreateParams& params)
 {
   ObjectWriteOperation op;
 
-  int r = ClsFIFO::meta_create(&op, params);
+  int r = ClsFIFO::meta_create(&op, id, params);
   if (r < 0) {
     return r;
   }
@@ -54,23 +55,20 @@ TEST(ClsFIFO, TestCreate) {
   string fifo_id = "fifo";
   string oid = fifo_id;
 
-  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
+  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid, string(),
                                   ClsFIFO::MetaCreateParams()));
 
-  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
+  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid, fifo_id,
                      ClsFIFO::MetaCreateParams()
-                     .id(fifo_id)
                      .max_part_size(0)));
 
-  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
+  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid, fifo_id,
                      ClsFIFO::MetaCreateParams()
-                     .id(fifo_id)
                      .max_entry_size(0)));
   
   /* first successful create */
-  ASSERT_EQ(0, fifo_create(ioctx, oid,
-               ClsFIFO::MetaCreateParams()
-               .id(fifo_id)));
+  ASSERT_EQ(0, fifo_create(ioctx, oid, fifo_id,
+               ClsFIFO::MetaCreateParams()));
 
   uint64_t size;
   struct timespec ts;
@@ -78,29 +76,25 @@ TEST(ClsFIFO, TestCreate) {
   ASSERT_GT(size, 0);
 
   /* test idempotency */
-  ASSERT_EQ(0, fifo_create(ioctx, oid,
-               ClsFIFO::MetaCreateParams()
-               .id(fifo_id)));
+  ASSERT_EQ(0, fifo_create(ioctx, oid, fifo_id,
+               ClsFIFO::MetaCreateParams()));
 
   uint64_t size2;
   struct timespec ts2;
   ASSERT_EQ(0, ioctx.stat2(oid, &size2, &ts2));
   ASSERT_EQ(size2, size);
 
-  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
+  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid, fifo_id,
                ClsFIFO::MetaCreateParams()
-               .id(fifo_id)
                .exclusive(true)));
 
-  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
+  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid, fifo_id,
                ClsFIFO::MetaCreateParams()
-               .id(fifo_id)
                .oid_prefix("myprefix")
                .exclusive(false)));
 
-  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
+  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid, "foo",
                ClsFIFO::MetaCreateParams()
-               .id("foo")
                .exclusive(false)));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
@@ -119,9 +113,8 @@ TEST(ClsFIFO, TestGetInfo) {
   fifo_info_t info;
 
   /* first successful create */
-  ASSERT_EQ(0, fifo_create(ioctx, oid,
-               ClsFIFO::MetaCreateParams()
-               .id(fifo_id)));
+  ASSERT_EQ(0, fifo_create(ioctx, oid, fifo_id,
+               ClsFIFO::MetaCreateParams()));
 
   ASSERT_EQ(0, ClsFIFO::meta_get(ioctx, oid,
                ClsFIFO::MetaGetParams(), &info));

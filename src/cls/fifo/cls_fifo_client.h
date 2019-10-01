@@ -34,7 +34,6 @@ namespace rados {
           struct State {
             static constexpr uint64_t default_max_part_size = 4 * 1024 * 1024;
             static constexpr uint64_t default_max_entry_size = 32 * 1024;
-            std::string id;
             std::optional<fifo_objv_t> objv;
             std::optional<std::string> oid_prefix;
             bool exclusive{false};
@@ -42,10 +41,6 @@ namespace rados {
             uint64_t max_entry_size{default_max_entry_size};
           } state;
 
-          MetaCreateParams& id(const std::string& id) {
-            state.id = id;
-            return *this;
-          }
           MetaCreateParams& oid_prefix(const std::string& oid_prefix) {
             state.oid_prefix = oid_prefix;
             return *this;
@@ -69,6 +64,7 @@ namespace rados {
         };
 
         static int meta_create(librados::ObjectWriteOperation *op,
+                               const string& id,
                                const MetaCreateParams& params);
 
         /* get info */

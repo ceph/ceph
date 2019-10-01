@@ -31,16 +31,17 @@ namespace rados {
   namespace cls {
     namespace fifo {
       int ClsFIFO::meta_create(librados::ObjectWriteOperation *rados_op,
+                               const string& id,
                                const MetaCreateParams& params) {
         cls_fifo_meta_create_op op;
 
         auto& state = params.state;
 
-        if (state.id.empty()) {
+        if (id.empty()) {
           return -EINVAL;
         }
 
-        op.id = state.id;
+        op.id = id;
         op.objv = state.objv;
         op.oid_prefix = state.oid_prefix;
         op.max_part_size = state.max_part_size;
@@ -573,7 +574,7 @@ namespace rados {
           ClsFIFO::MetaCreateParams default_params;
           ClsFIFO::MetaCreateParams *params = (create_params ? &(*create_params) : &default_params);
 
-          int r = ClsFIFO::meta_create(&op, *params);
+          int r = ClsFIFO::meta_create(&op, id, *params);
           if (r < 0) {
             return r;
           }
