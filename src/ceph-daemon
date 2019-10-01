@@ -652,6 +652,8 @@ def command_run():
 ##################################
 
 def command_shell():
+    log_dir = get_log_dir(args.log_dir, args.fsid)
+    makedirs(log_dir)
     if '.' in args.name:
         (daemon_type, daemon_id) = args.name.split('.')
     else:
