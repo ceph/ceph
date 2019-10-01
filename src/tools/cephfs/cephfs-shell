@@ -41,6 +41,7 @@ except ImportError:
                 try:
                     args = argparser.parse_args(arglist)
                 except SystemExit:
+                    shell.exit_code = 1
                     # argparse exits at seeing bad arguments
                     return
                 else:
@@ -135,6 +136,7 @@ def ls(path, opts=''):
                 yield dent
     except libcephfs.ObjectNotFound as e:
         perror(e)
+        shell.exit_code = 1
 
 
 def glob(path, pattern):
@@ -262,6 +264,7 @@ def copy_from_local(local_path, remote_path):
         try:
             file_ = open(local_path, 'rb')
         except PermissionError:
+            self.exit_code = 1
             perror('error: no permission to read local file {}'.format(
                    local_path.decode('utf-8')))
             return
@@ -270,6 +273,7 @@ def copy_from_local(local_path, remote_path):
         fd = cephfs.open(remote_path, 'w', 0o666)
     except libcephfs.Error as e:
         perror(e)
+        self.exit_code = 1
         return
     progress = 0
     while True:
@@ -351,6 +355,7 @@ class CephFSShell(Cmd):
         try:
             argparse_args = getattr(self, 'argparse_' + command)
         except AttributeError:
+            self.exit_code = 1
             return None
         doc_lines = getattr(
             self, 'do_' + command).__doc__.expandtabs().splitlines()
@@ -407,16 +412,20 @@ class CephFSShell(Cmd):
             return res
         except ConnectionError as e:
             perror('***\n{}'.format(e))
+            self.exit_code = 3
         except KeyboardInterrupt:
             perror('Command aborted')
+            self.exit_code = 130
         except libcephfs.Error as e:
             perror(e.strerror)
             if shell.debug:
                 traceback.print_exc(file=sys.stdout)
+            self.exit_code = 1
         except Exception as e:
             perror(e)
             if shell.debug:
                 traceback.print_exc(file=sys.stdout)
+            self.exit_code = 1
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -692,6 +701,7 @@ exists.')
                     else:
                         perror('{}: already exists! use --force to overwrite'.format(
                                root_src_dir.decode('utf-8')))
+                        self.exit_code = 1
                         return
 
             for file_ in files:
@@ -1040,6 +1050,7 @@ sub-directories, files')
             os.chdir(os.path.expanduser(args.path))
         except OSError as e:
             perror("Cannot change to {}: {}".format(e.filename, e.strerror))
+            self.exit_code = 1
 
     def complete_lls(self, text, line, begidx, endidx):
         """
@@ -1068,6 +1079,7 @@ sub-directories, files')
                     print_list(items)
                 except OSError as e:
                     perror("'{}': {}".format(e.filename, e.strerror))
+                    self.exit_code = 1
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
@@ -1170,6 +1182,7 @@ sub-directories, files')
                         f.decode('utf-8')))
                 except libcephfs.Error as e:
                     perror(e)
+                    self.exit_code = 1
                     continue
 
         for path in args.paths:
@@ -1218,6 +1231,7 @@ sub-directories, files')
                                     max_bytes, len(max_bytes),
                                     os.XATTR_REPLACE)
                     perror('max_bytes reset to %d' % args.max_bytes)
+                    self.exit_code = 1
 
             if args.max_files >= 0:
                 max_files = to_bytes(str(args.max_files))
@@ -1231,6 +1245,7 @@ sub-directories, files')
                                     max_files, len(max_files),
                                     os.XATTR_REPLACE)
                     perror('max_files reset to %d' % args.max_files)
+                    self.exit_code = 1
         elif args.op == 'get':
             max_bytes = '0'
             max_files = '0'
@@ -1240,6 +1255,7 @@ sub-directories, files')
                 poutput('max_bytes: %s' % max_bytes)
             except libcephfs.Error:
                 perror('max_bytes is not set')
+                self.exit_code = 1
                 pass
 
             try:
@@ -1248,6 +1264,7 @@ sub-directories, files')
                 poutput('max_files: %s' % max_files)
             except libcephfs.Error:
                 perror('max_files is not set')
+                self.exit_code = 1
                 pass
 
     def do_help(self, line):
@@ -1330,4 +1347,4 @@ if __name__ == '__main__':
     sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])
     setup_cephfs(config_file)
     shell = CephFSShell()
-    shell.cmdloop()
+    sys.exit(shell.cmdloop())
