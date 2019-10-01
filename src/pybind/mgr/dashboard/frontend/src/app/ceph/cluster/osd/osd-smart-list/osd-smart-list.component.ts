@@ -46,15 +46,17 @@ export class OsdSmartListComponent implements OnInit, OnChanges {
         if (this.isSmartError(smartData)) {
           let userMessage = '';
           if (smartData.smartctl_error_code === -22) {
-            const msg =
-              `Smartctl has received an unknown argument (error code ` +
-              `${smartData.smartctl_error_code}). You may be using an incompatible version of ` +
-              `smartmontools.  Version >= 7.0 of smartmontools is required to ` +
-              `succesfully retrieve data.`;
-            userMessage = this.i18n(msg);
+            userMessage = this.i18n(
+              `Smartctl has received an unknown argument (error code
+                {{smartData.smartctl_error_code}}). You may be using an
+                incompatible version of smartmontools. Version >= 7.0 of
+                smartmontools is required to succesfully retrieve data.`,
+              { code: smartData.smartctl_error_code }
+            );
           } else {
-            const msg = `An error with error code ${smartData.smartctl_error_code} occurred.`;
-            userMessage = this.i18n(msg);
+            userMessage = this.i18n('An error with error code {{code}} occurred.', {
+              code: smartData.smartctl_error_code
+            });
           }
           result[deviceId] = {
             error: smartData.error,
