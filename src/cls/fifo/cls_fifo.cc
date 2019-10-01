@@ -107,7 +107,8 @@ static string new_oid_prefix(string id, std::optional<string>& val)
 }
 
 static int write_header(cls_method_context_t hctx,
-                        fifo_info_t& header)
+                        fifo_info_t& header,
+                        bool inc_ver = true)
 {
   if (header.objv.instance.empty()) {
 #define HEADER_INSTANCE_SIZE 16
@@ -117,7 +118,9 @@ static int write_header(cls_method_context_t hctx,
 
     header.objv.instance = buf;
   }
-  ++header.objv.ver;
+  if (inc_ver) {
+    ++header.objv.ver;
+  }
   bufferlist bl;
   encode(header, bl);
   return cls_cxx_write_full(hctx, &bl);
@@ -264,6 +267,13 @@ static int fifo_meta_create_op(cls_method_context_t hctx,
   header.id = op.id;
   if (op.objv) {
     header.objv = *op.objv;
+  } else {
+#define DEFAULT_INSTANCE_SIZE 16
+    char buf[DEFAULT_INSTANCE_SIZE + 1];
+    cls_gen_rand_base64(buf, sizeof(buf));
+    buf[DEFAULT_INSTANCE_SIZE] = '\0';
+    header.objv.instance = buf;
+    header.objv.ver = 1;
   }
   header.oid_prefix = new_oid_prefix(op.id, op.oid_prefix);
 
@@ -271,7 +281,7 @@ static int fifo_meta_create_op(cls_method_context_t hctx,
   header.data_params.max_entry_size = op.max_entry_size;
   header.data_params.full_size_threshold = op.max_part_size - op.max_entry_size;
 
-  r = write_header(hctx, header);
+  r = write_header(hctx, header, false);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
     return r;
