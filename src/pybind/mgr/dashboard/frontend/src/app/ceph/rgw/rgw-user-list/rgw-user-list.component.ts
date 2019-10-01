@@ -115,6 +115,7 @@ export class RgwUserListComponent {
     this.bsModalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: this.selection.hasSingleSelection ? this.i18n('user') : this.i18n('users'),
+        itemNames: this.selection.selected.map((user: any) => user['uid']),
         submitActionObservable: (): Observable<any> => {
           return new Observable((observer: Subscriber<any>) => {
             // Delete all selected data table rows.

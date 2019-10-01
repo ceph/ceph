@@ -134,6 +134,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: this.i18n('mirror peer'),
+        itemNames: [`${poolName} (${peerUUID})`],
         submitActionObservable: () =>
           new Observable((observer: Subscriber<any>) => {
             this.taskWrapper

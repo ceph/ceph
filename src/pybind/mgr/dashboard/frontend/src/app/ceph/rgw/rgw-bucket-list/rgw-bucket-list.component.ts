@@ -99,6 +99,7 @@ export class RgwBucketListComponent {
         itemDescription: this.selection.hasSingleSelection
           ? this.i18n('bucket')
           : this.i18n('buckets'),
+        itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
         submitActionObservable: () => {
           return new Observable((observer: Subscriber<any>) => {
             // Delete all selected data table rows.

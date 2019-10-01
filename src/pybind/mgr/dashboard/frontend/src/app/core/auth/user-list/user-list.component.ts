@@ -137,6 +137,7 @@ export class UserListComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'User',
+        itemNames: [username],
         submitAction: () => this.deleteUser(username)
       }
     });

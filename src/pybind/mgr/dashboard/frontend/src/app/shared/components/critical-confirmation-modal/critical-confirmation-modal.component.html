@@ -12,7 +12,19 @@
       <div class="modal-body">
         <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
         <div class="question">
-          <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
+          <span *ngIf="itemNames; else noNames">
+            <p *ngIf="itemNames.length === 1; else manyNames"
+               i18n>Are you sure that you want to {{ actionDescription | lowercase }} <strong>{{ itemNames[0] }}</strong>?</p>
+            <ng-template #manyNames>
+              <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected items?</p>
+              <ul>
+                <li *ngFor="let itemName of itemNames"><strong>{{ itemName }}</strong></li>
+              </ul>
+            </ng-template >
+          </span>
+          <ng-template #noNames>
+            <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
+          </ng-template>
           <div class="form-group"
                [ngClass]="{'has-error': deletionForm.showError('confirmation', formDir)}">
             <div class="checkbox checkbox-primary">

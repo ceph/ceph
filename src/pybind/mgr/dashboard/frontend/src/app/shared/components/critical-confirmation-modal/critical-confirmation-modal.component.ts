@@ -21,6 +21,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   submitAction: Function;
   deletionForm: CdFormGroup;
   itemDescription: 'entry';
+  itemNames: string[];
   actionDescription = 'delete';
 
   constructor(public modalRef: BsModalRef) {}
