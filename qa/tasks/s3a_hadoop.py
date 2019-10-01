@@ -41,7 +41,7 @@ def task(ctx, config):
 
     # get versions
     maven_major = config.get('maven-major', 'maven-3')
-    maven_version = config.get('maven-version', '3.6.0')
+    maven_version = config.get('maven-version', '3.6.2')
     hadoop_ver = config.get('hadoop-version', '2.9.2')
     bucket_name = config.get('bucket-name', 's3atest')
     access_key = config.get('access-key', 'EGAQRD2ULOIFKFSKCT4F')
