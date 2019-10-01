@@ -1,16 +1,3 @@
-import locale_cs from '@angular/common/locales/cs';
-import locale_de from '@angular/common/locales/de';
-import locale_en from '@angular/common/locales/en';
-import locale_es from '@angular/common/locales/es';
-import locale_fr from '@angular/common/locales/fr';
-import locale_id from '@angular/common/locales/id';
-import locale_it from '@angular/common/locales/it';
-import locale_ja from '@angular/common/locales/ja';
-import locale_ko from '@angular/common/locales/ko';
-import locale_pl from '@angular/common/locales/pl';
-import locale_pt from '@angular/common/locales/pt';
-import locale_zh_Hans from '@angular/common/locales/zh-Hans';
-import locale_zh_Hant from '@angular/common/locales/zh-Hant';
 import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
 
 declare const require;
@@ -57,49 +44,6 @@ export class LocaleHelper {
   static setLocale(lang: string) {
     document.cookie = `cd-lang=${lang}`;
     window.localStorage.setItem('lang', lang);
-  }
-
-  static getLocaleData() {
-    let localeData = locale_en;
-    switch (this.getLocale()) {
-      case 'cs':
-        localeData = locale_cs;
-        break;
-      case 'de-DE':
-        localeData = locale_de;
-        break;
-      case 'es-ES':
-        localeData = locale_es;
-        break;
-      case 'fr-FR':
-        localeData = locale_fr;
-        break;
-      case 'id-ID':
-        localeData = locale_id;
-        break;
-      case 'it-IT':
-        localeData = locale_it;
-        break;
-      case 'ja-JP':
-        localeData = locale_ja;
-        break;
-      case 'ko-KR':
-        localeData = locale_ko;
-        break;
-      case 'pl-PL':
-        localeData = locale_pl;
-        break;
-      case 'pt-BR':
-        localeData = locale_pt;
-        break;
-      case 'zh-CN':
-        localeData = locale_zh_Hans;
-        break;
-      case 'zh-TW':
-        localeData = locale_zh_Hant;
-        break;
-    }
-    return localeData;
   }
 }
 
