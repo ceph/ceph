@@ -221,6 +221,7 @@ class RGWRadosList {
   };
 
   std::map<std::string,process_t> bucket_process_map;
+  std::set<std::string> visited_oids;
 
   void add_bucket_entire(const std::string& bucket_name) {
     auto p = bucket_process_map.emplace(std::make_pair(bucket_name,
