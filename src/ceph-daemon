@@ -164,10 +164,6 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
     return mounts
 
 def get_container(fsid, daemon_type, daemon_id, privileged=False):
-    if daemon_id:
-        dname = daemon_type + '.' + daemon_id
-    else:
-        dname = daemon_type
     podman_args = []
     if daemon_type == 'osd' or privileged:
         podman_args += ['--privileged']
@@ -180,7 +176,6 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False):
         ] + get_daemon_args(fsid, daemon_type, daemon_id),
         podman_args=podman_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
-        dname=dname,
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
 
@@ -373,19 +368,12 @@ class CephContainer:
                  args=[],
                  volume_mounts={},
                  cname='',
-                 dname='',
                  podman_args=[]):
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
         self.cname = cname
-        self.dname = dname
-        if dname:
-            (self.daemon_type, self.daemon_id) = dname.split('.')
-        else:
-            self.daemon_type = None
-            self.daemon_id = None
         self.podman_args = podman_args
 
     def run_cmd(self):
