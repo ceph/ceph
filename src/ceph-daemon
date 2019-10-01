@@ -119,16 +119,16 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             os.fchown(f.fileno(), uid, gid)
 
 def get_config_and_keyring():
-    if args.config_and_key:
+    if args.config_and_keyring:
         import json
-        if args.config_and_key == '-':
+        if args.config_and_keyring == '-':
             j = sys.stdin.read()
         else:
-            with open(args.config_and_key, 'r') as f:
+            with open(args.config_and_keyring, 'r') as f:
                 j = f.read()
         d = json.loads(j)
         config = d.get('config')
-        keyring = '[%s]\n\tkey = %s\n' % (args.name, d.get('key'))
+        keyring = d.get('keyring')
     else:
         if args.key:
             keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
@@ -974,7 +974,7 @@ parser_deploy.add_argument(
     '--key',
     help='key for new daemon')
 parser_deploy.add_argument(
-    '--config-and-key',
+    '--config-and-keyring',
     help='JSON file with config and key')
 parser_deploy.add_argument(
     '--mon-ip',
