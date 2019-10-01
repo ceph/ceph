@@ -96,6 +96,7 @@ export class CephfsClientsComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'client',
+        itemNames: [clientId],
         actionDescription: 'evict',
         submitAction: () => this.evictClient(clientId)
       }
