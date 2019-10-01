@@ -644,8 +644,11 @@ def command_deploy():
     if daemon_type == 'mon':
         if args.mon_ip:
             config += '[mon.%s]\n\tpublic_addr = %s\n' % (daemon_id, args.mon_ip)
+        elif args.mon_network:
+            config += '[mon.%s]\n\tpublic_network = %s\n' % (daemon_id,
+                                                             args.mon_network)
         else:
-            raise RuntimeError('must specify --mon-ip')
+            raise RuntimeError('must specify --mon-ip or --mon-network')
     (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
@@ -979,6 +982,9 @@ parser_deploy.add_argument(
 parser_deploy.add_argument(
     '--mon-ip',
     help='mon IP')
+parser_deploy.add_argument(
+    '--mon-network',
+    help='mon network (CIDR)')
 parser_deploy.add_argument(
     '--osd-fsid',
     help='OSD uuid, if creating an OSD container')
