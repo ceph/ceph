@@ -252,7 +252,7 @@ void CyanStore::write_meta(const std::string& key,
   std::string v = value;
   v += "\n";
   if (int r = safe_write_file(path.c_str(), key.c_str(),
-                              v.c_str(), v.length());
+                              v.c_str(), v.length(), 0600);
       r < 0) {
     throw std::runtime_error{fmt::format("unable to write_meta({})", key)};
   }
