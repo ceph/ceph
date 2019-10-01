@@ -131,6 +131,7 @@ export class RoleListComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'Role',
+        itemNames: [name],
         submitAction: () => this.deleteRole(name)
       }
     });
