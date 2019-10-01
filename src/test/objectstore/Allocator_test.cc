@@ -378,6 +378,27 @@ TEST_P(AllocTest, test_alloc_bug_24598)
   EXPECT_EQ(tmp.size(), 1);
 }
 
+//Verifies issue from
+//http://tracker.ceph.com/issues/40703
+//
+TEST_P(AllocTest, test_alloc_big2)
+{
+  int64_t block_size = 4096;
+  int64_t blocks = 1048576 * 2;
+  int64_t mas = 1024*1024;
+  init_alloc(blocks*block_size, block_size);
+  alloc->init_add_free(0, blocks * block_size);
+  
+  PExtentVector extents;
+  uint64_t need = block_size * blocks / 4; // 2GB
+  EXPECT_EQ(need,
+      alloc->allocate(need, mas, 0, &extents));
+  need = block_size * blocks / 4; // 2GB
+  EXPECT_EQ(need,
+      alloc->allocate(need, mas, 0, &extents));
+  EXPECT_TRUE(extents[0].length > 0);
+}
+
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,

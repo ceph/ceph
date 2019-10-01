@@ -205,10 +205,13 @@ int64_t StupidAllocator::allocate(
     bool can_append = true;
     if (!extents->empty()) {
       bluestore_pextent_t &last_extent  = extents->back();
-      if ((last_extent.end() == offset) &&
-	  ((last_extent.length + length) <= max_alloc_size)) {
-	can_append = false;
-	last_extent.length += length;
+      if (last_extent.end() == offset) {
+        uint64_t l64 = last_extent.length;
+        l64 += length;
+        if (l64 < 0x100000000 && l64 <= max_alloc_size) {
+	  can_append = false;
+	  last_extent.length += length;
+        }
       }
     }
     if (can_append) {
