@@ -555,18 +555,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _create_daemon(self, daemon_type, host, keyring, network=None):
         conn = self._get_connection(host)
         try:
-            monmap = self.get('mon_map')
-            fsid = monmap['fsid']
             name = '%s.%s' % (daemon_type, host)
-
-            # get container image
-            ret, image, err = self.mon_command({
-                'prefix': 'config get',
-                'who': name,
-                'key': 'image',
-            })
-            image = image.strip()
-            self.log.debug('%s container image %s' % (name, image))
 
             # generate config
             ret, config, err = self.mon_command({
@@ -588,14 +577,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             extra_args = []
             if network:
                 extra_args += ['--mon-network', network]
-            remoto.process.run(conn, [
-                '/home/sage/src/ceph5/src/ceph-daemon',
-                '--image', image,
-                'deploy',
-                '--fsid', fsid,
-                '--name', name,
-                '--config-and-keyring', '/tmp/foo',
-            ] + extra_args)
+            self._run_ceph_daemon(
+                host, name, 'deploy',
+                [
+                    '--name', name,
+                    '--config-and-keyring', '/tmp/foo'
+                ] + extra_args)
 
             return "Created {} on host '{}'".format(name, host)
 
