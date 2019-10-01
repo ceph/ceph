@@ -409,6 +409,10 @@ class CephFSShell(Cmd):
             perror('***\n{}'.format(e))
         except KeyboardInterrupt:
             perror('Command aborted')
+        except libcephfs.Error as e:
+            perror(e.strerror)
+            if shell.debug:
+                traceback.print_exc(file=sys.stdout)
         except Exception as e:
             perror(e)
             traceback.print_exc(file=sys.stdout)
