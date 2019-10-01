@@ -415,34 +415,33 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
         return orchestrator.TrivialReadCompletion(nodes)
 
-    def _get_device_inventory(self, host):
+    def _run_ceph_daemon(self, host, entity, command, args):
         """
-        Query storage devices on a remote node.
-
-        :return: list of InventoryDevice
+        Run ceph-daemon on the remote host with the given command + args
         """
         conn = self._get_connection(host)
 
         try:
-            ceph_volume_executable = self._executable_path(conn, 'podman')
+            # get container image
+            ret, image, err = self.mon_command({
+                'prefix': 'config get',
+                'who': entity,
+                'key': 'image',
+            })
+            image = image.strip()
+            self.log.debug('%s container image %s' % (entity, image))
+
             command = [
-                ceph_volume_executable,
-                'run',
-                '-it',
-                '--net=host',
-                '--privileged',
-                '--entrypoint',
-                '/usr/sbin/ceph-volume',
-                'ceph/daemon-base',
-                "inventory",
-                "--format=json"
-            ]
+                '/home/sage/src/ceph5/src/ceph-daemon',
+                '--image', image,
+                command,
+                '--fsid', self.get('mon_map')['fsid'],
+            ] + args
 
             out, err, code = remoto.process.check(conn, command)
-            # stdout and stderr get combined; assume last line is the real
-            # output and everything preceding it is an error.
-            host_devices = json.loads(out[-1])
-            return host_devices
+            # ceph-daemon combines stdout and stderr, so ignore err.
+            self.log.debug('code %s out %s' % (code, out))
+            return out, code
 
         except Exception as ex:
             self.log.exception(ex)
@@ -478,7 +477,13 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             if host_info.outdated(timeout_min) or refresh:
                 self.log.info("refresh stale inventory for '{}'".format(host))
-                data = self._get_device_inventory(host)
+                out, code = self._run_ceph_daemon(
+                    host, 'osd',
+                    'ceph-volume',
+                    ['--', 'inventory', '--format=json'])
+                # stdout and stderr get combined; assume last line is the real
+                # output and everything preceding it is an error.
+                data = json.loads(out[-1])
                 host_info = orchestrator.OutdatableData(data)
                 self.inventory_cache[host] = host_info
             else:
