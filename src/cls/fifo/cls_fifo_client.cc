@@ -315,7 +315,7 @@ namespace rados {
 
         *canceled = (r == -ECANCELED);
 
-        r = read_meta();
+        r = do_read_meta();
         if (r < 0) {
           return r;
         }
@@ -323,7 +323,7 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::read_meta(std::optional<fifo_objv_t> objv)
+      int FIFO::do_read_meta(std::optional<fifo_objv_t> objv)
       {
         ClsFIFO::MetaGetParams get_params;
         if (objv) {
@@ -568,6 +568,10 @@ namespace rados {
       int FIFO::open(bool create,
                         std::optional<ClsFIFO::MetaCreateParams> create_params)
       {
+        if (!ioctx) {
+          return -EINVAL;
+        }
+
         if (create) {
           librados::ObjectWriteOperation op;
 
@@ -585,14 +589,9 @@ namespace rados {
           }
         }
 
-        ClsFIFO::MetaGetParams get_params;
-        if (create_params) {
-          get_params.objv(create_params->state.objv);
-        }
-        int r = ClsFIFO::meta_get(*ioctx,
-                                  meta_oid,
-                                  get_params,
-                                  &meta_info);
+        std::optional<fifo_objv_t> objv = (create_params ?  create_params->state.objv : nullopt);
+
+        int r = do_read_meta(objv);
         if (r < 0) {
           return r;
         }
@@ -602,8 +601,21 @@ namespace rados {
         return 0;
       }
 
+      int FIFO::read_meta(std::optional<fifo_objv_t> objv)
+      {
+        if (!is_open) {
+          return -EINVAL;
+        }
+
+        return do_read_meta(objv);
+      }
+
       int FIFO::push_entry(int64_t part_num, bufferlist& bl)
       {
+        if (!is_open) {
+          return -EINVAL;
+        }
+
         librados::ObjectWriteOperation op;
 
         int r = ClsFIFO::push_part(&op, ClsFIFO::PushPartParams()
@@ -625,6 +637,10 @@ namespace rados {
                           uint64_t ofs,
                           std::optional<string> tag)
       {
+        if (!is_open) {
+          return -EINVAL;
+        }
+
         librados::ObjectWriteOperation op;
 
         int r = ClsFIFO::trim_part(&op, ClsFIFO::TrimPartParams()
@@ -718,7 +734,7 @@ namespace rados {
                                      &part_more,
                                      nullptr);
           if (r == -ENOENT) {
-            r = read_meta();
+            r = do_read_meta();
             if (r < 0) {
               return r;
             }

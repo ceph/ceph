@@ -57,6 +57,10 @@ namespace rados {
             state.max_entry_size = max_entry_size;
             return *this;
           }
+          MetaCreateParams& objv(const fifo_objv_t& objv) {
+            state.objv = objv;
+            return *this;
+          }
           MetaCreateParams& objv(const std::string& instance, uint64_t ver) {
             state.objv = fifo_objv_t{instance, ver};
             return *this;
@@ -258,7 +262,7 @@ namespace rados {
 
         int update_meta(ClsFIFO::MetaUpdateParams& update_params,
                         bool *canceled);
-        int read_meta(std::optional<fifo_objv_t> objv = std::nullopt);
+        int do_read_meta(std::optional<fifo_objv_t> objv = std::nullopt);
 
         int create_part(int64_t part_num, const string& tag);
         int remove_part(int64_t part_num, const string& tag);
@@ -277,8 +281,10 @@ namespace rados {
 
       public:
         FIFO(CephContext *_cct,
-             const string& _id) : cct(_cct),
-                                  id(_id) {
+             const string& _id,
+             librados::IoCtx *_ioctx = nullptr) : cct(_cct),
+                                                  id(_id),
+                                                  ioctx(_ioctx) {
           meta_oid = id;
         }
 
@@ -286,13 +292,18 @@ namespace rados {
                        const string& pool,
                        std::optional<string> pool_ns);
 
-        int init_ioctx(librados::IoCtx *_ioctx) {
+        void set_ioctx(librados::IoCtx *_ioctx) {
           ioctx = ioctx;
-          return 0;
         }
 
         int open(bool create,
                  std::optional<ClsFIFO::MetaCreateParams> create_params = std::nullopt);
+
+        int read_meta(std::optional<fifo_objv_t> objv = std::nullopt);
+
+        const fifo_info_t& get_meta() const {
+          return meta_info;
+        }
 
         int push(bufferlist& bl);
 
