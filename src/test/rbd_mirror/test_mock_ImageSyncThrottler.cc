@@ -113,6 +113,65 @@ TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync_Start_Waiting) {
   throttler.finish_op("id2");
 }
 
+TEST_F(TestMockImageSyncThrottler, Duplicate) {
+  MockImageSyncThrottler throttler;
+  throttler.set_max_concurrent_syncs(1);
+
+  C_SaferCond on_start1;
+  throttler.start_op("id1", &on_start1);
+  ASSERT_EQ(0, on_start1.wait());
+
+  C_SaferCond on_start2;
+  throttler.start_op("id1", &on_start2);
+  ASSERT_EQ(0, on_start2.wait());
+
+  C_SaferCond on_start3;
+  throttler.start_op("id2", &on_start3);
+  C_SaferCond on_start4;
+  throttler.start_op("id2", &on_start4);
+  ASSERT_EQ(-ENOENT, on_start3.wait());
+
+  throttler.finish_op("id1");
+  ASSERT_EQ(0, on_start4.wait());
+  throttler.finish_op("id2");
+}
+
+TEST_F(TestMockImageSyncThrottler, Duplicate2) {
+  MockImageSyncThrottler throttler;
+  throttler.set_max_concurrent_syncs(2);
+
+  C_SaferCond on_start1;
+  throttler.start_op("id1", &on_start1);
+  ASSERT_EQ(0, on_start1.wait());
+  C_SaferCond on_start2;
+  throttler.start_op("id2", &on_start2);
+  ASSERT_EQ(0, on_start2.wait());
+
+  C_SaferCond on_start3;
+  throttler.start_op("id3", &on_start3);
+  C_SaferCond on_start4;
+  throttler.start_op("id3", &on_start4); // dup
+  ASSERT_EQ(-ENOENT, on_start3.wait());
+
+  C_SaferCond on_start5;
+  throttler.start_op("id4", &on_start5);
+
+  throttler.finish_op("id1");
+  ASSERT_EQ(0, on_start4.wait());
+
+  throttler.finish_op("id2");
+  ASSERT_EQ(0, on_start5.wait());
+
+  C_SaferCond on_start6;
+  throttler.start_op("id5", &on_start6);
+
+  throttler.finish_op("id3");
+  ASSERT_EQ(0, on_start6.wait());
+
+  throttler.finish_op("id4");
+  throttler.finish_op("id5");
+}
+
 TEST_F(TestMockImageSyncThrottler, Increase_Max_Concurrent_Syncs) {
   MockImageSyncThrottler throttler;
   throttler.set_max_concurrent_syncs(2);
