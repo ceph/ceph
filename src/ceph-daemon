@@ -677,6 +677,20 @@ def command_exec():
 
 ##################################
 
+def command_ceph_volume():
+    log_dir = get_log_dir(args.log_dir, args.fsid)
+    makedirs(log_dir)
+    c = CephContainer(
+        image=args.image,
+        entrypoint='/usr/sbin/ceph-volume',
+        args=args.command,
+        podman_args=['--privileged'],
+        volume_mounts=get_container_mounts(args.fsid, 'osd', None),
+    )
+    subprocess.call(c.run_cmd())
+
+##################################
+
 def command_unit():
     (daemon_type, daemon_id) = args.name.split('.')
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
@@ -887,6 +901,17 @@ parser_exec.add_argument(
     action='store_true',
     help='use a privileged container')
 parser_exec.add_argument(
+    'command', nargs='+',
+    help='command')
+
+parser_ceph_volume = subparsers.add_parser(
+    'ceph-volume', help='run ceph-volume inside a container')
+parser_ceph_volume.set_defaults(func=command_ceph_volume)
+parser_ceph_volume.add_argument(
+    '--fsid',
+    required=True,
+    help='cluster FSID')
+parser_ceph_volume.add_argument(
     'command', nargs='+',
     help='command')
 
