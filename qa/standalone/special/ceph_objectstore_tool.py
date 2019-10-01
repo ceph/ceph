@@ -1742,6 +1742,27 @@ def main(argv):
 
     ERRORS += EXP_ERRORS
 
+    print("Test clear-data-digest")
+    for nspace in db.keys():
+        for basename in db[nspace].keys():
+          JSON = db[nspace][basename]['json']
+          cmd = (CFSD_PREFIX + "'{json}' clear-data-digest").format(osd='osd0', json=JSON)
+          logging.debug(cmd)
+          ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+          if ret != 0:
+              logging.error("Clearing data digest failed for {json}".format(json=JSON))
+              ERRORS += 1
+              break
+          cmd = (CFSD_PREFIX + "'{json}' dump | grep '\"data_digest\": \"0xff'").format(osd='osd0', json=JSON)
+          logging.debug(cmd)
+          ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+          if ret != 0:
+              logging.error("Data digest not cleared for {json}".format(json=JSON))
+              ERRORS += 1
+              break
+          break
+        break
+
     print("Test pg removal")
     RM_ERRORS = 0
     for pg in ALLREPPGS + ALLECPGS:
