@@ -356,21 +356,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return out
 
-    def _bootstrap_mgr(self, conn):
-        """
-        Bootstrap a manager.
-
-          1. install a copy of ceph.conf
-          2. install the manager bootstrap key
-
-        :param conn: remote host connection
-        """
-        self._ensure_ceph_conf(conn)
-        keyring = self._get_bootstrap_key("mgr")
-        keyring_path = "/var/lib/ceph/bootstrap-mgr/ceph.keyring"
-        conn.remote_module.write_keyring(keyring_path, keyring)
-        return keyring_path
-
     def _bootstrap_osd(self, conn):
         """
         Bootstrap an osd.
@@ -678,55 +663,17 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         self.log.info("create_mgr({}): starting".format(host))
 
-        conn = self._get_connection(host)
+        # get mgr. key
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'mgr.%s' % host,
+            'caps': ['mon', 'allow profile mgr',
+                     'osd', 'allow *',
+                     'mds', 'allow *'],
+        })
+        self.log.debug('keyring %s' % keyring)
 
-        try:
-            bootstrap_keyring_path = self._bootstrap_mgr(conn)
-
-            mgr_path = "/var/lib/ceph/mgr/ceph-{name}".format(name=host)
-            conn.remote_module.safe_makedirs(mgr_path)
-            keyring_path = os.path.join(mgr_path, "keyring")
-
-            command = [
-                'ceph',
-                '--name', 'client.bootstrap-mgr',
-                '--keyring', bootstrap_keyring_path,
-                'auth', 'get-or-create', 'mgr.{name}'.format(name=host),
-                'mon', 'allow profile mgr',
-                'osd', 'allow *',
-                'mds', 'allow *',
-                '-o',
-                keyring_path
-            ]
-
-            out, err, ret = remoto.process.check(conn, command)
-            if ret != 0:
-                raise Exception("oops")
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph-mgr@{name}'.format(name=host)],
-                timeout=7
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'start', 'ceph-mgr@{name}'.format(name=host)],
-                timeout=7
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph.target'],
-                timeout=7
-            )
-
-            return "Created mgr on host '{}'".format(host)
-
-        except Exception as e:
-            self.log.error("create_mgr({}): error: {}".format(host, e))
-            raise
-
-        finally:
-            self.log.info("create_mgr({}): finished".format(host))
-            conn.exit()
+        return self._create_daemon('mgr', host, keyring)
 
     def update_mgrs(self, num, hosts):
         """
