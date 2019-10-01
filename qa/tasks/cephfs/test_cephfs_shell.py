@@ -619,7 +619,5 @@ class TestMisc(TestCephFSShell):
         """
         Test that help outputs commands.
         """
-
-        o = self.get_cephfs_shell_cmd_output("help")
-
+        o = self.get_cephfs_shell_cmd_output("help all")
         log.info("output:\n{}".format(o))
