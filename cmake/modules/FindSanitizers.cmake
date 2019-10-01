@@ -20,7 +20,7 @@ foreach(component ${Sanitizers_FIND_COMPONENTS})
     elseif(NOT CMAKE_POSITION_INDEPENDENT_CODE)
       message(SEND_ERROR "TSan requires all code to be position independent")
     endif()
-    set(Sanitizers_Thread_COMPILE_OPTIONS "-fsanitize=thread")
+    set(Sanitizers_thread_COMPILE_OPTIONS "-fsanitize=thread")
   elseif(component STREQUAL "undefined_behavior")
     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=88684
     set(Sanitizers_undefined_behavior_COMPILE_OPTIONS "-fsanitize=undefined;-fno-sanitize=vptr")
