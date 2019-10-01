@@ -10,7 +10,10 @@ ceph-mgr DeepSea orchestrator module
 
 import json
 import errno
-from typing import Dict
+try:
+    from typing import Dict
+except ImportError:
+    pass  # type checking
 
 import requests
 
