@@ -71,7 +71,6 @@ overrides:
         debug rocksdb: "0/0"
         debug leveldb: "0/0"
         debug memdb: "0/0"
-        debug kinetic: "0/0"
         debug fuse: "0/0"
         debug mgr: "0/0"
         debug mgrc: "0/0"
