@@ -12,6 +12,7 @@ TYPE(RGWZone)
 TYPE(RGWZoneGroup)
 TYPE(RGWRealm)
 TYPE(RGWPeriod)
+TYPE(RGWPeriodLatestEpochInfo)
 
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
