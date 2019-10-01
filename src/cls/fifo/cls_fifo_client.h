@@ -25,7 +25,7 @@ namespace rados {
   namespace cls {
     namespace fifo {
 
-      class FIFO {
+      class ClsFIFO {
       public:
 
         /* create */
@@ -229,7 +229,7 @@ namespace rados {
         static int list_part(librados::IoCtx& ioctx,
                              const string& oid,
                              const ListPartParams& params,
-                             std::vector<cls_fifo_part_list_op_reply::entry> *pentries,
+                             std::vector<cls_fifo_part_list_entry_t> *pentries,
                              bool *more,
                              string *ptag = nullptr);
       };
@@ -240,7 +240,7 @@ namespace rados {
         ceph::real_time mtime;
       };
 
-      class Manager {
+      class FIFO {
         CephContext *cct;
         string id;
 
@@ -260,7 +260,7 @@ namespace rados {
                           int64_t *part_num,
                           uint64_t *part_ofs);
 
-        int update_meta(FIFO::MetaUpdateParams& update_params,
+        int update_meta(ClsFIFO::MetaUpdateParams& update_params,
                         bool *canceled);
         int read_meta(std::optional<fifo_objv_t> objv = std::nullopt);
 
@@ -280,9 +280,9 @@ namespace rados {
                       std::optional<string> tag);
 
       public:
-        Manager(CephContext *_cct,
-                const string& _id) : cct(_cct),
-                                    id(_id) {
+        FIFO(CephContext *_cct,
+             const string& _id) : cct(_cct),
+                                  id(_id) {
           meta_oid = id;
         }
 
@@ -296,7 +296,7 @@ namespace rados {
         }
 
         int open(bool create,
-                 std::optional<FIFO::MetaCreateParams> create_params = std::nullopt);
+                 std::optional<ClsFIFO::MetaCreateParams> create_params = std::nullopt);
 
         int push(bufferlist& bl);
 

@@ -30,8 +30,8 @@ using namespace librados;
 namespace rados {
   namespace cls {
     namespace fifo {
-      int FIFO::meta_create(librados::ObjectWriteOperation *rados_op,
-                            const MetaCreateParams& params) {
+      int ClsFIFO::meta_create(librados::ObjectWriteOperation *rados_op,
+                               const MetaCreateParams& params) {
         cls_fifo_meta_create_op op;
 
         auto& state = params.state;
@@ -60,10 +60,10 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::meta_get(librados::IoCtx& ioctx,
-                         const string& oid,
-                         const MetaGetParams& params,
-                         fifo_info_t *result) {
+      int ClsFIFO::meta_get(librados::IoCtx& ioctx,
+                            const string& oid,
+                            const MetaGetParams& params,
+                            fifo_info_t *result) {
         cls_fifo_meta_get_op op;
 
         auto& state = params.state;
@@ -100,8 +100,8 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::meta_update(librados::ObjectWriteOperation *rados_op,
-                            const MetaUpdateParams& params) {
+      int ClsFIFO::meta_update(librados::ObjectWriteOperation *rados_op,
+                               const MetaUpdateParams& params) {
         cls_fifo_meta_update_op op;
 
         auto& state = params.state;
@@ -125,8 +125,8 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::part_init(librados::ObjectWriteOperation *rados_op,
-                          const PartInitParams& params) {
+      int ClsFIFO::part_init(librados::ObjectWriteOperation *rados_op,
+                             const PartInitParams& params) {
         cls_fifo_part_init_op op;
 
         auto& state = params.state;
@@ -145,8 +145,8 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::push_part(librados::ObjectWriteOperation *rados_op,
-                          const PushPartParams& params) {
+      int ClsFIFO::push_part(librados::ObjectWriteOperation *rados_op,
+                             const PushPartParams& params) {
         cls_fifo_part_push_op op;
 
         auto& state = params.state;
@@ -165,8 +165,8 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::trim_part(librados::ObjectWriteOperation *rados_op,
-                          const TrimPartParams& params) {
+      int ClsFIFO::trim_part(librados::ObjectWriteOperation *rados_op,
+                             const TrimPartParams& params) {
         cls_fifo_part_trim_op op;
 
         auto& state = params.state;
@@ -181,12 +181,12 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::list_part(librados::IoCtx& ioctx,
-                          const string& oid,
-                          const ListPartParams& params,
-                          std::vector<cls_fifo_part_list_op_reply::entry> *pentries,
-                          bool *more,
-                          string *ptag)
+      int ClsFIFO::list_part(librados::IoCtx& ioctx,
+                             const string& oid,
+                             const ListPartParams& params,
+                             std::vector<cls_fifo_part_list_entry_t> *pentries,
+                             bool *more,
+                             string *ptag)
       {
         cls_fifo_part_list_op op;
 
@@ -236,7 +236,7 @@ namespace rados {
         return 0;
       }
 
-      string Manager::craft_marker(int64_t part_num,
+      string FIFO::craft_marker(int64_t part_num,
                                    uint64_t part_ofs)
       {
         char buf[64];
@@ -244,9 +244,9 @@ namespace rados {
         return string(buf);
       }
 
-      bool Manager::parse_marker(const string& marker,
-                                 int64_t *part_num,
-                                 uint64_t *part_ofs)
+      bool FIFO::parse_marker(const string& marker,
+                              int64_t *part_num,
+                              uint64_t *part_ofs)
       {
         if (marker.empty()) {
           *part_num = meta_info.tail_part_num;
@@ -277,9 +277,9 @@ namespace rados {
         return true;
       }
 
-      int Manager::init_ioctx(librados::Rados *rados,
-                              const string& pool,
-                              std::optional<string> pool_ns)
+      int FIFO::init_ioctx(librados::Rados *rados,
+                           const string& pool,
+                           std::optional<string> pool_ns)
       {
         _ioctx.emplace();
         int r = rados->ioctx_create(pool.c_str(), *_ioctx);
@@ -296,13 +296,13 @@ namespace rados {
         return 0;
       }
 
-      int Manager::update_meta(FIFO::MetaUpdateParams& update_params,
-                               bool *canceled)
+      int FIFO::update_meta(ClsFIFO::MetaUpdateParams& update_params,
+                            bool *canceled)
       {
         update_params.objv(meta_info.objv);
 
         librados::ObjectWriteOperation wop;
-        int r = FIFO::meta_update(&wop, update_params);
+        int r = ClsFIFO::meta_update(&wop, update_params);
         if (r < 0) {
           return r;
         }
@@ -322,16 +322,16 @@ namespace rados {
         return 0;
       }
 
-      int Manager::read_meta(std::optional<fifo_objv_t> objv)
+      int FIFO::read_meta(std::optional<fifo_objv_t> objv)
       {
-        FIFO::MetaGetParams get_params;
+        ClsFIFO::MetaGetParams get_params;
         if (objv) {
           get_params.objv(*objv);
         }
-        int r = FIFO::meta_get(*ioctx,
-                               meta_oid,
-                               get_params,
-                               &meta_info);
+        int r = ClsFIFO::meta_get(*ioctx,
+                                  meta_oid,
+                                  get_params,
+                                  &meta_info);
         if (r < 0) {
           return r;
         }
@@ -339,14 +339,14 @@ namespace rados {
         return 0;
       }
 
-      int Manager::create_part(int64_t part_num, const string& tag) {
+      int FIFO::create_part(int64_t part_num, const string& tag) {
         librados::ObjectWriteOperation op;
 
         op.create(true); /* exclusive */
-        int r = FIFO::part_init(&op,
-                                FIFO::PartInitParams()
-                                .tag(tag)
-                                .data_params(meta_info.data_params));
+        int r = ClsFIFO::part_init(&op,
+                                   ClsFIFO::PartInitParams()
+                                   .tag(tag)
+                                   .data_params(meta_info.data_params));
         if (r < 0) {
           return r;
         }
@@ -359,7 +359,7 @@ namespace rados {
         return 0;
       }
 
-      int Manager::remove_part(int64_t part_num, const string& tag) {
+      int FIFO::remove_part(int64_t part_num, const string& tag) {
         librados::ObjectWriteOperation op;
         op.remove();
         int r = ioctx->operate(meta_info.part_oid(part_num), &op);
@@ -373,7 +373,7 @@ namespace rados {
         return 0;
       }
 
-      int Manager::process_journal_entry(const fifo_journal_entry_t& entry)
+      int FIFO::process_journal_entry(const fifo_journal_entry_t& entry)
       {
         switch (entry.op) {
           case fifo_journal_entry_t::Op::OP_CREATE:
@@ -388,7 +388,7 @@ namespace rados {
         return 0;
       }
 
-      int Manager::process_journal_entries(vector<fifo_journal_entry_t> *processed)
+      int FIFO::process_journal_entries(vector<fifo_journal_entry_t> *processed)
       {
         for (auto& iter : meta_info.journal) {
           auto& entry = iter.second;
@@ -403,7 +403,7 @@ namespace rados {
         return 0;
       }
 
-      int Manager::process_journal()
+      int FIFO::process_journal()
       {
         vector<fifo_journal_entry_t> processed;
 
@@ -422,7 +422,7 @@ namespace rados {
 
         for (i = 0; i < RACE_RETRY; ++i) {
           bool canceled;
-          r = update_meta(FIFO::MetaUpdateParams()
+          r = update_meta(ClsFIFO::MetaUpdateParams()
                           .journal_entries_rm(processed),
                           &canceled);
           if (r < 0) {
@@ -476,7 +476,7 @@ namespace rados {
         return string(buf);
       }
 
-      int Manager::prepare_new_part()
+      int FIFO::prepare_new_part()
       {
         fifo_journal_entry_t jentry;
 
@@ -488,7 +488,7 @@ namespace rados {
         int i;
 
         for (i = 0; i < RACE_RETRY; ++i) {
-          r = update_meta(FIFO::MetaUpdateParams()
+          r = update_meta(ClsFIFO::MetaUpdateParams()
                           .journal_entry_add(jentry),
                           &canceled);
           if (r < 0) {
@@ -520,7 +520,7 @@ namespace rados {
         return 0;
       }
 
-      int Manager::prepare_new_head()
+      int FIFO::prepare_new_head()
       {
         int64_t new_head_num = meta_info.head_part_num + 1;
 
@@ -541,9 +541,9 @@ namespace rados {
 
         for (i = 0; i < RACE_RETRY; ++i) {
           bool canceled;
-          int r = update_meta(FIFO::MetaUpdateParams()
-                          .head_part_num(new_head_num),
-                          &canceled);
+          int r = update_meta(ClsFIFO::MetaUpdateParams()
+                              .head_part_num(new_head_num),
+                              &canceled);
           if (r < 0) {
             return r;
           }
@@ -564,16 +564,16 @@ namespace rados {
         return 0;
       }
 
-      int Manager::open(bool create,
-                        std::optional<FIFO::MetaCreateParams> create_params)
+      int FIFO::open(bool create,
+                        std::optional<ClsFIFO::MetaCreateParams> create_params)
       {
         if (create) {
           librados::ObjectWriteOperation op;
 
-          FIFO::MetaCreateParams default_params;
-          FIFO::MetaCreateParams *params = (create_params ? &(*create_params) : &default_params);
+          ClsFIFO::MetaCreateParams default_params;
+          ClsFIFO::MetaCreateParams *params = (create_params ? &(*create_params) : &default_params);
 
-          int r = FIFO::meta_create(&op, *params);
+          int r = ClsFIFO::meta_create(&op, *params);
           if (r < 0) {
             return r;
           }
@@ -584,14 +584,14 @@ namespace rados {
           }
         }
 
-        FIFO::MetaGetParams get_params;
+        ClsFIFO::MetaGetParams get_params;
         if (create_params) {
           get_params.objv(create_params->state.objv);
         }
-        int r = FIFO::meta_get(*ioctx,
-                               meta_oid,
-                               get_params,
-                               &meta_info);
+        int r = ClsFIFO::meta_get(*ioctx,
+                                  meta_oid,
+                                  get_params,
+                                  &meta_info);
         if (r < 0) {
           return r;
         }
@@ -601,13 +601,13 @@ namespace rados {
         return 0;
       }
 
-      int Manager::push_entry(int64_t part_num, bufferlist& bl)
+      int FIFO::push_entry(int64_t part_num, bufferlist& bl)
       {
         librados::ObjectWriteOperation op;
 
-        int r = FIFO::push_part(&op, FIFO::PushPartParams()
-                                          .tag(meta_info.head_tag)
-                                          .data(bl));
+        int r = ClsFIFO::push_part(&op, ClsFIFO::PushPartParams()
+                                        .tag(meta_info.head_tag)
+                                        .data(bl));
         if (r < 0) {
           return r;
         }
@@ -620,15 +620,15 @@ namespace rados {
         return 0;
       }
 
-      int Manager::trim_part(int64_t part_num,
-                             uint64_t ofs,
-                             std::optional<string> tag)
+      int FIFO::trim_part(int64_t part_num,
+                          uint64_t ofs,
+                          std::optional<string> tag)
       {
         librados::ObjectWriteOperation op;
 
-        int r = FIFO::trim_part(&op, FIFO::TrimPartParams()
-                                          .tag(tag)
-                                          .ofs(ofs));
+        int r = ClsFIFO::trim_part(&op, ClsFIFO::TrimPartParams()
+                                        .tag(tag)
+                                        .ofs(ofs));
         if (r < 0) {
           return r;
         }
@@ -641,7 +641,7 @@ namespace rados {
         return 0;
       }
 
-      int Manager::push(bufferlist& bl)
+      int FIFO::push(bufferlist& bl)
       {
         if (!is_open) {
           return -EINVAL;
@@ -680,10 +680,10 @@ namespace rados {
         return 0;
       }
 
-      int Manager::list(int max_entries,
-                        std::optional<string> marker,
-                        vector<fifo_entry> *result,
-                       bool *more)
+      int FIFO::list(int max_entries,
+                     std::optional<string> marker,
+                     vector<fifo_entry> *result,
+                     bool *more)
       {
         if (!is_open) {
           return -EINVAL;
@@ -707,15 +707,15 @@ namespace rados {
         bool part_more{false};
         while (max_entries > 0 &&
                part_num <= meta_info.head_part_num) {
-          std::vector<cls_fifo_part_list_op_reply::entry> entries;
-          int r = FIFO::list_part(*ioctx,
-                                  meta_info.part_oid(part_num),
-                                  FIFO::ListPartParams()
-                                  .ofs(ofs)
-                                  .max_entries(max_entries),
-                                  &entries,
-                                  &part_more,
-                                  nullptr);
+          std::vector<cls_fifo_part_list_entry_t> entries;
+          int r = ClsFIFO::list_part(*ioctx,
+                                     meta_info.part_oid(part_num),
+                                     ClsFIFO::ListPartParams()
+                                     .ofs(ofs)
+                                     .max_entries(max_entries),
+                                     &entries,
+                                     &part_more,
+                                     nullptr);
           if (r == -ENOENT) {
             r = read_meta();
             if (r < 0) {
@@ -734,7 +734,7 @@ namespace rados {
             return 0;
           }
           if (r < 0) {
-            ldout(cct, 20) << __func__ << "(): FIFO::list_part() on oid=" << meta_info.part_oid(part_num) << " returned r=" << r << dendl;
+            ldout(cct, 20) << __func__ << "(): ClsFIFO::list_part() on oid=" << meta_info.part_oid(part_num) << " returned r=" << r << dendl;
             return r;
           }
 
@@ -759,7 +759,7 @@ namespace rados {
         return 0;
       }
 
-      int Manager::trim(const string& marker)
+      int FIFO::trim(const string& marker)
       {
         if (!is_open) {
           return -EINVAL;
@@ -798,7 +798,7 @@ namespace rados {
 
         for (i = 0; i < RACE_RETRY; ++i) {
           bool canceled;
-          int r = update_meta(FIFO::MetaUpdateParams()
+          int r = update_meta(ClsFIFO::MetaUpdateParams()
                               .tail_part_num(part_num),
                               &canceled);
           if (r < 0) {

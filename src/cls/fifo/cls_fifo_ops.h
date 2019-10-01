@@ -217,35 +217,8 @@ WRITE_CLASS_ENCODER(cls_fifo_part_list_op)
 
 struct cls_fifo_part_list_op_reply
 {
-  struct entry {
-    bufferlist data;
-    uint64_t ofs;
-    ceph::real_time mtime;
-
-    entry() {}
-    entry(bufferlist&& _data,
-          uint64_t _ofs,
-          ceph::real_time _mtime) : data(std::move(_data)), ofs(_ofs), mtime(_mtime) {}
-
-
-    void encode(bufferlist &bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(data, bl);
-      encode(ofs, bl);
-      encode(mtime, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::const_iterator &bl) {
-      DECODE_START(1, bl);
-      decode(data, bl);
-      decode(ofs, bl);
-      decode(mtime, bl);
-      DECODE_FINISH(bl);
-    }
-  };
-
   string tag;
-  vector<entry> entries;
+  vector<rados::cls::fifo::cls_fifo_part_list_entry_t> entries;
   bool more{false};
 
   void encode(bufferlist &bl) const {
@@ -263,5 +236,4 @@ struct cls_fifo_part_list_op_reply
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_part_list_op_reply::entry)
 WRITE_CLASS_ENCODER(cls_fifo_part_list_op_reply)
