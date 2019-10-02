@@ -84,8 +84,8 @@ def get_legacy_config_fsid(cluster):
         if 'global' in config and 'fsid' in config['global']:
             return config['global']['fsid']
     except:
-        return 'unknown'
-    return 'unknown'
+        return None
+    return None
 
 def get_legacy_daemon_fsid(cluster_name, daemon_type, daemon_id):
     fsid = None
@@ -272,7 +272,8 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
 
     deploy_daemon_units(fsid, daemon_type, daemon_id, c)
 
-def deploy_daemon_units(fsid, daemon_type, daemon_id, c):
+def deploy_daemon_units(fsid, daemon_type, daemon_id, c,
+                        enable=True, start=True):
     # cmd
     data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
     with open(data_dir + '/cmd', 'w') as f:
@@ -290,8 +291,10 @@ def deploy_daemon_units(fsid, daemon_type, daemon_id, c):
     subprocess.check_output(['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(fsid, daemon_type, daemon_id)
-    subprocess.check_output(['systemctl', 'enable', unit_name])
-    subprocess.check_output(['systemctl', 'start', unit_name])
+    if enable:
+        subprocess.check_output(['systemctl', 'enable', unit_name])
+    if start:
+        subprocess.check_output(['systemctl', 'start', unit_name])
 
 def install_base_units(fsid):
     """
@@ -864,6 +867,61 @@ def command_ls():
 
 ##################################
 
+def command_adopt():
+    (daemon_type, daemon_id) = args.name.split('.')
+    if args.style == 'legacy':
+        fsid = get_legacy_daemon_fsid(args.cluster, daemon_type, daemon_id)
+        if not fsid:
+            raise RuntimeError('could not detect fsid; add fsid = to ceph.conf')
+
+        # NOTE: implicit assumption here that the units correspond to the
+        # cluster we are adopting based on the /etc/{defaults,sysconfig}/ceph
+        # CLUSTER field.
+        unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
+        (enabled, active) = check_unit(unit_name)
+
+        if active:
+            logging.info('Stopping old systemd unit %s...' % unit_name)
+            subprocess.check_output(['systemctl', 'stop', unit_name])
+        if enabled:
+            logging.info('Disabling old systemd unit %s...' % unit_name)
+            subprocess.check_output(['systemctl', 'disable', unit_name])
+
+        logging.info('Moving data...')
+        makedirs(os.path.join(args.data_dir, fsid))
+        data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
+        subprocess.check_output([
+            'mv',
+            '/var/lib/ceph/%s/%s-%s' % (daemon_type, args.cluster, daemon_id),
+            data_dir])
+        subprocess.check_output([
+            'cp',
+            '/etc/ceph/%s.conf' % args.cluster,
+            os.path.join(data_dir, 'config')])
+
+        logging.info('Moving logs...')
+        log_dir = get_log_dir(args.log_dir, fsid)
+        makedirs(log_dir)
+        try:
+            subprocess.check_output(
+                ['mv',
+                 '/var/log/ceph/%s-%s.%s.log*' % (args.cluster,
+                                                  daemon_type, daemon_id),
+                 os.path.join(log_dir)],
+                shell=True)
+        except:
+            pass
+
+        logging.info('Creating new units...')
+        c = get_container(fsid, daemon_type, daemon_id)
+        deploy_daemon_units(fsid, daemon_type, daemon_id, c,
+                            enable=True,  # unconditionally enable the new unit
+                            start=active)
+    else:
+        raise RuntimeError('adoption of style %s not implemented' % args.style)
+
+##################################
+
 def command_rm_daemon():
     (daemon_type, daemon_id) = args.name.split('.')
     if daemon_type in ['mon', 'osd'] and not args.force:
@@ -943,6 +1001,22 @@ parser_version.set_defaults(func=command_version)
 parser_ls = subparsers.add_parser(
     'ls', help='list daemon instances on this host')
 parser_ls.set_defaults(func=command_ls)
+
+parser_adopt = subparsers.add_parser(
+    'adopt', help='adopt daemon deployed with a different tool')
+parser_adopt.set_defaults(func=command_adopt)
+parser_adopt.add_argument(
+    '--name', '-n',
+    required=True,
+    help='daemon name (type.id)')
+parser_adopt.add_argument(
+    '--style',
+    required=True,
+    help='deployment style (legacy, ...)')
+parser_adopt.add_argument(
+    '--cluster',
+    default='ceph',
+    help='cluster name')
 
 parser_rm_daemon = subparsers.add_parser(
     'rm-daemon', help='remove daemon instance')
