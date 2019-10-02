@@ -35,31 +35,27 @@ export class MgrModuleFormComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.route.params.subscribe(
-      (params: { name: string }) => {
-        this.moduleName = decodeURIComponent(params.name);
-        this.loading = true;
-        const observables = [];
-        observables.push(this.mgrModuleService.getOptions(this.moduleName));
-        observables.push(this.mgrModuleService.getConfig(this.moduleName));
-        observableForkJoin(observables).subscribe(
-          (resp: object) => {
-            this.loading = false;
-            this.moduleOptions = resp[0];
-            // Create the form dynamically.
-            this.createForm();
-            // Set the form field values.
-            this.mgrModuleForm.setValue(resp[1]);
-          },
-          (error) => {
-            this.error = error;
-          }
-        );
-      },
-      (error) => {
-        this.error = error;
-      }
-    );
+    this.route.params.subscribe((params: { name: string }) => {
+      this.moduleName = decodeURIComponent(params.name);
+      this.loading = true;
+      const observables = [
+        this.mgrModuleService.getOptions(this.moduleName),
+        this.mgrModuleService.getConfig(this.moduleName)
+      ];
+      observableForkJoin(observables).subscribe(
+        (resp: object) => {
+          this.loading = false;
+          this.moduleOptions = resp[0];
+          // Create the form dynamically.
+          this.createForm();
+          // Set the form field values.
+          this.mgrModuleForm.setValue(resp[1]);
+        },
+        (_error) => {
+          this.error = true;
+        }
+      );
+    });
   }
 
   getValidators(moduleOption): ValidatorFn[] {
