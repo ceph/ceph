@@ -1135,6 +1135,9 @@ void PeeringState::send_lease()
 
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
+  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+    return;
+  }
   if (!is_nonprimary()) {
     return;
   }
@@ -1175,6 +1178,9 @@ void PeeringState::proc_lease(const pg_lease_t& l)
 
 void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 {
+  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+    return;
+  }
   auto now = pl->get_mnow();
   bool was_min = false;
   for (unsigned i = 0; i < acting.size(); ++i) {
@@ -1220,6 +1226,9 @@ void PeeringState::recalc_readable_until()
 
 bool PeeringState::check_prior_readable_down_osds(const OSDMapRef& map)
 {
+  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+    return false;
+  }
   bool changed = false;
   auto p = prior_readable_down_osds.begin();
   while (p != prior_readable_down_osds.end()) {
@@ -2372,8 +2381,10 @@ void PeeringState::activate(
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    renew_lease(pl->get_mnow());
-    schedule_renew_lease();
+    if (get_osdmap()->require_osd_release >= ceph_release_t::octopus) {
+      renew_lease(pl->get_mnow());
+      schedule_renew_lease();
+    }
 
     // adjust purged_snaps: PG may have been inactive while snaps were pruned
     // from the removed_snaps_queue in the osdmap.  update local purged_snaps
