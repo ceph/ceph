@@ -1,5 +1,11 @@
 import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
-import { ErrorHandler, NgModule } from '@angular/core';
+import {
+  ErrorHandler,
+  LOCALE_ID,
+  NgModule,
+  TRANSLATIONS,
+  TRANSLATIONS_FORMAT
+} from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
@@ -15,7 +21,6 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
 import { CoreModule } from './core/core.module';
-import { i18nProviders } from './locale.helper';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
@@ -60,7 +65,19 @@ export function jwtTokenGetter() {
       useClass: ApiInterceptorService,
       multi: true
     },
-    i18nProviders,
+    {
+      provide: TRANSLATIONS,
+      useFactory: (locale) => {
+        locale = locale || 'en-US';
+        try {
+          return require(`raw-loader!locale/messages.${locale}.xlf`);
+        } catch (error) {
+          return [];
+        }
+      },
+      deps: [LOCALE_ID]
+    },
+    { provide: TRANSLATIONS_FORMAT, useValue: 'xlf' },
     I18n
   ],
   bootstrap: [AppComponent]
