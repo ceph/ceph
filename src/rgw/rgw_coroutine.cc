@@ -210,7 +210,7 @@ RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *
 
 RGWCoroutinesStack::~RGWCoroutinesStack()
 {
-  while (ops.empty()) {
+  while (!ops.empty()) {
     ops.pop_back();
   }
 
