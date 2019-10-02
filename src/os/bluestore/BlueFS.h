@@ -21,8 +21,6 @@ class Allocator;
 
 enum {
   l_bluefs_first = 732600,
-  l_bluefs_gift_bytes,
-  l_bluefs_reclaim_bytes,
   l_bluefs_db_total_bytes,
   l_bluefs_db_used_bytes,
   l_bluefs_wal_total_bytes,
@@ -53,25 +51,6 @@ enum {
   l_bluefs_read_prefetch_bytes,
 
   l_bluefs_last,
-};
-
-class BlueFSDeviceExpander {
-protected:
-  ~BlueFSDeviceExpander() {}
-public:
-  virtual uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
-    uint64_t bluefs_total) = 0;
-  virtual int allocate_freespace(
-    uint64_t min_size,
-    uint64_t size,
-    PExtentVector& extents) = 0;
-  /** Reports amount of space that can be transferred to BlueFS.
-   * This gives either current state, when alloc_size is currently used
-   * BlueFS's size, or simulation when alloc_size is different.
-   * @params
-   * alloc_size - allocation unit size to check
-   */
-  virtual uint64_t available_freespace(uint64_t alloc_size) = 0;
 };
 
 class BlueFSVolumeSelector {
@@ -329,7 +308,6 @@ private:
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
-  BlueFSDeviceExpander* slow_dev_expander = nullptr;
   std::unique_ptr<BlueFSVolumeSelector> vselector;
 
   class SocketHook;
@@ -351,7 +329,6 @@ private:
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
   }
   const char* get_device_name(unsigned id);
-  int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
   int _allocate_without_fallback(uint8_t id, uint64_t len,
@@ -525,9 +502,6 @@ public:
   /// test and compact log, if necessary
   void _maybe_compact_log(std::unique_lock<ceph::mutex>& l);
 
-  void set_slow_device_expander(BlueFSDeviceExpander* a) {
-    slow_dev_expander = a;
-  }
   void set_volume_selector(BlueFSVolumeSelector* s) {
     vselector.reset(s);
   }
@@ -552,10 +526,6 @@ public:
     int r = _flush_and_sync_log(l);
     ceph_assert(r == 0);
   }
-
-  /// reclaim block space
-  int reclaim_blocks(unsigned bdev, uint64_t want,
-		     PExtentVector *extents);
 
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
