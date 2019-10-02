@@ -7337,6 +7337,9 @@ int BlueStore::_verify_csum(OnodeRef& o,
     }
   }
   logger->tinc(l_bluestore_csum_lat, ceph_clock_now() - start);
+  if (cct->_conf->bluestore_ignore_data_csum) {
+    return 0;
+  }
   return r;
 }
 
