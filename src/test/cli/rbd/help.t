@@ -1674,6 +1674,7 @@
                                   [--remote-cluster <remote-cluster>] 
                                   [--remote-mon-host <remote-mon-host>] 
                                   [--remote-key-file <remote-key-file>] 
+                                  [--direction <direction>] 
                                   <pool-name> <remote-cluster-spec> 
   
   Add a mirroring peer to a pool.
@@ -1689,6 +1690,8 @@
     --remote-cluster arg     remote cluster name
     --remote-mon-host arg    remote mon host(s)
     --remote-key-file arg    path to file containing remote key
+    --direction arg          mirroring direction (rx-only, rx-tx)
+                             [default: rx-tx]
   
   rbd help mirror pool peer bootstrap create
   usage: rbd mirror pool peer bootstrap create
@@ -1748,8 +1751,10 @@
   Positional arguments
     <pool-name>          pool name
     <uuid>               peer uuid
-    <key>                peer parameter [client, cluster, mon-host, key-file]
+    <key>                peer parameter
+                         (direction, site-name, client, mon-host, key-file)
     <value>              new value for specified key
+                         (rx-only, tx-only, or rx-tx for direction)
   
   Optional arguments
     -p [ --pool ] arg    pool name
