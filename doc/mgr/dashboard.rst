@@ -908,7 +908,6 @@ The dashboard manages NFS-Ganesha config files stored in RADOS objects on the Ce
 NFS-Ganesha must store part of their configuration in the Ceph cluster.
 
 These configuration files must follow some conventions.
-conventions.
 Each export block must be stored in its own RADOS object named
 ``export-<id>``, where ``<id>`` must match the ``Export_ID`` attribute of the
 export configuration. Then, for each NFS-Ganesha service daemon there should
