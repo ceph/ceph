@@ -700,6 +700,10 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
         return -EINVAL;
       }
     }
+
+    if(s->bucket_exists) {
+      s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
+    }
   }
 
   /* handle user ACL only for those APIs which support it */
@@ -3634,8 +3638,7 @@ int RGWPutObj::verify_permission()
     }
   }
 
-  auto access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
-  if (access_conf && access_conf->block_public_acls()) {
+  if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls()) {
     if (s->canned_acl.compare("public-read") ||
         s->canned_acl.compare("public-read-write") ||
         s->canned_acl.compare("authenticated-read"))
@@ -5536,8 +5539,9 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  if (auto access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
-      access_conf && access_conf->block_public_acls() && new_policy.IsPublic()) {
+  if (s->bucket_access_conf &&
+      s->bucket_access_conf->block_public_acls() &&
+      new_policy.IsPublic()) {
     op_ret = -EACCES;
     return;
   }
@@ -7692,11 +7696,11 @@ void RGWPutBucketPolicy::execute()
   try {
     const Policy p(s->cct, s->bucket_tenant, data);
     auto attrs = s->bucket_attrs;
-    if (auto access_conf = get_public_access_conf_from_attr(attrs);
-        access_conf && access_conf->block_public_policy() && rgw::IAM::IsPublic(p))
-    {
-        op_ret = -EACCES;
-        return;
+    if (s->bucket_access_conf &&
+        s->bucket_access_conf->block_public_policy() &&
+        rgw::IAM::IsPublic(p)) {
+      op_ret = -EACCES;
+      return;
     }
 
     op_ret = retry_raced_bucket_write(store->getRados(), s, [&p, this, &attrs] {
