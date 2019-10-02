@@ -110,13 +110,14 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
 
     if config:
         with open(data_dir + '/config', 'w') as f:
-            f.write(config)
             os.fchown(f.fileno(), uid, gid)
+            os.fchmod(f.fileno(), 0o600)
+            f.write(config)
     if keyring:
         with open(data_dir + '/keyring', 'w') as f:
-            f.write(keyring)
             os.fchmod(f.fileno(), 0o600)
             os.fchown(f.fileno(), uid, gid)
+            f.write(keyring)
 
 def get_config_and_keyring():
     if args.config_and_keyring:
@@ -228,6 +229,8 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
 
         # write conf
         with open(mon_dir + '/config', 'w') as f:
+            os.fchown(f.fileno(), uid, gid)
+            os.fchmod(f.fileno(), 0o600)
             f.write(config)
     else:
         # dirs, conf, keyring
@@ -543,6 +546,8 @@ def command_bootstrap():
     ).run()
 
     with open(mon_dir + '/config', 'w') as f:
+        os.fchown(f.fileno(), uid, gid)
+        os.fchmod(f.fileno(), 0o600)
         f.write(config)
 
     mon_c = get_container(fsid, 'mon', mon_id)
