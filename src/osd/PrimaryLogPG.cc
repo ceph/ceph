@@ -1990,17 +1990,19 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     eversion_t version;
     version_t user_version;
     int return_code = 0;
+    vector<pg_log_op_return_item_t> op_returns;
     bool got = check_in_progress_op(
-      m->get_reqid(), &version, &user_version, &return_code);
+      m->get_reqid(), &version, &user_version, &return_code, &op_returns);
     if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
 	      << " version " << version << dendl;
       if (already_complete(version)) {
-	osd->reply_op_error(op, return_code, version, user_version);
+	osd->reply_op_error(op, return_code, version, user_version, op_returns);
       } else {
 	dout(10) << " waiting for " << version << " to commit" << dendl;
         // always queue ondisk waiters, so that we can requeue if needed
-	waiting_for_ondisk[version].emplace_back(op, user_version, return_code);
+	waiting_for_ondisk[version].emplace_back(op, user_version, return_code,
+						 op_returns);
 	op->mark_delayed("waiting for ondisk");
       }
       return;
@@ -2587,10 +2589,6 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
       auto m = op->get_req<MOSDOp>();
       int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
       MOSDOpReply *reply = orig_reply.detach();
-      if (reply == nullptr) {
-	reply = new MOSDOpReply(m, r, pg->get_osdmap_epoch(),
-				flags, true);
-      }
       ldpp_dout(pg, 10) << " sending commit on " << *m << " " << reply << dendl;
       pg->osd->send_message_osd_client(reply, m->get_connection());
     }
@@ -3560,7 +3558,8 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
   if (!pwop->sent_reply) {
     // send commit.
     assert(pwop->ctx->reply == nullptr);
-    MOSDOpReply *reply = new MOSDOpReply(m, r, get_osdmap_epoch(), 0, true);
+    MOSDOpReply *reply = new MOSDOpReply(m, r, get_osdmap_epoch(), 0,
+					 true /* we claim it below */);
     reply->set_reply_versions(eversion_t(), pwop->user_version);
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     reply->claim_op_out_data(pwop->ops);
@@ -3973,13 +3972,6 @@ void PrimaryLogPG::reply_ctx(OpContext *ctx, int r)
 {
   if (ctx->op)
     osd->reply_op_error(ctx->op, r);
-  close_op_ctx(ctx);
-}
-
-void PrimaryLogPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
-{
-  if (ctx->op)
-    osd->reply_op_error(ctx->op, r, v, uv);
   close_op_ctx(ctx);
 }
 
@@ -10431,7 +10423,7 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
           return_code = std::get<2>(i);
         }
         osd->reply_op_error(std::get<0>(i), return_code, repop->v,
-                            std::get<1>(i));
+                            std::get<1>(i), std::get<3>(i));
       }
       waiting_for_ondisk.erase(it);
     }
@@ -14503,28 +14495,6 @@ bool PrimaryLogPG::already_complete(eversion_t v)
 	       << " not committed, returning false"
 	       << dendl;
       return false;
-    }
-  }
-  dout(20) << __func__ << ": returning true" << dendl;
-  return true;
-}
-
-bool PrimaryLogPG::already_ack(eversion_t v)
-{
-  dout(20) << __func__ << ": " << v << dendl;
-  for (xlist<RepGather*>::iterator i = repop_queue.begin();
-       !i.end();
-       ++i) {
-    // skip copy from temp object ops
-    if ((*i)->v == eversion_t()) {
-      dout(20) << __func__ << ": " << **i
-	       << " version is empty" << dendl;
-      continue;
-    }
-    if ((*i)->v > v) {
-      dout(20) << __func__ << ": " << **i
-	       << " (*i)->v past v" << dendl;
-      break;
     }
   }
   dout(20) << __func__ << ": returning true" << dendl;

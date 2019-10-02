@@ -1021,8 +1021,6 @@ protected:
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v);
-  /// true if we can send an ack for v
-  bool already_ack(eversion_t v);
 
   // projected object info
   SharedLRU<hobject_t, ObjectContext> object_contexts;
@@ -1185,7 +1183,6 @@ protected:
   void execute_ctx(OpContext *ctx);
   void finish_ctx(OpContext *ctx, int log_op_type, int result=0);
   void reply_ctx(OpContext *ctx, int err);
-  void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 
