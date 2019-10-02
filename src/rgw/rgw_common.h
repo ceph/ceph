@@ -37,6 +37,7 @@
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
+#include "rgw_public_access.h"
 
 namespace ceph {
   class Formatter;
@@ -1696,6 +1697,7 @@ struct req_state : DoutPrefixProvider {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
+  boost::optional<rgw::IAM::PublicAccessConfiguration> bucket_access_conf;
   vector<rgw::IAM::Policy> iam_user_policies;
 
   /* Is the request made by an user marked as a system one?
