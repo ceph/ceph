@@ -10,4 +10,4 @@ libxslt1-dev
 graphviz
 ant
 zlib1g-dev
-cython
+cython3
