@@ -69,7 +69,7 @@ def ship_utilities(ctx, config):
     log.info('Shipping valgrind.supp...')
     assert 'suite_path' in ctx.config
     try:
-        with file(
+        with open(
             os.path.join(ctx.config['suite_path'], 'valgrind.supp'),
             'rb'
                 ) as f:
@@ -92,7 +92,7 @@ def ship_utilities(ctx, config):
         src = os.path.join(os.path.dirname(__file__), filename)
         dst = os.path.join(destdir, filename)
         filenames.append(dst)
-        with file(src, 'rb') as f:
+        with open(src, 'rb') as f:
             for rem in ctx.cluster.remotes.iterkeys():
                 teuthology.sudo_write_file(
                     remote=rem,

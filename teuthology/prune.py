@@ -139,7 +139,7 @@ def maybe_remove_jobs(run_dir, pass_days, fail_days, dry_run=False):
         # Depending on whether it passed or failed, we have a different age
         # threshold
         summary_lines = [line.strip() for line in
-                         file(summary_path).readlines()]
+                         open(summary_path).readlines()]
         if 'success: true' in summary_lines:
             status = 'passed'
             days = pass_days

@@ -301,8 +301,8 @@ class TestMergeConfigs(object):
 
     @patch("os.path.exists")
     @patch("yaml.safe_load")
-    @patch("__builtin__.file")
-    def test_merge_configs(self, m_file, m_safe_load, m_exists):
+    @patch("__builtin__.open")
+    def test_merge_configs(self, m_open, m_safe_load, m_exists):
         """ Only tests with one yaml file being passed, mainly just to test
             the loop logic.  The actual merge will be tested in subsequent
             tests.
@@ -312,7 +312,7 @@ class TestMergeConfigs(object):
         m_safe_load.return_value = expected
         result = misc.merge_configs(["path/to/config1"])
         assert result == expected
-        m_file.assert_called_once_with("path/to/config1")
+        m_open.assert_called_once_with("path/to/config1")
 
     def test_merge_configs_empty(self):
         assert misc.merge_configs([]) == {}

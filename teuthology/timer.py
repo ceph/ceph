@@ -108,7 +108,7 @@ class Timer(object):
 
     def write(self):
         try:
-            with file(self.path, 'w') as f:
+            with open(self.path, 'w') as f:
                 yaml.safe_dump(self.data, f, default_flow_style=False)
         except Exception:
             log.exception("Failed to write timing.yaml !")

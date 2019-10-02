@@ -346,7 +346,7 @@ def download_kernel(ctx, config):
             proc = role_remote.run(
                 args=[
                     'python', '-c',
-                    'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+                    'import shutil, sys; shutil.copyfileobj(sys.stdin, open(sys.argv[1], "wb"))',
                     remote_pkg_path(role_remote),
                     ],
                 wait=False,

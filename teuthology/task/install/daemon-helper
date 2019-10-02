@@ -59,7 +59,7 @@ if nostdin:
         args=args[skip_nostdin:],
         )
 else:
-    with file('/dev/null', 'rb') as devnull:
+    with open('/dev/null', 'rb') as devnull:
         proc = subprocess.Popen(
             args=args,
             stdin=devnull,

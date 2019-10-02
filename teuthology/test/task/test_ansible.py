@@ -47,7 +47,7 @@ class TestAnsibleTask(TestTask):
             m_NTF,
         )
         self.patchers['file'] = patch(
-            'teuthology.task.ansible.file', create=True)
+            'teuthology.task.ansible.open', create=True)
         self.patchers['os_mkdir'] = patch(
             'teuthology.task.ansible.os.mkdir',
         )

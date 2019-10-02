@@ -37,7 +37,8 @@ class YamlConfig(collections.MutableMapping):
                 self._conf = yaml.safe_load(conf)
             return
         if os.path.exists(self.yaml_path):
-            self._conf = yaml.safe_load(file(self.yaml_path))
+            with open(self.yaml_path) as f:
+                self._conf = yaml.safe_load(f)
         else:
             log.debug("%s not found", self.yaml_path)
             self._conf = dict()

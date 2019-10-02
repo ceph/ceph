@@ -71,12 +71,12 @@ class FakeArchive(object):
             archive_dir = os.path.join(run_archive_dir, str(job['job_id']))
             os.mkdir(archive_dir)
 
-            with file(os.path.join(archive_dir, 'info.yaml'), 'w') as yfile:
+            with open(os.path.join(archive_dir, 'info.yaml'), 'w') as yfile:
                 yaml.safe_dump(job['info'], yfile)
 
             if 'summary' in job:
                 summary_path = os.path.join(archive_dir, 'summary.yaml')
-                with file(summary_path, 'w') as yfile:
+                with open(summary_path, 'w') as yfile:
                     yaml.safe_dump(job['summary'], yfile)
 
     def create_fake_run(self, run_name, job_count, yaml_path, num_hung=0):

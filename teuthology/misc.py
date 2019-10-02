@@ -92,7 +92,7 @@ def config_file(string):
     """
     config_dict = {}
     try:
-        with file(string) as f:
+        with open(string) as f:
             g = yaml.safe_load_all(f)
             for new in g:
                 config_dict.update(new)
@@ -124,7 +124,7 @@ def merge_configs(config_paths):
         if not os.path.exists(conf_path):
             log.debug("The config path {0} does not exist, skipping.".format(conf_path))
             continue
-        with file(conf_path) as partial_file:
+        with open(conf_path) as partial_file:
             partial_dict = yaml.safe_load(partial_file)
         try:
             conf_dict = deep_merge(conf_dict, partial_dict)

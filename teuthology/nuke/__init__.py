@@ -184,7 +184,7 @@ def main(args):
         ctx.config = config_file(ctx.archive + '/config.yaml')
         ifn = os.path.join(ctx.archive, 'info.yaml')
         if os.path.exists(ifn):
-            with file(ifn, 'r') as fd:
+            with open(ifn, 'r') as fd:
                 info = yaml.load(fd.read())
         if not ctx.pid:
             ctx.pid = info.get('pid')

@@ -10,7 +10,7 @@ class FileLock(object):
     def __enter__(self):
         if not self.noop:
             assert self.file is None
-            self.file = file(self.filename, 'w')
+            self.file = open(self.filename, 'w')
             fcntl.lockf(self.file, fcntl.LOCK_EX)
         return self
 

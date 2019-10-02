@@ -2,7 +2,7 @@ import os
 import requests
 import urlparse
 
-from mock import patch, DEFAULT, Mock, MagicMock, call
+from mock import patch, DEFAULT, Mock, mock_open, call
 from pytest import raises
 
 from teuthology.config import config, FakeNamespace
@@ -170,8 +170,7 @@ class TestGraphiteGrapher(TestPCPGrapher):
             m_resp = Mock()
             m_resp.ok = True
             m_get.return_value = m_resp
-            with patch('teuthology.task.pcp.open', create=True) as m_open:
-                m_open.return_value = MagicMock(spec=file)
+            with patch('teuthology.task.pcp.open', mock_open(), create=True):
                 obj.download_graphs()
         expected_filenames = []
         for metric in obj.metrics:
@@ -199,8 +198,7 @@ class TestGraphiteGrapher(TestPCPGrapher):
             m_resp = Mock()
             m_resp.ok = True
             m_get.return_value = m_resp
-            with patch('teuthology.task.pcp.open', create=True) as m_open:
-                m_open.return_value = MagicMock(spec=file)
+            with patch('teuthology.task.pcp.open', mock_open(), create=True):
                 obj.download_graphs()
         html = obj.generate_html(mode='static')
         assert config.pcp_host not in html

@@ -15,7 +15,7 @@ def ls(archive_dir, verbose):
         job_dir = os.path.join(archive_dir, j)
         summary = {}
         try:
-            with file(os.path.join(job_dir, 'summary.yaml')) as f:
+            with open(os.path.join(job_dir, 'summary.yaml')) as f:
                 g = yaml.safe_load_all(f)
                 for new in g:
                     summary.update(new)
