@@ -77,7 +77,7 @@ def check_unit(unit_name):
         active = False
     return (enabled, active)
 
-def get_legacy_fsid(cluster):
+def get_legacy_config_fsid(cluster):
     try:
         config = configparser.ConfigParser()
         config.read('/etc/ceph/%s.conf' % cluster)
@@ -86,6 +86,21 @@ def get_legacy_fsid(cluster):
     except:
         return 'unknown'
     return 'unknown'
+
+def get_legacy_daemon_fsid(cluster_name, daemon_type, daemon_id):
+    fsid = None
+    if daemon_type == 'osd':
+        try:
+            with open(os.path.join(args.data_dir,
+                                   daemon_type,
+                                   'ceph-%s' % daemon_id,
+                                   'ceph_fsid'), 'r') as f:
+                fsid = f.read().strip()
+        except:
+            pass
+    if not fsid:
+        fsid = get_legacy_config_fsid(cluster)
+    return fsid
 
 def get_daemon_args(fsid, daemon_type, daemon_id):
     r = [
@@ -818,16 +833,7 @@ def command_ls():
                 if '-' not in j:
                     continue
                 (cluster, daemon_id) = j.split('-', 1)
-                fsid = None
-                if daemon_type == 'osd':
-                    try:
-                        with open(os.path.join(args.data_dir, i, j,
-                                               'ceph_fsid')) as f:
-                            fsid = f.read().strip()
-                    except:
-                        pass
-                if not fsid:
-                    fsid = get_legacy_fsid(cluster)
+                fsid = get_legacy_daemon_fsid(cluster, daemon_type, daemon_id)
                 (enabled, active) = check_unit('ceph-%s@%s' % (daemon_type,
                                                                daemon_id))
                 ls.append({
