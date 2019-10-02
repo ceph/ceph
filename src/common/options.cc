@@ -6953,8 +6953,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_crypt_vault_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(
-        "Provide a URL to the Vault server secret path.")
+    .set_description("Base URL to the Vault server.")
     .add_see_also({
       "rgw_crypt_s3_kms_backend",
       "rgw_crypt_vault_auth",
