@@ -198,7 +198,7 @@ def extract_info(file_name, fields):
         return empty_result
 
     with open(file_name, 'r') as f:
-        parsed = yaml.load(f)
+        parsed = yaml.safe_load(f)
 
     if not isinstance(parsed, dict):
         return empty_result
