@@ -11,11 +11,11 @@ Kernel Driver
 To mount CephFS in your file systems table as a kernel driver, add the
 following to ``/etc/fstab``::
 
-	{ipaddress}:{port}:/ {mount}/{mountpoint} {file-system-name}	[name=username,secret=secretkey|secretfile=/path/to/secretfile],[{mount.options}]
+	[{ipaddress}:{port}]:/ {mount}/{mountpoint} ceph [name=username,secret=secretkey|secretfile=/path/to/secretfile],[{mount.options}]
 
 For example:: 
 
-	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,noatime,_netdev    0       2
+	:/     /mnt/ceph    ceph    name=admin,noatime,_netdev    0       2
 	
 The default for the ``name=`` parameter is ``guest``. If the ``secret`` or
 ``secretfile`` options are not specified then the mount helper will attempt to
