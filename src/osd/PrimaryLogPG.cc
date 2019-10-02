@@ -754,6 +754,10 @@ void PrimaryLogPG::maybe_force_recovery()
 
 bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 {
+  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+    dout(10) << __func__ << " require_osd_release < octopus" << dendl;
+    return true;
+  }
   if (state_test(PG_STATE_WAIT)) {
     dout(10) << __func__ << " PG is WAIT state" << dendl;
   } else if (!state_test(PG_STATE_LAGGY)) {
@@ -784,6 +788,9 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
 bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
 {
+  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+    return true;
+  }
   if (!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) {
     return true; // not laggy
   }
