@@ -1087,26 +1087,25 @@ void MonClient::_send_command(MonCommand *r)
 
     // tell-style command
     if (monmap.min_mon_release >= ceph_release_t::octopus) {
-      if (r->target_rank >= (int)monmap.size()) {
-	ldout(cct, 10) << " target " << r->target_rank
-		       << " >= max mon " << monmap.size() << dendl;
-	_finish_command(r, -ENOENT, "mon rank dne");
-	return;
-      }
-      if (!monmap.contains(r->target_name)) {
-	ldout(cct, 10) << " target " << r->target_name
-		       << " not present in monmap" << dendl;
-	_finish_command(r, -ENOENT, "mon dne");
-	return;
-      }
-
       if (r->target_con) {
 	r->target_con->mark_down();
       }
       if (r->target_rank >= 0) {
+	if (r->target_rank >= (int)monmap.size()) {
+	  ldout(cct, 10) << " target " << r->target_rank
+			 << " >= max mon " << monmap.size() << dendl;
+	  _finish_command(r, -ENOENT, "mon rank dne");
+	  return;
+	}
 	r->target_con = messenger->connect_to_mon(
 	  monmap.get_addrs(r->target_rank), true /* anon */);
       } else {
+	if (!monmap.contains(r->target_name)) {
+	  ldout(cct, 10) << " target " << r->target_name
+			 << " not present in monmap" << dendl;
+	  _finish_command(r, -ENOENT, "mon dne");
+	  return;
+	}
 	r->target_con = messenger->connect_to_mon(
 	  monmap.get_addrs(r->target_name), true /* anon */);
       }
