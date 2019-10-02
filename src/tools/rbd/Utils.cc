@@ -906,6 +906,10 @@ int get_local_mirror_image_status(
 }
 
 std::string timestr(time_t t) {
+  if (t == 0) {
+    return "";
+  }
+
   struct tm tm;
 
   localtime_r(&t, &tm);
@@ -930,6 +934,74 @@ bool is_not_user_snap_namespace(librbd::Image* image,
     return false;
   }
   return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
+}
+
+void get_mirror_peer_sites(
+    librados::IoCtx& io_ctx,
+    std::vector<librbd::mirror_peer_site_t>* mirror_peers) {
+  librados::IoCtx default_io_ctx;
+  default_io_ctx.dup(io_ctx);
+  default_io_ctx.set_namespace("");
+
+  mirror_peers->clear();
+
+  librbd::RBD rbd;
+  int r = rbd.mirror_peer_site_list(default_io_ctx, mirror_peers);
+  if (r < 0 && r != -ENOENT) {
+    std::cerr << "rbd: failed to list mirror peers" << std::endl;
+  }
+}
+
+void get_mirror_peer_fsid_to_names(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    std::map<std::string, std::string>* fsid_to_name) {
+  fsid_to_name->clear();
+  for (auto& peer : mirror_peers) {
+    if (!peer.fsid.empty() && !peer.site_name.empty()) {
+      (*fsid_to_name)[peer.fsid] = peer.site_name;
+    }
+  }
+}
+
+void populate_unknown_mirror_image_site_statuses(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    librbd::mirror_image_global_status_t* global_status) {
+  std::set<std::string> missing_fsids;
+  librbd::mirror_peer_direction_t mirror_peer_direction =
+    RBD_MIRROR_PEER_DIRECTION_RX_TX;
+  for (auto& peer : mirror_peers) {
+    if (peer.uuid == mirror_peers.begin()->uuid) {
+      mirror_peer_direction = peer.direction;
+    } else if (mirror_peer_direction != RBD_MIRROR_PEER_DIRECTION_RX_TX &&
+               mirror_peer_direction != peer.direction) {
+      mirror_peer_direction = RBD_MIRROR_PEER_DIRECTION_RX_TX;
+    }
+
+    if (!peer.fsid.empty() && peer.direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+      missing_fsids.insert(peer.fsid);
+    }
+  }
+
+  if (mirror_peer_direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+    missing_fsids.insert(RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+  }
+
+  std::vector<librbd::mirror_image_site_status_t> site_statuses;
+  site_statuses.reserve(missing_fsids.size());
+
+  for (auto& site_status : global_status->site_statuses) {
+    if (missing_fsids.count(site_status.fsid) > 0) {
+      missing_fsids.erase(site_status.fsid);
+      site_statuses.push_back(site_status);
+    }
+  }
+
+  for (auto& fsid : missing_fsids) {
+    site_statuses.push_back({fsid, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                             "status not found", 0, false});
+  }
+
+  std::swap(global_status->site_statuses, site_statuses);
 }
 
 } // namespace utils

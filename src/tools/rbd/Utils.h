@@ -207,6 +207,16 @@ std::string timestr(time_t t);
 // duplicate here to not include librbd_internal lib
 uint64_t get_rbd_default_features(CephContext* cct);
 
+void get_mirror_peer_sites(
+    librados::IoCtx& io_ctx,
+    std::vector<librbd::mirror_peer_site_t>* mirror_peers);
+void get_mirror_peer_fsid_to_names(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    std::map<std::string, std::string>* fsid_to_name);
+void populate_unknown_mirror_image_site_statuses(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    librbd::mirror_image_global_status_t* global_status);
+
 } // namespace utils
 } // namespace rbd
 
