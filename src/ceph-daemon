@@ -829,36 +829,39 @@ def command_ls():
     ls = []
 
     # /var/lib/ceph
-    for i in os.listdir(args.data_dir):
-        if i in ['mon', 'osd', 'mds', 'mgr']:
-            daemon_type = i
-            for j in os.listdir(os.path.join(args.data_dir, i)):
-                if '-' not in j:
-                    continue
-                (cluster, daemon_id) = j.split('-', 1)
-                fsid = get_legacy_daemon_fsid(cluster, daemon_type, daemon_id)
-                (enabled, active) = check_unit('ceph-%s@%s' % (daemon_type,
-                                                               daemon_id))
-                ls.append({
-                    'style': 'legacy',
-                    'name': '%s.%s' % (daemon_type, daemon_id),
-                    'fsid': fsid,
-                    'enabled': enabled,
-                    'active': active,
-                })
-        elif is_fsid(i):
-            fsid = i
-            for j in os.listdir(os.path.join(args.data_dir, i)):
-                (daemon_type, daemon_id) = j.split('.', 1)
-                (enabled, active) = check_unit(get_unit_name(fsid, daemon_type,
-                                                             daemon_id))
-                ls.append({
-                    'style': 'ceph-daemon:v1',
-                    'name': '%s.%s' % (daemon_type, daemon_id),
-                    'fsid': fsid,
-                    'enabled': enabled,
-                    'active': active,
-                })
+    if os.path.exists(args.data_dir):
+        for i in os.listdir(args.data_dir):
+            if i in ['mon', 'osd', 'mds', 'mgr']:
+                daemon_type = i
+                for j in os.listdir(os.path.join(args.data_dir, i)):
+                    if '-' not in j:
+                        continue
+                    (cluster, daemon_id) = j.split('-', 1)
+                    fsid = get_legacy_daemon_fsid(cluster, daemon_type,
+                                                  daemon_id) or 'unknown'
+                    (enabled, active) = check_unit('ceph-%s@%s' % (daemon_type,
+                                                                   daemon_id))
+                    ls.append({
+                        'style': 'legacy',
+                        'name': '%s.%s' % (daemon_type, daemon_id),
+                        'fsid': fsid,
+                        'enabled': enabled,
+                        'active': active,
+                    })
+            elif is_fsid(i):
+                fsid = i
+                for j in os.listdir(os.path.join(args.data_dir, i)):
+                    (daemon_type, daemon_id) = j.split('.', 1)
+                    (enabled, active) = check_unit(get_unit_name(fsid,
+                                                                 daemon_type,
+                                                                 daemon_id))
+                    ls.append({
+                        'style': 'ceph-daemon:v1',
+                        'name': '%s.%s' % (daemon_type, daemon_id),
+                        'fsid': fsid,
+                        'enabled': enabled,
+                        'active': active,
+                    })
 
     # /var/lib/rook
     # WRITE ME
