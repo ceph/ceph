@@ -7,12 +7,11 @@ import { of } from 'rxjs';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { CoreModule } from '../../../../core/core.module';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { SharedModule } from '../../../../shared/shared.module';
+import { CephModule } from '../../../ceph.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
-import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
-import { OsdSmartListComponent } from '../osd-smart-list/osd-smart-list.component';
 import { OsdDetailsComponent } from './osd-details.component';
 
 describe('OsdDetailsComponent', () => {
@@ -27,9 +26,10 @@ describe('OsdDetailsComponent', () => {
       HttpClientTestingModule,
       TabsModule.forRoot(),
       PerformanceCounterModule,
-      SharedModule
+      CephModule,
+      CoreModule
     ],
-    declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent, OsdSmartListComponent],
+    declarations: [],
     providers: i18nProviders
   });
 

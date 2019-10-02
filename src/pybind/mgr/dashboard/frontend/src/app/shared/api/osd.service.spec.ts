@@ -111,4 +111,10 @@ describe('OsdService', () => {
     const req = httpTesting.expectOne('api/osd/[0,1]/safe_to_destroy');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call the devices endpoint to retrieve smart data', () => {
+    service.getDevices(1).subscribe();
+    const req = httpTesting.expectOne('api/osd/1/devices');
+    expect(req.request.method).toBe('GET');
+  });
 });

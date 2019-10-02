@@ -118,6 +118,15 @@ class OsdTest(DashboardTestCase):
         self.wait_until_equal(get_destroy_status, False, 10)
         self.assertStatus(200)
 
+    def test_osd_devices(self):
+        data = self._get('/api/osd/0/devices')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(JObj({
+            'daemons': JList(str),
+            'devid': str,
+            'location': JList(JObj({'host': str, 'dev': str}))
+        })))
+
 
 class OsdFlagsTest(DashboardTestCase):
     def __init__(self, *args, **kwargs):
