@@ -875,22 +875,33 @@ def command_rm_cluster():
     if not args.force:
         raise RuntimeError('must pass --force to proceed: '
                            'this command may destroy precious data!')
+
     unit_name = 'ceph-%s.target' % args.fsid
     try:
         subprocess.check_output(['systemctl', 'stop', unit_name])
         subprocess.check_output(['systemctl', 'disable', unit_name])
     except subprocess.CalledProcessError:
         pass
-    # FIXME: disable individual daemon units, too?
+
+    slice_name = 'system-%s.slice' % (
+        ('ceph-%s' % args.fsid).replace('-', '\\x2d'))
+    try:
+        subprocess.check_output(['systemctl', 'stop', slice_name])
+    except subprocess.CalledProcessError:
+        pass
+
+    # FIXME: stop + disable individual daemon units, too?
+
+    # rm units
     subprocess.check_output(['rm', '-f', args.unit_dir +
                              '/ceph-%s@.service' % args.fsid])
     subprocess.check_output(['rm', '-f', args.unit_dir +
                              '/ceph-%s.target' % args.fsid])
     subprocess.check_output(['rm', '-rf',
                   args.unit_dir + '/ceph-%s.target.wants' % args.fsid])
-    # data
+    # rm data
     subprocess.check_output(['rm', '-rf', args.data_dir + '/' + args.fsid])
-    # logs
+    # rm logs
     subprocess.check_output(['rm', '-rf', args.log_dir + '/' + args.fsid])
     subprocess.check_output(['rm', '-rf', args.log_dir +
                              '/*.wants/ceph-%s@*' % args.fsid])
