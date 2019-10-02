@@ -222,12 +222,18 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   return count;
 }
 
+// it's expected the `write_lock` is held while calling this method.
 void ProtocolV2::reset_recv_state() {
   auth_meta.reset(new AuthConnectionMeta);
-  session_stream_handlers.tx.reset(nullptr);
   session_stream_handlers.rx.reset(nullptr);
-  pre_auth.txbuf.clear();
   pre_auth.rxbuf.clear();
+
+  // execute in the same thread that actually makes use of the tx handler
+  // during `::write_message()`. `submit_to()` here is NOT blocking.
+  connection->center->submit_to(connection->center->get_id(), [this] {
+    session_stream_handlers.tx.reset(nullptr);
+    pre_auth.txbuf.clear();
+  }, /* nowait = */true);
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
