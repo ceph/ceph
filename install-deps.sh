@@ -261,6 +261,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/pkgconf \
         devel/libedit \
         devel/libtool \
+        devel/libatomic_ops \
         devel/google-perftools \
         lang/cython \
         devel/py-virtualenv \
@@ -272,6 +273,8 @@ if [ x$(uname)x = xFreeBSDx ]; then
         misc/e2fsprogs-libuuid \
         misc/getopt \
         net/socat \
+        net/librdkafka \
+        net/rabbitmq-c \
         textproc/expat2 \
         textproc/gsed \
         lang/gawk \
