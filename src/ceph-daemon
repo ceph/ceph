@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from distutils.spawn import find_executable
 
 try:
@@ -565,11 +566,31 @@ def command_bootstrap():
             f.write('[client.admin]\n'
                     '\tkey = ' + admin_key + '\n')
             os.fchmod(f.fileno(), 0o600)
-        logging.info('wrote keyring to %s' % args.output_keyring)
+        logging.info('Wrote keyring to %s' % args.output_keyring)
     if args.output_config:
         with open(args.output_config, 'w') as f:
             f.write(config)
-        logging.info('wrote config to %s' % args.output_config)
+        logging.info('Wrote config to %s' % args.output_config)
+
+    logging.info('Waiting for mgr to start...')
+    while True:
+        out = CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'status', '-f', 'json-pretty'],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+            },
+        ).run().decode('utf-8')
+        j = json.loads(out)
+        if j.get('mgrmap', {}).get('available', False):
+            break
+        logging.info('mgr is still not available yet, waiting...')
+        time.sleep(1)
 
     # ssh
     if not args.skip_ssh:
@@ -600,7 +621,7 @@ def command_bootstrap():
                 '-i', '/tmp/key'],
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-               tmp_key.name: '/tmp/key:z',
+                tmp_key.name: '/tmp/key:z',
             },
         ).run()
         CephContainer(
@@ -625,6 +646,52 @@ def command_bootstrap():
             os.fchmod(f.fileno(), 0o600)  # just in case we created it
             f.write(ssh_pub + '\n')
 
+        logging.info('Enabling ssh module...')
+        CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'mgr', 'module', 'enable', 'ssh'
+            ],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+                tmp_pub.name: '/tmp/pub:z',
+            },
+        ).run()
+        logging.info('Setting orchestrator backend to ssh...')
+        CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'orchestrator', 'set', 'backend', 'ssh'
+            ],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+                tmp_pub.name: '/tmp/pub:z',
+            },
+        ).run()
+        host = get_hostname()
+        logging.info('Adding host %s...' % host)
+        CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'orchestrator', 'host', 'add', host
+            ],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+                tmp_pub.name: '/tmp/pub:z',
+            },
+        ).run()
     return 0
 
 ##################################
