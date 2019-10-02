@@ -369,10 +369,11 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   will_ping = _will_ping;
-  Session* sessionref(static_cast<Session*>(con->get_priv()));
-  if (sessionref) {
+  auto priv = con->get_priv();
+  if (priv) {
+    auto sessionref = static_cast<Session*>(priv.get());
     sessionref->wstate.addWatch(self.lock());
-    sessionref->put();
+    priv.reset();
     for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
 	 i != in_progress_notifies.end();
 	 ++i) {
@@ -415,10 +416,10 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (conn) {
-    Session* sessionref(static_cast<Session*>(conn->get_priv()));
-    if (sessionref) {
-      sessionref->wstate.removeWatch(self.lock());
-      sessionref->put();
+    auto priv = conn->get_priv();
+    if (priv) {
+      auto session = static_cast<Session*>(priv.get());
+      session->wstate.removeWatch(self.lock());
     }
     conn = ConnectionRef();
   }

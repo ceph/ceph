@@ -964,7 +964,7 @@ void MDSRank::ProgressThread::shutdown()
 bool MDSRankDispatcher::ms_dispatch(Message *m)
 {
   if (m->get_source().is_client()) {
-    Session *session = static_cast<Session*>(m->get_connection()->get_priv());
+    Session *session = static_cast<Session*>(m->get_connection()->get_priv().get());
     if (session)
       session->last_seen = Session::clock::now();
   }
@@ -1294,9 +1294,9 @@ bool MDSRank::is_stale_message(Message *m) const
 
 Session *MDSRank::get_session(Message *m)
 {
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  // do not carry ref
+  auto session = static_cast<Session *>(m->get_connection()->get_priv().get());
   if (session) {
-    session->put(); // do not carry ref
     dout(20) << "get_session have " << session << " " << session->info.inst
 	     << " state " << session->get_state_name() << dendl;
     // Check if we've imported an open session since (new sessions start closed)
@@ -1412,9 +1412,9 @@ void MDSRank::send_message_client_counted(Message *m, client_t client)
 
 void MDSRank::send_message_client_counted(Message *m, Connection *connection)
 {
-  Session *session = static_cast<Session *>(connection->get_priv());
+  // do not carry ref
+  auto session = static_cast<Session *>(m->get_connection()->get_priv().get());
   if (session) {
-    session->put();  // do not carry ref
     send_message_client_counted(m, session);
   } else {
     dout(10) << "send_message_client_counted has no session for " << m->get_source_inst() << dendl;

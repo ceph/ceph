@@ -4814,12 +4814,12 @@ void OSD::_add_heartbeat_peer(int p)
       return;
     hi = &heartbeat_peers[p];
     hi->peer = p;
-    HeartbeatSession *s = new HeartbeatSession(p);
+    RefCountedPtr s{new HeartbeatSession{p}, false};
     hi->con_back = cons.first.get();
-    hi->con_back->set_priv(s->get());
+    hi->con_back->set_priv(s);
     if (cons.second) {
       hi->con_front = cons.second.get();
-      hi->con_front->set_priv(s->get());
+      hi->con_front->set_priv(s);
       dout(10) << "_add_heartbeat_peer: new peer osd." << p
 	       << " " << hi->con_back->get_peer_addr()
 	       << " " << hi->con_front->get_peer_addr()
@@ -4830,7 +4830,6 @@ void OSD::_add_heartbeat_peer(int p)
 	       << " " << hi->con_back->get_peer_addr()
 	       << dendl;
     }
-    s->put();
   } else {
     hi = &i->second;
   }
@@ -5274,13 +5273,13 @@ void OSD::heartbeat()
 bool OSD::heartbeat_reset(Connection *con)
 {
   Mutex::Locker l(heartbeat_lock);
-  HeartbeatSession *s = static_cast<HeartbeatSession*>(con->get_priv());
+  auto s = con->get_priv();
   if (s) {
     if (is_stopping()) {
-      s->put();
       return true;
     }
-    map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(s->peer);
+    auto heartbeat_session = static_cast<HeartbeatSession*>(s.get());
+    auto p = heartbeat_peers.find(heartbeat_session->peer);
     if (p != heartbeat_peers.end() &&
 	(p->second.con_back == con ||
 	 p->second.con_front == con)) {
@@ -5297,10 +5296,10 @@ bool OSD::heartbeat_reset(Connection *con)
       pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
       if (newcon.first) {
 	p->second.con_back = newcon.first.get();
-	p->second.con_back->set_priv(s->get());
+	p->second.con_back->set_priv(s);
 	if (newcon.second) {
 	  p->second.con_front = newcon.second.get();
-	  p->second.con_front->set_priv(s->get());
+	  p->second.con_front->set_priv(s);
 	}
       } else {
 	dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
@@ -5310,7 +5309,6 @@ bool OSD::heartbeat_reset(Connection *con)
     } else {
       dout(10) << "heartbeat_reset closing (old) failed hb con " << con << dendl;
     }
-    s->put();
   }
   return true;
 }
@@ -5879,10 +5877,11 @@ void OSD::ms_handle_fast_connect(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
-    Session *s = static_cast<Session*>(con->get_priv());
+    auto priv = con->get_priv();
+    auto s = static_cast<Session*>(priv.get());
     if (!s) {
-      s = new Session(cct);
-      con->set_priv(s->get());
+      s = new Session{cct};
+      con->set_priv(RefCountedPtr{s, false});
       s->con = con;
       dout(10) << " new session (outgoing) " << s << " con=" << s->con
           << " addr=" << s->con->get_peer_addr() << dendl;
@@ -5890,7 +5889,6 @@ void OSD::ms_handle_fast_connect(Connection *con)
       assert(con->get_peer_type() == CEPH_ENTITY_TYPE_OSD);
       s->entity_name.set_type(CEPH_ENTITY_TYPE_OSD);
     }
-    s->put();
   }
 }
 
@@ -5898,10 +5896,11 @@ void OSD::ms_handle_fast_accept(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
-    Session *s = static_cast<Session*>(con->get_priv());
+    auto priv = con->get_priv();
+    auto s = static_cast<Session*>(priv.get());
     if (!s) {
-      s = new Session(cct);
-      con->set_priv(s->get());
+      s = new Session{cct};
+      con->set_priv(RefCountedPtr{s, false});
       s->con = con;
       dout(10) << "new session (incoming)" << s << " con=" << con
           << " addr=" << con->get_peer_addr()
@@ -5909,23 +5908,23 @@ void OSD::ms_handle_fast_accept(Connection *con)
       assert(con->get_peer_type() == CEPH_ENTITY_TYPE_OSD);
       s->entity_name.set_type(CEPH_ENTITY_TYPE_OSD);
     }
-    s->put();
   }
 }
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  Session *session = static_cast<Session*>(con->get_priv());
+  auto s = con->get_priv();
+  auto session = static_cast<Session*>(s.get());
   dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset(con);
-  session->con.reset(NULL);  // break con <-> session ref cycle
+  session->con->set_priv(nullptr);
+  session->con.reset();  // break con <-> session ref cycle
   // note that we break session->con *before* the session_handle_reset
   // cleanup below.  this avoids a race between us and
   // PG::add_backoff, Session::check_backoff, etc.
-  session_handle_reset(session);
-  session->put();
+  session_handle_reset(SessionRef{session});
   return true;
 }
 
@@ -5934,7 +5933,8 @@ bool OSD::ms_handle_refused(Connection *con)
   if (!cct->_conf->osd_fast_fail_on_connection_refused)
     return false;
 
-  Session *session = static_cast<Session*>(con->get_priv());
+  auto priv = con->get_priv();
+  auto session = static_cast<Session*>(priv.get());
   dout(2) << "ms_handle_refused con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -5956,7 +5956,6 @@ bool OSD::ms_handle_refused(Connection *con)
       }
     }
   }
-  session->put();
   return true;
 }
 
@@ -6115,11 +6114,10 @@ void OSD::_send_boot()
     cluster_messenger->set_addr_unknowns(cluster_addr);
     dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
   } else {
-    Session *s = static_cast<Session*>(local_connection->get_priv());
-    if (s)
-      s->put();
-    else
+    auto session = local_connection->get_priv();
+    if (!session) {
       cluster_messenger->ms_deliver_handle_fast_connect(local_connection);
+    }
   }
 
   entity_addr_t hb_back_addr = hb_back_server_messenger->get_myaddr();
@@ -6131,11 +6129,10 @@ void OSD::_send_boot()
     hb_back_server_messenger->set_addr_unknowns(hb_back_addr);
     dout(10) << " assuming hb_back_addr ip matches cluster_addr" << dendl;
   } else {
-    Session *s = static_cast<Session*>(local_connection->get_priv());
-    if (s)
-      s->put();
-    else
+    auto session = local_connection->get_priv();
+    if (!session) {
       hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
+    }
   }
 
   entity_addr_t hb_front_addr = hb_front_server_messenger->get_myaddr();
@@ -6147,11 +6144,10 @@ void OSD::_send_boot()
     hb_front_server_messenger->set_addr_unknowns(hb_front_addr);
     dout(10) << " assuming hb_front_addr ip matches client_addr" << dendl;
   } else {
-    Session *s = static_cast<Session*>(local_connection->get_priv());
-    if (s)
-      s->put();
-    else
+    auto session = local_connection->get_priv();
+    if (!session) {
       hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
+    }
   }
 
   MOSDBoot *mboot = new MOSDBoot(superblock, get_osdmap_epoch(), service.get_boot_epoch(),
@@ -6512,7 +6508,8 @@ void OSD::handle_command(MMonCommand *m)
 void OSD::handle_command(MCommand *m)
 {
   ConnectionRef con = m->get_connection();
-  Session *session = static_cast<Session *>(con->get_priv());
+  auto priv = con->get_priv();
+  auto session = static_cast<Session *>(priv.get());
   if (!session) {
     con->send_message(new MCommandReply(m, -EPERM));
     m->put();
@@ -6520,7 +6517,7 @@ void OSD::handle_command(MCommand *m)
   }
 
   OSDCap& caps = session->caps;
-  session->put();
+  priv.reset();
 
   if (!caps.allow_all() || m->get_source().is_mon()) {
     con->send_message(new MCommandReply(m, -EPERM));
@@ -7186,7 +7183,7 @@ void OSD::maybe_share_map(
   op->check_send_map = false;
 }
 
-void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
+void OSD::dispatch_session_waiting(SessionRef session, OSDMapRef osdmap)
 {
   assert(session->session_dispatch_lock.is_locked());
 
@@ -7259,17 +7256,15 @@ void OSD::ms_fast_dispatch(Message *m)
     // legacy client, and this is an MOSDOp (the *only* fast dispatch
     // message that didn't have an explicit spg_t); we need to map
     // them to an spg_t while preserving delivery order.
-    Session *session = static_cast<Session*>(m->get_connection()->get_priv());
+    auto priv = m->get_connection()->get_priv();
+    auto session = static_cast<Session*>(priv.get());
     if (session) {
-      {
-	Mutex::Locker l(session->session_dispatch_lock);
-	op->get();
-	session->waiting_on_map.push_back(*op);
-	OSDMapRef nextmap = service.get_nextmap_reserved();
-	dispatch_session_waiting(session, nextmap);
-	service.release_map(nextmap);
-      }
-      session->put();
+      Mutex::Locker l{session->session_dispatch_lock};
+      op->get();
+      session->waiting_on_map.push_back(*op);
+      OSDMapRef nextmap = service.get_nextmap_reserved();
+      dispatch_session_waiting(session, nextmap);
+      service.release_map(nextmap);
     }
   }
   OID_EVENT_TRACE_WITH_MSG(m, "MS_FAST_DISPATCH_END", false); 
@@ -7280,12 +7275,12 @@ void OSD::ms_fast_preprocess(Message *m)
   if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
     if (m->get_type() == CEPH_MSG_OSD_MAP) {
       MOSDMap *mm = static_cast<MOSDMap*>(m);
-      Session *s = static_cast<Session*>(m->get_connection()->get_priv());
+      auto priv = m->get_connection()->get_priv();
+      auto s = static_cast<Session*>(priv.get());
       if (s) {
 	s->received_map_lock.lock();
 	s->received_map_epoch = mm->get_last();
 	s->received_map_lock.unlock();
-	s->put();
       }
     }
   }
@@ -7360,12 +7355,14 @@ bool OSD::ms_verify_authorizer(
   }
 
   if (isvalid) {
-    Session *s = static_cast<Session *>(con->get_priv());
+    auto priv = con->get_priv();
+    auto s = static_cast<Session*>(priv.get());
     if (!s) {
-      s = new Session(cct);
-      con->set_priv(s->get());
+      s = new Session{cct};
+      con->set_priv(RefCountedPtr{s, false});
       s->con = con;
-      dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
+      dout(10) << " new session " << s << " con=" << s->con
+	       << " addr=" << con->get_peer_addr() << dendl;
     }
 
     s->entity_name = name;
@@ -7387,8 +7384,6 @@ bool OSD::ms_verify_authorizer(
       else
 	dout(10) << " session " << s << " " << s->entity_name << " failed to parse caps '" << str << "'" << dendl;
     }
-
-    s->put();
   }
   return true;
 }
@@ -7900,18 +7895,16 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  auto priv = m->get_connection()->get_priv();
+  auto session = static_cast<Session *>(priv.get());
   if (session && !(session->entity_name.is_mon() ||
 		   session->entity_name.is_osd())) {
     //not enough perms!
     dout(10) << "got osd map from Session " << session
              << " which we can't take maps from (not a mon or osd)" << dendl;
     m->put();
-    session->put();
     return;
   }
-  if (session)
-    session->put();
 
   // share with the objecter
   if (!is_preboot())
@@ -8691,15 +8684,16 @@ bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
 	    << dendl;
     ConnectionRef con = m->get_connection();
     con->mark_down();
-    Session *s = static_cast<Session*>(con->get_priv());
+    auto priv = con->get_priv();
+    auto s = static_cast<Session*>(priv.get());
     if (s) {
       if (!is_fast_dispatch)
 	s->session_dispatch_lock.Lock();
       clear_session_waiting_on_map(s);
-      con->set_priv(NULL);   // break ref <-> session cycle, if any
+      con->set_priv(nullptr);   // break ref <-> session cycle, if any
+      s->con.reset();
       if (!is_fast_dispatch)
 	s->session_dispatch_lock.Unlock();
-      s->put();
     }
     return false;
   }
@@ -9871,11 +9865,10 @@ void OSD::dequeue_op(
 
   logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
 
-  Session *session = static_cast<Session *>(
-    op->get_req()->get_connection()->get_priv());
+  auto priv = op->get_req()->get_connection()->get_priv();
+  auto session = static_cast<Session *>(priv.get());
   if (session) {
     maybe_share_map(session, op, pg->get_osdmap());
-    session->put();
   }
 
   if (pg->deleting)
@@ -10619,11 +10612,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	       << " dropping " << *qi << dendl;
       // share map with client?
       if (boost::optional<OpRequestRef> _op = qi->maybe_get_op()) {
-	Session *session = static_cast<Session *>(
-	  (*_op)->get_req()->get_connection()->get_priv());
+	auto priv = (*_op)->get_req()->get_connection()->get_priv();
+	auto session = static_cast<Session *>(priv.get());
 	if (session) {
 	  osd->maybe_share_map(session, *_op, sdata->waiting_for_pg_osdmap);
-	  session->put();
 	}
       }
       unsigned pushes_to_free = qi->get_reserved_pushes();

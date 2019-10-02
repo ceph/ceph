@@ -58,10 +58,8 @@ class PaxosServiceMessage : public Message {
    * normally.
    */
   MonSession *get_session() {
-    MonSession *session = (MonSession *)get_connection()->get_priv();
-    if (session)
-      session->put();
-    return session;
+    auto priv = get_connection()->get_priv();
+    return static_cast<MonSession*>(priv.get());
   }
   
   const char *get_type_name() const override { return "PaxosServiceMessage"; }

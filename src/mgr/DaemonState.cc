@@ -126,8 +126,8 @@ void DaemonPerfCounters::update(MMgrReport *report)
            << report->packed.length() << " bytes of data" << dendl;
 
   // Retrieve session state
-  MgrSessionRef session(static_cast<MgrSession*>(
-        report->get_connection()->get_priv()));
+  auto priv = report->get_connection()->get_priv();
+  auto session = static_cast<MgrSession*>(priv.get());
 
   // Load any newly declared types
   for (const auto &t : report->declare_types) {

@@ -590,7 +590,8 @@ void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
 				   int r, bufferlist outbl,
 				   boost::string_view outs)
 {
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  auto priv = m->get_connection()->get_priv();
+  auto session = static_cast<Session *>(priv.get());
   assert(session != NULL);
   // If someone is using a closed session for sending commands (e.g.
   // the ceph CLI) then we should feel free to clean up this connection
@@ -606,7 +607,7 @@ void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
     assert(session->is_closed());
     session->connection->mark_disposable();
   }
-  session->put();
+  priv.reset();
 
   MCommandReply *reply = new MCommandReply(r, outs);
   reply->set_tid(m->get_tid());
@@ -617,7 +618,8 @@ void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
 /* This function DOES put the passed message before returning*/
 void MDSDaemon::handle_command(MCommand *m)
 {
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  auto priv = m->get_connection()->get_priv();
+  auto session = static_cast<Session *>(priv.get());
   assert(session != NULL);
 
   int r = 0;
@@ -645,7 +647,7 @@ void MDSDaemon::handle_command(MCommand *m)
   } else {
     r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
   }
-  session->put();
+  priv.reset();
 
   if (need_reply) {
     send_command_reply(m, mds_rank, r, outbl, outs);
@@ -1254,14 +1256,14 @@ bool MDSDaemon::ms_handle_reset(Connection *con)
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE)
     return false;
 
-  Session *session = static_cast<Session *>(con->get_priv());
+  auto priv = con->get_priv();
+  auto session = static_cast<Session *>(priv.get());
   if (session) {
     if (session->is_closed()) {
       dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
-      con->set_priv(NULL);
+      con->set_priv(nullptr);
     }
-    session->put();
   } else {
     con->mark_down();
   }
@@ -1283,14 +1285,14 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE)
     return;
 
-  Session *session = static_cast<Session *>(con->get_priv());
+  auto priv = con->get_priv();
+  auto session = static_cast<Session *>(priv.get());
   if (session) {
     if (session->is_closed()) {
       dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
-      con->set_priv(NULL);
+      con->set_priv(nullptr);
     }
-    session->put();
   }
 }
 
@@ -1364,7 +1366,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
       s->info.inst.addr = con->get_peer_addr();
       s->info.inst.name = n;
       dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
-      con->set_priv(s);
+      con->set_priv(RefCountedPtr{s, false});
       s->connection = con;
       if (mds_rank) {
         mds_rank->kick_waiters_for_any_client_connection();
@@ -1372,7 +1374,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     } else {
       dout(10) << " existing session " << s << " for " << s->info.inst << " existing con " << s->connection
 	       << ", new/authorizing con " << con << dendl;
-      con->set_priv(s->get());
+      con->set_priv(RefCountedPtr{s, false});
 
 
 
@@ -1428,7 +1430,8 @@ void MDSDaemon::ms_handle_accept(Connection *con)
     return;
   }
 
-  Session *s = static_cast<Session *>(con->get_priv());
+  auto priv = con->get_priv();
+  auto s = static_cast<Session *>(priv.get());
   dout(10) << "ms_handle_accept " << con->get_peer_addr() << " con " << con << " session " << s << dendl;
   if (s) {
     if (s->connection != con) {
@@ -1441,7 +1444,6 @@ void MDSDaemon::ms_handle_accept(Connection *con)
 	s->preopen_out_queue.pop_front();
       }
     }
-    s->put();
   }
 }
 

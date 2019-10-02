@@ -897,11 +897,7 @@ class OSDStub : public TestStub
 
   bool ms_handle_reset(Connection *con) override {
     dout(1) << __func__ << dendl;
-    Session *session = (Session *)con->get_priv();
-    if (!session)
-      return false;
-    session->put();
-    return true;
+    return con->get_priv().get();
   }
 
   bool ms_handle_refused(Connection *con) override {
