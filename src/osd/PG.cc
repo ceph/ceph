@@ -819,12 +819,15 @@ bool PG::check_in_progress_op(
   const osd_reqid_t &r,
   eversion_t *version,
   version_t *user_version,
-  int *return_code) const
+  int *return_code,
+  vector<pg_log_op_return_item_t> *op_returns
+  ) const
 {
   return (
-    projected_log.get_request(r, version, user_version, return_code) ||
+    projected_log.get_request(r, version, user_version, return_code,
+			      op_returns) ||
     recovery_state.get_pg_log().get_log().get_request(
-      r, version, user_version, return_code));
+      r, version, user_version, return_code, op_returns));
 }
 
 void PG::publish_stats_to_osd()
