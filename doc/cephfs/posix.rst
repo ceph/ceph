@@ -80,3 +80,22 @@ than NFS when it comes to write atomicity.
 In other words, when it comes to POSIX, ::
 
   HDFS < NFS < CephFS < {XFS, ext4}
+
+
+fsync() and error reporting
+---------------------------
+
+POSIX is somewhat vague about the state of an inode after fsync reports
+an error. In general, CephFS uses the standard error-reporting
+mechanisms in the client's kernel, and therefore follows the same
+conventions as other filesystems.
+
+In modern Linux kernels (v4.17 or later), writeback errors are reported
+once to every file description that is open at the time of the error. In
+addition, unreported errors that occured before the file description was
+opened will also be returned on fsync.
+
+See `PostgreSQL's summary of fsync() error reporting across operating systems
+<https://wiki.postgresql.org/wiki/Fsync_Errors>`_ and `Matthew Wilcox's
+presentation on Linux IO error handling
+<https://www.youtube.com/watch?v=74c19hwY2oE>`_ for more information.

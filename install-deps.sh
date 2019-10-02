@@ -340,6 +340,7 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 7 ; then
+		    $SUDO $yumdnf install -y python36-devel
 		    case $(uname -m) in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl

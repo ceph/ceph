@@ -104,7 +104,7 @@ def ensure_associated_lvs(lvs):
     wal_lvs = lvs._filter(lv_tags={'ceph.type': 'wal'})
     backing_devices = [
         (journal_lvs, 'journal'),
-        (db_lvs, 'block'),
+        (db_lvs, 'db'),
         (wal_lvs, 'wal')
     ]
 
