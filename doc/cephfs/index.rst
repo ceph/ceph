@@ -40,24 +40,25 @@ Block Devices) and RGW (Ceph Object Storage Gateway).
 
 
 Using CephFS
-============
+^^^^^^^^^^^^
 
-Using the Ceph File System requires at least one :term:`Ceph Metadata Server` in
-your Ceph Storage Cluster.
-
-
+To run and use the Ceph File System, you must have a running Ceph Storage
+Cluster with at least one :term:`Ceph Metadata Server` running.
 
 .. raw:: html
 
-	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
-	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Step 1: Metadata Server</h3>
+   <!---
 
-To run the Ceph File System, you must have a running Ceph Storage Cluster with at
-least one :term:`Ceph Metadata Server` running.
+Metadata Server Setup
+^^^^^^^^^^^^^^^^^^^^^
 
+.. raw:: html
+
+   --->
 
 .. toctree:: 
-	:maxdepth: 1
+   :maxdepth: 1
+   :hidden:
 
 	Provision/Add/Remove MDS(s) <add-remove-mds>
 	MDS failover and standby configuration <standby>
@@ -66,17 +67,26 @@ least one :term:`Ceph Metadata Server` running.
 	Journaler Configuration <journaler>
 	Manpage ceph-mds <../../man/8/ceph-mds>
 
-.. raw:: html 
-
-	</td><td><h3>Step 2: Mount CephFS</h3>
 
 Once you have a healthy Ceph Storage Cluster with at least
 one Ceph Metadata Server, you may create and mount your Ceph File System.
 Ensure that your client has network connectivity and the proper
 authentication keyring.
 
+.. raw:: html
+
+   <!---
+
+Mounting CephFS
+^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   --->
+
 .. toctree:: 
-	:maxdepth: 1
+   :maxdepth: 1
+   :hidden:
 
 	Create a CephFS file system <createfs>
 	Mount CephFS with the Kernel Driver <kernel>
@@ -89,12 +99,20 @@ authentication keyring.
 	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
 
 
-.. raw:: html 
+.. raw:: html
 
-	</td><td><h3>Additional Details</h3>
+   <!---
+
+Additional Details
+^^^^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   --->
 
 .. toctree:: 
-    :maxdepth: 1
+   :maxdepth: 1
+   :hidden:
 
     Deployment best practices <best-practices>
     MDS States <mds-states>
@@ -124,20 +142,37 @@ authentication keyring.
     FS volume and subvolumes <fs-volumes>
     Dynamic Metadata Management in CephFS <dynamic-metadata-management>
 
+.. raw:: html
+
+   <!---
+
+Metadata Repair
+^^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   --->
+
 .. toctree:: 
    :hidden:
 
     Advanced: Metadata repair <disaster-recovery-experts>
 
+
 .. raw:: html
 
-	</td></tr></tbody></table>
+   <!---
 
-For developers
-==============
+For Developers
+^^^^^^^^^^^^^^
+
+.. raw:: html
+
+   --->
 
 .. toctree:: 
-    :maxdepth: 1
+   :maxdepth: 1
+   :hidden:
 
     Client's Capabilities <capabilities>
     libcephfs <../../api/libcephfs-java/>
