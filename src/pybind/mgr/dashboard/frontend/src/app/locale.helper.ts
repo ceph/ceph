@@ -1,7 +1,3 @@
-import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
-
-declare const require;
-
 export class LocaleHelper {
   static getBrowserLang(): string {
     const lang = navigator.language;
@@ -45,21 +41,3 @@ export class LocaleHelper {
   }
 }
 
-const i18nProviders = [
-  { provide: LOCALE_ID, useValue: LocaleHelper.getLocale() },
-  {
-    provide: TRANSLATIONS,
-    useFactory: (locale) => {
-      locale = locale || 'en-US';
-      try {
-        return require(`raw-loader!locale/messages.${locale}.xlf`).default;
-      } catch (error) {
-        return [];
-      }
-    },
-    deps: [LOCALE_ID]
-  },
-  { provide: TRANSLATIONS_FORMAT, useValue: 'xlf' }
-];
-
-export { i18nProviders };
