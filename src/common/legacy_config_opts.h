@@ -816,13 +816,6 @@ OPTION(leveldb_paranoid, OPT_BOOL) // leveldb paranoid flag
 OPTION(leveldb_log, OPT_STR)  // enable leveldb log file
 OPTION(leveldb_compact_on_mount, OPT_BOOL)
 
-OPTION(kinetic_host, OPT_STR) // hostname or ip address of a kinetic drive to use
-OPTION(kinetic_port, OPT_INT) // port number of the kinetic drive
-OPTION(kinetic_user_id, OPT_INT) // kinetic user to authenticate as
-OPTION(kinetic_hmac_key, OPT_STR) // kinetic key to authenticate with
-OPTION(kinetic_use_ssl, OPT_BOOL) // whether to secure kinetic traffic with TLS
-
-
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64)  // rocksdb cache size (unless set by bluestore/etc)
 OPTION(rocksdb_cache_row_ratio, OPT_FLOAT)   // ratio of cache for row (vs block)

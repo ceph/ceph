@@ -3945,26 +3945,6 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("kinetic_host", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
-    .set_description(""),
-
-    Option("kinetic_port", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(8123)
-    .set_description(""),
-
-    Option("kinetic_user_id", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(1)
-    .set_description(""),
-
-    Option("kinetic_hmac_key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("asdfasdf")
-    .set_description(""),
-
-    Option("kinetic_use_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
     Option("rocksdb_log_to_ceph_log", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
