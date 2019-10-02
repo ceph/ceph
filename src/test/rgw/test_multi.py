@@ -19,6 +19,7 @@ from rgw_multi.zone_es import ESZoneConfig as ESZoneConfig
 from rgw_multi.zone_cloud import CloudZone as CloudZone
 from rgw_multi.zone_cloud import CloudZoneConfig as CloudZoneConfig
 from rgw_multi.zone_ps import PSZone as PSZone
+from rgw_multi.zone_ps import PSZoneConfig as PSZoneConfig
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
@@ -70,6 +71,8 @@ class Cluster(multisite.Cluster):
             env = os.environ.copy()
             env['CEPH_NUM_MDS'] = '0'
             cmd += ['-n']
+            # cmd += ['-o']
+            # cmd += ['rgw_cache_enabled=false']
         bash(cmd, env=env)
         self.needs_reset = False
 
@@ -86,13 +89,18 @@ class Gateway(multisite.Gateway):
     def start(self, args = None):
         """ start the gateway """
         assert(self.cluster)
+        env = os.environ.copy()
+        # to change frontend, set RGW_FRONTEND env variable
+        # e.g. RGW_FRONTEND=civetweb
+        # to run test under valgrind memcheck, set RGW_VALGRIND to 'yes'
+        # e.g. RGW_VALGRIND=yes
         cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port)]
         if self.id:
             cmd += ['-i', self.id]
         cmd += ['--debug-rgw=20', '--debug-ms=1']
         if args:
             cmd += args
-        bash(cmd)
+        bash(cmd, env=env)
 
     def stop(self):
         """ stop the gateway """
@@ -162,6 +170,7 @@ def init(parse_args):
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
                                          'num_ps_zones': 0,
+                                         'num_az_zones': 0,
                                          'gateways_per_zone': 2,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
@@ -202,14 +211,19 @@ def init(parse_args):
     parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
     parser.add_argument('--num-ps-zones', type=int, default=cfg.getint(section, 'num_ps_zones'))
 
+
     es_cfg = []
     cloud_cfg = []
+    ps_cfg = []
+    az_cfg = []
 
     for s in cfg.sections():
         if s.startswith('elasticsearch'):
             es_cfg.append(ESZoneConfig(cfg, s))
         elif s.startswith('cloud'):
             cloud_cfg.append(CloudZoneConfig(cfg, s))
+        elif s.startswith('pubsub'):
+            ps_cfg.append(PSZoneConfig(cfg, s))
 
     argv = []
 
@@ -232,7 +246,7 @@ def init(parse_args):
     admin_user = multisite.User('zone.user')
 
     user_creds = gen_credentials()
-    user = multisite.User('tester')
+    user = multisite.User('tester', tenant=args.tenant)
 
     realm = multisite.Realm('r')
     if bootstrap:
@@ -245,6 +259,9 @@ def init(parse_args):
 
     num_es_zones = len(es_cfg)
     num_cloud_zones = len(cloud_cfg)
+    num_ps_zones_from_conf = len(ps_cfg)
+    num_ps_zones = args.num_ps_zones if num_ps_zones_from_conf == 0 else num_ps_zones_from_conf 
+    print 'num_ps_zones = ' + str(num_ps_zones)
 
     num_zones = args.num_zones + num_es_zones + num_cloud_zones + args.num_ps_zones
 
@@ -300,7 +317,12 @@ def init(parse_args):
                                  ccfg.target_path, zonegroup, cluster)
             elif ps_zone:
                 zone_index = z - args.num_zones - num_es_zones - num_cloud_zones
-                zone = PSZone(zone_name(zg, z), zonegroup, cluster)
+                if num_ps_zones_from_conf == 0:
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster)
+                else:
+                    pscfg = ps_cfg[zone_index]
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster,
+                                  full_sync=pscfg.full_sync, retention_days=pscfg.retention_days)
             else:
                 zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
 
@@ -346,14 +368,13 @@ def init(parse_args):
                     # create test user
                     arg = ['--display-name', '"Test User"']
                     arg += user_creds.credential_args()
-                    if args.tenant:
-                        cmd += ['--tenant', args.tenant]
                     user.create(zone, arg)
                 else:
                     # read users and update keys
                     admin_user.info(zone)
                     admin_creds = admin_user.credentials[0]
-                    user.info(zone)
+                    arg = []
+                    user.info(zone, arg)
                     user_creds = user.credentials[0]
 
     if not bootstrap:
@@ -361,7 +382,8 @@ def init(parse_args):
 
     config = Config(checkpoint_retries=args.checkpoint_retries,
                     checkpoint_delay=args.checkpoint_delay,
-                    reconfigure_delay=args.reconfigure_delay)
+                    reconfigure_delay=args.reconfigure_delay,
+                    tenant=args.tenant)
     init_multi(realm, user, config)
 
 def setup_module():

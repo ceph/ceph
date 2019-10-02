@@ -157,5 +157,11 @@ endif()
 add_executable(unittest_rgw_xml test_rgw_xml.cc)
 add_ceph_unittest(unittest_rgw_xml)
 
-target_link_libraries(unittest_rgw_xml rgw_a ${EXPAT_LIBRARIES})
+target_link_libraries(unittest_rgw_xml ${rgw_libs} ${EXPAT_LIBRARIES})
+
+# unittest_rgw_arn
+add_executable(unittest_rgw_arn test_rgw_arn.cc)
+add_ceph_unittest(unittest_rgw_arn)
+
+target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
