@@ -1,15 +1,18 @@
-<cd-info-panel *ngIf="status === vcs.ValueNone">
+<cd-alert-panel type="info"
+                *ngIf="status === vcs.ValueNone">
   <ng-container i18n>Retrieving data<span *ngIf="statusFor"> for
   <span [innerHtml]="statusFor"></span></span>. Please wait...</ng-container>
-</cd-info-panel>
+</cd-alert-panel>
 
-<cd-warning-panel *ngIf="status === vcs.ValueStale">
+<cd-alert-panel *ngIf="status === vcs.ValueStale"
+                type="warning">
   <ng-container i18n>Displaying previously cached data<span *ngIf="statusFor">
   for <span [innerHtml]="statusFor"></span></span>.</ng-container>
-</cd-warning-panel>
+</cd-alert-panel>
 
-<cd-error-panel *ngIf="status === vcs.ValueException">
+<cd-alert-panel type="error"
+                *ngIf="status === vcs.ValueException">
   <ng-container i18n>Could not load data<span *ngIf="statusFor"> for
   <span [innerHtml]="statusFor"></span></span>.
   Please check the cluster health.</ng-container>
-</cd-error-panel>
+</cd-alert-panel>
