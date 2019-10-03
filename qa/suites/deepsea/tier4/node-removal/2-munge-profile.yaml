@@ -1,4 +1,0 @@
-tasks:
-        - deepsea.policy:
-                munge_policy: 
-                        remove_storage_only_node:

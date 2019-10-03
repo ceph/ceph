@@ -1,0 +1,21 @@
+tasks:
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.validation:
+                nodes_in_cluster:
+                        storage: 1
+        - deepsea.policy:
+                munge_policy:
+                        node_add:
+                                client.0: 'storage'
+        - deepsea.orch:
+                stage: 2
+        - deepsea.orch:
+                stage: 3
+        - deepsea.validation:
+                nodes_in_cluster:
+                        storage: 2
+        - deepsea.toolbox:
+            wait_for_health_ok:
+              timeout_minutes: 15
