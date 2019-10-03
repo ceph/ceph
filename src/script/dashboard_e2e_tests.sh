@@ -81,6 +81,17 @@ else
     false
 fi
 
+# check that front- and backend are responding
+CURL_CMD="curl --silent"
+set +e
+$CURL_CMD -d '{"username":"admin", "password":"admin"}' -H "Content-Type: application/json" -X POST "$URL/api/auth"
+echo $?
+$CURL_CMD -d '{"token":"foobar"}' -H "Content-Type: application/json" -X POST "$URL/api/auth/check"
+echo $?
+$CURL_CMD -X GET "$URL/#login"
+echo $?
+set -e
+
 # set dashboard admin password
 sudo ceph dashboard ac-user-set-password admin admin
 
