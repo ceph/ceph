@@ -186,8 +186,8 @@ class TestPVolumes(object):
             pv_name='/dev/vg/foo',
             pv_uuid='1111', pv_tags=pv_tags, vg_name='vg')
         pvolumes.append(FooPVolume)
-        pvolumes.filter(pv_tags={'ceph.type': 'journal', 'ceph.osd_id': '2'})
-        assert pvolumes == []
+        assert pvolumes.filter(pv_tags={'ceph.type': 'journal',
+                               'ceph.osd_id': '2'}) == []
 
     def test_filter_by_tags_matches(self, pvolumes, monkeypatch):
         pv_tags = "ceph.type=journal,ceph.osd_id=1"
@@ -195,8 +195,8 @@ class TestPVolumes(object):
             pv_name='/dev/vg/foo',
             pv_uuid='1111', pv_tags=pv_tags, vg_name="vg")
         pvolumes.append(FooPVolume)
-        pvolumes.filter(pv_tags={'ceph.type': 'journal', 'ceph.osd_id': '1'})
-        assert pvolumes == [FooPVolume]
+        assert pvolumes.filter(pv_tags={'ceph.type': 'journal',
+                               'ceph.osd_id': '1'}) == [FooPVolume]
 
 
 class TestGetVG(object):
