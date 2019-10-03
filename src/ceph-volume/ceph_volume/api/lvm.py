@@ -960,24 +960,19 @@ class PVolumes(list):
     def filter(self, pv_name=None, pv_uuid=None, pv_tags=None):
         """
         Filter out volumes on top level attributes like ``pv_name`` or by
-        ``pv_tags`` where a dict is required. For example, to find a physical volume
-        that has an OSD ID of 0, the filter would look like::
+        ``pv_tags`` where a dict is required. For example, to find a physical
+        volume that has an OSD ID of 0, the filter would look like::
 
             pv_tags={'ceph.osd_id': '0'}
 
         """
         if not any([pv_name, pv_uuid, pv_tags]):
-            raise TypeError('.filter() requires pv_name, pv_uuid, or pv_tags (none given)')
-        # first find the filtered volumes with the values in self
-        filtered_volumes = self._filter(
-            pv_name=pv_name,
-            pv_uuid=pv_uuid,
-            pv_tags=pv_tags
-        )
-        # then purge everything
-        self._purge()
-        # and add the filtered items
-        self.extend(filtered_volumes)
+            raise TypeError('.filter() requires pv_name, pv_uuid, or pv_tags'
+                            '(none given)')
+
+        filtered_pvs = PVolumes(populate=False)
+        filtered_pvs.extend(self._filter(pv_name, pv_uuid, pv_tags))
+        return filtered_pvs
 
     def get(self, pv_name=None, pv_uuid=None, pv_tags=None):
         """
