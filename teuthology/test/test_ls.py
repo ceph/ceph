@@ -17,18 +17,17 @@ class TestLs(object):
         assert results == ["1", "3"]
 
     @patch("yaml.safe_load_all")
-    @patch("__builtin__.file")
     @patch("teuthology.ls.get_jobs")
-    def test_ls(self, m_get_jobs, m_file, m_safe_load_all):
+    def test_ls(self, m_get_jobs,  m_safe_load_all):
         m_get_jobs.return_value = ["1", "2"]
         m_safe_load_all.return_value = [{"failure_reason": "reasons"}]
         ls.ls("some/archive/div", True)
 
-    @patch("__builtin__.file")
+    @patch("__builtin__.open")
     @patch("teuthology.ls.get_jobs")
-    def test_ls_ioerror(self, m_get_jobs, m_file):
+    def test_ls_ioerror(self, m_get_jobs, m_open):
         m_get_jobs.return_value = ["1", "2"]
-        m_file.side_effect = IOError()
+        m_open.side_effect = IOError()
         with pytest.raises(IOError):
             ls.ls("some/archive/dir", True)
 

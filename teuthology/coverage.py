@@ -122,7 +122,7 @@ def analyze(test_dir, cov_tools_dir, lcov_output, html_output, skip_init):
     test_summaries = {}
     for test in tests:
         summary = {}
-        with file(os.path.join(test_dir, test, 'summary.yaml')) as f:
+        with open(os.path.join(test_dir, test, 'summary.yaml')) as f:
             g = yaml.safe_load_all(f)
             for new in g:
                 summary.update(new)

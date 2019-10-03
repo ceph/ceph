@@ -381,7 +381,7 @@ class Run(object):
                 if not is_collected:
                     continue
 
-            raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
+            raw_yaml = '\n'.join([open(a, 'r').read() for a in fragment_paths])
 
             parsed_yaml = yaml.safe_load(raw_yaml)
             os_type = parsed_yaml.get('os_type') or self.base_config.os_type

@@ -2,7 +2,7 @@ import datetime
 import dateutil
 import json
 
-from mock import patch, MagicMock
+from mock import patch, mock_open
 from pytest import mark
 
 from teuthology.provision.cloud import util
@@ -18,11 +18,10 @@ from teuthology.provision.cloud import util
 def test_get_user_ssh_pubkey(path, exists):
     with patch('os.path.exists') as m_exists:
         m_exists.return_value = exists
-        with patch('teuthology.provision.cloud.util.file') as m_file:
-            m_file.return_value = MagicMock(spec=file)
+        with patch('__builtin__.open', mock_open(), create=True) as m_open:
             util.get_user_ssh_pubkey(path)
             if exists:
-                assert m_file.called_once_with(path, 'rb')
+                m_open.assert_called_once_with(path, 'rb')
 
 
 @mark.parametrize(
@@ -103,7 +102,6 @@ class TestAuthToken(object):
         self.mocks = dict()
         for name, patcher in self.patchers.items():
             self.mocks[name] = patcher.start()
-        self.mocks['m_open'].return_value = MagicMock(spec=file)
 
     def teardown(self):
         for patcher in self.patchers.values():

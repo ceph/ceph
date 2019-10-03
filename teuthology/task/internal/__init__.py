@@ -58,7 +58,7 @@ def save_config(ctx, config):
     """
     log.info('Saving configuration')
     if ctx.archive is not None:
-        with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
+        with open(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
 
@@ -242,7 +242,7 @@ def serialize_remote_roles(ctx, config):
     So that other software can be loosely coupled to teuthology
     """
     if ctx.archive is not None:
-        with file(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
             info_yaml = yaml.safe_load(info_file)
             info_file.seek(0)
             info_yaml['cluster'] = dict([(rem.name, {'roles': roles}) for rem, roles in ctx.cluster.remotes.iteritems()])

@@ -63,7 +63,7 @@ class TestSerializer(object):
         jobs = self.archive.create_fake_run(run_name, job_count, yaml_path)
         job = jobs[0]
 
-        with file(yaml_path) as yaml_file:
+        with open(yaml_path) as yaml_file:
             obj_from_yaml = yaml.safe_load(yaml_file)
         full_obj = obj_from_yaml.copy()
         full_obj.update(job['info'])

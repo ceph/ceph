@@ -37,7 +37,7 @@ def main(ctx):
 
     if ctx.targets:
         try:
-            with file(ctx.targets) as f:
+            with open(ctx.targets) as f:
                 g = yaml.safe_load_all(f)
                 for new in g:
                     if 'targets' in new:
@@ -278,7 +278,7 @@ def updatekeys(args):
                     for m in args['<machine>']]
     elif args['--targets']:
         targets = args['--targets']
-        with file(targets) as f:
+        with open(targets) as f:
             docs = yaml.safe_load_all(f)
             for doc in docs:
                 machines = [n for n in doc.get('targets', dict()).iterkeys()]
