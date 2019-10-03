@@ -25,6 +25,8 @@ CLS_NAME(fifo)
 
 #define CLS_FIFO_MAX_PART_HEADER_SIZE 512
 
+static uint32_t part_entry_overhead;
+
 struct cls_fifo_entry_header_pre {
   __le64 magic;
   __le64 pre_size;
@@ -257,7 +259,7 @@ static int fifo_meta_create_op(cls_method_context_t hctx,
 
   header.data_params.max_part_size = op.max_part_size;
   header.data_params.max_entry_size = op.max_entry_size;
-  header.data_params.full_size_threshold = op.max_part_size - op.max_entry_size;
+  header.data_params.full_size_threshold = op.max_part_size - op.max_entry_size - part_entry_overhead;
 
   r = write_header(hctx, header, false);
   if (r < 0) {
@@ -331,6 +333,9 @@ static int fifo_meta_get_op(cls_method_context_t hctx,
   if (r < 0) {
     return r;
   }
+
+  reply.part_header_size = CLS_FIFO_MAX_PART_HEADER_SIZE;
+  reply.part_entry_overhead = part_entry_overhead;
 
   encode(reply, *out);
 
@@ -863,6 +868,13 @@ CLS_INIT(fifo)
   cls_register_cxx_method(h_class, "fifo_part_get_info",
                           CLS_METHOD_RD,
                           fifo_part_get_info_op, &h_fifo_part_get_info_op);
+
+  /* calculate entry overhead */
+  struct cls_fifo_entry_header entry_header;
+  bufferlist entry_header_bl;
+  encode(entry_header, entry_header_bl);
+
+  part_entry_overhead = sizeof(cls_fifo_entry_header_pre) + entry_header_bl.length();
 
   return;
 }

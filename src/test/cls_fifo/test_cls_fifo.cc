@@ -121,15 +121,23 @@ TEST(ClsFIFO, TestGetInfo) {
   ASSERT_EQ(0, fifo_create(ioctx, oid, fifo_id,
                ClsFIFO::MetaCreateParams()));
 
+  uint32_t part_header_size;
+  uint32_t part_entry_overhead;
+
   ASSERT_EQ(0, ClsFIFO::meta_get(ioctx, oid,
-               ClsFIFO::MetaGetParams(), &info));
+               ClsFIFO::MetaGetParams(), &info,
+               &part_header_size, &part_entry_overhead));
+
+  ASSERT_GT(part_header_size, 0);
+  ASSERT_GT(part_entry_overhead, 0);
 
   ASSERT_TRUE(!info.objv.instance.empty());
 
   ASSERT_EQ(0, ClsFIFO::meta_get(ioctx, oid,
                ClsFIFO::MetaGetParams()
                .objv(info.objv),
-               &info));
+               &info,
+               &part_header_size, &part_entry_overhead));
 
   fifo_objv_t objv;
   objv.instance="foo";
@@ -137,7 +145,8 @@ TEST(ClsFIFO, TestGetInfo) {
   ASSERT_EQ(-ECANCELED, ClsFIFO::meta_get(ioctx, oid,
                ClsFIFO::MetaGetParams()
                .objv(objv),
-               &info));
+               &info,
+               &part_header_size, &part_entry_overhead));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }

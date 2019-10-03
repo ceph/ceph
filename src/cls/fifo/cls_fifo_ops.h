@@ -82,15 +82,21 @@ WRITE_CLASS_ENCODER(cls_fifo_meta_get_op)
 struct cls_fifo_meta_get_op_reply
 {
   rados::cls::fifo::fifo_info_t info;
+  uint32_t part_header_size{0};
+  uint32_t part_entry_overhead{0}; /* per entry extra data that is stored */
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode(info, bl);
+    encode(part_header_size, bl);
+    encode(part_entry_overhead, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(info, bl);
+    decode(part_header_size, bl);
+    decode(part_entry_overhead, bl);
     DECODE_FINISH(bl);
   }
 };

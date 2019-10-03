@@ -94,7 +94,9 @@ namespace rados {
         static int meta_get(librados::IoCtx& ioctx,
                             const string& oid,
                             const MetaGetParams& params,
-                            rados::cls::fifo::fifo_info_t *result);
+                            rados::cls::fifo::fifo_info_t *result,
+                            uint32_t *part_header_size,
+                            uint32_t *part_entry_overhead);
 
         /* update */
 
@@ -268,6 +270,9 @@ namespace rados {
 
         fifo_info_t meta_info;
 
+        uint32_t part_header_size;
+        uint32_t part_entry_overhead;
+
         bool is_open{false};
 
         string craft_marker(int64_t part_num,
@@ -326,6 +331,16 @@ namespace rados {
 
         const fifo_info_t& get_meta() const {
           return meta_info;
+        }
+
+        void get_part_layout_info(uint32_t *header_size, uint32_t *entry_overhead) {
+          if (header_size) {
+            *header_size = part_header_size;
+          }
+
+          if (entry_overhead) {
+            *entry_overhead = part_entry_overhead;
+          }
         }
 
         int push(bufferlist& bl);

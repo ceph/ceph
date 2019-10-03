@@ -64,7 +64,9 @@ namespace rados {
       int ClsFIFO::meta_get(librados::IoCtx& ioctx,
                             const string& oid,
                             const MetaGetParams& params,
-                            fifo_info_t *result) {
+                            fifo_info_t *result,
+                            uint32_t *part_header_size,
+                            uint32_t *part_entry_overhead) {
         cls_fifo_meta_get_op op;
 
         auto& state = params.state;
@@ -97,6 +99,14 @@ namespace rados {
         }
 
         *result = reply.info;
+
+        if (part_header_size) {
+          *part_header_size = reply.part_header_size;
+        }
+
+        if (part_entry_overhead) {
+          *part_entry_overhead = reply.part_entry_overhead;
+        }
 
         return 0;
       }
@@ -402,7 +412,9 @@ namespace rados {
         int r = ClsFIFO::meta_get(*ioctx,
                                   meta_oid,
                                   get_params,
-                                  &meta_info);
+                                  &meta_info,
+                                  &part_header_size,
+                                  &part_entry_overhead);
         if (r < 0) {
           return r;
         }
