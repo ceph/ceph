@@ -758,13 +758,12 @@ class TeuthologyOpenStack(OpenStack):
                     }
                 }
             }
-            yaml_data = yaml.safe_dump(overrides, default_flow_style=False)
             with tempfile.NamedTemporaryFile(mode='w+b',
                                              suffix='-artifact.yaml',
                                              delete=False) as f:
                 yaml_file = f.name
                 log.debug("Using file " + yaml_file)
-                print >> f, yaml_data
+                yaml.safe_dump(overrides, stream=f, default_flow_style=False)
 
             path = self._upload_yaml_file(yaml_file)
             argv.append(path)
