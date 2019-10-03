@@ -1069,6 +1069,21 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
+  if (website_conf.is_redirect_all && website_conf.redirect_all.hostname.empty()) {
+    s->err.message = "A host name must be provided to redirect all requests (e.g. \"example.com\").";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    return -EINVAL;
+  } else if (!website_conf.is_redirect_all && !website_conf.is_set_index_doc) {
+    s->err.message = "A value for IndexDocument Suffix must be provided if RedirectAllRequestsTo is empty";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    return -EINVAL;
+  } else if (!website_conf.is_redirect_all && website_conf.is_set_index_doc &&
+             website_conf.index_doc_suffix.empty()) {
+    s->err.message = "The IndexDocument Suffix is not well formed";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    return -EINVAL;
+  }
+
 #define WEBSITE_ROUTING_RULES_MAX_NUM      50
   int max_num = s->cct->_conf->rgw_website_routing_rules_max_num;
   if (max_num < 0) {
@@ -3718,7 +3733,13 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   }
 
   rgw_obj_key new_obj;
-  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
+  bool get_res = s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
+  if (!get_res) {
+    s->err.message = "The IndexDocument Suffix is not configurated or not well formed!";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    return -EINVAL;
+  }
+
   ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> "
 		    << new_obj << dendl;
 
