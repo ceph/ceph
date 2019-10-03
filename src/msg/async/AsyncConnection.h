@@ -173,7 +173,7 @@ private:
   DispatchQueue *dispatch_queue;
 
   // lockfree, only used in own thread
-  bufferlist outcoming_bl;
+  bufferlist outgoing_bl;
   bool open_write = false;
 
   std::mutex write_lock;
