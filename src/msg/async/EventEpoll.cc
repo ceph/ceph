@@ -83,16 +83,18 @@ int EpollDriver::del_event(int fd, int cur_mask, int delmask)
 {
   ldout(cct, 20) << __func__ << " del event fd=" << fd << " cur_mask=" << cur_mask
                  << " delmask=" << delmask << " to " << epfd << dendl;
-  struct epoll_event ee;
+  struct epoll_event ee = {0};
   int mask = cur_mask & (~delmask);
   int r = 0;
 
-  ee.events = 0;
-  if (mask & EVENT_READABLE) ee.events |= EPOLLIN;
-  if (mask & EVENT_WRITABLE) ee.events |= EPOLLOUT;
-  ee.data.u64 = 0; /* avoid valgrind warning */
-  ee.data.fd = fd;
   if (mask != EVENT_NONE) {
+    ee.events = EPOLLET;
+    ee.data.fd = fd;
+    if (mask & EVENT_READABLE)
+      ee.events |= EPOLLIN;
+    if (mask & EVENT_WRITABLE)
+      ee.events |= EPOLLOUT;
+
     if ((r = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ee)) < 0) {
       lderr(cct) << __func__ << " epoll_ctl: modify fd=" << fd << " mask=" << mask
                  << " failed." << cpp_strerror(errno) << dendl;
