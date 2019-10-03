@@ -2163,17 +2163,22 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
   epoch_t first = get_first_committed();
   epoch_t last = osdmap.get_epoch();
   int max = g_conf->osd_map_message_max;
+  ssize_t max_bytes = g_conf->osd_map_message_max_bytes;
   for (epoch_t e = std::max(first, m->get_full_first());
-       e <= std::min(last, m->get_full_last()) && max > 0;
+       e <= std::min(last, m->get_full_last()) && max > 0 && max_bytes > 0;
        ++e, --max) {
-    int r = get_version_full(e, features, reply->maps[e]);
+    bufferlist& bl = reply->maps[e];
+    int r = get_version_full(e, features, bl);
     assert(r >= 0);
+    max_bytes -= bl.length();
   }
   for (epoch_t e = std::max(first, m->get_inc_first());
-       e <= std::min(last, m->get_inc_last()) && max > 0;
+       e <= std::min(last, m->get_inc_last()) && max > 0 && max_bytes > 0;
        ++e, --max) {
-    int r = get_version(e, features, reply->incremental_maps[e]);
+    bufferlist& bl = reply->incremental_maps[e];
+    int r = get_version(e, features, bl);
     assert(r >= 0);
+    max_bytes -= bl.length();
   }
   reply->oldest_map = first;
   reply->newest_map = last;

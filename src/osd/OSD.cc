@@ -1266,22 +1266,52 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   m->oldest_map = max_oldest_map;
   m->newest_map = sblock.newest_map;
 
-  for (epoch_t e = to; e > since; e--) {
+  int max = cct->_conf->osd_map_message_max;
+  ssize_t max_bytes = cct->_conf->osd_map_message_max_bytes;
+
+  if (since > m->oldest_map) {
+    // we don't have the next map the target wants, so start with a
+    // full map.
     bufferlist bl;
-    if (e > m->oldest_map && get_inc_map_bl(e, bl)) {
-      m->incremental_maps[e].claim(bl);
-    } else if (get_map_bl(e, bl)) {
-      m->maps[e].claim(bl);
-      break;
-    } else {
-      derr << "since " << since << " to " << to
-	   << " oldest " << m->oldest_map << " newest " << m->newest_map
-	   << dendl;
-      m->put();
-      m = NULL;
+    dout(10) << __func__ << " oldest map " << max_oldest_map << " < since "
+	     << since << ", starting with full map" << dendl;
+    since = m->oldest_map;
+    if (!get_map_bl(since, bl)) {
+      derr << __func__ << " missing full map " << since << dendl;
+      goto panic;
+    }
+    max--;
+    max_bytes -= bl.length();
+    m->maps[since].claim(bl);
+  }
+  for (epoch_t e = since + 1; e <= to; ++e) {
+    bufferlist bl;
+    if (!get_inc_map_bl(e, bl)) {
+      derr << __func__ << " missing incremental map " << e << dendl;
+      goto panic;
+    }
+    max--;
+    max_bytes -= bl.length();
+    m->incremental_maps[e].claim(bl);
+    if (max <= 0 || max_bytes <= 0) {
       break;
     }
   }
+  return m;
+
+ panic:
+  if (!m->maps.empty() ||
+      !m->incremental_maps.empty()) {
+    // send what we have so far
+    return m;
+  }
+  // send something
+  bufferlist bl;
+  if (!get_inc_map_bl(m->newest_map, bl)) {
+    derr << __func__ << " unable to load latest map " << m->newest_map << dendl;
+    ceph_abort();
+  }
+  m->incremental_maps[m->newest_map].claim(bl);
   return m;
 }
 
@@ -1317,8 +1347,6 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
       since = to - cct->_conf->osd_map_share_max_epochs;
     }
 
-    if (to - since > (epoch_t)cct->_conf->osd_map_message_max)
-      to = since + cct->_conf->osd_map_message_max;
     m = build_incremental_map_msg(since, to, sblock);
   }
   send_map(m, con);
