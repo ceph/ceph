@@ -20,7 +20,7 @@ Note
 Description
 ===========
 
-**rbd-fuse** is a FUSE (File system in USErspace) client for RADOS
+**rbd-fuse** is a FUSE ("Filesystem in USErspace") client for RADOS
 block device (rbd) images.  Given a pool containing rbd images,
 it will mount a userspace file system allowing access to those images
 as regular files at **mountpoint**.
