@@ -210,7 +210,7 @@ class TestGraphiteGrapher(TestPCPGrapher):
             'foo.bar baz': 'foo.bar_baz',
             'foo.*.bar baz': 'foo._all_.bar_baz',
         }
-        for in_, out in sanitized_metrics.iteritems():
+        for in_, out in sanitized_metrics.items():
             assert self.klass._sanitize_metric_name(in_) == out
 
     def test_get_target_globs(self):

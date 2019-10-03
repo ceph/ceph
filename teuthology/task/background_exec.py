@@ -46,7 +46,7 @@ def task(ctx, config):
     testdir = misc.get_testdir(ctx)
 
     tasks = {}
-    for role, cmd in config.iteritems():
+    for role, cmd in config.items():
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         log.info('Running background command on role %s host %s', role,
                  remote.name)
@@ -70,7 +70,7 @@ def task(ctx, config):
         yield
 
     finally:
-        for name, task in tasks.iteritems():
+        for name, task in tasks.items():
             log.info('Stopping background command on %s', name)
             task.stdin.close()
         run.wait(tasks.itervalues())

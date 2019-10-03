@@ -282,7 +282,7 @@ def upgrade_remote_to_config(ctx, config):
             remotes[remote] = config.get(role)
 
     result = {}
-    for remote, node in remotes.iteritems():
+    for remote, node in remotes.items():
         if not node:
             node = {}
 
@@ -316,7 +316,7 @@ def upgrade_common(ctx, config, deploy_style):
     extra_pkgs = config.get('extra_packages', [])
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
 
-    for remote, node in remotes.iteritems():
+    for remote, node in remotes.items():
 
         system_type = teuthology.get_system_type(remote)
         assert system_type in ('deb', 'rpm')

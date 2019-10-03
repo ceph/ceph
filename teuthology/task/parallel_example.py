@@ -31,7 +31,7 @@ def parallel_test(ctx, config):
             """Call run for each remote host, but use 'wait=False' to have it return immediately."""
             proc = remote.run(args=['sleep', '5', run.Raw(';'), 'date', run.Raw(';'), 'hostname'], wait=False,)
             nodes[remote.name] = proc
-        for name, proc in nodes.iteritems():
+        for name, proc in nodes.items():
             """Wait for each process to finish before yielding and allowing other contextmanagers to run."""
             proc.wait()
     yield

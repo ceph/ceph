@@ -664,7 +664,7 @@ class TestSubset(object):
     @staticmethod
     def verify_facets(tree, description_list, subset, mat, first, matlimit):
         def flatten(tree):
-            for k,v in tree.iteritems():
+            for k,v in tree.items():
                 if v is None and '.yaml' in k:
                     yield k
                 elif v is not None and '.disable' not in k:
@@ -673,7 +673,7 @@ class TestSubset(object):
 
         def pptree(tree, tabs=0):
             ret = ""
-            for k, v in tree.iteritems():
+            for k, v in tree.items():
                 if v is None:
                     ret += ('\t'*tabs) + k.ljust(10) + "\n"
                 else:

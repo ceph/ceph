@@ -78,7 +78,7 @@ def run_tasks(tasks, ctx):
     try:
         for taskdict in tasks:
             try:
-                ((taskname, config),) = taskdict.iteritems()
+                ((taskname, config),) = taskdict.items()
             except (ValueError, AttributeError):
                 raise RuntimeError('Invalid task definition: %s' % taskdict)
             log.info('Running task %s...', taskname)

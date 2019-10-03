@@ -1501,7 +1501,7 @@ class TestOpenStack(TestOpenStackBase):
         }
         os.environ['OS_REGION_NAME'] = 'REGION'
         os.environ['OS_TENANT_ID'] = 'TENANT'
-        for (type, cmds) in type2cmd.iteritems():
+        for (type, cmds) in type2cmd.items():
             for cmd in cmds:
                 assert ("//" + type) in o.get_os_url(cmd + " ")
         for type in type2cmd.keys():

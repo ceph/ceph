@@ -178,7 +178,7 @@ def maybe_remove_remotes(run_dir, days, dry_run=False):
         if (should_preserve(item) or not os.path.isdir(item) or not
                 is_old_enough(item, days)):
             continue
-        for (subdir, description) in subdirs.iteritems():
+        for (subdir, description) in subdirs.items():
             _maybe_remove_subdir(item, subdir, days, description, dry_run)
 
 

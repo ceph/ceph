@@ -40,7 +40,7 @@ def task(ctx, config):
         for entry in config:
             if not isinstance(entry, dict):
                 entry = ctx.config.get(entry, {})
-            ((taskname, confg),) = entry.iteritems()
+            ((taskname, confg),) = entry.items()
             log.info('In full_sequential_finally, running task %s...' % taskname)
             mgr = run_tasks.run_one_task(taskname, ctx=ctx, config=confg)
             if hasattr(mgr, '__enter__'):

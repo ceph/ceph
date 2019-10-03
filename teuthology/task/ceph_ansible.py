@@ -140,7 +140,7 @@ class CephAnsible(Task):
         for group in sorted(self.groups_to_roles.keys()):
             role_prefix = self.groups_to_roles[group]
             want = lambda role: role.startswith(role_prefix)
-            for (remote, roles) in self.cluster.only(want).remotes.iteritems():
+            for (remote, roles) in self.cluster.only(want).remotes.items():
                 hostname = remote.hostname
                 host_vars = self.get_host_vars(remote)
                 if group not in hosts_dict:

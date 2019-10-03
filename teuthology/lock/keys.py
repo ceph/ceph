@@ -17,7 +17,7 @@ def do_update_keys(machines, all_=False, _raise=True):
 
 def push_new_keys(keys_dict, reference):
     ret = 0
-    for hostname, pubkey in keys_dict.iteritems():
+    for hostname, pubkey in keys_dict.items():
         log.info('Checking %s', hostname)
         if reference[hostname]['ssh_pub_key'] != pubkey:
             log.info('New key found. Updating...')

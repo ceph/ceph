@@ -193,7 +193,7 @@ def reset_syslog_dir(ctx):
         )
         nodes[remote.name] = proc
 
-    for name, proc in nodes.iteritems():
+    for name, proc in nodes.items():
         log.info('Waiting for %s to restart syslog...', name)
         proc.wait()
 

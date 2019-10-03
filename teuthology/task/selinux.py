@@ -49,7 +49,7 @@ class SELinux(Task):
         """
         super(SELinux, self).filter_hosts()
         new_cluster = Cluster()
-        for (remote, roles) in self.cluster.remotes.iteritems():
+        for (remote, roles) in self.cluster.remotes.items():
             if remote.is_vm:
                 msg = "Excluding {host}: VMs are not yet supported"
                 log.info(msg.format(host=remote.shortname))

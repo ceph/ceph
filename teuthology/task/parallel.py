@@ -52,7 +52,7 @@ def task(ctx, config):
                 # support the usual list syntax for tasks
                 if isinstance(entry, list):
                     entry = dict(sequential=entry)
-            ((taskname, confg),) = entry.iteritems()
+            ((taskname, confg),) = entry.items()
             p.spawn(_run_spawned, ctx, confg, taskname)
 
 
