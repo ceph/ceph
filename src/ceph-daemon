@@ -779,15 +779,9 @@ def command_ceph_volume():
     tmp_keyring = None
 
     if args.config_and_keyring:
-        import json
-        if args.config_and_keyring == '-':
-            j = sys.stdin.read()
-        else:
-            with open(args.config_and_keyring, 'r') as f:
-                j = f.read()
-        d = json.loads(j)
-        config = d.get('config')
-        keyring = d.get('keyring')
+        # note: this will always pull from args.config_and_keyring (we
+        # require it) and never args.config or args.keyring.
+        (config, keyring) = get_config_and_keyring()
 
         # tmp keyring file
         tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
