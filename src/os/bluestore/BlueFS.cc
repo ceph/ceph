@@ -168,12 +168,16 @@ BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
-    block_all(MAX_BDEV)
+    block_all(MAX_BDEV),
+    alloc(MAX_BDEV),
+    alloc_size(MAX_BDEV, 0),
+    pending_release(MAX_BDEV)
 {
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
   asok_hook = SocketHook::create(this);
+
 }
 
 BlueFS::~BlueFS()
@@ -307,7 +311,8 @@ void BlueFS::_update_logger_stats()
 }
 
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
-			     bool shared_with_bluestore)
+                             bool shared_with_bluestore,
+			     Allocator* _shared_bdev_alloc)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   ceph_assert(id < bdev.size());
@@ -330,6 +335,10 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
 	  << " size " << byte_u_t(b->get_size()) << dendl;
   bdev[id] = b;
   ioc[id] = new IOContext(cct, NULL);
+  if (_shared_bdev_alloc) {
+    ceph_assert(shared_bdev_alloc == nullptr);
+    alloc[id] = shared_bdev_alloc = _shared_bdev_alloc;
+  }
   return 0;
 }
 
@@ -360,10 +369,9 @@ void BlueFS::_add_block_extent(unsigned id, uint64_t offset, uint64_t length,
   ceph_assert(bdev[id]->get_size() >= offset + length);
   block_all[id].insert(offset, length);
 
-  if (id < alloc.size() && alloc[id]) {
+  if (id < alloc.size() && alloc[id] && alloc[id] != shared_bdev_alloc) {
     if (!skip)
       log_t.op_alloc_add(id, offset, length);
-
     alloc[id]->init_add_free(offset, length);
   }
 
@@ -535,9 +543,6 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
 void BlueFS::_init_alloc()
 {
   dout(20) << __func__ << dendl;
-  alloc.resize(MAX_BDEV);
-  alloc_size.resize(MAX_BDEV, 0);
-  pending_release.resize(MAX_BDEV);
   block_unused_too_granular.resize(MAX_BDEV);
 
   if (bdev[BDEV_WAL]) {
@@ -562,22 +567,28 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
-    std::string name = "bluefs-";
-    const char* devnames[] = {"wal","db","slow"};
-    if (id <= BDEV_SLOW)
-      name += devnames[id];
-    else
-      name += to_string(uintptr_t(this));
     ceph_assert(alloc_size[id]);
-    dout(1) << __func__ << " id " << id
-	     << " alloc_size 0x" << std::hex << alloc_size[id]
-	     << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
-    alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
-				  bdev[id]->get_size(),
-				  alloc_size[id], name);
-    interval_set<uint64_t>& p = block_all[id];
-    for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
-      alloc[id]->init_add_free(q.get_start(), q.get_len());
+    if (alloc[id]) {
+      dout(1) << __func__ << " shared, id " << id
+        << " alloc_size 0x" << std::hex << alloc_size[id]
+        << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
+    } else {
+      std::string name = "bluefs-";
+      const char* devnames[] = { "wal","db","slow" };
+      if (id <= BDEV_SLOW)
+        name += devnames[id];
+      else
+        name += to_string(uintptr_t(this));
+      dout(1) << __func__ << " new, id " << id
+	       << " alloc_size 0x" << std::hex << alloc_size[id]
+	       << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
+      alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
+				    bdev[id]->get_size(),
+				    alloc_size[id], name);
+      interval_set<uint64_t>& p = block_all[id];
+      for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
+        alloc[id]->init_add_free(q.get_start(), q.get_len());
+      }
     }
   }
 }
@@ -591,12 +602,16 @@ void BlueFS::_stop_alloc()
   }
 
   for (auto p : alloc) {
-    if (p != nullptr)  {
+    if (p != nullptr && p != shared_bdev_alloc) {
       p->shutdown();
       delete p;
     }
   }
-  alloc.clear();
+  for (size_t i = 0; i < alloc.size(); ++i) {
+    if (alloc[i] != shared_bdev_alloc) {
+      alloc[i] = nullptr;
+    }
+  }
   block_unused_too_granular.clear();
 }
 
@@ -1159,7 +1174,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	  if (!noop) {
 	    block_all[id].insert(offset, length);
 	    _adjust_granularity(id, &offset, &length, true);
-	    if (length) {
+	    if (length &&
+	        alloc[id] != shared_bdev_alloc) {
 	      alloc[id]->init_add_free(offset, length);
 	    }
 
