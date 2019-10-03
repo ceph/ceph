@@ -171,6 +171,7 @@ void AuthMonitor::create_initial()
   dout(10) << "create_initial -- creating initial map" << dendl;
 
   // initialize rotating keys
+  mon->key_server.clear_secrets();
   last_rotating_ver = 0;
   check_rotate();
   assert(pending_auth.size() == 1);
