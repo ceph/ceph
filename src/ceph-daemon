@@ -6,6 +6,27 @@ LOG_DIR='/var/log/ceph'
 UNIT_DIR='/etc/systemd/system'
 VERSION='unknown development version'
 
+"""
+You can invoke ceph-daemon in two ways:
+
+1. The normal way, at the command line.
+
+2. By piping the script to the python3 binary.  In this latter case, you should
+   prepend one or more lines to the beginning of the script.
+
+   For arguments,
+
+       injected_argv = [...]
+
+   e.g.,
+
+       injected_argv = ['ls']
+
+   For reading stdin from the '--config-and-json -' argument,
+
+       injected_stdin = '...'
+"""
+
 import argparse
 import configparser
 import json
@@ -139,7 +160,10 @@ def get_config_and_keyring():
     if args.config_and_keyring:
         import json
         if args.config_and_keyring == '-':
-            j = sys.stdin.read()
+            try:
+                j = injected_stdin
+            except NameError:
+                j = sys.stdin.read()
         else:
             with open(args.config_and_keyring, 'r') as f:
                 j = f.read()
@@ -1194,8 +1218,13 @@ parser_deploy.add_argument(
     '--osd-fsid',
     help='OSD uuid, if creating an OSD container')
 
-args = parser.parse_args()
+# allow argv to be injected
+try:
+    av = injected_argv
+except NameError:
+    av = sys.argv[1:]
 
+args = parser.parse_args(av)
 if 'func' not in args:
     sys.stderr.write('No command specified; pass -h or --help for usage\n')
     sys.exit(1)
