@@ -2569,6 +2569,16 @@ void PGMap::get_health_checks(
     }
   }
 
+  // TOO_FEW_OSDS
+  auto warn_too_few_osds = cct->_conf->get_val<bool>("mon_warn_on_too_few_osds");
+  auto osd_pool_default_size = cct->_conf->get_val<uint64_t>("osd_pool_default_size");
+  if (warn_too_few_osds && osdmap.get_num_osds() < osd_pool_default_size) {
+    ostringstream ss;
+    ss << "OSD count " << osdmap.get_num_osds()
+	 << " < osd_pool_default_size " << osd_pool_default_size;
+    checks->add("TOO_FEW_OSDS", HEALTH_WARN, ss.str());
+  }
+
   // SMALLER_PGP_NUM
   // MANY_OBJECTS_PER_PG
   if (!pg_stat.empty()) {
