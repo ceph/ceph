@@ -13,6 +13,7 @@ overrides:
       - \(OBJECT_
       - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
+      - \(OSD_SLOW_PING_TIME
     conf:
       global:
         ms inject delay max: 1
