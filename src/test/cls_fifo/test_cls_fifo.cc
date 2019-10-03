@@ -378,7 +378,14 @@ TEST(FIFO, TestMultipleParts) {
                          .max_part_size(max_part_size)
                          .max_entry_size(max_entry_size)));
 
-  int max_entries = max_part_size / max_entry_size + 5;
+  uint32_t part_header_size;
+  uint32_t part_entry_overhead;
+
+  fifo.get_part_layout_info(&part_header_size, &part_entry_overhead);
+
+  int entries_per_part = (max_part_size - part_header_size) / (max_entry_size + part_entry_overhead);
+
+  int max_entries = entries_per_part * 4 + 1;
 
   /* push enough entries */
   for (int i = 0; i < max_entries; ++i) {
@@ -430,6 +437,7 @@ TEST(FIFO, TestMultipleParts) {
   /* trim one at a time */
   marker.clear();
   for (int i = 0; i < max_entries; ++i) {
+    /* read single entry */
     ASSERT_EQ(0, fifo.list(1, marker, &result, &more));
 
     ASSERT_EQ(result.size(), 1);
@@ -438,7 +446,12 @@ TEST(FIFO, TestMultipleParts) {
 
     marker = result[0].marker;
 
+    /* trim */
     ASSERT_EQ(0, fifo.trim(marker));
+
+    /* check tail */
+    info = fifo.get_meta();
+    ASSERT_EQ(info.tail_part_num, i / entries_per_part);
 
     /* try to read all again, see how many entries left */
     ASSERT_EQ(0, fifo.list(max_entries, marker, &result, &more));
@@ -446,15 +459,18 @@ TEST(FIFO, TestMultipleParts) {
     ASSERT_EQ(false, more);
   }
 
+  /* tail now should point at head */
   info = fifo.get_meta();
   ASSERT_EQ(info.head_part_num, info.tail_part_num);
 
   fifo_part_info part_info;
 
+  /* check old tails are removed */
   for (int i = 0; i < info.tail_part_num; ++i) {
     ASSERT_EQ(-ENOENT, fifo.get_part_info(i, &part_info));
   }
 
+  /* check curent tail exists */
   ASSERT_EQ(0, fifo.get_part_info(info.tail_part_num, &part_info));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
