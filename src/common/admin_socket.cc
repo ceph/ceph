@@ -22,7 +22,10 @@
 #include "common/Thread.h"
 #include "common/version.h"
 #include "common/ceph_mutex.h"
+
+#ifndef WITH_SEASTAR
 #include "common/Cond.h"
+#endif
 
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
@@ -395,7 +398,11 @@ void AdminSocket::do_tell_queue()
 	auto reply = new MCommandReply(r, err);
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
+#ifdef WITH_SEASTAR
+#warning "fix message send with crimson"
+#else
 	m->get_connection()->send_message(reply);
+#endif
       });
   }
 }
@@ -406,6 +413,10 @@ int AdminSocket::execute_command(
   std::ostream& errss,
   bufferlist *outbl)
 {
+#ifdef WITH_SEASTAR
+#warning "must implement admin socket blocking execute_command() for crimson"
+  return -ENOSYS;
+#else
   bool done = false;
   int rval = 0;
   ceph::mutex mylock = ceph::make_mutex("admin_socket::excute_command::mylock");
@@ -424,6 +435,7 @@ int AdminSocket::execute_command(
     mycond.wait(l, [&done] { return done;});
   }
   return rval;
+#endif
 }
 
 void AdminSocket::execute_command(
