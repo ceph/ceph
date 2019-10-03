@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+      - \(OSD_SLOW_PING_TIME
     conf:
       client:
         rbd cache: true

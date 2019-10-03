@@ -6,3 +6,5 @@ overrides:
         mon mgr beacon grace: 90
       mgr:
         debug monc: 10
+    log-whitelist:
+      - \(OSD_SLOW_PING_TIME

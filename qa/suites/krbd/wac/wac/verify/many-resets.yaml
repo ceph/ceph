@@ -3,6 +3,8 @@ overrides:
     conf:
       global:
         ms inject socket failures: 500
+    log-whitelist:
+      - \(OSD_SLOW_PING_TIME
 tasks:
 - exec:
     client.0:
