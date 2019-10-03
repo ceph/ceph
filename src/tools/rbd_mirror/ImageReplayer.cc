@@ -1418,7 +1418,7 @@ void ImageReplayer<I>::set_mirror_image_status_update(
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
       status.description = state_desc;
       mirror_image_status_state = status.state;
-    } else if (last_r < 0) {
+    } else if (last_r < 0 && last_r != -ECANCELED) {
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR;
       status.description = state_desc;
       mirror_image_status_state = status.state;
