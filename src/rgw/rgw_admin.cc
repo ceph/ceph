@@ -2897,6 +2897,10 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
       user_id.from_str(val);
+      if (user_id.empty()) {
+        cerr << "no value for uid" << std::endl;
+        exit(1);
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
@@ -5462,6 +5466,12 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
     if (bucket_name.empty()) {
+      if (!user_id.empty()) {
+        if (!user_op.has_existing_user()) {
+          cerr << "ERROR: could not find user: " << user_id << std::endl;
+          return -ENOENT;
+        }
+      }
       RGWBucketAdminOp::info(store, bucket_op, f);
     } else {
       RGWBucketInfo bucket_info;
