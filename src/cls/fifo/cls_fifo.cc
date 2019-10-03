@@ -311,51 +311,23 @@ static int fifo_meta_update_op(cls_method_context_t hctx,
     return r;
   }
 
-  if (op.tail_part_num) {
-    header.tail_part_num = *op.tail_part_num;
-  }
+  string err;
 
-  if (op.head_part_num) {
-    header.tags.erase(header.head_part_num);
-    header.head_part_num = *op.head_part_num;
-    auto iter = header.tags.find(header.head_part_num);
-    if (iter != header.tags.end()) {
-      header.head_tag = iter->second;
-    } else {
-      header.head_tag.erase();
-    }
-  }
-
-  if (op.min_push_part_num) {
-    header.min_push_part_num = *op.min_push_part_num;
-  }
-
-  if (op.max_push_part_num) {
-    header.max_push_part_num = *op.max_push_part_num;
-  }
-
-  for (auto& entry : op.journal_entries_add) {
-    if (header.journal.find(entry.part_num) != header.journal.end()) {
-      /* don't allow multiple concurrent operations on the same part,
-         racing clients should use objv to avoid races anyway */
-      CLS_LOG(10, "%s(): NOTICE: multiple concurrent operations on same part are not allowed, part num=%lld", __func__, (long long)entry.part_num);
-      return -EINVAL;
-    }
-
-    header.journal[entry.part_num] = std::move(entry);
-
-    if (entry.op == fifo_journal_entry_t::Op::OP_CREATE) {
-      header.tags[entry.part_num] = entry.part_tag;
-    }
-  }
-
-  for (auto& entry : op.journal_entries_rm) {
-    header.journal.erase(entry.part_num);
+  r = header.apply_update(op.tail_part_num,
+                          op.head_part_num,
+                          op.min_push_part_num,
+                          op.max_push_part_num,
+                          op.journal_entries_add,
+                          op.journal_entries_rm,
+                          &err);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): %s", __func__, err.c_str());
+    return r;
   }
 
   r = write_header(hctx, header);
   if (r < 0) {
-    CLS_LOG(10, "%s(): failed to write heaader: r=%d", __func__, r);
+    CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
     return r;
   }
 

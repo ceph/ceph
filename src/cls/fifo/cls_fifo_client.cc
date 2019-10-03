@@ -297,6 +297,28 @@ namespace rados {
         return 0;
       }
 
+      int ClsFIFO::MetaUpdateParams::apply_update(CephContext *cct,
+                                                  fifo_info_t *info)
+      {
+        string err;
+
+        int r = info->apply_update(state.tail_part_num,
+                                   state.head_part_num,
+                                   state.min_push_part_num,
+                                   state.max_push_part_num,
+                                   state.journal_entries_add,
+                                   state.journal_entries_rm,
+                                   &err);
+        if (r < 0) {
+          ldout(cct, 0) << __func__ << "(): ERROR: " << err << dendl;
+          return r;
+        }
+
+        ++info->objv.ver;
+
+        return 0;
+      }
+
       int FIFO::update_meta(ClsFIFO::MetaUpdateParams& update_params,
                             bool *canceled)
       {
@@ -315,7 +337,17 @@ namespace rados {
 
         *canceled = (r == -ECANCELED);
 
-        r = do_read_meta();
+        if (!*canceled) {
+          r = update_params.apply_update(cct, &meta_info);
+          if (r < 0) { /* should really not happen,
+                          but if it does, let's treat it as if race was detected */
+            *canceled = true;
+          }
+        }
+
+        if (*canceled) {
+          r = do_read_meta();
+        }
         if (r < 0) {
           return r;
         }

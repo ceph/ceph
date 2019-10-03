@@ -266,7 +266,7 @@ set(cls_cas_client_srcs
 add_library(cls_cas_client STATIC ${cls_cas_client_srcs})
 
 # cls_fifo
-set(cls_fifo_srcs fifo/cls_fifo.cc)
+set(cls_fifo_srcs fifo/cls_fifo.cc fifo/cls_fifo_types.cc)
 add_library(cls_fifo SHARED ${cls_fifo_srcs})
 set_target_properties(cls_fifo PROPERTIES
   VERSION "1.0.0"

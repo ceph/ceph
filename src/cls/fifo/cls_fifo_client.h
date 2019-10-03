@@ -138,6 +138,9 @@ namespace rados {
             state.journal_entries_rm = entries;
             return *this;
           }
+
+          int apply_update(CephContext *cct,
+                           rados::cls::fifo::fifo_info_t *info);
         };
 
         static int meta_update(librados::ObjectWriteOperation *rados_op,

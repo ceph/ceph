@@ -153,6 +153,14 @@ namespace rados {
         string part_oid(int64_t part_num);
         void prepare_next_journal_entry(fifo_journal_entry_t *entry, const string& tag);
 
+        int apply_update(std::optional<uint64_t>& _tail_part_num,
+                         std::optional<uint64_t>& _head_part_num,
+                         std::optional<uint64_t>& _min_push_part_num,
+                         std::optional<uint64_t>& _max_push_part_num,
+                         std::vector<rados::cls::fifo::fifo_journal_entry_t>& journal_entries_add,
+                         std::vector<rados::cls::fifo::fifo_journal_entry_t>& journal_entries_rm,
+                         string *err);
+
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
           encode(id, bl);
