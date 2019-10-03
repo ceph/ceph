@@ -453,6 +453,41 @@ Operations
 :Default: ``5``
 :Valid Range: 1-63
 
+``osd snap trim sleep``
+
+:Description: Time in seconds to sleep before next snap trim op.
+              Increasing this value will slow down snap trimming.
+              This option overrides backend specific variants.
+
+:Type: Float
+:Default: ``0``
+
+
+``osd snap trim sleep hdd``
+
+:Description: Time in seconds to sleep before next snap trim op
+              for HDDs.
+
+:Type: Float
+:Default: ``5``
+
+
+``osd snap trim sleep ssd``
+
+:Description: Time in seconds to sleep before next snap trim op
+              for SSDs.
+
+:Type: Float
+:Default: ``0``
+
+
+``osd snap trim sleep hybrid``
+
+:Description: Time in seconds to sleep before next snap trim op
+              when osd data is on HDD and osd journal is on SSD.
+
+:Type: Float
+:Default: ``2``
 
 ``osd op thread timeout``
 
