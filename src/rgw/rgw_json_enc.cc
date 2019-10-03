@@ -483,6 +483,9 @@ void RGWUserInfo::dump(Formatter *f) const
   if (system) { /* no need to show it for every user */
     encode_json("system", (bool)system, f);
   }
+  if (admin) {
+    encode_json("admin", (bool)admin, f);
+  }
   encode_json("default_placement", default_placement.name, f);
   encode_json("default_storage_class", default_placement.storage_class, f);
   encode_json("placement_tags", placement_tags, f);
@@ -561,6 +564,9 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   bool sys = false;
   JSONDecoder::decode_json("system", sys, obj);
   system = (__u8)sys;
+  bool ad = false;
+  JSONDecoder::decode_json("admin", ad, obj);
+  admin = (__u8)ad;
   JSONDecoder::decode_json("default_placement", default_placement.name, obj);
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("placement_tags", placement_tags, obj);
