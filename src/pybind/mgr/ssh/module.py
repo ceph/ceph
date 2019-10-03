@@ -129,7 +129,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def __init__(self, *args, **kwargs):
         super(SSHOrchestrator, self).__init__(*args, **kwargs)
-        self._cluster_fsid = None
+        self._cluster_fsid = self.get('mon_map')['fsid']
 
         path = self.get_ceph_option('ceph_daemon_path')
         try:
@@ -233,15 +233,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             complete = False
 
         return complete
-
-    def _get_cluster_fsid(self):
-        """
-        Fetch and cache the cluster fsid.
-        """
-        if not self._cluster_fsid:
-            self._cluster_fsid = self.get("mon_map")["fsid"]
-        assert isinstance(self._cluster_fsid, six.string_types)
-        return self._cluster_fsid
 
     def _require_hosts(self, hosts):
         """
@@ -372,7 +363,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             final_args = [
                 '--image', image,
                 command,
-                '--fsid', self.get('mon_map')['fsid'],
+                '--fsid', self._cluster_fsid,
             ] + args
 
             script = 'injected_argv = ' + json.dumps(final_args) + '\n'
@@ -476,7 +467,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     '--config-and-keyring', '-',
                     '--',
                     'lvm', 'prepare',
-                    "--cluster-fsid", self._get_cluster_fsid(),
+                    "--cluster-fsid", self._cluster_fsid,
                     "--{}".format(drive_group.objectstore),
                     "--data", device,
                 ],
@@ -494,7 +485,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         self.log.debug('code %s out %s' % (code, out))
         j = json.loads('\n'.join(out))
         self.log.debug('j %s' % j)
-        fsid = self.get('mon_map')['fsid']
+        fsid = self._cluster_fsid
         for osd_id, osds in j.items():
             for osd in osds:
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
