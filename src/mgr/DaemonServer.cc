@@ -505,7 +505,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
 
   {
-    lock.lock();
+    std::unique_lock locker(lock);
 
     DaemonStatePtr daemon;
     // Look up the DaemonState
@@ -513,7 +513,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
       dout(20) << "updating existing DaemonState for " << key << dendl;
       daemon = daemon_state.get(key);
     } else {
-      lock.unlock();
+      locker.unlock();
 
       // we don't know the hostname at this stage, reject MMgrReport here.
       dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
@@ -543,7 +543,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
       }
 
-      lock.lock();
+      locker.lock();
 
       // kill session
       auto priv = m->get_connection()->get_priv();
@@ -565,7 +565,6 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         daemon_connections.erase(iter);
       }
 
-      lock.unlock();
       return false;
     }
 
@@ -610,8 +609,6 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
                  << dendl;
       }
     }
-
-    lock.unlock();
   }
 
   // if there are any schema updates, notify the python modules
