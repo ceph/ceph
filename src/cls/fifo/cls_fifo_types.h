@@ -224,6 +224,43 @@ namespace rados {
       };
       WRITE_CLASS_ENCODER(rados::cls::fifo::cls_fifo_part_list_entry_t)
 
+      struct fifo_part_header_t {
+        string tag;
+
+        fifo_data_params_t params;
+
+        uint64_t magic{0};
+
+        uint64_t min_ofs{0};
+        uint64_t max_ofs{0};
+        uint64_t min_index{0};
+        uint64_t max_index{0};
+
+        void encode(bufferlist &bl) const {
+          ENCODE_START(1, 1, bl);
+          encode(tag, bl);
+          encode(params, bl);
+          encode(magic, bl);
+          encode(min_ofs, bl);
+          encode(max_ofs, bl);
+          encode(min_index, bl);
+          encode(max_index, bl);
+          ENCODE_FINISH(bl);
+        }
+        void decode(bufferlist::const_iterator &bl) {
+          DECODE_START(1, bl);
+          decode(tag, bl);
+          decode(params, bl);
+          decode(magic, bl);
+          decode(min_ofs, bl);
+          decode(max_ofs, bl);
+          decode(min_index, bl);
+          decode(max_index, bl);
+          DECODE_FINISH(bl);
+        }
+      };
+      WRITE_CLASS_ENCODER(fifo_part_header_t)
+
     }
   }
 }

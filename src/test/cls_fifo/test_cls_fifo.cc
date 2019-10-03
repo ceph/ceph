@@ -435,11 +435,18 @@ TEST(FIFO, TestMultipleParts) {
     ASSERT_EQ(0, fifo.list(max_entries, marker, &result, &more));
     ASSERT_EQ(max_entries - i - 1, result.size());
     ASSERT_EQ(false, more);
-
-    auto info = fifo.get_meta();
   }
 
+  info = fifo.get_meta();
   ASSERT_EQ(info.head_part_num, info.tail_part_num);
+
+  fifo_part_info part_info;
+
+  for (int i = 0; i < info.tail_part_num; ++i) {
+    ASSERT_EQ(-ENOENT, fifo.get_part_info(i, &part_info));
+  }
+
+  ASSERT_EQ(0, fifo.get_part_info(info.tail_part_num, &part_info));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }

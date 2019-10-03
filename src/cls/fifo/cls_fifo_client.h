@@ -243,6 +243,10 @@ namespace rados {
                              std::vector<cls_fifo_part_list_entry_t> *pentries,
                              bool *more,
                              string *ptag = nullptr);
+
+        static int get_part_info(librados::IoCtx& ioctx,
+                                 const string& oid,
+                                 rados::cls::fifo::fifo_part_header_t *header);
       };
 
       struct fifo_entry {
@@ -250,6 +254,8 @@ namespace rados {
         string marker;
         ceph::real_time mtime;
       };
+
+      using fifo_part_info = rados::cls::fifo::fifo_part_header_t;
 
       class FIFO {
         CephContext *cct;
@@ -330,6 +336,9 @@ namespace rados {
                  bool *more);
 
         int trim(const string& marker);
+
+        int get_part_info(int64_t part_num,
+                          fifo_part_info *result);
       };
     } // namespace fifo
   }  // namespace cls

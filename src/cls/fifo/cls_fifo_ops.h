@@ -237,3 +237,33 @@ struct cls_fifo_part_list_op_reply
   }
 };
 WRITE_CLASS_ENCODER(cls_fifo_part_list_op_reply)
+
+struct cls_fifo_part_get_info_op
+{
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_fifo_part_get_info_op)
+
+struct cls_fifo_part_get_info_op_reply
+{
+  rados::cls::fifo::fifo_part_header_t header;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(header, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(header, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_fifo_part_get_info_op_reply)

@@ -25,43 +25,6 @@ CLS_NAME(fifo)
 
 #define CLS_FIFO_MAX_PART_HEADER_SIZE 512
 
-struct cls_fifo_part_header {
-  string tag;
-
-  fifo_data_params_t params;
-
-  uint64_t magic{0};
-
-  uint64_t min_ofs{0};
-  uint64_t max_ofs{0};
-  uint64_t min_index{0};
-  uint64_t max_index{0};
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(tag, bl);
-    encode(params, bl);
-    encode(magic, bl);
-    encode(min_ofs, bl);
-    encode(max_ofs, bl);
-    encode(min_index, bl);
-    encode(max_index, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(tag, bl);
-    decode(params, bl);
-    decode(magic, bl);
-    decode(min_ofs, bl);
-    decode(max_ofs, bl);
-    decode(min_index, bl);
-    decode(max_index, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(cls_fifo_part_header)
-
 struct cls_fifo_entry_header_pre {
   __le64 magic;
   __le64 pre_size;
@@ -127,7 +90,7 @@ static int write_header(cls_method_context_t hctx,
 }
 
 static int read_part_header(cls_method_context_t hctx,
-                            cls_fifo_part_header *part_header)
+                            fifo_part_header_t *part_header)
 {
   bufferlist bl;
   int r = cls_cxx_read2(hctx, 0, CLS_FIFO_MAX_PART_HEADER_SIZE, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
@@ -164,7 +127,7 @@ static int read_part_header(cls_method_context_t hctx,
 }
 
 static int write_part_header(cls_method_context_t hctx,
-                             cls_fifo_part_header& part_header)
+                             fifo_part_header_t& part_header)
 {
   bufferlist bl;
   encode(part_header, bl);
@@ -396,7 +359,7 @@ static int fifo_part_init_op(cls_method_context_t hctx,
     return r;
   }
   if (r == 0 && size > 0) {
-    cls_fifo_part_header part_header;
+    fifo_part_header_t part_header;
     r = read_part_header(hctx, &part_header);
     if (r < 0) {
       CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -412,7 +375,7 @@ static int fifo_part_init_op(cls_method_context_t hctx,
     return 0; /* already exists */
   }
 
-  cls_fifo_part_header part_header;
+  fifo_part_header_t part_header;
   
   part_header.tag = op.tag;
   part_header.params = op.data_params;
@@ -445,7 +408,7 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  cls_fifo_part_header part_header;
+  fifo_part_header_t part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -512,7 +475,7 @@ class EntryReader {
 
   cls_method_context_t hctx;
 
-  cls_fifo_part_header& part_header;
+  fifo_part_header_t& part_header;
 
   uint64_t ofs;
   bufferlist data;
@@ -524,7 +487,7 @@ class EntryReader {
 
 public:
   EntryReader(cls_method_context_t _hctx,
-              cls_fifo_part_header& _part_header,
+              fifo_part_header_t& _part_header,
               uint64_t _ofs) : hctx(_hctx),
                                part_header(_part_header),
                                ofs(_ofs) {
@@ -698,7 +661,7 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  cls_fifo_part_header part_header;
+  fifo_part_header_t part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -774,7 +737,7 @@ static int fifo_part_list_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  cls_fifo_part_header part_header;
+  fifo_part_header_t part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -827,6 +790,33 @@ static int fifo_part_list_op(cls_method_context_t hctx,
   return 0;
 }
 
+static int fifo_part_get_info_op(cls_method_context_t hctx,
+                                 bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+
+  cls_fifo_part_get_info_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  cls_fifo_part_get_info_op_reply reply;
+
+  int r = read_part_header(hctx, &reply.header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to read part header", __func__);
+    return r;
+  }
+
+  encode(reply, *out);
+
+  return 0;
+}
+
 CLS_INIT(fifo)
 {
   CLS_LOG(20, "Loaded fifo class!");
@@ -839,6 +829,7 @@ CLS_INIT(fifo)
   cls_method_handle_t h_fifo_part_push_op;
   cls_method_handle_t h_fifo_part_trim_op;
   cls_method_handle_t h_fifo_part_list_op;
+  cls_method_handle_t h_fifo_part_get_info_op;
 
   cls_register("fifo", &h_class);
   cls_register_cxx_method(h_class, "fifo_meta_create",
@@ -868,6 +859,10 @@ CLS_INIT(fifo)
   cls_register_cxx_method(h_class, "fifo_part_list",
                           CLS_METHOD_RD,
                           fifo_part_list_op, &h_fifo_part_list_op);
+
+  cls_register_cxx_method(h_class, "fifo_part_get_info",
+                          CLS_METHOD_RD,
+                          fifo_part_get_info_op, &h_fifo_part_get_info_op);
 
   return;
 }

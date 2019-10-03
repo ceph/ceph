@@ -237,6 +237,44 @@ namespace rados {
         return 0;
       }
 
+      int ClsFIFO::get_part_info(librados::IoCtx& ioctx,
+                                 const string& oid,
+                                 rados::cls::fifo::fifo_part_header_t *header)
+      {
+        cls_fifo_part_get_info_op op;
+
+        librados::ObjectReadOperation rop;
+
+        bufferlist in;
+        bufferlist out;
+        int op_ret;
+        encode(op, in);
+        rop.exec("fifo", "fifo_part_get_info", in, &out, &op_ret);
+
+        int r = ioctx.operate(oid, &rop, nullptr);
+        if (r < 0) {
+          return r;
+        }
+
+        if (op_ret < 0) {
+          return op_ret;
+        }
+
+        cls_fifo_part_get_info_op_reply reply;
+        auto iter = out.cbegin();
+        try {
+          decode(reply, iter);
+        } catch (buffer::error& err) {
+          return -EIO;
+        }
+
+        if (header) {
+          *header = std::move(reply.header);
+        }
+
+        return 0;
+      }
+
       string FIFO::craft_marker(int64_t part_num,
                                    uint64_t part_ofs)
       {
@@ -907,6 +945,27 @@ namespace rados {
             return -ECANCELED;
           }
         }
+
+        return 0;
+      }
+
+      int FIFO::get_part_info(int64_t part_num,
+                              fifo_part_info *result)
+      {
+        if (!is_open) {
+          return -EINVAL;
+        }
+
+        fifo_part_header_t header;
+
+        int r = ClsFIFO::get_part_info(*ioctx,
+                                       meta_info.part_oid(part_num),
+                                       &header);
+        if (r < 0) {
+          return r;
+        }
+
+        *result = std::move(header);
 
         return 0;
       }
