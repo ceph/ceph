@@ -232,8 +232,7 @@ class Device(object):
             for path in self._get_pv_paths():
                 # check if there was a pv created with the
                 # name of device
-                pvs = lvm.PVolumes()
-                pvs.filter(pv_name=path)
+                pvs = lvm.PVolumes().filter(pv_name=path)
                 has_vgs = [pv.vg_name for pv in pvs if pv.vg_name]
                 if has_vgs:
                     self.vgs = list(set(has_vgs))
