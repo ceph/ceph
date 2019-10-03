@@ -58,7 +58,7 @@ public:
   void on_defer_canceled(const cls_rgw_gc_obj_info& info);
 
   int remove(int index, const std::vector<string>& tags, librados::AioCompletion **pc);
-  int remove(int index, int num_entries, librados::AioCompletion **pc);
+  int remove(int index, int num_entries);
 
   void initialize(CephContext *_cct, RGWRados *_store);
   void finalize();
