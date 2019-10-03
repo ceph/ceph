@@ -10,6 +10,13 @@ to the lowest possible level of authority needed.
     Path restriction and layout modification restriction are new features
     in the Jewel release of Ceph.
 
+.. note::
+
+   Using Erasure Coded(EC) pools with CephFS is supported only with the
+   BlueStore Backend. They cannot be used as metadata pools and overwrites must
+   be enabled on the data pools.
+
+
 Path restriction
 ================
 
