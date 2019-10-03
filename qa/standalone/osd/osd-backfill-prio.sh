@@ -48,6 +48,7 @@ function TEST_backfill_priority() {
     local OSDS=5
     # size 2 -> 1 means degraded by 1, so add 1 to base prio
     local degraded_prio=$(expr $DEGRADED_PRIO + 1)
+    local max_tries=10
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
@@ -159,8 +160,15 @@ function TEST_backfill_priority() {
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations || return 1
 
     # 3. Item is in progress, adjust priority with no higher priority waiting
-    while(ceph pg force-backfill $PG3 2>&1 | grep -q "doesn't require backfilling")
+    for i in $(seq 1 $max_tries)
     do
+      if ! ceph pg force-backfill $PG3 2>&1 | grep -q "doesn't require backfilling"; then
+        break
+      fi
+      if [ "$i" = "$max_tries" ]; then
+        echo "ERROR: Didn't appear to be able to force-backfill"
+        ERRORS=$(expr $ERRORS + 1)
+      fi
       sleep 2
     done
     flush_pg_stats || return 1
@@ -202,8 +210,15 @@ function TEST_backfill_priority() {
     fi
 
     # 1. Item is queued, re-queue with new priority
-    while(ceph pg force-backfill $PG2 2>&1 | grep -q "doesn't require backfilling")
+    for i in $(seq 1 $max_tries)
     do
+      if ! ceph pg force-backfill $PG2 2>&1 | grep -q "doesn't require backfilling"; then
+        break
+      fi
+      if [ "$i" = "$max_tries" ]; then
+        echo "ERROR: Didn't appear to be able to force-backfill"
+        ERRORS=$(expr $ERRORS + 1)
+      fi
       sleep 2
     done
     sleep 2
