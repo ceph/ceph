@@ -241,6 +241,8 @@ void DetachChildRequest<I>::clone_v1_remove_child() {
   auto cct = m_image_ctx.cct;
   ldout(cct, 5) << dendl;
 
+  m_parent_spec.pool_namespace = "";
+
   librados::ObjectWriteOperation op;
   librbd::cls_client::remove_child(&op, m_parent_spec, m_image_ctx.id);
 

@@ -665,6 +665,16 @@ test_namespace() {
     rbd rm rbd/test2/image2
     rbd rm rbd/image2
 
+    # v1 clones are supported within the same namespace
+    rbd create $RBD_CREATE_ARGS --size 1G rbd/test1/image3
+    rbd snap create rbd/test1/image3@1
+    rbd snap protect rbd/test1/image3@1
+    rbd clone --rbd-default-clone-format 1 rbd/test1/image3@1 rbd/test1/image4
+    rbd rm rbd/test1/image4
+    rbd snap unprotect rbd/test1/image3@1
+    rbd snap rm rbd/test1/image3@1
+    rbd rm rbd/test1/image3
+
     rbd create $RBD_CREATE_ARGS --size 1G --namespace test1 image2
     expect_fail rbd namespace remove rbd/test1
 
