@@ -153,6 +153,10 @@ def volume_groups(monkeypatch):
     vgs._purge()
     return vgs
 
+def volume_groups_empty(monkeypatch):
+    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
+    vgs = lvm_api.VolumeGroups(populate=False)
+    return vgs
 
 @pytest.fixture
 def stub_vgs(monkeypatch, volume_groups):
