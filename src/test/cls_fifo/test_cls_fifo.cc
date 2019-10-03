@@ -30,6 +30,11 @@ using namespace librados;
 
 using namespace rados::cls::fifo;
 
+static CephContext *cct(librados::IoCtx& ioctx)
+{
+  return reinterpret_cast<CephContext *>(ioctx.cct());
+}
+
 static int fifo_create(IoCtx& ioctx,
                        const string& oid,
                        const string& id,
@@ -146,7 +151,7 @@ TEST(FIFO, TestOpenDefault) {
 
   string fifo_id = "fifo";
 
-  FIFO fifo(g_ceph_context, fifo_id, &ioctx);
+  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
 
   /* pre-open ops that should fail */
   ASSERT_EQ(-EINVAL, fifo.read_meta());
@@ -180,7 +185,7 @@ TEST(FIFO, TestOpenParams) {
 
   string fifo_id = "fifo";
 
-  FIFO fifo(g_ceph_context, fifo_id, &ioctx);
+  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
 
   uint64_t max_part_size = 10 * 1024;
   uint64_t max_entry_size = 128;
@@ -207,6 +212,234 @@ TEST(FIFO, TestOpenParams) {
   ASSERT_EQ(info.data_params.max_part_size, max_part_size);
   ASSERT_EQ(info.data_params.max_entry_size, max_entry_size);
   ASSERT_EQ(info.objv, objv);
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+template <class T>
+static int decode_entry(fifo_entry& entry,
+                        T *val,
+                        string *marker)
+{
+  *marker = entry.marker;
+  auto iter = entry.data.cbegin();
+
+  try {
+    decode(*val, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  return 0;
+}
+
+TEST(FIFO, TestPushListTrim) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string fifo_id = "fifo";
+
+  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+
+  /* first successful create */
+  ASSERT_EQ(0, fifo.open(true));
+
+  uint32_t max_entries = 10;
+
+  for (uint32_t i = 0; i < max_entries; ++i) {
+    bufferlist bl;
+    encode(i, bl);
+    ASSERT_EQ(0, fifo.push(bl));
+  }
+
+  string marker;
+
+  /* get entries one by one */
+
+  for (uint32_t i = 0; i < max_entries; ++i) {
+    vector<fifo_entry> result;
+    bool more;
+    ASSERT_EQ(0, fifo.list(1, marker, &result, &more));
+
+    bool expected_more = (i != (max_entries - 1));
+    ASSERT_EQ(expected_more, more);
+    ASSERT_EQ(1, result.size());
+
+    uint32_t val;
+    ASSERT_EQ(0, decode_entry(result.front(), &val, &marker));
+
+    ASSERT_EQ(i, val);
+  }
+
+  /* get all entries at once */
+  vector<fifo_entry> result;
+  bool more;
+  ASSERT_EQ(0, fifo.list(max_entries * 10, string(), &result, &more));
+
+  ASSERT_FALSE(more);
+  ASSERT_EQ(max_entries, result.size());
+
+  string markers[max_entries];
+
+
+  for (uint32_t i = 0; i < max_entries; ++i) {
+    uint32_t val;
+
+    ASSERT_EQ(0, decode_entry(result[i], &val, &markers[i]));
+    ASSERT_EQ(i, val);
+  }
+
+  uint32_t min_entry = 0;
+
+  /* trim one entry */
+  fifo.trim(markers[min_entry]);
+  ++min_entry;
+
+  ASSERT_EQ(0, fifo.list(max_entries * 10, string(), &result, &more));
+
+  ASSERT_FALSE(more);
+  ASSERT_EQ(max_entries - min_entry, result.size());
+
+  for (uint32_t i = min_entry; i < max_entries; ++i) {
+    uint32_t val;
+
+    ASSERT_EQ(0, decode_entry(result[i - min_entry], &val, &markers[i]));
+    ASSERT_EQ(i, val);
+  }
+
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(FIFO, TestPushTooBig) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string fifo_id = "fifo";
+
+  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+
+  uint64_t max_part_size = 2048;
+  uint64_t max_entry_size = 128;
+
+  char buf[max_entry_size + 1];
+  memset(buf, 0, sizeof(buf));
+
+  /* first successful create */
+  ASSERT_EQ(0, fifo.open(true,
+                         ClsFIFO::MetaCreateParams()
+                         .max_part_size(max_part_size)
+                         .max_entry_size(max_entry_size)));
+
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  ASSERT_EQ(-EINVAL, fifo.push(bl));
+
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(FIFO, TestMultipleParts) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string fifo_id = "fifo";
+
+  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+
+  uint64_t max_part_size = 2048;
+  uint64_t max_entry_size = 128;
+
+  char buf[max_entry_size];
+  memset(buf, 0, sizeof(buf));
+
+  /* create */
+  ASSERT_EQ(0, fifo.open(true,
+                         ClsFIFO::MetaCreateParams()
+                         .max_part_size(max_part_size)
+                         .max_entry_size(max_entry_size)));
+
+  int max_entries = max_part_size / max_entry_size + 5;
+
+  /* push enough entries */
+  for (int i = 0; i < max_entries; ++i) {
+    bufferlist bl;
+
+    *(int *)buf = i;
+    bl.append(buf, sizeof(buf));
+
+    ASSERT_EQ(0, fifo.push(bl));
+  }
+
+  auto info = fifo.get_meta();
+
+  ASSERT_EQ(info.id, fifo_id);
+  ASSERT_GT(info.head_part_num, 0); /* head should have advanced */
+
+
+  /* list all at once */
+  vector<fifo_entry> result;
+  bool more;
+  ASSERT_EQ(0, fifo.list(max_entries, string(), &result, &more));
+  ASSERT_EQ(false, more);
+
+  ASSERT_EQ(max_entries, result.size());
+
+  for (int i = 0; i < max_entries; ++i) {
+    auto& bl = result[i].data;
+    ASSERT_EQ(i, *(int *)bl.c_str());
+  }
+
+
+  /* list one at a time */
+  string marker;
+  for (int i = 0; i < max_entries; ++i) {
+    ASSERT_EQ(0, fifo.list(1, marker, &result, &more));
+
+    ASSERT_EQ(result.size(), 1);
+    bool expected_more = (i != (max_entries - 1));
+    ASSERT_EQ(expected_more, more);
+
+    auto& entry = result[0];
+
+    auto& bl = entry.data;
+    marker = entry.marker;
+
+    ASSERT_EQ(i, *(int *)bl.c_str());
+  }
+
+  /* trim one at a time */
+  marker.clear();
+  for (int i = 0; i < max_entries; ++i) {
+    ASSERT_EQ(0, fifo.list(1, marker, &result, &more));
+
+    ASSERT_EQ(result.size(), 1);
+    bool expected_more = (i != (max_entries - 1));
+    ASSERT_EQ(expected_more, more);
+
+    marker = result[0].marker;
+
+    ASSERT_EQ(0, fifo.trim(marker));
+
+    /* try to read all again, see how many entries left */
+    ASSERT_EQ(0, fifo.list(max_entries, marker, &result, &more));
+    ASSERT_EQ(max_entries - i - 1, result.size());
+    ASSERT_EQ(false, more);
+
+    auto info = fifo.get_meta();
+  }
+
+  ASSERT_EQ(info.head_part_num, info.tail_part_num);
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
