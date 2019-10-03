@@ -243,6 +243,9 @@ def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
     has_yamls = any([x.endswith('.yaml') for x in files])
     facet = os.path.basename(cur_dir) if has_yamls else ''
     for i, f in enumerate(files):
+        # skip any hidden files
+        if f.startswith('.'):
+            continue
         path = os.path.join(cur_dir, f)
         if i == len(files) - 1:
             file_pad = '└── '
