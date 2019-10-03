@@ -5357,13 +5357,22 @@ int BlueStore::_minimal_open_bluefs(bool create)
   bfn = path + "/block";
   // never trim here
   r = bluefs->add_block_device(bluefs_layout.shared_bdev, bfn, false,
-			       true /* shared with bluestore */);
+                               true,
+			       alloc);
   if (r < 0) {
     derr << __func__ << " add block device(" << bfn << ") returned: "
 	  << cpp_strerror(r) << dendl;
     goto free_bluefs;
   }
- 
+  if (create) {
+    auto reserved = _get_ondisk_reserved();
+
+    bluefs->add_block_extent(
+      bluefs_layout.shared_bdev,
+      reserved,
+      p2align(bdev->get_size(), min_alloc_size) - reserved);
+  }
+
   bfn = path + "/block.wal";
   if (::stat(bfn.c_str(), &st) == 0) {
     r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
@@ -6067,7 +6076,7 @@ int BlueStore::mkfs()
   dout(1) << __func__ << " path " << path << dendl;
   int r;
   uuid_d old_fsid;
-
+  uint64_t reserved;
   if (cct->_conf->osd_max_object_size > OBJECT_MAX_SIZE) {
     derr << __func__ << " osd_max_object_size "
 	 << cct->_conf->osd_max_object_size << " > bluestore max "
@@ -6189,6 +6198,17 @@ int BlueStore::mkfs()
     goto out_close_bdev;
   }
 
+  alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
+    bdev->get_size(),
+    min_alloc_size, "block");
+  if (!alloc) {
+    r = -EINVAL;
+    goto out_close_bdev;
+  }
+  reserved = _get_ondisk_reserved();
+  alloc->init_add_free(reserved,
+    p2align(bdev->get_size(), min_alloc_size) - reserved);
+
   r = _open_db(true);
   if (r < 0)
     goto out_close_bdev;
@@ -6241,6 +6261,8 @@ int BlueStore::mkfs()
  out_close_db:
   _close_db(false);
  out_close_bdev:
+  delete alloc;
+  alloc = nullptr;
   _close_bdev();
  out_close_fsid:
   _close_fsid();
@@ -8878,24 +8900,14 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   uint64_t bfree = alloc->get_free();
 
   if (bluefs) {
-    int64_t bluefs_total = bluefs->get_total(bluefs_layout.shared_bdev);
-    int64_t bluefs_free = bluefs->get_free(bluefs_layout.shared_bdev);
-    // part of our shared device is "free" according to BlueFS, but we
-    // can't touch bluestore_bluefs_min of it.
-    int64_t shared_available = std::min(
-      bluefs_free,
-      int64_t(bluefs_total - cct->_conf->bluestore_bluefs_min));
-    buf->internally_reserved = bluefs_total - shared_available;
-    if (shared_available > 0) {
-      bfree += shared_available;
-    }
+    buf->internally_reserved = 0;
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
       buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
     // call any non-omap bluefs space "internal metadata"
     buf->internal_metadata =
-      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
+      bluefs->get_used()
       - buf->omap_allocated;
   }
 
