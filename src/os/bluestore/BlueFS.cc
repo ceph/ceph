@@ -119,6 +119,13 @@ private:
 	  f->open_object_section("dev");
 	  f->dump_string("device", bluefs->get_device_name(dev));
 	  ceph_assert(bluefs->alloc[dev]);
+          auto total = bluefs->get_total(dev);
+          auto free = bluefs->alloc[dev]->get_free();
+          auto used = total - free;
+          f->dump_int("total", total);
+          f->dump_int("free", free);
+          f->dump_int("bluefs_used", used);
+
 	  f->dump_int("free", bluefs->alloc[dev]->get_free());
 	  f->close_section();
 	}
