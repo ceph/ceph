@@ -121,12 +121,13 @@ private:
 	  ceph_assert(bluefs->alloc[dev]);
           auto total = bluefs->get_total(dev);
           auto free = bluefs->alloc[dev]->get_free();
-          auto used = total - free;
+          auto used = bluefs->alloc[dev] == bluefs->shared_bdev_alloc ?
+            bluefs->shared_bdev_used.load() :
+            total - free;
+
           f->dump_int("total", total);
           f->dump_int("free", free);
           f->dump_int("bluefs_used", used);
-
-	  f->dump_int("free", bluefs->alloc[dev]->get_free());
 	  f->close_section();
 	}
       }
@@ -307,13 +308,17 @@ void BlueFS::_update_logger_stats()
   }
   if (alloc[BDEV_DB]) {
     logger->set(l_bluefs_db_total_bytes, block_all[BDEV_DB].size());
-    logger->set(l_bluefs_db_used_bytes,
-		block_all[BDEV_DB].size() - alloc[BDEV_DB]->get_free());
+    uint64_t used = alloc[BDEV_DB] == shared_bdev_alloc ?
+      shared_bdev_used.load() :
+      block_all[BDEV_DB].size() - alloc[BDEV_DB]->get_free();
+    logger->set(l_bluefs_db_used_bytes, used);
   }
   if (alloc[BDEV_SLOW]) {
     logger->set(l_bluefs_slow_total_bytes, block_all[BDEV_SLOW].size());
-    logger->set(l_bluefs_slow_used_bytes,
-		block_all[BDEV_SLOW].size() - alloc[BDEV_SLOW]->get_free());
+    uint64_t used = alloc[BDEV_SLOW] == shared_bdev_alloc ?
+      shared_bdev_used.load() :
+      block_all[BDEV_SLOW].size() - alloc[BDEV_SLOW]->get_free();
+    logger->set(l_bluefs_slow_used_bytes, used);
   }
 }
 
@@ -390,6 +395,9 @@ void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
   dout(10) << __func__ << " bdev " << id << dendl;
   ceph_assert(alloc[id]);
   alloc[id]->release(to_release);
+  if (alloc[id] == shared_bdev_alloc) {
+    shared_bdev_used -= to_release.size();
+  }
 }
 
 uint64_t BlueFS::get_used()
@@ -579,6 +587,7 @@ void BlueFS::_init_alloc()
       dout(1) << __func__ << " shared, id " << id
         << " alloc_size 0x" << std::hex << alloc_size[id]
         << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
+      shared_bdev_used = 0;
     } else {
       std::string name = "bluefs-";
       const char* devnames[] = { "wal","db","slow" };
@@ -654,12 +663,17 @@ int BlueFS::mount()
   }
 
   // init freelist
+  dout(1) << __func__ << " shared_bdev_used = " << shared_bdev_used << dendl;
   for (auto& p : file_map) {
     dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
       alloc[q.bdev]->init_rm_free(q.offset, q.length);
+      if (alloc[q.bdev] == shared_bdev_alloc) {
+        shared_bdev_used += q.length;
+      }
     }
   }
+  dout(1) << __func__ << " shared_bdev_used = " << shared_bdev_used << dendl;
 
   // set up the log for future writes
   log_writer = _create_writer(_get_file(1));
@@ -1664,6 +1678,9 @@ int BlueFS::device_migrate_to_existing(
 	PExtentVector to_release;
 	to_release.emplace_back(old_ext.offset, old_ext.length);
 	alloc[old_ext.bdev]->release(to_release);
+        if (alloc[old_ext.bdev] == shared_bdev_alloc) {
+          shared_bdev_used -= to_release.size();
+        }
       }
 
       // update fnode
@@ -1802,6 +1819,9 @@ int BlueFS::device_migrate_to_new(
 	PExtentVector to_release;
 	to_release.emplace_back(old_ext.offset, old_ext.length);
 	alloc[old_ext.bdev]->release(to_release);
+        if (alloc[old_ext.bdev] == shared_bdev_alloc) {
+          shared_bdev_used -= to_release.size();
+        }
       }
 
       // update fnode
@@ -2678,6 +2698,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
 	}
       }
       alloc[i]->release(to_release[i]);
+      if (alloc[i] == shared_bdev_alloc) {
+        shared_bdev_used -= to_release[i].size();
+      }
     }
   }
 
@@ -3088,6 +3111,9 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
       alloc[id]->dump();
     return -ENOSPC;
   }
+  if (alloc[id] == shared_bdev_alloc) {
+    shared_bdev_used += alloc_len;
+  }
 
   return 0;
 }
@@ -3136,6 +3162,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     if (max_bytes[id] < total_allocated) {
       logger->set(max_bytes_pcounters[id], total_allocated);
       max_bytes[id] = total_allocated;
+    }
+    if (alloc[id] == shared_bdev_alloc) {
+      shared_bdev_used += alloc_len;
     }
   }
 
