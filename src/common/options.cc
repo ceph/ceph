@@ -5392,13 +5392,13 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
-  Option("mgr_stats_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default((int64_t)PerfCountersBuilder::PRIO_USEFUL)
-  .set_description("Lowest perfcounter priority collected by mgr")
-  .set_long_description("Daemons only set perf counter data to the manager "
-    "daemon if the counter has a priority higher than this.")
-  .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
-               (int64_t)PerfCountersBuilder::PRIO_CRITICAL + 1),
+    Option("mgr_stats_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default((int64_t)PerfCountersBuilder::PRIO_USEFUL)
+    .set_description("Lowest perfcounter priority collected by mgr")
+    .set_long_description("Daemons only set perf counter data to the manager "
+			  "daemon if the counter has a priority higher than this.")
+    .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
+		 (int64_t)PerfCountersBuilder::PRIO_CRITICAL + 1),
 
     Option("journal_zero_on_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
