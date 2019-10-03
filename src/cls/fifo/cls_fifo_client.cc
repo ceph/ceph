@@ -372,7 +372,8 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::create_part(int64_t part_num, const string& tag) {
+      int FIFO::create_part(int64_t part_num, const string& tag,
+                            int64_t& max_part_num) {
         librados::ObjectWriteOperation op;
 
         op.create(true); /* exclusive */
@@ -389,10 +390,15 @@ namespace rados {
           return r;
         }
 
+        if (part_num > max_part_num) {
+          max_part_num = part_num;
+        }
+
         return 0;
       }
 
-      int FIFO::remove_part(int64_t part_num, const string& tag) {
+      int FIFO::remove_part(int64_t part_num, const string& tag,
+                            int64_t& tail_part_num) {
         librados::ObjectWriteOperation op;
         op.remove();
         int r = ioctx->operate(meta_info.part_oid(part_num), &op);
@@ -403,29 +409,38 @@ namespace rados {
           return r;
         }
 
-        return 0;
-      }
-
-      int FIFO::process_journal_entry(const fifo_journal_entry_t& entry)
-      {
-        switch (entry.op) {
-          case fifo_journal_entry_t::Op::OP_CREATE:
-          return create_part(entry.part_num, entry.part_tag);
-          case fifo_journal_entry_t::Op::OP_REMOVE:
-          return remove_part(entry.part_num, entry.part_tag);
-        default:
-          /* nothing to do */
-          break;
+        if (part_num >= tail_part_num) {
+          tail_part_num = part_num + 1;
         }
 
         return 0;
       }
 
-      int FIFO::process_journal_entries(vector<fifo_journal_entry_t> *processed)
+      int FIFO::process_journal_entry(const fifo_journal_entry_t& entry,
+                                      int64_t& tail_part_num,
+                                      int64_t& max_part_num)
+      {
+
+        switch (entry.op) {
+          case fifo_journal_entry_t::Op::OP_CREATE:
+          return create_part(entry.part_num, entry.part_tag, max_part_num);
+          case fifo_journal_entry_t::Op::OP_REMOVE:
+          return remove_part(entry.part_num, entry.part_tag, tail_part_num);
+        default:
+          /* nothing to do */
+          break;
+        }
+
+        return -EIO;
+      }
+
+      int FIFO::process_journal_entries(vector<fifo_journal_entry_t> *processed,
+                                        int64_t& tail_part_num,
+                                        int64_t& max_part_num)
       {
         for (auto& iter : meta_info.journal) {
           auto& entry = iter.second;
-          int r = process_journal_entry(entry);
+          int r = process_journal_entry(entry, tail_part_num, max_part_num);
           if (r < 0) {
             ldout(cct, 10) << __func__ << "(): ERROR: failed processing journal entry for part=" << entry.part_num << dendl;
           } else {
@@ -440,7 +455,10 @@ namespace rados {
       {
         vector<fifo_journal_entry_t> processed;
 
-        int r = process_journal_entries(&processed);
+        int64_t new_tail = meta_info.tail_part_num;
+        int64_t new_max = meta_info.max_push_part_num;
+
+        int r = process_journal_entries(&processed, new_tail, new_max);
         if (r < 0) {
           return r;
         }
@@ -455,8 +473,29 @@ namespace rados {
 
         for (i = 0; i < RACE_RETRY; ++i) {
           bool canceled;
+
+          std::optional<int64_t> tail_part_num;
+          std::optional<int64_t> max_part_num;
+
+          if (new_tail > meta_info.tail_part_num) {
+            tail_part_num = new_tail;
+          }
+
+          if (new_max > meta_info.max_push_part_num) {
+            max_part_num = new_max;
+          }
+
+          if (processed.empty() &&
+              !tail_part_num &&
+              !max_part_num) {
+            /* nothing to update anymore */
+            break;
+          }
+
           r = update_meta(ClsFIFO::MetaUpdateParams()
-                          .journal_entries_rm(processed),
+                          .journal_entries_rm(processed)
+                          .tail_part_num(tail_part_num)
+                          .max_push_part_num(max_part_num),
                           &canceled);
           if (r < 0) {
             return r;

@@ -114,6 +114,10 @@ namespace rados {
             state.objv = objv;
             return *this;
           }
+          MetaUpdateParams& tail_part_num(std::optional<uint64_t> tail_part_num) {
+            state.tail_part_num = tail_part_num;
+            return *this;
+          }
           MetaUpdateParams& tail_part_num(uint64_t tail_part_num) {
             state.tail_part_num = tail_part_num;
             return *this;
@@ -124,6 +128,10 @@ namespace rados {
           }
           MetaUpdateParams& min_push_part_num(uint64_t num) {
             state.min_push_part_num = num;
+            return *this;
+          }
+          MetaUpdateParams& max_push_part_num(std::optional<uint64_t> num) {
+            state.max_push_part_num = num;
             return *this;
           }
           MetaUpdateParams& max_push_part_num(uint64_t num) {
@@ -267,11 +275,17 @@ namespace rados {
                         bool *canceled);
         int do_read_meta(std::optional<fifo_objv_t> objv = std::nullopt);
 
-        int create_part(int64_t part_num, const string& tag);
-        int remove_part(int64_t part_num, const string& tag);
+        int create_part(int64_t part_num, const string& tag,
+                        int64_t& max_part_num);
+        int remove_part(int64_t part_num, const string& tag,
+                        int64_t& tail_part_num);
 
-        int process_journal_entry(const fifo_journal_entry_t& entry);
-        int process_journal_entries(vector<fifo_journal_entry_t> *processed);
+        int process_journal_entry(const fifo_journal_entry_t& entry,
+                                  int64_t& tail_part_num,
+                                  int64_t& max_part_num);
+        int process_journal_entries(vector<fifo_journal_entry_t> *processed,
+                                    int64_t& tail_part_num,
+                                    int64_t& max_part_num);
         int process_journal();
 
         int prepare_new_part();
