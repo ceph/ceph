@@ -842,7 +842,9 @@ namespace rados {
           }
         }
 
-        *more = part_more;
+        bool at_head = (part_num > meta_info.head_part_num); /* advanced beyond head */
+
+        *more = (!at_head) || part_more;
 
         return 0;
       }
