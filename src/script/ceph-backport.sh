@@ -261,6 +261,8 @@ redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
                 # is in the URL, i.e. https://tracker.ceph.com/users/[redmine_user_id]
 github_token    # https://github.com/settings/tokens -> Generate new token ->
                 # ensure it has "Full control of private repositories" scope
+                # see also:
+                # https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line
 github_user     # Your github username
 
 The above variables must be set explicitly, as the script has no way of
