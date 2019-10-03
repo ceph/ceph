@@ -144,6 +144,21 @@ static int read_part_header(cls_method_context_t hctx,
     return -EIO;
   }
 
+  CLS_LOG(20, "%s():%d read part_header:\n"
+           "\ttag=%s\n"
+           "\tmagic=0x%llx\n"
+           "\tmin_ofs=%lld\n"
+           "\tmax_ofs=%lld\n"
+           "\tmin_index=%lld\n"
+           "\tmax_index=%lld\n",
+           __func__, __LINE__,
+           part_header->tag.c_str(), 
+           (long long)part_header->magic,
+           (long long)part_header->min_ofs,
+           (long long)part_header->max_ofs,
+           (long long)part_header->min_index,
+           (long long)part_header->max_index);
+
   return 0;
 
 }
@@ -535,8 +550,10 @@ public:
 
 int EntryReader::fetch(uint64_t num_bytes)
 {
+  CLS_LOG(20, "%s(): fetch %d bytes, ofs=%d data.length()=%d", __func__, (int)num_bytes, (int)ofs, (int)data.length());
   if (data.length() < num_bytes) {
     bufferlist bl;
+    CLS_LOG(20, "%s(): reading %d bytes at ofs=%d", __func__, (int)prefetch_len, (int)ofs + data.length());
     int r = cls_cxx_read2(hctx, ofs + data.length(), prefetch_len, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
       CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
@@ -582,6 +599,7 @@ int EntryReader::seek(uint64_t num_bytes)
 {
   bufferlist bl;
 
+  CLS_LOG(20, "%s():%d: num_bytes=%d", __func__, __LINE__, (int)num_bytes);
   return read(num_bytes, &bl);
 }
 
@@ -593,10 +611,12 @@ int EntryReader::peek_pre_header(cls_fifo_entry_header_pre *pre_header)
 
   int r = peek(sizeof(*pre_header), (char *)pre_header);
   if (r < 0) {
+    CLS_ERR("ERROR: %s(): peek() size=%d failed: r=%d", __func__, (int)sizeof(pre_header), r);
     return r;
   }
 
   if (pre_header->magic != part_header.magic) {
+    CLS_ERR("ERROR: %s(): unexpected pre_header magic", __func__);
     return -ERANGE;
   }
 
@@ -611,6 +631,7 @@ int EntryReader::get_next_entry(bufferlist *pbl,
   cls_fifo_entry_header_pre pre_header;
   int r = peek_pre_header(&pre_header);
   if (r < 0) {
+    CLS_ERR("ERROR: %s(): peek_pre_header() failed: r=%d", __func__, r);
     return r;
   }
 
@@ -618,6 +639,7 @@ int EntryReader::get_next_entry(bufferlist *pbl,
     *pofs = ofs;
   }
 
+  CLS_LOG(20, "%s():%d: pre_header.pre_size=%d", __func__, __LINE__, (int)pre_header.pre_size);
   r = seek(pre_header.pre_size);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): failed to seek: r=%d", __func__, r);
@@ -625,6 +647,7 @@ int EntryReader::get_next_entry(bufferlist *pbl,
   }
 
   bufferlist header;
+  CLS_LOG(20, "%s():%d: pre_header.header_size=%d", __func__, __LINE__, (int)pre_header.header_size);
   r = read(pre_header.header_size, &header);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): failed to read entry header: r=%d", __func__, r);
@@ -730,7 +753,7 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
 
   r = write_part_header(hctx, part_header);
   if (r < 0) {
-    CLS_LOG(10, "%s(): failed to write heaader: r=%d", __func__, r);
+    CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
     return r;
   }
 
