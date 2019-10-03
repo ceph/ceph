@@ -130,6 +130,14 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
     def __init__(self, *args, **kwargs):
         super(SSHOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid = None
+
+        path = self.get_ceph_option('ceph_daemon_path')
+        try:
+            with open(path, 'r') as f:
+                self._ceph_daemon = f.read()
+        except:
+            raise RuntimeError("unable to read ceph-daemon at '%s'" % path)
+
         self._worker_pool = multiprocessing.pool.ThreadPool(1)
 
         self._reconfig_ssh()
@@ -345,7 +353,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
         return orchestrator.TrivialReadCompletion(nodes)
 
-    def _run_ceph_daemon(self, host, entity, command, args):
+    def _run_ceph_daemon(self, host, entity, command, args, stdin=None):
         """
         Run ceph-daemon on the remote host with the given command + args
         """
@@ -361,14 +369,24 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             image = image.strip()
             self.log.debug('%s container image %s' % (entity, image))
 
-            command = [
-                '/home/sage/src/ceph5/src/ceph-daemon',
+            final_args = [
                 '--image', image,
                 command,
                 '--fsid', self.get('mon_map')['fsid'],
             ] + args
 
-            out, err, code = remoto.process.check(conn, command)
+            script = 'injected_argv = ' + json.dumps(final_args) + '\n'
+            if stdin:
+                script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
+            script += self._ceph_daemon
+            #self.log.debug('script is %s' % script)
+
+            out, err, code = remoto.process.check(
+                conn,
+                ['/usr/bin/python3', '-u'],
+                stdin=script.encode('utf-8'))
+            if code:
+                self.log.debug('code %s, err %s' % (code, err))
             # ceph-daemon combines stdout and stderr, so ignore err.
             self.log.debug('code %s out %s' % (code, out))
             return out, code
@@ -450,25 +468,19 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         })
         self.log.debug('j %s' % j)
 
-        # TODO FIXME
-        conn = self._get_connection(host)
-        conn.remote_module.write_file(
-            '/tmp/foo',
-            j,
-            0o600, None, 0, 0)
-
         devices = drive_group.data_devices.paths
         for device in devices:
             out, code = self._run_ceph_daemon(
                 host, 'osd', 'ceph-volume',
                 [
-                    '--config-and-keyring', '/tmp/foo',
+                    '--config-and-keyring', '-',
                     '--',
                     'lvm', 'prepare',
                     "--cluster-fsid", self._get_cluster_fsid(),
                     "--{}".format(drive_group.objectstore),
                     "--data", device,
-                ])
+                ],
+                stdin=j)
             self.log.debug('ceph-volume prepare: %s' % out)
 
         # check result
@@ -550,17 +562,13 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             })
             self.log.debug('j %s' % j)
 
-            conn.remote_module.write_file(
-                '/tmp/foo',
-                j,
-                0o600, None, 0, 0)
-
             out, code = self._run_ceph_daemon(
                 host, name, 'deploy',
                 [
                     '--name', name,
-                    '--config-and-keyring', '/tmp/foo',
-                ] + extra_args)
+                    '--config-and-keyring', '-',
+                ] + extra_args,
+                stdin=j)
             self.log.debug('create_daemon code %s out %s' % (code, out))
 
             return "Created {} on host '{}'".format(name, host)
