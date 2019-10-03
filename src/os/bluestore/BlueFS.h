@@ -310,6 +310,7 @@ private:
 
   std::unique_ptr<BlueFSVolumeSelector> vselector;
   Allocator* shared_bdev_alloc = nullptr;
+  std::atomic<uint64_t> shared_bdev_used = 0;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
