@@ -710,8 +710,9 @@ class VolumeGroups(list):
     to filter them via keyword arguments.
     """
 
-    def __init__(self):
-        self._populate()
+    def __init__(self, populate=True):
+        if populate:
+            self._populate()
 
     def _populate(self):
         # get all the vgs in the current system
