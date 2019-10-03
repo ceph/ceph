@@ -896,11 +896,15 @@ bool PG::needs_backfill() const
 
 void PG::check_past_interval_bounds() const
 {
+  auto oldest_epoch = osd->get_superblock().oldest_map;
   auto rpib = get_required_past_interval_bounds(
     info,
-    osd->get_superblock().oldest_map);
+    oldest_epoch);
   if (rpib.first >= rpib.second) {
-    if (!past_intervals.empty()) {
+    // do not warn if the start bound is dictated by oldest_map; the
+    // past intervals are presumably appropriate given the pg info.
+    if (!past_intervals.empty() &&
+	rpib.first > oldest_epoch) {
       osd->clog->error() << info.pgid << " required past_interval bounds are"
 			 << " empty [" << rpib << ") but past_intervals is not: "
 			 << past_intervals;
