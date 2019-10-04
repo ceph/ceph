@@ -662,6 +662,11 @@ namespace rados {
               << meta_info.max_push_part_num << " new_head_num=" << meta_info.max_push_part_num << dendl;
             return -EIO;
           }
+
+          if (meta_info.head_part_num >= new_head_num) {
+            /* raced with head creation by another client */
+            return 0;
+          }
         }
 
         int i;
