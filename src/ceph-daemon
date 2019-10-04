@@ -6,6 +6,8 @@ LOG_DIR='/var/log/ceph'
 UNIT_DIR='/etc/systemd/system'
 VERSION='unknown development version'
 
+PODMAN_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
+
 """
 You can invoke ceph-daemon in two ways:
 
@@ -48,6 +50,8 @@ except:
     pass
 
 logging.basicConfig(level=logging.INFO)
+
+podman_path = None
 
 ##################################
 
@@ -370,10 +374,10 @@ Before=ceph-{fsid}.target
 LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
-ExecStartPre=-/usr/bin/podman rm ceph-{fsid}-%i
+ExecStartPre=-{podman_path} rm ceph-{fsid}-%i
 ExecStartPre=-mkdir -p /var/run/ceph
 ExecStart={data_dir}/{fsid}/%i/cmd
-ExecStop=-/usr/bin/podman stop ceph-{fsid}-%i
+ExecStop=-{podman_path} stop ceph-{fsid}-%i
 ExecStopPost=-/bin/rm -f /var/run/ceph/{fsid}-%i.asok
 Restart=on-failure
 RestartSec=10s
@@ -384,7 +388,10 @@ StartLimitBurst=5
 
 [Install]
 WantedBy=ceph-{fsid}.target
-""".format(fsid=fsid, data_dir=args.data_dir)
+""".format(
+    podman_path=podman_path,
+    fsid=fsid,
+    data_dir=args.data_dir)
     return u
 
 def gen_ssh_key(fsid):
@@ -432,7 +439,7 @@ class CephContainer:
         ]
         cname = ['--name', self.cname] if self.cname else []
         return [
-            find_program('podman'),
+            podman_path,
             'run',
             '--rm',
             '--net=host',
@@ -450,7 +457,7 @@ class CephContainer:
             '-e', f'NODE_NAME={get_hostname()}',
         ]
         return [
-            find_program('podman'),
+            podman_path,
             'run',
             '-it',
             '--net=host',
@@ -462,7 +469,7 @@ class CephContainer:
 
     def exec_cmd(self, cmd):
         return [
-            find_program('podman'),
+            podman_path,
             'exec',
             '-it',
             self.cname,
@@ -1002,6 +1009,10 @@ parser.add_argument(
     default=DEFAULT_IMAGE,
     help='container image')
 parser.add_argument(
+    '--docker',
+    action='store_true',
+    help='use docker instead of podman')
+parser.add_argument(
     '--data-dir',
     default=DATA_DIR,
     help='base directory for daemon data')
@@ -1225,6 +1236,20 @@ except NameError:
     av = sys.argv[1:]
 
 args = parser.parse_args(av)
+
+# podman or docker?
+if args.docker:
+    podman_path = find_program('docker')
+else:
+    for i in PODMAN_PREFERENCE:
+        try:
+            podman_path = find_program(i)
+            break
+        except:
+            logging.debug('could not locate %s' % i)
+    if not podman_path:
+        raise RuntimeError('unable to locate any of %s' % PODMAN_PREFERENCE)
+
 if 'func' not in args:
     sys.stderr.write('No command specified; pass -h or --help for usage\n')
     sys.exit(1)
