@@ -2,7 +2,7 @@
 import argparse
 from flask_restful import Api
 from flask import Flask
-from ceph_telemetry.rest import Index, Report
+from ceph_telemetry.rest import Index, Report, Device
 
 
 def create_app(name):
@@ -10,6 +10,7 @@ def create_app(name):
     api = Api(app, catch_all_404s=True)
     api.add_resource(Index, '/')
     api.add_resource(Report, '/report')
+    api.add_resource(Device, '/device')
     return app
 
 
