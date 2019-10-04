@@ -4,7 +4,6 @@ DEFAULT_IMAGE='ceph/daemon-base'
 DATA_DIR='/var/lib/ceph'
 LOG_DIR='/var/log/ceph'
 UNIT_DIR='/etc/systemd/system'
-VERSION='unknown development version'
 LOG_DIR_MODE=0o770
 DATA_DIR_MODE=0o700
 PODMAN_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
