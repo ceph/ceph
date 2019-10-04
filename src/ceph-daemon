@@ -55,6 +55,11 @@ podman_path = None
 
 ##################################
 
+def pathify(p):
+    if '/' not in p:
+        return './' + p
+    return p
+
 def get_hostname():
     import socket
     return socket.gethostname()
@@ -132,7 +137,7 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
         '--default-log-to-file=false',
         '--default-log-to-stderr=true',
         ]
-    if daemon_id:
+    if fsid and daemon_id:
         r += ['--default-admin-socket',
               '/var/run/ceph/' + fsid + '-' + daemon_type + '.' + daemon_id +
               '.asok']
@@ -187,11 +192,11 @@ def get_config_and_keyring():
     return (config, keyring)
 
 def get_container_mounts(fsid, daemon_type, daemon_id):
-    log_dir = get_log_dir(args.log_dir, fsid)
+    mounts = {}
+    if fsid:
+        log_dir = get_log_dir(args.log_dir, fsid)
+        mounts[log_dir] = '/var/log/ceph:z'
 
-    mounts = {
-        log_dir: '/var/log/ceph:z',
-    }
     if daemon_id:
         data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
         cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
@@ -773,14 +778,29 @@ def command_run():
 ##################################
 
 def command_shell():
-    log_dir = get_log_dir(args.log_dir, args.fsid)
-    makedirs(log_dir)
-    if '.' in args.name:
-        (daemon_type, daemon_id) = args.name.split('.')
+    if args.fsid:
+        log_dir = get_log_dir(args.log_dir, args.fsid)
+        makedirs(log_dir)
+    if args.name:
+        if '.' in args.name:
+            (daemon_type, daemon_id) = args.name.split('.')
+        else:
+            daemon_type = args.name
+            daemon_id = None
     else:
-        daemon_type = args.name
+        daemon_type = 'osd'  # get the most mounts
         daemon_id = None
-    c = get_container(args.fsid, daemon_type, daemon_id)
+    mounts = get_container_mounts(args.fsid, daemon_type, daemon_id)
+    if args.config:
+        mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
+    if args.keyring:
+        mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
+    c = CephContainer(
+        image=args.image,
+        entrypoint='doesnotmatter',
+        args=[],
+        podman_args=['--privileged'],
+        volume_mounts=mounts)
     subprocess.call(c.shell_cmd())
 
 ##################################
@@ -1095,12 +1115,16 @@ parser_shell = subparsers.add_parser(
 parser_shell.set_defaults(func=command_shell)
 parser_shell.add_argument(
     '--fsid',
-    required=True,
     help='cluster FSID')
 parser_shell.add_argument(
     '--name', '-n',
-    required=True,
     help='daemon name (type.id)')
+parser_shell.add_argument(
+    '--config', '-c',
+    help='ceph.conf to pass through to the container')
+parser_shell.add_argument(
+    '--keyring', '-k',
+    help='ceph.keyring to pass through to the container')
 
 parser_enter = subparsers.add_parser(
     'enter', help='run an interactive shell inside a running daemon container')
