@@ -128,6 +128,7 @@
     "jest-canvas-mock": "2.1.1",
     "jest-preset-angular": "7.1.1",
     "jest-silent-reporter": "0.1.2",
+    "npm-run-all": "^4.1.5",
     "prettier": "1.18.2",
     "pretty-quick": "1.11.1",
     "protractor": "5.4.2",
