@@ -345,4 +345,7 @@
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
 
+/* Shared library extension, such as .so, .dll or .dylib */
+#cmakedefine CMAKE_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"
+
 #endif /* CONFIG_H */

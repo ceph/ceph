@@ -7,6 +7,10 @@ add_library(common_texttable_obj OBJECT
 add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
 
+if(WIN32)
+  add_library(dlfcn_win32 STATIC dlfcn_win32.cc)
+endif()
+
 set(common_srcs
   AsyncOpTracker.cc
   BackTrace.cc
