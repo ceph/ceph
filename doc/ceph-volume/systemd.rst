@@ -42,7 +42,7 @@ behavior:
 * ``CEPH_VOLUME_SYSTEMD_TRIES``: Defaults to 30
 * ``CEPH_VOLUME_SYSTEMD_INTERVAL``: Defaults to 5
 
-The *"tries"* is a number that sets the maximum amount of times the unit will
+The *"tries"* is a number that sets the maximum number of times the unit will
 attempt to activate an OSD before giving up.
 
 The *"interval"* is a value in seconds that determines the waiting time before

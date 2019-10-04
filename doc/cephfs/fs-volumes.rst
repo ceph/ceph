@@ -5,7 +5,7 @@ FS volumes and subvolumes
 
 A  single source of truth for CephFS exports is implemented in the volumes
 module of the :term:`Ceph Manager` daemon (ceph-mgr). The OpenStack shared
-file system service (manila_), Ceph Containter Storage Interface (CSI_),
+file system service (manila_), Ceph Container Storage Interface (CSI_),
 storage administrators among others can use the common CLI provided by the
 ceph-mgr volumes module to manage the CephFS exports.
 
@@ -45,8 +45,8 @@ Create a volume using::
 
     $ ceph fs volume create <vol_name>
 
-This creates a CephFS file sytem and its data and metadata pools. It also tries
-to create MDSes for the filesytem using the enabled ceph-mgr orchestrator
+This creates a CephFS file system and its data and metadata pools. It also tries
+to create MDSes for the filesystem using the enabled ceph-mgr orchestrator
 module  (see :doc:`/mgr/orchestrator_cli`) , e.g., rook.
 
 Remove a volume using::
