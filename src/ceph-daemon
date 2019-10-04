@@ -34,10 +34,12 @@ import configparser
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from distutils.spawn import find_executable
 
 try:
@@ -61,15 +63,12 @@ def pathify(p):
     return p
 
 def get_hostname():
-    import socket
     return socket.gethostname()
 
 def make_fsid():
-    import uuid
     return str(uuid.uuid1())
 
 def is_fsid(s):
-    import uuid
     try:
         uuid.UUID(s)
     except:
@@ -167,7 +166,6 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
 
 def get_config_and_keyring():
     if args.config_and_keyring:
-        import json
         if args.config_and_keyring == '-':
             try:
                 j = injected_stdin
