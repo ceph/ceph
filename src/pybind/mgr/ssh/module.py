@@ -458,7 +458,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             'config': config,
             'keyring': keyring,
         })
-        self.log.debug('j %s' % j)
 
         devices = drive_group.data_devices.paths
         for device in devices:
@@ -485,7 +484,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             ])
         self.log.debug('code %s out %s' % (code, out))
         j = json.loads('\n'.join(out))
-        self.log.debug('j %s' % j)
         fsid = self._cluster_fsid
         for osd_id, osds in j.items():
             for osd in osds:
@@ -552,7 +550,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 'config': config,
                 'keyring': keyring,
             })
-            self.log.debug('j %s' % j)
 
             out, code = self._run_ceph_daemon(
                 host, name, 'deploy',
