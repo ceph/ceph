@@ -422,16 +422,11 @@ class Module(MgrModule):
                 ioctx.remove_omap_keys(op, tuple(erase))
             ioctx.operate_write_op(op, devid)
 
-    def show_device_metrics(self, devid, sample):
-        # verify device exists
-        r = self.get("device " + devid)
-        if not r or 'device' not in r.keys():
-            return -errno.ENOENT, '', 'device ' + devid + ' not found'
-        # fetch metrics
+    def _get_device_metrics(self, devid, sample=None, min_sample=None):
         res = {}
         ioctx = self.open_connection(create_if_missing=False)
         if not ioctx:
-            return 0, json.dumps(res, indent=4), ''
+            return {}
         with ioctx:
             with rados.ReadOpCtx() as op:
                 omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '',
@@ -441,6 +436,8 @@ class Module(MgrModule):
                     ioctx.operate_read_op(op, devid)
                     for key, value in list(omap_iter):
                         if sample and key != sample:
+                            break
+                        if min_sample and key < min_sample:
                             break
                         try:
                             v = json.loads(value)
@@ -454,8 +451,16 @@ class Module(MgrModule):
                 except rados.Error as e:
                     self.log.exception("RADOS error reading omap: {0}".format(e))
                     raise
+        return res
 
-        return 0, json.dumps(res, indent=4), ''
+    def show_device_metrics(self, devid, sample):
+        # verify device exists
+        r = self.get("device " + devid)
+        if not r or 'device' not in r.keys():
+            return -errno.ENOENT, '', 'device ' + devid + ' not found'
+        # fetch metrics
+        res = self._get_device_metrics(devid, sample=sample)
+        return 0, json.dumps(res, indent=4, sort_keys=True), ''
 
     def check_health(self):
         self.log.info('Check health')
