@@ -42,17 +42,6 @@ int rados::cls::fifo::fifo_info_t::apply_update(std::optional<uint64_t>& _tail_p
     tail_part_num = *_tail_part_num;
   }
 
-  if (_head_part_num) {
-    tags.erase(head_part_num);
-    head_part_num = *_head_part_num;
-    auto iter = tags.find(head_part_num);
-    if (iter != tags.end()) {
-      head_tag = iter->second;
-    } else {
-      head_tag.erase();
-    }
-  }
-
   if (_min_push_part_num) {
     min_push_part_num = *_min_push_part_num;
   }
@@ -62,8 +51,10 @@ int rados::cls::fifo::fifo_info_t::apply_update(std::optional<uint64_t>& _tail_p
   }
 
   for (auto& entry : journal_entries_add) {
-    if (journal.find(entry.part_num) != journal.end()) {
-      /* don't allow multiple concurrent operations on the same part,
+    auto iter = journal.find(entry.part_num);
+    if (iter != journal.end() &&
+        iter->second.op == entry.op) {
+      /* don't allow multiple concurrent (same) operations on the same part,
          racing clients should use objv to avoid races anyway */
       if (err) {
         stringstream ss;
@@ -77,11 +68,22 @@ int rados::cls::fifo::fifo_info_t::apply_update(std::optional<uint64_t>& _tail_p
       tags[entry.part_num] = entry.part_tag;
     }
 
-    journal[entry.part_num] = std::move(entry);
+    journal.insert(std::pair<int64_t, fifo_journal_entry_t>(entry.part_num, std::move(entry)));
   }
 
   for (auto& entry : journal_entries_rm) {
     journal.erase(entry.part_num);
+  }
+
+  if (_head_part_num) {
+    tags.erase(head_part_num);
+    head_part_num = *_head_part_num;
+    auto iter = tags.find(head_part_num);
+    if (iter != tags.end()) {
+      head_tag = iter->second;
+    } else {
+      head_tag.erase();
+    }
   }
 
   return 0;

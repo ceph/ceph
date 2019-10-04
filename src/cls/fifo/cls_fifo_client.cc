@@ -473,14 +473,20 @@ namespace rados {
 
       int FIFO::process_journal_entry(const fifo_journal_entry_t& entry,
                                       int64_t& tail_part_num,
+                                      int64_t& head_part_num,
                                       int64_t& max_part_num)
       {
 
         switch (entry.op) {
           case fifo_journal_entry_t::Op::OP_CREATE:
-          return create_part(entry.part_num, entry.part_tag, max_part_num);
+            return create_part(entry.part_num, entry.part_tag, max_part_num);
+          case fifo_journal_entry_t::Op::OP_SET_HEAD:
+            if (entry.part_num > head_part_num) {
+              head_part_num = entry.part_num;
+            }
+            return 0;
           case fifo_journal_entry_t::Op::OP_REMOVE:
-          return remove_part(entry.part_num, entry.part_tag, tail_part_num);
+            return remove_part(entry.part_num, entry.part_tag, tail_part_num);
         default:
           /* nothing to do */
           break;
@@ -491,11 +497,12 @@ namespace rados {
 
       int FIFO::process_journal_entries(vector<fifo_journal_entry_t> *processed,
                                         int64_t& tail_part_num,
+                                        int64_t& head_part_num,
                                         int64_t& max_part_num)
       {
         for (auto& iter : meta_info.journal) {
           auto& entry = iter.second;
-          int r = process_journal_entry(entry, tail_part_num, max_part_num);
+          int r = process_journal_entry(entry, tail_part_num, head_part_num, max_part_num);
           if (r < 0) {
             ldout(cct, 10) << __func__ << "(): ERROR: failed processing journal entry for part=" << entry.part_num << dendl;
           } else {
@@ -511,9 +518,10 @@ namespace rados {
         vector<fifo_journal_entry_t> processed;
 
         int64_t new_tail = meta_info.tail_part_num;
+        int64_t new_head = meta_info.head_part_num;
         int64_t new_max = meta_info.max_push_part_num;
 
-        int r = process_journal_entries(&processed, new_tail, new_max);
+        int r = process_journal_entries(&processed, new_tail, new_head, new_max);
         if (r < 0) {
           return r;
         }
@@ -530,10 +538,15 @@ namespace rados {
           bool canceled;
 
           std::optional<int64_t> tail_part_num;
+          std::optional<int64_t> head_part_num;
           std::optional<int64_t> max_part_num;
 
           if (new_tail > meta_info.tail_part_num) {
             tail_part_num = new_tail;
+          }
+
+          if (new_head > meta_info.head_part_num) {
+            head_part_num = new_head;
           }
 
           if (new_max > meta_info.max_push_part_num) {
@@ -550,6 +563,7 @@ namespace rados {
           r = update_meta(ClsFIFO::MetaUpdateParams()
                           .journal_entries_rm(processed)
                           .tail_part_num(tail_part_num)
+                          .head_part_num(head_part_num)
                           .max_push_part_num(max_part_num),
                           &canceled);
           if (r < 0) {
@@ -603,11 +617,20 @@ namespace rados {
         return string(buf);
       }
 
-      int FIFO::prepare_new_part()
+      int FIFO::prepare_new_part(bool is_head)
       {
         fifo_journal_entry_t jentry;
 
         meta_info.prepare_next_journal_entry(&jentry, generate_tag(cct));
+
+        int64_t new_head_part_num = meta_info.head_part_num;
+
+        std::optional<fifo_journal_entry_t> new_head_jentry;
+        if (is_head) {
+          new_head_jentry = jentry;
+          new_head_jentry->op = fifo_journal_entry_t::OP_SET_HEAD;
+          new_head_part_num = jentry.part_num;
+        }
 
         int r;
         bool canceled;
@@ -616,14 +639,16 @@ namespace rados {
 
         for (i = 0; i < RACE_RETRY; ++i) {
           r = update_meta(ClsFIFO::MetaUpdateParams()
-                          .journal_entry_add(jentry),
+                          .journal_entry_add(jentry)
+                          .journal_entry_add(new_head_jentry),
                           &canceled);
           if (r < 0) {
             return r;
           }
 
           if (canceled) {
-            if (meta_info.max_push_part_num >= jentry.part_num) { /* raced, but new part was already written */
+            if (meta_info.max_push_part_num >= jentry.part_num &&
+                meta_info.head_part_num >= new_head_part_num) { /* raced, but new part was already written */
               return 0;
             }
 
@@ -652,7 +677,7 @@ namespace rados {
         int64_t new_head_num = meta_info.head_part_num + 1;
 
         if (meta_info.max_push_part_num < new_head_num) {
-          int r = prepare_new_part();
+          int r = prepare_new_part(true);
           if (r < 0) {
             return r;
           }
@@ -663,10 +688,7 @@ namespace rados {
             return -EIO;
           }
 
-          if (meta_info.head_part_num >= new_head_num) {
-            /* raced with head creation by another client */
-            return 0;
-          }
+          return 0;
         }
 
         int i;

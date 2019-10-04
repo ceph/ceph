@@ -93,10 +93,12 @@ namespace rados {
 
       struct fifo_journal_entry_t {
         enum Op {
-          OP_UNKNOWN = 0,
-          OP_CREATE  = 1,
-          OP_REMOVE  = 2,
+          OP_UNKNOWN  = 0,
+          OP_CREATE   = 1,
+          OP_SET_HEAD = 2,
+          OP_REMOVE   = 3,
         } op{OP_UNKNOWN};
+
         int64_t part_num{0};
         string part_tag;
 
@@ -140,7 +142,7 @@ namespace rados {
         string head_tag;
         map<int64_t, string> tags;
 
-        std::map<int64_t, fifo_journal_entry_t> journal;
+        std::multimap<int64_t, fifo_journal_entry_t> journal;
 
         bool need_new_head() {
           return (head_part_num < min_push_part_num);

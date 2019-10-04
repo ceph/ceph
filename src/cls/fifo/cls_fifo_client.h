@@ -124,6 +124,10 @@ namespace rados {
             state.tail_part_num = tail_part_num;
             return *this;
           }
+          MetaUpdateParams& head_part_num(std::optional<uint64_t> head_part_num) {
+            state.head_part_num = head_part_num;
+            return *this;
+          }
           MetaUpdateParams& head_part_num(uint64_t head_part_num) {
             state.head_part_num = head_part_num;
             return *this;
@@ -138,6 +142,12 @@ namespace rados {
           }
           MetaUpdateParams& max_push_part_num(uint64_t num) {
             state.max_push_part_num = num;
+            return *this;
+          }
+          MetaUpdateParams& journal_entry_add(std::optional<rados::cls::fifo::fifo_journal_entry_t> entry) {
+            if (entry) {
+              state.journal_entries_add.push_back(*entry);
+            }
             return *this;
           }
           MetaUpdateParams& journal_entry_add(const rados::cls::fifo::fifo_journal_entry_t& entry) {
@@ -294,13 +304,15 @@ namespace rados {
 
         int process_journal_entry(const fifo_journal_entry_t& entry,
                                   int64_t& tail_part_num,
+                                  int64_t& head_part_num,
                                   int64_t& max_part_num);
         int process_journal_entries(vector<fifo_journal_entry_t> *processed,
                                     int64_t& tail_part_num,
+                                    int64_t& head_part_num,
                                     int64_t& max_part_num);
         int process_journal();
 
-        int prepare_new_part();
+        int prepare_new_part(bool is_head);
         int prepare_new_head();
 
         int push_entry(int64_t part_num, bufferlist& bl);
