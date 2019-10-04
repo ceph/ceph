@@ -662,6 +662,11 @@ def command_bootstrap():
         tmp_pub.write(ssh_pub)
         tmp_pub.flush()
 
+        if args.output_pub_ssh_key:
+            with open(args.output_put_ssh_key, 'w') as f:
+                f.write(ssh_pub)
+            logging.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
+
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -1215,6 +1220,9 @@ parser_bootstrap.add_argument(
 parser_bootstrap.add_argument(
     '--output-config',
     help='location to write conf file to connect to new cluster')
+parser_bootstrap.add_argument(
+    '--output-pub-ssh-key',
+    help='location to write the cluster\'s public SSH key')
 parser_bootstrap.add_argument(
     '--skip-ssh',
     action='store_true',
