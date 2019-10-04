@@ -550,3 +550,90 @@ TEST(FIFO, TestTwoPushers) {
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+TEST(FIFO, TestTwoPushersTrim) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string fifo_id = "fifo";
+
+  FIFO fifo1(cct(ioctx), fifo_id, &ioctx);
+
+  uint64_t max_part_size = 2048;
+  uint64_t max_entry_size = 128;
+
+  char buf[max_entry_size];
+  memset(buf, 0, sizeof(buf));
+
+  /* create */
+  ASSERT_EQ(0, fifo1.open(true,
+                          ClsFIFO::MetaCreateParams()
+                          .max_part_size(max_part_size)
+                          .max_entry_size(max_entry_size)));
+
+  uint32_t part_header_size;
+  uint32_t part_entry_overhead;
+
+  fifo1.get_part_layout_info(&part_header_size, &part_entry_overhead);
+
+  int entries_per_part = (max_part_size - part_header_size) / (max_entry_size + part_entry_overhead);
+
+  int max_entries = entries_per_part * 4 + 1;
+
+  FIFO fifo2(cct(ioctx), fifo_id, &ioctx);
+
+  /* open second one */
+  ASSERT_EQ(0, fifo2.open(true,
+                         ClsFIFO::MetaCreateParams()));
+
+  /* push one entry to fifo2 and the rest to fifo1 */
+
+  for (int i = 0; i < max_entries; ++i) {
+    bufferlist bl;
+
+    *(int *)buf = i;
+    bl.append(buf, sizeof(buf));
+
+    FIFO *f = (i < 1 ? &fifo2 : &fifo1);
+
+    ASSERT_EQ(0, f->push(bl));
+  }
+
+  /* trim half by fifo1 */
+  int num = max_entries / 2;
+
+  vector<fifo_entry> result;
+  bool more;
+  ASSERT_EQ(0, fifo1.list(num, string(), &result, &more));
+
+  ASSERT_EQ(true, more);
+  ASSERT_EQ(num, result.size());
+
+  for (int i = 0; i < num; ++i) {
+    auto& bl = result[i].data;
+    ASSERT_EQ(i, *(int *)bl.c_str());
+  }
+
+  auto& entry = result[num - 1];
+  auto& marker = entry.marker;
+
+  ASSERT_EQ(0, fifo1.trim(marker));
+
+  /* list what's left by fifo2 */
+
+  int left = max_entries - num;
+
+  ASSERT_EQ(0, fifo2.list(left, marker, &result, &more));
+  ASSERT_EQ(left, result.size());
+  ASSERT_EQ(false, more);
+
+  for (int i = num; i < max_entries; ++i) {
+    auto& bl = result[i - num].data;
+    ASSERT_EQ(i, *(int *)bl.c_str());
+  }
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
