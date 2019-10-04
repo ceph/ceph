@@ -13,6 +13,7 @@
 #include "rgw_perf_counters.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/random.h"
+#include "rgw_gc_log.h"
 
 #include <list> // XXX
 #include <sstream>
@@ -46,12 +47,8 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
     //version = 1 -> marked ready for transition
     librados::ObjectWriteOperation op;
     op.create(false);
-    obj_version objv;
-    cls_version_check(op, objv, VER_COND_EQ);
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_urgent_data_entries = cct->_conf->rgw_gc_num_urgent_data_entries;
-    cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
-    objv.ver = 1;
-    cls_version_set(op, objv);
+    gc_log_init2(op, queue_size, num_urgent_data_entries);
     store->gc_operate(obj_names[i], &op);
   }
 }
@@ -66,21 +63,13 @@ int RGWGC::tag_index(const string& tag)
   return rgw_shard_id(tag, max_objs);
 }
 
-void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_gc_obj_info& info)
-{
-  obj_version objv;
-  objv.ver = 1;
-  cls_version_check(op, objv, VER_COND_EQ);
-  cls_rgw_gc_queue_enqueue(op, cct->_conf->rgw_gc_obj_min_wait, info);
-}
-
 int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_obj_info info;
   info.chain = chain;
   info.tag = tag;
-  add_chain(op, info);
+  gc_log_enqueue2(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
   int i = tag_index(tag);
 
@@ -137,13 +126,12 @@ void RGWGC::on_defer_canceled(const cls_rgw_gc_obj_info& info)
 int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
 {
   const int i = tag_index(tag);
+  cls_rgw_gc_obj_info info;
+  info.chain = chain;
+  info.tag = tag;
 
   // if we've transitioned this shard object, we can rely on the cls_rgw_gc queue
   if (transitioned_objects_cache[i]) {
-    cls_rgw_gc_obj_info info;
-    info.chain = chain;
-    info.tag = tag;
-
     ObjectWriteOperation op;
     cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
@@ -162,10 +150,7 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
 
   // assert that we haven't initialized cls_rgw_gc queue. this prevents us
   // from writing new entries to omap after the transition
-  obj_version objv; // objv.ver = 0
-  cls_version_check(op, objv, VER_COND_EQ);
-
-  cls_rgw_gc_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, tag);
+  gc_log_defer1(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
   // prepare a callback to detect the transition via ECANCELED from cls_version_check()
   auto state = std::make_unique<defer_chain_state>();
