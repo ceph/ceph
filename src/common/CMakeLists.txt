@@ -126,6 +126,10 @@ endif()
 
 add_library(common-common-objs OBJECT
   ${common_srcs})
+# Let's not rely on the default system headers and point Cmake to the
+# retrieved OpenSSL location. This is especially important when cross
+# compiling (e.g. targeting Windows).
+target_include_directories(common-common-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 # for options.cc
 target_compile_definitions(common-common-objs PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
