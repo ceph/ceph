@@ -618,9 +618,9 @@ def command_bootstrap():
     # output files
     if args.output_keyring:
         with open(args.output_keyring, 'w') as f:
+            os.fchmod(f.fileno(), 0o600)
             f.write('[client.admin]\n'
                     '\tkey = ' + admin_key + '\n')
-            os.fchmod(f.fileno(), 0o600)
         logging.info('Wrote keyring to %s' % args.output_keyring)
     if args.output_config:
         with open(args.output_config, 'w') as f:
