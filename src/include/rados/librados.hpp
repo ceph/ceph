@@ -1278,8 +1278,13 @@ inline namespace v14_2_0 {
 
     config_t cct();
 
-    void set_osdmap_full_try();
-    void unset_osdmap_full_try();
+    void set_osdmap_full_try()
+      __attribute__ ((deprecated));
+    void unset_osdmap_full_try()
+      __attribute__ ((deprecated));
+
+    void set_pool_full_try();
+    void unset_pool_full_try();
 
     int application_enable(const std::string& app_name, bool force);
     int application_enable_async(const std::string& app_name,

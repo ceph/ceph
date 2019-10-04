@@ -151,6 +151,25 @@
   filesystem that has it enabled, a health warning is generated. Support for
   this feature will be removed in a future release.
 
+* ``ceph {set,unset} full`` is not supported anymore. We have been using
+  ``full`` and ``nearfull`` flags in OSD map for tracking the fullness status
+  of a cluster back since the Hammer release, if the OSD map is marked ``full``
+  all write operations will be blocked until this flag is removed. In the
+  Infernalis release and Linux kernel 4.7 client, we introduced the per-pool
+  full/nearfull flags to track the status for a finer-grained control, so the
+  clients will hold the write operations if either the cluster-wide ``full``
+  flag or the per-pool ``full`` flag is set. This was a compromise, as we
+  needed to support the cluster with and without per-pool ``full`` flags
+  support. But this practically defeated the purpose of introducing the
+  per-pool flags. So, in the Mimic release, the new flags finally took the
+  place of their cluster-wide counterparts, as the monitor started removing
+  these two flags from OSD map. So the clients of Infernalis and up can benefit
+  from this change, as they won't be blocked by the full pools which they are
+  not writing to. In this release, ``ceph {set,unset} full`` is now considered
+  as an invalid command. And the clients will continue honoring both the
+  cluster-wide and per-pool flags to be backward comaptible with pre-infernalis
+  clusters.
+
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
   * invalid `m` for "reed_sol_r6_op" erasure technique

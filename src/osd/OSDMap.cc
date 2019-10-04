@@ -3621,10 +3621,6 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
 string OSDMap::get_flag_string(unsigned f)
 {
   string s;
-  if ( f& CEPH_OSDMAP_NEARFULL)
-    s += ",nearfull";
-  if (f & CEPH_OSDMAP_FULL)
-    s += ",full";
   if (f & CEPH_OSDMAP_PAUSERD)
     s += ",pauserd";
   if (f & CEPH_OSDMAP_PAUSEWR)
@@ -5725,8 +5721,6 @@ void OSDMap::check_health(CephContext *cct,
   {
     // warn about flags
     uint64_t warn_flags =
-      CEPH_OSDMAP_NEARFULL |
-      CEPH_OSDMAP_FULL |
       CEPH_OSDMAP_PAUSERD |
       CEPH_OSDMAP_PAUSEWR |
       CEPH_OSDMAP_PAUSEREC |

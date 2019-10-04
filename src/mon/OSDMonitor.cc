@@ -1594,15 +1594,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       }
     }
 
-    // remove any legacy osdmap nearfull/full flags
-    {
-      if (tmp.test_flag(CEPH_OSDMAP_FULL | CEPH_OSDMAP_NEARFULL)) {
-	dout(10) << __func__ << " clearing legacy osdmap nearfull/full flag"
-		 << dendl;
-	remove_flag(CEPH_OSDMAP_NEARFULL);
-	remove_flag(CEPH_OSDMAP_FULL);
-      }
-    }
     // collect which pools are currently affected by
     // the near/backfill/full osd(s),
     // and set per-pool near/backfill/full flag instead
@@ -11013,9 +11004,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string key;
     cmd_getval(cct, cmdmap, "key", key);
-    if (key == "full")
-      return prepare_set_flag(op, CEPH_OSDMAP_FULL);
-    else if (key == "pause")
+    if (key == "pause")
       return prepare_set_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     else if (key == "noup")
       return prepare_set_flag(op, CEPH_OSDMAP_NOUP);
@@ -11065,9 +11054,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd unset") {
     string key;
     cmd_getval(cct, cmdmap, "key", key);
-    if (key == "full")
-      return prepare_unset_flag(op, CEPH_OSDMAP_FULL);
-    else if (key == "pause")
+    if (key == "pause")
       return prepare_unset_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     else if (key == "noup")
       return prepare_unset_flag(op, CEPH_OSDMAP_NOUP);
