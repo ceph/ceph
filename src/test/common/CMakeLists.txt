@@ -151,6 +151,13 @@ add_executable(unittest_lru
 add_ceph_unittest(unittest_lru)
 target_link_libraries(unittest_lru ceph-common)
 
+# unittest_intrusive_lru
+add_executable(unittest_intrusive_lru
+  test_intrusive_lru.cc
+  )
+add_ceph_unittest(unittest_intrusive_lru)
+target_link_libraries(unittest_intrusive_lru ceph-common)
+
 # unittest_crc32c
 add_executable(unittest_crc32c
   test_crc32c.cc
