@@ -72,10 +72,10 @@ class Task(object):
         for host_spec in host_specs:
             role_matches = self.ctx.cluster.only(host_spec)
             if len(role_matches.remotes) > 0:
-                for (remote, roles) in role_matches.remotes.iteritems():
+                for (remote, roles) in role_matches.remotes.items():
                     cluster.add(remote, roles)
             elif isinstance(host_spec, basestring):
-                for (remote, roles) in self.ctx.cluster.remotes.iteritems():
+                for (remote, roles) in self.ctx.cluster.remotes.items():
                     if remote.name.split('@')[-1] == host_spec or \
                             remote.shortname == host_spec:
                         cluster.add(remote, roles)

@@ -222,7 +222,7 @@ class FakeNamespace(YamlConfig):
         correctly.
         """
         result = dict()
-        for key, value in config_dict.iteritems():
+        for key, value in config_dict.items():
             new_key = key
             if new_key.startswith("--"):
                 new_key = new_key[2:]

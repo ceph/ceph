@@ -104,7 +104,7 @@ class Cluster(object):
         want = frozenset(r for r in roles if not callable(r))
         matchers = [r for r in roles if callable(r)]
 
-        for remote, has_roles in self.remotes.iteritems():
+        for remote, has_roles in self.remotes.items():
             # strings given as roles must all match
             if frozenset(has_roles) & want != want:
                 # not a match
@@ -129,7 +129,7 @@ class Cluster(object):
         """
         matches = self.only(*roles)
         c = self.__class__()
-        for remote, has_roles in self.remotes.iteritems():
+        for remote, has_roles in self.remotes.items():
             if remote not in matches.remotes:
                 c.add(remote, has_roles)
         return c

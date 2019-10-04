@@ -249,7 +249,7 @@ def do_summary(ctx):
         lockd[who][1] += 1 if l['up'] else 0
         lockd[who][2] = l['machine_type']
 
-    locks = sorted([p for p in lockd.iteritems()
+    locks = sorted([p for p in lockd.items()
                     ], key=lambda sort: (sort[1][2], sort[1][0]))
     total_count, total_up = 0, 0
     print "TYPE     COUNT  UP  OWNER"

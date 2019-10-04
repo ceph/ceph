@@ -63,7 +63,7 @@ OPENSTACK_DELAY = 30 * 60
 
 
 def stale_openstack_instances(ctx, instances, locked_nodes):
-    for (instance_id, instance) in instances.iteritems():
+    for (instance_id, instance) in instances.items():
         i = OpenStackInstance(instance_id)
         if not i.exists():
             log.debug("stale-openstack: {instance} disappeared, ignored"
@@ -136,7 +136,7 @@ def stale_openstack_volumes(ctx, volumes):
 
 def stale_openstack_nodes(ctx, instances, locked_nodes):
     names = set([ i['Name'] for i in instances.values() ])
-    for (name, node) in locked_nodes.iteritems():
+    for (name, node) in locked_nodes.items():
         name = decanonicalize_hostname(name)
         if node['machine_type'] != 'openstack':
             continue
@@ -253,7 +253,7 @@ def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
                             "Not nuking %s because description doesn't match",
                             lock['name'])
     with parallel() as p:
-        for target, hostkey in ctx.config['targets'].iteritems():
+        for target, hostkey in ctx.config['targets'].items():
             p.spawn(
                 nuke_one,
                 ctx,

@@ -331,7 +331,7 @@ def skeleton_config(ctx, roles, ips, cluster='ceph',
     mons = get_mons(roles=roles, ips=ips,
                     mon_bind_msgr2=mon_bind_msgr2,
                     mon_bind_addrvec=mon_bind_addrvec)
-    for role, addr in mons.iteritems():
+    for role, addr in mons.items():
         mon_cluster, _, _ = split_role(role)
         if mon_cluster != cluster:
             continue
@@ -406,7 +406,7 @@ def all_roles(cluster):
 
     :param cluster: Cluster extracted from the ctx.
     """
-    for _, roles_for_host in cluster.remotes.iteritems():
+    for _, roles_for_host in cluster.remotes.items():
         for name in roles_for_host:
             yield name
 
@@ -419,7 +419,7 @@ def all_roles_of_type(cluster, type_):
     :param cluster: Cluster extracted from the ctx.
     :param type_: role type
     """
-    for _, roles_for_host in cluster.remotes.iteritems():
+    for _, roles_for_host in cluster.remotes.items():
         for id_ in roles_of_type(roles_for_host, type_):
             yield id_
 
@@ -478,7 +478,7 @@ def create_simple_monmap(ctx, remote, conf, path=None,
 
         Each invocation returns the next monitor address
         """
-        for section, data in conf.iteritems():
+        for section, data in conf.items():
             PREFIX = 'mon.'
             if not section.startswith(PREFIX):
                 continue
@@ -1110,7 +1110,7 @@ def deep_merge(a, b):
         return a
     if isinstance(a, dict):
         assert isinstance(b, dict)
-        for (k, v) in b.iteritems():
+        for (k, v) in b.items():
             if k in a:
                 a[k] = deep_merge(a[k], v)
             else:
@@ -1364,7 +1364,7 @@ def is_in_dict(searchkey, searchval, d):
     """
     val = d.get(searchkey, None)
     if isinstance(val, dict) and isinstance(searchval, dict):
-        for foundkey, foundval in searchval.iteritems():
+        for foundkey, foundval in searchval.items():
             if not is_in_dict(foundkey, foundval, val):
                 return False
         return True

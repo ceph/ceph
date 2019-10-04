@@ -40,7 +40,7 @@ class CephMetrics(Ansible):
             if group not in hosts_dict:
                 hosts_dict[group] = dict(hosts=dict())
             group_dict = hosts_dict[group]['hosts']
-            for (remote, roles) in self.cluster.only(want).remotes.iteritems():
+            for (remote, roles) in self.cluster.only(want).remotes.items():
                 hostname = remote.hostname
                 group_dict[hostname] = dict(
                     ansible_user=remote.user,

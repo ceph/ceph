@@ -49,7 +49,7 @@ def process_args(args):
         '<config_yaml>': 'base_yaml_paths',
         'filter': 'filter_in',
     }
-    for (key, value) in args.iteritems():
+    for (key, value) in args.items():
         # Translate --foo-bar to foo_bar
         key = key.lstrip('--').replace('-', '_')
         # Rename the key if necessary

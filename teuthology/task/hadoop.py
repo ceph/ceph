@@ -12,7 +12,7 @@ HADOOP_2x_URL = "https://archive.apache.org/dist/hadoop/core/hadoop-2.5.2/hadoop
 
 def dict_to_hadoop_conf(items):
     out = "<configuration>\n"
-    for key, value in items.iteritems():
+    for key, value in items.items():
         out += "  <property>\n"
         out += "    <name>" + key + "</name>\n"
         out += "    <value>" + value + "</value>\n"

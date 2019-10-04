@@ -142,7 +142,7 @@ def add_remotes(ctx, config):
     machs = []
     for name in ctx.config['targets'].iterkeys():
         machs.append(name)
-    for t, key in ctx.config['targets'].iteritems():
+    for t, key in ctx.config['targets'].items():
         t = misc.canonicalize_hostname(t)
         try:
             if ctx.config['sshkeys'] == 'ignore':
@@ -245,7 +245,7 @@ def serialize_remote_roles(ctx, config):
         with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
             info_yaml = yaml.safe_load(info_file)
             info_file.seek(0)
-            info_yaml['cluster'] = dict([(rem.name, {'roles': roles}) for rem, roles in ctx.cluster.remotes.iteritems()])
+            info_yaml['cluster'] = dict([(rem.name, {'roles': roles}) for rem, roles in ctx.cluster.remotes.items()])
             yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
 
 

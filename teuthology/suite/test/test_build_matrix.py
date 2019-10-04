@@ -664,7 +664,7 @@ class TestSubset(object):
     @staticmethod
     def verify_facets(tree, description_list, subset, mat, first, matlimit):
         def flatten(tree):
-            for k,v in tree.iteritems():
+            for k,v in tree.items():
                 if v is None and '.yaml' in k:
                     yield k
                 elif v is not None and '.disable' not in k:
@@ -673,7 +673,7 @@ class TestSubset(object):
 
         def pptree(tree, tabs=0):
             ret = ""
-            for k, v in tree.iteritems():
+            for k, v in tree.items():
                 if v is None:
                     ret += ('\t'*tabs) + k.ljust(10) + "\n"
                 else:
@@ -698,7 +698,7 @@ class TestSubset(object):
                     mat,
                     0,
                     mat.size())
-                for i, desc in zip(xrange(mat.size()), all_desc):
+                for i, desc in zip(range(mat.size()), all_desc):
                     if i == first:
                         print '=========='
                     print i, desc
@@ -707,7 +707,7 @@ class TestSubset(object):
             assert found
 
     def test_random(self):
-        for i in xrange(10000):
+        for i in range(10000):
             tree = self.generate_fake_fs(
                 self.MAX_FACETS,
                 self.MAX_FANOUT,

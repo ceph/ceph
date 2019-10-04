@@ -288,7 +288,7 @@ def get_teuthology_command(args):
     and returns it as a string.
     """
     cmd = ["teuthology"]
-    for key, value in args.iteritems():
+    for key, value in args.items():
         if value:
             # an option, not an argument
             if not key.startswith("<"):

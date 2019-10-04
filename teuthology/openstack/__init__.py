@@ -68,7 +68,7 @@ class OpenStackInstance(object):
         if info is None:
             self.set_info()
         else:
-            self.info = dict(map(lambda (k,v): (k.lower(), v), info.iteritems()))
+            self.info = dict(map(lambda (k,v): (k.lower(), v), info.items()))
 
     def set_info(self):
         try:
@@ -458,7 +458,7 @@ class OpenStack(object):
                 if resource in hint:
                     new = hint[resource]
                     current = result[resource]
-                    for key, value in hint[resource].iteritems():
+                    for key, value in hint[resource].items():
                         current[key] = max(current[key], new[key])
         return result
 
@@ -920,7 +920,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                                      '../..', self.user_data)
         template = open(user_data).read()
         openrc = ''
-        for (var, value) in os.environ.iteritems():
+        for (var, value) in os.environ.items():
             if var in ('OS_TOKEN_VALUE', 'OS_TOKEN_EXPIRES'):
                 continue
             if var.startswith('OS_'):

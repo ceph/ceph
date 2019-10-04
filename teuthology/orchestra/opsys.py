@@ -83,13 +83,13 @@ class OS(object):
 
     @staticmethod
     def _version_to_codename(name, version):
-        for (_version, codename) in DISTRO_CODENAME_MAP[name].iteritems():
+        for (_version, codename) in DISTRO_CODENAME_MAP[name].items():
             if str(version) == _version or str(version).split('.')[0] == _version:
                 return codename
 
     @staticmethod
     def _codename_to_version(name, codename):
-        for (version, _codename) in DISTRO_CODENAME_MAP[name].iteritems():
+        for (version, _codename) in DISTRO_CODENAME_MAP[name].items():
             if codename == _codename:
                 return version
         raise RuntimeError("No version found for %s %s !" % (
