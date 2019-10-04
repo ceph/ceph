@@ -135,8 +135,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         try:
             with open(path, 'r') as f:
                 self._ceph_daemon = f.read()
-        except:
-            raise RuntimeError("unable to read ceph-daemon at '%s'" % path)
+        except IOError as e:
+            raise RuntimeError("unable to read ceph-daemon at '%s': %s" % (
+                path, str(e)))
 
         self._worker_pool = multiprocessing.pool.ThreadPool(1)
 
