@@ -22,6 +22,8 @@ HEALTH_MESSAGES = {
     DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 
+MAX_SAMPLES=500
+
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
@@ -391,7 +393,7 @@ class Module(MgrModule):
         erase = []
         try:
             with rados.ReadOpCtx() as op:
-                omap_iter, ret = ioctx.get_omap_keys(op, "", 500)  # fixme
+                omap_iter, ret = ioctx.get_omap_keys(op, "", MAX_SAMPLES)  # fixme
                 assert ret == 0
                 ioctx.operate_read_op(op, devid)
                 for key, _ in list(omap_iter):
@@ -428,7 +430,8 @@ class Module(MgrModule):
             return 0, json.dumps(res, indent=4), ''
         with ioctx:
             with rados.ReadOpCtx() as op:
-                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
+                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '',
+                                                     MAX_SAMPLES)  # fixme
                 assert ret == 0
                 try:
                     ioctx.operate_read_op(op, devid)
