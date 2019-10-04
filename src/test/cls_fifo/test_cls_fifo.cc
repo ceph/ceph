@@ -476,3 +476,77 @@ TEST(FIFO, TestMultipleParts) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(FIFO, TestTwoPushers) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string fifo_id = "fifo";
+
+  FIFO fifo(cct(ioctx), fifo_id, &ioctx);
+
+  uint64_t max_part_size = 2048;
+  uint64_t max_entry_size = 128;
+
+  char buf[max_entry_size];
+  memset(buf, 0, sizeof(buf));
+
+  /* create */
+  ASSERT_EQ(0, fifo.open(true,
+                         ClsFIFO::MetaCreateParams()
+                         .max_part_size(max_part_size)
+                         .max_entry_size(max_entry_size)));
+
+  uint32_t part_header_size;
+  uint32_t part_entry_overhead;
+
+  fifo.get_part_layout_info(&part_header_size, &part_entry_overhead);
+
+  int entries_per_part = (max_part_size - part_header_size) / (max_entry_size + part_entry_overhead);
+
+  int max_entries = entries_per_part * 4 + 1;
+
+  FIFO fifo2(cct(ioctx), fifo_id, &ioctx);
+
+  /* open second one */
+  ASSERT_EQ(0, fifo2.open(true,
+                         ClsFIFO::MetaCreateParams()));
+
+  vector<FIFO *> fifos(2);
+  fifos[0] = &fifo;
+  fifos[1] = &fifo2;
+
+  for (int i = 0; i < max_entries; ++i) {
+    bufferlist bl;
+
+    *(int *)buf = i;
+    bl.append(buf, sizeof(buf));
+
+    auto& f = fifos[i % fifos.size()];
+
+    ASSERT_EQ(0, f->push(bl));
+  }
+
+  /* list all by both */
+  vector<fifo_entry> result;
+  bool more;
+  ASSERT_EQ(0, fifo2.list(max_entries, string(), &result, &more));
+
+  ASSERT_EQ(false, more);
+
+  ASSERT_EQ(max_entries, result.size());
+
+  ASSERT_EQ(0, fifo.list(max_entries, string(), &result, &more));
+  ASSERT_EQ(false, more);
+
+  ASSERT_EQ(max_entries, result.size());
+
+  for (int i = 0; i < max_entries; ++i) {
+    auto& bl = result[i].data;
+    ASSERT_EQ(i, *(int *)bl.c_str());
+  }
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
