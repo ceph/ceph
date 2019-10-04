@@ -212,7 +212,7 @@ Lines 13-16 have been added as a workaround in the code block below:
     def __init__(self, credentials, service_name, region_name):
         self.credentials = credentials
         # We initialize these value here so the unit tests can have
-        # valid values.  But these will get overriden in ``add_auth``
+        # valid values.  But these will get overridden in ``add_auth``
         # later for real requests.
         self._region_name = region_name
         if service_name == 'sts':

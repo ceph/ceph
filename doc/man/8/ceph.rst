@@ -1048,7 +1048,7 @@ Usage::
 
         ceph osd pool application enable <pool-name> <app> {--yes-i-really-mean-it}
 
-Subcommand ``get`` displays the value for the given key that is assosciated
+Subcommand ``get`` displays the value for the given key that is associated
 with the given application of the given pool. Not passing the optional
 arguments would display all key-value pairs for all applications for all
 pools.
