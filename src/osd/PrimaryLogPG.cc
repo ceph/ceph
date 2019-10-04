@@ -754,8 +754,9 @@ void PrimaryLogPG::maybe_force_recovery()
 
 bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 {
-  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-    dout(10) << __func__ << " require_osd_release < octopus" << dendl;
+  if (!HAVE_FEATURE(recovery_state.get_min_upacting_features(),
+		    SERVER_OCTOPUS)) {
+    dout(20) << __func__ << " not all upacting has SERVER_OCTOPUS" << dendl;
     return true;
   }
   if (state_test(PG_STATE_WAIT)) {
@@ -788,7 +789,8 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
 bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
 {
-  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+  if (!HAVE_FEATURE(recovery_state.get_min_upacting_features(),
+		    SERVER_OCTOPUS)) {
     return true;
   }
   if (!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) {

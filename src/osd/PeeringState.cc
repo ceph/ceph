@@ -1129,7 +1129,7 @@ void PeeringState::send_lease()
 
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
-  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
     return;
   }
   if (!is_nonprimary()) {
@@ -1172,7 +1172,7 @@ void PeeringState::proc_lease(const pg_lease_t& l)
 
 void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
 {
-  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
     return;
   }
   auto now = pl->get_mnow();
@@ -1220,7 +1220,7 @@ void PeeringState::recalc_readable_until()
 
 bool PeeringState::check_prior_readable_down_osds(const OSDMapRef& map)
 {
-  if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+  if (!HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
     return false;
   }
   bool changed = false;
@@ -2375,7 +2375,7 @@ void PeeringState::activate(
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    if (get_osdmap()->require_osd_release >= ceph_release_t::octopus) {
+    if (HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
       renew_lease(pl->get_mnow());
       schedule_renew_lease();
     }
