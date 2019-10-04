@@ -401,9 +401,8 @@ Usage:
    ${this_script} [OPTIONS] BACKPORT_TRACKER_ISSUE_NUMBER
 
 Options:
-    -c/--component COMPONENT (for use with --set-milestone)
+    -c/--component COMPONENT (will try to set this label in the PR)
     --debug            (turns on "set -x")
-    -m/--set-milestone (requires elevated GitHub privs)
     -s/--setup         (just check the setup)
     -v/--verbose
 
@@ -498,7 +497,6 @@ eval set -- "$munged_options"
 
 ADVICE=""
 DEBUG=""
-SET_MILESTONE=""
 EXPLICIT_COMPONENT=""
 EXPLICIT_PREPARE=""
 HELP=""
@@ -514,7 +512,6 @@ while true ; do
         --debug|-d) DEBUG="$1" ; shift ;;
         --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
         --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
-        --set-milestone|-m) SET_MILESTONE="$1" ; shift ;;
         --setup|-s) SETUP_ONLY="$1" ; shift ;;
         --setup-advice) ADVICE="1" ; SETUP_ADVICE="$1" ; shift ;;
         --troubleshooting-advice) ADVICE="$1" ; TROUBLESHOOTING_ADVICE="$1" ; shift ;;
@@ -694,28 +691,24 @@ fi
 
 debug "Opening backport PR"
 remote_api_output=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':'$local_branch'","base":"'$target_branch'","body":"'"${desc}"'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token)
-number=$(echo "$remote_api_output" | jq -r .number)
-if [ -z "$number" -o "$number" = "null" ] ; then
+backport_pr_number=$(echo "$remote_api_output" | jq -r .number)
+if [ -z "$backport_pr_number" -o "$backport_pr_number" = "null" ] ; then
     bail_out_github_api "$remote_api_output"
 fi
+backport_pr_url="${github_endpoint}/pull/$backport_pr_number"
+info "Opened backport PR ${backport_pr_url}"
 
-if [ "$SET_MILESTONE" -o "$CEPH_BACKPORT_SET_MILESTONE" ] ; then
-    if [ "$EXPLICIT_COMPONENT" ] ; then
-        component="$EXPLICIT_COMPONENT"
-    else
-        component=${COMPONENT:-core}
-    fi
-    info "Opened backport PR ${github_endpoint}/pull/$number"
-    debug "Setting ${component} label and ${milestone} milestone"
-    curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null 2>&1
-    info "Set component label and milestone in PR"
+if [ "$EXPLICIT_COMPONENT" ] ; then
+    component="$EXPLICIT_COMPONENT"
 else
-    debug "Not setting component and milestone in PR (--set-milestone was not given and CEPH_BACKPORT_SET_MILESTONE not set)"
+    component=${COMPONENT:-core}
 fi
+debug "Attempting to set ${component} label and ${milestone} milestone in ${backport_pr_url}"
+curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$backport_pr_number'?access_token='$github_token >/dev/null 2>&1 || true
 
-pgrep firefox >/dev/null && firefox ${github_endpoint}/pull/$number
+pgrep firefox >/dev/null && firefox ${backport_pr_url}
 
-debug "Updating backport tracker issue in Redmine"
+debug "Updating backport tracker issue ${redmine_url}"
 redmine_status=2 # In Progress
 remote_api_status_code=$(curl --write-out %{http_code} --output /dev/null --silent -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$backport_pr_number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh"}' ${redmine_url}'.json?key='$redmine_key)
 if [ "${remote_api_status_code:0:1}" = "2" ] ; then
