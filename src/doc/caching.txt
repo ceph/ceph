@@ -15,8 +15,8 @@ disambiguate multiple replicas of the same item (see below).
 
   map<int, int> replicas;  // maps replicating mds# to nonce
 
-The cached_by set _always_ includes all nodes that cache the
-partcuarly object, but may additionally include nodes that used to
+The cached_by set _always_ includes all nodes that cache a
+particular object, but may additionally include nodes that used to
 cache it but no longer do.  In those cases, an expire message should
 be in transit.  That is, we have two invariants:
 
