@@ -31,7 +31,7 @@ LAST_REVISION_RE_OPT_IN = 2
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
-REVISION = 2
+REVISION = 3
 
 # History of revisions
 # --------------------
@@ -45,6 +45,9 @@ REVISION = 2
 #   - added config option changes
 #   - added channels
 #   - added explicit license acknowledgement to the opt-in process
+#
+# Version 3:
+#   - added device health metrics (i.e., SMART data, minus serial number)
 
 class Module(MgrModule):
     config = dict()

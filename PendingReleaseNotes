@@ -170,6 +170,25 @@
   cluster-wide and per-pool flags to be backward comaptible with pre-infernalis
   clusters.
 
+* The telemetry module now has a 'device' channel, enabled by default, that
+  will report anonymized hard disk and SSD health metrics to telemetry.ceph.com
+  in order to build and improve device failure prediction algorithms.  Because
+  the content of telemetry reports has changed, you will need to either re-opt-in
+  with::
+
+    ceph telemetry on
+
+  You can view exactly what information will be reported first with::
+
+    ceph telemetry show
+    ceph telemetry show device   # specifically show the device channel
+
+  If you are not comfortable sharing device metrics, you can disable that
+  channel first before re-opting-in:
+
+    ceph config set mgr mgr/telemetry/channel_crash false
+    ceph telemetry on
+
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
   * invalid `m` for "reed_sol_r6_op" erasure technique
