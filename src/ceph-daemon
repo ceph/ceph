@@ -5,7 +5,8 @@ DATA_DIR='/var/lib/ceph'
 LOG_DIR='/var/log/ceph'
 UNIT_DIR='/etc/systemd/system'
 VERSION='unknown development version'
-
+LOG_DIR_MODE=0o770
+DATA_DIR_MODE=0o700
 PODMAN_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 
 """
@@ -75,20 +76,42 @@ def is_fsid(s):
         return False
     return True
 
-def makedirs(dir):
-    os.makedirs(dir, exist_ok=True)
+def makedirs(dir, uid, gid, mode):
+    os.makedirs(dir, exist_ok=True, mode=mode)
+    os.chown(dir, uid, gid)
+    os.chmod(dir, mode)   # the above is masked by umask...
+
+def get_data_dir(fsid, t, n):
+    return os.path.join(args.data_dir, fsid, '%s.%s' % (t, n))
+
+def get_log_dir(fsid):
+    return os.path.join(args.log_dir, fsid)
+
+def make_data_dir_base(fsid, uid, gid):
+    data_dir_base = os.path.join(args.data_dir, fsid)
+    makedirs(data_dir_base, uid, gid, DATA_DIR_MODE)
+    return data_dir_base
+
+def make_data_dir(fsid, daemon_type, daemon_id, uid=None, gid=None):
+    if not uid:
+        (uid, gid) = extract_uid_gid()
+    make_data_dir_base(fsid, uid, gid)
+    data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+    makedirs(data_dir, uid, gid, DATA_DIR_MODE)
+    return data_dir
+
+def make_log_dir(fsid, uid=None, gid=None):
+    if not uid:
+        (uid, gid) = extract_uid_gid()
+    log_dir = get_log_dir(fsid)
+    makedirs(log_dir, uid, gid, LOG_DIR_MODE)
+    return log_dir
 
 def find_program(filename):
     name = find_executable(filename)
     if name is None:
         raise ValueError(f'{filename} not found')
     return name
-
-def get_data_dir(base, fsid, t, n):
-    return base + '/' + fsid + '/' + t + '.' + n
-
-def get_log_dir(base, fsid):
-    return base + '/' + fsid
 
 def get_unit_name(fsid, daemon_type, daemon_id):
     return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
@@ -149,12 +172,8 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
                        config=None, keyring=None):
-    data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
-    makedirs(data_dir)
-    os.chown(data_dir, uid, gid)
-    log_dir = get_log_dir(args.log_dir, fsid)
-    makedirs(log_dir)
-    os.chown(log_dir, uid, gid)
+    data_dir = make_data_dir(fsid, daemon_type, daemon_id)
+    make_log_dir(fsid)
 
     if config:
         with open(data_dir + '/config', 'w') as f:
@@ -195,11 +214,11 @@ def get_config_and_keyring():
 def get_container_mounts(fsid, daemon_type, daemon_id):
     mounts = {}
     if fsid:
-        log_dir = get_log_dir(args.log_dir, fsid)
+        log_dir = get_log_dir(fsid)
         mounts[log_dir] = '/var/log/ceph:z'
 
     if daemon_id:
-        data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
         cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
         mounts[data_dir] = cdata_dir + ':z'
         mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
@@ -258,8 +277,8 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
 
         # --mkfs
         create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid)
-        mon_dir = get_data_dir(args.data_dir, fsid, 'mon', daemon_id)
-        log_dir = get_log_dir(args.log_dir, fsid)
+        mon_dir = get_data_dir(fsid, 'mon', daemon_id)
+        log_dir = get_log_dir(fsid)
         out = CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph-mon',
@@ -309,7 +328,7 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
 def deploy_daemon_units(fsid, daemon_type, daemon_id, c,
                         enable=True, start=True):
     # cmd
-    data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
+    data_dir = get_data_dir(fsid, daemon_type, daemon_id)
     with open(data_dir + '/cmd', 'w') as f:
         f.write('#!/bin/sh\n' + ' '.join(c.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o700)
@@ -581,8 +600,8 @@ def command_bootstrap():
     # create mon
     logging.info('Creating mon...')
     create_daemon_dirs(fsid, 'mon', mon_id, uid, gid)
-    mon_dir = get_data_dir(args.data_dir, fsid, 'mon', mon_id)
-    log_dir = get_log_dir(args.log_dir, fsid)
+    mon_dir = get_data_dir(fsid, 'mon', mon_id)
+    log_dir = get_log_dir(fsid)
     out = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/ceph-mon',
@@ -785,8 +804,7 @@ def command_run():
 
 def command_shell():
     if args.fsid:
-        log_dir = get_log_dir(args.log_dir, args.fsid)
-        makedirs(log_dir)
+        make_log_dir(args.fsid)
     if args.name:
         if '.' in args.name:
             (daemon_type, daemon_id) = args.name.split('.')
@@ -827,8 +845,7 @@ def command_exec():
 ##################################
 
 def command_ceph_volume():
-    log_dir = get_log_dir(args.log_dir, args.fsid)
-    makedirs(log_dir)
+    make_log_dir(args.fsid)
 
     mounts = get_container_mounts(args.fsid, 'osd', None)
 
@@ -923,6 +940,7 @@ def command_ls():
 
 def command_adopt():
     (daemon_type, daemon_id) = args.name.split('.')
+    (uid, gid) = extract_uid_gid()
     if args.style == 'legacy':
         fsid = get_legacy_daemon_fsid(args.cluster, daemon_type, daemon_id)
         if not fsid:
@@ -942,8 +960,8 @@ def command_adopt():
             subprocess.check_output(['systemctl', 'disable', unit_name])
 
         logging.info('Moving data...')
-        makedirs(os.path.join(args.data_dir, fsid))
-        data_dir = get_data_dir(args.data_dir, fsid, daemon_type, daemon_id)
+        make_data_dir_base(fsid, uid, gid)
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
         subprocess.check_output([
             'mv',
             '/var/lib/ceph/%s/%s-%s' % (daemon_type, args.cluster, daemon_id),
@@ -952,10 +970,11 @@ def command_adopt():
             'cp',
             '/etc/ceph/%s.conf' % args.cluster,
             os.path.join(data_dir, 'config')])
+        os.chmod(data_dir, DATA_DIR_MODE)
+        os.chown(data_dir, uid, gid)
 
         logging.info('Moving logs...')
-        log_dir = get_log_dir(args.log_dir, fsid)
-        makedirs(log_dir)
+        log_dir = make_log_dir(fsid, uid=uid, gid=gid)
         try:
             subprocess.check_output(
                 ['mv',
@@ -985,7 +1004,7 @@ def command_rm_daemon():
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
     subprocess.check_output(['systemctl', 'stop', unit_name])
     subprocess.check_output(['systemctl', 'disable', unit_name])
-    data_dir = get_data_dir(args.data_dir, args.fsid, daemon_type, daemon_id)
+    data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
     subprocess.check_output(['rm', '-rf', data_dir])
 
 ##################################
