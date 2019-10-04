@@ -55,6 +55,3 @@ CREATE TABLE crash (
 );
 
 
-drop table cluster;
-drop table cluster_version;
-drop table crash;
