@@ -27,16 +27,10 @@
 
 // For PerfCounterType
 #include "messages/MMgrReport.h"
+#include "DaemonKey.h"
 
 namespace ceph {
   class Formatter;
-}
-
-// Unique reference to a daemon within a cluster
-typedef std::pair<std::string, std::string> DaemonKey;
-
-static inline std::string to_string(const DaemonKey& dk) {
-  return dk.first + "." + dk.second;
 }
 
 // An instance of a performance counter type, within
