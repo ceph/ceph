@@ -19,7 +19,8 @@ EOF
     --mon-ip 10.3.64.23 \
     --config c \
     --output-keyring k \
-    --output-config c
+    --output-config c \
+    --skip-ssh
 chmod 644 k c
 
 # mon.b
