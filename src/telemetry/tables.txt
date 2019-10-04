@@ -50,7 +50,6 @@ CREATE TABLE crash (
        version VARCHAR(64),
 
        stack_sig VARCHAR(64),
-       stack_weak_sig VARCHAR(64),
        stack TEXT
 );
 
