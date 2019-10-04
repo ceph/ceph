@@ -25,8 +25,11 @@ Create a key in Vault
 =====================
 
 Generate and save a 256-bit key in Vault. Vault provides several Secret
-Engines, which store, generate, and encrypt data. For instance, create a key
-in the `KV Secrets engine`_ using Vault's command line client::
+Engines, which store, generate, and encrypt data. Currently, the only secret
+engine supported is the `KV Secrets engine`_ version 2.
+
+To create a key in the KV version 2 engine using Vault's command line client,
+use the commands below::
 
   export VAULT_ADDR='http://vaultserver:8200'
   vault kv put secret/myproject/mybucketkey key=$(dd bs=32 count=1 if=/dev/urandom of=/dev/stdout 2>/dev/null | base64)
