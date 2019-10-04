@@ -44,11 +44,11 @@ from distutils.spawn import find_executable
 
 try:
     from StringIO import StringIO
-except:
+except ImportError:
     pass
 try:
     from io import StringIO
-except:
+except ImportError:
     pass
 
 logging.basicConfig(level=logging.INFO)
@@ -71,7 +71,7 @@ def make_fsid():
 def is_fsid(s):
     try:
         uuid.UUID(s)
-    except:
+    except ValueError:
         return False
     return True
 
@@ -97,12 +97,14 @@ def check_unit(unit_name):
     try:
         out = subprocess.check_output(['systemctl', 'is-enabled', unit_name])
         enabled = out.decode('utf-8').strip() == 'enabled'
-    except:
+    except Exception as e:
+        logging.warning('unable to run systemctl' % e)
         enabled = False
     try:
         out = subprocess.check_output(['systemctl', 'is-active', unit_name])
         active = out.decode('utf-8').strip() == 'active'
-    except:
+    except Exception as e:
+        logging.warning('unable to run systemctl: %s' % e)
         active = False
     return (enabled, active)
 
@@ -112,7 +114,8 @@ def get_legacy_config_fsid(cluster):
         config.read('/etc/ceph/%s.conf' % cluster)
         if 'global' in config and 'fsid' in config['global']:
             return config['global']['fsid']
-    except:
+    except Exception as e:
+        logging.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
         return None
     return None
 
@@ -125,7 +128,7 @@ def get_legacy_daemon_fsid(cluster_name, daemon_type, daemon_id):
                                    'ceph-%s' % daemon_id,
                                    'ceph_fsid'), 'r') as f:
                 fsid = f.read().strip()
-        except:
+        except IOError:
             pass
     if not fsid:
         fsid = get_legacy_config_fsid(cluster)
@@ -960,7 +963,8 @@ def command_adopt():
                                                   daemon_type, daemon_id),
                  os.path.join(log_dir)],
                 shell=True)
-        except:
+        except Exception as e:
+            logging.warning('unable to move log file: %s' % e)
             pass
 
         logging.info('Creating new units...')
@@ -1275,8 +1279,8 @@ else:
         try:
             podman_path = find_program(i)
             break
-        except:
-            logging.debug('could not locate %s' % i)
+        except Exception as e:
+            logging.debug('could not locate %s: %s' % (i, e))
     if not podman_path:
         raise RuntimeError('unable to locate any of %s' % PODMAN_PREFERENCE)
 
