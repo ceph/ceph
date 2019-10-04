@@ -399,6 +399,11 @@ static int fifo_part_init_op(cls_method_context_t hctx,
   return 0;
 }
 
+static bool full_part(const fifo_part_header_t& part_header)
+{
+  return (part_header.max_ofs > part_header.params.full_size_threshold);
+}
+
 static int fifo_part_push_op(cls_method_context_t hctx,
                              bufferlist *in, bufferlist *out)
 {
@@ -429,7 +434,7 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  if (part_header.max_ofs > part_header.params.full_size_threshold) {
+  if (full_part(part_header)) {
     return -ERANGE;
   }
 
@@ -684,7 +689,7 @@ static int fifo_part_trim_op(cls_method_context_t hctx,
   }
 
   if (op.ofs >= part_header.max_ofs) {
-    if (part_header.max_ofs > part_header.params.full_size_threshold) {
+    if (full_part(part_header)) {
       /*
        * trim full part completely: remove object
        */
@@ -789,6 +794,7 @@ static int fifo_part_list_op(cls_method_context_t hctx,
   }
 
   reply.more = !reader.end();
+  reply.full_part = full_part(part_header);
 
   encode(reply, *out);
 

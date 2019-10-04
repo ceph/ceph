@@ -244,6 +244,7 @@ namespace rados {
                              const ListPartParams& params,
                              std::vector<cls_fifo_part_list_entry_t> *pentries,
                              bool *more,
+                             bool *full_part = nullptr,
                              string *ptag = nullptr);
 
         static int get_part_info(librados::IoCtx& ioctx,

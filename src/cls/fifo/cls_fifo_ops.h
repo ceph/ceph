@@ -226,12 +226,15 @@ struct cls_fifo_part_list_op_reply
   string tag;
   vector<rados::cls::fifo::cls_fifo_part_list_entry_t> entries;
   bool more{false};
+  bool full_part{false}; /* whether part is full or still can be written to.
+                            A non full part is by definition head part */
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
     encode(entries, bl);
     encode(more, bl);
+    encode(full_part, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
@@ -239,6 +242,7 @@ struct cls_fifo_part_list_op_reply
     decode(tag, bl);
     decode(entries, bl);
     decode(more, bl);
+    decode(full_part, bl);
     DECODE_FINISH(bl);
   }
 };

@@ -197,6 +197,7 @@ namespace rados {
                              const ListPartParams& params,
                              std::vector<cls_fifo_part_list_entry_t> *pentries,
                              bool *more,
+                             bool *full_part,
                              string *ptag)
       {
         cls_fifo_part_list_op op;
@@ -238,6 +239,10 @@ namespace rados {
 
         if (more) {
           *more = reply.more;
+        }
+
+        if (full_part) {
+          *full_part = reply.full_part;
         }
 
         if (ptag) {
@@ -843,8 +848,9 @@ namespace rados {
         result->reserve(max_entries);
 
         bool part_more{false};
-        while (max_entries > 0 &&
-               part_num <= meta_info.head_part_num) {
+        bool part_full{false};
+
+        while (max_entries > 0) {
           std::vector<cls_fifo_part_list_entry_t> entries;
           int r = ClsFIFO::list_part(*ioctx,
                                      meta_info.part_oid(part_num),
@@ -853,6 +859,7 @@ namespace rados {
                                      .max_entries(max_entries),
                                      &entries,
                                      &part_more,
+                                     &part_full,
                                      nullptr);
           if (r == -ENOENT) {
             r = do_read_meta();
@@ -861,13 +868,16 @@ namespace rados {
             }
 
             if (part_num < meta_info.tail_part_num) {
-              /* raced with trim? */
+              /* raced with trim? restart */
+              result->clear();
               part_num = meta_info.tail_part_num;
               ofs = 0;
               continue;
             }
 
             /* assuming part was not written yet, so end of data */
+
+            *more = false;
 
             return 0;
           }
@@ -886,15 +896,20 @@ namespace rados {
           }
           max_entries -= entries.size();
 
-          if (!part_more) {
-            ++part_num;
-            ofs = 0;
+          if (max_entries > 0 &&
+              part_more) {
+            continue;
           }
+
+          if (!part_full) { /* head part is not full */
+            break;
+          }
+
+          ++part_num;
+          ofs = 0;
         }
 
-        bool at_head = (part_num > meta_info.head_part_num); /* advanced beyond head */
-
-        *more = (!at_head) || part_more;
+        *more = part_full || part_more;
 
         return 0;
       }
