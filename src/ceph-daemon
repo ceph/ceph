@@ -235,7 +235,7 @@ def extract_uid_gid():
         image=args.image,
         entrypoint='/usr/bin/grep',
         args=['ceph', '/etc/passwd'],
-    ).run().decode('utf-8')
+    ).run()
     (uid, gid) = out.split(':')[2:4]
     return (int(uid), int(gid))
 
@@ -483,7 +483,7 @@ class CephContainer:
 
     def run(self):
         logging.debug(self.run_cmd())
-        return subprocess.check_output(self.run_cmd())
+        return subprocess.check_output(self.run_cmd()).decode('utf-8')
 
 ##################################
 
@@ -509,17 +509,17 @@ def command_bootstrap():
         image=args.image,
         entrypoint='/usr/bin/ceph-authtool',
         args=['--gen-print-key'],
-    ).run().decode('utf-8').strip()
+    ).run().strip()
     admin_key = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/ceph-authtool',
         args=['--gen-print-key'],
-    ).run().decode('utf-8').strip()
+    ).run().strip()
     mgr_key = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/ceph-authtool',
         args=['--gen-print-key'],
-    ).run().decode('utf-8').strip()
+    ).run().strip()
 
     keyring = ('[mon.]\n'
                '\tkey = %s\n'
@@ -640,7 +640,7 @@ def command_bootstrap():
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
             },
-        ).run().decode('utf-8')
+        ).run()
         j = json.loads(out)
         if j.get('mgrmap', {}).get('available', False):
             break
