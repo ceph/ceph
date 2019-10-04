@@ -641,6 +641,8 @@ class Module(MgrModule):
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
-    def gather_device_report(self):
-        # write me
-        return {}
+    def get_recent_device_metrics(self, devid, min_sample):
+        return self._get_device_metrics(devid, min_sample=min_sample)
+
+    def get_time_format(self):
+        return TIME_FORMAT
