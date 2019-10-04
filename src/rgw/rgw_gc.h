@@ -48,7 +48,6 @@ public:
     finalize();
   }
   vector<bool> transitioned_objects_cache;
-  void add_chain(librados::ObjectWriteOperation& op, cls_rgw_gc_obj_info& info);
   int send_chain(cls_rgw_obj_chain& chain, const string& tag);
 
   // asynchronously defer garbage collection on an object that's still being read

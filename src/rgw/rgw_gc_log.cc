@@ -14,7 +14,8 @@ void gc_log_init2(librados::ObjectWriteOperation& op,
   obj_version objv; // objv.ver = 0
   cls_version_check(op, objv, VER_COND_EQ);
   cls_rgw_gc_queue_init(op, max_size, max_urgent);
-  cls_version_inc(op); // objv.ver -> 1
+  objv.ver = 1;
+  cls_version_set(op, objv);
 }
 
 void gc_log_enqueue1(librados::ObjectWriteOperation& op,
