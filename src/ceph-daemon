@@ -89,6 +89,7 @@ def get_log_dir(fsid):
 def make_data_dir_base(fsid, uid, gid):
     data_dir_base = os.path.join(args.data_dir, fsid)
     makedirs(data_dir_base, uid, gid, DATA_DIR_MODE)
+    makedirs(os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE)
     return data_dir_base
 
 def make_data_dir(fsid, daemon_type, daemon_id, uid=None, gid=None):
@@ -215,6 +216,7 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
     if fsid:
         log_dir = get_log_dir(fsid)
         mounts[log_dir] = '/var/log/ceph:z'
+        mounts['/var/lib/ceph/%s/crash' % fsid] = '/var/lib/ceph/crash:z'
 
     if daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
