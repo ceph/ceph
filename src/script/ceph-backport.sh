@@ -124,7 +124,7 @@ function deduce_remote {
         true
     else
         error "Cannot auto-determine ${remote_type}_remote"
-        info "Please set this variable explicitly and also file a bug report at ${redmine_endpoint}"
+        info "There is something wrong with your remotes - to start with, check 'git remote -v'"
         false
     fi
     echo "$remote"
