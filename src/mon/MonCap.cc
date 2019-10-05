@@ -177,6 +177,9 @@ void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
 
 void MonCapGrant::expand_profile_mgr(const EntityName& name) const
 {
+  if (profile == "crash") {
+    profile_grants.push_back(MonCapGrant("crash post"));
+  }
 }
 
 void MonCapGrant::expand_profile_mon(const EntityName& name) const
@@ -308,7 +311,10 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
                                 "rbd/mirror/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
   }
-
+  else if (profile == "crash") {
+    // TODO: we could limit this to getting the monmap and mgrmap...
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+  }
   if (profile == "role-definer") {
     // grants ALL caps to the auth subsystem, read-only on the
     // monitor subsystem and nothing else.
