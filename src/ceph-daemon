@@ -240,7 +240,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False):
         image=args.image,
         entrypoint='/usr/bin/ceph-' + daemon_type,
         args=[
-            '-i', daemon_id,
+            '-n', '%s.%s' % (daemon_type, daemon_id),
             '-f', # foreground
         ] + get_daemon_args(fsid, daemon_type, daemon_id),
         podman_args=podman_args,
