@@ -10,7 +10,6 @@ import uuid
 from six import itervalues, iteritems
 from collections import defaultdict
 from prettytable import PrettyTable, PLAIN_COLUMNS
-
 from mgr_module import MgrModule
 
 """
@@ -45,6 +44,16 @@ def nearest_power_of_two(n):
 
     return x if (v - n) > (n - x) else v
 
+class PgAdjustmentProgress(object):
+    """
+    Keeps the initial and target pg_num values
+    """
+    def __init__(self, pg_num, pg_num_target, ev_id, increase_decrease):
+        self._ev_id = ev_id
+        self._pg_num = pg_num
+        self._pg_num_target = pg_num_target
+        self._increase_decrease = increase_decrease
+   
 
 class PgAutoscaler(MgrModule):
     """
@@ -73,6 +82,7 @@ class PgAutoscaler(MgrModule):
     def __init__(self, *args, **kwargs):
         super(PgAutoscaler, self).__init__(*args, **kwargs)
         self._shutdown = threading.Event()
+        self._event = {}
 
         # So much of what we do peeks at the osdmap that it's easiest
         # to just keep a copy of the pythonized version.
@@ -162,6 +172,7 @@ class PgAutoscaler(MgrModule):
         self.config_notify()
         while not self._shutdown.is_set():
             self._maybe_adjust()
+            self._update_progress_events()
             self._shutdown.wait(timeout=int(self.sleep_interval))
 
     def get_subtree_resource_status(self, osdmap, crush):
@@ -306,7 +317,7 @@ class PgAutoscaler(MgrModule):
 
             adjust = False
             if (final_pg_target > p['pg_num_target'] * threshold or \
-                final_pg_target <= p['pg_num_target'] / threshold) and \
+                final_pg_target < p['pg_num_target'] / threshold) and \
                 final_ratio >= 0.0 and \
                 final_ratio <= 1.0:
                 adjust = True
@@ -333,7 +344,32 @@ class PgAutoscaler(MgrModule):
                 });
 
         return (ret, root_map, pool_root)
+    
+    def _update_progress_events(self):
+        osdmap = self.get_osdmap()
+        pools = osdmap.get_pools()
+        for pool_id in list(self._event):
+            ev = self._event[pool_id]
+            pool_data = pools[int(pool_id)]
+            pg_num = pool_data['pg_num']
+            pg_num_target = pool_data['pg_num_target']
+            initial_pg_num = ev._pg_num
+            initial_pg_num_target = ev._pg_num_target
+            progress = (pg_num - initial_pg_num) / (pg_num_target - initial_pg_num)
+            if pg_num == pg_num_target:
+                self.remote('progress', 'complete', ev._ev_id)
+                del self._event[pool_id]
+                continue
+            elif pg_num == initial_pg_num:
+                # Means no change
+                continue
 
+            else: 
+                self.remote('progress', 'update', ev._ev_id, 
+                        ev_msg="PG autoscaler %s pool %s PGs from %d to %d" % 
+                        (ev._increase_decrease, pool_id, pg_num, pg_num_target), 
+                        ev_progress=progress,
+                        refs=[("pool", int(pool_id))])
 
     def _maybe_adjust(self):
         self.log.info('_maybe_adjust')
@@ -356,6 +392,7 @@ class PgAutoscaler(MgrModule):
         target_bytes_pools = dict([(r, []) for r in iter(root_map)])
 
         for p in ps:
+            pool_id = str(p['pool_id'])
             total_ratio[p['crush_root_id']] += max(p['actual_capacity_ratio'],
                                                    p['target_ratio'])
             if p['target_ratio'] > 0:
@@ -388,6 +425,31 @@ class PgAutoscaler(MgrModule):
                     'var': 'pg_num',
                     'val': str(p['pg_num_final'])
                 })
+                
+                # Create new event for each pool
+                # and update existing events
+                # Call Progress Module to create progress event
+                if pool_id not in self._event:
+                    osdmap = self.get_osdmap()
+                    pools = osdmap.get_pools()
+                    pool_data = pools[int(pool_id)]
+                    pg_num = pool_data['pg_num']
+                    pg_num_target = pool_data['pg_num_target']
+                    ev_id = str(uuid.uuid4())
+                    pg_adj_obj = None
+                    if pg_num < pg_num_target:
+                        pg_adj_obj = PgAdjustmentProgress(pg_num, pg_num_target, ev_id, 'increasing')
+                        self._event[pool_id] = pg_adj_obj
+
+                    else:
+                        pg_adj_obj = PgAdjustmentProgress(pg_num, pg_num_target, ev_id, 'decreasing')
+                        self._event[pool_id] = pg_adj_obj
+
+                    self.remote('progress', 'update', ev_id, 
+                    ev_msg="PG autoscaler %s pool %s PGs from %d to %d" % 
+                    (pg_adj_obj._increase_decrease, pool_id, pg_num, pg_num_target), 
+                    ev_progress=0.0,
+                    refs=[("pool", int(pool_id))])
 
                 if r[0] != 0:
                     # FIXME: this is a serious and unexpected thing,
