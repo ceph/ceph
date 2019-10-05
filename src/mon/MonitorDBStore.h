@@ -754,7 +754,8 @@ class MonitorDBStore
     string v = value;
     v += "\n";
     int r = safe_write_file(path.c_str(), key.c_str(),
-			    v.c_str(), v.length());
+			    v.c_str(), v.length(),
+			    0600);
     if (r < 0)
       return r;
     return 0;
