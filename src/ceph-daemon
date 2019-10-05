@@ -213,6 +213,18 @@ def get_config_and_keyring():
             config = f.read()
     return (config, keyring)
 
+def get_config_and_both_keyrings():
+    if args.config_and_keyrings == '-':
+        try:
+            j = injected_stdin
+        except NameError:
+            j = sys.stdin.read()
+    else:
+        with open(args.config_and_keyrings, 'r') as f:
+            j = f.read()
+    d = json.loads(j)
+    (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
+
 def get_container_mounts(fsid, daemon_type, daemon_id):
     mounts = {}
     if fsid:
@@ -856,7 +868,7 @@ def command_deploy():
     (daemon_type, daemon_id) = args.name.split('.')
     if daemon_type not in ['mon', 'mgr', 'mds', 'osd', 'rgw']:
         raise RuntimeError('daemon type %s not recognized' % daemon_type)
-    (config, keyring) = get_config_and_keyring()
+    (config, keyring, crash_keyring) = get_config_and_both_keyrings()
     if daemon_type == 'mon':
         if args.mon_ip:
             config += '[mon.%s]\n\tpublic_addr = %s\n' % (daemon_id, args.mon_ip)
@@ -869,6 +881,7 @@ def command_deploy():
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                   config, keyring)
+    deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
 ##################################
 
@@ -1355,8 +1368,8 @@ parser_deploy.add_argument(
     '--key',
     help='key for new daemon')
 parser_deploy.add_argument(
-    '--config-and-keyring',
-    help='JSON file with config and key')
+    '--config-and-keyrings',
+    help='JSON file with config and keyrings for the daemon and crash agent')
 parser_deploy.add_argument(
     '--mon-ip',
     help='mon IP')
