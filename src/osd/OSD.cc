@@ -2313,7 +2313,7 @@ int OSD::set_numa_affinity()
 	      << " cpus "
 	      << cpu_set_to_str_list(numa_cpu_set_size, &numa_cpu_set)
 	      << dendl;
-      r = sched_setaffinity(getpid(), numa_cpu_set_size, &numa_cpu_set);
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
       if (r < 0) {
 	r = -errno;
 	derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)

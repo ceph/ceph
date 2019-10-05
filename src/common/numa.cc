@@ -134,6 +134,56 @@ int get_numa_node_cpu_set(
   return r;
 }
 
+static int easy_readdir(const std::string& dir, std::set<std::string> *out)
+{
+  DIR *h = ::opendir(dir.c_str());
+  if (!h) {
+    return -errno;
+  }
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(h))) {
+    if (strcmp(de->d_name, ".") == 0 ||
+	strcmp(de->d_name, "..") == 0) {
+      continue;
+    }
+    out->insert(de->d_name);
+  }
+  closedir(h);
+  return 0;
+}
+
+int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
+{
+  // first set my affinity
+  int r = sched_setaffinity(getpid(), cpu_set_size, cpu_set);
+  if (r < 0) {
+    return -errno;
+  }
+
+  // make 2 passes here so that we (hopefully) catch racing threads creating
+  // threads.
+  for (unsigned pass = 0; pass < 2; ++pass) {
+    // enumerate all child threads from /proc
+    std::set<std::string> ls;
+    std::string path = "/proc/"s + stringify(getpid()) + "/task";
+    r = easy_readdir(path, &ls);
+    if (r < 0) {
+      return r;
+    }
+    for (auto& i : ls) {
+      pid_t tid = atoll(i.c_str());
+      if (!tid) {
+	continue;  // wtf
+      }
+      r = sched_setaffinity(tid, cpu_set_size, cpu_set);
+      if (r < 0) {
+	return -errno;
+      }
+    }
+  }
+  return 0;
+}
+
 #elif defined(__FreeBSD__)
 
 int parse_cpu_set_list(const char *s,
@@ -158,6 +208,12 @@ std::set<int> cpu_set_to_set(size_t cpu_set_size,
 int get_numa_node_cpu_set(int node,
                           size_t *cpu_set_size,
                           cpu_set_t *cpu_set)
+{
+  return -ENOTSUP;
+}
+
+int set_cpu_affinity_all_threads(size_t cpu_set_size,
+				 cpu_set_t *cpu_set)
 {
   return -ENOTSUP;
 }
