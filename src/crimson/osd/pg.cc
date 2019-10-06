@@ -50,6 +50,7 @@ std::ostream& operator<<(std::ostream& out, const signedspan& d)
   auto s = std::chrono::duration_cast<std::chrono::seconds>(d).count();
   auto ns = std::abs((d % 1s).count());
   fmt::print(out, "{}{}s", s, ns ? fmt::format(".{:0>9}", ns) : "");
+  return out;
 }
 }
 
