@@ -11,9 +11,9 @@
 #include <boost/range/algorithm/copy.hpp>
 #include <boost/range/algorithm/max_element.hpp>
 #include <boost/range/numeric.hpp>
-
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <seastar/core/sleep.hh>
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
