@@ -174,20 +174,18 @@ public:
   struct FileReaderBuffer {
     MEMPOOL_CLASS_HELPERS();
 
-    uint64_t bl_off;        ///< prefetch buffer logical offset
+    uint64_t bl_off = 0;    ///< prefetch buffer logical offset
     bufferlist bl;          ///< prefetch buffer
-    uint64_t pos;           ///< current logical offset
+    uint64_t pos = 0;       ///< current logical offset
     uint64_t max_prefetch;  ///< max allowed prefetch
 
     explicit FileReaderBuffer(uint64_t mpf)
-      : bl_off(0),
-	pos(0),
-	max_prefetch(mpf) {}
+      : max_prefetch(mpf) {}
 
-    uint64_t get_buf_end() {
+    uint64_t get_buf_end() const {
       return bl_off + bl.length();
     }
-    uint64_t get_buf_remaining(uint64_t p) {
+    uint64_t get_buf_remaining(uint64_t p) const {
       if (p >= bl_off && p < bl_off + bl.length())
 	return bl_off + bl.length() - p;
       return 0;

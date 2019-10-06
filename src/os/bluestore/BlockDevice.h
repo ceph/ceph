@@ -98,11 +98,20 @@ private:
   std::atomic_int ioc_reap_count = {0};
 
 protected:
+  uint64_t size = 0;
+  uint64_t block_size = 0;
+  bool support_discard = false;
   bool rotational = true;
   bool lock_exclusive = true;
 
 public:
-  BlockDevice(CephContext* cct) : cct(cct) {}
+  aio_callback_t aio_callback;
+  void *aio_callback_priv;
+  BlockDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
+  : cct(cct),
+    aio_callback(cb),
+    aio_callback_priv(cbpriv)
+ {}
   virtual ~BlockDevice() = default;
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
