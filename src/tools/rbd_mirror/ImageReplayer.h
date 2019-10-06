@@ -126,7 +126,7 @@ public:
 
   void resync_image(Context *on_finish=nullptr);
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
 
   virtual void handle_replay_ready();
   virtual void handle_replay_complete(int r, const std::string &error_desc);

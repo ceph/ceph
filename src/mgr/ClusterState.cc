@@ -181,17 +181,19 @@ class ClusterSocketHook : public AdminSocketHook {
   ClusterState *cluster_state;
 public:
   explicit ClusterSocketHook(ClusterState *o) : cluster_state(o) {}
-  bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
-    stringstream ss;
-    bool r = true;
+  int call(std::string_view admin_command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
+    stringstream outss;
+    int r = 0;
     try {
-      r = cluster_state->asok_command(admin_command, cmdmap, format, ss);
+      r = cluster_state->asok_command(admin_command, cmdmap, f, outss);
+      out.append(outss);
     } catch (const bad_cmd_get& e) {
-      ss << e.what();
-      r = true;
+      errss << e.what();
+      r = -EINVAL;
     }
-    out.append(ss);
     return r;
   }
 };
@@ -200,9 +202,9 @@ void ClusterState::final_init()
 {
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   asok_hook = new ClusterSocketHook(this);
-  int r = admin_socket->register_command("dump_osd_network",
-		      "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
-		      "Dump osd heartbeat network ping times");
+  int r = admin_socket->register_command(
+    "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
+    "Dump osd heartbeat network ping times");
   ceph_assert(r == 0);
 }
 
@@ -214,11 +216,13 @@ void ClusterState::shutdown()
   asok_hook = NULL;
 }
 
-bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
-		       std::string_view format, ostream& ss)
+bool ClusterState::asok_command(
+  std::string_view admin_command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  ostream& ss)
 {
   std::lock_guard l(lock);
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (admin_command == "dump_osd_network") {
     int64_t value = 0;
     // Default to health warning level if nothing specified
@@ -365,7 +369,5 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
   } else {
     ceph_abort_msg("broken asok registration");
   }
-  f->flush(ss);
-  delete f;
   return true;
 }

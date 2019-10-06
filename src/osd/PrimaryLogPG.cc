@@ -936,23 +936,31 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 
 // ==========================================================
 
-int PrimaryLogPG::do_command(
-  cmdmap_t cmdmap,
-  ostream& ss,
-  bufferlist& idata,
-  bufferlist& odata,
-  ConnectionRef con,
-  ceph_tid_t tid)
+void PrimaryLogPG::do_command(
+  const string_view& orig_prefix,
+  const cmdmap_t& cmdmap,
+  const bufferlist& idata,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
-  string prefix;
   string format;
-
   cmd_getval(cct, cmdmap, "format", format);
-  boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json"));
+  std::unique_ptr<Formatter> f(Formatter::create(
+				 format, "json-pretty", "json-pretty"));
+  int ret = 0;
+  stringstream ss;   // stderr error message stream
+  bufferlist outbl;  // if empty at end, we'll dump formatter as output
 
+  // get final prefix:
+  // - ceph pg <pgid> foo -> prefix=pg, cmd=foo
+  // - ceph tell <pgid> foo -> prefix=foo
+  string prefix(orig_prefix);
   string command;
   cmd_getval(cct, cmdmap, "cmd", command);
-  if (command == "query") {
+  if (command.size()) {
+    prefix = command;
+  }
+
+  if (prefix == "query") {
     f->open_object_section("pg");
     f->dump_stream("snap_trimq") << snap_trimq;
     f->dump_unsigned("snap_trimq_len", snap_trimq.size());
@@ -969,49 +977,53 @@ int PrimaryLogPG::do_command(
     f->close_section();
 
     f->close_section();
-    f->flush(odata);
-    return 0;
   }
-  else if (command == "mark_unfound_lost") {
+
+  else if (prefix == "mark_unfound_lost") {
     string mulcmd;
     cmd_getval(cct, cmdmap, "mulcmd", mulcmd);
     int mode = -1;
     if (mulcmd == "revert") {
       if (pool.info.is_erasure()) {
 	ss << "mode must be 'delete' for ec pool";
-	return -EINVAL;
+	ret = -EINVAL;
+	goto out;
       }
       mode = pg_log_entry_t::LOST_REVERT;
     } else if (mulcmd == "delete") {
       mode = pg_log_entry_t::LOST_DELETE;
     } else {
       ss << "mode must be 'revert' or 'delete'; mark not yet implemented";
-      return -EINVAL;
+      ret = -EINVAL;
+      goto out;
     }
     ceph_assert(mode == pg_log_entry_t::LOST_REVERT ||
-	   mode == pg_log_entry_t::LOST_DELETE);
+		mode == pg_log_entry_t::LOST_DELETE);
 
     if (!is_primary()) {
       ss << "not primary";
-      return -EROFS;
+      ret = -EROFS;
+      goto out;
     }
 
     uint64_t unfound = recovery_state.get_missing_loc().num_unfound();
     if (!unfound) {
       ss << "pg has no unfound objects";
-      return 0;  // make command idempotent
+      goto out;  // make command idempotent
     }
 
     if (!recovery_state.all_unfound_are_queried_or_lost(get_osdmap())) {
       ss << "pg has " << unfound
 	 << " unfound objects but we haven't probed all sources, not marking lost";
-      return -EINVAL;
+      ret = -EINVAL;
+      goto out;
     }
 
-    mark_all_unfound_lost(mode, con, tid);
-    return -EAGAIN;
+    mark_all_unfound_lost(mode, on_finish);
+    return;
   }
-  else if (command == "list_unfound") {
+
+  else if (prefix == "list_unfound") {
     hobject_t offset;
     string offset_json;
     bool show_offset = false;
@@ -1023,7 +1035,8 @@ int PrimaryLogPG::do_command(
 	offset.decode(v);
       } catch (std::runtime_error& e) {
 	ss << "error parsing offset: " << e.what();
-	return -EINVAL;
+	ret = -EINVAL;
+	goto out;
       }
       show_offset = true;
     }
@@ -1069,13 +1082,62 @@ int PrimaryLogPG::do_command(
     }
     f->dump_bool("more", p != needs_recovery_map.end());
     f->close_section();
-    f->flush(odata);
-    return 0;
   }
 
-  ss << "unknown pg command " << prefix;
-  return -EINVAL;
+  else if (prefix == "scrub" ||
+	   prefix == "deep_scrub") {
+    bool deep = (prefix == "deep_scrub");
+    int64_t time;
+    cmd_getval(cct, cmdmap, "time", time, (int64_t)0);
+
+    if (is_primary()) {
+      const pg_pool_t *p = &pool.info;
+      double pool_scrub_max_interval = 0;
+      double scrub_max_interval;
+      if (deep) {
+        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
+        scrub_max_interval = pool_scrub_max_interval > 0 ?
+          pool_scrub_max_interval : g_conf()->osd_deep_scrub_interval;
+      } else {
+        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
+        scrub_max_interval = pool_scrub_max_interval > 0 ?
+          pool_scrub_max_interval : g_conf()->osd_scrub_max_interval;
+      }
+      // Instead of marking must_scrub force a schedule scrub
+      utime_t stamp = ceph_clock_now();
+      if (time == 0)
+        stamp -= scrub_max_interval;
+      else
+        stamp -=  (float)time;
+      stamp -= 100.0;  // push back last scrub more for good measure
+      if (deep) {
+        set_last_deep_scrub_stamp(stamp);
+      } else {
+        set_last_scrub_stamp(stamp);
+      }
+      f->open_object_section("result");
+      f->dump_bool("deep", deep);
+      f->dump_stream("stamp") << stamp;
+      f->close_section();
+    } else {
+      ss << "Not primary";
+      ret = -EPERM;
+    }
+    outbl.append(ss.str());
+  }
+
+  else {
+    ret = -ENOSYS;
+    ss << "prefix '" << prefix << "' not implemented";
+  }
+
+ out:
+  if (ret >= 0 && outbl.length() == 0) {
+    f->flush(outbl);
+  }
+  on_finish(ret, ss.str(), outbl);
 }
+
 
 // ==========================================================
 
@@ -11715,8 +11777,7 @@ void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
  */
 void PrimaryLogPG::mark_all_unfound_lost(
   int what,
-  ConnectionRef con,
-  ceph_tid_t tid)
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
   dout(3) << __func__ << " " << pg_log_entry_t::get_op_name(what) << dendl;
   list<hobject_t> oids;
@@ -11813,7 +11874,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
     log_entries,
     std::move(manager),
     std::optional<std::function<void(void)> >(
-      [this, oids, con, num_unfound, tid]() {
+      [this, oids, num_unfound, on_finish]() {
 	if (recovery_state.perform_deletes_during_peering()) {
 	  for (auto oid : oids) {
 	    // clear old locations - merge_new_log_entries will have
@@ -11847,11 +11908,8 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	string rs = ss.str();
 	dout(0) << "do_command r=" << 0 << " " << rs << dendl;
 	osd->clog->info() << rs;
-	if (con) {
-	  MCommandReply *reply = new MCommandReply(0, rs);
-	  reply->set_tid(tid);
-	  con->send_message(reply);
-	}
+	bufferlist empty;
+	on_finish(0, rs, empty);
       }),
     OpRequestRef());
 }

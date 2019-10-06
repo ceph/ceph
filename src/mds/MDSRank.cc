@@ -2433,13 +2433,13 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
   snapclient->handle_mds_failure(who);
 }
 
-bool MDSRankDispatcher::handle_asok_command(std::string_view command,
-					    const cmdmap_t& cmdmap,
-					    Formatter *f,
-					    std::ostream& ss)
+int MDSRankDispatcher::handle_asok_command(std::string_view command,
+					   const cmdmap_t& cmdmap,
+					   Formatter *f,
+					   std::ostream& ss)
 {
   if (command == "dump_ops_in_flight" ||
-             command == "ops") {
+      command == "ops") {
     if (!op_tracker.dump_ops_in_flight(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	  please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
@@ -2465,7 +2465,7 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
 
     if (!got_val) {
       ss << "no target epoch given";
-      return true;
+      return -EINVAL;
     }
     {
       std::lock_guard l(mds_lock);
@@ -2488,7 +2488,7 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
     const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
     if(!got_arg) {
       ss << "Invalid client_id specified";
-      return true;
+      return -ENOENT;
     }
     std::lock_guard l(mds_lock);
     std::stringstream dss;
@@ -2536,12 +2536,12 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
     string path;
     if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
       ss << "malformed path";
-      return true;
+      return -EINVAL;
     }
     int64_t rank;
     if(!cmd_getval(g_ceph_context, cmdmap, "rank", rank)) {
       ss << "malformed rank";
-      return true;
+      return -EINVAL;
     }
     command_export_dir(f, path, (mds_rank_t)rank);
   } else if (command == "dump cache") {
@@ -2601,10 +2601,10 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
   } else if (command == "dump inode") {
     command_dump_inode(f, cmdmap, ss);
   } else {
-    return false;
+    return -ENOSYS;
   }
 
-  return true;
+  return 0;
 }
 
 class C_MDS_Send_Command_Reply : public MDSInternalContext {

@@ -1491,13 +1491,11 @@ public:
 	       spg_t p);
   ~PrimaryLogPG() override {}
 
-  int do_command(
-    cmdmap_t cmdmap,
-    ostream& ss,
-    bufferlist& idata,
-    bufferlist& odata,
-    ConnectionRef conn,
-    ceph_tid_t tid) override;
+  void do_command(
+    const string_view& prefix,
+    const cmdmap_t& cmdmap,
+    const bufferlist& idata,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) override;
 
   void clear_cache();
   int get_cache_obj_count() {
@@ -1907,8 +1905,7 @@ public:
 
   void mark_all_unfound_lost(
     int what,
-    ConnectionRef con,
-    ceph_tid_t tid);
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
   eversion_t pick_newest_available(const hobject_t& oid);
 
   void do_update_log_missing(

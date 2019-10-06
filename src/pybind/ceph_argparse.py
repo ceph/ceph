@@ -1109,7 +1109,7 @@ def validate(args, signature, flags=0, partial=False):
         raise ArgumentError("unused arguments: " + str(myargs))
 
     if flags & Flag.MGR:
-        d['target'] = ('mgr','')
+        d['target'] = ('mon-mgr','')
 
     if flags & Flag.POLL:
         d['poll'] = True
@@ -1378,6 +1378,16 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
+            name = ''     # non-None empty string means "current active mgr"
+            if len(target) > 1 and target[1] is not None:
+                name = target[1]
+            if verbose:
+                print('submit {0} to {1} name {2}'.format(cmd, target[0], name),
+                      file=sys.stderr)
+            ret, outbuf, outs = run_in_thread(
+                cluster.mgr_command, cmd, inbuf, timeout=timeout, target=name)
+
+        elif target[0] == 'mon-mgr':
             if verbose:
                 print('submit {0} to {1}'.format(cmd, target[0]),
                       file=sys.stderr)

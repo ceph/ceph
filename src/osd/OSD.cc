@@ -118,7 +118,6 @@
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDRepScrub.h"
 
-#include "messages/MMonCommand.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 
@@ -2121,7 +2120,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   client_messenger(external_messenger),
   objecter_messenger(osdc_messenger),
   monc(mc),
-  mgrc(cct_, client_messenger),
+  mgrc(cct_, client_messenger, &mc->monmap),
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
@@ -2137,7 +2136,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   osd_compat(get_osd_compat_set()),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
 	    get_num_op_threads()),
-  command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   heartbeat_stop(false),
   heartbeat_need_update(true),
   hb_front_client_messenger(hb_client_front),
@@ -2162,11 +2160,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   up_thru_wanted(0),
   requested_full_first(0),
   requested_full_last(0),
-  command_wq(
-    this,
-    cct->_conf->osd_command_thread_timeout,
-    cct->_conf->osd_command_thread_suicide_timeout,
-    &command_tp),
   service(this)
 {
 
@@ -2333,18 +2326,24 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
-    stringstream ss;
-    bool r = true;
+  int call(std::string_view prefix, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& out) override {
+    ceph_abort("should use async hook");
+  }
+  void call_async(
+    std::string_view prefix,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist& inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
     try {
-      r = osd->asok_command(admin_command, cmdmap, format, ss);
+      osd->asok_command(prefix, cmdmap, f, inbl, on_finish);
     } catch (const bad_cmd_get& e) {
-      ss << e.what();
-      r = true;
+      bufferlist empty;
+      on_finish(-EINVAL, e.what(), empty);
     }
-    out.append(ss);
-    return r;
   }
 };
 
@@ -2359,11 +2358,70 @@ std::set<int64_t> OSD::get_mapped_pools()
   return pools;
 }
 
-bool OSD::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
-		       std::string_view format, ostream& ss)
+void OSD::asok_command(
+  std::string_view prefix, const cmdmap_t& cmdmap,
+  Formatter *f,
+  const bufferlist& inbl,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
-  if (admin_command == "status") {
+  int ret = 0;
+  stringstream ss;   // stderr error message stream
+  bufferlist outbl;  // if empty at end, we'll dump formatter as output
+
+  // --- PG commands are routed here to PG::do_command ---
+  if (prefix == "pg" ||
+      prefix == "query" ||
+      prefix == "mark_unfound_lost" ||
+      prefix == "list_unfound" ||
+      prefix == "scrub" ||
+      prefix == "deep_scrub"
+    ) {
+    string pgidstr;
+    pg_t pgid;
+    if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
+      ss << "no pgid specified";
+      ret = -EINVAL;
+      goto out;
+    }
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "couldn't parse pgid '" << pgidstr << "'";
+      ret = -EINVAL;
+      goto out;
+    }
+    spg_t pcand;
+    PGRef pg;
+    if (osdmap->get_primary_shard(pgid, &pcand) &&
+	(pg = _lookup_lock_pg(pcand))) {
+      if (pg->is_primary()) {
+	cmdmap_t new_cmdmap = cmdmap;
+	try {
+	  pg->do_command(prefix, new_cmdmap, inbl, on_finish);
+	  pg->unlock();
+	  return; // the pg handler calls on_finish directly
+	} catch (const bad_cmd_get& e) {
+	  pg->unlock();
+	  ss << e.what();
+	  ret = -EINVAL;
+	  goto out;
+	}
+      } else {
+	ss << "not primary for pgid " << pgid;
+	// do not reply; they will get newer maps and realize they
+	// need to resend.
+	pg->unlock();
+	ret = -EAGAIN;
+	goto out;
+      }
+    } else {
+      ss << "i don't have pgid " << pgid;
+      ret = -ENOENT;
+    }
+  }
+
+  // --- OSD commands follow ---
+
+  else if (prefix == "status") {
+    lock_guard l(osd_lock);
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
@@ -2373,14 +2431,14 @@ bool OSD::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
     f->dump_unsigned("newest_map", superblock.newest_map);
     f->dump_unsigned("num_pgs", num_pgs);
     f->close_section();
-  } else if (admin_command == "flush_journal") {
+  } else if (prefix == "flush_journal") {
     store->flush_journal();
-  } else if (admin_command == "dump_ops_in_flight" ||
-             admin_command == "ops" ||
-             admin_command == "dump_blocked_ops" ||
-             admin_command == "dump_historic_ops" ||
-             admin_command == "dump_historic_ops_by_duration" ||
-             admin_command == "dump_historic_slow_ops") {
+  } else if (prefix == "dump_ops_in_flight" ||
+             prefix == "ops" ||
+             prefix == "dump_blocked_ops" ||
+             prefix == "dump_historic_ops" ||
+             prefix == "dump_historic_ops_by_duration" ||
+             prefix == "dump_historic_slow_ops") {
 
     const string error_str = "op_tracker tracking is not enabled now, so no ops are tracked currently, \
 even those get stuck. Please enable \"osd_enable_op_tracker\", and the tracker \
@@ -2393,37 +2451,47 @@ will start to track new ops received afterwards.";
            inserter(filters, filters.end()));
     }
 
-    if (admin_command == "dump_ops_in_flight" ||
-        admin_command == "ops") {
+    if (prefix == "dump_ops_in_flight" ||
+        prefix == "ops") {
       if (!op_tracker.dump_ops_in_flight(f, false, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_blocked_ops") {
+    if (prefix == "dump_blocked_ops") {
       if (!op_tracker.dump_ops_in_flight(f, true, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_historic_ops") {
+    if (prefix == "dump_historic_ops") {
       if (!op_tracker.dump_historic_ops(f, false, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_historic_ops_by_duration") {
+    if (prefix == "dump_historic_ops_by_duration") {
       if (!op_tracker.dump_historic_ops(f, true, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_historic_slow_ops") {
+    if (prefix == "dump_historic_slow_ops") {
       if (!op_tracker.dump_historic_slow_ops(f, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-  } else if (admin_command == "dump_op_pq_state") {
+  } else if (prefix == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_shardedwq.dump(f);
     f->close_section();
-  } else if (admin_command == "dump_blacklist") {
+  } else if (prefix == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
@@ -2439,7 +2507,7 @@ will start to track new ops received afterwards.";
       f->close_section(); //entry
     }
     f->close_section(); //blacklist
-  } else if (admin_command == "dump_watchers") {
+  } else if (prefix == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     // scan pg's
     vector<PGRef> pgs;
@@ -2474,7 +2542,7 @@ will start to track new ops received afterwards.";
     }
 
     f->close_section(); //watchers
-  } else if (admin_command == "dump_recovery_reservations") {
+  } else if (prefix == "dump_recovery_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
     service.local_reserver.dump(f);
@@ -2483,21 +2551,13 @@ will start to track new ops received afterwards.";
     service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
-  } else if (admin_command == "dump_scrub_reservations") {
+  } else if (prefix == "dump_scrub_reservations") {
     f->open_object_section("scrub_reservations");
     service.dump_scrub_reservations(f);
     f->close_section();
-  } else if (admin_command == "get_latest_osdmap") {
+  } else if (prefix == "get_latest_osdmap") {
     get_latest_osdmap();
-  } else if (admin_command == "heap") {
-    auto result = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
-
-    // Note: Failed heap profile commands won't necessarily trigger an error:
-    f->open_object_section("result");
-    f->dump_string("error", cpp_strerror(result));
-    f->dump_bool("success", result >= 0);
-    f->close_section();
-  } else if (admin_command == "set_heap_property") {
+  } else if (prefix == "set_heap_property") {
     string property;
     int64_t value = 0;
     string error;
@@ -2521,7 +2581,7 @@ will start to track new ops received afterwards.";
     f->dump_string("error", error);
     f->dump_bool("success", success);
     f->close_section();
-  } else if (admin_command == "get_heap_property") {
+  } else if (prefix == "get_heap_property") {
     string property;
     size_t value = 0;
     string error;
@@ -2540,15 +2600,15 @@ will start to track new ops received afterwards.";
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
-  } else if (admin_command == "dump_objectstore_kv_stats") {
+  } else if (prefix == "dump_objectstore_kv_stats") {
     store->get_db_statistics(f);
-  } else if (admin_command == "dump_scrubs") {
+  } else if (prefix == "dump_scrubs") {
     service.dumps_scrub(f);
-  } else if (admin_command == "calc_objectstore_db_histogram") {
+  } else if (prefix == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
-  } else if (admin_command == "flush_store_cache") {
+  } else if (prefix == "flush_store_cache") {
     store->flush_cache(&ss);
-  } else if (admin_command == "dump_pgstate_history") {
+  } else if (prefix == "dump_pgstate_history") {
     f->open_object_section("pgstate_history");
     f->open_array_section("pgs");
     vector<PGRef> pgs;
@@ -2562,7 +2622,7 @@ will start to track new ops received afterwards.";
     }
     f->close_section();
     f->close_section();
-  } else if (admin_command == "compact") {
+  } else if (prefix == "compact") {
     dout(1) << "triggering manual compaction" << dendl;
     auto start = ceph::coarse_mono_clock::now();
     store->compact();
@@ -2574,18 +2634,18 @@ will start to track new ops received afterwards.";
     f->open_object_section("compact_result");
     f->dump_float("elapsed_time", duration);
     f->close_section();
-  } else if (admin_command == "get_mapped_pools") {
+  } else if (prefix == "get_mapped_pools") {
     f->open_array_section("mapped_pools");
     set<int64_t> poollist = get_mapped_pools();
     for (auto pool : poollist) {
       f->dump_int("pool_id", pool);
     }
     f->close_section();
-  } else if (admin_command == "smart") {
+  } else if (prefix == "smart") {
     string devid;
     cmd_getval(cct, cmdmap, "devid", devid);
     probe_smart(devid, ss);
-  } else if (admin_command == "list_devices") {
+  } else if (prefix == "list_devices") {
     set<string> devnames;
     store->get_devices(&devnames);
     f->open_array_section("list_devices");
@@ -2600,19 +2660,305 @@ will start to track new ops received afterwards.";
       f->close_section();
     }
     f->close_section();
-  } else if (admin_command == "send_beacon") {
+  } else if (prefix == "send_beacon") {
+    lock_guard l(osd_lock);
     if (is_active()) {
       send_beacon(ceph::coarse_mono_clock::now());
     }
-  } else if (admin_command == "dump_osd_network") {
+  }
+
+  else if (prefix == "cluster_log") {
+    vector<string> msg;
+    cmd_getval(cct, cmdmap, "message", msg);
+    if (msg.empty()) {
+      ret = -EINVAL;
+      ss << "ignoring empty log message";
+      goto out;
+    }
+    string message = msg.front();
+    for (vector<string>::iterator a = ++msg.begin(); a != msg.end(); ++a)
+      message += " " + *a;
+    string lvl;
+    cmd_getval(cct, cmdmap, "level", lvl);
+    clog_type level = string_to_clog_type(lvl);
+    if (level < 0) {
+      ret = -EINVAL;
+      ss << "unknown level '" << lvl << "'";
+      goto out;
+    }
+    clog->do_log(level, message);
+  }
+
+  else if (prefix == "bench") {
+    lock_guard l(osd_lock);
+    int64_t count;
+    int64_t bsize;
+    int64_t osize, onum;
+    // default count 1G, size 4MB
+    cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
+    cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
+    cmd_getval(cct, cmdmap, "object_size", osize, (int64_t)0);
+    cmd_getval(cct, cmdmap, "object_num", onum, (int64_t)0);
+
+    uint32_t duration = cct->_conf->osd_bench_duration;
+
+    if (bsize > (int64_t) cct->_conf->osd_bench_max_block_size) {
+      // let us limit the block size because the next checks rely on it
+      // having a sane value.  If we allow any block size to be set things
+      // can still go sideways.
+      ss << "block 'size' values are capped at "
+         << byte_u_t(cct->_conf->osd_bench_max_block_size) << ". If you wish to use"
+         << " a higher value, please adjust 'osd_bench_max_block_size'";
+      ret = -EINVAL;
+      goto out;
+    } else if (bsize < (int64_t) (1 << 20)) {
+      // entering the realm of small block sizes.
+      // limit the count to a sane value, assuming a configurable amount of
+      // IOPS and duration, so that the OSD doesn't get hung up on this,
+      // preventing timeouts from going off
+      int64_t max_count =
+        bsize * duration * cct->_conf->osd_bench_small_size_max_iops;
+      if (count > max_count) {
+        ss << "'count' values greater than " << max_count
+           << " for a block size of " << byte_u_t(bsize) << ", assuming "
+           << cct->_conf->osd_bench_small_size_max_iops << " IOPS,"
+           << " for " << duration << " seconds,"
+           << " can cause ill effects on osd. "
+           << " Please adjust 'osd_bench_small_size_max_iops' with a higher"
+           << " value if you wish to use a higher 'count'.";
+        ret = -EINVAL;
+        goto out;
+      }
+    } else {
+      // 1MB block sizes are big enough so that we get more stuff done.
+      // However, to avoid the osd from getting hung on this and having
+      // timers being triggered, we are going to limit the count assuming
+      // a configurable throughput and duration.
+      // NOTE: max_count is the total amount of bytes that we believe we
+      //       will be able to write during 'duration' for the given
+      //       throughput.  The block size hardly impacts this unless it's
+      //       way too big.  Given we already check how big the block size
+      //       is, it's safe to assume everything will check out.
+      int64_t max_count =
+        cct->_conf->osd_bench_large_size_max_throughput * duration;
+      if (count > max_count) {
+        ss << "'count' values greater than " << max_count
+           << " for a block size of " << byte_u_t(bsize) << ", assuming "
+           << byte_u_t(cct->_conf->osd_bench_large_size_max_throughput) << "/s,"
+           << " for " << duration << " seconds,"
+           << " can cause ill effects on osd. "
+           << " Please adjust 'osd_bench_large_size_max_throughput'"
+           << " with a higher value if you wish to use a higher 'count'.";
+        ret = -EINVAL;
+        goto out;
+      }
+    }
+
+    if (osize && bsize > osize)
+      bsize = osize;
+
+    dout(1) << " bench count " << count
+            << " bsize " << byte_u_t(bsize) << dendl;
+
+    ObjectStore::Transaction cleanupt;
+
+    if (osize && onum) {
+      bufferlist bl;
+      bufferptr bp(osize);
+      bp.zero();
+      bl.push_back(std::move(bp));
+      bl.rebuild_page_aligned();
+      for (int i=0; i<onum; ++i) {
+	char nm[30];
+	snprintf(nm, sizeof(nm), "disk_bw_test_%d", i);
+	object_t oid(nm);
+	hobject_t soid(sobject_t(oid, 0));
+	ObjectStore::Transaction t;
+	t.write(coll_t(), ghobject_t(soid), 0, osize, bl);
+	store->queue_transaction(service.meta_ch, std::move(t), NULL);
+	cleanupt.remove(coll_t(), ghobject_t(soid));
+      }
+    }
+
+    bufferlist bl;
+    bufferptr bp(bsize);
+    bp.zero();
+    bl.push_back(std::move(bp));
+    bl.rebuild_page_aligned();
+
+    {
+      C_SaferCond waiter;
+      if (!service.meta_ch->flush_commit(&waiter)) {
+	waiter.wait();
+      }
+    }
+
+    utime_t start = ceph_clock_now();
+    for (int64_t pos = 0; pos < count; pos += bsize) {
+      char nm[30];
+      unsigned offset = 0;
+      if (onum && osize) {
+	snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));
+	offset = rand() % (osize / bsize) * bsize;
+      } else {
+	snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
+      }
+      object_t oid(nm);
+      hobject_t soid(sobject_t(oid, 0));
+      ObjectStore::Transaction t;
+      t.write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl);
+      store->queue_transaction(service.meta_ch, std::move(t), NULL);
+      if (!onum || !osize)
+	cleanupt.remove(coll_t::meta(), ghobject_t(soid));
+    }
+
+    {
+      C_SaferCond waiter;
+      if (!service.meta_ch->flush_commit(&waiter)) {
+	waiter.wait();
+      }
+    }
+    utime_t end = ceph_clock_now();
+
+    // clean up
+    store->queue_transaction(service.meta_ch, std::move(cleanupt), NULL);
+    {
+      C_SaferCond waiter;
+      if (!service.meta_ch->flush_commit(&waiter)) {
+	waiter.wait();
+      }
+    }
+
+    double elapsed = end - start;
+    double rate = count / elapsed;
+    double iops = rate / bsize;
+    f->open_object_section("osd_bench_results");
+    f->dump_int("bytes_written", count);
+    f->dump_int("blocksize", bsize);
+    f->dump_float("elapsed_sec", elapsed);
+    f->dump_float("bytes_per_sec", rate);
+    f->dump_float("iops", iops);
+    f->close_section();
+  }
+
+  else if (prefix == "flush_pg_stats") {
+    mgrc.send_pgstats();
+    f->dump_unsigned("stat_seq", service.get_osd_stat_seq());
+  }
+
+  else if (prefix == "heap") {
+    ret = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
+  }
+
+  else if (prefix == "debug dump_missing") {
+    f->open_array_section("pgs");
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg : pgs) {
+      string s = stringify(pg->pg_id);
+      f->open_array_section(s.c_str());
+      pg->lock();
+      pg->dump_missing(f);
+      pg->unlock();
+      f->close_section();
+    }
+    f->close_section();
+  }
+
+  else if (prefix == "debug kick_recovery_wq") {
+    int64_t delay;
+    cmd_getval(cct, cmdmap, "delay", delay);
+    ostringstream oss;
+    oss << delay;
+    ret = cct->_conf.set_val("osd_recovery_delay_start", oss.str().c_str());
+    if (ret != 0) {
+      ss << "kick_recovery_wq: error setting "
+	 << "osd_recovery_delay_start to '" << delay << "': error "
+	 << ret;
+      goto out;
+    }
+    cct->_conf.apply_changes(nullptr);
+    ss << "kicking recovery queue. set osd_recovery_delay_start "
+       << "to " << cct->_conf->osd_recovery_delay_start;
+  }
+
+  else if (prefix == "cpu_profiler") {
+    ostringstream ds;
+    string arg;
+    cmd_getval(cct, cmdmap, "arg", arg);
+    vector<string> argvec;
+    get_str_vec(arg, argvec);
+    cpu_profiler_handle_command(argvec, ds);
+    outbl.append(ds.str());
+  }
+
+  else if (prefix == "dump_pg_recovery_stats") {
+    lock_guard l(osd_lock);
+    pg_recovery_stats.dump_formatted(f);
+  }
+
+  else if (prefix == "reset_pg_recovery_stats") {
+    lock_guard l(osd_lock);
+    pg_recovery_stats.reset();
+  }
+
+  else if (prefix == "perf histogram dump") {
+    std::string logger;
+    std::string counter;
+    cmd_getval(cct, cmdmap, "logger", logger);
+    cmd_getval(cct, cmdmap, "counter", counter);
+    cct->get_perfcounters_collection()->dump_formatted_histograms(
+      f, false, logger, counter);
+  }
+
+  else if (prefix == "cache drop") {
+    lock_guard l(osd_lock);
+    dout(20) << "clearing all caches" << dendl;
+    // Clear the objectstore's cache - onode and buffer for Bluestore,
+    // system's pagecache for Filestore
+    ret = store->flush_cache(&ss);
+    if (ret < 0) {
+      ss << "Error flushing objectstore cache: " << cpp_strerror(ret);
+      goto out;
+    }
+    // Clear the objectcontext cache (per PG)
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg: pgs) {
+      pg->clear_cache();
+    }
+  }
+
+  else if (prefix == "cache status") {
+    lock_guard l(osd_lock);
+    int obj_ctx_count = 0;
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg: pgs) {
+      obj_ctx_count += pg->get_cache_obj_count();
+    }
+    f->open_object_section("cache_status");
+    f->dump_int("object_ctx", obj_ctx_count);
+    store->dump_cache_stats(f);
+    f->close_section();
+  }
+
+  else if (prefix == "scrub_purged_snaps") {
+    lock_guard l(osd_lock);
+    scrub_purged_snaps();
+  }
+
+  else if (prefix == "dump_osd_network") {
+    lock_guard l(osd_lock);
     int64_t value = 0;
     if (!(cmd_getval(cct, cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
-      value = static_cast<int64_t>(g_conf().get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
+      value = static_cast<double>(g_conf().get_val<double>(
+				    "mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {
-        double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
-        value = g_conf().get_val<int64_t>("osd_heartbeat_grace");
-        value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
+	double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
+	value = g_conf().get_val<int64_t>("osd_heartbeat_grace");
+	value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
       }
     } else {
       // Convert user input to microseconds
@@ -2733,9 +3079,9 @@ will start to track new ops received afterwards.";
   } else {
     ceph_abort_msg("broken asok registration");
   }
-  f->flush(ss);
-  delete f;
-  return true;
+
+ out:
+  on_finish(ret, ss.str(), outbl);
 }
 
 class TestOpsSocketHook : public AdminSocketHook {
@@ -2743,16 +3089,20 @@ class TestOpsSocketHook : public AdminSocketHook {
   ObjectStore *store;
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
-    stringstream ss;
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
+    int r = 0;
+    stringstream outss;
     try {
-      test_ops(service, store, command, cmdmap, ss);
+      test_ops(service, store, command, cmdmap, outss);
+      out.append(outss);
     } catch (const bad_cmd_get& e) {
-      ss << e.what();
+      errss << e.what();
+      r = -EINVAL;
     }
-    out.append(ss);
-    return true;
+    return r;
   }
   void test_ops(OSDService *service, ObjectStore *store,
 		std::string_view command, const cmdmap_t& cmdmap, ostream &ss);
@@ -3204,7 +3554,6 @@ int OSD::init()
   }
 
   osd_op_tp.start();
-  command_tp.start();
 
   // start the heartbeat
   heartbeat_thread.create("osd_srv_heartbt");
@@ -3292,162 +3641,141 @@ void OSD::final_init()
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
-  int r = admin_socket->register_command("status", "status", asok_hook,
+  int r = admin_socket->register_command("status", asok_hook,
 					 "high-level status of OSD");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("flush_journal", "flush_journal",
+  r = admin_socket->register_command("flush_journal",
                                      asok_hook,
                                      "flush the journal to permanent store");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_ops_in_flight",
-				     "dump_ops_in_flight " \
+  r = admin_socket->register_command("dump_ops_in_flight " \
 				     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("ops",
-				     "ops " \
+  r = admin_socket->register_command("ops " \
 				     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_blocked_ops",
-				     "dump_blocked_ops " \
+  r = admin_socket->register_command("dump_blocked_ops " \
 				     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show the blocked ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops",
-                                     "dump_historic_ops " \
+  r = admin_socket->register_command("dump_historic_ops " \
                                      "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show recent ops");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_slow_ops",
-                                     "dump_historic_slow_ops " \
+  r = admin_socket->register_command("dump_historic_slow_ops " \
                                      "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show slowest recent ops");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops_by_duration",
-                                     "dump_historic_ops_by_duration " \
+  r = admin_socket->register_command("dump_historic_ops_by_duration " \
                                      "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show slowest recent ops, sorted by duration");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_op_pq_state", "dump_op_pq_state",
+  r = admin_socket->register_command("dump_op_pq_state",
 				     asok_hook,
 				     "dump op priority queue state");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_blacklist", "dump_blacklist",
+  r = admin_socket->register_command("dump_blacklist",
 				     asok_hook,
 				     "dump blacklisted clients and times");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_watchers", "dump_watchers",
+  r = admin_socket->register_command("dump_watchers",
 				     asok_hook,
 				     "show clients which have active watches,"
 				     " and on which objects");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_recovery_reservations", "dump_recovery_reservations",
+  r = admin_socket->register_command("dump_recovery_reservations",
 				     asok_hook,
 				     "show recovery reservations");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_scrub_reservations", "dump_scrub_reservations",
+  r = admin_socket->register_command("dump_scrub_reservations",
 				     asok_hook,
-				     "show scrub reservations");
+				     "show recovery reservations");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("get_latest_osdmap", "get_latest_osdmap",
+  r = admin_socket->register_command("get_latest_osdmap",
 				     asok_hook,
 				     "force osd to update the latest map from "
 				     "the mon");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command( "heap",
-                                      "heap " \
-                                      "name=heapcmd,type=CephString " \
-                                      "name=value,type=CephString,req=false",
-                                      asok_hook,
-                                      "show heap usage info (available only if "
-                                      "compiled with tcmalloc)");
-  ceph_assert(r == 0);
-
-  r = admin_socket->register_command("set_heap_property",
-				     "set_heap_property " \
+  r = admin_socket->register_command("set_heap_property " \
 				     "name=property,type=CephString " \
 				     "name=value,type=CephInt",
 				     asok_hook,
 				     "update malloc extension heap property");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("get_heap_property",
-				     "get_heap_property " \
+  r = admin_socket->register_command("get_heap_property " \
 				     "name=property,type=CephString",
 				     asok_hook,
 				     "get malloc extension heap property");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("dump_objectstore_kv_stats",
-				     "dump_objectstore_kv_stats",
 				     asok_hook,
 				     "print statistics of kvdb which used by bluestore");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("dump_scrubs",
-				     "dump_scrubs",
 				     asok_hook,
 				     "print scheduled scrubs");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("calc_objectstore_db_histogram",
-                                     "calc_objectstore_db_histogram",
                                      asok_hook,
                                      "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("flush_store_cache",
-                                     "flush_store_cache",
                                      asok_hook,
                                      "Flush bluestore internal cache");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_pgstate_history", "dump_pgstate_history",
+  r = admin_socket->register_command("dump_pgstate_history",
 				     asok_hook,
 				     "show recent state history");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("compact", "compact",
+  r = admin_socket->register_command("compact",
 				     asok_hook,
 				     "Commpact object store's omap."
                                      " WARNING: Compaction probably slows your requests");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("get_mapped_pools", "get_mapped_pools",
+  r = admin_socket->register_command("get_mapped_pools",
                                      asok_hook,
                                      "dump pools whose PG(s) are mapped to this OSD.");
 
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("smart", "smart name=devid,type=CephString,req=False",
+  r = admin_socket->register_command("smart name=devid,type=CephString,req=false",
                                      asok_hook,
                                      "probe OSD devices for SMART data.");
 
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("list_devices", "list_devices",
+  r = admin_socket->register_command("list_devices",
                                      asok_hook,
                                      "list OSD devices.");
-  r = admin_socket->register_command("send_beacon", "send_beacon",
+  r = admin_socket->register_command("send_beacon",
                                      asok_hook,
                                      "send OSD beacon to mon immediately");
 
-  r = admin_socket->register_command("dump_osd_network", "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
-					 "Dump osd heartbeat network ping times");
+  r = admin_socket->register_command(
+    "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
+    "Dump osd heartbeat network ping times");
   ceph_assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
   // these commands traditionally support both pool names and numbers
   r = admin_socket->register_command(
-   "setomapval",
    "setomapval " \
    "name=pool,type=CephString " \
    "name=objname,type=CephObjectname " \
@@ -3457,7 +3785,6 @@ void OSD::final_init()
    "set omap key");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "rmomapkey",
     "rmomapkey " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3466,7 +3793,6 @@ void OSD::final_init()
     "remove omap key");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "setomapheader",
     "setomapheader " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3476,7 +3802,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "getomap",
     "getomap " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname",
@@ -3485,7 +3810,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "truncobj",
     "truncobj " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3495,7 +3819,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "injectdataerr",
     "injectdataerr " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3505,7 +3828,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "injectmdataerr",
     "injectmdataerr " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3514,35 +3836,166 @@ void OSD::final_init()
     "inject metadata error to an object");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "set_recovery_delay",
     "set_recovery_delay " \
     "name=utime,type=CephInt,req=false",
     test_ops_hook,
      "Delay osd recovery by specified seconds");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-   "trigger_scrub",
-   "trigger_scrub " \
-   "name=pgid,type=CephString " \
-   "name=time,type=CephInt,req=false",
-   test_ops_hook,
-   "Trigger a scheduled scrub ");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command(
-   "trigger_deep_scrub",
-   "trigger_deep_scrub " \
-   "name=pgid,type=CephString " \
-   "name=time,type=CephInt,req=false",
-   test_ops_hook,
-   "Trigger a scheduled deep scrub ");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command(
-   "injectfull",
    "injectfull " \
    "name=type,type=CephString,req=false " \
    "name=count,type=CephInt,req=false ",
    test_ops_hook,
    "Inject a full disk (optional count times)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "bench " \
+    "name=count,type=CephInt,req=false "    \
+    "name=size,type=CephInt,req=false "		   \
+    "name=object_size,type=CephInt,req=false "	   \
+    "name=object_num,type=CephInt,req=false ",
+    asok_hook,
+    "OSD benchmark: write <count> <size>-byte objects(with <obj_size> <obj_num>), " \
+    "(default count=1G default size=4MB). Results in log.");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "cluster_log " \
+    "name=level,type=CephChoices,strings=error,warning,info,debug "	\
+    "name=message,type=CephString,n=N",
+    asok_hook,
+    "log a message to the cluster log");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "flush_pg_stats",
+    asok_hook,
+    "flush pg stats");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "heap " \
+    "name=heapcmd,type=CephChoices,strings="				\
+    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
+    "name=value,type=CephString,req=false",
+    asok_hook,
+    "show heap usage info (available only if compiled with tcmalloc)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "debug dump_missing "			\
+    "name=filename,type=CephFilepath",
+    asok_hook,
+    "dump missing objects to a named file");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "debug kick_recovery_wq "						\
+    "name=delay,type=CephInt,range=0",
+    asok_hook,
+    "set osd_recovery_delay_start to <val>");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "cpu_profiler "						\
+    "name=arg,type=CephChoices,strings=status|flush",
+    asok_hook,
+    "run cpu profiling on daemon");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "dump_pg_recovery_stats",
+    asok_hook,
+    "dump pg recovery statistics");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "reset_pg_recovery_stats",
+    asok_hook,
+    "reset pg recovery statistics");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "cache drop",
+    asok_hook,
+    "Drop all OSD caches");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "cache status",
+    asok_hook,
+    "Get OSD caches statistics");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "scrub_purged_snaps",
+    asok_hook,
+    "Scrub purged_snaps vs snapmapper index");
+  ceph_assert(r == 0);
+
+  // -- pg commands --
+  // old form: ceph pg <pgid> command ...
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=query",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=mark_unfound_lost " \
+    "name=mulcmd,type=CephChoices,strings=revert|delete",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=list_unfound " \
+    "name=offset,type=CephString,req=false",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=scrub " \
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=deep_scrub " \
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  // new form: tell <pgid> <cmd> for both cli and rest
+  r = admin_socket->register_command(
+    "query",
+    asok_hook,
+    "show details of a specific pg");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "mark_unfound_lost "					\
+    "name=pgid,type=CephPgid,req=false "			\
+    "name=mulcmd,type=CephChoices,strings=revert|delete",
+    asok_hook,
+    "mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "list_unfound "					\
+    "name=pgid,type=CephPgid,req=false "		\
+    "name=offset,type=CephString,req=false",
+    asok_hook,
+    "list unfound objects on this pg, perhaps starting at an offset given in JSON");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "scrub "				\
+    "name=pgid,type=CephPgid,req=false "	\
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "Trigger a scheduled scrub ");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "deep_scrub "			\
+    "name=pgid,type=CephPgid,req=false "	\
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "Trigger a scheduled deep scrub ");
   ceph_assert(r == 0);
 }
 
@@ -3637,10 +4090,6 @@ int OSD::shutdown()
   osd_op_tp.drain();
   osd_op_tp.stop();
   dout(10) << "op sharded tp stopped" << dendl;
-
-  command_tp.drain();
-  command_tp.stop();
-  dout(10) << "command tp stopped" << dendl;
 
   dout(10) << "stopping agent" << dendl;
   service.agent_stop();
@@ -5590,60 +6039,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
        << "to " << service->cct->_conf->osd_recovery_delay_start;
     return;
   }
-  if (command ==  "trigger_scrub" || command == "trigger_deep_scrub") {
-    spg_t pgid;
-    bool deep = (command == "trigger_deep_scrub");
-    OSDMapRef curmap = service->get_osdmap();
-
-    string pgidstr;
-
-    cmd_getval(service->cct, cmdmap, "pgid", pgidstr);
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "Invalid pgid specified";
-      return;
-    }
-
-    int64_t time;
-    cmd_getval(service->cct, cmdmap, "time", time, (int64_t)0);
-
-    PGRef pg = service->osd->_lookup_lock_pg(pgid);
-    if (pg == nullptr) {
-      ss << "Can't find pg " << pgid;
-      return;
-    }
-
-    if (pg->is_primary()) {
-      const pg_pool_t *p = curmap->get_pg_pool(pgid.pool());
-      double pool_scrub_max_interval = 0;
-      double scrub_max_interval;
-      if (deep) {
-        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_deep_scrub_interval;
-      } else {
-        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_scrub_max_interval;
-      }
-      // Instead of marking must_scrub force a schedule scrub
-      utime_t stamp = ceph_clock_now();
-      if (time == 0)
-        stamp -= scrub_max_interval;
-      else
-        stamp -=  (float)time;
-      stamp -= 100.0;  // push back last scrub more for good measure
-      if (deep) {
-        pg->set_last_deep_scrub_stamp(stamp);
-      } else {
-        pg->set_last_scrub_stamp(stamp);
-      }
-      ss << "ok - set" << (deep ? " deep" : "" ) << " stamp " << stamp;
-    } else {
-      ss << "Not primary";
-    }
-    pg->unlock();
-    return;
-  }
   if (command == "injectfull") {
     int64_t count;
     string type;
@@ -6323,18 +6718,6 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
   }
 }
 
-void OSD::handle_command(MMonCommand *m)
-{
-  if (!require_mon_peer(m)) {
-    m->put();
-    return;
-  }
-
-  Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), NULL);
-  command_wq.queue(c);
-  m->put();
-}
-
 void OSD::handle_command(MCommand *m)
 {
   ConnectionRef con = m->get_connection();
@@ -6344,182 +6727,13 @@ void OSD::handle_command(MCommand *m)
     m->put();
     return;
   }
-
-  OSDCap& caps = session->caps;
-
-  if (!caps.allow_all() || m->get_source().is_mon()) {
+  if (!session->caps.allow_all()) {
     con->send_message(new MCommandReply(m, -EPERM));
     m->put();
     return;
   }
-
-  Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), con.get());
-  command_wq.queue(c);
-
+  cct->get_admin_socket()->queue_tell_command(m);
   m->put();
-}
-
-struct OSDCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string perm;
-} osd_commands[] = {
-
-#define COMMAND(parsesig, helptext, module, perm) \
-  {parsesig, helptext, module, perm},
-
-// yes, these are really pg commands, but there's a limit to how
-// much work it's worth.  The OSD returns all of them.  Make this
-// form (pg <pgid> <cmd>) valid only for the cli.
-// Rest uses "tell <pgid> <cmd>"
-
-COMMAND("pg " \
-	"name=pgid,type=CephPgid " \
-	"name=cmd,type=CephChoices,strings=query", \
-	"show details of a specific pg", "osd", "r")
-COMMAND("pg " \
-	"name=pgid,type=CephPgid " \
-	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
-	"name=mulcmd,type=CephChoices,strings=revert|delete", \
-	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
-	"osd", "rw")
-COMMAND("pg " \
-	"name=pgid,type=CephPgid " \
-	"name=cmd,type=CephChoices,strings=list_unfound " \
-	"name=offset,type=CephString,req=false",
-	"list unfound objects on this pg, perhaps starting at an offset given in JSON",
-	"osd", "r")
-
-// new form: tell <pgid> <cmd> for both cli and rest
-
-COMMAND("query",
-	"show details of a specific pg", "osd", "r")
-COMMAND("mark_unfound_lost " \
-	"name=mulcmd,type=CephChoices,strings=revert|delete", \
-	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
-	"osd", "rw")
-COMMAND("list_unfound " \
-	"name=offset,type=CephString,req=false",
-	"list unfound objects on this pg, perhaps starting at an offset given in JSON",
-	"osd", "r")
-COMMAND("perf histogram dump "
-        "name=logger,type=CephString,req=false "
-        "name=counter,type=CephString,req=false",
-	"Get histogram data",
-	"osd", "r")
-
-// tell <osd.n> commands.  Validation of osd.n must be special-cased in client
-COMMAND("version", "report version of OSD", "osd", "r")
-COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r")
-COMMAND("injectargs " \
-	"name=injected_args,type=CephString,n=N",
-	"inject configuration arguments into running OSD",
-	"osd", "rw")
-COMMAND("config set " \
-	"name=key,type=CephString name=value,type=CephString",
-	"Set a configuration option at runtime (not persistent)",
-	"osd", "rw")
-COMMAND("config get " \
-	"name=key,type=CephString",
-	"Get a configuration option at runtime",
-	"osd", "r")
-COMMAND("config unset " \
-	"name=key,type=CephString",
-	"Unset a configuration option at runtime (not persistent)",
-	"osd", "rw")
-COMMAND("cluster_log " \
-	"name=level,type=CephChoices,strings=error,warning,info,debug " \
-	"name=message,type=CephString,n=N",
-	"log a message to the cluster log",
-	"osd", "rw")
-COMMAND("bench " \
-	"name=count,type=CephInt,req=false " \
-	"name=size,type=CephInt,req=false " \
-	"name=object_size,type=CephInt,req=false " \
-	"name=object_num,type=CephInt,req=false ", \
-	"OSD benchmark: write <count> <size>-byte objects(with <obj_size> <obj_num>), " \
-	"(default count=1G default size=4MB). Results in log.",
-	"osd", "rw")
-COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw")
-COMMAND("heap " \
-	"name=heapcmd,type=CephChoices,strings="\
-	    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
-	"name=value,type=CephString,req=false",
-	"show heap usage info (available only if compiled with tcmalloc)",
-	"osd", "rw")
-COMMAND("debug dump_missing " \
-	"name=filename,type=CephFilepath",
-	"dump missing objects to a named file", "osd", "r")
-COMMAND("debug kick_recovery_wq " \
-	"name=delay,type=CephInt,range=0",
-	"set osd_recovery_delay_start to <val>", "osd", "rw")
-COMMAND("cpu_profiler " \
-	"name=arg,type=CephChoices,strings=status|flush",
-	"run cpu profiling on daemon", "osd", "rw")
-COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics",
-	"osd", "r")
-COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
-	"osd", "rw")
-COMMAND("compact",
-        "compact object store's omap. "
-        "WARNING: Compaction probably slows your requests",
-        "osd", "rw")
-COMMAND("smart name=devid,type=CephString,req=False",
-        "runs smartctl on this osd devices.  ",
-        "osd", "rw")
-COMMAND("cache drop",
-        "Drop all OSD caches",
-        "osd", "rwx")
-COMMAND("cache status",
-        "Get OSD caches statistics",
-        "osd", "r")
-COMMAND("send_beacon",
-        "Send OSD beacon to mon immediately",
-        "osd", "r")
-COMMAND("scrub_purged_snaps",
-	"Scrub purged_snaps vs snapmapper index",
-	"osd", "r")
-};
-
-void OSD::do_command(
-  Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
-{
-  dout(20) << "do_command tid " << tid << " " << cmd << dendl;
-
-  int r = 0;
-  stringstream ss, ds;
-  bufferlist odata;
-  cmdmap_t cmdmap;
-  if (cmd.empty()) {
-    ss << "no command given";
-    goto out;
-  }
-  if (!cmdmap_from_json(cmd, &cmdmap, ss)) {
-    r = -EINVAL;
-    goto out;
-  }
-
-  try {
-    r = _do_command(con, cmdmap, tid, data, odata, ss, ds);
-  } catch (const bad_cmd_get& e) {
-    r = -EINVAL;
-    ss << e.what();
-  }
-  if (r == -EAGAIN) {
-    return;
-  }
- out:
-  string rs = ss.str();
-  odata.append(ds);
-  dout(0) << "do_command r=" << r << " " << rs << dendl;
-  clog->info() << rs;
-  if (con) {
-    MCommandReply *reply = new MCommandReply(r, rs);
-    reply->set_tid(tid);
-    reply->set_data(odata);
-    con->send_message(reply);
-  }
 }
 
 namespace {
@@ -6536,488 +6750,6 @@ namespace {
       m.lock();
     }
   };
-}
-
-int OSD::_do_command(
-  Connection *con, cmdmap_t& cmdmap, ceph_tid_t tid, bufferlist& data,
-  bufferlist& odata, stringstream& ss, stringstream& ds)
-{
-  int r = 0;
-  string prefix;
-  string format;
-  string pgidstr;
-  boost::scoped_ptr<Formatter> f;
-
-  cmd_getval(cct, cmdmap, "prefix", prefix);
-
-  if (prefix == "get_command_descriptions") {
-    int cmdnum = 0;
-    JSONFormatter *f = new JSONFormatter();
-    f->open_object_section("command_descriptions");
-    for (OSDCommand *cp = osd_commands;
-	 cp < &osd_commands[std::size(osd_commands)]; cp++) {
-
-      ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f, con->get_features(),
-                           secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, 0);
-      cmdnum++;
-    }
-    f->close_section();	// command_descriptions
-
-    f->flush(ds);
-    delete f;
-    goto out;
-  }
-
-  cmd_getval(cct, cmdmap, "format", format);
-  f.reset(Formatter::create(format));
-
-  if (prefix == "version") {
-    if (f) {
-      f->open_object_section("version");
-      f->dump_string("version", pretty_version_to_str());
-      f->close_section();
-      f->flush(ds);
-    } else {
-      ds << pretty_version_to_str();
-    }
-    goto out;
-  }
-  else if (prefix == "injectargs") {
-    vector<string> argsvec;
-    cmd_getval(cct, cmdmap, "injected_args", argsvec);
-
-    if (argsvec.empty()) {
-      r = -EINVAL;
-      ss << "ignoring empty injectargs";
-      goto out;
-    }
-    string args = argsvec.front();
-    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
-      args += " " + *a;
-    unlock_guard unlock{osd_lock};
-    r = cct->_conf.injectargs(args, &ss);
-  }
-  else if (prefix == "config set") {
-    std::string key;
-    std::string val;
-    cmd_getval(cct, cmdmap, "key", key);
-    cmd_getval(cct, cmdmap, "value", val);
-    unlock_guard unlock{osd_lock};
-    r = cct->_conf.set_val(key, val, &ss);
-    if (r == 0) {
-      cct->_conf.apply_changes(nullptr);
-    }
-  }
-  else if (prefix == "config get") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    unlock_guard unlock{osd_lock};
-    std::string val;
-    r = cct->_conf.get_val(key, &val);
-    if (r == 0) {
-      ds << val;
-    }
-  }
-  else if (prefix == "config unset") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    unlock_guard unlock{osd_lock};
-    r = cct->_conf.rm_val(key);
-    if (r == 0) {
-      cct->_conf.apply_changes(nullptr);
-    }
-    if (r == -ENOENT) {
-      r = 0;  // make command idempotent
-    }
-  }
-  else if (prefix == "cluster_log") {
-    vector<string> msg;
-    cmd_getval(cct, cmdmap, "message", msg);
-    if (msg.empty()) {
-      r = -EINVAL;
-      ss << "ignoring empty log message";
-      goto out;
-    }
-    string message = msg.front();
-    for (vector<string>::iterator a = ++msg.begin(); a != msg.end(); ++a)
-      message += " " + *a;
-    string lvl;
-    cmd_getval(cct, cmdmap, "level", lvl);
-    clog_type level = string_to_clog_type(lvl);
-    if (level < 0) {
-      r = -EINVAL;
-      ss << "unknown level '" << lvl << "'";
-      goto out;
-    }
-    clog->do_log(level, message);
-  }
-
-  // either 'pg <pgid> <command>' or
-  // 'tell <pgid>' (which comes in without any of that prefix)?
-
-  else if (prefix == "pg" ||
-	    prefix == "query" ||
-	    prefix == "mark_unfound_lost" ||
-	    prefix == "list_unfound"
-	   ) {
-    pg_t pgid;
-
-    if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
-      ss << "no pgid specified";
-      r = -EINVAL;
-    } else if (!pgid.parse(pgidstr.c_str())) {
-      ss << "couldn't parse pgid '" << pgidstr << "'";
-      r = -EINVAL;
-    } else {
-      spg_t pcand;
-      PGRef pg;
-      if (osdmap->get_primary_shard(pgid, &pcand) &&
-	  (pg = _lookup_lock_pg(pcand))) {
-	if (pg->is_primary()) {
-	  // simulate pg <pgid> cmd= for pg->do-command
-	  if (prefix != "pg")
-	    cmd_putval(cct, cmdmap, "cmd", prefix);
-	  try {
-	    r = pg->do_command(cmdmap, ss, data, odata, con, tid);
-	  } catch (const bad_cmd_get& e) {
-	    pg->unlock();
-	    ss << e.what();
-	    return -EINVAL;
-	  }
-	  if (r == -EAGAIN) {
-	    pg->unlock();
-	    // don't reply, pg will do so async
-	    return -EAGAIN;
-	  }
-	} else {
-	  ss << "not primary for pgid " << pgid;
-
-	  // send them the latest diff to ensure they realize the mapping
-	  // has changed.
-	  service.send_incremental_map(osdmap->get_epoch() - 1, con, osdmap);
-
-	  // do not reply; they will get newer maps and realize they
-	  // need to resend.
-	  pg->unlock();
-	  return -EAGAIN;
-	}
-	pg->unlock();
-      } else {
-	ss << "i don't have pgid " << pgid;
-	r = -ENOENT;
-      }
-    }
-  }
-
-  else if (prefix == "bench") {
-    int64_t count;
-    int64_t bsize;
-    int64_t osize, onum;
-    // default count 1G, size 4MB
-    cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
-    cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
-    cmd_getval(cct, cmdmap, "object_size", osize, (int64_t)0);
-    cmd_getval(cct, cmdmap, "object_num", onum, (int64_t)0);
-
-    uint32_t duration = cct->_conf->osd_bench_duration;
-
-    if (bsize > (int64_t) cct->_conf->osd_bench_max_block_size) {
-      // let us limit the block size because the next checks rely on it
-      // having a sane value.  If we allow any block size to be set things
-      // can still go sideways.
-      ss << "block 'size' values are capped at "
-         << byte_u_t(cct->_conf->osd_bench_max_block_size) << ". If you wish to use"
-         << " a higher value, please adjust 'osd_bench_max_block_size'";
-      r = -EINVAL;
-      goto out;
-    } else if (bsize < (int64_t) (1 << 20)) {
-      // entering the realm of small block sizes.
-      // limit the count to a sane value, assuming a configurable amount of
-      // IOPS and duration, so that the OSD doesn't get hung up on this,
-      // preventing timeouts from going off
-      int64_t max_count =
-        bsize * duration * cct->_conf->osd_bench_small_size_max_iops;
-      if (count > max_count) {
-        ss << "'count' values greater than " << max_count
-           << " for a block size of " << byte_u_t(bsize) << ", assuming "
-           << cct->_conf->osd_bench_small_size_max_iops << " IOPS,"
-           << " for " << duration << " seconds,"
-           << " can cause ill effects on osd. "
-           << " Please adjust 'osd_bench_small_size_max_iops' with a higher"
-           << " value if you wish to use a higher 'count'.";
-        r = -EINVAL;
-        goto out;
-      }
-    } else {
-      // 1MB block sizes are big enough so that we get more stuff done.
-      // However, to avoid the osd from getting hung on this and having
-      // timers being triggered, we are going to limit the count assuming
-      // a configurable throughput and duration.
-      // NOTE: max_count is the total amount of bytes that we believe we
-      //       will be able to write during 'duration' for the given
-      //       throughput.  The block size hardly impacts this unless it's
-      //       way too big.  Given we already check how big the block size
-      //       is, it's safe to assume everything will check out.
-      int64_t max_count =
-        cct->_conf->osd_bench_large_size_max_throughput * duration;
-      if (count > max_count) {
-        ss << "'count' values greater than " << max_count
-           << " for a block size of " << byte_u_t(bsize) << ", assuming "
-           << byte_u_t(cct->_conf->osd_bench_large_size_max_throughput) << "/s,"
-           << " for " << duration << " seconds,"
-           << " can cause ill effects on osd. "
-           << " Please adjust 'osd_bench_large_size_max_throughput'"
-           << " with a higher value if you wish to use a higher 'count'.";
-        r = -EINVAL;
-        goto out;
-      }
-    }
-
-    if (osize && bsize > osize)
-      bsize = osize;
-
-    dout(1) << " bench count " << count
-            << " bsize " << byte_u_t(bsize) << dendl;
-
-    ObjectStore::Transaction cleanupt;
-
-    if (osize && onum) {
-      bufferlist bl;
-      bufferptr bp(osize);
-      bp.zero();
-      bl.push_back(std::move(bp));
-      bl.rebuild_page_aligned();
-      for (int i=0; i<onum; ++i) {
-	char nm[30];
-	snprintf(nm, sizeof(nm), "disk_bw_test_%d", i);
-	object_t oid(nm);
-	hobject_t soid(sobject_t(oid, 0));
-	ObjectStore::Transaction t;
-	t.write(coll_t(), ghobject_t(soid), 0, osize, bl);
-	store->queue_transaction(service.meta_ch, std::move(t), NULL);
-	cleanupt.remove(coll_t(), ghobject_t(soid));
-      }
-    }
-
-    bufferlist bl;
-    bufferptr bp(bsize);
-    bp.zero();
-    bl.push_back(std::move(bp));
-    bl.rebuild_page_aligned();
-
-    {
-      C_SaferCond waiter;
-      if (!service.meta_ch->flush_commit(&waiter)) {
-	waiter.wait();
-      }
-    }
-
-    utime_t start = ceph_clock_now();
-    for (int64_t pos = 0; pos < count; pos += bsize) {
-      char nm[30];
-      unsigned offset = 0;
-      if (onum && osize) {
-	snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));
-	offset = rand() % (osize / bsize) * bsize;
-      } else {
-	snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
-      }
-      object_t oid(nm);
-      hobject_t soid(sobject_t(oid, 0));
-      ObjectStore::Transaction t;
-      t.write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl);
-      store->queue_transaction(service.meta_ch, std::move(t), NULL);
-      if (!onum || !osize)
-	cleanupt.remove(coll_t::meta(), ghobject_t(soid));
-    }
-
-    {
-      C_SaferCond waiter;
-      if (!service.meta_ch->flush_commit(&waiter)) {
-	waiter.wait();
-      }
-    }
-    utime_t end = ceph_clock_now();
-
-    // clean up
-    store->queue_transaction(service.meta_ch, std::move(cleanupt), NULL);
-    {
-      C_SaferCond waiter;
-      if (!service.meta_ch->flush_commit(&waiter)) {
-	waiter.wait();
-      }
-    }
-
-    double elapsed = end - start;
-    double rate = count / elapsed;
-    double iops = rate / bsize;
-    if (f) {
-      f->open_object_section("osd_bench_results");
-      f->dump_int("bytes_written", count);
-      f->dump_int("blocksize", bsize);
-      f->dump_float("elapsed_sec", elapsed);
-      f->dump_float("bytes_per_sec", rate);
-      f->dump_float("iops", iops);
-      f->close_section();
-      f->flush(ds);
-    } else {
-      ds << "bench: wrote " << byte_u_t(count)
-	 << " in blocks of " << byte_u_t(bsize) << " in "
-	 << elapsed << " sec at " << byte_u_t(rate) << "/sec "
-	 << si_u_t(iops) << " IOPS";
-    }
-  }
-
-  else if (prefix == "flush_pg_stats") {
-    mgrc.send_pgstats();
-    ds << service.get_osd_stat_seq() << "\n";
-  }
-
-  else if (prefix == "heap") {
-    r = ceph::osd_cmds::heap(*cct, cmdmap, *f, ds);
-  }
-
-  else if (prefix == "debug dump_missing") {
-    if (!f) {
-      f.reset(new JSONFormatter(true));
-    }
-    f->open_array_section("pgs");
-    vector<PGRef> pgs;
-    _get_pgs(&pgs);
-    for (auto& pg : pgs) {
-      string s = stringify(pg->pg_id);
-      f->open_array_section(s.c_str());
-      pg->lock();
-      pg->dump_missing(f.get());
-      pg->unlock();
-      f->close_section();
-    }
-    f->close_section();
-    f->flush(ds);
-  }
-  else if (prefix == "debug kick_recovery_wq") {
-    int64_t delay;
-    cmd_getval(cct, cmdmap, "delay", delay);
-    ostringstream oss;
-    oss << delay;
-    unlock_guard unlock{osd_lock};
-    r = cct->_conf.set_val("osd_recovery_delay_start", oss.str().c_str());
-    if (r != 0) {
-      ss << "kick_recovery_wq: error setting "
-	 << "osd_recovery_delay_start to '" << delay << "': error "
-	 << r;
-      goto out;
-    }
-    cct->_conf.apply_changes(nullptr);
-    ss << "kicking recovery queue. set osd_recovery_delay_start "
-       << "to " << cct->_conf->osd_recovery_delay_start;
-  }
-
-  else if (prefix == "cpu_profiler") {
-    string arg;
-    cmd_getval(cct, cmdmap, "arg", arg);
-    vector<string> argvec;
-    get_str_vec(arg, argvec);
-    cpu_profiler_handle_command(argvec, ds);
-  }
-
-  else if (prefix == "dump_pg_recovery_stats") {
-    stringstream s;
-    if (f) {
-      pg_recovery_stats.dump_formatted(f.get());
-      f->flush(ds);
-    } else {
-      pg_recovery_stats.dump(s);
-      ds << "dump pg recovery stats: " << s.str();
-    }
-  }
-
-  else if (prefix == "reset_pg_recovery_stats") {
-    ss << "reset pg recovery stats";
-    pg_recovery_stats.reset();
-  }
-
-  else if (prefix == "perf histogram dump") {
-    std::string logger;
-    std::string counter;
-    cmd_getval(cct, cmdmap, "logger", logger);
-    cmd_getval(cct, cmdmap, "counter", counter);
-    if (f) {
-      cct->get_perfcounters_collection()->dump_formatted_histograms(
-          f.get(), false, logger, counter);
-      f->flush(ds);
-    }
-  }
-
-  else if (prefix == "compact") {
-    dout(1) << "triggering manual compaction" << dendl;
-    auto start = ceph::coarse_mono_clock::now();
-    store->compact();
-    auto end = ceph::coarse_mono_clock::now();
-    double duration = std::chrono::duration<double>(end-start).count();
-    dout(1) << "finished manual compaction in "
-            << duration
-            << " seconds" << dendl;
-    ss << "compacted omap in " << duration << " seconds";
-  }
-
-  else if (prefix == "smart") {
-    string devid;
-    cmd_getval(cct, cmdmap, "devid", devid);
-    probe_smart(devid, ds);
-  }
-
-  else if (prefix == "cache drop") {
-    dout(20) << "clearing all caches" << dendl;
-    // Clear the objectstore's cache - onode and buffer for Bluestore,
-    // system's pagecache for Filestore
-    r = store->flush_cache(&ss);
-    if (r < 0) {
-      ds << "Error flushing objectstore cache: " << cpp_strerror(r);
-      goto out;
-    }
-    // Clear the objectcontext cache (per PG)
-    vector<PGRef> pgs;
-    _get_pgs(&pgs);
-    for (auto& pg: pgs) {
-      pg->clear_cache();
-    }
-  }
-
-  else if (prefix == "cache status") {
-    int obj_ctx_count = 0;
-    vector<PGRef> pgs;
-    _get_pgs(&pgs);
-    for (auto& pg: pgs) {
-      obj_ctx_count += pg->get_cache_obj_count();
-    }
-    if (f) {
-      f->open_object_section("cache_status");
-      f->dump_int("object_ctx", obj_ctx_count);
-      store->dump_cache_stats(f.get());
-      f->close_section();
-      f->flush(ds);
-    } else {
-      ds << "object_ctx: " << obj_ctx_count;
-      store->dump_cache_stats(ds);
-    }
-  }
-  else if (prefix == "send_beacon") {
-    if (is_active()) {
-      send_beacon(ceph::coarse_mono_clock::now());
-    }
-  } else if (prefix == "scrub_purged_snaps") {
-    scrub_purged_snaps();
-  } else {
-    ss << "unrecognized command '" << prefix << "'";
-    r = -EINVAL;
-  }
-
- out:
-  return r;
 }
 
 void OSD::scrub_purged_snaps()
@@ -7254,9 +6986,6 @@ void OSD::ms_fast_dispatch(Message *m)
   case CEPH_MSG_PING:
     dout(10) << "ping from " << m->get_source() << dendl;
     m->put();
-    return;
-  case MSG_MON_COMMAND:
-    handle_command(static_cast<MMonCommand*>(m));
     return;
   case MSG_OSD_FORCE_RECOVERY:
     handle_fast_force_recovery(static_cast<MOSDForceRecovery*>(m));

@@ -142,7 +142,7 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
     return 0;
 
   int fds[2];
-  if (pipe_cloexec(fds) < 0) {
+  if (pipe_cloexec(fds, 0) < 0) {
     int e = errno;
     lderr(cct) << __func__ << " can't create notify pipe: " << cpp_strerror(e) << dendl;
     return -e;

@@ -176,8 +176,10 @@ class Objecter::RequestStateHook : public AdminSocketHook {
   Objecter *m_objecter;
 public:
   explicit RequestStateHook(Objecter *objecter);
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, ceph::buffer::list& out) override;
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   ceph::buffer::list& out) override;
 };
 
 /**
@@ -384,7 +386,6 @@ void Objecter::init()
   m_request_state_hook = new RequestStateHook(this);
   AdminSocket* admin_socket = cct->get_admin_socket();
   int ret = admin_socket->register_command("objecter_requests",
-					   "objecter_requests",
 					   m_request_state_hook,
 					   "show in-progress osd requests");
 
@@ -532,7 +533,7 @@ void Objecter::shutdown()
   // shutdown() with the ::initialized check at start.
   if (m_request_state_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
-    admin_socket->unregister_command("objecter_requests");
+    admin_socket->unregister_commands(m_request_state_hook);
     delete m_request_state_hook;
     m_request_state_hook = NULL;
   }
@@ -4708,17 +4709,15 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 {
 }
 
-bool Objecter::RequestStateHook::call(std::string_view command,
-				      const cmdmap_t& cmdmap,
-				      std::string_view format,
-				      ceph::buffer::list& out)
+int Objecter::RequestStateHook::call(std::string_view command,
+				     const cmdmap_t& cmdmap,
+				     Formatter *f,
+				     std::ostream& ss,
+				     ceph::buffer::list& out)
 {
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   shared_lock rl(m_objecter->rwlock);
   m_objecter->dump_requests(f);
-  f->flush(out);
-  delete f;
-  return true;
+  return 0;
 }
 
 void Objecter::blacklist_self(bool set)
@@ -4782,6 +4781,18 @@ void Objecter::handle_command_reply(MCommandReply *m)
     sl.unlock();
     return;
   }
+  if (m->r == -EAGAIN) {
+    ldout(cct,10) << __func__ << " tid " << m->get_tid()
+		  << " got EAGAIN, requesting map and resending" << dendl;
+    // NOTE: This might resend twice... once now, and once again when
+    // we get an updated osdmap and the PG is found to have moved.
+    _maybe_request_map();
+    _send_command(c);
+    m->put();
+    sl.unlock();
+    return;
+  }
+
   if (c->poutbl) {
     c->poutbl->claim(m->get_data());
   }

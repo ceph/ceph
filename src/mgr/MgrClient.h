@@ -32,6 +32,7 @@ class MMgrClose;
 class Messenger;
 class MCommandReply;
 class MPGStats;
+class MonMap;
 
 class MgrSessionState
 {
@@ -46,6 +47,8 @@ class MgrSessionState
 class MgrCommand : public CommandOp
 {
   public:
+  std::string name;
+  bool tell = false;
 
   explicit MgrCommand(ceph_tid_t t) : CommandOp(t) {}
   MgrCommand() : CommandOp() {}
@@ -57,6 +60,7 @@ protected:
   CephContext *cct;
   MgrMap map;
   Messenger *msgr;
+  MonMap *monmap;
 
   std::unique_ptr<MgrSessionState> session;
 
@@ -103,7 +107,7 @@ protected:
   bool mgr_optional = false;
 
 public:
-  MgrClient(CephContext *cct_, Messenger *msgr_);
+  MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap);
 
   void set_messenger(Messenger *msgr_) { msgr = msgr_; }
 
@@ -144,9 +148,15 @@ public:
     pgstats_cb = std::move(cb_);
   }
 
-  int start_command(const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
-		    ceph::buffer::list *outbl, std::string *outs,
-		    Context *onfinish);
+  int start_command(
+    const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
+    ceph::buffer::list *outbl, std::string *outs,
+    Context *onfinish);
+  int start_tell_command(
+    const string& name,
+    const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
+    ceph::buffer::list *outbl, std::string *outs,
+    Context *onfinish);
 
   int service_daemon_register(
     const std::string& service,

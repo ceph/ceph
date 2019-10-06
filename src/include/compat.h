@@ -190,6 +190,6 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 
 int ceph_posix_fallocate(int fd, off_t offset, off_t len);
 
-int pipe_cloexec(int pipefd[2]);
+int pipe_cloexec(int pipefd[2], int flags);
 
 #endif /* !CEPH_COMPAT_H */

@@ -181,6 +181,22 @@
 * New OSD daemon command dump_scrub_reservations which reveals the
   scrub reservations that are held for local (primary) and remote (replica) PGs.
 
+* Previously, ``ceph tell mgr ...`` could be used to call commands
+  implemented by mgr modules.  This is no longer supported.  Since
+  luminous, using ``tell`` has not been necessary: those same commands
+  are also accessible without the ``tell mgr`` portion (e.g., ``ceph
+  tell mgr influx foo`` is the same as ``ceph influx foo``.  ``ceph
+  tell mgr ...`` will now call admin commands--the same set of
+  commands accessible via ``ceph daemon ...`` when you are logged into
+  the appropriate host.
+
+* The ``ceph tell`` and ``ceph daemon`` commands have been unified,
+  such that all such commands are accessible via either interface.
+  Note that ceph-mgr tell commands are accessible via either ``ceph
+  tell mgr ...`` or ``ceph tell mgr.<id> ...``, and it is only
+  possible to send tell commands to the active daemon (the standbys do
+  not accept incoming connections over the network).
+
 * Ceph will now issue a health warning if a RADOS pool as a ``pg_num``
   value that is not a power of two.  This can be fixed by adjusting
   the pool to a nearby power of two::
@@ -199,3 +215,4 @@
 
 * The ``upmap_max_iterations`` config option of mgr/balancer has been
   renamed to ``upmap_max_optimizations`` to better match its behaviour.
+
