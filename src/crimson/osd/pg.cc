@@ -139,7 +139,8 @@ bool PG::try_flush_or_schedule_async() {
 
 void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
 {
-  seastar::sleep(delay).then([last_peering_reset, this] {
+  // handle the peering event in the background
+  std::ignore = seastar::sleep(delay).then([last_peering_reset, this] {
     shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
@@ -259,7 +260,8 @@ HeartbeatStampsRef PG::get_hb_stamps(int peer)
 
 void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
 {
-  seastar::sleep(delay).then([last_peering_reset, this] {
+  // handle the peering event in the background
+  std::ignore = seastar::sleep(delay).then([last_peering_reset, this] {
     shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
