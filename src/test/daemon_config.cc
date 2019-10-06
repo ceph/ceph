@@ -204,7 +204,7 @@ TEST(DaemonConfig, InjectArgsReject) {
   // variable and there isn't an observer for it.
   std::string injection2("--osd_data /tmp/some-other-directory --log-graylog-port 4");
   ret = g_ceph_context->_conf.injectargs(injection2, &cout);
-  ASSERT_EQ(-ENOSYS, ret);
+  ASSERT_EQ(-EPERM, ret);
 
   // It should be unchanged.
   memset(buf2, 0, sizeof(buf2));
@@ -316,7 +316,7 @@ TEST(DaemonConfig, ThreadSafety1) {
   // Verify that we can't change this, since safe_to_start_threads has
   // been set.
   ret = g_ceph_context->_conf.set_val("osd_data", "");
-  ASSERT_EQ(-ENOSYS, ret);
+  ASSERT_EQ(-EPERM, ret);
 
   g_conf()._clear_safe_to_start_threads();
 

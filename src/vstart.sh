@@ -932,20 +932,26 @@ EOF
         run 'mgr' $name $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
-    # use tell mgr here because the first mgr might not have activated yet
-    # to register the python module commands.
     if [ "$new" -eq 1 ]; then
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
-            ceph_adm tell mgr dashboard ac-user-create admin admin administrator
+            while ! ceph_adm -h | grep -c -q ^dashboard ; do
+                echo 'waiting for mgr dashboard module to start'
+                sleep 1
+            done
+            ceph_adm dashboard ac-user-create admin admin administrator
             if [ "$ssl" != "0" ]; then
-                if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+                if ! ceph_adm dashboard create-self-signed-cert;  then
                     echo dashboard module not working correctly!
                 fi
             fi
         fi
 
-        if ceph_adm tell mgr restful create-self-signed-cert; then
+        while ! ceph_adm -h | grep -c -q ^restful ; do
+            echo 'waiting for mgr restful module to start'
+            sleep 1
+        done
+        if ceph_adm restful create-self-signed-cert; then
             SF=`mktemp`
             ceph_adm restful create-key admin -o $SF
             RESTFUL_SECRET=`cat $SF`

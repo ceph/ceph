@@ -844,9 +844,11 @@ int main(int argc, char **argv)
     }
 
     for (auto alloc_name : allocs_name) {
-      ceph::bufferlist out;
+      ceph::bufferlist in, out;
+      ostringstream err;
       bool b = admin_socket->execute_command(
-          "{\"prefix\": \"bluestore allocator " + action_name + " " + alloc_name + "\"}", out);
+	{"{\"prefix\": \"bluestore allocator " + action_name + " " + alloc_name + "\"}"},
+	in, err, &out);
       if (!b) {
         cerr << "failure querying '" << alloc_name << "'" << std::endl;
         exit(EXIT_FAILURE);

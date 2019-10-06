@@ -85,7 +85,7 @@ public:
     : desc(desc), replayer(replayer) {
   }
   virtual ~ImageReplayerAdminSocketCommand() {}
-  virtual bool call(Formatter *f, stringstream *ss) = 0;
+  virtual int call(Formatter *f) = 0;
 
   std::string desc;
   ImageReplayer<I> *replayer;
@@ -99,9 +99,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
-    this->replayer->print_status(f, ss);
-    return true;
+  int call(Formatter *f) override {
+    this->replayer->print_status(f);
+    return 0;
   }
 };
 
@@ -112,9 +112,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->start(nullptr, true);
-    return true;
+    return 0;
   }
 };
 
@@ -125,9 +125,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->stop(nullptr, true);
-    return true;
+    return 0;
   }
 };
 
@@ -138,9 +138,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->restart();
-    return true;
+    return 0;
   }
 };
 
@@ -151,9 +151,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->flush();
-    return true;
+    return 0;
   }
 };
 
@@ -177,7 +177,7 @@ public:
 
   int register_commands() {
     for (auto &it : commands) {
-      int r = admin_socket->register_command(it.first, it.first, this,
+      int r = admin_socket->register_command(it.first, this,
                                              it.second->desc);
       if (r < 0) {
         return r;
@@ -188,25 +188,20 @@ public:
   }
 
   ~ImageReplayerAdminSocketHook() override {
+    admin_socket->unregister_commands(this);
     for (auto &it : commands) {
-      if (it.second->registered) {
-        admin_socket->unregister_command(it.first);
-      }
       delete it.second;
     }
     commands.clear();
   }
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     auto i = commands.find(command);
     ceph_assert(i != commands.end());
-    Formatter *f = Formatter::create(format);
-    stringstream ss;
-    bool r = i->second->call(f, &ss);
-    delete f;
-    out.append(ss);
-    return r;
+    return i->second->call(f);
   }
 
 private:
@@ -920,21 +915,16 @@ bool ImageReplayer<I>::on_replay_interrupted()
 }
 
 template <typename I>
-void ImageReplayer<I>::print_status(Formatter *f, stringstream *ss)
+void ImageReplayer<I>::print_status(Formatter *f)
 {
   dout(10) << dendl;
 
   std::lock_guard l{m_lock};
 
-  if (f) {
-    f->open_object_section("image_replayer");
-    f->dump_string("name", m_name);
-    f->dump_string("state", to_string(m_state));
-    f->close_section();
-    f->flush(*ss);
-  } else {
-    *ss << m_name << ": state: " << to_string(m_state);
-  }
+  f->open_object_section("image_replayer");
+  f->dump_string("name", m_name);
+  f->dump_string("state", to_string(m_state));
+  f->close_section();
 }
 
 template <typename I>

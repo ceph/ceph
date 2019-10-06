@@ -102,6 +102,9 @@ public:
   bool is_con(Connection *c) const {
     return con.get() == c;
   }
+  void queue_command(Message *m) {
+    pending_tell_command = m;
+  }
 
 private:
   int _negotiate(MAuthReply *m,
@@ -129,6 +132,8 @@ private:
 
   std::unique_ptr<AuthClientHandler> auth;
   uint64_t global_id;
+
+  MessageRef pending_tell_command;
 
   AuthRegistry *auth_registry;
 };
@@ -504,9 +509,14 @@ private:
   uint64_t last_mon_command_tid;
 
   struct MonCommand {
+    // for tell only
     std::string target_name;
     int target_rank;
-    unsigned send_attempts = 0;
+    ConnectionRef target_con;
+    std::unique_ptr<MonConnection> target_session;
+    unsigned send_attempts = 0;  ///< attempt count for legacy mons
+    utime_t last_send_attempt;
+
     uint64_t tid;
     std::vector<std::string> cmd;
     ceph::buffer::list inbl;
@@ -520,15 +530,21 @@ private:
 	tid(t),
 	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL), ontimeout(NULL)
     {}
+
+    bool is_tell() const {
+      return target_name.size() || target_rank >= 0;
+    }
   };
   std::map<uint64_t,MonCommand*> mon_commands;
 
   void _send_command(MonCommand *r);
+  void _check_tell_commands();
   void _resend_mon_commands();
   int _cancel_mon_command(uint64_t tid);
   void _finish_command(MonCommand *r, int ret, std::string rs);
   void _finish_auth();
   void handle_mon_command_ack(MMonCommandAck *ack);
+  void handle_command_reply(MCommandReply *reply);
 
 public:
   void start_mon_command(const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,

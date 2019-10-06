@@ -1074,7 +1074,7 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
 
 int RGWHTTPManager::start()
 {
-  if (pipe_cloexec(thread_pipe) < 0) {
+  if (pipe_cloexec(thread_pipe, 0) < 0) {
     int e = errno;
     ldout(cct, 0) << "ERROR: pipe(): " << cpp_strerror(e) << dendl;
     return -e;

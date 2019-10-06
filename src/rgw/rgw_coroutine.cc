@@ -832,7 +832,7 @@ RGWCoroutinesManagerRegistry::~RGWCoroutinesManagerRegistry()
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   if (!admin_command.empty()) {
-    admin_socket->unregister_command(admin_command);
+    admin_socket->unregister_commands(this);
   }
 }
 
@@ -840,10 +840,10 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   if (!admin_command.empty()) {
-    admin_socket->unregister_command(admin_command);
+    admin_socket->unregister_commands(this);
   }
   admin_command = command;
-  int r = admin_socket->register_command(admin_command, admin_command, this,
+  int r = admin_socket->register_command(admin_command, this,
 				     "dump current coroutines stack state");
   if (r < 0) {
     lderr(cct) << "ERROR: fail to register admin socket command (r=" << r << ")" << dendl;
@@ -852,17 +852,14 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
   return 0;
 }
 
-bool RGWCoroutinesManagerRegistry::call(std::string_view command,
-                                        const cmdmap_t& cmdmap,
-                                        std::string_view format,
-                                        bufferlist& out) {
+int RGWCoroutinesManagerRegistry::call(std::string_view command,
+				       const cmdmap_t& cmdmap,
+				       Formatter *f,
+				       std::ostream& ss,
+				       bufferlist& out) {
   std::shared_lock rl{lock};
-  stringstream ss;
-  JSONFormatter f;
-  ::encode_json("cr_managers", *this, &f);
-  f.flush(ss);
-  out.append(ss);
-  return true;
+  ::encode_json("cr_managers", *this, f);
+  return 0;
 }
 
 void RGWCoroutinesManagerRegistry::dump(Formatter *f) const {

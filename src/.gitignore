@@ -5,3 +5,4 @@
 mypy_report.txt
 .mypy_venv/
 .mypy_cache/
+.tox/

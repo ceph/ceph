@@ -133,8 +133,10 @@ public:
                                const std::string& id = "");
 
   int hook_to_admin_command();
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-            std::string_view format, bufferlist& out) override;
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& out) override;
   string get_active_names();
 };
 

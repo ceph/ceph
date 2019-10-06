@@ -15,6 +15,7 @@
 #include "MgrClient.h"
 
 #include "mgr/MgrContext.h"
+#include "mon/MonMap.h"
 
 #include "msg/Messenger.h"
 #include "messages/MMgrMap.h"
@@ -37,9 +38,12 @@ using ceph::bufferlist;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgrc " << __func__ << " "
 
-MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
-    : Dispatcher(cct_), cct(cct_), msgr(msgr_),
-      timer(cct_, lock)
+MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap_)
+  : Dispatcher(cct_),
+    cct(cct_),
+    msgr(msgr_),
+    monmap(monmap_),
+    timer(cct_, lock)
 {
   ceph_assert(cct != nullptr);
 }
@@ -184,13 +188,34 @@ void MgrClient::reconnect()
   }
 
   // resend any pending commands
-  for (const auto &p : command_table.get_commands()) {
-    auto m = p.second.get_message(
-      {},
-      HAVE_FEATURE(map.active_mgr_features, SERVER_OCTOPUS));
+  auto p = command_table.get_commands().begin();
+  while (p != command_table.get_commands().end()) {
+    auto tid = p->first;
+    auto& op = p->second;
+    ldout(cct,10) << "resending " << tid << dendl;
+    MessageRef m;
+    if (op.tell) {
+      if (op.name.size() && op.name != map.active_name) {
+	ldout(cct, 10) << "active mgr " << map.active_name << " != target "
+		       << op.name << dendl;
+	if (op.on_finish) {
+	  op.on_finish->complete(-ENXIO);
+	}
+	++p;
+	command_table.erase(tid);
+	continue;
+      }
+      // note: will not work for pre-octopus mgrs
+      m = op.get_message({}, false);
+    } else {
+      m = op.get_message(
+	{},
+	HAVE_FEATURE(map.active_mgr_features, SERVER_OCTOPUS));
+    }
     ceph_assert(session);
     ceph_assert(session->con);
     session->con->send_message2(std::move(m));
+    ++p;
   }
 }
 
@@ -451,13 +476,50 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   op.on_finish = onfinish;
 
   if (session && session->con) {
-    // Leaving fsid argument null because it isn't used.
+    // Leaving fsid argument null because it isn't used historically, and
+    // we can use it as a signal that we are sending a non-tell command.
     auto m = op.get_message(
       {},
       HAVE_FEATURE(map.active_mgr_features, SERVER_OCTOPUS));
     session->con->send_message2(std::move(m));
   } else {
     ldout(cct, 5) << "no mgr session (no running mgr daemon?), waiting" << dendl;
+  }
+  return 0;
+}
+
+int MgrClient::start_tell_command(
+  const string& name,
+  const vector<string>& cmd, const bufferlist& inbl,
+  bufferlist *outbl, string *outs,
+  Context *onfinish)
+{
+  std::lock_guard l(lock);
+
+  ldout(cct, 20) << "target: " << name << " cmd: " << cmd << dendl;
+
+  if (map.epoch == 0 && mgr_optional) {
+    ldout(cct,20) << " no MgrMap, assuming EACCES" << dendl;
+    return -EACCES;
+  }
+
+  auto &op = command_table.start_command();
+  op.tell = true;
+  op.name = name;
+  op.cmd = cmd;
+  op.inbl = inbl;
+  op.outbl = outbl;
+  op.outs = outs;
+  op.on_finish = onfinish;
+
+  if (session && session->con && (name.size() == 0 || map.active_name == name)) {
+    // Set fsid argument to signal that this is really a tell message (and
+    // we are not a legacy client sending a non-tell command via MCommand).
+    auto m = op.get_message(monmap->fsid, false);
+    session->con->send_message2(std::move(m));
+  } else {
+    ldout(cct, 5) << "no mgr session (no running mgr daemon?), or "
+		  << name << " not active mgr, waiting" << dendl;
   }
   return 0;
 }

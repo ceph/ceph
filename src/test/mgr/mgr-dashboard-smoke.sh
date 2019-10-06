@@ -51,7 +51,7 @@ function TEST_dashboard() {
         tries=$((tries+1))
         sleep 1
     done
-    ceph_adm tell mgr dashboard set-login-credentials admin admin
+    ceph_adm dashboard set-login-credentials admin admin
 
     tries=0
     while [[ $tries < 30 ]] ; do

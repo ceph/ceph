@@ -1079,25 +1079,26 @@ class TestCommand(object):
         eq(len(buf), 0)
         del cmd['epoch']
 
-        # send to specific target by name
+        # send to specific target by name, rank
+        cmd = {"prefix": "version"}
+
         target = d['mons'][0]['name']
         print(target)
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30,
                                                 target=target)
         eq(ret, 0)
         assert len(buf) > 0
-        d = json.loads(buf.decode("utf-8"))
-        assert('epoch' in d)
+        e = json.loads(buf.decode("utf-8"))
+        assert('release' in e)
 
-        # and by rank
         target = d['mons'][0]['rank']
         print(target)
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30,
                                                 target=target)
         eq(ret, 0)
         assert len(buf) > 0
-        d = json.loads(buf.decode("utf-8"))
-        assert('epoch' in d)
+        e = json.loads(buf.decode("utf-8"))
+        assert('release' in e)
 
     def test_osd_bench(self):
         cmd = dict(prefix='bench', size=4096, count=8192)

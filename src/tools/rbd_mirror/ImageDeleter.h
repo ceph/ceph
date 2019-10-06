@@ -71,7 +71,7 @@ public:
   void init(Context* on_finish);
   void shut_down(Context* on_finish);
 
-  void print_status(Formatter *f, std::stringstream *ss);
+  void print_status(Formatter *f);
 
   // for testing purposes
   void wait_for_deletion(const std::string &image_id,
@@ -119,7 +119,7 @@ private:
     return os;
     }
 
-    void print_status(Formatter *f, std::stringstream *ss,
+    void print_status(Formatter *f,
                       bool print_failure_info=false);
   };
   typedef std::shared_ptr<DeleteInfo> DeleteInfoRef;

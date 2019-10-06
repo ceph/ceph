@@ -18,7 +18,7 @@ tasks:
       help:
       config show:
       config help:
-      config set filestore_dump_file /tmp/foo:
+      config set bluestore_csum_type xxhash64:
       perf dump:
       perf schema:
       get_heap_property tcmalloc.max_total_thread_cache_byte:
