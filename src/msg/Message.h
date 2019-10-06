@@ -172,6 +172,7 @@
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301
 #define MSG_MDS_METRICS            0x302
+#define MSG_MDS_PING               0x303
 
 #define MSG_MDS_EXPORTDIRDISCOVER     0x449
 #define MSG_MDS_EXPORTDIRDISCOVERACK  0x450
