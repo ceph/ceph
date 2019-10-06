@@ -158,13 +158,13 @@ public:
     std::array<bool, MAX_BDEV> dirty_devs;
 
     FileWriter(FileRef f)
-      : file(f),
+      : file(std::move(f)),
 	buffer_appender(buffer.get_page_aligned_appender(
 			  g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
-      if (f->fnode.ino == 1) {
+      if (file->fnode.ino == 1) {
 	write_hint = WRITE_LIFE_MEDIUM;
       }
     }
@@ -250,7 +250,7 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
-    explicit FileLock(FileRef f) : file(f) {}
+    explicit FileLock(FileRef f) : file(std::move(f)) {}
   };
 
 private:
