@@ -24,6 +24,46 @@ if [[ $* == *--debug* ]]; then
     set -x
 fi
 
+# associative array keyed on "component" strings from PR titles, mapping them to
+# GitHub PR labels that make sense in backports
+declare -A comp_hash=(
+["bluestore"]="bluestore"
+["build/ops"]="build/ops"
+["ceph.spec"]="build/ops"
+["ceph-volume"]="ceph-volume"
+["cephfs"]="cephfs"
+["cmake"]="build/ops"
+["config"]="config"
+["client"]="cephfs"
+["common"]="common"
+["core"]="core"
+["dashboard"]="dashboard"
+["deb"]="build/ops"
+["doc"]="documentation"
+["grafana"]="monitoring"
+["mds"]="cephfs"
+["messenger"]="core"
+["mon"]="core"
+["msg"]="core"
+["mgr/dashboard"]="dashboard"
+["mgr/prometheus"]="monitoring"
+["mgr"]="core"
+["monitoring"]="monitoring"
+["orch"]="orchestrator"
+["osd"]="core"
+["perf"]="performance"
+["prometheus"]="monitoring"
+["pybind"]="pybind"
+["py3"]="python3"
+["python3"]="python3"
+["qa"]="tests"
+["rbd"]="rbd"
+["rgw"]="rgw"
+["rpm"]="build/ops"
+["tests"]="tests"
+["tool"]="tools"
+)
+
 function bail_out_github_api {
     local api_said="$1"
     info "GitHub API said:"
@@ -144,6 +184,25 @@ function failed_mandatory_var_check {
     local varname="$1"
     error "$varname not defined"
     setup_ok=""
+}
+
+# takes PR title, attempts to guess component
+function guess_component {
+    local comp=
+    local pos="0"
+    local pr_title="$1"
+    local winning_comp=
+    local winning_comp_pos="9999"
+    for comp in "${!comp_hash[@]}" ; do
+        pos=$(grep_for_substr "$pr_title" "$comp")
+        # echo "$comp: $pos"
+        [ "$pos" = "-1" ] && continue
+        if [ "$pos" -lt "$winning_comp_pos" ] ; then
+             winning_comp_pos="$pos"
+             winning_comp="$comp"
+        fi
+    done
+    [ "$winning_comp" ] && echo "${comp_hash["$winning_comp"]}" || echo ""
 }
 
 function info {
@@ -344,6 +403,18 @@ EOM
     fi
 }
 
+# takes a string and a substring - returns position of substring within string,
+# or -1 if not found
+# NOTE: position of first character in string is 0
+function grep_for_substr {
+    munged="${1%%$2*}"
+    if [ "$munged" = "$1" ] ; then
+        echo "-1"
+    else
+        echo "${#munged}"
+    fi
+}
+
 function troubleshooting_advice {
     cat <<EOM
 Troubleshooting notes
@@ -398,18 +469,20 @@ Documentation:
    ${this_script} --troubleshooting-advice | less
 
 Usage:
-   ${this_script} [OPTIONS] BACKPORT_TRACKER_ISSUE_NUMBER
+   ${this_script} --setup
+   ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER
 
-Options:
-    -c/--component COMPONENT (will try to set this label in the PR)
+Options (not needed in normal operation):
+    -c/--component COMPONENT (will try to set this label in the PR; if
+                       omitted, the script will try to guess the component)
     --debug            (turns on "set -x")
-    -s/--setup         (just check the setup)
+    -s/--setup         (check the setup and report any problems found)
     -v/--verbose
 
 Example:
-   ${this_script} -c dashboard -m 31459
+   ${this_script} 31459
    (if cherry-pick conflicts are present, finish cherry-picking phase manually
-   and run the script again with the same arguments)
+   and then run the script again with the same argument)
 
 CAVEAT: The script must be run from inside a local git clone.
 EOM
@@ -699,12 +772,20 @@ backport_pr_url="${github_endpoint}/pull/$backport_pr_number"
 info "Opened backport PR ${backport_pr_url}"
 
 if [ "$EXPLICIT_COMPONENT" ] ; then
+    debug "Component given on command line: using it"
     component="$EXPLICIT_COMPONENT"
 else
-    component=${COMPONENT:-core}
+    debug "Attempting to guess component"
+    component=$(guess_component "$title")
 fi
-debug "Attempting to set ${component} label and ${milestone} milestone in ${backport_pr_url}"
-curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$backport_pr_number'?access_token='$github_token >/dev/null 2>&1 || true
+if [ "$component" ] ; then
+    debug "Attempting to set ${component} label and ${milestone} milestone in ${backport_pr_url}"
+    data_binary='{"milestone":'$milestone_number',"labels":["'$component'"]}'
+else
+    debug "Attempting to set ${milestone} milestone in ${backport_pr_url}"
+    data_binary='{"milestone":'$milestone_number'}'
+fi
+curl --silent --data-binary "$data_binary" 'https://api.github.com/repos/ceph/ceph/issues/'$backport_pr_number'?access_token='$github_token >/dev/null 2>&1 || true
 
 pgrep firefox >/dev/null && firefox ${backport_pr_url}
 
