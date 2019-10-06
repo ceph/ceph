@@ -176,6 +176,7 @@
 
 #include "messages/MMDSTableRequest.h"
 #include "messages/MMDSMetrics.h"
+#include "messages/MMDSPing.h"
 
 //#include "messages/MInodeUpdate.h"
 #include "messages/MCacheExpire.h"
@@ -836,6 +837,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_METRICS:
     m = make_message<MMDSMetrics>();
+    break;
+
+  case MSG_MDS_PING:
+    m = make_message<MMDSPing>();
     break;
 
   case MSG_MGR_BEACON:
