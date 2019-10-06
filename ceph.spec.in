@@ -1622,6 +1622,7 @@ fi
 %files mgr
 %{_bindir}/ceph-mgr
 %dir %{_datadir}/ceph/mgr
+%{_datadir}/ceph/mgr/alerts
 %{_datadir}/ceph/mgr/ansible
 %{_datadir}/ceph/mgr/balancer
 %{_datadir}/ceph/mgr/crash
