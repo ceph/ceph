@@ -138,8 +138,8 @@ private:
   std::atomic_int ioc_reap_count = {0};
 
 protected:
-  uint64_t size;
-  uint64_t block_size;
+  uint64_t size = 0;
+  uint64_t block_size = 0;
   bool support_discard = false;
   bool rotational = true;
   bool lock_exclusive = true;
@@ -149,8 +149,6 @@ public:
   void *aio_callback_priv;
   BlockDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   : cct(cct),
-    size(0),
-    block_size(0),
     aio_callback(cb),
     aio_callback_priv(cbpriv)
  {}
