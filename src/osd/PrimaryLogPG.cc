@@ -5900,7 +5900,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_try_flush, soid.oid.name.c_str(), soid.snap.val);
-	if (ctx->lock_type != ObjectContext::RWState::RWNONE) {
+	if (ctx->lock_type != RWState::RWNONE) {
 	  dout(10) << "cache-try-flush without SKIPRWLOCKS flag set" << dendl;
 	  result = -EINVAL;
 	  break;
@@ -5933,7 +5933,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_cache_flush, soid.oid.name.c_str(), soid.snap.val);
-	if (ctx->lock_type == ObjectContext::RWState::RWNONE) {
+	if (ctx->lock_type == RWState::RWNONE) {
 	  dout(10) << "cache-flush with SKIPRWLOCKS flag set" << dendl;
 	  result = -EINVAL;
 	  break;
@@ -10276,7 +10276,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
   // try to take the lock manually, since we don't
   // have a ctx yet.
   if (ctx->lock_manager.get_lock_type(
-	ObjectContext::RWState::RWWRITE,
+	RWState::RWWRITE,
 	oid,
 	obc,
 	fop->op)) {
@@ -10287,7 +10287,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
     // fop->op is now waiting on the lock; get fop->dup_ops to wait too.
     for (auto op : fop->dup_ops) {
       bool locked = ctx->lock_manager.get_lock_type(
-	ObjectContext::RWState::RWWRITE,
+	RWState::RWWRITE,
 	oid,
 	obc,
 	op);
@@ -14233,7 +14233,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 
   auto null_op_req = OpRequestRef();
   if (!ctx->lock_manager.get_lock_type(
-	ObjectContext::RWState::RWWRITE,
+	RWState::RWWRITE,
 	obc->obs.oi.soid,
 	obc,
 	null_op_req)) {
