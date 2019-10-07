@@ -98,11 +98,19 @@ function cherry_pick_phase {
     debug "Counting commits in ${original_pr_url}"
     remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token})
     number=$(echo ${remote_api_output} | jq .commits)
-    if [ -z "$number" -o "$number" = "null" ] ; then
+    singular_or_plural_commit=
+    if [ "$number" -eq "$number" ] 2>/dev/null ; then
+        # \$number is an integer
+        if [ "$number" -eq "1" ] ; then
+            singular_or_plural_commit="commit"
+        else
+            singular_or_plural_commit="commits"
+        fi
+    else
         error "Could not determine the number of commits in ${original_pr_url}"
         bail_out_github_api "$remote_api_output"
     fi
-    info "Found $number commits in ${original_pr_url}"
+    info "Found $number $singular_or_plural_commit in $original_pr_url"
 
     debug "Fetching latest commits from $upstream_remote"
     git fetch $upstream_remote
