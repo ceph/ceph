@@ -21,7 +21,7 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
-ARCH=`uname -m`
+ARCH=$(uname -m)
 
 function munge_ceph_spec_in {
     # http://rpm.org/user_doc/conditional_builds.html
@@ -29,10 +29,24 @@ function munge_ceph_spec_in {
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
 }
 
+function munge_debian_control {
+    local version=$1
+    shift
+    local control=$1
+    shift
+    case "$version" in
+        *squeeze*|*wheezy*)
+	    control="/tmp/control.$$"
+	    grep -v babeltrace debian/control > $control
+	    ;;
+    esac
+    echo $control
+}
+
 function ensure_decent_gcc_on_ubuntu {
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
-    local old=$(gcc -dumpversion)
+    local old=$(gcc -dumpfullversion -dumpversion)
     local new=$1
     local codename=$2
     if dpkg --compare-versions $old ge 7.0; then
@@ -41,17 +55,31 @@ function ensure_decent_gcc_on_ubuntu {
 
     if [ ! -f /usr/bin/g++-${new} ]; then
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
-deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
-deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
-deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
+deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
+deb [arch=amd64 lang=none] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
+deb [arch=amd64,i386 lang=none] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
 EOF
 	# import PPA's signing key into APT's keyring
-	$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F
-	$SUDO apt-get -y update -o Acquire::Languages=none -o Acquire::Translation=none || true
-	$SUDO apt-get install -y g++-7
+	cat << ENDOFKEY | $SUDO apt-key add -
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: SKS 1.1.6
+Comment: Hostname: keyserver.ubuntu.com
+
+mI0ESuBvRwEEAMi4cDba7xlKaaoXjO1n1HX8RKrkW+HEIl79nSOSJyvzysajs7zUow/OzCQp
+9NswqrDmNuH1+lPTTRNAGtK8r2ouq2rnXT1mTl23dpgHZ9spseR73s4ZBGw/ag4bpU5dNUSt
+vfmHhIjVCuiSpNn7cyy1JSSvSs3N2mxteKjXLBf7ABEBAAG0GkxhdW5jaHBhZCBUb29sY2hh
+aW4gYnVpbGRziLYEEwECACAFAkrgb0cCGwMGCwkIBwMCBBUCCAMEFgIDAQIeAQIXgAAKCRAe
+k3eiup7yfzGKA/4xzUqNACSlB+k+DxFFHqkwKa/ziFiAlkLQyyhm+iqz80htRZr7Ls/ZRYZl
+0aSU56/hLe0V+TviJ1s8qdN2lamkKdXIAFfavA04nOnTzyIBJ82EAUT3Nh45skMxo4z4iZMN
+msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
+=LcUQ
+-----END PGP PUBLIC KEY BLOCK-----
+ENDOFKEY
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
     fi
 
-    case $codename in
+    case "$codename" in
         trusty)
             old=4.8;;
         xenial)
@@ -62,15 +90,17 @@ EOF
 	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
 	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
 
-    $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    if [ -f /usr/bin/g++-${old} ]; then
+      $SUDO update-alternatives \
+  	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+  	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    fi
 
     $SUDO update-alternatives --auto gcc
 
     # cmake uses the latter by default
-    $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
-    $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/${ARCH}-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
 }
 
 function version_lt {
@@ -102,7 +132,7 @@ EOF
     fi
 }
 
-if [ x`uname`x = xFreeBSDx ]; then
+if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
         devel/git \
@@ -156,7 +186,7 @@ if [ x`uname`x = xFreeBSDx ]; then
     exit
 else
     source /etc/os-release
-    case $ID in
+    case "$ID" in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y devscripts equivs
@@ -179,11 +209,9 @@ else
         touch $DIR/status
 
 	backports=""
-	control="debian/control"
+	control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
-		control="/tmp/control.$$"
-		grep -v babeltrace debian/control > $control
                 backports="-t $codename-backports"
                 ;;
         esac
@@ -193,39 +221,40 @@ else
 	# work is done
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
-	if [ -n "$backports" ] ; then rm $control; fi
+	if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         yumdnf="yum"
-        builddepcmd="yum-builddep -y"
+        builddepcmd="yum-builddep -y --setopt=*.skip_if_unavailable=true"
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
             yumdnf="dnf"
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
-	if [ "$ID" = "centos" -a $(uname -m) = aarch64 ]; then
+	if [ "$ID" = "centos" -a "$ARCH" = "aarch64" ]; then
 	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
 	    $SUDO yum-config-manager --disable centos-sclo-rh || true
 	    $SUDO yum remove centos-release-scl || true
 	fi
-        case $ID in
+        case "$ID" in
             fedora)
                 if test $yumdnf = yum; then
                     $SUDO $yumdnf install -y yum-utils
                 fi
                 ;;
             centos|rhel|ol|virtuozzo)
+                MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO yum install -y yum-utils
                 if test $ID = rhel ; then
-                    $SUDO yum-config-manager --enable rhel-$VERSION_ID-server-optional-rpms
+                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$VERSION_ID/x86_64/
-                $SUDO yum install --nogpgcheck -y epel-release
-                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$VERSION_ID
+                rpm --quiet --query epel-release || \
+		    $SUDO yum -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
+                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $ID = centos -a $VERSION_ID = 7 ; then
+                if test $ID = centos -a $MAJOR_VERSION = 7 ; then
 		    $SUDO $yumdnf install -y python36-devel
-		    case $(uname -m) in
+		    case "$ARCH" in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
 			    dts_ver=7
@@ -246,6 +275,7 @@ else
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
 	if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
 	fi
@@ -283,8 +313,7 @@ function populate_wheelhouse() {
 
     # although pip comes with virtualenv, having a recent version
     # of pip matters when it comes to using wheel packages
-    # workaround of https://github.com/pypa/setuptools/issues/1042
-    pip --timeout 300 $install 'setuptools >= 0.8,< 36' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
     if test $# != 0 ; then
         pip --timeout 300 $install $@ || return 1
     fi
@@ -300,6 +329,9 @@ function activate_virtualenv() {
         # because CentOS 7 has a buggy old version (v1.10.1)
         # https://github.com/pypa/virtualenv/issues/463
         virtualenv ${env_dir}_tmp
+        # install setuptools before upgrading virtualenv, as the latter needs
+        # a recent setuptools for setup commands like `extras_require`.
+        ${env_dir}_tmp/bin/pip install --upgrade setuptools
         ${env_dir}_tmp/bin/pip install --upgrade virtualenv
         ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
         rm -rf ${env_dir}_tmp
@@ -328,6 +360,12 @@ find . -name tox.ini | while read ini ; do
     (
         cd $(dirname $ini)
         require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
+        md5=wheelhouse/md5
+        if test "$require"; then
+            if ! test -f $md5 || ! md5sum -c $md5 ; then
+                rm -rf wheelhouse
+            fi
+        fi
         if test "$require" && ! test -d wheelhouse ; then
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
@@ -335,6 +373,7 @@ find . -name tox.ini | while read ini ; do
                 populate_wheelhouse "wheel -w $wip_wheelhouse" $require || exit 1
             done
             mv $wip_wheelhouse wheelhouse
+            md5sum *requirements.txt > $md5
         fi
     )
 done
@@ -343,3 +382,4 @@ for interpreter in python2.7 python3 ; do
     rm -rf $top_srcdir/install-deps-$interpreter
 done
 rm -rf $XDG_CACHE_HOME
+git --version || (echo "Dashboard uses git to pull dependencies." ; false)
