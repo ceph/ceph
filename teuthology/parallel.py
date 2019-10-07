@@ -51,7 +51,7 @@ class parallel(object):
             for foo in bar:
                 p.spawn(quux, foo, baz=True)
             for result in p:
-                print result
+                print(result)
 
     If one of the spawned functions throws an exception, it will be thrown
     when iterating over the results, or when the with block ends.
