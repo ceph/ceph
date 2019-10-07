@@ -85,7 +85,7 @@ urllib3==1.22
     source venv/bin/activate
     pip install 'setuptools >= 12'
     eval pip install $TEUTHOLOGY_PY_REQS
-    pip install -r $CURR_DIR/requirements.txt
+    pip install -r $CURR_DIR/requirements.txt -c $CURR_DIR/constraints.txt
 
     git clone --depth 1 https://github.com/ceph/teuthology.git
 
