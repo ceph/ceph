@@ -43,6 +43,31 @@
 # filesystem, etc.). Without correct values for these four variables, this
 # script will not work!
 #
+#
+
+function deprecation_warning {
+    echo "*******************"
+    echo "DEPRECATION WARNING"
+    echo "*******************"
+    echo
+    echo "This is an outdated, unmaintained version of ceph-backport.sh. Using this"
+    echo "version can have unpredictable results. It is recommended to use the"
+    echo "version from the \"master\" branch, instead. In other words, use this:"
+    echo
+    echo "https://github.com/ceph/ceph/blob/master/src/script/ceph-backport.sh"
+    echo
+}
+
+if [[ "$@" =~ "--version" ]] ; then
+    deprecation_warning
+    echo "$0: version 14.2.0 (DEPRECATED - DO NOT USE)"
+    exit 0
+fi
+
+deprecation_warning
+echo "Sleeping for 5 seconds to give you time to hit CTRL-C..."
+sleep 5
+
 source $HOME/bin/backport_common.sh
 
 function failed_required_variable_check () {
