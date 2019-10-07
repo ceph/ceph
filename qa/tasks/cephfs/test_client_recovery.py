@@ -472,22 +472,22 @@ class TestClientRecovery(CephFSTestCase):
 
                 path = "{path}"
 
-                print "Starting creation..."
+                print("Starting creation...")
                 start = time.time()
 
                 os.mkdir(path)
                 dfd = os.open(path, os.O_DIRECTORY)
 
                 fd = open(os.path.join(path, "childfile"), "w")
-                print "Finished creation in {{0}}s".format(time.time() - start)
+                print("Finished creation in {{0}}s".format(time.time() - start))
 
-                print "Starting fsync..."
+                print("Starting fsync...")
                 start = time.time()
                 if {dirfsync}:
                     os.fsync(dfd)
                 else:
                     os.fsync(fd)
-                print "Finished fsync in {{0}}s".format(time.time() - start)
+                print("Finished fsync in {{0}}s".format(time.time() - start))
             """.format(path=path,dirfsync=str(dirfsync)))
         )
 
@@ -570,7 +570,7 @@ class TestClientRecovery(CephFSTestCase):
             cephfs.mount()
             client_id = cephfs.get_instance_id()
             cephfs.abort_conn()
-            print client_id
+            print(client_id)
             """)
         )
         gid = int(gid_str);

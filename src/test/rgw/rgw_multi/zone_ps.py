@@ -165,10 +165,10 @@ def delete_all_s3_topics(zone, region):
 
         topics = client.list_topics()['Topics']
         for topic in topics:
-            print 'topic cleanup, deleting: ' + topic['TopicArn']
+            print('topic cleanup, deleting: ' + topic['TopicArn'])
             assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
     except Exception as err:
-        print 'failed to do topic cleanup: ' + str(err)
+        print('failed to do topic cleanup: ' + str(err))
     
 
 def delete_all_objects(conn, bucket_name):

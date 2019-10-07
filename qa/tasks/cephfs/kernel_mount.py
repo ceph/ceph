@@ -208,7 +208,7 @@ class KernelMount(CephFSMount):
                     result[client_id] = dir
                 return result
 
-            print json.dumps(get_id_to_dir())
+            print(json.dumps(get_id_to_dir()))
             """)
 
         p = self.client_remote.run(args=[
@@ -230,7 +230,7 @@ class KernelMount(CephFSMount):
         pyscript = dedent("""
             import os
 
-            print open(os.path.join("{debug_dir}", "{filename}")).read()
+            print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
         p = self.client_remote.run(args=[

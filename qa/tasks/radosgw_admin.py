@@ -131,7 +131,7 @@ class usage_acc:
             for b in e['buckets']:
                 c = b['categories']
                 if b['bucket'] == 'nosuchbucket':
-                    print "got here"
+                    print("got here")
                 try:
                     b2 = self.e2b(e2, b['bucket'], False)
                     if b2 != None:
@@ -232,7 +232,7 @@ def create_presigned_url(conn, method, bucket_name, key_name, expiration):
 
 def send_raw_http_request(conn, method, bucket_name, key_name, follow_redirects = False):
     url = create_presigned_url(conn, method, bucket_name, key_name, 3600)
-    print url
+    print(url)
     h = httplib2.Http()
     h.follow_redirects = follow_redirects
     return h.request(url, method)

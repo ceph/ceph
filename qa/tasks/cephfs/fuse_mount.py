@@ -427,7 +427,7 @@ def find_socket(client_name):
                         return f
         raise RuntimeError("Client socket {{0}} not found".format(client_name))
 
-print find_socket("{client_name}")
+print(find_socket("{client_name}"))
 """.format(
             asok_path=self._asok_path(),
             client_name="client.{0}".format(self.client_id))
