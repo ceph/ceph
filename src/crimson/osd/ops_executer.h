@@ -17,7 +17,7 @@
 #include "crimson/net/Fwd.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
-#include "osd/osd_internal_types.h"
+#include "crimson/osd/object_context.h"
 
 #include "crimson/common/errorator.h"
 #include "crimson/common/type_helpers.h"

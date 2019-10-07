@@ -13,7 +13,7 @@
 #include "crimson/osd/acked_peers.h"
 #include "crimson/common/shared_lru.h"
 #include "osd/osd_types.h"
-#include "osd/osd_internal_types.h"
+#include "crimson/osd/object_context.h"
 
 struct hobject_t;
 class MOSDRepOpReply;
