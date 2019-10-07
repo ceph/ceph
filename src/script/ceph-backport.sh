@@ -174,7 +174,7 @@ function deduce_remote {
 
 function display_version_message_and_exit {
     echo "$this_script: Ceph backporting script, version $SCRIPT_VERSION"
-    exit 0
+    exit 0 
 }
 
 function eol {
@@ -815,7 +815,7 @@ pgrep firefox >/dev/null && firefox ${backport_pr_url}
 
 debug "Updating backport tracker issue ${redmine_url}"
 redmine_status=2 # In Progress
-remote_api_status_code=$(curl --write-out %{http_code} --output /dev/null --silent -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$backport_pr_number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh version '$SCRIPT_VERSION'"}' ${redmine_url}'.json?key='$redmine_key)
+remote_api_status_code=$(curl --write-out %{http_code} --output /dev/null --silent -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$backport_pr_number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id',"notes":"Updated automatically by ceph-backport.sh version '$SCRIPT_VERSION'"}}' ${redmine_url}'.json?key='$redmine_key)
 if [ "${remote_api_status_code:0:1}" = "2" ] ; then
     info "${redmine_url} updated"
 elif [ "${remote_api_status_code:0:1}" = "4" ] ; then
