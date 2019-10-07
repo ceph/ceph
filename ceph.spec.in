@@ -277,7 +277,7 @@ BuildRequires:	python2-Cython
 %endif
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-setuptools
-%if 0%{?rhel}
+%if 0%{?rhel} == 7
 BuildRequires:	python%{python3_version_nodots}-Cython
 %else
 BuildRequires:	python%{python3_pkgversion}-Cython
