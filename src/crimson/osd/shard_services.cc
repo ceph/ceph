@@ -37,7 +37,8 @@ ShardServices::ShardServices(
       public_msgr(public_msgr),
       monc(monc),
       mgrc(mgrc),
-      store(store)
+      store(store),
+      obc_registry(crimson::common::local_conf())
 {
   perf = build_osd_logger(&cct);
   cct.get_perfcounters_collection()->add(perf);

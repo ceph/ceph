@@ -13,6 +13,8 @@
 #include <seastar/core/shared_mutex.hh>
 #include <seastar/core/future.hh>
 
+#include "include/ceph_assert.h"
+
 namespace ceph {
   class Formatter;
 }
