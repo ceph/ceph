@@ -7316,6 +7316,13 @@ void MDCache::standby_trim_segment(LogSegment *ls)
     in->dirfragtreelock.remove_dirty();
     try_trim_inode(in);
   }
+  while (!ls->truncating_inodes.empty()) {
+    auto it = ls->truncating_inodes.begin();
+    CInode *in = *it;
+    ls->truncating_inodes.erase(it);
+    in->put(CInode::PIN_TRUNCATING);
+    try_trim_inode(in);
+  }
 }
 
 void MDCache::handle_cache_expire(const MCacheExpire::const_ref &m)
