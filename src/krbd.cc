@@ -434,6 +434,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   struct udev_device *dev;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -455,8 +456,14 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   }
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   l = udev_enumerate_get_list_entry(enm);
   if (!l) {
@@ -492,6 +499,7 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
   string err;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -513,8 +521,14 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
     goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   l = udev_enumerate_get_list_entry(enm);
   if (!l) {
@@ -771,6 +785,7 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
   bool have_output = false;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -780,8 +795,14 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
     goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   udev_list_entry_foreach(l, udev_enumerate_get_list_entry(enm)) {
     struct udev_device *dev;
