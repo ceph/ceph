@@ -8915,7 +8915,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     break;
 
   case SEEK_DATA:
-    if (offset < 0 || offset >= in->size) {
+    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size) {
       r = -ENXIO;
       return offset; 
     }
@@ -8923,7 +8923,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     break;
 
   case SEEK_HOLE:
-    if (offset < 0 || offset >= in->size) {
+    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size) {
       r = -ENXIO;
       pos = offset; 
     } else {
