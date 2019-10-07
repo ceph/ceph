@@ -8000,12 +8000,12 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     fill_statx(dn->inode, caps, &stx);
 
     uint64_t next_off = dn->offset + 1;
+    fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
     ++pd;
     if (pd == dir->readdir_cache.end())
       next_off = dir_result_t::END;
 
     Inode *in = NULL;
-    fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
     if (getref) {
       in = dn->inode.get();
       _ll_get(in);
