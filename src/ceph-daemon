@@ -713,6 +713,44 @@ def command_bootstrap():
     mon_c = get_container(fsid, 'mon', mon_id)
     deploy_daemon_units(fsid, 'mon', mon_id, mon_c)
 
+    # assimilate and minimize config
+    if not args.no_minimize_config:
+        logging.info('Assimilating anything we can from ceph.conf...')
+        out = CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=['-n', 'mon.',
+                  '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                  '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                  'config', 'assimilate-conf',
+                  '-i', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
+            volume_mounts={
+                log_dir: '/var/log/ceph:z',
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id},
+        ).run()
+        logging.info('Generating new minimal ceph.conf...')
+        out = CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=['-n', 'mon.',
+                  '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                  '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                  'config', 'generate-minimal-conf',
+                '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
+            volume_mounts={
+                log_dir: '/var/log/ceph:z',
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id},
+        ).run()
+        # re-read our minimized config
+        with open(mon_dir + '/config', 'r') as f:
+            config = f.read()
+        logging.info('Restarting the monitor...')
+        subprocess.call([
+            'systemctl',
+            'restart',
+            get_unit_name(fsid, 'mon', mon_id)
+        ])
+
     # create mgr
     logging.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
@@ -1346,6 +1384,10 @@ parser_bootstrap.add_argument(
     '--skip-ssh',
     action='store_true',
     help='skip setup of ssh key on local host')
+parser_bootstrap.add_argument(
+    '--no-minimize-config',
+    action='store_true',
+    help='do not assimilate and minimize the config file')
 
 parser_deploy = subparsers.add_parser(
     'deploy', help='deploy a daemon')
