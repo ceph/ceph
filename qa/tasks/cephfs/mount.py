@@ -594,9 +594,9 @@ class CephFSMount(object):
                 sys.exit(e.errno)
 
             attrs = ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"]
-            print json.dumps(
+            print(json.dumps(
                 dict([(a, getattr(s, a)) for a in attrs]),
-                indent=2)
+                indent=2))
             """).format(stat_call=stat_call)
         proc = self._run_python(pyscript)
         if wait:
@@ -636,14 +636,14 @@ class CephFSMount(object):
                 import os
                 import stat
 
-                print os.stat("{path}").st_ino
+                print(os.stat("{path}").st_ino)
                 """).format(path=abs_path)
         else:
             pyscript = dedent("""
                 import os
                 import stat
 
-                print os.lstat("{path}").st_ino
+                print(os.lstat("{path}").st_ino)
                 """).format(path=abs_path)
 
         proc = self._run_python(pyscript)
@@ -657,7 +657,7 @@ class CephFSMount(object):
             import os
             import stat
 
-            print os.stat("{path}").st_nlink
+            print(os.stat("{path}").st_nlink)
             """).format(path=abs_path)
 
         proc = self._run_python(pyscript)
