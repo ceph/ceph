@@ -92,6 +92,7 @@ about Ceph, see our `Architecture`_ section.
    :hidden:
 
    start/intro
+   bootstrap
    start/index
    install/index
    start/kube-helm

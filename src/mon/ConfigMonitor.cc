@@ -257,7 +257,8 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "who", who);
 
     EntityName entity;
-    if (!entity.from_str(who)) {
+    if (!entity.from_str(who) &&
+	!entity.from_str(who + ".")) {
       ss << "unrecognized entity '" << who << "'";
       err = -EINVAL;
       goto reply;
