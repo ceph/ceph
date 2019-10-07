@@ -15,6 +15,7 @@ from teuthology import contextutil
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology.orchestra.connection import split_user
+from teuthology.exceptions import ConfigError
 
 log = logging.getLogger(__name__)
 
@@ -198,16 +199,31 @@ def configure(ctx, config):
                     's3tests: no dns-s3website-name for rgw_website_server {}'.format(website_role)
             s3tests_conf['DEFAULT']['s3website_domain'] = website_endpoint.website_dns_name
 
-        kms_key = properties.get('kms_key')
-        if kms_key:
-            host = None
-            if not hasattr(ctx, 'barbican'):
-                raise ConfigError('s3tests must run after the barbican task')
-            if not ( kms_key in ctx.barbican.keys ):
-                raise ConfigError('Key '+kms_key+' not defined')
 
-            key = ctx.barbican.keys[kms_key]
-            s3tests_conf['DEFAULT']['kms_keyid'] = key['id']
+        if hasattr(ctx, 'barbican'):
+            properties = properties['barbican']
+            if properties is not None and 'kms_key' in properties:
+                if not (properties['kms_key'] in ctx.barbican.keys):
+                    raise ConfigError('Key '+properties['kms_key']+' not defined')
+
+                if not (properties['kms_key2'] in ctx.barbican.keys):
+                    raise ConfigError('Key '+properties['kms_key2']+' not defined')
+
+                key = ctx.barbican.keys[properties['kms_key']]
+                s3tests_conf['DEFAULT']['kms_keyid'] = key['id']
+
+                key = ctx.barbican.keys[properties['kms_key2']]
+                s3tests_conf['DEFAULT']['kms_keyid2'] = key['id']
+
+        elif hasattr(ctx, 'vault'):
+            properties = properties['vault']
+            log.info("Vault Key")
+            s3tests_conf['DEFAULT']['kms_keyid'] = properties['key_path']
+            s3tests_conf['DEFAULT']['kms_keyid2'] = properties['key_path2']
+        else:
+            # Fallback scenario where it's the local (ceph.conf) kms being tested
+            s3tests_conf['DEFAULT']['kms_keyid'] = 'testkey-1'
+            s3tests_conf['DEFAULT']['kms_keyid2'] = 'testkey-2'
 
         slow_backend = properties.get('slow_backend')
         if slow_backend:
