@@ -109,17 +109,17 @@ class JobPrinter(JobProcessor):
         job_priority = job_config['priority']
         job_name = job_config['name']
         job_desc = job_config['description']
-        print 'Job: {i:>4} priority: {pri:>4} {job_name}/{job_id}'.format(
+        print('Job: {i:>4} priority: {pri:>4} {job_name}/{job_id}'.format(
             i=job_index,
             pri=job_priority,
             job_id=job_id,
             job_name=job_name,
-            )
+            ))
         if self.full:
             pprint.pprint(job_config)
         elif job_desc and self.show_desc:
             for desc in job_desc.split():
-                print '\t {desc}'.format(desc=desc)
+                print('\t {}'.format(desc))
 
 
 class RunPrinter(JobProcessor):
@@ -131,7 +131,7 @@ class RunPrinter(JobProcessor):
         run = self.jobs[job_id]['job_config']['name']
         if run not in self.runs:
             self.runs.append(run)
-            print run
+            print(run)
 
 
 class JobDeleter(JobProcessor):
@@ -147,10 +147,10 @@ class JobDeleter(JobProcessor):
     def process_job(self, job_id):
         job_config = self.jobs[job_id]['job_config']
         job_name = job_config['name']
-        print 'Deleting {job_name}/{job_id}'.format(
+        print('Deleting {job_name}/{job_id}'.format(
             job_id=job_id,
             job_name=job_name,
-            )
+            ))
         job_obj = self.jobs[job_id].get('job_obj')
         if job_obj:
             job_obj.delete()
@@ -196,7 +196,7 @@ def main(args):
             # it is not needed for pausing tubes
             watch_tube(connection, machine_type)
         if status:
-            print stats_tube(connection, machine_type)
+            print(stats_tube(connection, machine_type))
         elif pause_duration:
             pause_tube(connection, machine_type, pause_duration)
         elif delete:
