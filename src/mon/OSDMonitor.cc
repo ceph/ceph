@@ -4864,6 +4864,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	if (f) {
 	  if (detail == "detail") {
 	    f->open_object_section("pool");
+	    f->dump_int("pool_id", it->first);
 	    f->dump_string("pool_name", osdmap.get_pool_name(it->first));
 	    it->second.dump(f.get());
 	    f->close_section();
