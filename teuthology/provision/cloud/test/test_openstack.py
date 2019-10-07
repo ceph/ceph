@@ -217,7 +217,7 @@ class TestOpenStackCustomProvisioner(TestOpenStackBase):
 
         if test_conf:
             yaml_file = os.path.dirname(__file__) + '/' + test_conf
-            print ("Reading conf: %s" % yaml_file)
+            print("Reading conf: %s" % yaml_file)
             with open(yaml_file) as f:
                 teuth_conf=yaml.safe_load(f)
             print(teuth_conf)

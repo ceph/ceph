@@ -43,7 +43,7 @@ def selective_update(a, b, func):
         >>> a = dict(x=0, y=1, z=3)
         >>> b = dict(x=1, y=2, z=0)
         >>> selective_update(a, b, lambda foo, bar: foo > bar)
-        >>> print a
+        >>> print(a)
         {'x': 1, 'y': 2, 'z': 3}
 
     :param a:    A dict. This is modified in-place!
