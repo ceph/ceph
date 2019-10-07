@@ -7072,7 +7072,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   if (r > 0) return;
   if (r == -ESTALE) {
     mdcache->find_ino_peers(srcpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
-	mdr->slave_to_mds);
+			    mdr->slave_to_mds, true);
     return;
   }
   ceph_assert(r == 0);
@@ -8593,7 +8593,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   if (r > 0) return;
   if (r == -ESTALE) {
     mdcache->find_ino_peers(destpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
-			    mdr->slave_to_mds);
+			    mdr->slave_to_mds, true);
     return;
   }
   ceph_assert(r == 0);  // we shouldn't get an error here!

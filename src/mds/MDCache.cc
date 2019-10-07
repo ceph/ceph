@@ -9157,7 +9157,8 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSContext* fin,
   - traverse path
 
  */
-void MDCache::find_ino_peers(inodeno_t ino, MDSContext *c, mds_rank_t hint)
+void MDCache::find_ino_peers(inodeno_t ino, MDSContext *c,
+			     mds_rank_t hint, bool path_locked)
 {
   dout(5) << "find_ino_peers " << ino << " hint " << hint << dendl;
   CInode *in = get_inode(ino);
@@ -9172,6 +9173,7 @@ void MDCache::find_ino_peers(inodeno_t ino, MDSContext *c, mds_rank_t hint)
   fip.ino = ino;
   fip.tid = tid;
   fip.fin = c;
+  fip.path_locked = path_locked;
   fip.hint = hint;
   _do_find_ino_peer(fip);
 }
@@ -9233,7 +9235,7 @@ void MDCache::handle_find_ino(const cref_t<MMDSFindIno> &m)
 
 void MDCache::handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m)
 {
-  map<ceph_tid_t, find_ino_peer_info_t>::iterator p = find_ino_peer.find(m->tid);
+  auto p = find_ino_peer.find(m->tid);
   if (p != find_ino_peer.end()) {
     dout(10) << "handle_find_ino_reply " << *m << dendl;
     find_ino_peer_info_t& fip = p->second;
@@ -9256,7 +9258,10 @@ void MDCache::handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m)
       vector<CDentry*> trace;
       CF_MDS_RetryMessageFactory cf(mds, m);
       MDRequestRef null_ref;
-      int r = path_traverse(null_ref, cf, m->path, MDS_TRAVERSE_DISCOVER, &trace);
+      int flags = MDS_TRAVERSE_DISCOVER;
+      if (fip.path_locked)
+	flags |= MDS_TRAVERSE_PATH_LOCKED;
+      int r = path_traverse(null_ref, cf, m->path, flags, &trace);
       if (r > 0)
 	return; 
       dout(0) << "handle_find_ino_reply failed with " << r << " on " << m->path 
