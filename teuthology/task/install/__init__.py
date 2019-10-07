@@ -335,7 +335,7 @@ def upgrade_common(ctx, config, deploy_style):
             i=installed_version,
             u=upgrade_version
         ))
-	if _upgrade_is_downgrade(installed_version, upgrade_version):
+        if _upgrade_is_downgrade(installed_version, upgrade_version):
             raise RuntimeError(
                 "An attempt to upgrade from a higher version to a lower one "
                 "will always fail. Hint: check tags in the target git branch."
