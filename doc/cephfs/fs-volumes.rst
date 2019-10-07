@@ -88,6 +88,10 @@ Fetch the absolute path of a subvolume group using::
 
     $ ceph fs subvolumegroup getpath <vol_name> <group_name>
 
+List subvolume groups using::
+
+    $ ceph fs subvolumegroup ls <vol_name>
+
 Create a snapshot (see :doc:`/cephfs/experimental-features`) of a
 subvolume group using::
 
@@ -101,6 +105,10 @@ Remove a snapshot of a subvolume group using::
 
 Using the '--force' flag allows the command to succeed that would otherwise
 fail if the snapshot did not exist.
+
+List snapshots of a subvolume group using::
+
+    $ ceph fs subvolumegroup snapshot ls <vol_name> <group_name>
 
 
 FS Subvolumes
@@ -120,7 +128,7 @@ subvolume is created within the default subvolume group, and with an octal file
 mode '755', uid of its subvolume group, gid of its subvolume group, data pool layout of
 its parent directory and no size limit.
 
-Remove a subvolume group using::
+Remove a subvolume using::
 
     $ ceph fs subvolume rm <vol_name> <subvol_name> [--group_name <subvol_group_name> --force]
 
@@ -146,6 +154,9 @@ Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
+List subvolumes using::
+
+    $ ceph fs subvolume ls <vol_name> [--group_name <subvol_group_name>]
 
 Create a snapshot of a subvolume using::
 
@@ -158,6 +169,10 @@ Remove a snapshot of a subvolume using::
 
 Using the '--force' flag allows the command to succeed that would otherwise
 fail if the snapshot did not exist.
+
+List snapshots of a subvolume using::
+
+    $ ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi
