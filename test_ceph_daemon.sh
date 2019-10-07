@@ -2,6 +2,7 @@
 
 fsid=2a833e3f-53e4-49a7-a7a0-bd89d193ab62
 image=ceph/daemon-base:latest-master-devel
+[ -z "$ip" ] && ip=127.0.0.1
 
 ../src/ceph-daemon rm-cluster --fsid $fsid --force
 
@@ -16,21 +17,23 @@ EOF
     --mon-id a \
     --mgr-id x \
     --fsid $fsid \
-    --mon-ip 10.3.64.23 \
+    --mon-ip $ip \
     --config c \
     --output-keyring k \
     --output-config c \
     --skip-ssh
 chmod 644 k c
 
-# mon.b
-../src/ceph-daemon \
+if [ -n "$ip2" ]; then
+    # mon.b
+    ../src/ceph-daemon \
     --image $image \
     deploy --name mon.b \
     --fsid $fsid \
-    --mon-ip 10.3.64.27 \
+    --mon-ip $ip2 \
     --keyring /var/lib/ceph/$fsid/mon.a/keyring \
     --config c
+fi
 
 # mgr.b
 bin/ceph -c c -k k auth get-or-create mgr.y \
