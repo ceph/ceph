@@ -347,8 +347,22 @@ function debug {
     log debug "$@"
 }
 
+function deprecation_warning {
+    echo "*******************"
+    echo "DEPRECATION WARNING"
+    echo "*******************"
+    echo
+    echo "This is an outdated, unmaintained version of ceph-backport.sh. Using this"
+    echo "version can have unpredictable results. It is recommended to use the"
+    echo "version from the \"master\" branch, instead. In other words, use this:"
+    echo
+    echo "https://github.com/ceph/ceph/blob/master/src/script/ceph-backport.sh"
+    echo
+}
+
 function display_version_message_and_exit {
-    echo "$this_script: Ceph backporting script, version $SCRIPT_VERSION"
+    deprecation_warning
+    echo "$this_script: Ceph backporting script, version $SCRIPT_VERSION (DEPRECATED - DO NOT USE)"
     exit 0 
 }
 
@@ -1446,6 +1460,10 @@ while true ; do
         *) echo "Internal error" ; false ;;
     esac
 done
+
+deprecation_warning
+echo "Sleeping for 5 seconds to give you time to hit CTRL-C..."
+sleep 5
 
 if [ "$ADVICE" ] ; then
     [ "$HELP" ] && usage
