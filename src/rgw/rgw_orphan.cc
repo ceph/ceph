@@ -957,8 +957,13 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
   // iterator to store result of dlo/slo attribute find
   decltype(result.attrs)::iterator attr_it = result.attrs.end();
   const std::string oid = bucket.marker + "_" + result.obj.get_object();
+  ldout(store->ctx(), 20) << "radoslist processing object=\"" <<
+      oid << "\"" << dendl;
   if (visited_oids.find(oid) != visited_oids.end()) {
     // apparently we hit a loop; don't continue with this oid
+    ldout(store->ctx(), 15) <<
+      "radoslist stopped loop at already visited object=\"" <<
+      oid << "\"" << dendl;
     return 0;
   }
 
@@ -987,6 +992,8 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
 
     obj_oids.insert(oid);
     visited_oids.insert(oid); // prevent dlo loops
+    ldout(store->ctx(), 15) << "radoslist added to visited list DLO=\"" <<
+      oid << "\"" << dendl;
 
     char* prefix_path_c = attr_it->second.c_str();
     const std::string& prefix_path = prefix_path_c;
@@ -1000,12 +1007,17 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
     const std::string prefix = prefix_path.substr(sep_pos + 1);
 
     add_bucket_prefix(bucket_name, prefix);
+    ldout(store->ctx(), 25) << "radoslist DLO oid=\"" << oid <<
+      "\" added bucket=\"" << bucket_name << "\" prefix=\"" <<
+      prefix << "\" to process list" << dendl;
   } else if ((attr_it = result.attrs.find(RGW_ATTR_SLO_MANIFEST)) !=
 	     result.attrs.end()) {
     // *** handle SLO object
 
     obj_oids.insert(oid);
     visited_oids.insert(oid); // prevent slo loops
+    ldout(store->ctx(), 15) << "radoslist added to visited list SLO=\"" <<
+      oid << "\"" << dendl;
 
     RGWSLOInfo slo_info;
     bufferlist::iterator bliter = attr_it->second.begin();
@@ -1033,6 +1045,9 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
 
       const rgw_obj_key obj_key(obj_name);
       add_bucket_filter(bucket_name, obj_key);
+      ldout(store->ctx(), 25) << "radoslist SLO oid=\"" << oid <<
+	"\" added bucket=\"" << bucket_name << "\" obj_key=\"" <<
+	obj_key << "\" to process list" << dendl;
     }
   } else {
     RGWObjManifest& manifest = result.manifest;
