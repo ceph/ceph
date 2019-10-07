@@ -8470,7 +8470,8 @@ int RGWRados::cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_
   return r;
 }
 
-int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
+int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
+				  const rgw_bucket& bucket,
 				  uint64_t num_objs)
 {
   if (! cct->_conf.get_val<bool>("rgw_dynamic_resharding")) {
@@ -8478,22 +8479,40 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bu
   }
 
   bool need_resharding = false;
-  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
-  uint32_t suggested_num_shards;
+  uint32_t num_source_shards =
+    (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+  const uint32_t max_dynamic_shards =
+    uint32_t(cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards"));
 
+  if (num_source_shards >= max_dynamic_shards) {
+    return 0;
+  }
+
+  uint32_t suggested_num_shards = 0;
   const uint64_t max_objs_per_shard =
     cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
+
   quota_handler->check_bucket_shards(max_objs_per_shard, num_source_shards,
 				     bucket, num_objs, need_resharding,
 				     &suggested_num_shards);
-  if (need_resharding) {
-    ldout(cct, 20) << __func__ << " bucket " << bucket.name << " need resharding " <<
-      " old num shards " << bucket_info.num_shards << " new num shards " << suggested_num_shards <<
-      dendl;
-    return add_bucket_to_reshard(bucket_info, suggested_num_shards);
+  if (! need_resharding) {
+    return 0;
   }
 
-  return 0;
+  const uint32_t final_num_shards =
+    RGWBucketReshard::get_preferred_shards(suggested_num_shards,
+					   max_dynamic_shards);
+  // final verification, so we don't reduce number of shards
+  if (final_num_shards <= num_source_shards) {
+    return 0;
+  }
+
+  ldout(cct, 20) << "RGWRados::" << __func__ << " bucket " << bucket.name <<
+    " needs resharding; current num shards " << bucket_info.num_shards <<
+    "; new num shards " << final_num_shards << " (suggested " <<
+    suggested_num_shards << ")" << dendl;
+
+  return add_bucket_to_reshard(bucket_info, final_num_shards);
 }
 
 int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards)
