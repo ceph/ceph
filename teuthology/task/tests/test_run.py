@@ -34,7 +34,7 @@ class TestRun(object):
     def test_command_success(self, ctx, config):
         result = StringIO()
         ctx.cluster.run(
-            args=["python", "-c", "print 'hi'"],
+            args=["python", "-c", "print('hi')"],
             stdout=result
         )
         assert result.getvalue().strip() == "hi"
