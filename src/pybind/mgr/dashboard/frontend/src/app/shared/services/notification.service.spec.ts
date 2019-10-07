@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import * as _ from 'lodash';
@@ -22,8 +21,6 @@ describe('NotificationService', () => {
 
   configureTestBed({
     providers: [
-      CdDatePipe,
-      DatePipe,
       NotificationService,
       TaskMessageService,
       { provide: ToastrService, useValue: toastFakeService },
@@ -73,6 +70,7 @@ describe('NotificationService', () => {
     };
 
     beforeEach(() => {
+      spyOn(service, 'show').and.callThrough();
       service.cancel(service['justShownTimeoutId']);
     });
 
@@ -103,16 +101,17 @@ describe('NotificationService', () => {
       expect(service['dataSource'].getValue().length).toBe(10);
     }));
 
-    it('should show a success task notification', fakeAsync(() => {
+    it('should show a success task notification, but not save it', fakeAsync(() => {
       const task = _.assign(new FinishedTask(), {
         success: true
       });
+
       service.notifyTask(task, true);
-      expectSavedNotificationToHave({
-        type: NotificationType.success,
-        title: 'Executed unknown task',
-        message: undefined
-      });
+      tick(1500);
+
+      expect(service.show).toHaveBeenCalled();
+      const notifications = service['dataSource'].getValue();
+      expect(notifications.length).toBe(0);
     }));
 
     it('should be able to stop notifyTask from notifying', fakeAsync(() => {
@@ -139,11 +138,12 @@ describe('NotificationService', () => {
         }
       );
       service.notifyTask(task);
-      expectSavedNotificationToHave({
-        type: NotificationType.error,
-        title: `Failed to create RBD 'somePool/someImage'`,
-        message: `Name is already used by RBD 'somePool/someImage'.`
-      });
+
+      tick(1500);
+
+      expect(service.show).toHaveBeenCalled();
+      const notifications = service['dataSource'].getValue();
+      expect(notifications.length).toBe(0);
     }));
 
     it('combines different notifications with the same title', fakeAsync(() => {

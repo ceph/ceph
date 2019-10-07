@@ -18,6 +18,7 @@ describe('TaskManagerMessageService', () => {
   beforeEach(() => {
     service = TestBed.get(TaskMessageService);
     finishedTask = new FinishedTask();
+    finishedTask.duration = 30;
   });
 
   it('should be created', () => {
@@ -48,7 +49,7 @@ describe('TaskManagerMessageService', () => {
       expect(service.getErrorTitle(finishedTask)).toBe(
         'Failed to ' + operation.failure + ' ' + involves
       );
-      expect(service.getSuccessTitle(finishedTask)).toBe(operation.success + ' ' + involves);
+      expect(service.getSuccessTitle(finishedTask)).toBe(`${operation.success} ${involves}`);
     };
 
     const testCreate = (involves: string) => {
