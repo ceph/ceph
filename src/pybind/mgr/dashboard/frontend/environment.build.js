@@ -49,12 +49,23 @@ const optionsOldProd = {
     allowEmptyPaths: false,
 };
 
+const optionsDefaultLang = {
+  files: [
+    'src/environments/environment.prod.ts',
+    'src/environments/environment.ts'
+  ],
+  from: /'{DEFAULT_LANG}'/g,
+  to: `'${process.env.npm_package_config_locale}'`,
+  allowEmptyPaths: false
+}
+
 try {
     let changeOldYearFiles = replace.sync(optionsOldYear);
     let changeNewYearFiles = replace.sync(optionsNewYear);
     let changeOldProdFiles = replace.sync(optionsOldProd);
     let changeProdFiles = replace.sync(optionsNewProd);
     let changeDevFiles = replace.sync(optionsNewDev);
+    let changeDefaultLangFiles = replace.sync(optionsDefaultLang);
     console.log('Environment variables have been set');
 }
 catch (error) {

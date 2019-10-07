@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Inject, LOCALE_ID } from '@angular/core';
 import { Injectable } from '@angular/core';
 
+import { environment } from '../../../environments/environment';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -9,7 +11,7 @@ export class LanguageService {
   constructor(private http: HttpClient, @Inject(LOCALE_ID) protected localeId: string) {}
 
   getLocale(): string {
-    return this.localeId || 'en-US';
+    return this.localeId || environment.default_lang;
   }
 
   setLocale(lang: string) {

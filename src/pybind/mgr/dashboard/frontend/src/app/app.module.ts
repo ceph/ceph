@@ -28,6 +28,8 @@ import { ApiInterceptorService } from './shared/services/api-interceptor.service
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
 
+import { environment } from '../environments/environment';
+
 export function jwtTokenGetter() {
   return localStorage.getItem('access_token');
 }
@@ -74,7 +76,7 @@ export function jwtTokenGetter() {
     {
       provide: TRANSLATIONS,
       useFactory: (locale) => {
-        locale = locale || 'en-US';
+        locale = locale || environment.default_lang;
         try {
           return require(`raw-loader!locale/messages.${locale}.xlf`).default;
         } catch (error) {
