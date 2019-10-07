@@ -2584,6 +2584,8 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
 
+  mon->no_reply(op);
+
   if (m->if_osd_failed()) {
     // calculate failure time
     utime_t now = ceph_clock_now();
@@ -2595,7 +2597,6 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
       mon->clog->debug() << m->get_target() << " reported immediately failed by "
             << m->get_orig_source_inst();
       force_failure(target_osd, reporter);
-      mon->no_reply(op);
       return true;
     }
     mon->clog->debug() << m->get_target() << " reported failed by "
@@ -2629,7 +2630,6 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     } else {
       dout(10) << " no failure_info for osd." << target_osd << dendl;
     }
-    mon->no_reply(op);
   }
 
   return false;
