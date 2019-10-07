@@ -149,8 +149,13 @@ class Alerts(MgrModule):
         return d
 
     def _send_alert(self, status, diff):
+        checks = {}
         if self.smtp_host:
-            self._send_alert_smtp(status, diff)
+            r = self._send_alert_smtp(status, diff)
+            if r:
+                for code, alert in r.items():
+                    checks[code] = alert
+        self.set_health_checks(checks)
 
     def serve(self):
         """
@@ -229,12 +234,23 @@ class Alerts(MgrModule):
         self.log.debug('message: %s' % message)
 
         # send
-        if self.smtp_ssl:
-            server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
-        else:
-            server = smtplib.SMTP(self.smtp_host, self.smtp_port)
-        if self.smtp_password:
-            server.login(self.smtp_user, self.smtp_password)
-        server.sendmail(self.smtp_sender, self.smtp_destination, message)
-        server.quit()
+        try:
+            if self.smtp_ssl:
+                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
+            else:
+                server = smtplib.SMTP(self.smtp_host, self.smtp_port)
+            if self.smtp_password:
+                server.login(self.smtp_user, self.smtp_password)
+            server.sendmail(self.smtp_sender, self.smtp_destination, message)
+            server.quit()
+        except Exception as e:
+            return {
+                'ALERTS_SMTP_ERROR': {
+                    'severity': 'warning',
+                    'summary': 'unable to send alert email',
+                    'count': 1,
+                    'detail': [ str(e) ]
+                }
+            }
         self.log.debug('Sent email to %s' % self.smtp_destination)
+        return None
