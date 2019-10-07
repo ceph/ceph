@@ -29,6 +29,7 @@ class Options(object):
     RGW_API_ADMIN_RESOURCE = ('admin', str)
     RGW_API_SCHEME = ('http', str)
     RGW_API_USER_ID = ('', str)
+    RGW_API_SSL_VERIFY = (True, bool)
 
     @staticmethod
     def has_default_value(name):
