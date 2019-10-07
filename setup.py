@@ -53,7 +53,7 @@ setup(
                       'gevent',
                       'PyYAML',
                       'argparse >= 1.2.1',
-                      'beanstalkc >= 0.2.0',
+                      'beanstalkc3 >= 0.4.0',
                       'boto >= 2.0b4',
                       'bunch >= 1.0.0',
                       'configobj',
