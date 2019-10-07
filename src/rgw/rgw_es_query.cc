@@ -149,7 +149,9 @@ public:
   }
   virtual ~ESQueryNode_Bool() {
     delete first;
+    first = nullptr;
     delete second;
+    second = nullptr;
   }
 
   void dump(Formatter *f) const override {
@@ -157,7 +159,9 @@ public:
     const char *section = (op == "and" ? "must" : "should");
     f->open_array_section(section);
     encode_json("entry", *first, f);
-    encode_json("entry", *second, f);
+    if (second) {
+      encode_json("entry", *second, f);
+    }
     f->close_section();
     f->close_section();
   }
@@ -670,8 +674,10 @@ bool ESQueryCompiler::compile(string *perr) {
     return false;
   }
 
-  if (!convert(infix, perr)) {
-    return false;
+  if (!infix.empty()) {
+    if (!convert(infix, perr)) {
+      return false;
+    }
   }
 
   for (auto& c : eq_conds) {
@@ -689,6 +695,8 @@ bool ESQueryCompiler::compile(string *perr) {
 }
 
 void ESQueryCompiler::dump(Formatter *f) const {
-  encode_json("query", *query_root, f);
+  if (query_root) {
+    encode_json("query", *query_root, f);
+  }
 }
 
