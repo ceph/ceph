@@ -105,6 +105,15 @@ target_link_libraries(unittest_rgw_crypto
   ${CRYPTO_LIBS}
   )
 
+set(test_rgw_reshard_srcs test_rgw_reshard.cc)
+add_executable(unittest_rgw_reshard
+  ${test_rgw_reshard_srcs}
+  )
+add_ceph_unittest(unittest_rgw_reshard)
+target_link_libraries(unittest_rgw_reshard
+  ${rgw_libs}
+  )
+
 add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
 add_ceph_unittest(unittest_rgw_putobj)
 target_link_libraries(unittest_rgw_putobj ${rgw_libs} ${UNITTEST_LIBS})

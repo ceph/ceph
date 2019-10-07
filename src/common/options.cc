@@ -7021,7 +7021,8 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "If true, RGW will dynamicall increase the number of shards in buckets that have "
         "a high number of objects per shard.")
-    .add_see_also("rgw_max_objs_per_shard"),
+    .add_see_also("rgw_max_objs_per_shard")
+    .add_see_also("rgw_max_dynamic_shards"),
 
     Option("rgw_max_objs_per_shard", Option::TYPE_UINT, Option::LEVEL_BASIC)
     .set_default(100000)
@@ -7030,7 +7031,19 @@ std::vector<Option> get_rgw_options() {
         "This is the max number of objects per bucket index shard that RGW will "
         "allow with dynamic resharding. RGW will trigger an automatic reshard operation "
         "on the bucket if it exceeds this number.")
-    .add_see_also("rgw_dynamic_resharding"),
+    .add_see_also("rgw_dynamic_resharding")
+    .add_see_also("rgw_max_dynamic_shards"),
+
+    Option("rgw_max_dynamic_shards", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1999)
+    .set_min(1)
+    .set_description("Max shards that dynamic resharding can create")
+    .set_long_description(
+        "This is the maximum number of bucket index shards that dynamic "
+	"sharding is able to create on its own. This does not limit user "
+	"requested resharding. Ideally this value is a prime number.")
+    .add_see_also("rgw_dynamic_resharding")
+    .add_see_also("rgw_max_objs_per_shard"),
 
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
