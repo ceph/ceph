@@ -202,7 +202,7 @@ class TestForwardScrub(CephFSTestCase):
         inotable_dict = {}
         for rank in ranks:
             inotable_oid = "mds{rank:d}_".format(rank=rank) + "inotable"
-            print "Trying to fetch inotable object: " + inotable_oid
+            print("Trying to fetch inotable object: " + inotable_oid)
 
             #self.fs.get_metadata_object("InoTable", "mds0_inotable")
             inotable_raw = self.fs.get_metadata_object_raw(inotable_oid)
