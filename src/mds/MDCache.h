@@ -173,6 +173,7 @@ class MDCache {
     inodeno_t ino;
     ceph_tid_t tid = 0;
     MDSContext *fin = nullptr;
+    bool path_locked = false;
     mds_rank_t hint = MDS_RANK_NONE;
     mds_rank_t checking = MDS_RANK_NONE;
     set<mds_rank_t> checked;
@@ -822,7 +823,8 @@ class MDCache {
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,
 		bool want_replica=true, bool want_xlocked=false);
 
-  void find_ino_peers(inodeno_t ino, MDSContext *c, mds_rank_t hint=MDS_RANK_NONE);
+  void find_ino_peers(inodeno_t ino, MDSContext *c,
+		      mds_rank_t hint=MDS_RANK_NONE, bool path_locked=false);
   void _do_find_ino_peer(find_ino_peer_info_t& fip);
   void handle_find_ino(const cref_t<MMDSFindIno> &m);
   void handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m);
