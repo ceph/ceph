@@ -2398,6 +2398,8 @@ void MDSRankDispatcher::handle_mds_map(
   if (oldmap.get_max_mds() != mdsmap->get_max_mds()) {
     purge_queue.update_op_limit(*mdsmap);
   }
+
+  mdcache->handle_mdsmap(*mdsmap);
 }
 
 void MDSRank::handle_mds_recovery(mds_rank_t who)
