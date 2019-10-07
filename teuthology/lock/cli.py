@@ -120,22 +120,22 @@ def main(ctx):
                 if vm_host_name:
                     s['vm_host'] = vm_host_name
             if ctx.list:
-                    print json.dumps(statuses, indent=4)
+                    print(json.dumps(statuses, indent=4))
 
             elif ctx.brief:
                 for s in sorted(statuses, key=lambda s: s.get('name')):
                     locked = "un" if s['locked'] == 0 else "  "
                     mo = re.match('\w+@(\w+?)\..*', s['name'])
                     host = mo.group(1) if mo else s['name']
-                    print '{host} {locked}locked {owner} "{desc}"'.format(
+                    print('{host} {locked}locked {owner} "{desc}"'.format(
                         locked=locked, host=host,
-                        owner=s['locked_by'], desc=s['description'])
+                        owner=s['locked_by'], desc=s['description']))
 
             else:
                 frag = {'targets': {}}
                 for f in statuses:
                     frag['targets'][f['name']] = f['ssh_pub_key']
-                print yaml.safe_dump(frag, default_flow_style=False)
+                print(yaml.safe_dump(frag, default_flow_style=False))
         else:
             log.error('error retrieving lock statuses')
             ret = 1
@@ -220,9 +220,9 @@ def main(ctx):
                         "these machines come up.",
                         shortnames)
             else:
-                print yaml.safe_dump(
+                print(yaml.safe_dump(
                     dict(targets=result),
-                    default_flow_style=False)
+                    default_flow_style=False))
     elif ctx.update:
         assert ctx.desc is not None or ctx.status is not None, \
             'you must specify description or status to update'
@@ -252,18 +252,18 @@ def do_summary(ctx):
     locks = sorted([p for p in lockd.items()
                     ], key=lambda sort: (sort[1][2], sort[1][0]))
     total_count, total_up = 0, 0
-    print "TYPE     COUNT  UP  OWNER"
+    print("TYPE     COUNT  UP  OWNER")
 
     for (owner, (count, upcount, machinetype)) in locks:
             # if machinetype == spectype:
-            print "{machinetype:8s} {count:3d}  {up:3d}  {owner}".format(
+            print("{machinetype:8s} {count:3d}  {up:3d}  {owner}".format(
                 count=count, up=upcount, owner=owner[0],
-                machinetype=machinetype)
+                machinetype=machinetype))
             total_count += count
             total_up += upcount
 
-    print "         ---  ---"
-    print "{cnt:12d}  {up:3d}".format(cnt=total_count, up=total_up)
+    print("         ---  ---")
+    print("{cnt:12d}  {up:3d}".format(cnt=total_count, up=total_up))
 
 
 def updatekeys(args):
