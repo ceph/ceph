@@ -1,0 +1,4 @@
+overrides:
+  rgw:
+    client.0:
+      use-testing-role: client.0
