@@ -17,7 +17,9 @@
 #
 #
 
-this_script=$(basename "$0")
+SCRIPT_VERSION=
+full_path="$0"
+this_script=$(basename "$full_path")
 how_to_get_setup_advice="For additional setup advice, run:  ${this_script} --setup-advice"
 
 if [[ $* == *--debug* ]]; then
@@ -168,6 +170,11 @@ function deduce_remote {
         false
     fi
     echo "$remote"
+}
+
+function display_version_message_and_exit {
+    echo "$this_script: Ceph backporting script, version $SCRIPT_VERSION"
+    exit 0
 }
 
 function eol {
@@ -460,6 +467,18 @@ function try_known_milestones {
     echo "$mn"
 }
 
+function update_version_number_and_exit {
+    set -x
+    local raw_version=$(git describe --long --match 'v*' | sed 's/^v//')
+    # raw_version will look like this: 15.0.0-5774-g4c2f2eda969
+    local munge_first_hyphen=${raw_version/-/.}
+    # munge_first_hyphen will look like this: 15.0.0.5774-g4c2f2eda969
+    local script_version_number=${munge_first_hyphen%-*}
+    # script_version_number will look like this: 15.0.0.5774
+    sed -i -e 's/^SCRIPT_VERSION=.*/SCRIPT_VERSION="'"$script_version_number"'"/' $full_path
+    exit 0
+}
+
 function usage {
     cat <<EOM >&2
 Documentation:
@@ -477,7 +496,10 @@ Options (not needed in normal operation):
                        omitted, the script will try to guess the component)
     --debug            (turns on "set -x")
     -s/--setup         (check the setup and report any problems found)
-    -v/--verbose
+    --update-version   (this option exists as a convenience for the script
+                        maintainer only: not intended for day-to-day usage)
+    -v/--verbose       (produce more output than normal)
+    --version          (display version number and exit)
 
 Example:
    ${this_script} 31459
@@ -565,7 +587,7 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,usage-advice,verbose" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
@@ -588,8 +610,10 @@ while true ; do
         --setup|-s) SETUP_ONLY="$1" ; shift ;;
         --setup-advice) ADVICE="1" ; SETUP_ADVICE="$1" ; shift ;;
         --troubleshooting-advice) ADVICE="$1" ; TROUBLESHOOTING_ADVICE="$1" ; shift ;;
+        --update-version) update_version_number_and_exit ;;
         --usage-advice) ADVICE="$1" ; USAGE_ADVICE="$1" ; shift ;;
         --verbose|-v) VERBOSE="$1" ; shift ;;
+        --version) display_version_message_and_exit ;;
         --) shift ; ISSUE="$1" ; break ;;
         *) echo "Internal error" ; false ;;
     esac
@@ -746,7 +770,7 @@ if [ "$original_pr" -o "$original_issue" ] ; then
     [ "$original_pr"    ] && desc="${desc}\nbackport of ${github_endpoint}/pull/${original_pr}"
     [ "$original_issue" ] && desc="${desc}\nparent tracker: ${redmine_endpoint}/issues/${original_issue}"
 fi
-desc="${desc}\n\nthis backport was staged using ${github_endpoint}/blob/master/src/script/ceph-backport.sh"
+desc="${desc}\n\nthis backport was staged using ceph-backport.sh version ${SCRIPT_VERSION}\nfind the latest version at ${github_endpoint}/blob/master/src/script/ceph-backport.sh"
 
 debug "Generating backport PR title"
 if [ "$original_pr" ] ; then
@@ -791,7 +815,7 @@ pgrep firefox >/dev/null && firefox ${backport_pr_url}
 
 debug "Updating backport tracker issue ${redmine_url}"
 redmine_status=2 # In Progress
-remote_api_status_code=$(curl --write-out %{http_code} --output /dev/null --silent -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$backport_pr_number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh"}' ${redmine_url}'.json?key='$redmine_key)
+remote_api_status_code=$(curl --write-out %{http_code} --output /dev/null --silent -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$backport_pr_number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh version '$SCRIPT_VERSION'"}' ${redmine_url}'.json?key='$redmine_key)
 if [ "${remote_api_status_code:0:1}" = "2" ] ; then
     info "${redmine_url} updated"
 elif [ "${remote_api_status_code:0:1}" = "4" ] ; then
