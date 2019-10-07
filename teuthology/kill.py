@@ -142,7 +142,7 @@ def remove_beanstalk_jobs(run_name, tube_name):
                 log.info(msg)
                 job.delete()
     else:
-        print "No jobs in Beanstalk Queue"
+        print("No jobs in Beanstalk Queue")
     beanstalk_conn.close()
 
 
