@@ -4917,16 +4917,7 @@ void BlueStore::_validate_bdev()
   ceph_assert(bdev);
   ceph_assert(min_alloc_size); // _get_odisk_reserved depends on that
   uint64_t dev_size = bdev->get_size();
-  if (dev_size < 
-    _get_ondisk_reserved() + cct->_conf->bluestore_bluefs_min) {
-    dout(1) << __func__ << " main device size " << byte_u_t(dev_size)
-            << " is too small, disable bluestore_bluefs_min for now"
-            << dendl;
-    ceph_assert(dev_size >= _get_ondisk_reserved());
-
-    int r = cct->_conf.set_val("bluestore_bluefs_min", "0");
-    ceph_assert(r == 0);
-  }
+  ceph_assert(dev_size > _get_ondisk_reserved());
 }
 
 void BlueStore::_close_bdev()
@@ -6413,8 +6404,7 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
 
   int r = _mount_for_bluefs();
 
-  // require bluestore_bluefs_min_free to be free at target device!
-  uint64_t used_space = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
+  uint64_t used_space = 0;
   for(auto src_id : devs_source) {
     used_space += bluefs->get_total(src_id) - bluefs->get_free(src_id);
   }
