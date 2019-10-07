@@ -45,6 +45,7 @@ public:
     return write_data(buf, len);
   }
 
+  size_t send_connection_header(bool force_close = false) override;
   size_t complete_request() override;
 
   void flush() override;

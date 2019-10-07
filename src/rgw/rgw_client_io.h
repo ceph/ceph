@@ -19,6 +19,8 @@
 
 class RGWRestfulIO;
 
+constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
+constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
 namespace rgw {
 namespace io {
 

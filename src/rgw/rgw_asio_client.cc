@@ -136,6 +136,13 @@ static size_t dump_date_header(char (&timestr)[TIME_BUF_SIZE])
                   "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp);
 }
 
+size_t ClientIO::send_connection_header(bool force_close) {
+  if (!force_close && parser.keep_alive()) {
+    return txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
+  }
+  return txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
+}
+
 size_t ClientIO::complete_header()
 {
   size_t sent = 0;
@@ -143,14 +150,6 @@ size_t ClientIO::complete_header()
   char timestr[TIME_BUF_SIZE];
   if (dump_date_header(timestr)) {
     sent += txbuf.sputn(timestr, strlen(timestr));
-  }
-
-  if (parser.keep_alive()) {
-    constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
-    sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
-  } else {
-    constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
-    sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
   }
 
   constexpr char HEADER_END[] = "\r\n";

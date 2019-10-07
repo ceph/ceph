@@ -216,17 +216,19 @@ size_t RGWCivetWeb::dump_date_header()
   return txbuf.sputn(timestr, strlen(timestr));
 }
 
+size_t RGWCivetWeb::send_connection_header(bool force_close)
+{
+  if (!force_close && explicit_keepalive) {
+    return txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
+  }
+  return txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
+
+  return 0;
+}
+
 size_t RGWCivetWeb::complete_header()
 {
   size_t sent = dump_date_header();
-
-  if (explicit_keepalive) {
-    constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
-    sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
-  } else if (explicit_conn_close) {
-    constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
-    sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
-  }
 
   static constexpr char HEADER_END[] = "\r\n";
   sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);

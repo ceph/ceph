@@ -619,6 +619,11 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   }
   dump_header_if_nonempty(s, "Server", g_conf()->rgw_service_provider_name);
 
+  // close the connection for Invalid PUT or POST requests so as to force the
+  // client not to send any data on the socket
+  bool force_close = s->is_err() && (s->op == OP_PUT || s->op == OP_POST);
+  RESTFUL_IO(s)->send_connection_header(force_close);
+
   try {
     RESTFUL_IO(s)->complete_header();
   } catch (rgw::io::Exception& e) {
