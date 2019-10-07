@@ -2,6 +2,7 @@
 ceph:
   deb:
   - ceph
+  - ceph-daemon
   - ceph-mds
   - ceph-mgr
   - ceph-common
@@ -34,6 +35,7 @@ ceph:
   - ceph-radosgw
   - ceph-test
   - ceph
+  - ceph-daemon
   - ceph-mgr
   - ceph-mgr-dashboard
   - ceph-mgr-diskprediction-cloud
