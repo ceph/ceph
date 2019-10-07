@@ -9,7 +9,7 @@
     "ng": "ng",
     "start": "npm run env_build && ng serve --host 0.0.0.0",
     "build": "npm run env_build && ng build",
-    "build-i18n": "export _locale=${LOCALE:-$npm_package_config_locale}; [ -f src/locale/messages.${_locale}.xlf ] && npm run build -- --i18nFormat=xlf --outputPath=dist/${_locale} --i18nFile=src/locale/messages.${_locale}.xlf --i18nLocale=${_locale}",
+    "build-i18n": "export _locale=${LOCALE:-$npm_package_config_locale}; [ -f src/locale/messages.${_locale}.xlf ] && npm run build -- --outputPath=dist/${_locale} --i18nFile=src/locale/messages.${_locale}.xlf --i18nLocale=${_locale}",
     "build:en-US": "LOCALE=en-US npm run build-i18n",
     "build:de-DE": "LOCALE=de-DE npm run build-i18n",
     "build:es-ES": "LOCALE=es-ES npm run build-i18n",
