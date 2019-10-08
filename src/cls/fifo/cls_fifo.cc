@@ -430,7 +430,7 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  if (op.data.length() > part_header.params.max_entry_size) {
+  if (op.total_len > part_header.params.max_entry_size) {
     return -EINVAL;
   }
 
@@ -444,32 +444,51 @@ static int fifo_part_push_op(cls_method_context_t hctx,
   bufferlist entry_header_bl;
   encode(entry_header, entry_header_bl);
 
+  auto max_index = part_header.max_index;
+  auto ofs = part_header.max_ofs;
+
   cls_fifo_entry_header_pre pre_header;
   pre_header.magic = part_header.magic;
   pre_header.pre_size = sizeof(pre_header);
-  pre_header.header_size = entry_header_bl.length();
-  pre_header.data_size = op.data.length();
-  pre_header.index = part_header.max_index;
   pre_header.reserved = 0;
 
-  bufferptr pre((char *)&pre_header, sizeof(pre_header));
-  bufferlist all_data;
-  all_data.append(pre);
-  all_data.claim_append(entry_header_bl);
-  all_data.claim_append(op.data);
+  uint64_t total_data = 0;
 
-  auto write_len = all_data.length();
+  for (auto& data : op.data_bufs) {
+    total_data += data.length();
 
-  r = cls_cxx_write2(hctx, part_header.max_ofs, write_len,
-                     &all_data, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
-  if (r < 0) {
-    CLS_LOG(10, "%s(): failed to write entry (ofs=%lld len=%lld): r=%d",
-            __func__, (long long)part_header.max_ofs, (long long)write_len, r);
-    return r;
+    pre_header.header_size = entry_header_bl.length();
+    pre_header.data_size = data.length();
+    pre_header.index = max_index;
+
+    bufferptr pre((char *)&pre_header, sizeof(pre_header));
+    bufferlist all_data;
+    all_data.append(pre);
+    all_data.append(entry_header_bl);
+    all_data.claim_append(data);
+
+    auto write_len = all_data.length();
+
+    r = cls_cxx_write2(hctx, ofs, write_len,
+                       &all_data, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    if (r < 0) {
+      CLS_LOG(10, "%s(): failed to write entry (ofs=%lld len=%lld): r=%d",
+              __func__, (long long)part_header.max_ofs, (long long)write_len, r);
+      return r;
+    }
+
+    ofs += write_len;
+    ++max_index;
   }
 
-  ++part_header.max_index;
-  part_header.max_ofs += write_len;
+  if (total_data != op.total_len) {
+    CLS_LOG(10, "%s(): length mismatch: op.total_len=%lld total data received=%lld",
+            __func__, (long long)op.total_len, (long long)total_data);
+    return -EINVAL;
+  }
+
+  part_header.max_index = max_index;
+  part_header.max_ofs = ofs;
 
   r = write_part_header(hctx, part_header);
   if (r < 0) {

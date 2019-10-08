@@ -161,18 +161,21 @@ WRITE_CLASS_ENCODER(cls_fifo_part_init_op)
 struct cls_fifo_part_push_op
 {
   string tag;
-  bufferlist data;
+  std::vector<bufferlist> data_bufs;
+  uint64_t total_len{0};
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
-    encode(data, bl);
+    encode(data_bufs, bl);
+    encode(total_len, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
-    decode(data, bl);
+    decode(data_bufs, bl);
+    decode(total_len, bl);
     DECODE_FINISH(bl);
   }
 };

@@ -167,7 +167,8 @@ namespace rados {
         }
 
         op.tag = state.tag;
-        op.data = state.data;
+        op.data_bufs.emplace_back(state.data);
+        op.total_len = state.data.length();
 
         bufferlist in;
         encode(op, in);
