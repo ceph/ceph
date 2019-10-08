@@ -224,7 +224,7 @@ the default zone group first.
 
     # radosgw-admin zonegroup remove --rgw-zonegroup=default --rgw-zone=default
     # radosgw-admin period update --commit
-    # radosgw-admin zone delete --rgw-zone=default
+    # radosgw-admin zone rm --rgw-zone=default
     # radosgw-admin period update --commit
     # radosgw-admin zonegroup delete --rgw-zonegroup=default
     # radosgw-admin period update --commit
@@ -399,7 +399,7 @@ Delete the default zone if needed.
 
 ::
 
-    # radosgw-admin zone delete --rgw-zone=default
+    # radosgw-admin zone rm --rgw-zone=default
 
 Finally, delete the default pools in your Ceph storage cluster if
 needed.
@@ -1272,7 +1272,7 @@ Next, delete the zone. Execute the following:
 
 ::
 
-    # radosgw-admin zone delete --rgw-zone<name>
+    # radosgw-admin zone rm --rgw-zone<name>
 
 Finally, update the period:
 

@@ -825,7 +825,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONE_PLACEMENT_LIST;
   } else if (strcmp(prev_cmd, "zone") == 0) {
-    if (strcmp(cmd, "delete") == 0)
+    if (match_str(cmd, "rm", "delete"))
       return OPT_ZONE_DELETE;
     if (strcmp(cmd, "create") == 0)
       return OPT_ZONE_CREATE;
