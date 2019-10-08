@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import yaml
 import errno
@@ -26,15 +28,15 @@ def ls(archive_dir, verbose):
             else:
                 raise
 
-        print "{job} {status} {owner} {desc} {duration}s".format(
+        print("{job} {status} {owner} {desc} {duration}s".format(
             job=j,
             owner=summary.get('owner', '-'),
             desc=summary.get('description', '-'),
             status=get_status(summary),
             duration=int(summary.get('duration', 0)),
-        )
+        ))
         if verbose and 'failure_reason' in summary:
-            print '    {reason}'.format(reason=summary['failure_reason'])
+            print('    {reason}'.format(reason=summary['failure_reason']))
 
 
 def get_jobs(archive_dir):
@@ -51,7 +53,7 @@ def get_jobs(archive_dir):
 
 
 def print_debug_info(job, job_dir, archive_dir):
-    print '%s      ' % job,
+    print('%s      ' % job, end='')
 
     try:
         pidfile = os.path.join(job_dir, 'pid')
@@ -62,15 +64,15 @@ def print_debug_info(job, job_dir, archive_dir):
                 cmdline = open('/proc/%s/cmdline' % pid,
                                'r').read()
                 if cmdline.find(archive_dir) >= 0:
-                    print '(pid %s)' % pid,
+                    print('(pid %s)' % pid, end='')
                     found = True
         if not found:
-            print '(no process or summary.yaml)',
+            print('(no process or summary.yaml)', end='')
         # tail
         tail = os.popen(
             'tail -1 %s/%s/teuthology.log' % (archive_dir, job)
         ).read().rstrip()
-        print tail,
+        print(tail, end='')
     except IOError:
         pass
-    print ''
+    print('')

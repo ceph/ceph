@@ -145,7 +145,7 @@ def get_koji_task_result(task_id, remote, ctx):
     """
     py_cmd = ('import koji; '
               'hub = koji.ClientSession("{kojihub_url}"); '
-              'print hub.getTaskResult({task_id})')
+              'print(hub.getTaskResult({task_id}))')
     py_cmd = py_cmd.format(
         task_id=task_id,
         kojihub_url=config.kojihub_url
@@ -265,7 +265,7 @@ def get_koji_build_info(build_id, remote, ctx):
     """
     py_cmd = ('import koji; '
               'hub = koji.ClientSession("{kojihub_url}"); '
-              'print hub.getBuild({build_id})')
+              'print(hub.getBuild({build_id}))')
     py_cmd = py_cmd.format(
         build_id=build_id,
         kojihub_url=config.kojihub_url

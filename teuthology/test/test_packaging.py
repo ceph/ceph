@@ -149,7 +149,7 @@ class TestPackaging(object):
             'python', '-c',
             'import koji; '
             'hub = koji.ClientSession("http://kojihub.com"); '
-            'print hub.getBuild(1)',
+            'print(hub.getBuild(1))',
         ]
         assert expected_args == kwargs['args']
 
@@ -181,7 +181,7 @@ class TestPackaging(object):
             'python', '-c',
             'import koji; '
             'hub = koji.ClientSession("http://kojihub.com"); '
-            'print hub.getTaskResult(1)',
+            'print(hub.getTaskResult(1))',
         ]
         assert expected_args == kwargs['args']
 
@@ -347,7 +347,7 @@ class TestBuilderProject(object):
         )
         gp = self.klass("ceph", config)
         result = gp.base_url
-        print self.m_get.call_args_list
+        print(self.m_get.call_args_list)
         assert result == expected
 
     def test_init_from_config_branch_ref(self):

@@ -1,4 +1,6 @@
+from __future__ import print_function
 import os
+
 # Tell gevent not to patch os.waitpid() since it is susceptible to race
 # conditions. See:
 # http://www.gevent.org/gevent.monkey.html#gevent.monkey.patch_os
@@ -41,7 +43,7 @@ try:
     ).strip()
 except Exception as e:
     # before logging; should be unusual
-    print >>sys.stderr, 'Can\'t get version from git rev-parse', e
+    print("Can't get version from git rev-parse %s" % e, file=sys.stderr)
 
 # If we are running inside a virtualenv, ensure we have its 'bin' directory in
 # our PATH. This doesn't happen automatically if scripts are called without

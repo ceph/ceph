@@ -126,11 +126,11 @@ class TestInstall(object):
 
     def test_upgrade_is_downgrade(self):
         assert_ok_vals = [
-	    ('9.0.0', '10.0.0'),
-	    ('10.2.2-63-g8542898-1trusty', '10.2.2-64-gabcdef1-1trusty'),
-	    ('11.0.0-918.g13c13c7', '11.0.0-2165.gabcdef1')
-	]
-	for t in assert_ok_vals:
+            ('9.0.0', '10.0.0'),
+            ('10.2.2-63-g8542898-1trusty', '10.2.2-64-gabcdef1-1trusty'),
+            ('11.0.0-918.g13c13c7', '11.0.0-2165.gabcdef1')
+        ]
+        for t in assert_ok_vals:
             assert install._upgrade_is_downgrade(t[0], t[1]) == False
 
     @patch("teuthology.packaging.get_package_version")
@@ -181,7 +181,7 @@ class TestInstall(object):
                 },
             ],
         }
-	m_get_upgrade_version.return_value = "11.0.0"
+        m_get_upgrade_version.return_value = "11.0.0"
         m_get_package_version.return_value = "10.2.4"
         m_get_system_type.return_value = "deb"
         def upgrade(ctx, node, remote, pkgs, system_type):

@@ -66,7 +66,7 @@ class safe_while(object):
         >>> with safe_while() as proceed:
         ...    while proceed():
         ...        # repetitive code here
-        ...        print "hello world"
+        ...        print("hello world")
         ...
         Traceback (most recent call last):
         ...

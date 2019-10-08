@@ -76,7 +76,7 @@ class Integration(object):
         self.worker_cmd = ("teuthology-worker --tube openstack " +
                            "-l " + self.logs + " "
                            "--archive-dir " + self.archive + " ")
-	logging.info(self.worker_cmd)
+        logging.info(self.worker_cmd)
         self.worker = subprocess.Popen(self.worker_cmd,
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,

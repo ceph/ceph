@@ -17,6 +17,8 @@ Usage:
     daemon-helper <signal> [--kill-group] [nostdin] COMMAND ...
 """
 
+from __future__ import print_function
+
 import fcntl
 import os
 import select
@@ -46,14 +48,14 @@ try:
         nostdin = True
         skip_nostdin = 1
 except IndexError:
-    print 'No command specified'
+    print('No command specified')
     sys.exit(1)
 
 
 proc = None
 if nostdin:
     if len(args) - skip_nostdin == 0:
-        print 'No command specified'
+        print('No command specified')
         sys.exit(1)
     proc = subprocess.Popen(
         args=args[skip_nostdin:],
@@ -95,18 +97,18 @@ while True:
 
 exitstatus = proc.wait()
 if exitstatus > 0:
-    print >>sys.stderr, '{me}: command failed with exit status {exitstatus:d}'.format(
+    print('{me}: command failed with exit status {exitstatus:d}'.format(
         me=os.path.basename(sys.argv[0]),
         exitstatus=exitstatus,
-        )
+        ), file=sys.stderr)
     sys.exit(exitstatus)
 elif exitstatus < 0:
     if saw_eof and exitstatus == -end_signal:
         # suppress error from the exit we intentionally caused
         pass
     else:
-        print >>sys.stderr, '{me}: command crashed with signal {signal:d}'.format(
+        print('{me}: command crashed with signal {signal:d}'.format(
             me=os.path.basename(sys.argv[0]),
             signal=-exitstatus,
-            )
+            ), file=sys.stderr)
         sys.exit(1)
