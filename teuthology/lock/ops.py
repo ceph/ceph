@@ -20,12 +20,20 @@ import keys
 log = logging.getLogger(__name__)
 
 
-def update_nodes(nodes):
+def update_nodes(nodes, reset_os=False):
     for node in nodes:
         remote = teuthology.orchestra.remote.Remote(
             canonicalize_hostname(node))
-        inventory_info = remote.inventory_info
-        teuthology.lock.ops.update_inventory(inventory_info)
+        if reset_os:
+            log.info("Updating [%s]: reset os type and version on server", node)
+            inventory_info = dict()
+            inventory_info['os_type'] = ''
+            inventory_info['os_version'] = ''
+            inventory_info['name'] = remote.hostname
+        else:
+            log.info("Updating [%s]: set os type and version on server", node)
+            inventory_info = remote.inventory_info
+        update_inventory(inventory_info)
 
 
 def lock_many_openstack(ctx, num, machine_type, user=None, description=None,
@@ -111,6 +119,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                 machines=', '.join(machines.keys())))
             if machine_type in vm_types:
                 ok_machs = {}
+                update_nodes(machines, True)
                 for machine in machines:
                     if teuthology.provision.create_if_vm(ctx, machine):
                         ok_machs[machine] = machines[machine]
@@ -130,6 +139,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                 )
                 with console_log.task(
                         ctx, console_log_conf):
+                    update_nodes(reimaged, True)
                     with teuthology.parallel.parallel() as p:
                         for machine in machines:
                             p.spawn(teuthology.provision.reimage, ctx, machine)
