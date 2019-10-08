@@ -191,7 +191,8 @@ namespace rados {
         struct PushPartParams {
           struct State {
             string tag;
-            bufferlist data;
+	    std::vector<bufferlist> data_bufs;
+	    uint64_t total_len{0};
           } state;
 
           PushPartParams& tag(const std::string& tag) {
@@ -199,7 +200,14 @@ namespace rados {
             return *this;
           }
           PushPartParams& data(bufferlist& bl) {
-            state.data = bl;
+	    state.total_len += bl.length();
+            state.data_bufs.emplace_back(bl);
+            return *this;
+          }
+          PushPartParams& data_bufs(std::vector<bufferlist>& dbs) {
+	    for (auto& bl : dbs) {
+	      data(bl);
+	    }
             return *this;
           }
         };
@@ -315,7 +323,7 @@ namespace rados {
         int prepare_new_part(bool is_head);
         int prepare_new_head();
 
-        int push_entry(int64_t part_num, bufferlist& bl);
+	int push_entries(int64_t part_num, std::vector<bufferlist>& data_bufs);
         int trim_part(int64_t part_num,
                       uint64_t ofs,
                       std::optional<string> tag);
@@ -357,6 +365,7 @@ namespace rados {
         }
 
         int push(bufferlist& bl);
+	int push(vector<bufferlist>& bl);
 
         int list(int max_entries,
                  std::optional<string> marker,

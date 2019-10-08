@@ -167,8 +167,8 @@ namespace rados {
         }
 
         op.tag = state.tag;
-        op.data_bufs.emplace_back(state.data);
-        op.total_len = state.data.length();
+        op.data_bufs = state.data_bufs;
+        op.total_len = state.total_len;
 
         bufferlist in;
         encode(op, in);
@@ -764,7 +764,7 @@ namespace rados {
         return do_read_meta(objv);
       }
 
-      int FIFO::push_entry(int64_t part_num, bufferlist& bl)
+      int FIFO::push_entries(int64_t part_num, std::vector<bufferlist>& data_bufs)
       {
         if (!is_open) {
           return -EINVAL;
@@ -773,8 +773,8 @@ namespace rados {
         librados::ObjectWriteOperation op;
 
         int r = ClsFIFO::push_part(&op, ClsFIFO::PushPartParams()
-                                        .tag(meta_info.head_tag)
-                                        .data(bl));
+                                   .tag(meta_info.head_tag)
+                                   .data_bufs(data_bufs));
         if (r < 0) {
           return r;
         }
@@ -814,6 +814,14 @@ namespace rados {
 
       int FIFO::push(bufferlist& bl)
       {
+        std::vector<bufferlist> data_bufs;
+        data_bufs.push_back(bl);
+
+        return push(data_bufs);
+      }
+
+      int FIFO::push(vector<bufferlist>& data_bufs)
+      {
         if (!is_open) {
           return -EINVAL;
         }
@@ -829,23 +837,54 @@ namespace rados {
 
         int i;
 
-        for (i = 0; i < RACE_RETRY; ++i) {
-          r = push_entry(meta_info.head_part_num, bl);
-          if (r == -ERANGE) {
-            r = prepare_new_head();
+        auto iter = data_bufs.begin();
+
+        while (iter != data_bufs.end()) {
+          uint64_t batch_len = 0;
+
+          vector<bufferlist> batch;
+
+          for (; iter != data_bufs.end(); ++iter) {
+            auto& data = *iter;
+            auto data_len = data.length();
+            auto max_entry_size = meta_info.data_params.max_entry_size;
+
+            if (data_len > max_entry_size) {
+              ldout(cct, 10) << __func__ << "(): entry too large: " << data_len << " > " <<  meta_info.data_params.max_entry_size << dendl;
+              return -EINVAL;
+            }
+
+            if (batch_len + data_len > max_entry_size) {
+              break;
+            }
+
+            batch_len +=  data_len + part_entry_overhead; /* we can send entry with data_len up to max_entry_size,
+                                                             however, we want to also account the overhead when dealing
+                                                             with multiple entries. Previous check doesn't account
+                                                             for overhead on purpose. */
+
+            batch.push_back(data);
+          }
+
+
+          for (i = 0; i < RACE_RETRY; ++i) {
+            r = push_entries(meta_info.head_part_num, batch);
+            if (r == -ERANGE) {
+              r = prepare_new_head();
+              if (r < 0) {
+                return r;
+              }
+              continue;
+            }
             if (r < 0) {
               return r;
             }
-            continue;
+            break;
           }
-          if (r < 0) {
-            return r;
+          if (i == RACE_RETRY) {
+            ldout(cct, 0) << "ERROR: " << __func__ << "(): race check failed too many times, likely a bug" << dendl;
+            return -ECANCELED;
           }
-          break;
-        }
-        if (i == RACE_RETRY) {
-          ldout(cct, 0) << "ERROR: " << __func__ << "(): race check failed too many times, likely a bug" << dendl;
-          return -ECANCELED;
         }
 
         return 0;

@@ -430,7 +430,9 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  if (op.total_len > part_header.params.max_entry_size) {
+  uint64_t effective_len = op.total_len + op.data_bufs.size() * part_entry_overhead;
+
+  if (effective_len > part_header.params.max_entry_size + part_entry_overhead) {
     return -EINVAL;
   }
 
