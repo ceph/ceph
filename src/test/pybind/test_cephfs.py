@@ -111,6 +111,9 @@ def test_xattr():
     # Pass explicit size, and we'll get the value
     assert_equal(300, len(cephfs.getxattr("/", "user.big", 300)))
 
+    cephfs.removexattr("/", "user.key")
+    # user.key is already removed
+    assert_raises(libcephfs.NoData, cephfs.getxattr, "/", "user.key")
 
 @with_setup(setup_test)
 def test_rename():

@@ -132,6 +132,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                       const void *value, size_t size, int flags)
     int ceph_getxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       void *value, size_t size)
+    int ceph_removexattr(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
@@ -1096,6 +1097,26 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
+    def removexattr(self, path, name):
+        """
+        Remove an extended attribute of a file.
+
+        :param path: path of the file.
+        :param name: name of the extended attribute to remove.
+        """
+        self.require_state("mounted")
+
+        name = cstr(name, 'name')
+        path = cstr(path, 'path')
+
+        cdef:
+            char *_path = path
+            char *_name = name
+
+        with nogil:
+            ret = ceph_removexattr(self.cluster, _path, _name)
+        if ret < 0:
+            raise make_ex(ret, "error in removexattr")
 
     def stat(self, path, follow_symlink=True):
         """
