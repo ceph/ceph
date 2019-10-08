@@ -152,6 +152,25 @@ public:
   };
   using CollectionHandle = ceph::ref_t<CollectionImpl>;
 
+  struct ObjectImpl : public RefCountedObject {
+    ghobject_t oid;
+    bool exists = true;              ///< true if object logically exists
+
+    const ghobject_t& get_oid() {
+      return oid;
+    }
+    bool get_exists() {
+      return exists;
+    }
+    ObjectImpl(CephContext *cct, const ghobject_t& o, bool exists=true)
+      : RefCountedObject(cct),
+	oid(o),
+	exists(exists) {}
+    ~ObjectImpl() = default;
+    FRIEND_MAKE_REF(ObjectImpl);
+  };
+  using ObjectHandle = ceph::ref_t<ObjectImpl>;
+
 
   /*********************************
    *

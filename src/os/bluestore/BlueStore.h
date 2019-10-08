@@ -1052,13 +1052,10 @@ public:
   struct OnodeSpace;
 
   /// an in-memory object
-  struct Onode {
+  struct Onode : public ObjectStore::ObjectImpl {
     MEMPOOL_CLASS_HELPERS();
 
-    std::atomic_int nref;  ///< reference count
     Collection *c;
-
-    ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
     mempool::bluestore_cache_other::string key;
@@ -1066,7 +1063,6 @@ public:
     boost::intrusive::list_member_hook<> lru_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
-    bool exists;              ///< true if object logically exists
 
     ExtentMap extent_map;
 
@@ -1080,30 +1076,24 @@ public:
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_other::string& k)
-      : nref(0),
+      : ObjectImpl(c->get_cct(), o, false),
 	c(c),
-	oid(o),
 	key(k),
-	exists(false),
 	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
-      const string& k)
-      : nref(0),
-      c(c),
-      oid(o),
-      key(k),
-      exists(false),
-      extent_map(this) {
+	  const string& k)
+      : ObjectImpl(c->get_cct(), o, false),
+	c(c),
+	key(k),
+	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
-      const char* k)
-      : nref(0),
-      c(c),
-      oid(o),
-      key(k),
-      exists(false),
-      extent_map(this) {
+	  const char* k)
+      : ObjectImpl(c->get_cct(), o, false),
+	c(c),
+	key(k),
+	extent_map(this) {
     }
 
     static Onode* decode(
@@ -1115,13 +1105,6 @@ public:
     void dump(Formatter* f) const;
 
     void flush();
-    void get() {
-      ++nref;
-    }
-    void put() {
-      if (--nref == 0)
-	delete this;
-    }
 
     const string& get_omap_prefix();
     void get_omap_header(string *out);

@@ -45,6 +45,9 @@ public:
   void set_cct(class CephContext *c) {
     cct = c;
   }
+  CephContext *get_cct() {
+    return cct;
+  }
 
   uint64_t get_nref() const {
     return nref;

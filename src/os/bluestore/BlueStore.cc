@@ -875,7 +875,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
     while (n > 0) {
       BlueStore::Onode *o = &*p;
-      int refs = o->nref.load();
+      int refs = o->get_nref();
       if (refs > 1) {
         dout(20) << __func__ << "  " << o->oid << " has " << refs
                  << " refs, skipping" << dendl;
