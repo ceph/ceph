@@ -337,7 +337,7 @@ class TestVolumeGroups(object):
         journal = api.VolumeGroup(vg_name='volume2', vg_tags='ceph.group=plain')
         volume_groups.append(osd)
         volume_groups.append(journal)
-        volume_groups.filter(vg_tags={'ceph.group': 'dmcache'})
+        volume_groups = volume_groups.filter(vg_tags={'ceph.group': 'dmcache'})
         assert len(volume_groups) == 1
         assert volume_groups[0].vg_name == 'volume1'
 
@@ -345,7 +345,7 @@ class TestVolumeGroups(object):
         vg_tags = "ceph.group=dmcache,ceph.disk_type=ssd"
         osd = api.VolumeGroup(vg_name='volume1', vg_path='/dev/vg/lv', vg_tags=vg_tags)
         volume_groups.append(osd)
-        volume_groups.filter(vg_tags={'ceph.group': 'data', 'ceph.disk_type': 'ssd'})
+        volume_groups = volume_groups.filter(vg_tags={'ceph.group': 'data', 'ceph.disk_type': 'ssd'})
         assert volume_groups == []
 
     def test_filter_by_vg_name(self, volume_groups):
@@ -354,13 +354,13 @@ class TestVolumeGroups(object):
         journal = api.VolumeGroup(vg_name='volume2', vg_tags='ceph.type=journal')
         volume_groups.append(osd)
         volume_groups.append(journal)
-        volume_groups.filter(vg_name='ceph_vg')
+        volume_groups = volume_groups.filter(vg_name='ceph_vg')
         assert len(volume_groups) == 1
         assert volume_groups[0].vg_name == 'ceph_vg'
 
     def test_filter_requires_params(self, volume_groups):
         with pytest.raises(TypeError):
-            volume_groups.filter()
+            volume_groups = volume_groups.filter()
 
 
 class TestVolumeGroupFree(object):
