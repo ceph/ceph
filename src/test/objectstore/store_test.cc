@@ -114,6 +114,18 @@ bool sorted(const vector<ghobject_t> &in) {
   return true;
 }
 
+bool sorted(const vector<ObjectStore::ObjectHandle> &in) {
+  ghobject_t start;
+  for (auto& i : in) {
+    if (start > i->get_oid()) {
+      cout << start << " should follow " << i->get_oid() << std::endl;
+      return false;
+    }
+    start = i->get_oid();
+  }
+  return true;
+}
+
 class StoreTest : public StoreTestFixture,
                   public ::testing::WithParamInterface<const char*> {
 public:
@@ -2755,6 +2767,70 @@ TEST_P(StoreTest, SimpleListTest) {
 	  //cout << "got new " << *p << std::endl;
 	}
 	saw.insert(*p);
+      }
+      objects.clear();
+      current = next;
+    }
+    ASSERT_EQ(saw.size(), all.size());
+    ASSERT_EQ(saw, all);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
+      t.remove(cid, *p);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, SimpleListPlusTest) {
+  int r;
+  coll_t cid(spg_t(pg_t(0, 1), shard_id_t(1)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  set<ghobject_t> all;
+  {
+    ObjectStore::Transaction t;
+    for (int i=0; i<200; ++i) {
+      string name("object_");
+      name += stringify(i);
+      ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)),
+		      ghobject_t::NO_GEN, shard_id_t(1));
+      hoid.hobj.pool = 1;
+      all.insert(hoid);
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+    }
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    set<ghobject_t> saw;
+    vector<ObjectStore::ObjectHandle> objects;
+    ghobject_t next, current;
+    while (!next.is_max()) {
+      int r = store->collection_list_plus(ch, current, ghobject_t::get_max(),
+					  50,
+					  &objects, &next, 0);
+      ASSERT_EQ(r, 0);
+      ASSERT_TRUE(sorted(objects));
+      cout << " got " << objects.size() << " next " << next << std::endl;
+      for (auto& p : objects) {
+	ASSERT_TRUE(p->get_exists());
+	if (saw.count(p->get_oid())) {
+	  cout << "got DUP " << p->get_oid() << std::endl;
+	} else {
+	  //cout << "got new " << *p << std::endl;
+	}
+	saw.insert(p->get_oid());
       }
       objects.clear();
       current = next;

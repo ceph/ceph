@@ -10271,7 +10271,29 @@ int BlueStore::collection_list(
   int r;
   {
     std::shared_lock l(c->lock);
-    r = _collection_list(c, start, end, max, ls, pnext, flags);
+    r = _collection_list(c, start, end, max, ls, nullptr, pnext, flags);
+  }
+
+  dout(10) << __func__ << " " << c->cid
+    << " start " << start << " end " << end << " max " << max
+    << " = " << r << ", ls.size() = " << ls->size()
+    << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
+  return r;
+}
+
+int BlueStore::collection_list_plus(
+  CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
+  vector<ObjectHandle> *ls, ghobject_t *pnext, int flags)
+{
+  Collection *c = static_cast<Collection *>(c_.get());
+  c->flush();
+  dout(15) << __func__ << " " << c->cid
+           << " start " << start << " end " << end << " max " << max
+	   << " flags " << flags << dendl;
+  int r;
+  {
+    std::shared_lock l(c->lock);
+    r = _collection_list(c, start, end, max, nullptr, ls, pnext, flags);
   }
 
   dout(10) << __func__ << " " << c->cid
@@ -10283,7 +10305,9 @@ int BlueStore::collection_list(
 
 int BlueStore::_collection_list(
   Collection *c, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext, int flags)
+  vector<ghobject_t> *ls,
+  vector<ObjectHandle> *lsp,
+  ghobject_t *pnext, int flags)
 {
 
   if (!c->exists)
@@ -10302,6 +10326,7 @@ int BlueStore::_collection_list(
   bool temp;
   auto pstart = start;
   bool has_pstart = false;
+  unsigned n = 0;
 
   if (!pnext)
     pnext = &static_next;
@@ -10414,16 +10439,23 @@ int BlueStore::_collection_list(
     int r = get_key_object(it->key(), &oid);
     ceph_assert(r == 0);
 
+    OnodeRef o;
     bufferlist v = it->value();
-    if ((flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) && v.length()) {
+    assert(v.length());
+    if (lsp || (flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED)) {
       mempool::bluestore_cache_other::string key(
 	it->key().c_str(), it->key().length());
-      c->get_onode(oid, key, v);
+      o = c->get_onode(oid, key, v);
     }
-
     dout(20) << __func__ << " oid " << oid << " end " << end << dendl;
-    if (ls->size() < (unsigned)max) {
-      ls->push_back(oid);
+    if (n < (unsigned)max) {
+      if (ls) {
+	ls->push_back(oid);
+      } else {
+	assert(o);
+	lsp->push_back(o);
+      }
+      ++n;
     } else if (prefetch) {
       c->col_cache.push(oid);
       --prefetch;
@@ -14721,7 +14753,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     // then check if all of them are marked as non-existent.
     // Bypass the check if (next != ghobject_t::get_max())
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
-                         nonexistent_count + 1, &ls, &next,
+                         nonexistent_count + 1, &ls, nullptr, &next,
 			 CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     if (r >= 0) {
       // If true mean collecton has more objects than nonexistent_count,
