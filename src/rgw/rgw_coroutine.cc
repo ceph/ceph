@@ -872,7 +872,12 @@ void RGWCoroutinesManagerRegistry::dump(Formatter *f) const {
 
 void RGWCoroutine::call(RGWCoroutine *op)
 {
-  stack->call(op);
+  if (op) {
+    stack->call(op);
+  } else {
+    // the call()er expects this to set a retcode
+    retcode = 0;
+  }
 }
 
 RGWCoroutinesStack *RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
