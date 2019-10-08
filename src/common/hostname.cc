@@ -16,6 +16,8 @@
 
 #include <unistd.h>
 
+#include "include/compat.h"
+
 std::string ceph_get_hostname()
 {
   // are we in a container?  if so we would prefer the *real* hostname.

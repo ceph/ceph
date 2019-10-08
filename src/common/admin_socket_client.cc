@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <unistd.h>
 
 #include "common/admin_socket.h"
 #include "common/errno.h"
