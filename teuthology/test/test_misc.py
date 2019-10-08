@@ -56,13 +56,10 @@ def test_wait_until_osds_up():
     ctx.daemons.iter_daemons_of_role.return_value = list()
     remote = FakeRemote()
 
-    class r():
-        class o:
-            def getvalue(self):
-                return 'IGNORED\n{"osds":[{"state":["up"]}]}'
-        stdout = o()
+    def s(self, **kwargs):
+        return 'IGNORED\n{"osds":[{"state":["up"]}]}'
 
-    remote.run = lambda **kwargs: r()
+    remote.sh = s
     ctx.cluster = cluster.Cluster(
         remotes=[
             (remote, ['osd.0', 'client.1'])
