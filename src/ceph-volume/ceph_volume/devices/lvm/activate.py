@@ -121,7 +121,7 @@ def get_osd_device_path(osd_lv, lvs, device_type, dmcrypt_secret=None):
     raise RuntimeError('could not find %s with uuid %s' % (device_type, device_uuid))
 
 
-def activate_bluestore(lvs, no_systemd=False, tmpfs=True):
+def activate_bluestore(lvs, no_systemd=False, no_tmpfs=False):
     # find the osd
     osd_lv = lvs.get(lv_tags={'ceph.type': 'block'})
     if not osd_lv:
@@ -136,7 +136,7 @@ def activate_bluestore(lvs, no_systemd=False, tmpfs=True):
     osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     if not system.path_is_mounted(osd_path):
         # mkdir -p and mount as tmpfs
-        prepare_utils.create_osd_path(osd_id, tmpfs=tmpfs)
+        prepare_utils.create_osd_path(osd_id, tmpfs=(not no_tmpfs))
     # XXX This needs to be removed once ceph-bluestore-tool can deal with
     # symlinks that exist in the osd dir
     for link_name in ['block', 'block.db', 'block.wal']:
@@ -262,11 +262,11 @@ class Activate(object):
             logger.info('unable to find a journal associated with the OSD, assuming bluestore')
             return activate_bluestore(lvs,
                                       no_systemd=args.no_systemd,
-                                      tmpfs=(not args.no_tmpfs))
+                                      no_tmpfs=args.no_tmpfs)
         if args.bluestore:
             activate_bluestore(lvs,
                                no_systemd=args.no_systemd,
-                               tmpfs=(not args.no_tmpfs))
+                               no_tmpfs=args.no_tmpfs)
         elif args.filestore:
             activate_filestore(lvs, no_systemd=args.no_systemd)
 
