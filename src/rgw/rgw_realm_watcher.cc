@@ -70,13 +70,11 @@ void RGWRealmWatcher::handle_notify(uint64_t notify_id, uint64_t cookie,
 
 void RGWRealmWatcher::handle_error(uint64_t cookie, int err)
 {
+  lderr(cct) << "RGWRealmWatcher::handle_error oid=" << watch_oid << " err=" << err << dendl;
   if (cookie != watch_handle)
     return;
 
-  if (err == -ENOTCONN) {
-    ldout(cct, 4) << "Disconnected watch on " << watch_oid << dendl;
-    watch_restart();
-  }
+  watch_restart();
 }
 
 int RGWRealmWatcher::watch_start(RGWRealm& realm)
