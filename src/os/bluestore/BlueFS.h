@@ -353,11 +353,12 @@ private:
   void _compact_log_sync();
   void _compact_log_async(std::unique_lock<ceph::mutex>& l);
 
-  void _rewrite_log_sync(bool allocate_with_fallback,
-			 int super_dev,
-			 int log_dev,
-			 int new_log_dev,
-			 int flags);
+  void _rewrite_log_and_layout_sync(bool allocate_with_fallback,
+				    int super_dev,
+				    int log_dev,
+				    int new_log_dev,
+				    int flags,
+				    std::optional<bluefs_layout_t> layout);
 
   //void _aio_finish(void *priv);
 
@@ -410,7 +411,7 @@ public:
   int mount();
   int maybe_verify_layout(const bluefs_layout_t& layout) const;
   void umount();
-  int prepare_new_device(int id);
+  int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
 
@@ -424,11 +425,13 @@ public:
   int device_migrate_to_new(
     CephContext *cct,
     const set<int>& devs_source,
-    int dev_target);
+    int dev_target,
+    const bluefs_layout_t& layout);
   int device_migrate_to_existing(
     CephContext *cct,
     const set<int>& devs_source,
-    int dev_target);
+    int dev_target,
+    const bluefs_layout_t& layout);
 
   uint64_t get_used();
   uint64_t get_total(unsigned id);
