@@ -6423,6 +6423,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     }
 
     reserved = BDEV_LABEL_BLOCK_SIZE;
+    bluefs_layout.dedicated_wal = true;
   } else if (id == BlueFS::BDEV_NEWDB) {
     string p = path + "/block.db";
     r = _setup_block_symlink_or_file("block.db", dev_path,
@@ -6443,6 +6444,8 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
       ceph_assert(r == 0);
     }
     reserved = SUPER_RESERVED;
+    bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
+    bluefs_layout.dedicated_db = true;
   }
 
   bluefs->umount();
@@ -6453,7 +6456,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     reserved,
     bluefs->get_block_device_size(id) - reserved);
 
-  r = bluefs->prepare_new_device(id);
+  r = bluefs->prepare_new_device(id, bluefs_layout);
   ceph_assert(r == 0);
 
   if (r < 0) {
@@ -6519,7 +6522,14 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
 	 << dendl;
     return -ENOSPC;
   }
-  r = bluefs->device_migrate_to_existing(cct, devs_source, id);
+  if (devs_source.count(BlueFS::BDEV_DB)) {
+    bluefs_layout.shared_bdev = BlueFS::BDEV_DB;
+    bluefs_layout.dedicated_db = false;
+  }
+  if (devs_source.count(BlueFS::BDEV_WAL)) {
+    bluefs_layout.dedicated_wal = false;
+  }
+  r = bluefs->device_migrate_to_existing(cct, devs_source, id, bluefs_layout);
   if (r < 0) {
     derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
     goto shutdown;
@@ -6562,9 +6572,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   if (devs_source.count(BlueFS::BDEV_DB) &&
       bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
     link_db = path + "/block.db";
+    bluefs_layout.shared_bdev = BlueFS::BDEV_DB;
+    bluefs_layout.dedicated_db = false;
   }
   if (devs_source.count(BlueFS::BDEV_WAL)) {
     link_wal = path + "/block.wal";
+    bluefs_layout.dedicated_wal = false;
   }
 
   size_t target_size;
@@ -6572,6 +6585,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   if (id == BlueFS::BDEV_NEWWAL) {
     target_name = "block.wal";
     target_size = cct->_conf->bluestore_block_wal_size;
+    bluefs_layout.dedicated_wal = true;
 
     r = bluefs->add_block_device(BlueFS::BDEV_NEWWAL, dev_path,
 				 cct->_conf->bdev_enable_discard);
@@ -6589,6 +6603,8 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   } else if (id == BlueFS::BDEV_NEWDB) {
     target_name = "block.db";
     target_size = cct->_conf->bluestore_block_db_size;
+    bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
+    bluefs_layout.dedicated_db = true;
 
     r = bluefs->add_block_device(BlueFS::BDEV_NEWDB, dev_path,
 				 cct->_conf->bdev_enable_discard);
@@ -6611,7 +6627,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   bluefs->add_block_extent(
     id, reserved, bluefs->get_block_device_size(id) - reserved);
 
-  r = bluefs->device_migrate_to_new(cct, devs_source, id);
+  r = bluefs->device_migrate_to_new(cct, devs_source, id, bluefs_layout);
 
   if (r < 0) {
     derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
