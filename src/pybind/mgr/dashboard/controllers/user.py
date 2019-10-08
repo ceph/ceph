@@ -17,29 +17,29 @@ def check_password_complexity(password, username, old_password=None):
     if password_complexity.check_if_as_the_old_password():
         raise DashboardException(msg='Password cannot be the\
                                       same as the previous one.',
-                                 code='not-strong-enough-password',
+                                 code='pwd-must-not-be-last-one',
                                  component='user')
     if password_complexity.check_if_contains_username():
         raise DashboardException(msg='Password cannot contain username.',
-                                 code='not-strong-enough-password',
+                                 code='pwd-must-not-contain-username',
                                  component='user')
     if password_complexity.check_if_contains_forbidden_words():
         raise DashboardException(msg='Password cannot contain keywords.',
-                                 code='not-strong-enough-password',
+                                 code='pwd-must-not-contain-forbidden-keywords',
                                  component='user')
     if password_complexity.check_if_repetetive_characters():
-        raise DashboardException(msg='Password cannot contain repetitive\
+        raise DashboardException(msg='Password cannot contain repetitive \
                                       characters.',
-                                 code='not-strong-enough-password',
+                                 code='pwd-must-not-contain-repetitive-chars',
                                  component='user')
     if password_complexity.check_if_sequential_characters():
-        raise DashboardException(msg='Password cannot contain sequential\
+        raise DashboardException(msg='Password cannot contain sequential \
                                       characters.',
-                                 code='not-strong-enough-password',
+                                 code='pwd-must-not-contain-sequential-chars',
                                  component='user')
     if password_complexity.check_password_characters() < 10:
         raise DashboardException(msg='Password is too weak.',
-                                 code='not-strong-enough-password',
+                                 code='pwd-too-weak',
                                  component='user')
 
 
