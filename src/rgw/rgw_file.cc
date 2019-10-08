@@ -526,7 +526,7 @@ namespace rgw {
       /* save attrs */
       rgw_fh->encode_attrs(ux_key, ux_attrs);
       if (st)
-        rgw_fh->stat(st);
+        rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
       get<0>(mkr) = rgw_fh;
     } else {
       get<1>(mkr) = -EIO;
@@ -656,7 +656,7 @@ namespace rgw {
 	  parent->set_ctime(real_clock::to_timespec(t));
 	}
         if (st)
-          (void) rgw_fh->stat(st);
+	  (void) rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
 
         rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
         rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
@@ -1088,8 +1088,11 @@ namespace rgw {
     }
 
     bool initial_off;
+    char* mk{nullptr};
+
     if (likely(!! get<const char*>(&offset))) {
-      initial_off = ! get<const char*>(offset);
+      mk = const_cast<char*>(get<const char*>(offset));
+      initial_off = !mk;
     } else {
       initial_off = (*get<uint64_t*>(offset) == 0);
     }
@@ -1301,6 +1304,27 @@ namespace rgw {
     if (d) {
       state.nlink = 2;
       d->last_marker = rgw_obj_key{};
+    }
+  }
+
+  void RGWFileHandle::advance_mtime(uint32_t flags) {
+    /* intended for use on directories, fast-forward mtime so as to
+     * ensure a new, higher value for the change attribute */
+    unique_lock uniq(mtx, std::defer_lock);
+    if (likely(! (flags & RGWFileHandle::FLAG_LOCKED))) {
+      uniq.lock();
+    }
+
+    /* advance mtime only if stored mtime is older than the
+     * configured namespace expiration */
+    auto now = real_clock::now();
+    auto cmptime = state.mtime;
+    cmptime.tv_sec +=
+      fs->get_context()->_conf->rgw_nfs_namespace_expire_secs;
+    if (cmptime < real_clock::to_timespec(now)) {
+      /* sets ctime as well as mtime, to avoid masking updates should
+       * ctime inexplicably hold a higher value */
+      set_times(now);
     }
   }
 
