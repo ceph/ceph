@@ -192,7 +192,7 @@ def ceph_log(ctx, config):
         rotate_conf_path = os.path.join(os.path.dirname(__file__), 'logrotate.conf')
         with file(rotate_conf_path, 'rb') as f:
             conf = ""
-            for daemon, size in daemons.iteritems():
+            for daemon, size in daemons.items():
                 log.info('writing logrotate stanza for {daemon}'.format(daemon=daemon))
                 conf += f.read().format(daemon_type=daemon, max_size=size)
                 f.seek(0, 0)
@@ -483,7 +483,7 @@ def skeleton_config(ctx, roles, ips, mons, cluster='ceph'):
     skconf = t.read().format(testdir=teuthology.get_testdir(ctx))
     conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
     mon_hosts = []
-    for role, addr in mons.iteritems():
+    for role, addr in mons.items():
         mon_cluster, _, _ = teuthology.split_role(role)
         if mon_cluster != cluster:
             continue
@@ -515,7 +515,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
     :return the FSID (as a string) of the newly created monmap
     """
 
-    addresses = list(mons.iteritems())
+    addresses = list(mons.items())
     assert addresses, "There are no monitors in config!"
     log.debug('Ceph mon addresses: %s', addresses)
 
@@ -611,7 +611,7 @@ def cluster(ctx, config):
     remote_to_roles_to_devs = {}
     remote_to_roles_to_journals = {}
     osds = ctx.cluster.only(teuthology.is_type('osd', cluster_name))
-    for remote, roles_for_host in osds.remotes.iteritems():
+    for remote, roles_for_host in osds.remotes.items():
         devs = teuthology.get_scratch_devices(remote)
         roles_to_devs = {}
         roles_to_journals = {}
@@ -661,14 +661,14 @@ def cluster(ctx, config):
     conf = skeleton_config(
         ctx, roles=roles, ips=ips, mons=mons, cluster=cluster_name,
     )
-    for remote, roles_to_journals in remote_to_roles_to_journals.iteritems():
-        for role, journal in roles_to_journals.iteritems():
+    for remote, roles_to_journals in remote_to_roles_to_journals.items():
+        for role, journal in roles_to_journals.items():
             name = teuthology.ceph_role(role)
             if name not in conf:
                 conf[name] = {}
             conf[name]['osd journal'] = journal
-    for section, keys in config['conf'].iteritems():
-        for key, value in keys.iteritems():
+    for section, keys in config['conf'].items():
+        for key, value in keys.items():
             log.info("[%s] %s = %s" % (section, key, value))
             if section not in conf:
                 conf[section] = {}
@@ -791,7 +791,7 @@ def cluster(ctx, config):
     if not config.get('skip_mgr_daemons', False):
         log.info('Setting up mgr nodes...')
         mgrs = ctx.cluster.only(teuthology.is_type('mgr', cluster_name))
-        for remote, roles_for_host in mgrs.remotes.iteritems():
+        for remote, roles_for_host in mgrs.remotes.items():
             for role in teuthology.cluster_roles_of_type(roles_for_host, 'mgr',
                                                          cluster_name):
                 _, _, id_ = teuthology.split_role(role)
@@ -818,7 +818,7 @@ def cluster(ctx, config):
 
     log.info('Setting up mds nodes...')
     mdss = ctx.cluster.only(teuthology.is_type('mds', cluster_name))
-    for remote, roles_for_host in mdss.remotes.iteritems():
+    for remote, roles_for_host in mdss.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'mds',
                                                      cluster_name):
             _, _, id_ = teuthology.split_role(role)
@@ -864,7 +864,7 @@ def cluster(ctx, config):
     teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_journals, remote_to_roles_to_journals)
 
     log.info("ctx.disk_config.remote_to_roles_to_dev: {r}".format(r=str(ctx.disk_config.remote_to_roles_to_dev)))
-    for remote, roles_for_host in osds.remotes.iteritems():
+    for remote, roles_for_host in osds.remotes.items():
         roles_to_devs = remote_to_roles_to_devs[remote]
         roles_to_journals = remote_to_roles_to_journals[remote]
 
@@ -1009,7 +1009,7 @@ def cluster(ctx, config):
     log.info('Reading keys from all nodes...')
     keys_fp = StringIO()
     keys = []
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for remote, roles_for_host in ctx.cluster.remotes.items():
         for type_ in ['mgr',  'mds', 'osd']:
             if type_ == 'mgr' and config.get('skip_mgr_daemons', False):
                 continue
@@ -1026,7 +1026,7 @@ def cluster(ctx, config):
                 )
                 keys.append((type_, id_, data))
                 keys_fp.write(data)
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for remote, roles_for_host in ctx.cluster.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'client', cluster_name):
             _, _, id_ = teuthology.split_role(role)
             data = teuthology.get_file(
@@ -1069,7 +1069,7 @@ def cluster(ctx, config):
         )
 
     log.info('Running mkfs on mon nodes...')
-    for remote, roles_for_host in mons.remotes.iteritems():
+    for remote, roles_for_host in mons.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'mon', cluster_name):
             _, _, id_ = teuthology.split_role(role)
             mnt_point = DATA_PATH.format(
@@ -1170,7 +1170,7 @@ def cluster(ctx, config):
                             )
                         break
 
-        for remote, dirs in devs_to_clean.iteritems():
+        for remote, dirs in devs_to_clean.items():
             for dir_ in dirs:
                 log.info('Unmounting %s on %s' % (dir_, remote))
                 try:
@@ -1196,7 +1196,7 @@ def cluster(ctx, config):
 
         if config.get('tmpfs_journal'):
             log.info('tmpfs journal enabled - unmounting tmpfs at /mnt')
-            for remote, roles_for_host in osds.remotes.iteritems():
+            for remote, roles_for_host in osds.remotes.items():
                 remote.run(
                     args=['sudo', 'umount', '-f', '/mnt'],
                     check_status=False,
@@ -1215,7 +1215,7 @@ def cluster(ctx, config):
                     pass
                 else:
                     raise
-            for remote, roles in mons.remotes.iteritems():
+            for remote, roles in mons.remotes.items():
                 for role in roles:
                     is_mon = teuthology.is_type('mon', cluster_name)
                     if is_mon(role):
@@ -1354,7 +1354,7 @@ def run_daemon(ctx, config, type_):
     # create osds in order.  (this only matters for pre-luminous, which might
     # be hammer, which doesn't take an id_ argument to legacy 'osd create').
     osd_uuids  = {}
-    for remote, roles_for_host in daemons.remotes.iteritems():
+    for remote, roles_for_host in daemons.remotes.items():
         is_type_ = teuthology.is_type(type_, cluster_name)
         for role in roles_for_host:
             if not is_type_(role):
@@ -1398,7 +1398,7 @@ def run_daemon(ctx, config, type_):
                 ]
             )
 
-    for remote, roles_for_host in daemons.remotes.iteritems():
+    for remote, roles_for_host in daemons.remotes.items():
         is_type_ = teuthology.is_type(type_, cluster_name)
         for role in roles_for_host:
             if not is_type_(role):
