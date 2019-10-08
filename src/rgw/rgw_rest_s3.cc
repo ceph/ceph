@@ -4251,7 +4251,7 @@ rgw::auth::s3::LDAPEngine::authenticate(
   }*/
 
   if (ldh->auth(base64_token.id, base64_token.key) != 0) {
-    return result_t::deny();
+    return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
 
   auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
