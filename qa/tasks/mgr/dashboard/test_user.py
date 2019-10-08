@@ -177,7 +177,7 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypassword10#'
         })
         self.assertStatus(400)
-        self.assertError(code='the_same_as_old_password', component='user')
+        self.assertError(code='pwd-must-not-be-last-one', component='user')
         self.delete_user('test1')
 
     def test_change_password_contains_username(self):
@@ -188,7 +188,7 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypasstest1@#'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_username', component='user')
+        self.assertError(code='pwd-must-not-contain-username', component='user')
         self.delete_user('test1')
 
     def test_change_password_contains_forbidden_words(self):
@@ -199,7 +199,7 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypassOSD01'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_forbidden_words', component='user')
+        self.assertError(code='pwd-must-not-contain-forbidden-keywords', component='user')
         self.delete_user('test1')
 
     def test_change_password_contains_sequential_characters(self):
@@ -210,7 +210,7 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypass123456!@$'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_sequential_characters', component='user')
+        self.assertError(code='pwd-must-not-contain-sequential-chars', component='user')
         self.delete_user('test1')    
 
     def test_change_password_contains_repetetive_characters(self):
@@ -221,7 +221,7 @@ class UserTest(DashboardTestCase):
             'new_password': 'aaaaA1@!#'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_repetetive_characters', component='user')
+        self.assertError(code='pwd-must-not-contain-repetitive-chars', component='user')
         self.delete_user('test1')
 
     def test_change_password(self):
