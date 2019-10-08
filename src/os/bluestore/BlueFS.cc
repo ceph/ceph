@@ -480,7 +480,17 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
   dout(10) << __func__ << " bdev " << id << dendl;
   if (id >= block_all.size())
     return -EINVAL;
-  *extents = block_all[id];
+  if (alloc[id] && alloc[id] == shared_bdev_alloc) {
+    for (auto& p : file_map) {
+      for (auto& q : p.second->fnode.extents) {
+        if (alloc[q.bdev] == shared_bdev_alloc) {
+          extents->insert(q.offset, q.length);
+        }
+      }
+    }
+  } else {
+    *extents = block_all[id];
+  }
   return 0;
 }
 
