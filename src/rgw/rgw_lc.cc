@@ -672,6 +672,14 @@ public:
       ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": not current, skipping" << dendl;
       return false;
     }
+    if (o.is_delete_marker()) {
+      if (oc.ol.next_has_same_name()) {
+        return false;
+      } else {
+        *exp_time = real_clock::now();
+        return true;
+      }
+    }
 
     auto& mtime = o.meta.mtime;
     bool is_expired;
@@ -693,7 +701,12 @@ public:
 
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
-    int r = remove_expired_obj(oc, !oc.bucket_info.versioned());
+    int r;
+    if (o.is_delete_marker()) {
+      r = remove_expired_obj(oc, true);
+    } else {
+      r = remove_expired_obj(oc, !oc.bucket_info.versioned());
+    }
     if (r < 0) {
       ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
