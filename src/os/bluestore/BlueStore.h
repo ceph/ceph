@@ -2410,7 +2410,11 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, vector<ghobject_t> *ls, ghobject_t *next, int flags);
+    int max,
+    vector<ghobject_t> *ls,
+    vector<ObjectHandle> *lsh,
+    ghobject_t *next,
+    int flags);
 
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
@@ -2728,6 +2732,13 @@ public:
 		      const ghobject_t& end,
 		      int max,
 		      vector<ghobject_t> *ls,
+		      ghobject_t *next,
+		      int flags) override;
+  int collection_list_plus(CollectionHandle &c,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
+		      int max,
+		      vector<ObjectHandle> *ls,
 		      ghobject_t *next,
 		      int flags) override;
 
