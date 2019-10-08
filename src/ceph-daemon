@@ -51,8 +51,6 @@ try:
 except ImportError:
     pass
 
-logging.basicConfig(level=logging.INFO)
-
 podman_path = None
 
 ##################################
@@ -123,13 +121,13 @@ def check_unit(unit_name):
         out = subprocess.check_output(['systemctl', 'is-enabled', unit_name])
         enabled = out.decode('utf-8').strip() == 'enabled'
     except Exception as e:
-        logging.warning('unable to run systemctl' % e)
+        logger.warning('unable to run systemctl' % e)
         enabled = False
     try:
         out = subprocess.check_output(['systemctl', 'is-active', unit_name])
         active = out.decode('utf-8').strip() == 'active'
     except Exception as e:
-        logging.warning('unable to run systemctl: %s' % e)
+        logger.warning('unable to run systemctl: %s' % e)
         active = False
     return (enabled, active)
 
@@ -140,7 +138,7 @@ def get_legacy_config_fsid(cluster):
         if 'global' in config and 'fsid' in config['global']:
             return config['global']['fsid']
     except Exception as e:
-        logging.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
+        logger.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
         return None
     return None
 
@@ -576,7 +574,7 @@ class CephContainer:
         ] + cmd
 
     def run(self):
-        logging.debug(self.run_cmd())
+        logger.debug(self.run_cmd())
         return subprocess.check_output(self.run_cmd()).decode('utf-8')
 
 ##################################
@@ -595,11 +593,11 @@ def command_bootstrap():
     mgr_id = args.mgr_id or hostname
     logging.info('Cluster fsid: %s' % fsid)
 
-    logging.info('Extracting ceph user uid/gid from container image...')
+    logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid()
 
     # create some initial keys
-    logging.info('Creating initial keys...')
+    logger.info('Creating initial keys...')
     mon_key = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/ceph-authtool',
@@ -665,7 +663,7 @@ def command_bootstrap():
         config = f.getvalue()
 
     # create initial monmap, tmp monmap file
-    logging.info('Creating initial monmap...')
+    logger.info('Creating initial monmap...')
     tmp_monmap = tempfile.NamedTemporaryFile(mode='w')
     os.fchmod(tmp_monmap.fileno(), 0o644)
     out = CephContainer(
@@ -683,7 +681,7 @@ def command_bootstrap():
     ).run()
 
     # create mon
-    logging.info('Creating mon...')
+    logger.info('Creating mon...')
     create_daemon_dirs(fsid, 'mon', mon_id, uid, gid)
     mon_dir = get_data_dir(fsid, 'mon', mon_id)
     log_dir = get_log_dir(fsid)
@@ -715,7 +713,7 @@ def command_bootstrap():
 
     # assimilate and minimize config
     if not args.no_minimize_config:
-        logging.info('Assimilating anything we can from ceph.conf...')
+        logger.info('Assimilating anything we can from ceph.conf...')
         out = CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -728,7 +726,7 @@ def command_bootstrap():
                 log_dir: '/var/log/ceph:z',
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id},
         ).run()
-        logging.info('Generating new minimal ceph.conf...')
+        logger.info('Generating new minimal ceph.conf...')
         out = CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -744,7 +742,7 @@ def command_bootstrap():
         # re-read our minimized config
         with open(mon_dir + '/config', 'r') as f:
             config = f.read()
-        logging.info('Restarting the monitor...')
+        logger.info('Restarting the monitor...')
         subprocess.call([
             'systemctl',
             'restart',
@@ -752,7 +750,7 @@ def command_bootstrap():
         ])
 
     # create mgr
-    logging.info('Creating mgr...')
+    logger.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
@@ -767,13 +765,13 @@ def command_bootstrap():
             os.fchmod(f.fileno(), 0o600)
             f.write('[client.admin]\n'
                     '\tkey = ' + admin_key + '\n')
-        logging.info('Wrote keyring to %s' % args.output_keyring)
+        logger.info('Wrote keyring to %s' % args.output_keyring)
     if args.output_config:
         with open(args.output_config, 'w') as f:
             f.write(config)
-        logging.info('Wrote config to %s' % args.output_config)
+        logger.info('Wrote config to %s' % args.output_config)
 
-    logging.info('Waiting for mgr to start...')
+    logger.info('Waiting for mgr to start...')
     while True:
         out = CephContainer(
             image=args.image,
@@ -790,12 +788,12 @@ def command_bootstrap():
         j = json.loads(out)
         if j.get('mgrmap', {}).get('available', False):
             break
-        logging.info('mgr is still not available yet, waiting...')
+        logger.info('mgr is still not available yet, waiting...')
         time.sleep(1)
 
     # ssh
     if not args.skip_ssh:
-        logging.info('Generating ssh key...')
+        logger.info('Generating ssh key...')
         (ssh_key, ssh_pub) = gen_ssh_key(fsid)
 
         tmp_key = tempfile.NamedTemporaryFile(mode='w')
@@ -812,7 +810,7 @@ def command_bootstrap():
         if args.output_pub_ssh_key:
             with open(args.output_put_ssh_key, 'w') as f:
                 f.write(ssh_pub)
-            logging.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
+            logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
         CephContainer(
             image=args.image,
@@ -847,12 +845,12 @@ def command_bootstrap():
             },
         ).run()
 
-        logging.info('Adding key to root@localhost\'s authorized_keys...')
+        logger.info('Adding key to root@localhost\'s authorized_keys...')
         with open('/root/.ssh/authorized_keys', 'a') as f:
             os.fchmod(f.fileno(), 0o600)  # just in case we created it
             f.write(ssh_pub + '\n')
 
-        logging.info('Enabling ssh module...')
+        logger.info('Enabling ssh module...')
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -867,7 +865,7 @@ def command_bootstrap():
                 tmp_pub.name: '/tmp/pub:z',
             },
         ).run()
-        logging.info('Setting orchestrator backend to ssh...')
+        logger.info('Setting orchestrator backend to ssh...')
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -883,7 +881,7 @@ def command_bootstrap():
             },
         ).run()
         host = get_hostname()
-        logging.info('Adding host %s...' % host)
+        logger.info('Adding host %s...' % host)
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -1081,13 +1079,13 @@ def command_adopt():
         (enabled, active) = check_unit(unit_name)
 
         if active:
-            logging.info('Stopping old systemd unit %s...' % unit_name)
+            logger.info('Stopping old systemd unit %s...' % unit_name)
             subprocess.check_output(['systemctl', 'stop', unit_name])
         if enabled:
-            logging.info('Disabling old systemd unit %s...' % unit_name)
+            logger.info('Disabling old systemd unit %s...' % unit_name)
             subprocess.check_output(['systemctl', 'disable', unit_name])
 
-        logging.info('Moving data...')
+        logger.info('Moving data...')
         make_data_dir_base(fsid, uid, gid)
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
         subprocess.check_output([
@@ -1101,7 +1099,7 @@ def command_adopt():
         os.chmod(data_dir, DATA_DIR_MODE)
         os.chown(data_dir, uid, gid)
 
-        logging.info('Moving logs...')
+        logger.info('Moving logs...')
         log_dir = make_log_dir(fsid, uid=uid, gid=gid)
         try:
             subprocess.check_output(
@@ -1111,10 +1109,10 @@ def command_adopt():
                  os.path.join(log_dir)],
                 shell=True)
         except Exception as e:
-            logging.warning('unable to move log file: %s' % e)
+            logger.warning('unable to move log file: %s' % e)
             pass
 
-        logging.info('Creating new units...')
+        logger.info('Creating new units...')
         c = get_container(fsid, daemon_type, daemon_id)
         deploy_daemon_units(fsid, daemon_type, daemon_id, c,
                             enable=True,  # unconditionally enable the new unit
@@ -1206,6 +1204,10 @@ parser.add_argument(
     '--unit-dir',
     default=UNIT_DIR,
     help='base directory for systemd units')
+parser.add_argument(
+    '--debug', '-d',
+    action='store_true',
+    help='Show debug-level log messages')
 subparsers = parser.add_subparsers(help='sub-command')
 
 parser_version = subparsers.add_parser(
@@ -1430,6 +1432,12 @@ except NameError:
 
 args = parser.parse_args(av)
 
+if args.debug:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # podman or docker?
 if args.docker:
     podman_path = find_program('docker')
@@ -1439,7 +1447,7 @@ else:
             podman_path = find_program(i)
             break
         except Exception as e:
-            logging.debug('could not locate %s: %s' % (i, e))
+            logger.debug('could not locate %s: %s' % (i, e))
     if not podman_path:
         raise RuntimeError('unable to locate any of %s' % PODMAN_PREFERENCE)
 
