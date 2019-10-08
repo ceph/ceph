@@ -2528,6 +2528,8 @@ public:
       const auto& zonegroups_by_api = current_period.get_map().zonegroups_by_api;
       if (zonegroups_by_api.find(api) != zonegroups_by_api.end())
         return true;
+    } else if (zonegroup.api_name == api) {
+        return true;
     }
     return false;
   }
