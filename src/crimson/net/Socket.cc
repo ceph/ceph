@@ -173,6 +173,23 @@ seastar::future<> Socket::try_trap_post(bp_action_t& trap) {
   }
   return seastar::now();
 }
+
+void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_) {
+  blocker = blocker_;
+  if (type == bp_type_t::READ) {
+    ceph_assert(next_trap_read == bp_action_t::CONTINUE);
+    next_trap_read = action;
+  } else { // type == bp_type_t::WRITE
+    if (next_trap_write == bp_action_t::CONTINUE) {
+      next_trap_write = action;
+    } else if (next_trap_write == bp_action_t::FAULT) {
+      // do_sweep_messages() may combine multiple write events into one socket write
+      ceph_assert(action == bp_action_t::FAULT || action == bp_action_t::CONTINUE);
+    } else {
+      ceph_abort();
+    }
+  }
+}
 #endif
 
 } // namespace ceph::net
