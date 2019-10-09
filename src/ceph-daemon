@@ -689,6 +689,30 @@ def command_bootstrap():
     mgr_id = args.mgr_id or hostname
     logging.info('Cluster fsid: %s' % fsid)
 
+    # config
+    cp = configparser.ConfigParser()
+    if args.config:
+        cp.read(args.config)
+    if args.mon_ip:
+        addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
+        mon_ip = args.mon_ip
+    elif args.mon_addrv:
+        addr_arg = args.mon_addrv
+        mon_ip = args.mon_addrv.split(':')[1]
+    else:
+        raise RuntimeError('must specify --mon-ip or --mon-addrv')
+    cp['global']['fsid'] = fsid;
+    cp['global']['mon host'] = addr_arg
+    with StringIO() as f:
+        cp.write(f)
+        config = f.getvalue()
+
+    if not args.skip_ping_check:
+        logger.info('Verifying we can ping mon IP %s...' % mon_ip)
+        _, _, ret = call(['timeout', '5', 'ping', mon_ip, '-c', '1'], 'ping')
+        if ret:
+            raise RuntimeError('Failed to ping %s' % mon_ip)
+
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid()
 
@@ -741,22 +765,6 @@ def command_bootstrap():
     os.fchown(tmp_keyring.fileno(), uid, gid)
     tmp_keyring.write(keyring)
     tmp_keyring.flush()
-
-    # config
-    cp = configparser.ConfigParser()
-    if args.config:
-        cp.read(args.config)
-    if args.mon_ip:
-        addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
-    elif args.mon_addrv:
-        addr_arg = args.mon_addrv
-    else:
-        raise RuntimeError('must specify --mon-ip or --mon-addrv')
-    cp['global']['fsid'] = fsid;
-    cp['global']['mon host'] = addr_arg
-    with StringIO() as f:
-        cp.write(f)
-        config = f.getvalue()
 
     # create initial monmap, tmp monmap file
     logger.info('Creating initial monmap...')
@@ -1489,6 +1497,10 @@ parser_bootstrap.add_argument(
     '--no-minimize-config',
     action='store_true',
     help='do not assimilate and minimize the config file')
+parser_bootstrap.add_argument(
+    '--skip-ping-check',
+    action='store_true',
+    help='do not verify that mon IP is pingable')
 
 parser_deploy = subparsers.add_parser(
     'deploy', help='deploy a daemon')
