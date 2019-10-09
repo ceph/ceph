@@ -5522,17 +5522,18 @@ int BlueStore::_open_db_and_around(bool read_only)
     if (r < 0)
       goto out_fm;
 
-    // now open in R/W mode
-    if (!read_only) {
-      _close_db(true);
+    // Re-open in the proper mode.
+    // Can't simply bypass second open for read-only mode as we need to
+    // load allocated extents from bluefs into allocator.
+    // And now it's time to do that
+    //
+    _close_db(true);
 
-      r = _open_db(false, false, false);
-      if (r < 0) {
-	_close_alloc();
-	_close_fm();
-	return r;
-      }
-      fm->sync(db);
+    r = _open_db(false, false, read_only);
+    if (r < 0) {
+      _close_alloc();
+      _close_fm();
+      return r;
     }
   } else {
     r = _open_db(false, false);
@@ -7975,7 +7976,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   uint64_t_btree_t used_omap_head;
   uint64_t_btree_t used_sbids;
 
-  mempool_dynamic_bitset used_blocks;
+  mempool_dynamic_bitset used_blocks, bluefs_used_blocks;
   KeyValueDB::Iterator it;
   store_statfs_t expected_store_statfs, actual_statfs;
   per_pool_statfs expected_pool_statfs;
@@ -7990,16 +7991,36 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   uint64_t num_sharded_objects = 0;
   BlueStoreRepairer repairer;
 
+  interval_set<uint64_t> bluefs_extents;
+  auto alloc_size = fm->get_alloc_size();
+
   utime_t start = ceph_clock_now();
 
   _fsck_collections(&errors);
   used_blocks.resize(fm->get_alloc_units());
+
+  int r = bluefs->get_block_extents(bluefs_layout.shared_bdev, &bluefs_extents);
+  ceph_assert(r == 0);
+  for (interval_set<uint64_t>::iterator it = bluefs_extents.begin(); it != bluefs_extents.end(); ++it) {
+
+    apply_for_bitset_range(it.get_start(), it.get_len(), alloc_size, used_blocks,
+      [&](uint64_t pos, mempool_dynamic_bitset& bs) {
+        ceph_assert(pos < bs.size());
+        bs.set(pos);
+      }
+    );
+  }
+
+  bluefs_used_blocks = used_blocks;
+
   apply_for_bitset_range(
-    0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
+    0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), alloc_size, used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
   );
+
+
   if (repair) {
     repairer.get_space_usage_tracker().init(
       bdev->get_size(),
@@ -8477,7 +8498,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	         << " released 0x" << std::hex << wt.released << std::dec << dendl;
         for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
           apply_for_bitset_range(
-            e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
+            e.get_start(), e.get_len(), alloc_size, used_blocks,
             [&](uint64_t pos, mempool_dynamic_bitset &bs) {
               bs.set(pos);
             }
@@ -8493,9 +8514,10 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       while (fm->enumerate_next(db, &offset, &length)) {
         bool intersects = false;
         apply_for_bitset_range(
-          offset, length, fm->get_alloc_size(), used_blocks,
+          offset, length, alloc_size, used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-            if (bs.test(pos)) {
+	    ceph_assert(pos < bs.size());
+            if (bs.test(pos) && !bluefs_used_blocks.test(pos)) {
 	      if (offset == SUPER_RESERVED &&
 	          length == min_alloc_size - SUPER_RESERVED) {
 	        // this is due to the change just after luminous to min_alloc_size
