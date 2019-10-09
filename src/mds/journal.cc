@@ -791,7 +791,7 @@ void EMetaBlob::encode(bufferlist& bl, uint64_t features) const
 }
 void EMetaBlob::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
   decode(lump_order, bl);
   decode(lump_map, bl);
   if (struct_v >= 4) {
