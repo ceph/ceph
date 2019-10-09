@@ -431,7 +431,7 @@ std::vector<Option> get_global_options() {
     .add_tag("network")
     .add_see_also("mon_host"),
 
-    Option("image", Option::TYPE_STR, Option::LEVEL_BASIC)
+    Option("container_image", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("container image (used by ssh orchestrator)")
     .set_flag(Option::FLAG_STARTUP)
     .set_default("ceph/daemon-base"),

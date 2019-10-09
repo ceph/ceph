@@ -356,7 +356,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             ret, image, err = self.mon_command({
                 'prefix': 'config get',
                 'who': entity,
-                'key': 'image',
+                'key': 'container_image',
             })
             image = image.strip()
             self.log.debug('%s container image %s' % (entity, image))
