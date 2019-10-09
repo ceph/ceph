@@ -139,8 +139,9 @@ public:
   }
 
   void handle_client_session(const cref_t<MClientSession> &m);
-  void _session_logged(Session *session, uint64_t state_seq, 
-		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
+  void _session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
+		       interval_set<inodeno_t>& prealloc, interval_set<inodeno_t>& deleg,
+		       version_t piv);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
 					map<client_t,client_metadata_t>& cmm,
 					map<client_t,pair<Session*,uint64_t> >& smap);

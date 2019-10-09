@@ -215,7 +215,9 @@ public:
     ceph_assert(!info.prealloc_inos.empty());
 
     if (ino) {
-      if (info.prealloc_inos.contains(ino))
+      if (info.delegated_inos.contains(ino))
+	info.delegated_inos.erase(ino);
+      else if (info.prealloc_inos.contains(ino))
 	info.prealloc_inos.erase(ino);
       else
 	ino = 0;
@@ -226,6 +228,20 @@ public:
     }
     info.used_inos.insert(ino, 1);
     return ino;
+  }
+  int delegate_inos(int want) {
+    int count = std::min((int)info.prealloc_inos.size(), want);
+    want = count;
+    while (want > 0) {
+      inodeno_t start = info.prealloc_inos.range_start();
+      inodeno_t end = info.prealloc_inos.end_after(start);
+      int num = std::min((_inodeno_t)want, end - start);
+
+      info.prealloc_inos.erase(start, num);
+      info.delegated_inos.insert(start, num);
+      want -= num;
+    }
+    return count;
   }
   int get_num_projected_prealloc_inos() const {
     return info.prealloc_inos.size() + pending_prealloc_inos.size();

@@ -472,10 +472,14 @@ void client_metadata_t::dump(Formatter *f) const
  */
 void session_info_t::encode(bufferlist& bl, uint64_t features) const
 {
+  interval_set<inodeno_t> both;
+  both.insert(delegated_inos);
+  both.insert(prealloc_inos);
+
   ENCODE_START(7, 7, bl);
   encode(inst, bl, features);
   encode(completed_requests, bl);
-  encode(prealloc_inos, bl);   // hacky, see below.
+  encode(both, bl);
   encode(used_inos, bl);
   encode(completed_flushes, bl);
   encode(auth_name, bl);
@@ -531,6 +535,15 @@ void session_info_t::dump(Formatter *f) const
 
   f->open_array_section("prealloc_inos");
   for (const auto& [start, len] : prealloc_inos) {
+    f->open_object_section("ino_range");
+    f->dump_stream("start") << start;
+    f->dump_unsigned("length", len);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("delegated_inos");
+  for (const auto& [start, len] : delegated_inos) {
     f->open_object_section("ino_range");
     f->dump_stream("start") << start;
     f->dump_unsigned("length", len);

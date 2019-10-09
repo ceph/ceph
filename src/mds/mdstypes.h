@@ -1170,6 +1170,7 @@ struct session_info_t {
   entity_inst_t inst;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
+  interval_set<inodeno_t> delegated_inos;  // hand these out to client
   interval_set<inodeno_t> used_inos;       // journaling use
   client_metadata_t client_metadata;
   std::set<ceph_tid_t> completed_flushes;

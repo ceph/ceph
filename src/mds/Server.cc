@@ -327,17 +327,18 @@ class C_MDS_session_finish : public ServerLogContext {
   uint64_t state_seq;
   bool open;
   version_t cmapv;
-  interval_set<inodeno_t> inos;
+  interval_set<inodeno_t> prealloc;
+  interval_set<inodeno_t> deleg;
   version_t inotablev;
   Context *fin;
 public:
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& p, interval_set<inodeno_t>& d, version_t iv, Context *fin_ = NULL) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), prealloc(p), deleg(d), inotablev(iv), fin(fin_) { }
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
+    server->_session_logged(session, state_seq, open, cmapv, prealloc, deleg, inotablev);
     if (fin) {
       fin->complete(r);
     }
@@ -736,7 +737,8 @@ void Server::finish_flush_session(Session *session, version_t seq)
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
-			     interval_set<inodeno_t>& inos, version_t piv)
+			     interval_set<inodeno_t>& prealloc, interval_set<inodeno_t>& deleg,
+			     version_t piv)
 {
   dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
@@ -744,7 +746,11 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   if (piv) {
     ceph_assert(session->is_closing() || session->is_killing() ||
 	   session->is_opening()); // re-open closing session
-    session->info.prealloc_inos.subtract(inos);
+    session->info.delegated_inos.subtract(deleg);
+    session->info.prealloc_inos.subtract(prealloc);
+    interval_set<inodeno_t> inos;
+    inos.union_of(deleg, prealloc);
+    dout(10) << __func__ << " releasing inos " << inos << dendl;
     mds->inotable->apply_release_ids(inos);
     ceph_assert(mds->inotable->get_version() == piv);
   }
@@ -1220,9 +1226,13 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
 
   // release alloc and pending-alloc inos for this session
   // and wipe out session state, in case the session close aborts for some reason
+  interval_set<inodeno_t> prealloc;
+  prealloc.insert(session->info.prealloc_inos);
+  prealloc.insert(session->pending_prealloc_inos);
+  interval_set<inodeno_t> deleg;
+  deleg.insert(session->info.delegated_inos);
   interval_set<inodeno_t> both;
-  both.insert(session->info.prealloc_inos);
-  both.insert(session->pending_prealloc_inos);
+  both.union_of(prealloc, deleg);
   if (both.size()) {
     mds->inotable->project_release_ids(both);
     piv = mds->inotable->get_projected_version();
@@ -1230,7 +1240,7 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
     piv = 0;
 
   mdlog->start_submit_entry(new ESession(session->info.inst, false, pv, both, piv),
-			    new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe));
+			    new C_MDS_session_finish(this, session, sseq, false, pv, prealloc, deleg, piv, on_safe));
   mdlog->flush();
 
   // clean up requests, too
@@ -2040,6 +2050,13 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr, session);
+
+  // Try to delegate some prealloc_inos to the client, if it needs them
+  // FIXME: Make these ratios tunable
+  if (session && session->info.delegated_inos.size() < g_conf()->mds_client_prealloc_inos / 20) {
+    int want = g_conf()->mds_client_prealloc_inos/10 - session->info.delegated_inos.size();
+    session->delegate_inos(want);
+  }
 
   // get tracei/tracedn from mdr?
   snapid_t snapid = mdr->snapid;
