@@ -7852,6 +7852,16 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     return;
   const size_t offs_base = 65536 / 2;
 
+
+  // Now we need standalone db to pass "false free fix" section below
+  // Due to new BlueFS allocation model (single allocator for main device)
+  // it might cause "false free" blob overwrite by BlueFS/DB stuff
+  // and hence fail the test case and corrupt data.
+  //
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "4294967296");
+
   SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
   SetVal(g_conf(), "bluestore_max_blob_size", 
@@ -7936,8 +7946,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   ASSERT_EQ(bstore->fsck(false), 0);
   ASSERT_EQ(bstore->mount(), 0);
   ASSERT_EQ(bstore->statfs(&statfs), 0);
-  // adjust free space to success in comparison
+  // adjust free/internal meta space to success in comparison
   statfs0.available = statfs.available;
+  statfs0.internal_metadata = statfs.internal_metadata;
   ASSERT_EQ(statfs0, statfs);
 
   ///////// undecodable shared blob key / stray shared blob records ///////
