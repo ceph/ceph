@@ -1001,6 +1001,8 @@ def command_bootstrap():
                 tmp_pub.name: '/tmp/pub:z',
             },
         ).run()
+
+    logger.info('Bootstrap complete.')
     return 0
 
 ##################################
