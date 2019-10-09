@@ -202,7 +202,7 @@ def task(ctx, config):
             weights['append'] = weights['append'] / 2
             weights['append_excl'] = weights['append']
 
-    for op, weight in weights.iteritems():
+    for op, weight in weights.items():
         args.extend([
             '--op', op, str(weight)
         ])
