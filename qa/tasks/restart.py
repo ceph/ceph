@@ -96,7 +96,7 @@ def task(ctx, config):
 
     try:
         assert 'exec' in config, "config requires exec key with <role>: <command> entries"
-        for role, task in config['exec'].iteritems():
+        for role, task in config['exec'].items():
             log.info('restart for role {r}'.format(r=role))
             (remote,) = ctx.cluster.only(role).remotes.keys()
             srcdir, restarts = get_tests(ctx, config, role, remote, testdir)
@@ -113,7 +113,7 @@ def task(ctx, config):
                     ]
                 env = config.get('env')
                 if env is not None:
-                    for var, val in env.iteritems():
+                    for var, val in env.items():
                         quoted_val = pipes.quote(val)
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
