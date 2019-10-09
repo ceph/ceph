@@ -2445,6 +2445,25 @@ void mirror_image_map_remove(librados::ObjectWriteOperation *op,
   op->exec("rbd", "mirror_image_map_remove", bl);
 }
 
+void mirror_image_snapshot_unlink_peer(librados::ObjectWriteOperation *op,
+                                       snapid_t snap_id,
+                                       const std::string &mirror_peer_uuid) {
+  bufferlist bl;
+  encode(snap_id, bl);
+  encode(mirror_peer_uuid, bl);
+
+  op->exec("rbd", "mirror_image_snapshot_unlink_peer", bl);
+}
+
+int mirror_image_snapshot_unlink_peer(librados::IoCtx *ioctx,
+                                      const std::string &oid,
+                                      snapid_t snap_id,
+                                      const std::string &mirror_peer_uuid) {
+  librados::ObjectWriteOperation op;
+  mirror_image_snapshot_unlink_peer(&op, snap_id, mirror_peer_uuid);
+  return ioctx->operate(oid, &op);
+}
+
 // Groups functions
 int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
                    const std::string &start, uint64_t max_return,

@@ -519,6 +519,13 @@ void mirror_image_map_update(librados::ObjectWriteOperation *op,
 void mirror_image_map_remove(librados::ObjectWriteOperation *op,
                              const std::string &global_image_id);
 
+void mirror_image_snapshot_unlink_peer(librados::ObjectWriteOperation *op,
+                                       snapid_t snap_id,
+                                       const std::string &mirror_peer_uuid);
+int mirror_image_snapshot_unlink_peer(librados::IoCtx *ioctx,
+                                      const std::string &oid,
+                                      snapid_t snap_id,
+                                      const std::string &mirror_peer_uuid);
 // Groups functions
 int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
                    const std::string &start, uint64_t max_return,
