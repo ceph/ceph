@@ -6,23 +6,44 @@
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
-// creates a temporary pool and initializes an IoCtx for each test
+// creates a rados client and temporary pool
+struct RadosEnv : public ::testing::Environment {
+  static std::optional<std::string> pool_name;
+ public:
+  static std::optional<librados::Rados> rados;
+
+  void SetUp() override {
+    rados.emplace();
+    // create pool
+    std::string name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(name, *rados));
+    pool_name = name;
+  }
+  void TearDown() override {
+    if (pool_name) {
+      ASSERT_EQ(0, destroy_one_pool_pp(*pool_name, *rados));
+    }
+    rados.reset();
+  }
+
+  static int ioctx_create(librados::IoCtx& ioctx) {
+    return rados->ioctx_create(pool_name->c_str(), ioctx);
+  }
+};
+std::optional<std::string> RadosEnv::pool_name;
+std::optional<librados::Rados> RadosEnv::rados;
+
+auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
+
 class rgw_gc_log : public ::testing::Test {
-  static librados::Rados rados;
-  static std::string pool_name;
  protected:
   static librados::IoCtx ioctx;
 
-  static void SetUpTestCase() {
-    pool_name = get_temp_pool_name();
-    /* create pool */
-    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  static void SetUpTestSuite() {
+    ASSERT_EQ(0, RadosEnv::ioctx_create(ioctx));
   }
-  static void TearDownTestCase() {
-    /* remove pool */
+  static void TearDownTestSuite() {
     ioctx.close();
-    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
   }
 
   // use the test's name as the oid so different tests don't conflict
@@ -30,8 +51,6 @@ class rgw_gc_log : public ::testing::Test {
     return ::testing::UnitTest::GetInstance()->current_test_info()->name();
   }
 };
-librados::Rados rgw_gc_log::rados;
-std::string rgw_gc_log::pool_name;
 librados::IoCtx rgw_gc_log::ioctx;
 
 
