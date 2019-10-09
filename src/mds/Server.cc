@@ -757,6 +757,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     ceph_assert(session->is_closing() || session->is_killing() ||
 	   session->is_opening()); // re-open closing session
     session->info.prealloc_inos.subtract(inos);
+    session->delegated_inos.clear();
     mds->inotable->apply_release_ids(inos);
     ceph_assert(mds->inotable->get_version() == piv);
   }
@@ -3164,8 +3165,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   bool allow_prealloc_inos = mdr->session->is_open();
 
   // assign ino
-  if (allow_prealloc_inos &&
-      mdr->session->info.prealloc_inos.size()) {
+  if (allow_prealloc_inos && mdr->session->get_num_prealloc_inos()) {
     mdr->used_prealloc_ino = 
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
     mds->sessionmap.mark_projected(mdr->session);
