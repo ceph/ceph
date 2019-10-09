@@ -43,6 +43,8 @@ def build_git_url(project, project_owner='ceph'):
     """
     if project == 'ceph-qa-suite':
         base = config.get_ceph_qa_suite_git_url()
+    elif project == 'ceph-cm-ansible':
+        base = config.get_ceph_cm_ansible_git_url()
     elif project == 'ceph':
         base = config.get_ceph_git_url()
     else:

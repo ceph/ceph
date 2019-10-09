@@ -123,6 +123,12 @@ class TestUtil(object):
         m_get_ceph_git_url.return_value = url + '.git'
         assert url == util.build_git_url('ceph')
 
+    @patch('teuthology.config.TeuthologyConfig.get_ceph_cm_ansible_git_url')
+    def test_build_git_url_ceph_cm_ansible_custom(self, m_get_ceph_cm_ansible_git_url):
+        url = 'http://foo.com/some'
+        m_get_ceph_cm_ansible_git_url.return_value = url + '.git'
+        assert url == util.build_git_url('ceph-cm-ansible')
+
     @patch('teuthology.config.TeuthologyConfig.get_ceph_git_url')
     def test_git_ls_remote(self, m_get_ceph_git_url, git_repository):
         m_get_ceph_git_url.return_value = git_repository

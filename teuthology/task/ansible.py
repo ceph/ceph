@@ -411,8 +411,7 @@ class CephLab(Ansible):
         if 'playbook' not in config:
             config['playbook'] = 'cephlab.yml'
         if 'repo' not in config:
-            config['repo'] = os.path.join(teuth_config.ceph_git_base_url,
-                                          'ceph-cm-ansible.git')
+            config['repo'] = teuth_config.get_ceph_cm_ansible_git_url()
         super(CephLab, self).__init__(ctx, config)
 
     def begin(self):
