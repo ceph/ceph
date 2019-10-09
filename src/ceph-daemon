@@ -654,6 +654,7 @@ class CephContainer:
             '-it',
             '--net=host',
             '--privileged',
+            '--env', 'LANG=C',
         ] + self.podman_args + envs + vols + [
             '--entrypoint', '/bin/bash',
             self.image
