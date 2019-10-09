@@ -1977,6 +1977,54 @@ test_v2_lossless_connected_fault(FailoverTest& test) {
 }
 
 seastar::future<>
+test_v2_lossless_connected_fault2(FailoverTest& test) {
+  return seastar::do_with(std::vector<Breakpoint>{
+      {Tag::ACK, bp_type_t::READ},
+      {Tag::ACK, bp_type_t::WRITE},
+  }, [&test] (auto& failure_cases) {
+    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+      TestInterceptor interceptor;
+      interceptor.make_fault(bp);
+      return test.run_suite(
+          fmt::format("test_v2_lossless_connected_fault2 -- {}", bp),
+          interceptor,
+          policy_t::lossless_client,
+          policy_t::stateful_server,
+          [&test] (FailoverSuite& suite) {
+        return seastar::futurize_apply([&suite] {
+          return suite.connect_peer();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&test] {
+          return test.peer_send_me();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&test] {
+          return test.peer_send_me();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&suite] {
+          return suite.wait_results(1);
+        }).then([] (ConnResults& results) {
+          results[0].assert_state_at(conn_state_t::established);
+          results[0].assert_connect(2, 1, 1, 2);
+          results[0].assert_accept(0, 0, 0, 0);
+          results[0].assert_reset(0, 0);
+        });
+      });
+    });
+  });
+}
+
+seastar::future<>
 test_v2_lossless_reconnect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<std::pair<Breakpoint, Breakpoint>>{
       {{Tag::MESSAGE, bp_type_t::WRITE},
@@ -2837,6 +2885,8 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
       return test_v2_lossless_connect_fault(*test);
     }).then([test] {
       return test_v2_lossless_connected_fault(*test);
+    }).then([test] {
+      return test_v2_lossless_connected_fault2(*test);
     }).then([test] {
       return test_v2_lossless_reconnect_fault(*test);
     }).then([test] {
