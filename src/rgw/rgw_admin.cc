@@ -104,8 +104,8 @@ void usage()
   cout << "  subuser rm                 remove subuser\n";
   cout << "  key create                 create access key\n";
   cout << "  key rm                     remove access key\n";
-  cout << "  bucket list                list buckets (specify --allow-unordered for\n";
-  cout << "                             faster, unsorted listing)\n";
+  cout << "  bucket list                list buckets (specify --zonegroup-id for listing the zonegroup's own buckets\n";
+  cout << "                             --allow-unordered for faster, unsorted listing)\n";
   cout << "  bucket limit check         show bucket sharding stats\n";
   cout << "  bucket link                link bucket to specified user\n";
   cout << "  bucket unlink              unlink bucket from specified user\n";
@@ -4990,6 +4990,7 @@ int main(int argc, const char **argv)
   bucket_op.set_delete_children(delete_child_objects);
   bucket_op.set_fix_index(fix);
   bucket_op.set_max_aio(max_concurrent_ios);
+  bucket_op.set_zonegroup_id(zonegroup_id);
 
   // required to gather errors from operations
   std::string err_msg;

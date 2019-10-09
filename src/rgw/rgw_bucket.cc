@@ -1357,6 +1357,18 @@ int RGWBucketAdminOp::sync_bucket(RGWRadosStore *store, RGWBucketAdminOpState& o
   return bucket.sync(op_state, &attrs, err_msg);
 }
 
+static int get_bucket_info(RGWRadosStore *store, const std::string& tenant_name,
+                           std::string& bucket_name, RGWBucketInfo &bucket_info)
+{
+  real_time mtime;
+  map<string, bufferlist> attrs;
+
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  int r = store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, &mtime, null_yield, &attrs);
+  if (r < 0)
+    return r;
+}
+
 static int bucket_stats(RGWRadosStore *store, const std::string& tenant_name, std::string&  bucket_name, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
@@ -1581,8 +1593,17 @@ int RGWBucketAdminOp::info(RGWRadosStore *store, RGWBucketAdminOpState& op_state
 
         if (show_stats)
           bucket_stats(store, user_id.tenant, obj_name, formatter);
-        else
+        else {
+          if(!op_state.zonegroup_id.empty()) {
+            RGWBucketInfo bucket_info;
+            ret = get_bucket_info(store, user_id.tenant, obj_name, bucket_info);
+            if (ret < 0)
+              return ret;
+            if (bucket_info.zonegroup != op_state.zonegroup_id)
+              continue;
+          }
           formatter->dump_string("bucket", obj_name);
+        }
 
         marker = obj_name;
       }
@@ -1610,8 +1631,17 @@ int RGWBucketAdminOp::info(RGWRadosStore *store, RGWBucketAdminOpState& op_state
       for (auto& bucket_name : buckets) {
         if (show_stats)
           bucket_stats(store, user_id.tenant, bucket_name, formatter);
-        else
+        else {
+          if(!op_state.zonegroup_id.empty()) {
+            RGWBucketInfo bucket_info;
+            ret = get_bucket_info(store, user_id.tenant, bucket_name, bucket_info);
+            if (ret < 0)
+              return ret;
+            if (bucket_info.zonegroup != op_state.zonegroup_id)
+              continue;
+          }
           formatter->dump_string("bucket", bucket_name);
+        }
       }
     }
 
