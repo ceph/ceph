@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { Component, Input, NgZone } from '@angular/core';
+import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import * as _ from 'lodash';
@@ -27,6 +27,24 @@ describe('CephfsTabsComponent', () => {
     mdsCounters: object;
     name: string;
     clients: { status: ViewCacheStatus; data: any[] };
+  };
+
+  let old: any;
+  const getReload = () => component['reloadSubscriber'];
+  const setReload = (sth?) => (component['reloadSubscriber'] = sth);
+  const mockRunOutside = () => {
+    component['subscribeInterval'] = () => {
+      // It's mocked because the rxjs timer subscription ins't called through the use of 'tick'.
+      setReload({
+        unsubscribed: false,
+        unsubscribe: () => {
+          old = getReload();
+          getReload().unsubscribed = true;
+          setReload();
+        }
+      });
+      component.refresh();
+    };
   };
 
   const setSelection = (selection: object[]) => {
@@ -89,8 +107,10 @@ describe('CephfsTabsComponent', () => {
     };
     service = TestBed.get(CephfsService);
     spyOn(service, 'getTabs').and.callFake(() => of(data));
-    selectFs(1, 'firstMds');
+
     fixture.detectChanges();
+    mockRunOutside();
+    setReload(); // Clears rxjs timer subscription
   });
 
   it('should create', () => {
@@ -126,6 +146,7 @@ describe('CephfsTabsComponent', () => {
       data: [],
       status: ViewCacheStatus.ValueNone
     };
+    component['subscribeInterval'] = () => {};
     updateData();
     expect(component.clients).not.toEqual(defaultClients);
     expect(component.details).not.toEqual(defaultDetails);
@@ -144,23 +165,7 @@ describe('CephfsTabsComponent', () => {
   });
 
   describe('handling of id change', () => {
-    let old: any;
-    const getReload = () => component['reloadSubscriber'];
-    const setReload = (sth?) => (component['reloadSubscriber'] = sth);
-
     beforeEach(() => {
-      spyOn(TestBed.get(NgZone), 'runOutsideAngular').and.callFake(() => {
-        // It's mocked because the rxjs timer subscription ins't called through the use of 'tick'.
-        setReload({
-          unsubscribed: false,
-          unsubscribe: () => {
-            old = getReload();
-            getReload().unsubscribed = true;
-            setReload();
-          }
-        });
-        component.refresh();
-      });
       setReload(); // Clears rxjs timer subscription
       selectFs(2, 'otherMds');
       old = getReload(); // Gets current subscription
@@ -172,7 +177,11 @@ describe('CephfsTabsComponent', () => {
     });
 
     it('should not subscribe to an new interval for the same selection', () => {
+      expect(component.id).toBe(2);
+      expect(component.grafanaId).toBe('otherMds');
       selectFs(2, 'otherMds');
+      expect(component.id).toBe(2);
+      expect(component.grafanaId).toBe('otherMds');
       expect(getReload()).toBe(old);
     });
 
