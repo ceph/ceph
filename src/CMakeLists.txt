@@ -74,7 +74,13 @@ endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    set(default_build_type "Debug")
+  else()
+    set(default_build_type "RelWithDebInfo")
+  endif()
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
 endif()
 
 if(WITH_CEPH_DEBUG_MUTEX OR CMAKE_BUILD_TYPE STREQUAL Debug)
