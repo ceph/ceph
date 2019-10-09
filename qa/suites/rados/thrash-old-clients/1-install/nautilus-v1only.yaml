@@ -11,6 +11,8 @@ overrides:
 tasks:
 - install:
     branch: nautilus
+    exclude_packages:
+      - ceph-daemon
 - install.upgrade:
     mon.a:
     mon.b:
