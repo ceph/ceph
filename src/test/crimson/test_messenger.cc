@@ -882,6 +882,7 @@ enum class cmd_t : char {
   suite_stop,
   suite_connect_me,
   suite_send_me,
+  suite_keepalive_me,
   suite_recv_op
 };
 
@@ -1246,6 +1247,12 @@ class FailoverSuite : public Dispatcher {
     }
   }
 
+  seastar::future<> keepalive_peer() {
+    logger().info("[Test] keepalive_peer()");
+    ceph_assert(tracked_conn);
+    return tracked_conn->keepalive();
+  }
+
   seastar::future<> wait_blocked() {
     logger().info("[Test] wait_blocked() ...");
     return interceptor.blocker.wait_blocked();
@@ -1453,6 +1460,12 @@ class FailoverTest : public Dispatcher {
       return peer_send_me();
     });
   }
+
+  seastar::future<> peer_keepalive_me() {
+    logger().info("[Test] peer_keepalive_me()");
+    ceph_assert(test_suite);
+    return prepare_cmd(cmd_t::suite_keepalive_me);
+  }
 };
 
 class FailoverSuitePeer : public Dispatcher {
@@ -1546,6 +1559,12 @@ class FailoverSuitePeer : public Dispatcher {
     }
   }
 
+  seastar::future<> keepalive_peer() {
+    logger().info("[TestPeer] keepalive_peer()");
+    ceph_assert(tracked_conn);
+    return tracked_conn->keepalive();
+  }
+
   static seastar::future<std::unique_ptr<FailoverSuitePeer>>
   create(entity_addr_t addr, const SocketPolicy& policy, cb_t op_callback) {
     return Messenger::create(entity_name_t::OSD(4), "TestPeer", 4, 0
@@ -1630,6 +1649,9 @@ class FailoverTestPeer : public Dispatcher {
      case cmd_t::suite_send_me:
       ceph_assert(test_suite);
       return test_suite->send_peer();
+     case cmd_t::suite_keepalive_me:
+      ceph_assert(test_suite);
+      return test_suite->keepalive_peer();
      default:
       logger().error("TestPeer got unexpected command {} from Test", m_cmd);
       ceph_abort();
@@ -1981,6 +2003,10 @@ test_v2_lossless_connected_fault2(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
       {Tag::ACK, bp_type_t::READ},
       {Tag::ACK, bp_type_t::WRITE},
+      {Tag::KEEPALIVE2, bp_type_t::READ},
+      {Tag::KEEPALIVE2, bp_type_t::WRITE},
+      {Tag::KEEPALIVE2_ACK, bp_type_t::READ},
+      {Tag::KEEPALIVE2_ACK, bp_type_t::WRITE},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1998,9 +2024,13 @@ test_v2_lossless_connected_fault2(FailoverTest& test) {
         }).then([&suite] {
           return suite.send_peer();
         }).then([&suite] {
+          return suite.keepalive_peer();
+        }).then([&suite] {
           return suite.wait_established();
         }).then([&test] {
           return test.peer_send_me();
+        }).then([&test] {
+          return test.peer_keepalive_me();
         }).then([&suite] {
           return suite.wait_established();
         }).then([&suite] {

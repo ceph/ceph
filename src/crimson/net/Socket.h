@@ -135,16 +135,7 @@ class Socket
   seastar::future<> try_trap_post(bp_action_t& trap);
 
  public:
-  void set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_) {
-    blocker = blocker_;
-    if (type == bp_type_t::READ) {
-      ceph_assert(next_trap_read == bp_action_t::CONTINUE);
-      next_trap_read = action;
-    } else {
-      ceph_assert(next_trap_write == bp_action_t::CONTINUE);
-      next_trap_write = action;
-    }
-  }
+  void set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_);
 #endif
 };
 
