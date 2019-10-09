@@ -346,7 +346,7 @@ test_rmobj() {
     $CEPH_TOOL osd pool set-quota $p max_objects 1
     V1=`mktemp fooattrXXXXXXX`
     $RADOS_TOOL put $OBJ $V1 -p $p
-    while ! $CEPH_TOOL osd dump | grep 'full max_objects'
+    while ! $CEPH_TOOL osd dump | grep 'full_no_quota max_objects'
     do
 	sleep 2
     done
