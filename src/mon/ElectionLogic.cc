@@ -264,7 +264,58 @@ void ElectionLogic::propose_classic_handler(int from)
 
 void ElectionLogic::propose_connectivity_handler(int from)
 {
-  ceph_assert(0);
+  const set<int>& disallowed_leaders = elector->get_disallowed_leaders();
+  int my_rank = elector->get_my_rank();
+  bool me_disallowed = disallowed_leaders.count(my_rank);
+  bool from_disallowed = disallowed_leaders.count(from);
+  double my_score, from_score, leader_score = 0;
+  int my_liveness, from_liveness, leader_liveness = 0;
+  peer_tracker->get_total_connection_score(my_rank, &my_score, &my_liveness);
+  peer_tracker->get_total_connection_score(from, &from_score, &from_liveness);
+  if (leader_acked >= 0) {
+    peer_tracker->get_total_connection_score(leader_acked, &leader_score, &leader_liveness);
+  }
+
+  ldout(cct, 10) << "propose from rank=" << from << ",disallowed="
+		 << from_disallowed << ",score=" << from_score
+		 << "; my score=" << my_score << ",disallowed=" << me_disallowed
+		 << "; currently acked " << leader_acked
+		 << ",score=" << leader_score << dendl;
+
+
+  bool my_win = !me_disallowed && // I am allowed to lead
+    (from_disallowed || // either they're disallowed or
+     ((my_rank < from && (my_score >= from_score)) || // we have same scores and my rank is lower
+      my_score > from_score)); // my score is higher
+  
+  bool their_win = !from_disallowed && // they are allowed to lead
+    (me_disallowed || // either I'm disallowed or
+     ((from < my_rank && (from_score >= my_score)) || // they have lower rank and same scores
+      (from_score > my_score))) && // or they score more connectivity points than me
+    // and they are a better choice than our previously-acked choice
+    ((from < leader_acked && leader_score <= from_score) ||
+     (leader_score <= from_score));
+
+  if (my_win) {
+    // i would win over them.
+    if (leader_acked >= 0) {        // we already acked someone
+      ceph_assert(leader_score >= from_score || from_disallowed);  // and they still win, of course
+      ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
+    } else {
+      // wait, i should win!
+      if (!electing_me) {
+	elector->trigger_new_election();
+      }
+    }
+  } else {
+    // they would win over me
+    if (their_win) {
+      defer(from);
+    } else {
+      // ignore them!
+      ldout(cct, 5) << "no, we already acked " << leader_acked << " with score >=" << from_score << dendl;
+    }
+  }
 }
 
 void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
@@ -301,8 +352,19 @@ bool ElectionLogic::victory_makes_sense(int from)
       elector->get_disallowed_leaders().count(elector->get_my_rank());
     break;
   case CONNECTIVITY:
-    // TODO: actually do soemthing here!
-    makes_sense = true;
+    double my_score, leader_score;
+    int my_liveness, leader_liveness;
+    peer_tracker->get_total_connection_score(elector->get_my_rank(),
+					     &my_score, &my_liveness);
+    peer_tracker->get_total_connection_score(from,
+					     &leader_score, &leader_liveness);
+    ldout(cct, 5) << "victory from " << from << " makes sense? lscore:"
+		  << leader_score << ",llive:" << leader_liveness
+		  << "; my score:" << my_score << ",liveness:" << my_liveness << dendl;
+
+    // TODO: this probably isn't safe because we may be behind on score states?
+    makes_sense = (leader_score >= my_score);
+    break;
   default:
     ceph_assert(0 == "how did you get a nonsense election strategy assigned?");
   }
