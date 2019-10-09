@@ -248,7 +248,7 @@ class TestForwardScrub(CephFSTestCase):
                               "--inode={0}".format(inos["./file3_sixmegs"]), "summary"], 0)
 
         # Revert to old inotable.
-        for key, value in inotable_copy.iteritems():
+        for key, value in inotable_copy.items():
            self.fs.put_metadata_object_raw(key, value)
 
         self.mds_cluster.mds_restart()
