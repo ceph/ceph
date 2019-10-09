@@ -17,7 +17,7 @@
 
 #include "rgw_common.h"
 
-
+#if 0
 struct rgw_sync_flow_directional_rule {
   string source_zone;
   string target_zone;
@@ -166,6 +166,142 @@ struct rgw_sync_policy_info {
   bool empty() const {
     return (!flow_rules || flow_rules->empty()) &&
            (!targets || targets->empty());
+  }
+
+};
+WRITE_CLASS_ENCODER(rgw_sync_policy_info)
+
+#endif
+
+struct rgw_sync_symmetric_group {
+  std::set<string> zones;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(zones, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(zones, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_symmetric_group)
+
+struct rgw_sync_directional_rule {
+  string source_zone;
+  string target_zone;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(source_zone, bl);
+    encode(target_zone, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(source_zone, bl);
+    decode(target_zone, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_directional_rule)
+
+struct rgw_sync_bucket_entity {
+  bool wildcard{false};
+  std::optional<rgw_bucket> bucket;
+  std::optional<std::set<string> > zones;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(wildcard, bl);
+    encode(bucket, bl);
+    encode(zones, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(wildcard, bl);
+    decode(bucket, bl);
+    decode(zones, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
+
+struct rgw_sync_bucket_pipe {
+  rgw_sync_bucket_entity source;
+  rgw_sync_bucket_entity target;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(source, bl);
+    encode(target, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(source, bl);
+    decode(target, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_bucket_pipe)
+
+
+
+struct rgw_sync_policy_info {
+  /* zone data flow */
+  std::optional<std::vector<rgw_sync_symmetric_group> > symmetrical;
+  std::optional<std::vector<rgw_sync_directional_rule> > directional;
+
+  std::optional<std::vector<rgw_sync_bucket_pipe> > pipes;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(symmetrical, bl);
+    encode(directional, bl);
+    encode(pipes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(symmetrical, bl);
+    decode(directional, bl);
+    decode(pipes, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  template <class O>
+  bool empty_opt(O& o) const {
+    return (!o || o->empty());
+  }
+
+  bool empty() const {
+    return (empty_opt(symmetrical) &&
+            empty_opt(directional) &&
+            empty_opt(pipes));
   }
 
 };
