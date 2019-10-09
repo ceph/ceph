@@ -72,7 +72,7 @@ private:
     virtual ~effect_t() = default;
   };
 
-  PGBackend::cached_os_t os;
+  ObjectContextRef obc;
   PG& pg;
   PGBackend& backend;
   Ref<MOSDOp> msg;
@@ -91,10 +91,14 @@ private:
 
   call_errorator::future<> do_op_call(class OSDOp& osd_op);
 
+  hobject_t &get_target() const {
+    return obc->obs.oi.soid;
+  }
+
   template <class Func>
   auto do_const_op(Func&& f) {
     // TODO: pass backend as read-only
-    return std::forward<Func>(f)(backend, std::as_const(*os));
+    return std::forward<Func>(f)(backend, std::as_const(obc->obs));
   }
 
   template <class Func>
@@ -107,7 +111,7 @@ private:
   template <class Func>
   auto do_write_op(Func&& f) {
     ++num_write;
-    return std::forward<Func>(f)(backend, *os, txn);
+    return std::forward<Func>(f)(backend, obc->obs, txn);
   }
 
   // PG operations are being provided with pg instead of os.
@@ -122,14 +126,14 @@ private:
   }
 
 public:
-  OpsExecuter(PGBackend::cached_os_t os, PG& pg, Ref<MOSDOp> msg)
-    : os(std::move(os)),
+  OpsExecuter(ObjectContextRef obc, PG& pg, Ref<MOSDOp> msg)
+    : obc(std::move(obc)),
       pg(pg),
       backend(pg.get_backend()),
       msg(std::move(msg)) {
   }
   OpsExecuter(PG& pg, Ref<MOSDOp> msg)
-    : OpsExecuter{PGBackend::cached_os_t{}, pg, std::move(msg)}
+    : OpsExecuter{ObjectContextRef(), pg, std::move(msg)}
   {}
 
   osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
@@ -175,9 +179,9 @@ auto OpsExecuter::with_effect(
 template <typename Func>
 OpsExecuter::osd_op_errorator::future<> OpsExecuter::submit_changes(Func&& f) && {
   if (__builtin_expect(op_effects.empty(), true)) {
-    return std::forward<Func>(f)(std::move(txn), std::move(os));
+    return std::forward<Func>(f)(std::move(txn), std::move(obc));
   }
-  return std::forward<Func>(f)(std::move(txn), std::move(os)).safe_then([this] {
+  return std::forward<Func>(f)(std::move(txn), std::move(obc)).safe_then([this] {
     // let's do the cleaning of `op_effects` in destructor
     return crimson::do_for_each(op_effects, [] (auto& op_effect) {
       return op_effect->execute();

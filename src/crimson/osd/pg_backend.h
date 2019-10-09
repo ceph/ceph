@@ -43,10 +43,6 @@ public:
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile);
-  using cached_os_t = boost::local_shared_ptr<ObjectState>;
-  using get_os_errorator = crimson::errorator<crimson::ct_error::enoent>;
-  get_os_errorator::future<cached_os_t> get_object_state(const hobject_t& oid);
-  seastar::future<> evict_object_state(const hobject_t& oid);
 
   using read_errorator = ll_read_errorator::extend<
     crimson::ct_error::input_output_error,
@@ -58,6 +54,7 @@ public:
     size_t truncate_size,
     uint32_t truncate_seq,
     uint32_t flags);
+
   using stat_errorator = crimson::errorator<crimson::ct_error::enoent>;
   stat_errorator::future<> stat(
     const ObjectState& os,
@@ -80,7 +77,7 @@ public:
     ceph::os::Transaction& trans);
   seastar::future<crimson::osd::acked_peers_t> mutate_object(
     std::set<pg_shard_t> pg_shards,
-    cached_os_t&& os,
+    crimson::osd::ObjectContextRef &&obc,
     ceph::os::Transaction&& txn,
     const MOSDOp& m,
     epoch_t min_epoch,
@@ -129,18 +126,12 @@ public:
   struct loaded_object_md_t {
     ObjectState os;
     std::optional<SnapSet> ss;
+    using ref = std::unique_ptr<loaded_object_md_t>;
   };
-  load_metadata_ertr::future<loaded_object_md_t> load_metadata(
+  load_metadata_ertr::future<loaded_object_md_t::ref> load_metadata(
     const hobject_t &oid);
 
 private:
-  using cached_ss_t = boost::local_shared_ptr<SnapSet>;
-  SharedLRU<hobject_t, SnapSet> ss_cache;
-  get_os_errorator::future<cached_ss_t> _load_ss(const hobject_t& oid);
-
-  SharedLRU<hobject_t, ObjectState> os_cache;
-  get_os_errorator::future<cached_os_t> _load_os(const hobject_t& oid);
-
   virtual ll_read_errorator::future<ceph::bufferlist> _read(
     const hobject_t& hoid,
     size_t offset,
