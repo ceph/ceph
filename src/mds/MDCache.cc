@@ -337,6 +337,9 @@ void MDCache::remove_inode(CInode *o)
   if (o->state_test(CInode::STATE_QUEUEDEXPORTPIN))
     export_pin_queue.erase(o);
 
+  if (o->state_test(CInode::STATE_DELAYEDEXPORTPIN))
+    export_pin_delayed_queue.erase(o);
+
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
     inode_map.erase(o->ino());
@@ -13114,3 +13117,23 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   f->close_section();
   return true;
 }
+
+void MDCache::handle_mdsmap(const MDSMap &mdsmap) {
+  // process export_pin_delayed_queue whenever a new MDSMap received
+  auto &q = export_pin_delayed_queue;
+  for (auto it = q.begin(); it != q.end(); ) {
+    auto *in = *it;
+    mds_rank_t export_pin = in->get_export_pin(false);
+    dout(10) << " delayed export_pin=" << export_pin << " on " << *in 
+      << " max_mds=" << mdsmap.get_max_mds() << dendl;
+    if (export_pin >= mdsmap.get_max_mds()) {
+      it++;
+      continue;
+    }
+
+    in->state_clear(CInode::STATE_DELAYEDEXPORTPIN);
+    it = q.erase(it);
+    in->maybe_export_pin();
+  }
+}
+
