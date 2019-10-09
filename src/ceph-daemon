@@ -816,6 +816,26 @@ def command_bootstrap():
     mon_c = get_container(fsid, 'mon', mon_id)
     deploy_daemon_units(fsid, 'mon', mon_id, mon_c)
 
+    logger.info('Waiting for mon to start...')
+    while True:
+        c = CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'status'],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+            },
+        )
+        out, err, ret = call(c.run_cmd(), c.entrypoint)
+        if ret == 0:
+            break
+        logger.info('mon is still not available yet, waiting...')
+        time.sleep(1)
+
     # assimilate and minimize config
     if not args.no_minimize_config:
         logger.info('Assimilating anything we can from ceph.conf...')
