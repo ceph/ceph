@@ -23,7 +23,7 @@ class Exiter(object):
 
             my_handler(signal, frame)
         """
-        if type(signals) is int:
+        if isinstance(signals, int):
             signals = [signals]
 
         for signal_ in signals:

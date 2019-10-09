@@ -143,7 +143,7 @@ def run_tasks(tasks, ctx):
         # from yaml files where only one entry of type y is correct.  This
         # causes failures with 'too many values to unpack.'  We want to
         # fail as before, but with easier to understand error indicators.
-        if type(e) == ValueError:
+        if isinstance(e, ValueError):
             if e.message == 'too many values to unpack':
                 emsg = 'Possible configuration error in yaml file'
                 log.error(emsg)

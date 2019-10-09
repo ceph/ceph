@@ -72,7 +72,7 @@ class TestExiter(object):
             assert handler.func.call_count == 0
 
     def test_n_handlers(self, n=10, sig=11):
-        if type(sig) is int:
+        if isinstance(sig, int):
             send_sig = sig
         else:
             send_sig = random.choice(sig)
