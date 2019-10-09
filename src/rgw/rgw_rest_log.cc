@@ -404,7 +404,7 @@ void RGWOp_BILog_List::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
+    http_ret = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
     if (http_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -497,7 +497,7 @@ void RGWOp_BILog_Info::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
+    http_ret = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
     if (http_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -561,7 +561,7 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
+    http_ret = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
     if (http_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;

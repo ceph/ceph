@@ -1379,17 +1379,17 @@ public:
     sent_data = true;
   }
 
-  void send_response_data(RGWUserBuckets& buckets) override {
+  void send_response_data(rgw::sal::RGWBucketList& buckets) override {
     if (!sent_data)
       return;
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
+    map<string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
     for (const auto& iter : m) {
       boost::string_ref marker{iter.first};
-      const RGWBucketEnt& ent = iter.second;
-      if (! this->operator()(ent.bucket.name, marker)) {
+      rgw::sal::RGWSalBucket* ent = iter.second;
+      if (! this->operator()(ent->get_name(), marker)) {
 	/* caller cannot accept more */
 	lsubdout(cct, rgw, 5) << "ListBuckets rcb failed"
-			      << " dirent=" << ent.bucket.name
+			      << " dirent=" << ent->get_name()
 			      << " call count=" << ix
 			      << dendl;
 	rcb_eof = true;
@@ -2243,7 +2243,7 @@ public:
   }
 
   real_time get_ctime() const {
-    return bucket.creation_time;
+    return bucket->get_creation_time();
   }
 
   bool only_bucket() override { return false; }
@@ -2284,16 +2284,16 @@ public:
   }
 
   void send_response() override {
-    bucket.creation_time = get_state()->bucket_info.creation_time;
-    bs.size = bucket.size;
-    bs.size_rounded = bucket.size_rounded;
-    bs.creation_time = bucket.creation_time;
-    bs.num_entries = bucket.count;
+    bucket->get_creation_time() = get_state()->bucket_info.creation_time;
+    bs.size = bucket->get_size();
+    bs.size_rounded = bucket->get_size_rounded();
+    bs.creation_time = bucket->get_creation_time();
+    bs.num_entries = bucket->get_count();
     std::swap(attrs, get_state()->bucket_attrs);
   }
 
   bool matched() {
-    return (bucket.bucket.name.length() > 0);
+    return (bucket->get_name().length() > 0);
   }
 
 }; /* RGWStatBucketRequest */

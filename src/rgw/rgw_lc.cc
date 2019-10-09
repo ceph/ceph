@@ -1026,13 +1026,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
   map<string, bufferlist> bucket_attrs;
   string no_ns, list_versions;
   vector<rgw_bucket_dir_entry> objs;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   vector<std::string> result;
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
   string bucket_marker = result[2];
-  int ret = store->getRados()->get_bucket_info(obj_ctx, bucket_tenant, bucket_name, bucket_info, NULL, null_yield, &bucket_attrs);
+  int ret = store->getRados()->get_bucket_info(store->svc(), bucket_tenant, bucket_name, bucket_info, NULL, null_yield, &bucket_attrs);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket_info for " << bucket_name << " failed" << dendl;
     return ret;
