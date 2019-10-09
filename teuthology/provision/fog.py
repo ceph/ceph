@@ -2,10 +2,10 @@ import json
 import logging
 import requests
 import socket
+import re
 
 from datetime import datetime
 from paramiko import SSHException
-from StringIO import StringIO
 
 import teuthology.orchestra
 
@@ -276,15 +276,13 @@ class FOG(object):
         used to create the image initially. Fix that by making a call to
         /binhostname and tweaking /etc/hosts.
         """
-        proc = self.remote.run(args='hostname', stdout=StringIO())
-        wrong_hostname = proc.stdout.read().strip()
-        proc = self.remote.run(
-            args='grep %s /etc/hosts' % wrong_hostname,
-            stdout=StringIO(),
+        wrong_hostname = self.remote.sh('hostname').strip()
+        etc_hosts = self.remote.sh(
+            'grep %s /etc/hosts' % wrong_hostname,
             check_status=False,
-        )
-        if proc.returncode == 0:
-            wrong_ip = proc.stdout.readlines()[0].split(' ')[0]
+        ).strip()
+        if etc_hosts:
+            wrong_ip = re.split(r'\s+', etc_hosts.split('\n')[0].strip())[0]
             self.remote.run(args="sudo hostname %s" % self.shortname)
             self.remote.run(
                 args="sudo sed -i -e 's/%s/%s/g' /etc/hosts" % (
