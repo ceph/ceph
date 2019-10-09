@@ -9,26 +9,10 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-#if 0
-void RGWBucketSyncPolicyInfo::post_init()
-{
-  if (pipes) {
-    return;
-  }
-
-  for (auto& p : *pipes) {
-    auto& pipe = p.second;
-
-    source_zones.insert(pipe.source.zone_id());
-  }
-}
-#endif
-
-
 int RGWBucketSyncPolicyHandler::init()
 {
   const auto& zone_id = zone_svc->get_zone().id;
-  auto& zg = svc.zone->get_zonegroup();
+  auto& zg = zone_svc->get_zonegroup();
 
   if (!bucket_info.sync_policy) {
     return 0;
@@ -53,22 +37,24 @@ int RGWBucketSyncPolicyHandler::init()
         continue;
       }
 
-      /* populate trivial peers */
-      for (auto& rule : target.flow_rules) {
-        set<string> source_zones;
-        set<string> target_zones;
-        rule.get_zone_peers(zone_id, &source_zones, &target_zones);
+      if (target.flow_rules) {
+        /* populate trivial peers */
+        for (auto& rule : *target.flow_rules) {
+          set<string> source_zones;
+          set<string> target_zones;
+          rule.get_zone_peers(zone_id, &source_zones, &target_zones);
 
-        for (auto& sz : source_zones) {
-          peer_info sinfo;
-          sinfo.bucket = bucket_info.bucket;
-          sources[sz].insert(sinfo);
-        }
+          for (auto& sz : source_zones) {
+            peer_info sinfo;
+            sinfo.bucket = bucket_info.bucket;
+            sources[sz].insert(sinfo);
+          }
 
-        for (auto& tz : target_zones) {
-          peer_info tinfo;
-          tinfo.bucket = bucket_info.bucket;
-          targets[tz].insert(tinfo);
+          for (auto& tz : target_zones) {
+            peer_info tinfo;
+            tinfo.bucket = bucket_info.bucket;
+            targets[tz].insert(tinfo);
+          }
         }
       }
 
