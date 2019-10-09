@@ -8367,22 +8367,6 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
   ldout(cct, 8) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
-  if (unmounting)
-    return -ENOTCONN;
-
-  if (!ino->dentries.empty()) {
-    // if we exposed the parent here, we'd need to check permissions,
-    // but right now we just rely on the MDS doing so in make_request
-    ldout(cct, 8) << __func__ << " dentry already present" << dendl;
-    return 0;
-  }
-  
-  if (ino->is_root()) {
-    *parent = NULL;
-    ldout(cct, 8) << "ino is root, no parent" << dendl;
-    return -EINVAL;
-  }
-
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
   filepath path(ino->ino);
   req->set_filepath(path);
@@ -8401,12 +8385,6 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   }
   ldout(cct, 8) << __func__ << " exit(" << ino->ino << ") = " << r << dendl;
   return r;
-}
-
-int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
-{
-  Mutex::Locker lock(client_lock);
-  return _lookup_parent(ino, perms, parent);
 }
 
 /**
@@ -10398,32 +10376,39 @@ int Client::ll_lookup_inode(
     const UserPerm& perms,
     Inode **inode)
 {
+  ceph_assert(inode != NULL);
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "ll_lookup_inode " << ino  << dendl;
    
+  if (unmounting)
+    return -ENOTCONN;
+
   // Num1: get inode and *inode
   int r = _lookup_ino(ino, perms, inode);
-  if (r) {
+  if (r)
     return r;
+
+  ceph_assert(*inode != NULL);
+
+  if (!(*inode)->dentries.empty()) {
+    ldout(cct, 8) << __func__ << " dentry already present" << dendl;
+    return 0;
   }
-  assert(inode != NULL);
-  assert(*inode != NULL);
+
+  if ((*inode)->is_root()) {
+    ldout(cct, 8) << "ino is root, no parent" << dendl;
+    return 0;
+  }
 
   // Num2: Request the parent inode, so that we can look up the name
   Inode *parent;
   r = _lookup_parent(*inode, perms, &parent);
-  if (r && r != -EINVAL) {
-    // Unexpected error
+  if (r) {
     _ll_forget(*inode, 1);  
     return r;
-  } else if (r == -EINVAL) {
-    // EINVAL indicates node without parents (root), drop out now
-    // and don't try to look up the non-existent dentry.
-    return 0;
   }
-  // FIXME: I don't think this works; lookup_parent() returns 0 if the parent
-  // is already in cache
-  assert(parent != NULL);
+
+  ceph_assert(parent != NULL);
 
   // Num3: Finally, get the name (dentry) of the requested inode
   r = _lookup_name(*inode, parent, perms);
