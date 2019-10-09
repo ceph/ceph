@@ -217,17 +217,18 @@ CyanStore::get_attr_errorator::future<ceph::bufferptr> CyanStore::get_attr(
   }
 }
 
-seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef ch,
-                                                         const ghobject_t& oid)
+CyanStore::get_attrs_ertr::future<CyanStore::attrs_t> CyanStore::get_attrs(
+  CollectionRef ch,
+  const ghobject_t& oid)
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
-                __func__, c->get_cid(), oid);
+		 __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return crimson::ct_error::enoent::make();
   }
-  return seastar::make_ready_future<attrs_t>(o->xattr);
+  return get_attrs_ertr::make_ready_future<attrs_t>(o->xattr);
 }
 
 seastar::future<CyanStore::omap_values_t>

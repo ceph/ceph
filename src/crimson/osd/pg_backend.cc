@@ -17,6 +17,7 @@
 #include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+#include "crimson/osd/osd_operation.h"
 #include "replicated_backend.h"
 #include "ec_backend.h"
 #include "exceptions.h"
@@ -107,29 +108,57 @@ PGBackend::get_object_state(const hobject_t& oid)
   }
 }
 
+PGBackend::load_metadata_ertr::future<PGBackend::loaded_object_md_t>
+PGBackend::load_metadata(const hobject_t& oid)
+{
+  return store->get_attrs(
+    coll,
+    ghobject_t{oid, ghobject_t::NO_GEN, shard}).safe_then(
+      [oid, this](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t>{
+	loaded_object_md_t ret;
+	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
+	  bufferlist bl;
+	  bl.push_back(oiiter->second);
+	  ret.os = ObjectState(
+	    object_info_t(bl),
+	    true);
+	} else {
+	  return crimson::ct_error::object_corrupted::make();
+	}
+	
+	if (oid.is_head()) {
+	  if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
+	    bufferlist bl;
+	    bl.push_back(ssiter->second);
+	    ret.ss = SnapSet(bl);
+	  } else {
+	    return crimson::ct_error::object_corrupted::make();
+	  }
+	}
+
+	return load_metadata_ertr::make_ready_future<loaded_object_md_t>(
+	  std::move(ret));
+      }, crimson::ct_error::enoent::handle([oid, this] {
+	return load_metadata_ertr::make_ready_future<loaded_object_md_t>(
+	  loaded_object_md_t{
+	    ObjectState(),
+	    std::nullopt
+	  });
+      }));
+}
+
 PGBackend::get_os_errorator::future<PGBackend::cached_os_t>
 PGBackend::_load_os(const hobject_t& oid)
 {
   if (auto found = os_cache.find(oid); found) {
     return get_os_errorator::make_ready_future<cached_os_t>(std::move(found));
   }
-  return store->get_attr(coll,
-                         ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         OI_ATTR)
-  .safe_then(
-    [oid, this] (ceph::bufferptr&& bp) {
-      // decode existing OI_ATTR's value
-      ceph::bufferlist bl;
-      bl.push_back(std::move(bp));
-      return get_os_errorator::make_ready_future<cached_os_t>(
-        os_cache.insert(oid,
-          std::make_unique<ObjectState>(object_info_t{bl}, true /* exists */)));
-    }, crimson::errorator<crimson::ct_error::enoent,
-                          crimson::ct_error::enodata>::all_same_way([oid, this] {
-      return get_os_errorator::make_ready_future<cached_os_t>(
-        os_cache.insert(oid,
-          std::make_unique<ObjectState>(object_info_t{oid}, false)));
-    }));
+  return load_metadata(oid).safe_then([oid, this](auto &&md) {
+    return get_os_errorator::make_ready_future<cached_os_t>(
+      os_cache.insert(
+	oid,
+	std::make_unique<ObjectState>(std::move(md.os))));
+  });
 }
 
 PGBackend::get_os_errorator::future<PGBackend::cached_ss_t>
@@ -138,25 +167,15 @@ PGBackend::_load_ss(const hobject_t& oid)
   if (auto found = ss_cache.find(oid); found) {
     return get_os_errorator::make_ready_future<cached_ss_t>(std::move(found));
   }
-  return store->get_attr(coll,
-                         ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         SS_ATTR)
-  .safe_then(
-    [oid, this] (ceph::bufferptr&& bp) {
-      // decode existing SS_ATTR's value
-      ceph::bufferlist bl;
-      bl.push_back(std::move(bp));
+  return load_metadata(oid).safe_then([oid, this](auto &&md) {
+    if (!md.ss) {
       return get_os_errorator::make_ready_future<cached_ss_t>(
-        ss_cache.insert(oid, std::make_unique<SnapSet>(bl)));
-    }, crimson::errorator<crimson::ct_error::enoent,
-                          crimson::ct_error::enodata>::all_same_way([oid, this] {
-      // NOTE: the errors could have been handled by writing just:
-      //   `get_attr_errorator::all_same_way(...)`.
-      // however, this way is more explicit and resilient to unexpected
-      // changes in the alias definition.
+	std::make_unique<SnapSet>());
+    } else {
       return get_os_errorator::make_ready_future<cached_ss_t>(
-        ss_cache.insert(oid, std::make_unique<SnapSet>()));
-    }));
+	ss_cache.insert(oid, std::make_unique<SnapSet>(std::move(*(md.ss)))));
+    }
+  });
 }
 
 seastar::future<crimson::osd::acked_peers_t>

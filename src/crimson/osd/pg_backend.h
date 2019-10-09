@@ -123,17 +123,30 @@ protected:
   CollectionRef coll;
   crimson::os::FuturizedStore* store;
 
+public:
+  using load_metadata_ertr = crimson::errorator<
+    crimson::ct_error::object_corrupted>;
+  struct loaded_object_md_t {
+    ObjectState os;
+    std::optional<SnapSet> ss;
+  };
+  load_metadata_ertr::future<loaded_object_md_t> load_metadata(
+    const hobject_t &oid);
+
 private:
   using cached_ss_t = boost::local_shared_ptr<SnapSet>;
   SharedLRU<hobject_t, SnapSet> ss_cache;
   get_os_errorator::future<cached_ss_t> _load_ss(const hobject_t& oid);
+
   SharedLRU<hobject_t, ObjectState> os_cache;
   get_os_errorator::future<cached_os_t> _load_os(const hobject_t& oid);
+
   virtual ll_read_errorator::future<ceph::bufferlist> _read(
     const hobject_t& hoid,
     size_t offset,
     size_t length,
     uint32_t flags) = 0;
+
   bool maybe_create_new_object(ObjectState& os, ceph::os::Transaction& txn);
   virtual seastar::future<crimson::osd::acked_peers_t>
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
