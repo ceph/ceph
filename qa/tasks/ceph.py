@@ -466,9 +466,7 @@ def skeleton_config(ctx, roles, ips, mons, cluster='ceph'):
     Use conf.write to write it out, override .filename first if you want.
     """
     path = os.path.join(os.path.dirname(__file__), 'ceph.conf.template')
-    t = open(path, 'r')
-    skconf = t.read().format(testdir=teuthology.get_testdir(ctx))
-    conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
+    conf = configobj.ConfigObj(path, file_error=True)
     mon_hosts = []
     for role, addr in mons.items():
         mon_cluster, _, _ = teuthology.split_role(role)
