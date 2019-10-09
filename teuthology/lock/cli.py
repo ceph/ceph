@@ -169,15 +169,18 @@ def main(ctx):
                 updatekeys_machines = list()
             else:
                 machines_to_update.append(machine)
+                ops.update_nodes([machine], True)
                 teuthology.provision.create_if_vm(
                     ctx,
                     misc.canonicalize_hostname(machine),
                 )
         with teuthology.parallel.parallel() as p:
+            ops.update_nodes(reimage_machines, True)
             for machine in reimage_machines:
                 p.spawn(teuthology.provision.reimage, ctx, machine)
         for machine in updatekeys_machines:
             keys.do_update_keys([machine])
+        ops.update_nodes(reimage_machines + machines_to_update)
 
     elif ctx.unlock:
         if ctx.owner is None and user is None:
