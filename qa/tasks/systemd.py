@@ -26,7 +26,7 @@ def task(ctx, config):
     Test ceph systemd services can start, stop and restart and
     check for any failed services and report back errors
     """
-    for remote, roles in ctx.cluster.remotes.iteritems():
+    for remote, roles in ctx.cluster.remotes.items():
         remote.run(args=['sudo', 'ps', '-eaf', run.Raw('|'),
                          'grep', 'ceph'])
         units = remote.sh('sudo systemctl list-units | grep ceph',

@@ -71,9 +71,9 @@ def create_users(ctx, config):
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
     users = {'': 'foo', '2': 'bar'}
-    for client, testswift_conf in config.iteritems():
+    for client, testswift_conf in config.items():
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
-        for suffix, user in users.iteritems():
+        for suffix, user in users.items():
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
             ctx.cluster.only(client).run(
                 args=[
@@ -148,7 +148,7 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         args = [
                 'SWIFT_TEST_CONFIG_FILE={tdir}/archive/testswift.{client}.conf'.format(tdir=testdir, client=client),
                 '{tdir}/swift/virtualenv/bin/nosetests'.format(tdir=testdir),
@@ -217,7 +217,7 @@ def task(ctx, config):
 
     testswift_conf = {}
     clients = []
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         # http://tracker.ceph.com/issues/40304 can't bootstrap on rhel 7.6+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         if remote.os.name == 'rhel' and LooseVersion(remote.os.version) >= LooseVersion('7.6'):

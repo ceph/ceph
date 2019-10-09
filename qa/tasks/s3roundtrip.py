@@ -146,7 +146,7 @@ def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-roundtrip-tests...')
     testdir = teuthology.get_testdir(ctx)
-    for client, properties in config['clients'].iteritems():
+    for client, properties in config['clients'].items():
         s3tests_conf = config['s3tests_conf'][client]
         if properties is not None and 'rgw_server' in properties:
             host = None
@@ -194,7 +194,7 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf = teuthology.get_file(remote, '{tdir}/archive/s3roundtrip.{client}.config.yaml'.format(tdir=testdir, client=client))
         args = [

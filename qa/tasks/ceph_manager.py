@@ -1223,7 +1223,7 @@ class CephManager:
             return
         if no_wait is None:
             no_wait = []
-        for osd, need in seq.iteritems():
+        for osd, need in seq.items():
             if osd in no_wait:
                 continue
             got = 0
@@ -1529,7 +1529,7 @@ class CephManager:
         :param osdnum: osd number
         :param argdict: dictionary containing values to set.
         """
-        for k, v in argdict.iteritems():
+        for k, v in argdict.items():
             self.wait_run_admin_socket(
                 'osd', osdnum,
                 ['config', 'set', str(k), str(v)])

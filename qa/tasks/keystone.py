@@ -327,7 +327,7 @@ def assign_ports(ctx, config, initial_port):
     """
     port = initial_port
     role_endpoints = {}
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for remote, roles_for_host in ctx.cluster.remotes.items():
         for role in roles_for_host:
             if role in config:
                 role_endpoints[role] = (remote.name.split('@')[1], port)

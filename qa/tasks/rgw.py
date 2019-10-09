@@ -165,7 +165,7 @@ def start_rgw(ctx, config, clients):
 
 def assign_endpoints(ctx, config, default_cert):
     role_endpoints = {}
-    for role, client_config in config.iteritems():
+    for role, client_config in config.items():
         client_config = client_config or {}
         remote = get_remote_for_role(ctx, role)
 

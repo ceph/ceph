@@ -271,7 +271,7 @@ def test_all():
           ]
       }
 
-  for (module,cmd_lst) in cmds.iteritems():
+  for (module,cmd_lst) in cmds.items():
     k = keyring_base + '.' + module
     for cmd in cmd_lst:
 
@@ -283,8 +283,8 @@ def test_all():
 
       print('generating keyring for {m}/{c}'.format(m=module,c=cmd_cmd))
       # gen keyring
-      for (good_or_bad,kind_map) in perms.iteritems():
-        for (kind,lst) in kind_map.iteritems():
+      for (good_or_bad,kind_map) in perms.items():
+        for (kind,lst) in kind_map.items():
           for (perm, cap) in lst:
             cap_formatted = cap.format(
                 s=module,
@@ -308,7 +308,7 @@ def test_all():
 
       # test
       for good_bad in perms.keys():
-        for (kind,lst) in perms[good_bad].iteritems():
+        for (kind,lst) in perms[good_bad].items():
           for (perm,_) in lst:
             cname = 'client.{gb}-{k}-{p}'.format(gb=good_bad,k=kind,p=perm)
 

@@ -607,7 +607,7 @@ def task(ctx, config):
         norm_config = teuthology.replace_all_with_clients(ctx.cluster, config)
     if isinstance(norm_config, dict):
         role_images = {}
-        for role, properties in norm_config.iteritems():
+        for role, properties in norm_config.items():
             if properties is None:
                 properties = {}
             role_images[role] = properties.get('image_name')

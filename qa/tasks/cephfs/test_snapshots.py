@@ -242,7 +242,7 @@ class TestSnapshots(CephFSTestCase):
         def _check_snapclient_cache(snaps_dump, cache_dump=None, rank=0):
             if cache_dump is None:
                 cache_dump = self._get_snapclient_dump(rank=rank)
-            for key, value in cache_dump.iteritems():
+            for key, value in cache_dump.items():
                 if value != snaps_dump[key]:
                     return False
             return True;
