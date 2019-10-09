@@ -2229,6 +2229,63 @@ TEST_F(TestClsRbd, mirror_instances) {
   ASSERT_EQ(0U, instance_ids.size());
 }
 
+TEST_F(TestClsRbd, mirror_snapshot) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 10, 22, 0, oid, -1));
+
+  cls::rbd::MirrorPrimarySnapshotNamespace primary = {false,
+                                                      {"peer1", "peer2"}};
+  cls::rbd::MirrorNonPrimarySnapshotNamespace non_primary = {"uuid", 123};
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_add(&op, 1, "primary", primary);
+  ::librbd::cls_client::snapshot_add(&op, 2, "non_primary", non_primary);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  cls::rbd::SnapshotInfo snap;
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, 1, &snap));
+  auto sn = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+    &snap.snapshot_namespace);
+  ASSERT_NE(nullptr, sn);
+  ASSERT_EQ(primary, *sn);
+  ASSERT_EQ(2U, sn->mirror_peer_uuids.size());
+  ASSERT_EQ(1U, sn->mirror_peer_uuids.count("peer1"));
+  ASSERT_EQ(1U, sn->mirror_peer_uuids.count("peer2"));
+
+  ASSERT_EQ(-ENOENT, mirror_image_snapshot_unlink_peer(&ioctx, oid, 1, "peer"));
+  ASSERT_EQ(0, mirror_image_snapshot_unlink_peer(&ioctx, oid, 1, "peer1"));
+  ASSERT_EQ(-ENOENT, mirror_image_snapshot_unlink_peer(&ioctx, oid, 1,
+                                                       "peer1"));
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, 1, &snap));
+  sn = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+    &snap.snapshot_namespace);
+  ASSERT_NE(nullptr, sn);
+  ASSERT_EQ(1U, sn->mirror_peer_uuids.size());
+  ASSERT_EQ(1U, sn->mirror_peer_uuids.count("peer2"));
+
+  ASSERT_EQ(-ERESTART,
+            mirror_image_snapshot_unlink_peer(&ioctx, oid, 1, "peer2"));
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, 1, &snap));
+  sn = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+    &snap.snapshot_namespace);
+  ASSERT_NE(nullptr, sn);
+  ASSERT_EQ(1U, sn->mirror_peer_uuids.size());
+  ASSERT_EQ(1U, sn->mirror_peer_uuids.count("peer2"));
+
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, 2, &snap));
+  auto nsn = boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
+    &snap.snapshot_namespace);
+  ASSERT_NE(nullptr, nsn);
+  ASSERT_EQ(non_primary, *nsn);
+  ASSERT_FALSE(nsn->copied);
+  ASSERT_EQ(nsn->last_copied_object_number, 0);
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 1));
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 2));
+}
+
 TEST_F(TestClsRbd, group_dir_list) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
