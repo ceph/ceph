@@ -69,7 +69,7 @@ class TestMisc(CephFSTestCase):
                                             '--yes-i-really-really-mean-it')
         self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
                                             self.fs.metadata_pool_name,
-                                            self.fs.get_pgs_per_fs_pool().__str__())
+                                            self.fs.pgs_per_fs_pool.__str__())
 
         dummyfile = '/etc/fstab'
 
@@ -106,7 +106,7 @@ class TestMisc(CephFSTestCase):
                                             '--yes-i-really-really-mean-it')
         self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
                                             self.fs.metadata_pool_name,
-                                            self.fs.get_pgs_per_fs_pool().__str__())
+                                            self.fs.pgs_per_fs_pool.__str__())
         self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
                                             self.fs.metadata_pool_name,
                                             data_pool_name)
