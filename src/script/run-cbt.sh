@@ -25,7 +25,8 @@ archive_dir=$PWD/cbt-archive
 build_dir=$PWD
 source_dir=$(dirname $PWD)
 use_existing=false
-opts=$(getopt --options "a:h" --longoptions "archive-dir:,build-dir:,source-dir:,cbt:,help,use-existing" --name $prog_name -- "$@")
+classical=false
+opts=$(getopt --options "a:h" --longoptions "archive-dir:,build-dir:,source-dir:,cbt:,help,use-existing,classical" --name $prog_name -- "$@")
 eval set -- "$opts"
 
 while true; do
@@ -48,6 +49,10 @@ while true; do
             ;;
         --use-existing)
             use_existing=true
+            shift
+            ;;
+        --classical)
+            classical=true
             shift
             ;;
         -h|--help)
@@ -82,11 +87,17 @@ fi
 source_dir=$(readlink -f $source_dir)
 if ! $use_existing; then
     cd $build_dir
-    MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
-       --without-dashboard --memstore \
-       -o "memstore_device_bytes=34359738368" \
-       --crimson --nodaemon --redirect-output \
-       --osd-args "--memory 4G"
+    if $classical; then
+        MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
+           --without-dashboard --memstore \
+           -o "memstore_device_bytes=34359738368"
+    else
+        MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
+           --without-dashboard --memstore \
+           -o "memstore_device_bytes=34359738368" \
+           --crimson --nodaemon --redirect-output \
+           --osd-args "--memory 4G"
+    fi
     cd -
 fi
 
@@ -106,5 +117,9 @@ done
 
 if ! $use_existing; then
     cd $build_dir
-    $source_dir/src/stop.sh --crimson
+    if $classical; then
+      $source_dir/src/stop.sh
+    else
+      $source_dir/src/stop.sh --crimson
+    fi
 fi
