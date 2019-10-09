@@ -58,7 +58,6 @@ makedepends="
 	readline-dev
 	rpcgen
 	snappy-dev
-	userspace-rcu-dev
 	util-linux
 	xfsprogs-dev
 	xmlstarlet
