@@ -172,11 +172,6 @@ public:
     return session_cache_liveness.get();
   }
 
-  inodeno_t next_ino() const {
-    if (info.prealloc_inos.empty())
-      return 0;
-    return info.prealloc_inos.range_start();
-  }
   inodeno_t take_ino(inodeno_t ino = 0) {
     ceph_assert(!info.prealloc_inos.empty());
 
