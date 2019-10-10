@@ -398,6 +398,7 @@ void usage()
   generic_client_usage();
 }
 
+
 enum {
   OPT_NO_CMD = 0,
   OPT_USER_CREATE,
@@ -580,6 +581,192 @@ enum {
   OPT_PUBSUB_SUB_PULL,
   OPT_PUBSUB_EVENT_RM,
 };
+
+struct cmd_def {
+  string cmd;
+  int opt{OPT_NO_CMD};
+};
+
+std::vector<cmd_def> all_cmds = {
+  { "user create", OPT_USER_CREATE },
+  { "user info", OPT_USER_INFO },
+  { "user modify", OPT_USER_MODIFY },
+  { "user rename", OPT_USER_RENAME },
+  { "user rm", OPT_USER_RM },
+  { "user suspend", OPT_USER_SUSPEND },
+  { "user enable", OPT_USER_ENABLE },
+  { "user check", OPT_USER_CHECK },
+  { "user stats", OPT_USER_STATS },
+  { "user list", OPT_USER_LIST },
+  { "subuser create", OPT_SUBUSER_CREATE },
+  { "subuser modify", OPT_SUBUSER_MODIFY },
+  { "subuser rm", OPT_SUBUSER_RM },
+  { "key create", OPT_KEY_CREATE },
+  { "key rm", OPT_KEY_RM },
+  { "buckets list", OPT_BUCKETS_LIST },
+  { "bucket limit check", OPT_BUCKET_LIMIT_CHECK },
+  { "bucket link", OPT_BUCKET_LINK },
+  { "bucket unlink", OPT_BUCKET_UNLINK },
+  { "bucket stats", OPT_BUCKET_STATS },
+  { "bucket check", OPT_BUCKET_CHECK },
+  { "bucket sync status", OPT_BUCKET_SYNC_STATUS },
+  { "bucket sync markers", OPT_BUCKET_SYNC_MARKERS },
+  { "bucket sync init", OPT_BUCKET_SYNC_INIT },
+  { "bucket sync run", OPT_BUCKET_SYNC_RUN },
+  { "bucket sync disable", OPT_BUCKET_SYNC_DISABLE },
+  { "bucket sync enable", OPT_BUCKET_SYNC_ENABLE },
+  { "bucket rm", OPT_BUCKET_RM },
+  { "bucket rewrite", OPT_BUCKET_REWRITE },
+  { "bucket reshard", OPT_BUCKET_RESHARD },
+  { "bucket chown", OPT_BUCKET_CHOWN },
+  { "policy", OPT_POLICY },
+  { "pool add", OPT_POOL_ADD },
+  { "pool rm", OPT_POOL_RM },
+  { "pools list", OPT_POOLS_LIST },
+  { "log list", OPT_LOG_LIST },
+  { "log show", OPT_LOG_SHOW },
+  { "log rm", OPT_LOG_RM },
+  { "usage show", OPT_USAGE_SHOW },
+  { "usage trim", OPT_USAGE_TRIM },
+  { "usage clear", OPT_USAGE_CLEAR },
+  { "object put", OPT_OBJECT_PUT },
+  { "object rm", OPT_OBJECT_RM },
+  { "object unlink", OPT_OBJECT_UNLINK },
+  { "object stat", OPT_OBJECT_STAT },
+  { "object rewrite", OPT_OBJECT_REWRITE },
+  { "objects expire", OPT_OBJECTS_EXPIRE },
+  { "objects expire stale list", OPT_OBJECTS_EXPIRE_STALE_LIST },
+  { "objects expire stale rm", OPT_OBJECTS_EXPIRE_STALE_RM },
+  { "bi get", OPT_BI_GET },
+  { "bi put", OPT_BI_PUT },
+  { "bi list", OPT_BI_LIST },
+  { "bi purge", OPT_BI_PURGE },
+  { "olh get", OPT_OLH_GET },
+  { "olh readlog", OPT_OLH_READLOG },
+  { "quota set", OPT_QUOTA_SET },
+  { "quota enable", OPT_QUOTA_ENABLE },
+  { "quota disable", OPT_QUOTA_DISABLE },
+  { "gc list", OPT_GC_LIST },
+  { "gc process", OPT_GC_PROCESS },
+  { "lc list", OPT_LC_LIST },
+  { "lc get", OPT_LC_GET },
+  { "lc process", OPT_LC_PROCESS },
+  { "lc reshard fix", OPT_LC_RESHARD_FIX },
+  { "orphans find", OPT_ORPHANS_FIND },
+  { "orphans finish", OPT_ORPHANS_FINISH },
+  { "orphans list jobs", OPT_ORPHANS_LIST_JOBS },
+  { "zonegroup add", OPT_ZONEGROUP_ADD },
+  { "zonegroup create", OPT_ZONEGROUP_CREATE },
+  { "zonegroup default", OPT_ZONEGROUP_DEFAULT },
+  { "zonegroup delete", OPT_ZONEGROUP_DELETE },
+  { "zonegroup get", OPT_ZONEGROUP_GET },
+  { "zonegroup modify", OPT_ZONEGROUP_MODIFY },
+  { "zonegroup set", OPT_ZONEGROUP_SET },
+  { "zonegroup list", OPT_ZONEGROUP_LIST },
+  { "zonegroup remove", OPT_ZONEGROUP_REMOVE },
+  { "zonegroup rename", OPT_ZONEGROUP_RENAME },
+  { "zonegroup placement add", OPT_ZONEGROUP_PLACEMENT_ADD },
+  { "zonegroup placement modify", OPT_ZONEGROUP_PLACEMENT_MODIFY },
+  { "zonegroup placement rm", OPT_ZONEGROUP_PLACEMENT_RM },
+  { "zonegroup placement list", OPT_ZONEGROUP_PLACEMENT_LIST },
+  { "zonegroup placement default", OPT_ZONEGROUP_PLACEMENT_DEFAULT },
+  { "zone create", OPT_ZONE_CREATE },
+  { "zone delete", OPT_ZONE_DELETE },
+  { "zone get", OPT_ZONE_GET },
+  { "zone modify", OPT_ZONE_MODIFY },
+  { "zone set", OPT_ZONE_SET },
+  { "zone list", OPT_ZONE_LIST },
+  { "zone rename", OPT_ZONE_RENAME },
+  { "zone default", OPT_ZONE_DEFAULT },
+  { "zone placement add", OPT_ZONE_PLACEMENT_ADD },
+  { "zone placement modify", OPT_ZONE_PLACEMENT_MODIFY },
+  { "zone placement rm", OPT_ZONE_PLACEMENT_RM },
+  { "zone placement list", OPT_ZONE_PLACEMENT_LIST },
+  { "caps add", OPT_CAPS_ADD },
+  { "caps rm", OPT_CAPS_RM },
+  { "metadata get [*]", OPT_METADATA_GET },
+  { "metadata put [*]", OPT_METADATA_PUT },
+  { "metadata rm [*]", OPT_METADATA_RM },
+  { "metadata list [*]", OPT_METADATA_LIST },
+  { "metadata sync status", OPT_METADATA_SYNC_STATUS },
+  { "metadata sync init", OPT_METADATA_SYNC_INIT },
+  { "metadata sync run", OPT_METADATA_SYNC_RUN },
+  { "mdlog list", OPT_MDLOG_LIST },
+  { "mdlog autotrim", OPT_MDLOG_AUTOTRIM },
+  { "mdlog trim", OPT_MDLOG_TRIM },
+  { "mdlog fetch", OPT_MDLOG_FETCH },
+  { "mdlog status", OPT_MDLOG_STATUS },
+  { "sync error list", OPT_SYNC_ERROR_LIST },
+  { "sync error trim", OPT_SYNC_ERROR_TRIM },
+  { "bilog list", OPT_BILOG_LIST },
+  { "bilog trim", OPT_BILOG_TRIM },
+  { "bilog status", OPT_BILOG_STATUS },
+  { "bilog autotrim", OPT_BILOG_AUTOTRIM },
+  { "data sync status", OPT_DATA_SYNC_STATUS },
+  { "data sync init", OPT_DATA_SYNC_INIT },
+  { "data sync run", OPT_DATA_SYNC_RUN },
+  { "datalog list", OPT_DATALOG_LIST },
+  { "datalog status", OPT_DATALOG_STATUS },
+  { "datalog autotrim", OPT_DATALOG_AUTOTRIM },
+  { "datalog trim", OPT_DATALOG_TRIM },
+  { "realm create", OPT_REALM_CREATE },
+  { "realm delete", OPT_REALM_DELETE },
+  { "realm get", OPT_REALM_GET },
+  { "realm get default", OPT_REALM_GET_DEFAULT },
+  { "realm list", OPT_REALM_LIST },
+  { "realm list periods", OPT_REALM_LIST_PERIODS },
+  { "realm rename", OPT_REALM_RENAME },
+  { "realm set", OPT_REALM_SET },
+  { "realm default", OPT_REALM_DEFAULT },
+  { "realm pull", OPT_REALM_PULL },
+  { "period delete", OPT_PERIOD_DELETE },
+  { "period get", OPT_PERIOD_GET },
+  { "period get current", OPT_PERIOD_GET_CURRENT },
+  { "period pull", OPT_PERIOD_PULL },
+  { "period push", OPT_PERIOD_PUSH },
+  { "period list", OPT_PERIOD_LIST },
+  { "period update", OPT_PERIOD_UPDATE },
+  { "period commit", OPT_PERIOD_COMMIT },
+  { "global quota get", OPT_GLOBAL_QUOTA_GET },
+  { "global quota set", OPT_GLOBAL_QUOTA_SET },
+  { "global quota enable", OPT_GLOBAL_QUOTA_ENABLE },
+  { "global quota disable", OPT_GLOBAL_QUOTA_DISABLE },
+  { "sync status", OPT_SYNC_STATUS },
+  { "role create", OPT_ROLE_CREATE },
+  { "role delete", OPT_ROLE_DELETE },
+  { "role get", OPT_ROLE_GET },
+  { "role modify", OPT_ROLE_MODIFY },
+  { "role list", OPT_ROLE_LIST },
+  { "role policy put", OPT_ROLE_POLICY_PUT },
+  { "role policy list", OPT_ROLE_POLICY_LIST },
+  { "role policy get", OPT_ROLE_POLICY_GET },
+  { "role policy delete", OPT_ROLE_POLICY_DELETE },
+  { "reshard add", OPT_RESHARD_ADD },
+  { "reshard list", OPT_RESHARD_LIST },
+  { "reshard status", OPT_RESHARD_STATUS },
+  { "reshard process", OPT_RESHARD_PROCESS },
+  { "reshard cancel", OPT_RESHARD_CANCEL },
+  { "mfa create", OPT_MFA_CREATE },
+  { "mfa remove", OPT_MFA_REMOVE },
+  { "mfa get", OPT_MFA_GET },
+  { "mfa list", OPT_MFA_LIST },
+  { "mfa check", OPT_MFA_CHECK },
+  { "mfa resync", OPT_MFA_RESYNC },
+  { "reshard stale instances list", OPT_RESHARD_STALE_INSTANCES_LIST },
+  { "reshard stale instances delete", OPT_RESHARD_STALE_INSTANCES_DELETE },
+  { "pubsub topics list", OPT_PUBSUB_TOPICS_LIST },
+  { "pubsub topic create", OPT_PUBSUB_TOPIC_CREATE },
+  { "pubsub topic get", OPT_PUBSUB_TOPIC_GET },
+  { "pubsub topic rm", OPT_PUBSUB_TOPIC_RM },
+  { "pubsub notification create", OPT_PUBSUB_NOTIFICATION_CREATE },
+  { "pubsub notification rm", OPT_PUBSUB_NOTIFICATION_RM },
+  { "pubsub sub get", OPT_PUBSUB_SUB_GET },
+  { "pubsub sub create", OPT_PUBSUB_SUB_CREATE },
+  { "pubsub sub rm", OPT_PUBSUB_SUB_RM },
+  { "pubsub sub pull", OPT_PUBSUB_SUB_PULL },
+  { "pubsub event rm", OPT_PUBSUB_EVENT_RM },
+};
+
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
 {
@@ -2853,6 +3040,32 @@ int main(int argc, const char **argv)
   string event_id;
   rgw::notify::EventTypeList event_types;
 
+  struct cmd_node {
+    map<string, cmd_node> next;
+    int opt{OPT_NO_CMD};
+  };
+
+  cmd_node cmd_root;
+
+  for (auto& cmd : all_cmds) {
+    vector<string> words;
+    get_str_vec(cmd.cmd, " ", words);
+
+    auto node = &cmd_root;
+    for (auto& word : words) {
+      auto parent = node;
+      node = &node->next[word];
+
+      if (word == "[*]") { /* optional param at the end */
+        parent->next["*"] = *node; /* can be also looked up by '*' */
+        parent->opt = cmd.opt;
+      }
+    }
+
+    node->opt = cmd.opt;
+  };
+
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -3214,22 +3427,28 @@ int main(int argc, const char **argv)
     exit(1);
   }
   else {
-    const char *prev_cmd = NULL;
-    const char *prev_prev_cmd = NULL;
-    std::vector<const char*>::iterator i ;
-    for (i = args.begin(); i != args.end(); ++i) {
-      opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
-      if (opt_cmd < 0) {
-	cerr << "unrecognized arg " << *i << std::endl;
-	exit(1);
+    auto node = &cmd_root;
+
+    vector<string> extra_args;
+    std::optional<int> found_opt;
+
+    for (auto& arg : args) {
+      auto iter = node->next.find(arg);
+      if (iter == node->next.end()) {
+        iter = node->next.find("*");
+        if (iter == node->next.end()) {
+          cerr << "unrecognized arg " << arg << std::endl;
+          exit(1);
+        }
+        extra_args.push_back(arg);
+        if (!found_opt) {
+          found_opt = node->opt;
+        }
       }
-      if (!need_more) {
-	++i;
-	break;
-      }
-      prev_prev_cmd = prev_cmd;
-      prev_cmd = *i;
+      node = &(iter->second);
     }
+
+    opt_cmd = found_opt.value_or(node->opt);
 
     if (opt_cmd == OPT_NO_CMD) {
       cerr << "no command" << std::endl;
@@ -3237,13 +3456,13 @@ int main(int argc, const char **argv)
     }
 
     /* some commands may have an optional extra param */
-    if (i != args.end()) {
+    if (!extra_args.empty()) {
       switch (opt_cmd) {
         case OPT_METADATA_GET:
         case OPT_METADATA_PUT:
         case OPT_METADATA_RM:
         case OPT_METADATA_LIST:
-          metadata_key = *i;
+          metadata_key = extra_args[0];
           break;
         default:
           break;
