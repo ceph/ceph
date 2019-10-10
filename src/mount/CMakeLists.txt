@@ -1,3 +1,6 @@
+find_package(PkgConfig QUIET REQUIRED)
+pkg_check_modules(CAPNG REQUIRED libcap-ng)
+
 set(mount_ceph_srcs
   mount.ceph.c conf.cc)
 add_executable(mount.ceph ${mount_ceph_srcs}

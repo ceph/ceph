@@ -177,7 +177,7 @@ target_link_libraries(crc32
 
 add_library(common_utf8 STATIC utf8.c)
 
-if(WITH_LIBCEPHFS OR WITH_KRBD)
+if(HAVE_KEYUTILS)
   set(parse_secret_srcs
     secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_srcs})
