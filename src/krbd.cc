@@ -183,18 +183,23 @@ static int wait_for_mapping(udev_monitor *mon, F udev_device_handler)
   fds[0].events = POLLIN;
 
   for (;;) {
-    struct udev_device *dev;
-
     if (poll(fds, 1, -1) < 0) {
       ceph_abort();
     }
 
-    dev = udev_monitor_receive_device(mon);
-    if (!dev) {
-      continue;
-    }
-    if (udev_device_handler(dev)) {
-      return 0;
+    for (;;) {
+      struct udev_device *dev;
+
+      dev = udev_monitor_receive_device(mon);
+      if (!dev) {
+        if (errno != EINTR && errno != EAGAIN) {
+          return -errno;
+        }
+        break;
+      }
+      if (udev_device_handler(dev)) {
+        return 0;
+      }
     }
   }
 }
