@@ -193,7 +193,7 @@ static ceph::spinlock debug_lock;
     raw_hack_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       realdata = new char[len+align-1];
-      unsigned off = ((unsigned)realdata) & (align-1);
+      unsigned off = ((uintptr_t)realdata) & (align-1);
       if (off)
 	data = realdata + align - off;
       else
@@ -201,7 +201,7 @@ static ceph::spinlock debug_lock;
       //cout << "hack aligned " << (unsigned)data
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
-      ceph_assert(((unsigned)data & (align-1)) == 0);
+      ceph_assert(((uintptr_t)data & (align-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
