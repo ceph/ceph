@@ -52,6 +52,7 @@
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/operation/TrimRequest.h"
 #include "librbd/trash/MoveRequest.h"
+#include "librbd/trash/RemoveRequest.h"
 
 #include "journal/Journaler.h"
 
@@ -1605,16 +1606,17 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
       return -EPERM;
     }
 
-    r = remove(io_ctx, "", image_id, prog_ctx, false, true);
+    ThreadPool *thread_pool;
+    ContextWQ *op_work_queue;
+    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
+    C_SaferCond cond;
+    auto req = librbd::trash::RemoveRequest<>::create(
+      io_ctx, image_id, op_work_queue, force, prog_ctx, &cond);
+    req->send();
+
+    r = cond.wait();
     if (r < 0) {
-      lderr(cct) << "error removing image " << image_id
-                 << ", which is pending deletion" << dendl;
-      return r;
-    }
-    r = cls_client::trash_remove(&io_ctx, image_id);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error removing image " << image_id
-                 << " from rbd_trash object" << dendl;
       return r;
     }
 
