@@ -2146,6 +2146,90 @@ class RBD(object):
         """
         return ConfigPoolIterator(ioctx)
 
+    def config_get(self, ioctx, key):
+        """
+        Get a pool-level configuration override.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: key
+        :type key: str
+        :returns: str - value
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = conf_key
+            size_t size = 4096
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rbd_pool_metadata_get(_ioctx, _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no config %s for pool %s' % (key, ioctx.get_pool_name()))
+            if ret != 0:
+                raise make_ex(ret, 'error getting config %s for pool %s' %
+                             (key, ioctx.get_pool_name()))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
+    def config_set(self, ioctx, key, value):
+        """
+        Get a pool-level configuration override.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: key
+        :type key: str
+        :param value: value
+        :type value: str
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        value = cstr(value, 'value')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = conf_key
+            char *_value = value
+        with nogil:
+            ret = rbd_pool_metadata_set(_ioctx, _key, _value)
+
+        if ret != 0:
+            raise make_ex(ret, 'error setting config %s for pool %s' %
+                          (key, ioctx.get_pool_name()))
+
+    def config_remove(self, ioctx, key):
+        """
+        Remove a pool-level configuration override.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: key
+        :type key: str
+        :returns: str - value
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = conf_key
+        with nogil:
+            ret = rbd_pool_metadata_remove(_ioctx, _key)
+
+        if ret == -errno.ENOENT:
+            raise KeyError('no config %s for pool %s' %
+                           (key, ioctx.get_pool_name()))
+        if ret != 0:
+            raise make_ex(ret, 'error removing config %s for pool %s' %
+                          (key, ioctx.get_pool_name()))
+
     def group_create(self, ioctx, name):
         """
         Create a group.
