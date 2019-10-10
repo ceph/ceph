@@ -356,6 +356,33 @@ void Monitor::do_admin_command(
       err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
+  } else if (command == "smart") {
+    string want_devid;
+    cmd_getval(cct, cmdmap, "devid", want_devid);
+
+    string devname = store->get_devname();
+    set<string> devnames;
+    get_raw_devices(devname, &devnames);
+    json_spirit::mObject json_map;
+    uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
+      "mon_smart_report_timeout");
+    for (auto& devname : devnames) {
+      string err;
+      string devid = get_device_id(devname, &err);
+      if (want_devid.size() && want_devid != devid) {
+	derr << "get_device_id failed on " << devname << ": " << err << dendl;
+	continue;
+      }
+      json_spirit::mValue smart_json;
+      if (block_device_get_metrics(devname, smart_timeout,
+				   &smart_json)) {
+	dout(10) << "block_device_get_metrics failed for /dev/" << devname
+		 << dendl;
+	continue;
+      }
+      json_map[devid] = smart_json;
+    }
+    json_spirit::write(json_map, out, json_spirit::pretty_print);
   } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
@@ -829,6 +856,10 @@ int Monitor::preinit()
   r = admin_socket->register_command("dump_historic_slow_ops",
                                      admin_hook,
                                     "show recent slow ops");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("smart name=devid,type=CephString,req=false",
+                                     admin_hook,
+                                     "probe OSD devices for SMART data.");
   ceph_assert(r == 0);
 
   l.lock();
@@ -3840,37 +3871,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
     rs = "";
     r = 0;
-  } else if (prefix == "smart") {
-    string want_devid;
-    cmd_getval(cct, cmdmap, "devid", want_devid);
-
-    string devname = store->get_devname();
-    set<string> devnames;
-    get_raw_devices(devname, &devnames);
-    json_spirit::mObject json_map;
-    uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
-      "mon_smart_report_timeout");
-    for (auto& devname : devnames) {
-      string err;
-      string devid = get_device_id(devname, &err);
-      if (want_devid.size() && want_devid != devid) {
-	derr << "get_device_id failed on " << devname << ": " << err << dendl;
-	continue;
-      }
-      json_spirit::mValue smart_json;
-      if (block_device_get_metrics(devname, smart_timeout,
-				   &smart_json)) {
-	dout(10) << "block_device_get_metrics failed for /dev/" << devname
-		 << dendl;
-	continue;
-      }
-      json_map[devid] = smart_json;
-    }
-    ostringstream ss;
-    json_spirit::write(json_map, ss, json_spirit::pretty_print);
-    rdata.append(ss.str());
-    r = 0;
-    rs = "";
   }
 
  out:
