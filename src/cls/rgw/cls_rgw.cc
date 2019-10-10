@@ -2621,7 +2621,7 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
     end_key.append(end_marker);
   }
 
-  CLS_LOG(0, "bi_log_iterate_entries start_key=%s end_key=%s\n", start_key.c_str(), end_key.c_str());
+  CLS_LOG(10, "bi_log_iterate_entries start_key=%s end_key=%s\n", start_key.c_str(), end_key.c_str());
 
   string filter;
 
@@ -2639,7 +2639,7 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
     const string& key = iter->first;
     rgw_bi_log_entry e;
 
-    CLS_LOG(0, "bi_log_iterate_entries key=%s bl.length=%d\n", key.c_str(), (int)iter->second.length());
+    CLS_LOG(10, "bi_log_iterate_entries key=%s bl.length=%d\n", key.c_str(), (int)iter->second.length());
 
     if (key.compare(end_key) > 0) {
       key_iter = key;
