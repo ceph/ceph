@@ -3415,21 +3415,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     oss << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb") << " in " << duration << " seconds";
     rs = oss.str();
     r = 0;
-  }
-  else if (prefix == "injectargs") {
-    vector<string> injected_args;
-    cmd_getval(g_ceph_context, cmdmap, "injected_args", injected_args);
-    if (!injected_args.empty()) {
-      dout(0) << "parsing injected options '" << injected_args << "'" << dendl;
-      ostringstream oss;
-      r = g_conf().injectargs(str_join(injected_args, " "), &oss);
-      ss << "injectargs:"  << oss.str();
-      rs = ss.str();
-      goto out;
-    } else {
-      rs = "must supply options to be parsed in a single string";
-      r = -EINVAL;
-    }
   } else if (prefix == "time-sync-status") {
     if (!f)
       f.reset(Formatter::create("json-pretty"));
@@ -3463,17 +3448,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
     r = 0;
     rs = "";
-  } else if (prefix == "config set") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    std::string val;
-    cmd_getval(cct, cmdmap, "value", val);
-    r = g_conf().set_val(key, val, &ss);
-    if (r == 0) {
-      g_conf().apply_changes(nullptr);
-    }
-    rs = ss.str();
-    goto out;
   } else if (prefix == "status" ||
 	     prefix == "health" ||
 	     prefix == "df") {
