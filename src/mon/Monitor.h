@@ -684,7 +684,7 @@ public:
                         const cmdmap_t& cmdmap,
                         const map<string,string>& param_str_map,
                         const MonCommand *this_cmd);
-  void get_mon_status(Formatter *f, ostream& ss);
+  void get_mon_status(Formatter *f);
   void _quorum_status(Formatter *f, ostream& ss);
   bool _add_bootstrap_peer_hint(std::string_view cmd, const cmdmap_t& cmdmap,
 				std::ostream& ss);

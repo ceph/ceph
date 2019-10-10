@@ -242,8 +242,6 @@ COMMAND("mon ok-to-rm " \
 	"check whether removing the specified mon would break quorum",
 	"mon", "r")
 
-COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
-	     FLAG(NOFORWARD))
 COMMAND_WITH_FLAG("sync force " \
 	"name=yes_i_really_mean_it,type=CephBool,req=false " \
 	"name=i_know_what_i_am_doing,type=CephBool,req=false", \
@@ -254,8 +252,6 @@ COMMAND_WITH_FLAG("heap " \
 	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	     "show heap usage info (available only if compiled with tcmalloc)", \
 	     "mon", "rw", FLAG(NOFORWARD))
-COMMAND("quorum name=quorumcmd,type=CephChoices,strings=enter|exit,n=1", \
-	"enter or exit quorum", "mon", "rw")
 COMMAND("tell " \
 	"name=target,type=CephName " \
 	"name=args,type=CephString,n=N", \
