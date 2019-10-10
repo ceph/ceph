@@ -6098,7 +6098,7 @@ next:
     RGWReshard reshard(store);
 
     cls_rgw_reshard_entry entry;
-    //entry.tenant = tenant;
+    entry.tenant = tenant;
     entry.bucket_name = bucket_name;
     //entry.bucket_id = bucket_id;
 
