@@ -8,6 +8,12 @@ fi
 
 PYBUILD="2"
 source /etc/os-release
+
+if [ "$(uname)" == FreeBSD ] ; then
+  DWITH_RADOSGW_AMQP_ENDPOINT="OFF"
+  DWITH_RADOSGW_KAFKA_ENDPOINT="OFF"
+fi
+
 case "$ID" in
     fedora)
         if [ "$VERSION_ID" -ge "29" ] ; then
@@ -23,6 +29,7 @@ case "$ID" in
     opensuse*|suse|sles)
         PYBUILD="3"
         WITH_RADOSGW_AMQP_ENDPOINT="OFF"
+        WITH_RADOSGW_KAFKA_ENDPOINT="OFF"
         ;;
 esac
 if [ "$PYBUILD" = "3" ] ; then

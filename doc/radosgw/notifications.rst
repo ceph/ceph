@@ -7,7 +7,7 @@ Bucket Notifications
 .. contents::
 
 Bucket notifications provide a mechanism for sending information out of the radosgw when certain events are happening on the bucket.
-Currently, notifications could be sent to HTTP and AMQP0.9.1 endpoints.
+Currently, notifications could be sent to: HTTP, AMQP0.9.1 and Kafka endpoints.
 
 Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint, 
 the `PubSub Module`_ should be used instead of the bucket notification mechanism.
@@ -67,24 +67,39 @@ To update a topic, use the same command used for topic creation, with the topic 
    &Name=<topic-name>
    &push-endpoint=<endpoint>
    [&Attributes.entry.1.key=amqp-exchange&Attributes.entry.1.value=<exchange>]
-   [&Attributes.entry.2.key=amqp-sck-level&Attributes.entry.2.value=ack-level]
-   &Attributes.entry.3.key=verify-sll&Attributes.entry.3.value=true|false]
+   [&Attributes.entry.2.key=amqp-ack-level&Attributes.entry.2.value=none|broker]
+   [&Attributes.entry.3.key=verify-sll&Attributes.entry.3.value=true|false]
+   [&Attributes.entry.4.key=kafka-ack-level&Attributes.entry.4.value=none|broker]
 
 Request parameters:
 
-- push-endpoint: URI of endpoint to send push notification to
+- push-endpoint: URI of an endpoint to send push notification to
+- HTTP endpoint 
 
- - URI schema is: ``http[s]|amqp://[<user>:<password>@]<fqdn>[:<port>][/<amqp-vhost>]``
- - Same schema is used for HTTP and AMQP endpoints (except amqp-vhost which is specific to AMQP)
- - Default values for HTTP/S: no user/password, port 80/443
- - Default values for AMQP: user/password=guest/guest, port 5672, amqp-vhost is "/"
+ - URI: ``http[s]://<fqdn>[:<port]``
+ - port defaults to: 80/443 for HTTP/S accordingly
+ - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
 
-- verify-ssl: can be used with https endpoints (ignored for other endpoints), indicate whether the server certificate is validated or not ("true" by default)
-- amqp-exchange: mandatory parameter for AMQP endpoint. The exchanges must exist and be able to route messages based on topics
-- amqp-ack-level: No end2end acking is required, as messages may persist in the broker before delivered into their final destination. 2 ack methods exist:
+- AMQP0.9.1 endpoint
 
- - "none" - message is considered "delivered" if sent to broker
- - "broker" message is considered "delivered" if acked by broker
+ - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
+ - user/password defaults to : guest/guest
+ - port defaults to: 5672
+ - vhost defaults to: "/"
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
+ - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+
+  - "none": message is considered "delivered" if sent to broker
+  - "broker": message is considered "delivered" if acked by broker (default)
+
+- Kafka endpoint 
+
+ - URI: ``kafka://<fqdn>[:<port]``
+ - port defaults to: 9092
+ - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+
+  - "none": message is considered "delivered" if sent to broker
+  - "broker": message is considered "delivered" if acked by broker (default)
 
 .. note:: 
 

@@ -16,6 +16,9 @@
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#include "rgw_kafka.h"
+#endif
 
 #include <boost/algorithm/hex.hpp>
 #include <boost/asio/yield.hpp>
@@ -1531,11 +1534,19 @@ RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFor
     ldout(cct, 1) << "ERROR: failed to initialize AMQP manager in pubsub sync module" << dendl;
   }
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  if (!rgw::kafka::init(cct)) {
+    ldout(cct, 1) << "ERROR: failed to initialize Kafka manager in pubsub sync module" << dendl;
+  }
+#endif
 }
 
 RGWPSSyncModuleInstance::~RGWPSSyncModuleInstance() {
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  rgw::kafka::shutdown();
 #endif
 }
 

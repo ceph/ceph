@@ -26,6 +26,10 @@ if(WITH_RADOSGW)
     list(APPEND DENCODER_EXTRALIBS
       rabbitmq)
   endif()
+  if(WITH_RADOSGW_KAFKA_ENDPOINT)
+    list(APPEND DENCODER_EXTRALIBS
+      rdkafka)
+  endif()
 endif()
 
 if(WITH_RBD)

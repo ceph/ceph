@@ -11,8 +11,8 @@ events. Events are published into predefined topics. Topics can be subscribed to
 can be pulled from them. Events need to be acked. Also, events will expire and disappear
 after a period of time. 
 
-A push notification mechanism exists too, currently supporting HTTP and
-AMQP0.9.1 endpoints, on top of storing the events in Ceph. If events should only be pushed to an endpoint
+A push notification mechanism exists too, currently supporting HTTP,
+AMQP0.9.1 and Kafka endpoints. In this case, the events are pushed to an endpoint on top of storing them in Ceph. If events should only be pushed to an endpoint
 and do not need to be stored in Ceph, the `Bucket Notification`_ mechanism should be used instead of pubsub sync module. 
 
 A user can create different topics. A topic entity is defined by its user and its name. A
@@ -149,23 +149,40 @@ To update a topic, use the same command used for topic creation, with the topic 
 
 ::
 
-   PUT /topics/<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=<level>][&verify-ssl=true|false]]
+   PUT /topics/<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker]]
 
 Request parameters:
 
-- push-endpoint: URI of endpoint to send push notification to
+- push-endpoint: URI of an endpoint to send push notification to
 
- - URI schema is: ``http[s]|amqp://[<user>:<password>@]<fqdn>[:<port>][/<amqp-vhost>]``
- - Same schema is used for HTTP and AMQP endpoints (except amqp-vhost which is specific to AMQP)
- - Default values for HTTP/S: no user/password, port 80/443
- - Default values for AMQP: user/password=guest/guest, port 5672, amqp-vhost is "/"
+The endpoint URI may include parameters depending with the type of endpoint:
 
-- verify-ssl: can be used with https endpoints (ignored for other endpoints), indicate whether the server certificate is validated or not ("true" by default)
-- amqp-exchange: mandatory parameter for AMQP endpoint. The exchanges must exist and be able to route messages based on topics
-- amqp-ack-level: No end2end acking is required, as messages may persist in the broker before delivered into their final destination. 2 ack methods exist:
+- HTTP endpoint 
 
- - "none" - message is considered "delivered" if sent to broker
- - "broker" message is considered "delivered" if acked by broker
+ - URI: ``http[s]://<fqdn>[:<port]``
+ - port defaults to: 80/443 for HTTP/S accordingly
+ - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+
+- AMQP0.9.1 endpoint
+
+ - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
+ - user/password defaults to : guest/guest
+ - port defaults to: 5672
+ - vhost defaults to: "/"
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
+ - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+
+  - "none": message is considered "delivered" if sent to broker
+  - "broker": message is considered "delivered" if acked by broker (default)
+
+- Kafka endpoint 
+
+ - URI: ``kafka://<fqdn>[:<port]``
+ - port defaults to: 9092
+ - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+
+  - "none": message is considered "delivered" if sent to broker
+  - "broker": message is considered "delivered" if acked by broker (default)
 
 The topic ARN in the response will have the following format:
 
@@ -316,24 +333,42 @@ Creates a new subscription.
 
 ::
 
-   PUT /subscriptions/<sub-name>?topic=<topic-name>[&push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=<level>][&verify-ssl=true|false]]
+   PUT /subscriptions/<sub-name>?topic=<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker]]
 
 Request parameters:
 
 - topic-name: name of topic
 - push-endpoint: URI of endpoint to send push notification to
 
- - URI schema is: ``http[s]|amqp://[<user>:<password>@]<fqdn>[:<port>][/<amqp-vhost>]``
- - Same schema is used for HTTP and AMQP endpoints (except amqp-vhost which is specific to AMQP)
- - Default values for HTTP/S: no user/password, port 80/443
- - Default values for AMQP: user/password=guest/guest, port 5672, amqp-vhost is "/"
+The endpoint URI may include parameters depending with the type of endpoint:
 
-- verify-ssl: can be used with https endpoints (ignored for other endpoints), indicate whether the server certificate is validated or not ("true" by default)
-- amqp-exchange: mandatory parameter for AMQP endpoint. The exchanges must exist and be able to route messages based on topics
-- amqp-ack-level: No end2end acking is required, as messages may persist in the broker before delivered into their final destination. 2 ack methods exist:
+- HTTP endpoint 
 
- - "none": message is considered "delivered" if sent to broker
- - "broker": message is considered "delivered" if acked by broker
+ - URI: ``http[s]://<fqdn>[:<port]``
+ - port defaults to: 80/443 for HTTP/S accordingly
+ - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+
+- AMQP0.9.1 endpoint
+
+ - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
+ - user/password defaults to : guest/guest
+ - port defaults to: 5672
+ - vhost defaults to: "/"
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
+ - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+
+  - "none": message is considered "delivered" if sent to broker
+  - "broker": message is considered "delivered" if acked by broker (default)
+
+- Kafka endpoint 
+
+ - URI: ``kafka://<fqdn>[:<port]``
+ - port defaults to: 9092
+ - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+
+  - "none": message is considered "delivered" if sent to broker
+  - "broker": message is considered "delivered" if acked by broker (default)
+
 
 Get Subscription Information
 ````````````````````````````
