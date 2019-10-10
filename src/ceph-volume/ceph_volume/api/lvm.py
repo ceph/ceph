@@ -1224,8 +1224,10 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None,
     """
     if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
         return None
-    if lvs is None:
+
+    if lvs is None or len(lvs) == 0:
         lvs = Volumes()
+
     return lvs.get(
         lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_uuid=lv_uuid,
         lv_tags=lv_tags
