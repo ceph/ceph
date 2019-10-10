@@ -677,6 +677,76 @@ class TestDF(TestCephFSShell):
         self.validate_df("dumpfile")
 
 
+class TestQuota(TestCephFSShell):
+    dir_name = 'testdir'
+
+    def create_dir(self):
+        mount_output = self.mount_a.run_shell('mkdir ' + self.dir_name)
+        log.info("cephfs-shell mount output:\n{}".format(mount_output))
+
+    def validate(self, input_val):
+        quota_output = self.get_cephfs_shell_cmd_output('quota set --max_bytes '+input_val[0]+' --max_files '+input_val[1]+ ' '+ self.dir_name)
+        log.info("cephfs-shell quota set output:\n{}".format(quota_output))
+
+        quota_output = self.get_cephfs_shell_cmd_output('quota get '+ self.dir_name)
+        log.info("cephfs-shell quota get output:\n{}".format(quota_output))
+
+        quota_output = quota_output.split()
+        return quota_output[1], quota_output[3]
+
+    def test_set(self):
+        self.create_dir()
+        set_values = ('6', '2')
+        self.assertTupleEqual(self.validate(set_values), set_values)
+
+    def test_replace_values(self):
+        self.test_set()
+        set_values = ('20', '4')
+        self.assertTupleEqual(self.validate(set_values), set_values)
+
+    def test_set_invalid_dir(self):
+        set_values = ('5', '5')
+        try:
+            self.assertTupleEqual(self.validate(set_values), set_values)
+            raise Exception("Something went wrong!! Values set for non existing directory")
+        except IndexError:
+            # Test should pass as values cannot be set for non existing directory
+            pass
+
+    def test_set_invalid_values(self):
+        self.create_dir()
+        set_values = ('-6', '-5')
+        try:
+            self.assertTupleEqual(self.validate(set_values), set_values)
+            raise Exception("Something went wrong!! Invalid values set")
+        except IndexError:
+            # Test should pass as invalid values cannot be set
+            pass
+
+    def test_exceed_file_limit(self):
+        self.test_set()
+        dir_abspath = path.join(self.mount_a.mountpoint, self.dir_name)
+        self.mount_a.run_shell('touch '+dir_abspath+'/file1')
+        try:
+            self.mount_a.run_shell('touch '+dir_abspath+'/file2')
+            raise Exception("Something went wrong!! File creation should have failed")
+        except CommandFailedError:
+            # Test should pass as file quota set to 2
+            pass
+
+    def test_exceed_write_limit(self):
+        self.test_set()
+        dir_abspath = path.join(self.mount_a.mountpoint, self.dir_name)
+        filename = 'test_file'
+        file_abspath = path.join(dir_abspath, filename)
+        try:
+            sudo_write_file(self.mount_a.client_remote, file_abspath,
+                    'Disk raise Exception')
+            raise Exception("Write should have failed")
+        except CommandFailedError:
+            # Test should pass as bytes quota set to 6
+            pass
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
