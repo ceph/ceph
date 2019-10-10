@@ -671,18 +671,17 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
 
 void md_config_t::apply_changes(std::ostream *oss)
 {
+  Mutex::Locker locker(lock);
   rev_obs_map_t rev_obs;
-  {
-    Mutex::Locker l(lock);
-    /*
-     * apply changes until the cluster name is assigned
-     */
-    if (cluster.size()) {
-      for_each_change(
-        oss, [this, &rev_obs](md_config_obs_t *obs, const std::string &key) {
-          map_observer_changes(obs, key, &rev_obs);
-        });
-    }
+
+  /*
+   * apply changes until the cluster name is assigned
+   */
+  if (cluster.size()) {
+    for_each_change(
+      oss, [this, &rev_obs](md_config_obs_t *obs, const std::string &key) {
+        map_observer_changes(obs, key, &rev_obs);
+      });
   }
 
   call_observers(rev_obs);
@@ -734,15 +733,13 @@ void md_config_t::for_each_change(std::ostream *oss, config_gather_cb callback)
 
 void md_config_t::call_all_observers()
 {
+  Mutex::Locker locker(lock);
   rev_obs_map_t rev_obs;
-  {
-    Mutex::Locker l(lock);
 
-    expand_all_meta();
+  expand_all_meta();
 
-    for (auto r = observers.begin(); r != observers.end(); ++r) {
-      map_observer_changes(r->second, r->first, &rev_obs);
-    }
+  for (auto r = observers.begin(); r != observers.end(); ++r) {
+    map_observer_changes(r->second, r->first, &rev_obs);
   }
 
   call_observers(rev_obs);
@@ -750,41 +747,39 @@ void md_config_t::call_all_observers()
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)
 {
-  int ret;
+  Mutex::Locker locker(lock);
   rev_obs_map_t rev_obs;
-  {
-    Mutex::Locker l(lock);
 
-    char b[s.length()+1];
-    strcpy(b, s.c_str());
-    std::vector<const char*> nargs;
-    char *p = b;
-    while (*p) {
-      nargs.push_back(p);
-      while (*p && *p != ' ') p++;
-      if (!*p)
-        break;
-      *p++ = 0;
-      while (*p && *p == ' ') p++;
-    }
-    ret = parse_injectargs(nargs, oss);
-    if (!nargs.empty()) {
-      *oss << " failed to parse arguments: ";
-      std::string prefix;
-      for (std::vector<const char*>::const_iterator i = nargs.begin();
-           i != nargs.end(); ++i) {
-        *oss << prefix << *i;
-        prefix = ",";
-      }
-      *oss << "\n";
-      ret = -EINVAL;
-    }
-
-    for_each_change(
-      oss, [this, &rev_obs](md_config_obs_t *obs, const std::string &key) {
-        map_observer_changes(obs, key, &rev_obs);
-      });
+  char b[s.length()+1];
+  strcpy(b, s.c_str());
+  std::vector<const char*> nargs;
+  char *p = b;
+  while (*p) {
+    nargs.push_back(p);
+    while (*p && *p != ' ') p++;
+    if (!*p)
+      break;
+    *p++ = 0;
+    while (*p && *p == ' ') p++;
   }
+
+  int ret = parse_injectargs(nargs, oss);
+  if (!nargs.empty()) {
+    *oss << " failed to parse arguments: ";
+    std::string prefix;
+    for (std::vector<const char*>::const_iterator i = nargs.begin();
+         i != nargs.end(); ++i) {
+      *oss << prefix << *i;
+      prefix = ",";
+    }
+    *oss << "\n";
+    ret = -EINVAL;
+  }
+
+  for_each_change(
+    oss, [this, &rev_obs](md_config_obs_t *obs, const std::string &key) {
+      map_observer_changes(obs, key, &rev_obs);
+    });
 
   call_observers(rev_obs);
   return ret;
@@ -1395,10 +1390,15 @@ void md_config_t::complain_about_parse_errors(CephContext *cct)
 }
 
 void md_config_t::call_observers(rev_obs_map_t &rev_obs) {
+  // observers are notified outside of lock
+  ceph_assert(lock.is_locked());
+  lock.Unlock();
   for (auto p : rev_obs) {
     p.first->handle_conf_change(this, p.second);
-    // this can be done outside the lock as call_gate_enter()
-    // and remove_observer() are serialized via lock
+  }
+  lock.Lock();
+
+  for (auto& p : rev_obs) {
     call_gate_leave(p.first);
   }
 }
