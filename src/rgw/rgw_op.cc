@@ -376,13 +376,20 @@ static int read_obj_policy(RGWRados *store,
     if (ret < 0) {
       return ret;
     }
-
     const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
     if (bucket_owner.compare(s->user->user_id) != 0 &&
-        ! s->auth.identity->is_admin_of(bucket_owner) &&
-        ! bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
-                                          RGW_PERM_READ)) {
-      ret = -EACCES;
+        ! s->auth.identity->is_admin_of(bucket_owner)) {
+      if (policy) {
+        auto r =  policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket));
+        if (r == Effect::Allow)
+          return -ENOENT;
+        if (r == Effect::Deny)
+          return -EACCES;
+      }
+      if (! bucket_policy.verify_permission(*s->auth.identity, s->perm_mask, RGW_PERM_READ))
+        ret = -EACCES;
+      else
+        ret = -ENOENT;
     } else {
       ret = -ENOENT;
     }
