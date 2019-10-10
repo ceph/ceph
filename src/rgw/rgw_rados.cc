@@ -255,6 +255,7 @@ rgw_pool RGWZoneGroup::get_pool(CephContext *cct_)
 int RGWZoneGroup::create_default(bool old_format)
 {
   name = default_zonegroup_name;
+  api_name = default_zonegroup_name;
   is_master = true;
 
   RGWZoneGroupPlacementTarget placement_target;
