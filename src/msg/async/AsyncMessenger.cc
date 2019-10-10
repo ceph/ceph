@@ -672,13 +672,14 @@ ConnectionRef AsyncMessenger::connect_to(int type,
 					 const entity_addrvec_t& addrs,
 					 bool anon)
 {
-  std::lock_guard l{lock};
   if (*my_addrs == addrs ||
       (addrs.v.size() == 1 &&
        my_addrs->contains(addrs.front()))) {
     // local
     return local_connection;
   }
+
+  std::lock_guard l{lock};
 
   auto av = _filter_addrs(addrs);
 
