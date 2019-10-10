@@ -777,6 +777,7 @@ Group:		Development/Libraries/Python
 %endif
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
+%{?python_provide:%python_provide python-rgw}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rgw
 This package contains Python 2 libraries for interacting with Cephs RADOS
@@ -806,6 +807,7 @@ Summary:	Python 2 libraries for the RADOS object store
 Group:		Development/Libraries/Python
 %endif
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+%{?python_provide:%python_provide python-rados}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rados
 This package contains Python 2 libraries for interacting with Cephs RADOS
@@ -897,6 +899,7 @@ Group:		Development/Libraries/Python
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
+%{?python_provide:%python_provide python-rbd}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rbd
 This package contains Python 2 libraries for interacting with Cephs RADOS
@@ -958,6 +961,7 @@ Group:		Development/Libraries/Python
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
+%{?python_provide:%python_provide python-cephfs}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-cephfs
 This package contains Python 2 libraries for interacting with Cephs distributed
@@ -987,6 +991,7 @@ Summary:	Python 2 utility libraries for Ceph CLI
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
+%{?python_provide:%python_provide python-ceph-argparse}
 %description -n python-ceph-argparse
 This package contains types and routines for Python 2 used by the Ceph CLI as
 well as the RESTful interface. These have to do with querying the daemons for
@@ -1012,6 +1017,7 @@ Summary:	Python 2 utility libraries for Ceph
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
+%{?python_provide:%python_provide python-ceph-common}
 %description -n python-ceph-common
 This package contains data structures, classes and functions used by Ceph.
 It also contains utilities used for the SSH orchestrator.
