@@ -831,8 +831,7 @@ void PGMapDigest::dump_pool_stats_full(
     f->close_section();
   else {
     ceph_assert(ss != nullptr);
-    *ss << "POOLS:\n";
-    tbl.set_indent(4);
+    *ss << "--- POOLS ---\n";
     *ss << tbl;
   }
 }
@@ -892,8 +891,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
 	<< percentify(osd_sum.statfs.get_used_raw_ratio()*100.0)
 	<< TextTable::endrow;
 
-    *ss << "RAW STORAGE:\n";
-    tbl.set_indent(4);
+    *ss << "--- RAW STORAGE ---\n";
     *ss << tbl;
   }
 }
