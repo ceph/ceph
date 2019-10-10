@@ -308,7 +308,7 @@ void Monitor::do_admin_command(
     << "cmd='" << command << "' args=" << args << ": dispatch";
 
   if (command == "mon_status") {
-    get_mon_status(f, out);
+    get_mon_status(f);
   } else if (command == "quorum_status") {
     _quorum_status(f, out);
   } else if (command == "sync_force") {
@@ -355,6 +355,20 @@ void Monitor::do_admin_command(
     if (op_tracker.dump_historic_slow_ops(f, {})) {
       err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
+  } else if (command == "quorum") {
+    string quorumcmd;
+    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
+    if (quorumcmd == "exit") {
+      start_election();
+      elector.stop_participating();
+      out << "stopped responding to quorum, initiated new election" << std::endl;
+    } else if (quorumcmd == "enter") {
+      elector.start_participating();
+      start_election();
+      out << "started responding to quorum, initiated new election" << std::endl;
+    } else {
+      err << "needs a valid 'quorum' command" << std::endl;
     }
   } else if (command == "smart") {
     string want_devid;
@@ -2537,16 +2551,8 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     delete f;
 }
 
-void Monitor::get_mon_status(Formatter *f, ostream& ss)
+void Monitor::get_mon_status(Formatter *f)
 {
-  bool free_formatter = false;
-
-  if (!f) {
-    // louzy/lazy hack: default to json if no formatter has been defined
-    f = new JSONFormatter();
-    free_formatter = true;
-  }
-
   f->open_object_section("mon_status");
   f->dump_string("name", name);
   f->dump_int("rank", rank);
@@ -2618,12 +2624,6 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
 
   f->dump_object("feature_map", session_map.feature_map);
   f->close_section(); // mon_status
-
-  if (free_formatter) {
-    // flush formatter to ss and delete it iff we created the formatter
-    f->flush(ss);
-    delete f;
-  }
 }
 
 
@@ -3742,13 +3742,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     r = 0;
     rs = "safe to remove mon." + id;
-  } else if (prefix == "mon_status") {
-    get_mon_status(f.get(), ds);
-    if (f)
-      f->flush(ds);
-    rdata.append(ds);
-    rs = "";
-    r = 0;
   } else if (prefix == "sync force" ||
              prefix == "mon sync force") {
     bool validate1 = false;
@@ -3782,23 +3775,6 @@ void Monitor::handle_command(MonOpRequestRef op)
       rdata.append(ds);
       rs = "";
       r = 0;
-    }
-  } else if (prefix == "quorum") {
-    string quorumcmd;
-    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
-    if (quorumcmd == "exit") {
-      start_election();
-      elector.stop_participating();
-      rs = "stopped responding to quorum, initiated new election";
-      r = 0;
-    } else if (quorumcmd == "enter") {
-      elector.start_participating();
-      start_election();
-      rs = "started responding to quorum, initiated new election";
-      r = 0;
-    } else {
-      rs = "needs a valid 'quorum' command";
-      r = -EINVAL;
     }
   } else if (prefix == "version") {
     if (f) {
@@ -4618,10 +4594,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   f->open_object_section("pong");
 
   healthmon()->get_health_status(false, f.get(), nullptr);
-  {
-    stringstream ss;
-    get_mon_status(f.get(), ss);
-  }
+  get_mon_status(f.get());
 
   f->close_section();
   stringstream ss;
