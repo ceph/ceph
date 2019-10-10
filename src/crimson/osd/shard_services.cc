@@ -95,7 +95,8 @@ seastar::future<> ShardServices::dispatch_context(
 {
   ceph_assert(col || ctx.transaction.empty());
   return seastar::when_all_succeed(
-    dispatch_context_messages(BufferedRecoveryMessages(ctx)),
+    dispatch_context_messages(
+      BufferedRecoveryMessages{ceph_release_t::octopus, ctx}),
     col ? dispatch_context_transaction(col, ctx) : seastar::now());
 }
 

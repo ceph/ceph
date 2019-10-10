@@ -25,12 +25,10 @@ using namespace ceph::osd;
 
 struct compound_state {
   seastar::promise<BufferedRecoveryMessages> promise;
-  BufferedRecoveryMessages ctx;
-  compound_state()
-    // assuming crimson-osd won't need to be compatible with pre-octopus
-    // releases
-    : ctx{ceph_release_t::octopus}
-  {}
+  // assuming crimson-osd won't need to be compatible with pre-octopus
+  // releases
+  BufferedRecoveryMessages ctx{ceph_release_t::octopus};
+  compound_state() = default;
   ~compound_state() {
     promise.set_value(std::move(ctx));
   }
