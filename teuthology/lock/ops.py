@@ -11,7 +11,6 @@ from teuthology import misc
 from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.task import console_log
-import teuthology.task.internal
 from teuthology.misc import canonicalize_hostname
 
 import util
