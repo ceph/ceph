@@ -12,6 +12,10 @@ class Interface(object):
     pass
 
 
+class Mixin(object):
+    pass
+
+
 class DashboardPluginManager(object):
     def __init__(self, project_name):
         self.__pm = PluginManager(project_name)
@@ -32,6 +36,11 @@ class DashboardPluginManager(object):
         self.pm.add_hookspecs(cls)
         return cls
 
+    @staticmethod
+    def final(func):
+        setattr(func, '__final__', True)
+        return func
+
     def add_plugin(self, plugin):
         """ Provides decorator interface for PluginManager.register():
             @PLUGIN_MANAGER.add_plugin
@@ -45,6 +54,9 @@ class DashboardPluginManager(object):
         from inspect import getmembers, ismethod
         for interface in plugin.__bases__:
             for method_name, _ in getmembers(interface, predicate=ismethod):
+                if hasattr(getattr(interface, method_name), '__final__'):
+                    continue
+
                 if self.pm.parse_hookimpl_opts(plugin, method_name) is None:
                     raise NotImplementedError(
                         "Plugin '{}' implements interface '{}' but existing"
