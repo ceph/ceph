@@ -1566,18 +1566,45 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   if (in->last != CEPH_NOSNAP) {
     CInode *head_in = get_inode(in->ino());
     assert(head_in);
-    if (head_in->split_need_snapflush(oldin, in)) {
+    auto ret = head_in->split_need_snapflush(oldin, in);
+    if (ret.first) {
       oldin->client_snap_caps = in->client_snap_caps;
-      for (const auto &p : in->client_snap_caps) {
+      for (const auto &p : oldin->client_snap_caps) {
 	SimpleLock *lock = oldin->get_lock(p.first);
 	assert(lock);
 	for (const auto &q : p.second) {
-	  oldin->auth_pin(lock);
-	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
+	  if (lock->get_state() != LOCK_SNAP_SYNC) {
+	    ceph_assert(lock->is_stable());
+	    lock->set_state(LOCK_SNAP_SYNC);  // gathering
+	    oldin->auth_pin(lock);
+	  }
 	  lock->get_wrlock(true);
-          (void)q; /* unused */
+	  (void)q; /* unused */
 	}
       }
+    }
+    if (!ret.second) {
+      auto client_snap_caps = std::move(in->client_snap_caps);
+      in->client_snap_caps.clear();
+      in->item_open_file.remove_myself();
+      in->item_caps.remove_myself();
+
+      list<MDSInternalContextBase*> finished;
+      for (const auto &p : client_snap_caps) {
+	SimpleLock *lock = in->get_lock(p.first);
+	ceph_assert(lock);
+	ceph_assert(lock->get_state() == LOCK_SNAP_SYNC); // gathering
+	for (const auto &q : p.second) {
+	  lock->put_wrlock();
+	  (void)q; /* unused */
+	}
+	if (!lock->get_num_wrlocks()) {
+	  lock->set_state(LOCK_SYNC);
+	  lock->take_waiting(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD, finished);
+	  in->auth_unpin(lock);
+	}
+      }
+      mds->queue_waiters(finished);
     }
     return oldin;
   }
@@ -1597,10 +1624,13 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	    int lockid = cinode_lock_info[i].lock;
 	    SimpleLock *lock = oldin->get_lock(lockid);
 	    assert(lock);
-	    oldin->client_snap_caps[lockid].insert(client);
-	    oldin->auth_pin(lock);
-	    lock->set_state(LOCK_SNAP_SYNC);  // gathering
+	    if (lock->get_state() != LOCK_SNAP_SYNC) {
+	      ceph_assert(lock->is_stable());
+	      lock->set_state(LOCK_SNAP_SYNC);  // gathering
+	      oldin->auth_pin(lock);
+	    }
 	    lock->get_wrlock(true);
+	    oldin->client_snap_caps[lockid].insert(client);
 	    dout(10) << " client." << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
 		     << " wrlock lock " << *lock << " on " << *oldin << dendl;
 	  }
