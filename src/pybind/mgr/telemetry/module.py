@@ -336,7 +336,8 @@ class Module(MgrModule):
 
             # anonymize the smartctl report itself
             for k in ['serial_number']:
-                m.pop(k)
+                if k in m:
+                    m.pop(k)
 
             res[anon_devid] = m
         return res
