@@ -17,12 +17,65 @@
 #
 #
 
-this_script=$(basename "$0")
-how_to_get_setup_advice="For setup advice, run:  ${this_script} --setup-advice"
+SCRIPT_VERSION="15.0.0.5775"
+full_path="$0"
+this_script=$(basename "$full_path")
+how_to_get_setup_advice="For additional setup advice, run:  ${this_script} --setup-advice"
 
 if [[ $* == *--debug* ]]; then
     set -x
 fi
+
+# associative array keyed on "component" strings from PR titles, mapping them to
+# GitHub PR labels that make sense in backports
+declare -A comp_hash=(
+["bluestore"]="bluestore"
+["build/ops"]="build/ops"
+["ceph.spec"]="build/ops"
+["ceph-volume"]="ceph-volume"
+["cephfs"]="cephfs"
+["cmake"]="build/ops"
+["config"]="config"
+["client"]="cephfs"
+["common"]="common"
+["core"]="core"
+["dashboard"]="dashboard"
+["deb"]="build/ops"
+["doc"]="documentation"
+["grafana"]="monitoring"
+["mds"]="cephfs"
+["messenger"]="core"
+["mon"]="core"
+["msg"]="core"
+["mgr/dashboard"]="dashboard"
+["mgr/prometheus"]="monitoring"
+["mgr"]="core"
+["monitoring"]="monitoring"
+["orch"]="orchestrator"
+["osd"]="core"
+["perf"]="performance"
+["prometheus"]="monitoring"
+["pybind"]="pybind"
+["py3"]="python3"
+["python3"]="python3"
+["qa"]="tests"
+["rbd"]="rbd"
+["rgw"]="rgw"
+["rpm"]="build/ops"
+["tests"]="tests"
+["tool"]="tools"
+)
+
+function bail_out_github_api {
+    local api_said="$1"
+    info "GitHub API said:"
+    log bare "$api_said"
+    info "For setup report, run:  ${this_script} --setup"
+    info "For setup advice, run:  ${this_script} --setup-advice"
+    info "(hint) Check the value of github_token"
+    info "(hint) Run the script with --debug"
+    false
+}
 
 function cherry_pick_phase {
     local offset=0
@@ -43,12 +96,21 @@ function cherry_pick_phase {
     info "Parent issue ostensibly fixed by: ${original_pr_url}"
 
     debug "Counting commits in ${original_pr_url}"
-    number=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token} | jq .commits)
-    if [ -z "$number" ] ; then
+    remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token})
+    number=$(echo ${remote_api_output} | jq .commits)
+    singular_or_plural_commit=
+    if [ "$number" -eq "$number" ] 2>/dev/null ; then
+        # \$number is an integer
+        if [ "$number" -eq "1" ] ; then
+            singular_or_plural_commit="commit"
+        else
+            singular_or_plural_commit="commits"
+        fi
+    else
         error "Could not determine the number of commits in ${original_pr_url}"
-        return 1
+        bail_out_github_api "$remote_api_output"
     fi
-    info "Found $number commits in ${original_pr_url}"
+    info "Found $number $singular_or_plural_commit in $original_pr_url"
 
     debug "Fetching latest commits from $upstream_remote"
     git fetch $upstream_remote
@@ -105,17 +167,22 @@ function deduce_remote {
         url_component="$github_user"
     else
         error "Internal error in deduce_remote"
-        exit 1
+        false
     fi
     remote=$(git remote -v | egrep --ignore-case '(://|@)github.com(/|:)'$url_component'/ceph(\s|\.|\/)' | head -n1 | cut -f 1)
     if [ "$remote" ] ; then
         true
     else
         error "Cannot auto-determine ${remote_type}_remote"
-        info "Please set this variable explicitly and also file a bug report at ${redmine_endpoint}"
-        exit 1
+        info "There is something wrong with your remotes - to start with, check 'git remote -v'"
+        false
     fi
     echo "$remote"
+}
+
+function display_version_message_and_exit {
+    echo "$this_script: Ceph backporting script, version $SCRIPT_VERSION"
+    exit 0 
 }
 
 function eol {
@@ -134,6 +201,25 @@ function failed_mandatory_var_check {
     setup_ok=""
 }
 
+# takes PR title, attempts to guess component
+function guess_component {
+    local comp=
+    local pos="0"
+    local pr_title="$1"
+    local winning_comp=
+    local winning_comp_pos="9999"
+    for comp in "${!comp_hash[@]}" ; do
+        pos=$(grep_for_substr "$pr_title" "$comp")
+        # echo "$comp: $pos"
+        [ "$pos" = "-1" ] && continue
+        if [ "$pos" -lt "$winning_comp_pos" ] ; then
+             winning_comp_pos="$pos"
+             winning_comp="$comp"
+        fi
+    done
+    [ "$winning_comp" ] && echo "${comp_hash["$winning_comp"]}" || echo ""
+}
+
 function info {
     log info "$@"
 }
@@ -150,7 +236,7 @@ function init_github_user {
         else
             failed_mandatory_var_check github_user
             info "$how_to_get_setup_advice"
-            exit 1
+            false
         fi
     fi
 }
@@ -162,55 +248,6 @@ function init_mandatory_vars {
     debug "Initializing mandatory variables - GitHub remotes"
     upstream_remote="${upstream_remote:-$(deduce_remote upstream)}"
     fork_remote="${fork_remote:-$(deduce_remote fork)}"
-}
-
-function setup_summary {
-    local not_set="!!! NOT SET !!!"
-    local redmine_user_id_display="$not_set"
-    local redmine_key_display="$not_set"
-    local github_user_display="$not_set"
-    local github_token_display="$not_set"
-    local upstream_remote_display="$not_set"
-    local fork_remote_display="$not_set"
-    [ "$redmine_user_id" ] && redmine_user_id_display="$redmine_user_id"
-    [ "$redmine_key" ] && redmine_key_display="(OK, not shown)"
-    [ "$github_user" ] && github_user_display="$github_user"
-    [ "$github_token" ] && github_token_display="(OK, not shown)"
-    [ "$upstream_remote" ] && upstream_remote_display="$upstream_remote"
-    [ "$fork_remote" ] && fork_remote_display="$fork_remote"
-    debug Re-checking mandatory variables
-    test "$redmine_key"      || failed_mandatory_var_check redmine_key
-    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id
-    test "$github_user"      || failed_mandatory_var_check github_user
-    test "$github_token"     || failed_mandatory_var_check github_token
-    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote
-    test "$fork_remote"      || failed_mandatory_var_check fork_remote
-    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint
-    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint
-    if [ "$SETUP_ONLY" ] ; then
-        read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
-redmine_user_id  $redmine_user_id_display
-redmine_key      $redmine_key_display
-github_user      $github_user_display
-github_token     $github_token_display
-upstream_remote  $upstream_remote_display
-fork_remote      $fork_remote_display
-EOM
-        log bare "================================"
-        log bare "Setup summary"
-        log bare "--------------------------------"
-        log bare "variable name    value"
-        log bare "--------------------------------"
-        log bare "$setup_summary"
-        log bare "================================"
-    elif [ "$VERBOSE" ] ; then
-        debug "redmine_user_id  $redmine_user_id_display"
-        debug "redmine_key      $redmine_key_display"
-        debug "github_user      $github_user_display"
-        debug "github_token     $github_token_display"
-        debug "upstream_remote  $upstream_remote_display"
-        debug "fork_remote      $fork_remote_display"
-    fi
 }
 
 function log {
@@ -249,7 +286,7 @@ function milestone_number_from_remote_api {
     local mtt=$1  # milestone to try
     local mn=""   # milestone number
     warning "Milestone ->$mtt<- unknown to script - falling back to GitHub API"
-    remote_api_output=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)
+    remote_api_output=$(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)
     mn=$(echo $remote_api_output | jq --arg milestone $mtt '.[] | select(.title==$milestone) | .number')
     if [ "$mn" -gt "0" ] >/dev/null 2>&1 ; then
         echo "$mn"
@@ -259,7 +296,7 @@ function milestone_number_from_remote_api {
             info "GitHub API said:"
             log bare "$remote_api_output"
         fi
-        info "Valid values are $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
+        info "Valid values are $(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
         info "(This probably means the Release field of ${redmine_url} is populated with"
         info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
         false
@@ -298,6 +335,8 @@ redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
                 # is in the URL, i.e. https://tracker.ceph.com/users/[redmine_user_id]
 github_token    # https://github.com/settings/tokens -> Generate new token ->
                 # ensure it has "Full control of private repositories" scope
+                # see also:
+                # https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line
 github_user     # Your github username
 
 The above variables must be set explicitly, as the script has no way of
@@ -326,6 +365,69 @@ actually using the script to stage a backport, run:
     ${this_script} --setup
 
 EOM
+}
+
+function setup_report {
+    local not_set="!!! NOT SET !!!"
+    local redmine_endpoint_display="${redmine_endpoint:-$not_set}"
+    local redmine_user_id_display="${redmine_user_id:-$not_set}"
+    local github_endpoint_display="${github_endpoint:-$not_set}"
+    local github_user_display="${github_user:-$not_set}"
+    local upstream_remote_display="${upstream_remote:-$not_set}"
+    local fork_remote_display="${fork_remote:-$not_set}"
+    local redmine_key_display=""
+    local github_token_display=""
+    [ "$redmine_key" ] && redmine_key_display="(OK, not shown)" || redmine_key_display="$not_set"
+    [ "$github_token" ] && github_token_display="(OK, not shown)" || github_token_display="$not_set"
+    debug Re-checking mandatory variables
+    test "$redmine_key"      || failed_mandatory_var_check redmine_key
+    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id
+    test "$github_user"      || failed_mandatory_var_check github_user
+    test "$github_token"     || failed_mandatory_var_check github_token
+    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote
+    test "$fork_remote"      || failed_mandatory_var_check fork_remote
+    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint
+    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint
+    if [ "$SETUP_ONLY" ] ; then
+        read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
+redmine_endpoint $redmine_endpoint
+redmine_user_id  $redmine_user_id_display
+redmine_key      $redmine_key_display
+github_endpoint  $github_endpoint
+github_user      $github_user_display
+github_token     $github_token_display
+upstream_remote  $upstream_remote_display
+fork_remote      $fork_remote_display
+EOM
+        log bare "================================"
+        log bare "Setup report"
+        log bare "--------------------------------"
+        log bare "variable name    value"
+        log bare "--------------------------------"
+        log bare "$setup_summary"
+        log bare "================================"
+    elif [ "$VERBOSE" ] ; then
+        debug "redmine_endpoint $redmine_endpoint_display"
+        debug "redmine_user_id  $redmine_user_id_display"
+        debug "redmine_key      $redmine_key_display"
+        debug "github_endpoint  $github_endpoint_display"
+        debug "github_user      $github_user_display"
+        debug "github_token     $github_token_display"
+        debug "upstream_remote  $upstream_remote_display"
+        debug "fork_remote      $fork_remote_display"
+    fi
+}
+
+# takes a string and a substring - returns position of substring within string,
+# or -1 if not found
+# NOTE: position of first character in string is 0
+function grep_for_substr {
+    munged="${1%%$2*}"
+    if [ "$munged" = "$1" ] ; then
+        echo "-1"
+    else
+        echo "${#munged}"
+    fi
 }
 
 function troubleshooting_advice {
@@ -373,6 +475,18 @@ function try_known_milestones {
     echo "$mn"
 }
 
+function update_version_number_and_exit {
+    set -x
+    local raw_version=$(git describe --long --match 'v*' | sed 's/^v//')
+    # raw_version will look like this: 15.0.0-5774-g4c2f2eda969
+    local munge_first_hyphen=${raw_version/-/.}
+    # munge_first_hyphen will look like this: 15.0.0.5774-g4c2f2eda969
+    local script_version_number=${munge_first_hyphen%-*}
+    # script_version_number will look like this: 15.0.0.5774
+    sed -i -e 's/^SCRIPT_VERSION=.*/SCRIPT_VERSION="'"$script_version_number"'"/' $full_path
+    exit 0
+}
+
 function usage {
     cat <<EOM >&2
 Documentation:
@@ -382,19 +496,23 @@ Documentation:
    ${this_script} --troubleshooting-advice | less
 
 Usage:
-   ${this_script} [OPTIONS] BACKPORT_TRACKER_ISSUE_NUMBER
+   ${this_script} --setup
+   ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER
 
-Options:
-    -c/--component COMPONENT (for use with --set-milestone)
+Options (not needed in normal operation):
+    -c/--component COMPONENT (will try to set this label in the PR; if
+                       omitted, the script will try to guess the component)
     --debug            (turns on "set -x")
-    -m/--set-milestone (requires elevated GitHub privs)
-    -s/--setup         (just check the setup)
-    -v/--verbose
+    -s/--setup         (check the setup and report any problems found)
+    --update-version   (this option exists as a convenience for the script
+                        maintainer only: not intended for day-to-day usage)
+    -v/--verbose       (produce more output than normal)
+    --version          (display version number and exit)
 
 Example:
-   ${this_script} -c dashboard -m 31459
+   ${this_script} 31459
    (if cherry-pick conflicts are present, finish cherry-picking phase manually
-   and run the script again with the same arguments)
+   and then run the script again with the same argument)
 
 CAVEAT: The script must be run from inside a local git clone.
 EOM
@@ -477,12 +595,11 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,usage-advice,verbose" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
 DEBUG=""
-SET_MILESTONE=""
 EXPLICIT_COMPONENT=""
 EXPLICIT_PREPARE=""
 HELP=""
@@ -498,12 +615,13 @@ while true ; do
         --debug|-d) DEBUG="$1" ; shift ;;
         --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
         --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
-        --set-milestone|-m) SET_MILESTONE="$1" ; shift ;;
         --setup|-s) SETUP_ONLY="$1" ; shift ;;
         --setup-advice) ADVICE="1" ; SETUP_ADVICE="$1" ; shift ;;
         --troubleshooting-advice) ADVICE="$1" ; TROUBLESHOOTING_ADVICE="$1" ; shift ;;
+        --update-version) update_version_number_and_exit ;;
         --usage-advice) ADVICE="$1" ; USAGE_ADVICE="$1" ; shift ;;
         --verbose|-v) VERBOSE="$1" ; shift ;;
+        --version) display_version_message_and_exit ;;
         --) shift ; ISSUE="$1" ; break ;;
         *) echo "Internal error" ; false ;;
     esac
@@ -546,7 +664,7 @@ BACKPORT_COMMON=$HOME/bin/backport_common.sh
 setup_ok="1"
 init_github_user
 init_mandatory_vars
-setup_summary
+setup_report
 if [ "$setup_ok" ] ; then
     if [ "$SETUP_ONLY" ] ; then
         log bare "Overall setup is OK"
@@ -557,6 +675,7 @@ if [ "$setup_ok" ] ; then
 else
     if [ "$SETUP_ONLY" ] ; then
         log bare "Setup is NOT OK"
+        log bare "(hint) set variables via the environment"
         log bare "$how_to_get_setup_advice"
         false
     else
@@ -659,7 +778,7 @@ if [ "$original_pr" -o "$original_issue" ] ; then
     [ "$original_pr"    ] && desc="${desc}\nbackport of ${github_endpoint}/pull/${original_pr}"
     [ "$original_issue" ] && desc="${desc}\nparent tracker: ${redmine_endpoint}/issues/${original_issue}"
 fi
-desc="${desc}\n\nthis backport was staged using ${github_endpoint}/blob/master/src/script/ceph-backport.sh"
+desc="${desc}\n\nthis backport was staged using ceph-backport.sh version ${SCRIPT_VERSION}\nfind the latest version at ${github_endpoint}/blob/master/src/script/ceph-backport.sh"
 
 debug "Generating backport PR title"
 if [ "$original_pr" ] ; then
@@ -677,31 +796,53 @@ fi
 
 debug "Opening backport PR"
 remote_api_output=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':'$local_branch'","base":"'$target_branch'","body":"'"${desc}"'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token)
-number=$(echo "$remote_api_output" | jq -r .number)
-if [ "$number" = "null" ] ; then
-    error "Remote API call failed"
-    log bare "$remote_api_output"
-    false
+backport_pr_number=$(echo "$remote_api_output" | jq -r .number)
+if [ -z "$backport_pr_number" -o "$backport_pr_number" = "null" ] ; then
+    bail_out_github_api "$remote_api_output"
 fi
+backport_pr_url="${github_endpoint}/pull/$backport_pr_number"
+info "Opened backport PR ${backport_pr_url}"
 
-if [ "$SET_MILESTONE" -o "$CEPH_BACKPORT_SET_MILESTONE" ] ; then
-    if [ "$EXPLICIT_COMPONENT" ] ; then
-        component="$EXPLICIT_COMPONENT"
-    else
-        component=${COMPONENT:-core}
-    fi
-    info "Opened backport PR ${github_endpoint}/pull/$number"
-    debug "Setting ${component} label and ${milestone} milestone"
-    curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null 2>&1
-    info "Set component label and milestone in PR"
+if [ "$EXPLICIT_COMPONENT" ] ; then
+    debug "Component given on command line: using it"
+    component="$EXPLICIT_COMPONENT"
 else
-    debug "Not setting component and milestone in PR (--set-milestone was not given and CEPH_BACKPORT_SET_MILESTONE not set)"
+    debug "Attempting to guess component"
+    component=$(guess_component "$title")
 fi
+if [ "$component" ] ; then
+    debug "Attempting to set ${component} label and ${milestone} milestone in ${backport_pr_url}"
+    data_binary='{"milestone":'$milestone_number',"labels":["'$component'"]}'
+else
+    debug "Attempting to set ${milestone} milestone in ${backport_pr_url}"
+    data_binary='{"milestone":'$milestone_number'}'
+fi
+curl --silent --data-binary "$data_binary" 'https://api.github.com/repos/ceph/ceph/issues/'$backport_pr_number'?access_token='$github_token >/dev/null 2>&1 || true
 
-pgrep firefox >/dev/null && firefox ${github_endpoint}/pull/$number
+pgrep firefox >/dev/null && firefox ${backport_pr_url}
 
-debug "Updating backport tracker issue in Redmine"
+debug "Updating backport tracker issue ${redmine_url}"
 redmine_status=2 # In Progress
-curl -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh"}' ${redmine_url}'.json?key='$redmine_key
-info "${redmine_url} updated"
+remote_api_status_code=$(curl --write-out %{http_code} --output /dev/null --silent -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$backport_pr_number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id',"notes":"Updated automatically by ceph-backport.sh version '$SCRIPT_VERSION'"}}' ${redmine_url}'.json?key='$redmine_key)
+if [ "${remote_api_status_code:0:1}" = "2" ] ; then
+    info "${redmine_url} updated"
+elif [ "${remote_api_status_code:0:1}" = "4" ] ; then
+    error "Remote API ${redmine_endpoint} returned status ${remote_api_status_code}"
+    info "This indicates an authentication/authorization problem: is your API access key valid?"
+else
+    error "Remote API ${redmine_endpoint} returned unexpected response code ${remote_api_status_code}"
+fi
+# check if anything actually changed on the Redmine issue
+redmine_result_ok=""
+remote_api_output=$(curl --silent "${redmine_url}.json")
+tracker_description=$(echo $remote_api_output | jq -r '.issue.description')
+if [[ "$tracker_description" =~ "$backport_pr_number" ]] ; then
+    debug "Backport tracker description is set to ->${tracker_description}<-"
+    true  # success
+else
+    info "Failed to automatically update ${redmine_url}."
+    info "Please add a comment to ${redmine_url} to let others know that you"
+    info "are working on the backport. In your comment, consider mentioning the"
+    info "${backport_pr_url} (the URL of the backport PR that was just opened)."
+fi
 pgrep firefox >/dev/null && firefox ${redmine_url}
