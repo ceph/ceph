@@ -11,7 +11,7 @@ import re
 import requests
 import uuid
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Event
 from collections import defaultdict
 
@@ -31,7 +31,7 @@ LAST_REVISION_RE_OPT_IN = 2
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
-REVISION = 2
+REVISION = 3
 
 # History of revisions
 # --------------------
@@ -45,6 +45,9 @@ REVISION = 2
 #   - added config option changes
 #   - added channels
 #   - added explicit license acknowledgement to the opt-in process
+#
+# Version 3:
+#   - added device health metrics (i.e., SMART data, minus serial number)
 
 class Module(MgrModule):
     config = dict()
@@ -129,7 +132,7 @@ class Module(MgrModule):
             'name': 'channel_device',
             'type': 'bool',
             'default': True,
-            'description': 'Share device health metrics (e.g., SMART data)',
+            'description': 'Share device health metrics (e.g., SMART data, minus potentially identifying info like serial numbers)',
         },
     ]
 
@@ -293,9 +296,50 @@ class Module(MgrModule):
 
     def gather_device_report(self):
         try:
-            return self.remote('devicehealth', 'gather_device_report')
+            time_format = self.remote('devicehealth', 'get_time_format')
         except:
             return None
+        cutoff = datetime.utcnow() - timedelta(hours=self.interval * 2)
+        min_sample = cutoff.strftime(time_format)
+
+        devices = self.get('devices')['devices']
+
+        res = {}
+        for d in devices:
+            devid = d['devid']
+            try:
+                m = self.remote('devicehealth', 'get_recent_device_metrics',
+                                devid, min_sample)
+            except:
+                continue
+
+            # anonymize host id
+            try:
+                host = d['location'][0]['host']
+            except:
+                continue
+            anon_host = self.get_store('host-id/%s' % host)
+            if not anon_host:
+                anon_host = str(uuid.uuid1())
+                self.set_store('host-id/%s' % host, anon_host)
+            m['host_id'] = anon_host
+
+            # anonymize device id
+            (vendor, model, serial) = devid.split('_')
+            anon_devid = self.get_store('devid-id/%s' % devid)
+            if not anon_devid:
+                anon_devid = '%s_%s_%s' % (vendor, model, uuid.uuid1())
+                self.set_store('devid-id/%s' % devid, anon_devid)
+
+            self.log.info('devid %s / %s, host %s / %s' % (devid, anon_devid,
+                                                           host, anon_host))
+
+            # anonymize the smartctl report itself
+            for k in ['serial_number']:
+                m.pop(k)
+
+            res[anon_devid] = m
+        return res
 
     def compile_report(self, channels=[]):
         if not channels:
