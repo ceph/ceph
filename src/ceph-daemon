@@ -1267,28 +1267,18 @@ def command_rm_cluster():
         raise RuntimeError('must pass --force to proceed: '
                            'this command may destroy precious data!')
 
-    unit_name = 'ceph-%s.target' % args.fsid
-    try:
-        call_throws(['systemctl', 'stop', unit_name],
-                    verbose_on_failure=False)
-        call_throws(['systemctl', 'disable', unit_name],
-                    verbose_on_failure=False)
-    except RuntimeError:
-        pass
-    crash_unit_name = 'ceph-%s-crash.service' % args.fsid
-    try:
-        subprocess.check_output(['systemctl', 'stop', crash_unit_name])
-        subprocess.check_output(['systemctl', 'disable', crash_unit_name])
-    except subprocess.CalledProcessError:
-        pass
+    # ignore errors here
+    for unit_name in ['ceph-%s.target' % args.fsid,
+                      'ceph-%s-crash.service' % args.fsid]:
+        call(['systemctl', 'stop', unit_name], 'systemctl',
+             verbose_on_failure=False)
+        call(['systemctl', 'disable', unit_name], 'systemctl',
+             verbose_on_failure=False)
 
-    slice_name = 'system-%s.slice' % (
-        ('ceph-%s' % args.fsid).replace('-', '\\x2d'))
-    try:
-        call_throws(['systemctl', 'stop', slice_name],
-                    verbose_on_failure=False)
-    except RuntimeError:
-        pass
+    slice_name = 'system-%s.slice' % (('ceph-%s' % args.fsid).replace('-',
+                                                                      '\\x2d'))
+    call(['systemctl', 'stop', slice_name], 'systemctl',
+         verbose_on_failure=False)
 
     # FIXME: stop + disable individual daemon units, too?
 
