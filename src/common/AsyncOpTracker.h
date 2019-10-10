@@ -20,6 +20,8 @@ public:
 
   bool empty();
 
+  friend std::ostream& operator<<(std::ostream&, const AsyncOpTracker&);
+
 private:
   ceph::mutex m_lock = ceph::make_mutex("AsyncOpTracker::m_lock");
   uint32_t m_pending_ops = 0;

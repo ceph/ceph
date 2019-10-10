@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <iostream>
 #include "common/AsyncOpTracker.h"
 #include "include/Context.h"
 
@@ -50,3 +51,9 @@ bool AsyncOpTracker::empty() {
   return (m_pending_ops == 0);
 }
 
+std::ostream& operator<<(std::ostream& os,
+                         const AsyncOpTracker &t) {
+  os << "pending_ops=" << t.m_pending_ops << ", "
+     << "on_finish=" << t.m_on_finish;
+  return os;
+};

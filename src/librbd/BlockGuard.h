@@ -28,6 +28,13 @@ struct BlockExtent {
   }
   BlockExtent(uint64_t block_start, uint64_t block_end)
     : block_start(block_start), block_end(block_end) {
+    assert(block_start <= block_end);
+  }
+  friend std::ostream &operator<<(std::ostream &os,
+				  BlockExtent &extent) {
+    os << "[block_start=" << extent.block_start
+       << ", block_end=" << extent.block_end << "]";
+    return os;
   }
 };
 
