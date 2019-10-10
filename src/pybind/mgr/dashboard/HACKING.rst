@@ -1876,7 +1876,7 @@ The available Interfaces are:
 - ``FilterRequest.BeforeHandler``: requires overriding
   ``filter_request_before_handler()`` hook. This method receives a
   ``cherrypy.request`` object for processing. A usual implementation of this
-  method will allow some requests to pass or will raise a ``cherrypy.HTTPError`
+  method will allow some requests to pass or will raise a ``cherrypy.HTTPError``
   based on the ``request`` metadata and other conditions.
 
 New interfaces and hooks should be added as soon as they are required to
