@@ -24,11 +24,14 @@ void add_id_option(po::options_description *positional) {
     ("lock-id", "unique lock id");
 }
 
-int get_id(const po::variables_map &vm, std::string *id) {
-  *id = utils::get_positional_argument(vm, 1);
+int get_id(const po::variables_map &vm, size_t *arg_index,
+           std::string *id) {
+  *id = utils::get_positional_argument(vm, *arg_index);
   if (id->empty()) {
     std::cerr << "rbd: lock id was not specified" << std::endl;
     return -EINVAL;
+  } else {
+    ++(*arg_index);
   }
   return 0;
 }
@@ -165,7 +168,7 @@ int execute_add(const po::variables_map &vm) {
   }
 
   std::string lock_cookie;
-  r = get_id(vm, &lock_cookie);
+  r = get_id(vm, &arg_index, &lock_cookie);
   if (r < 0) {
     return r;
   }
@@ -223,12 +226,12 @@ int execute_remove(const po::variables_map &vm) {
   }
 
   std::string lock_cookie;
-  r = get_id(vm, &lock_cookie);
+  r = get_id(vm, &arg_index, &lock_cookie);
   if (r < 0) {
     return r;
   }
 
-  std::string lock_client = utils::get_positional_argument(vm, 2);
+  std::string lock_client = utils::get_positional_argument(vm, arg_index);
   if (lock_client.empty()) {
     std::cerr << "rbd: locker was not specified" << std::endl;
     return -EINVAL;
