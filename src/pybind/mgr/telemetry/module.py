@@ -72,7 +72,19 @@ class Module(MgrModule):
             'type': 'int',
             'default': 24,
             'min': 8
-        }
+        },
+        {
+            'name': 'channel_basic',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share basic cluster information (size, version)',
+        },
+        {
+            'name': 'channel_crash',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share metadata about Ceph daemon crashes (version, stack straces, etc)',
+        },
     ]
 
     COMMANDS = [
@@ -185,11 +197,21 @@ class Module(MgrModule):
             crashlist.append(c)
         return crashlist
 
+    def get_active_channels(self):
+        r = []
+        if self.channel_basic:
+            r.append('basic')
+        if self.channel_crash:
+            r.append('crash')
+        return r
+
     def compile_report(self):
         report = {
             'leaderboard': False,
             'report_version': 1,
-            'report_timestamp': datetime.utcnow().isoformat()
+            'report_timestamp': datetime.utcnow().isoformat(),
+            'report_id': self.report_id,
+            'channels': self.get_active_channels(),
         }
 
         if self.leaderboard:
@@ -198,63 +220,64 @@ class Module(MgrModule):
         for option in ['description', 'contact', 'organization']:
             report[option] = getattr(self, option)
 
-        mon_map = self.get('mon_map')
-        osd_map = self.get('osd_map')
-        service_map = self.get('service_map')
-        fs_map = self.get('fs_map')
-        df = self.get('df')
+        if self.channel_basic:
+            mon_map = self.get('mon_map')
+            osd_map = self.get('osd_map')
+            service_map = self.get('service_map')
+            fs_map = self.get('fs_map')
+            df = self.get('df')
 
-        report['report_id'] = self.report_id
-        report['created'] = self.parse_timestamp(mon_map['created']).isoformat()
+            report['created'] = self.parse_timestamp(mon_map['created']).isoformat()
 
-        report['mon'] = {
-            'count': len(mon_map['mons']),
-            'features': mon_map['features']
-        }
+            report['mon'] = {
+                'count': len(mon_map['mons']),
+                'features': mon_map['features']
+            }
 
-        num_pg = 0
-        report['pools'] = list()
-        for pool in osd_map['pools']:
-            num_pg += pool['pg_num']
-            report['pools'].append(
-                {
-                    'pool': pool['pool'],
-                    'type': pool['type'],
-                    'pg_num': pool['pg_num'],
-                    'pgp_num': pool['pg_placement_num'],
-                    'size': pool['size'],
-                    'min_size': pool['min_size'],
-                    'crush_rule': pool['crush_rule']
-                }
-            )
+            num_pg = 0
+            report['pools'] = list()
+            for pool in osd_map['pools']:
+                num_pg += pool['pg_num']
+                report['pools'].append(
+                    {
+                        'pool': pool['pool'],
+                        'type': pool['type'],
+                        'pg_num': pool['pg_num'],
+                        'pgp_num': pool['pg_placement_num'],
+                        'size': pool['size'],
+                        'min_size': pool['min_size'],
+                        'crush_rule': pool['crush_rule']
+                    }
+                )
 
-        report['osd'] = {
-            'count': len(osd_map['osds']),
-            'require_osd_release': osd_map['require_osd_release'],
-            'require_min_compat_client': osd_map['require_min_compat_client']
-        }
+            report['osd'] = {
+                'count': len(osd_map['osds']),
+                'require_osd_release': osd_map['require_osd_release'],
+                'require_min_compat_client': osd_map['require_min_compat_client']
+            }
 
-        report['fs'] = {
-            'count': len(fs_map['filesystems'])
-        }
+            report['fs'] = {
+                'count': len(fs_map['filesystems'])
+            }
 
-        report['metadata'] = dict()
-        report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
-        report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
+            report['metadata'] = dict()
+            report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
+            report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
 
-        report['usage'] = {
-            'pools': len(df['pools']),
-            'pg_num:': num_pg,
-            'total_used_bytes': df['stats']['total_used_bytes'],
-            'total_bytes': df['stats']['total_bytes'],
-            'total_avail_bytes': df['stats']['total_avail_bytes']
-        }
+            report['usage'] = {
+                'pools': len(df['pools']),
+                'pg_num:': num_pg,
+                'total_used_bytes': df['stats']['total_used_bytes'],
+                'total_bytes': df['stats']['total_bytes'],
+                'total_avail_bytes': df['stats']['total_avail_bytes']
+            }
 
-        report['services'] = defaultdict(int)
-        for key, value in service_map['services'].items():
-            report['services'][key] += 1
+            report['services'] = defaultdict(int)
+            for key, value in service_map['services'].items():
+                report['services'][key] += 1
 
-        report['crashes'] = self.gather_crashinfo()
+        if self.channel_crash:
+            report['crashes'] = self.gather_crashinfo()
 
         return report
 
