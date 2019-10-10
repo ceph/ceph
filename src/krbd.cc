@@ -225,84 +225,101 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
   return 0;
 }
 
-static int wait_for_udev_add(struct udev_monitor *mon, const krbd_spec& spec,
-                             string *pname)
+template <typename F>
+static int wait_for_mapping(udev_monitor *mon, F udev_device_handler)
 {
-  struct udev_device *bus_dev = nullptr;
-  std::vector<struct udev_device*> block_dev_vec;
+  struct pollfd fds[1];
+
+  fds[0].fd = udev_monitor_get_fd(mon);
+  fds[0].events = POLLIN;
+
+  for (;;) {
+    struct udev_device *dev;
+
+    if (poll(fds, 1, -1) < 0) {
+      ceph_abort_msgf("poll failed: %d", -errno);
+    }
+
+    dev = udev_monitor_receive_device(mon);
+    if (!dev) {
+      continue;
+    }
+    if (udev_device_handler(dev)) {
+      return 0;
+    }
+  }
+}
+
+class UdevMapHandler {
+public:
+  UdevMapHandler(const krbd_spec *spec, std::string *pdevnode) :
+      m_spec(spec), m_pdevnode(pdevnode) {}
 
   /*
    * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
    * block device to show up.  This is necessary because rbd devices
    * and block devices aren't linked together in our sysfs layout.
    */
-  for (;;) {
-    struct pollfd fds[1];
-    struct udev_device *dev;
-
-    fds[0].fd = udev_monitor_get_fd(mon);
-    fds[0].events = POLLIN;
-    if (poll(fds, 1, -1) < 0) {
-      ceph_abort_msgf("poll failed: %d", -errno);
-    }
-
-    dev = udev_monitor_receive_device(mon);
-    if (!dev)
-      continue;
-
-    if (strcmp(udev_device_get_action(dev), "add") != 0)
+  bool operator()(udev_device *dev) {
+    if (strcmp(udev_device_get_action(dev), "add")) {
       goto next;
-
-    if (strcmp(udev_device_get_subsystem(dev), "rbd") == 0) {
-      if (!bus_dev) {
-        auto cur_spec = spec_from_dev(dev);
-        if (cur_spec && *cur_spec == spec) {
-          bus_dev = dev;
+    }
+    if (!strcmp(udev_device_get_subsystem(dev), "rbd")) {
+      if (!m_bus_dev) {
+        auto spec = spec_from_dev(dev);
+        if (spec && *spec == *m_spec) {
+          m_bus_dev = dev;
           goto check;
         }
       }
-    } else if (strcmp(udev_device_get_subsystem(dev), "block") == 0) {
-      block_dev_vec.push_back(dev);
+    } else if (!strcmp(udev_device_get_subsystem(dev), "block")) {
+      m_block_devs.push_back(dev);
       goto check;
     }
 
 next:
     udev_device_unref(dev);
-    continue;
+    return false;
 
 check:
-    if (bus_dev && !block_dev_vec.empty()) {
-      const char *major = udev_device_get_sysattr_value(bus_dev, "major");
-      const char *minor = udev_device_get_sysattr_value(bus_dev, "minor");
+    if (m_bus_dev && !m_block_devs.empty()) {
+      const char *major = udev_device_get_sysattr_value(m_bus_dev, "major");
+      const char *minor = udev_device_get_sysattr_value(m_bus_dev, "minor");
       ceph_assert(!minor ^ have_minor_attr());
 
-      for (auto p : block_dev_vec) {
+      for (auto p : m_block_devs) {
         const char *this_major = udev_device_get_property_value(p, "MAJOR");
         const char *this_minor = udev_device_get_property_value(p, "MINOR");
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
-          string name = get_kernel_rbd_name(udev_device_get_sysname(bus_dev));
+          string name = get_kernel_rbd_name(udev_device_get_sysname(m_bus_dev));
 
           ceph_assert(strcmp(udev_device_get_devnode(p), name.c_str()) == 0);
-          *pname = name;
-          goto done;
+          *m_pdevnode = name;
+          return true;
         }
       }
     }
+    return false;
   }
 
-done:
-  if (bus_dev) {
-    udev_device_unref(bus_dev);
-  }
-  
-  for (auto p : block_dev_vec) {
-    udev_device_unref(p);
+  ~UdevMapHandler() {
+    if (m_bus_dev) {
+      udev_device_unref(m_bus_dev);
+    }
+
+    for (auto p : m_block_devs) {
+      udev_device_unref(p);
+    }
   }
 
-  return 0;
-}
+private:
+  udev_device *m_bus_dev = nullptr;
+  std::vector<udev_device *> m_block_devs;
+  const krbd_spec *m_spec;
+  std::string *m_pdevnode;
+};
 
 static int do_map(struct udev *udev, const krbd_spec& spec, const string& buf,
                   string *pname)
@@ -332,7 +349,7 @@ static int do_map(struct udev *udev, const krbd_spec& spec, const string& buf,
     goto out_mon;
   }
 
-  r = wait_for_udev_add(mon, spec, pname);
+  r = wait_for_mapping(mon, UdevMapHandler(&spec, pname));
   if (r < 0) {
     cerr << "rbd: wait failed" << std::endl;
     goto out_mon;
@@ -579,33 +596,24 @@ static string build_unmap_buf(const string& id, const char *options)
   return buf;
 }
 
-static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
-{
-  for (;;) {
-    struct pollfd fds[1];
-    struct udev_device *dev;
+class UdevUnmapHandler {
+public:
+  UdevUnmapHandler(dev_t devno) : m_devno(devno) {}
 
-    fds[0].fd = udev_monitor_get_fd(mon);
-    fds[0].events = POLLIN;
-    if (poll(fds, 1, -1) < 0) {
-      ceph_abort_msgf("poll failed: %d", -errno);
+  bool operator()(udev_device *dev) {
+    bool match = false;
+
+    if (!strcmp(udev_device_get_action(dev), "remove") &&
+        udev_device_get_devnum(dev) == m_devno) {
+      match = true;
     }
-
-    dev = udev_monitor_receive_device(mon);
-    if (!dev)
-      continue;
-
-    if (strcmp(udev_device_get_action(dev), "remove") == 0 &&
-        udev_device_get_devnum(dev) == devno) {
-      udev_device_unref(dev);
-      break;
-    }
-
     udev_device_unref(dev);
+    return match;
   }
 
-  return 0;
-}
+private:
+  dev_t m_devno;
+};
 
 static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
 {
@@ -652,7 +660,7 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
     }
   }
 
-  r = wait_for_udev_remove(mon, devno);
+  r = wait_for_mapping(mon, UdevUnmapHandler(devno));
   if (r < 0) {
     cerr << "rbd: wait failed" << std::endl;
     goto out_mon;
