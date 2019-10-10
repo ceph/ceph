@@ -500,6 +500,10 @@ seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
       conn->get_shared(),
       m);
     return seastar::now();
+  case MSG_OSD_PG_LEASE:
+    [[fallthrough]];
+  case MSG_OSD_PG_LEASE_ACK:
+    [[fallthrough]];
   case MSG_OSD_PG_NOTIFY2:
     [[fallthrough]];
   case MSG_OSD_PG_INFO2:
