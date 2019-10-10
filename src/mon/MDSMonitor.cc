@@ -1424,9 +1424,9 @@ int MDSMonitor::filesystem_command(
 
     bool modified = fsmap.undamaged(role.fscid, role.rank);
     if (modified) {
-      dout(1) << "repaired: restoring rank " << role << dendl;
+      ss << "repaired: restoring rank " << role;
     } else {
-      dout(1) << "repaired: no-op on rank " << role << dendl;
+      ss << "nothing to do: rank is not damaged";
     }
 
     r = 0;
