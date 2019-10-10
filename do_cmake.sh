@@ -7,6 +7,7 @@ if test -e build; then
 fi
 
 PYBUILD="2"
+<<<<<<< HEAD
 source /etc/os-release
 case "$ID" in
     fedora)
@@ -23,6 +24,7 @@ case "$ID" in
     opensuse*|suse|sles)
         PYBUILD="3"
         WITH_RADOSGW_AMQP_ENDPOINT="OFF"
+        WITH_RADOSGW_KAFKA_ENDPOINT="OFF"
         ;;
 esac
 if [ "$PYBUILD" = "3" ] ; then

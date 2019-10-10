@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
-#include "include/compat.h"
 #include "rgw_amqp.h"
 #include <amqp.h>
 #include <amqp_tcp_socket.h>
@@ -50,9 +49,9 @@ static const int RGW_AMQP_NO_REPLY_CODE =                 0x0;
 
 // key class for the connection list
 struct connection_id_t {
-  std::string host;
-  int port;
-  std::string vhost;
+  const std::string host;
+  const int port;
+  const std::string vhost;
   // constructed from amqp_connection_info struct
   connection_id_t(const amqp_connection_info& info) 
     : host(info.host), port(info.port), vhost(info.vhost) {}
@@ -73,7 +72,7 @@ struct connection_id_t {
 };
 
 std::string to_string(const connection_id_t& id) {
-    return id.host+":"+"/"+id.vhost;
+    return id.host+":"+std::to_string(id.port)+"/"+id.vhost;
 }
 
 // connection_t state cleaner
@@ -633,7 +632,7 @@ private:
       {
         // thread safe access to the connection list
         // once the iterators are fetched they are guaranteed to remain valid
-        std::lock_guard<std::mutex> lock(connections_lock);
+        std::lock_guard lock(connections_lock);
         conn_it = connections.begin();
         end_it = connections.end();
       }
@@ -646,7 +645,7 @@ private:
         if (conn->marked_for_deletion) {
           ldout(conn->cct, 10) << "AMQP run: connection is deleted" << dendl;
           conn->destroy(RGW_AMQP_STATUS_CONNECTION_CLOSED);
-          std::lock_guard<std::mutex> lock(connections_lock);
+          std::lock_guard lock(connections_lock);
           // erase is safe - does not invalidate any other iterator
           // lock so no insertion happens at the same time
           ERASE_AND_CONTINUE(conn_it, connections);
@@ -847,7 +846,7 @@ public:
     }
 
     const connection_id_t id(info);
-    std::lock_guard<std::mutex> lock(connections_lock);
+    std::lock_guard lock(connections_lock);
     const auto it = connections.find(id);
     if (it != connections.end()) {
       if (it->second->marked_for_deletion) {
@@ -931,7 +930,7 @@ public:
   // get the number of in-flight messages
   size_t get_inflight() const {
     size_t sum = 0;
-    std::lock_guard<std::mutex> lock(connections_lock);
+    std::lock_guard lock(connections_lock);
     std::for_each(connections.begin(), connections.end(), [&sum](auto& conn_pair) {
         sum += conn_pair.second->callbacks.size();
       });
