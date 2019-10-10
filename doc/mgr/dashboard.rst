@@ -968,7 +968,8 @@ Web UI will automatically allow to choose to which cluster an export belongs.
 Plug-ins
 --------
 
-Dashboard Plug-ins allow to extend the functionality of the dashboard in a modular
-and loosely coupled approach.
+Dashboard Plug-ins extend the functionality of the dashboard in a modular
+and loosely coupled fashion.
 
 .. include:: dashboard_plugins/feature_toggles.inc.rst
+.. include:: dashboard_plugins/debug.inc.rst
