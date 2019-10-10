@@ -185,6 +185,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
 
+    def __del__(self):
+        self.vc.shutdown()
+
+    def shutdown(self):
+        self.vc.shutdown()
+
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
         try:
