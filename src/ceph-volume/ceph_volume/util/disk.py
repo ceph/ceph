@@ -787,6 +787,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
     dev_devs = get_dev_devs(_dev_path)
     mapper_devs = get_mapper_devs(_mapper_path)
 
+    lvs = lvm.Volumes()
     for block in block_devs:
         sysdir = os.path.join(_sys_block_path, block)
         metadata = {}
@@ -799,7 +800,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
-            if lvm.is_lv(diskname):
+            if lvm.is_lv(diskname, lvs):
                 continue
 
         metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
