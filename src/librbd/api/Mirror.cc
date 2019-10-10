@@ -22,6 +22,7 @@
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
+#include "librbd/mirror_snapshot/UnlinkPeerRequest.h"
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/scope_exit.hpp>
@@ -1240,6 +1241,75 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
                << cpp_strerror(r) << dendl;
     return r;
   }
+
+  std::set<std::string> image_ids;
+  r = list_mirror_images(io_ctx, image_ids);
+  if (r < 0) {
+    lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  for (const auto& image_id : image_ids) {
+    cls::rbd::MirrorImage mirror_image;
+    r = cls_client::mirror_image_get(&io_ctx, image_id, &mirror_image);
+    if (r < 0) {
+      lderr(cct) << "error getting mirror info for image " << image_id
+                 << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      continue;
+    }
+
+    // Snapshot based mirroring. Unlink the peer from mirroring snapshots.
+    // TODO: optimize.
+
+    I *img_ctx = I::create("", image_id, nullptr, io_ctx, false);
+    r = img_ctx->state->open(0);
+    if (r < 0) {
+      lderr(cct) << "error opening image " << image_id << ": "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    std::list<uint64_t> snap_ids;
+    {
+      std::shared_lock image_locker{img_ctx->image_lock};
+      for (auto &it : img_ctx->snap_info) {
+        auto info = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+          &it.second.snap_namespace);
+        if (info && info->mirror_peer_uuids.count(uuid)) {
+          snap_ids.push_back(it.first);
+        }
+      }
+    }
+    for (auto snap_id : snap_ids) {
+      C_SaferCond cond;
+      auto req = mirror::snapshot::UnlinkPeerRequest<I>::create(
+        img_ctx, snap_id, uuid, &cond);
+      req->send();
+      r = cond.wait();
+      if (r == -ENOENT) {
+        r = 0;
+      }
+      if (r < 0) {
+        break;
+      }
+    }
+
+    int close_r = img_ctx->state->close();
+    if (r < 0) {
+      lderr(cct) << "error unlinking peer for image " << image_id << ": "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    } else if (close_r < 0) {
+      lderr(cct) << "failed to close image " << image_id << ": "
+                 << cpp_strerror(close_r) << dendl;
+      return close_r;
+    }
+  }
+
   return 0;
 }
 
