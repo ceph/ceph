@@ -862,6 +862,42 @@ You can manually initiate a scrub of a clean PG with::
 Miscellaneous
 -------------
 
+RECENT_CRASH
+____________
+
+One or more Ceph daemons has crashed recently, and the crash has not
+yet been archived (acknowledged) by the administrator.  This may
+indicate a software bug, a hardware problem (e.g., a failing disk), or
+some other problem.
+
+New crashes can be listed with::
+
+  ceph crash ls-new
+
+Information about a specific crash can be examined with::
+
+  ceph crash info <crash-id>
+
+This warning can be silenced by "archiving" the crash (perhaps after
+being examined by an administrator) so that it does not generate this
+warning::
+
+  ceph crash archive <crash-id>
+
+Similarly, all new crashes can be archived with::
+
+  ceph crash archive-all
+
+Archived crashes will still be visible via ``ceph crash ls`` but not
+``ceph crash ls-new``.
+
+The time period for what "recent" means is controlled by the option
+``mgr/crash/warn_recent_interval`` (default: two weeks).
+
+These warnings can be disabled entirely with::
+
+  ceph config set mgr/crash/warn_recent_interval 0
+
 TELEMETRY_CHANGED
 _________________
 
