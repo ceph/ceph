@@ -83,7 +83,10 @@ from .settings import options_command_list, options_schema_list, \
                       handle_option_command
 
 from .plugins import PLUGIN_MANAGER
-from .plugins import feature_toggles  # noqa # pylint: disable=unused-import
+from .plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+
+
+PLUGIN_MANAGER.hook.init()
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -120,6 +123,11 @@ class CherryPyConfig(object):
     def url_prefix(self):
         return self._url_prefix
 
+    @staticmethod
+    def update_cherrypy_config(config):
+        PLUGIN_MANAGER.hook.configure_cherrypy(config=config)
+        cherrypy.config.update(config)
+
     # pylint: disable=too-many-branches
     def _configure(self):
         """
@@ -145,10 +153,10 @@ class CherryPyConfig(object):
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
-        cherrypy.tools.plugin_hooks = cherrypy.Tool(
+        cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
             lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
-            priority=10)
+            priority=1)
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -170,7 +178,7 @@ class CherryPyConfig(object):
             ],
             'tools.json_in.on': True,
             'tools.json_in.force': False,
-            'tools.plugin_hooks.on': True,
+            'tools.plugin_hooks_filter_request.on': True,
         }
 
         if ssl:
@@ -235,7 +243,7 @@ class CherryPyConfig(object):
             config['server.ssl_certificate'] = cert_fname
             config['server.ssl_private_key'] = pkey_fname
 
-        cherrypy.config.update(config)
+        self.update_cherrypy_config(config)
 
         self._url_prefix = prepare_url_prefix(self.get_module_option('url_prefix',
                                                                      default=''))
@@ -374,6 +382,7 @@ class Module(MgrModule, CherryPyConfig):
             config[purl] = {
                 'request.dispatch': mapper
             }
+
         cherrypy.tree.mount(None, config=config)
 
         PLUGIN_MANAGER.hook.setup()
