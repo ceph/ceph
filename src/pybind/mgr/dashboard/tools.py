@@ -123,9 +123,9 @@ class RequestLoggingTool(cherrypy.Tool):
                       req.remote.port, req.method, status,
                       "{0:.3f}s".format(lat), user, length, req.path_info)
         else:
-            logger_fn("[%s:%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
+            logger_fn("[%s:%s] [%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
                       req.remote.port, req.method, status,
-                      "{0:.3f}s".format(lat), length, req.path_info)
+                      "{0:.3f}s".format(lat), length, getattr(req, 'unique_id', '-'), req.path_info)
 
 
 # pylint: disable=too-many-instance-attributes
