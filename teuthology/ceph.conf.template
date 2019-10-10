@@ -1,3 +1,13 @@
+# XXX
+#
+#   DO NOT MODIFY THIS FILE
+#
+# This file is a legacy ceph.conf template used only when testing older
+# releases of Ceph (pre-Nautilus). The new template exists in ceph.git at
+# qa/tasks/ceph.conf.template
+#
+# XXX
+
 [global]
 	chdir = ""
 	pid file = /var/run/ceph/$cluster-$name.pid
