@@ -23,7 +23,6 @@ def _remove(ctx, config, remote, rpm):
     """
     remote_os = remote.os
     dist_release = remote_os.name
-    rpm = _package_overrides(rpm, remote_os)
 
     install_ceph_packages = config.get('install_ceph_packages')
     if install_ceph_packages:
@@ -63,29 +62,6 @@ def _remove(ctx, config, remote, rpm):
     else:
         remote.run(args='sudo yum clean expire-cache')
 
-
-def _package_overrides(pkgs, os):
-    """
-    Replaces some package names with their distro-specific equivalents.
-
-    CentOS/RHEL-7 is not fully migrated to python3 at the time of writing,
-    we are using EPEL7 for building python3 packages. and we use the rpm
-    macro of "python3_pkgversion" as the python3 version for which we build
-    python bindings. see https://src.fedoraproject.org/cgit/rpms/python-rpm-macros.git/commit/macros.python-srpm?h=epel7 for its latest definition.
-
-    (currently "python3-*" -> "python36-*" for CentOS)
-
-    :param pkgs: list of RPM package names
-    :param os: the teuthology.orchestra.opsys.OS object
-    """
-    is_rhel = os.name in ['centos', 'rhel']
-    result = []
-    for pkg in pkgs:
-        if is_rhel:
-            if pkg.startswith('python3-') or pkg == 'python3':
-                pkg = pkg.replace('python3', 'python36', 1)
-        result.append(pkg)
-    return result
 
 def _zypper_addrepo(remote, repo_list):
     """
@@ -174,7 +150,6 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
         else:
             rpm += system_pkglist
     remote_os = remote.os
-    rpm = _package_overrides(rpm, remote_os)
 
     dist_release = remote_os.name
     log.debug("_update_package_list_and_install: config is {}".format(config))
