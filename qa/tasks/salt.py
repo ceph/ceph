@@ -61,7 +61,7 @@ class Salt(Task):
             'sudo', 'sh', '-c',
             'echo discovery: false >> /etc/salt/master'
         ])
-        for rem in self.remotes.iterkeys():
+        for rem in self.remotes.keys():
             rem.run(args=[
                 'sudo', 'sh', '-c',
                 'echo discovery: false >> /etc/salt/minion'
@@ -72,7 +72,7 @@ class Salt(Task):
         Generate minion key on salt master to be used to preseed this cluster's
         minions.
         '''
-        for rem in self.remotes.iterkeys():
+        for rem in self.remotes.keys():
             minion_id = rem.hostname
             log.info('Ensuring that minion ID {} has a keypair on the master'
                      .format(minion_id))
@@ -106,7 +106,7 @@ class Salt(Task):
         Preseed minions with generated and accepted keys; set minion id
         to the remote's hostname.
         '''
-        for rem in self.remotes.iterkeys():
+        for rem in self.remotes.keys():
             minion_id = rem.hostname
             src = 'salt/minion-keys/{}.pub'.format(minion_id)
             dest = '/etc/salt/pki/master/minions/{}'.format(minion_id)
@@ -166,7 +166,7 @@ class Salt(Task):
     def _set_minion_master(self):
         """Points all minions to the master"""
         master_id = self.sm.master_remote.hostname
-        for rem in self.remotes.iterkeys():
+        for rem in self.remotes.keys():
             # remove old master public key if present. Minion will refuse to
             # start if master name changed but old key is present
             delete_file(rem, '/etc/salt/pki/minion/minion_master.pub',
@@ -184,7 +184,7 @@ class Salt(Task):
 
     def _set_debug_log_level(self):
         """Sets log_level: debug for all salt daemons"""
-        for rem in self.remotes.iterkeys():
+        for rem in self.remotes.keys():
             rem.run(args=[
                 'sudo',
                 'sed', '--in-place', '--regexp-extended',

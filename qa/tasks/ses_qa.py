@@ -122,7 +122,7 @@ class Validation(SESQA):
 
     def begin(self):
         self.log.debug("Processing tests: ->{}<-".format(self.config.keys()))
-        for method_spec, kwargs in self.config.iteritems():
+        for method_spec, kwargs in self.config.items():
             kwargs = {} if not kwargs else kwargs
             if not isinstance(kwargs, dict):
                 raise ConfigError(self.err_prefix + "Method config must be a dict")

@@ -141,7 +141,7 @@ class SaltManager(object):
     def check_salt_daemons(self):
         self.master_remote.run(args=['sudo', 'salt-key', '-L'])
         systemctl_remote(self.master_remote, 'status', 'salt-master')
-        for _remote in self.ctx.cluster.remotes.iterkeys():
+        for _remote in self.ctx.cluster.remotes.keys():
             systemctl_remote(_remote, 'status', 'salt-minion')
             _remote.run(args='sudo cat /etc/salt/minion_id')
             _remote.run(args='sudo cat /etc/salt/minion.d/master.conf')
@@ -155,7 +155,7 @@ class SaltManager(object):
         systemctl_remote(self.ctx.cluster, "enable", "salt-minion")
 
     def gather_logfile(self, logfile):
-        for _remote in self.ctx.cluster.remotes.iterkeys():
+        for _remote in self.ctx.cluster.remotes.keys():
             try:
                 _remote.run(args=[
                     'sudo', 'test', '-f', '/var/log/{}'.format(logfile),
@@ -192,7 +192,7 @@ class SaltManager(object):
             if not archive:
                 archive = logdir
             logdir = '/var/log/{}'.format(logdir)
-        for _remote in self.ctx.cluster.remotes.iterkeys():
+        for _remote in self.ctx.cluster.remotes.keys():
             try:
                 _remote.run(args=[
                     'sudo', 'test', '-d', '{}/'.format(logdir),
