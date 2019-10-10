@@ -509,11 +509,7 @@ def create_simple_monmap(ctx, remote, conf, path=None,
         path
     ])
 
-    r = remote.run(
-        args=args,
-        stdout=StringIO()
-    )
-    monmap_output = r.stdout.getvalue()
+    monmap_output = remote.sh(args)
     fsid = re.search("generated fsid (.+)$",
                      monmap_output, re.MULTILINE).group(1)
     return fsid
@@ -598,11 +594,7 @@ def move_file(remote, from_path, to_path, sudo=False, preserve_perms=True):
             '\"%a\"',
             to_path
         ])
-        proc = remote.run(
-            args=args,
-            stdout=StringIO(),
-        )
-        perms = proc.stdout.getvalue().rstrip().strip('\"')
+        perms = remote.sh(args).rstrip().strip('\"')
 
     args = []
     if sudo:
@@ -613,10 +605,7 @@ def move_file(remote, from_path, to_path, sudo=False, preserve_perms=True):
         from_path,
         to_path,
     ])
-    proc = remote.run(
-        args=args,
-        stdout=StringIO(),
-    )
+    remote.sh(args)
 
     if preserve_perms:
         # reset the file back to the original permissions
@@ -628,10 +617,7 @@ def move_file(remote, from_path, to_path, sudo=False, preserve_perms=True):
             perms,
             to_path,
         ])
-        proc = remote.run(
-            args=args,
-            stdout=StringIO(),
-        )
+        remote.sh(args)
 
 
 def delete_file(remote, path, sudo=False, force=False, check=True):
@@ -649,11 +635,7 @@ def delete_file(remote, path, sudo=False, force=False, check=True):
         '--',
         path,
     ])
-    remote.run(
-        args=args,
-        stdout=StringIO(),
-        check_status=check
-    )
+    remote.sh(args, check_status=check)
 
 
 def remove_lines_from_file(remote, path, line_is_valid_test,
@@ -755,10 +737,7 @@ def create_file(remote, path, data="", permissions=str(644), sudo=False):
         '--',
         path
     ])
-    remote.run(
-        args=args,
-        stdout=StringIO(),
-    )
+    remote.sh(args)
     # now write out the data if any was passed in
     if "" != data:
         append_lines_to_file(remote, path, data, sudo)
@@ -830,15 +809,7 @@ def get_wwn_id_map(remote, devs):
     """
     stdout = None
     try:
-        r = remote.run(
-            args=[
-                'ls',
-                '-l',
-                '/dev/disk/by-id/wwn-*',
-            ],
-            stdout=StringIO(),
-        )
-        stdout = r.stdout.getvalue()
+        stdout = remote.sh('ls -l /dev/disk/by-id/wwn-*')
     except Exception:
         log.info('Failed to get wwn devices! Using /dev/sd* devices...')
         return dict((d, d) for d in devs)
@@ -875,11 +846,7 @@ def get_scratch_devices(remote):
         file_data = get_file(remote, "/scratch_devs")
         devs = file_data.split()
     except Exception:
-        r = remote.run(
-            args=['ls', run.Raw('/dev/[sv]d?')],
-            stdout=StringIO()
-        )
-        devs = r.stdout.getvalue().strip().split('\n')
+        devs = remote.sh('ls /dev/[sv]d?').strip().split('\n')
 
     # Remove root device (vm guests) from the disk list
     for dev in devs:
@@ -931,12 +898,7 @@ def wait_until_healthy(ctx, remote, ceph_cluster='ceph', use_sudo=False):
     args.extend(cmd)
     with safe_while(tries=(900 / 6), action="wait_until_healthy") as proceed:
         while proceed():
-            r = remote.run(
-                args=args,
-                stdout=StringIO(),
-                logger=log.getChild('health'),
-            )
-            out = r.stdout.getvalue()
+            out = remote.sh(args, logger=log.getChild('health'))
             log.debug('Ceph health: %s', out.rstrip('\n'))
             if out.split(None, 1)[0] == 'HEALTH_OK':
                 break
@@ -952,8 +914,8 @@ def wait_until_osds_up(ctx, cluster, remote, ceph_cluster='ceph'):
             daemons = ctx.daemons.iter_daemons_of_role('osd', ceph_cluster)
             for daemon in daemons:
                 daemon.check_status()
-            r = remote.run(
-                args=[
+            out = remote.sh(
+                [
                     'adjust-ulimits',
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
@@ -961,10 +923,8 @@ def wait_until_osds_up(ctx, cluster, remote, ceph_cluster='ceph'):
                     '--cluster', ceph_cluster,
                     'osd', 'dump', '--format=json'
                 ],
-                stdout=StringIO(),
                 logger=log.getChild('health'),
             )
-            out = r.stdout.getvalue()
             j = json.loads('\n'.join(out.split('\n')[1:]))
             up = len(filter(lambda o: 'up' in o['state'], j['osds']))
             log.debug('%d of %d OSDs are up' % (up, num_osds))
@@ -1260,17 +1220,10 @@ def get_system_type(remote, distro=False, version=False):
     If neither, return 'deb' or 'rpm' if distro is known to be one of those
     Finally, if unknown, return the unfiltered distro (from lsb_release -is)
     """
-    r = remote.run(
-        args=[
-            'sudo', 'lsb_release', '-is',
-        ],
-        stdout=StringIO(),
-    )
-    system_value = r.stdout.getvalue().strip()
+    system_value = remote.sh('sudo lsb_release -is').strip()
     log.debug("System to be installed: %s" % system_value)
     if version:
-        v = remote.run(args=['sudo', 'lsb_release', '-rs'], stdout=StringIO())
-        version = v.stdout.getvalue().strip()
+        version = remote.sh('sudo lsb_release -rs').strip()
     if distro and version:
         return system_value.lower(), version
     if distro:
