@@ -2912,8 +2912,21 @@ void Client::kick_requests_closed(MetaSession *session)
       if (req->got_unsafe) {
 	lderr(cct) << __func__ << " removing unsafe request " << req->get_tid() << dendl;
 	req->unsafe_item.remove_myself();
-	req->unsafe_dir_item.remove_myself();
-	req->unsafe_target_item.remove_myself();
+	if (is_dir_operation(req)) {
+	  Inode *dir = req->inode();
+	  assert(dir);
+	  dir->set_async_err(-EIO);
+	  lderr(cct) << "kick_requests_closed drop req of inode(dir) : "
+		     <<  dir->ino  << " " << req->get_tid() << dendl;
+	  req->unsafe_dir_item.remove_myself();
+	}
+	if (req->target) {
+	  InodeRef &in = req->target;
+	  in->set_async_err(-EIO);
+	  lderr(cct) << "kick_requests_closed drop req of inode : "
+		     <<  in->ino  << " " << req->get_tid() << dendl;
+	  req->unsafe_target_item.remove_myself();
+	}
 	signal_cond_list(req->waitfor_safe);
 	unregister_request(req);
       }
