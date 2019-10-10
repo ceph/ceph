@@ -3,6 +3,7 @@
 
 #include "gtest/gtest.h"
 #include "mon/ElectionLogic.h"
+#include "mon/ConnectionTracker.h"
 #include "common/dout.h"
 
 #include "global/global_context.h"
@@ -48,7 +49,7 @@ struct Election {
 
   vector< function<void()> > messages;
 
-  Election(int c, ElectionLogic::election_strategy es=ElectionLogic::CLASSIC);
+  Election(int c, ElectionLogic::election_strategy es=ElectionLogic::CLASSIC, double tracker_halflife=5);
   ~Election();
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
@@ -73,21 +74,23 @@ struct Election {
   void add_disallowed_leader(int disallowed) { disallowed_leaders.insert(disallowed); }
   const char* prefix_name() { return "Election:      "; }
 };
-struct Owner : public ElectionOwner {
+struct Owner : public ElectionOwner, RankProvider {
   Election *parent;
   int rank;
   epoch_t persisted_epoch;
   bool ever_joined;
+  ConnectionTracker peer_tracker;
   ElectionLogic logic;
   set<int> quorum;
   int victory_accepters;
   int timer_steps; // timesteps until we trigger timeout
   bool timer_election; // the timeout is for normal election, or victory
 
- Owner(int r, ElectionLogic::election_strategy es,
+ Owner(int r, ElectionLogic::election_strategy es, double tracker_halflife,
        Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
-    logic(this, g_ceph_context),
+    peer_tracker(this, tracker_halflife),
+    logic(this, &peer_tracker, g_ceph_context),
     victory_accepters(0),
     timer_steps(-1), timer_election(true) {
         logic.set_election_strategy(es);
@@ -208,10 +211,11 @@ struct Owner : public ElectionOwner {
   const char *prefix_name() { return "Owner:         "; }
 };
 
-Election::Election(int c, ElectionLogic::election_strategy es) : count(c), election_strategy(es)
+Election::Election(int c, ElectionLogic::election_strategy es,
+		   double tracker_halflife) : count(c), election_strategy(es)
 {
   for (int i = 0; i < count; ++i) {
-    electors[i] = new Owner(i, election_strategy, this);
+    electors[i] = new Owner(i, election_strategy, tracker_halflife, this);
   }
 }
 
