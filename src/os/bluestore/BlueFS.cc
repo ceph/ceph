@@ -368,10 +368,11 @@ uint64_t BlueFS::get_block_device_size(unsigned id)
   return 0;
 }
 
-void BlueFS::_add_block_extent(unsigned id, uint64_t offset, uint64_t length,
-                               bool skip)
+void BlueFS::_add_block_extent(bool create, unsigned id, uint64_t offset,
+			       uint64_t length, bool skip)
 {
   dout(1) << __func__ << " bdev " << id
+          << " create " << create
 	  << " 0x" << std::hex << offset << "~" << length << std::dec
 	  << " skip " << skip
 	  << dendl;
@@ -381,10 +382,14 @@ void BlueFS::_add_block_extent(unsigned id, uint64_t offset, uint64_t length,
   ceph_assert(bdev[id]->get_size() >= offset + length);
   block_all[id].insert(offset, length);
 
-  if (id < alloc.size() && alloc[id] && alloc[id] != shared_bdev_alloc) {
+  if (!create) {
+    ceph_assert(id < alloc.size());
+    ceph_assert(alloc[id]);
     if (!skip)
       log_t.op_alloc_add(id, offset, length);
-    alloc[id]->init_add_free(offset, length);
+    if (alloc[id] != shared_bdev_alloc) {
+      alloc[id]->init_add_free(offset, length);
+    }
   }
 
   dout(10) << __func__ << " done" << dendl;
@@ -406,8 +411,26 @@ uint64_t BlueFS::get_used()
   uint64_t used = 0;
   for (unsigned id = 0; id < MAX_BDEV; ++id) {
     if (alloc[id]) {
-      used += block_all[id].size() - alloc[id]->get_free();
+      if (alloc[id] != shared_bdev_alloc) {
+        used += block_all[id].size() - alloc[id]->get_free();
+      } else {
+        used += shared_bdev_used;
+      }
     }
+  }
+  return used;
+}
+
+uint64_t BlueFS::get_used(unsigned id)
+{
+  ceph_assert(id < alloc.size());
+  ceph_assert(alloc[id]);
+  std::lock_guard l(lock);
+  uint64_t used = 0;
+  if (alloc[id] != shared_bdev_alloc) {
+    used = block_all[id].size() - alloc[id]->get_free();
+  } else {
+    used += shared_bdev_used;
   }
   return used;
 }
@@ -673,7 +696,6 @@ int BlueFS::mount()
   }
 
   // init freelist
-  dout(1) << __func__ << " shared_bdev_used = " << shared_bdev_used << dendl;
   for (auto& p : file_map) {
     dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
