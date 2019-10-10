@@ -34,6 +34,7 @@ set(librbd_internal_srcs
   api/PoolMetadata.cc
   api/Snapshot.cc
   api/Trash.cc
+  cache/ImageCache.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/ParentCacheObjectDispatch.cc
