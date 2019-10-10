@@ -58,7 +58,7 @@ RepRequest::PGPipeline &RepRequest::pp(PG &pg)
 
 seastar::future<> RepRequest::start()
 {
-  logger().info("{} start", *this);
+  logger().debug("{} start", *this);
   IRef ref = this;
   return with_blocking_future(handle.enter(cp().await_map))
     .then([this]() {
