@@ -1281,18 +1281,16 @@ class CephFSShell(Cmd):
             max_bytes = '0'
             max_files = '0'
             try:
-                max_bytes = cephfs.getxattr(args.path,
-                                            'ceph.quota.max_bytes')
-                poutput('max_bytes: %s' % max_bytes)
+                max_bytes = cephfs.getxattr(args.path, 'ceph.quota.max_bytes')
+                poutput('max_bytes: {}'.format(max_bytes.decode('utf-8')))
             except libcephfs.Error:
                 perror('max_bytes is not set')
                 self.exit_code = 1
                 pass
 
             try:
-                max_files = cephfs.getxattr(args.path,
-                                            'ceph.quota.max_files')
-                poutput('max_files: %s' % max_files)
+                max_files = cephfs.getxattr(args.path, 'ceph.quota.max_files')
+                poutput('max_files: {}'.format(max_files.decode('utf-8')))
             except libcephfs.Error:
                 perror('max_files is not set')
                 self.exit_code = 1
