@@ -7175,6 +7175,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("time-delay in seconds for rbd-mirror asynchronous replication"),
 
+    Option("rbd_mirroring_max_mirroring_snapshots", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min(3)
+    .set_description("mirroring snapshots limit"),
+
     Option("rbd_default_format", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2)
     .set_description("default image format for new images"),
