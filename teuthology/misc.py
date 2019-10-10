@@ -325,9 +325,7 @@ def skeleton_config(ctx, roles, ips, cluster='ceph',
     Use conf.write to write it out, override .filename first if you want.
     """
     path = os.path.join(os.path.dirname(__file__), 'ceph.conf.template')
-    t = open(path, 'r')
-    skconf = t.read().format(testdir=get_testdir(ctx))
-    conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
+    conf = configobj.ConfigObj(path, file_error=True)
     mons = get_mons(roles=roles, ips=ips,
                     mon_bind_msgr2=mon_bind_msgr2,
                     mon_bind_addrvec=mon_bind_addrvec)
