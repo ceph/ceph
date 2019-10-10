@@ -388,6 +388,9 @@ int mirror_peer_ping(librados::IoCtx *ioctx,
 void mirror_peer_ping(librados::ObjectWriteOperation *op,
                       const std::string& site_name,
                       const std::string& fsid);
+void mirror_peer_list_start(librados::ObjectReadOperation *op);
+int mirror_peer_list_finish(bufferlist::const_iterator *it,
+                            std::vector<cls::rbd::MirrorPeer> *peers);
 int mirror_peer_list(librados::IoCtx *ioctx,
                      std::vector<cls::rbd::MirrorPeer> *peers);
 int mirror_peer_add(librados::IoCtx *ioctx,

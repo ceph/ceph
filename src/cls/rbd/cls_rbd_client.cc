@@ -1810,22 +1810,37 @@ int mirror_mode_set(librados::IoCtx *ioctx,
   return 0;
 }
 
+void mirror_peer_list_start(librados::ObjectReadOperation *op) {
+  bufferlist bl;
+  op->exec("rbd", "mirror_peer_list", bl);
+}
+
+int mirror_peer_list_finish(bufferlist::const_iterator *it,
+                            std::vector<cls::rbd::MirrorPeer> *peers) {
+  peers->clear();
+  try {
+    decode(*peers, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 int mirror_peer_list(librados::IoCtx *ioctx,
                      std::vector<cls::rbd::MirrorPeer> *peers) {
-  bufferlist in_bl;
+  librados::ObjectReadOperation op;
+  mirror_peer_list_start(&op);
+
   bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_list", in_bl,
-                      out_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
   if (r < 0) {
     return r;
   }
 
-  peers->clear();
-  try {
-    auto bl_it = out_bl.cbegin();
-    decode(*peers, bl_it);
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
+  auto it = out_bl.cbegin();
+  r = mirror_peer_list_finish(&it, peers);
+  if (r < 0) {
+    return r;
   }
   return 0;
 }
