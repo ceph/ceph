@@ -2342,7 +2342,7 @@ static int bucket_source_sync_status(RGWRados *store, const RGWZone& zone,
   out << indented{width, "source zone"} << source.id << " (" << source.name << ")\n";
 
   // syncing from this zone?
-  if (!zone.syncs_from(source.id)) {
+  if (!zone.syncs_from(source.name)) {
     out << indented{width} << "not in sync_from\n";
     return 0;
   }
