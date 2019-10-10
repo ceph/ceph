@@ -6,6 +6,13 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   add_library(amqp_mock STATIC ${amqp_mock_src})
 endif()
 
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  # kafka stub library
+  set(kafka_stub_src
+    kafka_stub.cc)
+  add_library(kafka_stub STATIC ${kafka_stub_src})
+endif()
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)

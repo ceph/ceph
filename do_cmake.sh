@@ -28,11 +28,13 @@ if [ -r /etc/os-release ]; then
       opensuse*|suse|sles)
           PYBUILD="3"
           ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+          ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
           ;;
   esac
 elif [ "$(uname)" == FreeBSD ] ; then
   PYBUILD="3"
   ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+  ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
 else
   echo Unknown release
   exit 1
