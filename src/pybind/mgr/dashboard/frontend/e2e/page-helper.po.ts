@@ -285,4 +285,8 @@ export abstract class PageHelper {
     // Waits for item to be removed from table
     return this.waitStaleness(this.getFirstTableCellWithText(name));
   }
+
+  getTableRows() {
+    return $$('datatable-row-wrapper');
+  }
 }
