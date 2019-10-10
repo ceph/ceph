@@ -807,6 +807,13 @@ Options
    When specified with bucket deletion and bypass-gc set to true,
    ignores bucket index consistency.
 
+.. option:: --max-concurrent-ios
+
+        Maximum concurrent ios for bucket operations. Affects operations that
+        scan the bucket index, e.g., listing, deletion, and all scan/search
+        operations such as finding orphans or checking the bucket index.
+        Default is 32.
+
 Quota Options
 =============
 
@@ -838,11 +845,6 @@ Orphans Search Options
 .. option:: --job-id
 
         Set the job id (for orphans find)
-
-.. option:: --max-concurrent-ios
-
-        Maximum concurrent ios for orphans find.
-        Default is 32.
 
 
 Orphans list-jobs options
