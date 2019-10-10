@@ -8373,6 +8373,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("client_reject_retry_delay", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(30.0)
+    .set_description(""),
+
     Option("client_max_inline_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(4_K)
     .set_description(""),

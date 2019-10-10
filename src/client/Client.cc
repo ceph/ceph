@@ -2047,6 +2047,7 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
       ldout(cct, 4) << __func__ << " mds." << mds << " old inst "
                        "rejected us, trying with new inst" << dendl;
       rejected_by_mds.erase(mds);
+      rejectmds_at.erase(mds);
     }
   }
 
@@ -2095,7 +2096,8 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
       if (!missing_features.empty()) {
 	lderr(cct) << "mds." << from << " lacks required features '"
 		   << missing_features << "', closing session " << dendl;
-	rejected_by_mds[session->mds_num] = session->addrs;
+        rejected_by_mds[session->mds_num] = session->addrs;
+        rejectmds_at[session->mds_num] = ceph_clock_now();
 	_close_mds_session(session);
 	_closed_mds_session(session);
 	break;
@@ -2161,6 +2163,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
       lderr(cct) << "mds." << from << " rejected us (" << error_str << ")" << dendl;
 
       rejected_by_mds[session->mds_num] = session->addrs;
+      rejectmds_at[session->mds_num] = ceph_clock_now();
       _closed_mds_session(session);
     }
     break;
@@ -6235,6 +6238,14 @@ void Client::tick()
       break;
     delayed_list.pop_front();
     check_caps(in, CHECK_CAPS_NODELAY);
+  }
+
+//auto reconnect after rejected by mds
+  for (map<mds_rank_t, utime_t>::iterator it_mds = rejectmds_at.begin(); it_mds != rejectmds_at.end(); ++it_mds) {
+    if (it_mds->second + cct->_conf->client_reject_retry_delay > now) {
+      rejected_by_mds.erase(it_mds->first);
+      rejectmds_at.erase(it_mds->first);
+    }
   }
 
   trim_cache(true);

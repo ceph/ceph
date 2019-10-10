@@ -1259,6 +1259,7 @@ private:
   // when we talk to another inst with the same rank we can
   // try again.
   std::map<mds_rank_t, entity_addrvec_t> rejected_by_mds;
+  std::map<mds_rank_t, utime_t> rejectmds_at;
 
   int local_osd = -ENXIO;
   epoch_t local_osd_epoch = 0;
