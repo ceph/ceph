@@ -279,7 +279,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     prefix = ("sudo ceph-objectstore-tool "
               "--data-path {fpath} "
               "--journal-path {jpath} ").format(fpath=FSPATH, jpath=JPATH)
-    for remote in osds.remotes.iterkeys():
+    for remote in osds.remotes.keys():
         log.debug(remote)
         log.debug(osds.remotes[remote])
         for role in osds.remotes[remote]:
@@ -319,7 +319,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
             GETNAME = os.path.join(DATADIR, "get")
             SETNAME = os.path.join(DATADIR, "set")
 
-            for remote in osds.remotes.iterkeys():
+            for remote in osds.remotes.keys():
                 for role in osds.remotes[remote]:
                     if string.find(role, "osd.") != 0:
                         continue
@@ -411,7 +411,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
         GETNAME = os.path.join(DATADIR, "get")
         SETNAME = os.path.join(DATADIR, "set")
 
-        for remote in osds.remotes.iterkeys():
+        for remote in osds.remotes.keys():
             for role in osds.remotes[remote]:
                 if string.find(role, "osd.") != 0:
                     continue
@@ -498,7 +498,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                             log.error(values)
 
     log.info("Test pg info")
-    for remote in osds.remotes.iterkeys():
+    for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
             if string.find(role, "osd.") != 0:
                 continue
@@ -523,7 +523,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                     ERRORS += 1
 
     log.info("Test pg logging")
-    for remote in osds.remotes.iterkeys():
+    for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
             if string.find(role, "osd.") != 0:
                 continue
@@ -555,7 +555,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
     log.info("Test pg export")
     EXP_ERRORS = 0
-    for remote in osds.remotes.iterkeys():
+    for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
             if string.find(role, "osd.") != 0:
                 continue
@@ -582,7 +582,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
     log.info("Test pg removal")
     RM_ERRORS = 0
-    for remote in osds.remotes.iterkeys():
+    for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
             if string.find(role, "osd.") != 0:
                 continue
@@ -608,7 +608,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     if EXP_ERRORS == 0 and RM_ERRORS == 0:
         log.info("Test pg import")
 
-        for remote in osds.remotes.iterkeys():
+        for remote in osds.remotes.keys():
             for role in osds.remotes[remote]:
                 if string.find(role, "osd.") != 0:
                     continue

@@ -106,7 +106,7 @@ def install_packages(ctx, config):
 
     packages = {}
     for (client, _) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         # use bindep to read which dependencies we need from keystone/bindep.txt
         run_in_tox_venv(ctx, remote, ['pip', 'install', 'bindep'])
         r = run_in_tox_venv(ctx, remote,
@@ -122,7 +122,7 @@ def install_packages(ctx, config):
         log.info('Removing packaged dependencies of Keystone...')
 
         for (client, _) in config.items():
-            (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+            (remote,) = ctx.cluster.only(client).remotes.keys()
             for dep in packages[client]:
                 remove_package(dep, remote)
 
@@ -204,7 +204,7 @@ def run_keystone(ctx, config):
     log.info('Configuring keystone...')
 
     for (client, _) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         cluster_name, _, client_id = teuthology.split_role(client)
 
         # start the public endpoint
