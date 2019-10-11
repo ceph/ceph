@@ -2,6 +2,8 @@
 
 from __future__ import absolute_import
 
+import time
+
 from .helper import DashboardTestCase
 
 
@@ -81,6 +83,7 @@ class UserTest(DashboardTestCase):
         # Restart dashboard module.
         self._unload_module('dashboard')
         self._load_module('dashboard')
+        time.sleep(10)
 
         self._get('/api/user/klara')
         self.assertStatus(200)
