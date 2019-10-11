@@ -1515,16 +1515,6 @@ Usage::
 	ceph status
 
 
-sync force
-----------
-
-Forces sync of and clear monitor store.
-
-Usage::
-
-	ceph sync force {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
-
-
 tell
 ----
 

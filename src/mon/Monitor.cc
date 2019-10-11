@@ -319,9 +319,10 @@ int Monitor::do_admin_command(
       err << "are you SURE? this will mean the monitor store will be erased "
 	"the next time the monitor is restarted.  pass "
 	"'--yes-i-really-mean-it' if you really do.";
+      r = -EPERM;
       goto abort;
     }
-    sync_force(f, out);
+    sync_force(f);
   } else if (command.compare(0, 23, "add_bootstrap_peer_hint") == 0 ||
 	     command.compare(0, 24, "add_bootstrap_peer_hintv") == 0) {
     if (!_add_bootstrap_peer_hint(command, cmdmap, out))
@@ -827,11 +828,12 @@ int Monitor::preinit()
   r = admin_socket->register_command("quorum_status",
 				     admin_hook, "show current quorum status");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("sync_force name=validate,"
-				     "type=CephChoices,"
-			             "strings=--yes-i-really-mean-it",
-				     admin_hook,
-				     "force sync of and clear monitor store");
+  r = admin_socket->register_command(
+    "sync_force "
+    //"name=yes_i_really_mean_it,type=CephBool,req=false",
+    "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
+    admin_hook,
+    "force sync of and clear monitor store");
   ceph_assert(r == 0);
   r = admin_socket->register_command("add_bootstrap_peer_hint name=addr,"
 				     "type=CephIPAddr",
@@ -2487,16 +2489,8 @@ void Monitor::get_combined_feature_map(FeatureMap *fm)
   }
 }
 
-void Monitor::sync_force(Formatter *f, ostream& ss)
+void Monitor::sync_force(Formatter *f)
 {
-  bool free_formatter = false;
-
-  if (!f) {
-    // louzy/lazy hack: default to json if no formatter has been defined
-    f = new JSONFormatter();
-    free_formatter = true;
-  }
-
   auto tx(std::make_shared<MonitorDBStore::Transaction>());
   sync_stash_critical_state(tx);
   tx->put("mon_sync", "force_sync", 1);
@@ -2506,9 +2500,6 @@ void Monitor::sync_force(Formatter *f, ostream& ss)
   f->dump_int("ret", 0);
   f->dump_stream("msg") << "forcing store sync the next time the monitor starts";
   f->close_section(); // sync_force
-  f->flush(ss);
-  if (free_formatter)
-    delete f;
 }
 
 void Monitor::_quorum_status(Formatter *f, ostream& ss)
@@ -3373,11 +3364,9 @@ void Monitor::handle_command(MonOpRequestRef op)
       /* Let the Monitor class handle the following commands:
        *  'mon compact'
        *  'mon scrub'
-       *  'mon sync force'
        */
       prefix != "mon compact" &&
       prefix != "mon scrub" &&
-      prefix != "mon sync force" &&
       prefix != "mon metadata" &&
       prefix != "mon versions" &&
       prefix != "mon count-metadata" &&
@@ -3744,23 +3733,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     r = 0;
     rs = "safe to remove mon." + id;
-  } else if (prefix == "sync force" ||
-             prefix == "mon sync force") {
-    bool validate1 = false;
-    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", validate1);
-    bool validate2 = false;
-    cmd_getval(g_ceph_context, cmdmap, "i_know_what_i_am_doing", validate2);
-
-    if (!validate1 || !validate2) {
-      r = -EINVAL;
-      rs = "are you SURE? this will mean the monitor store will be "
-	   "erased.  pass '--yes-i-really-mean-it "
-	   "--i-know-what-i-am-doing' if you really do.";
-      goto out;
-    }
-    sync_force(f.get(), ds);
-    rs = ds.str();
-    r = 0;
   } else if (prefix == "heap") {
     if (!ceph_using_tcmalloc())
       rs = "tcmalloc not enabled, can't use heap profiler commands\n";
