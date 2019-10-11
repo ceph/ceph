@@ -587,7 +587,7 @@ struct cmd_def {
   int opt{OPT_NO_CMD};
 };
 
-std::vector<cmd_def> all_cmds = {
+static std::vector<cmd_def> all_cmds = {
   { "user create", OPT_USER_CREATE },
   { "user info", OPT_USER_INFO },
   { "user modify", OPT_USER_MODIFY },
@@ -768,6 +768,38 @@ std::vector<cmd_def> all_cmds = {
   { "pubsub sub pull", OPT_PUBSUB_SUB_PULL },
   { "pubsub event rm", OPT_PUBSUB_EVENT_RM },
 };
+
+static set<string> cmd_aliases[] = {
+  { "delete", "del", "rm", "remove"},
+  { "rename", "mv" },
+};
+
+static map<string, string> cmd_alias_map;
+
+static void init_cmd_alias_map()
+{
+  for (auto& alias_set : cmd_aliases) {
+    std::optional<string> first;
+
+    for (auto& alias : alias_set) {
+      if (!first) {
+        first = alias;
+      } else {
+        cmd_alias_map[alias] = *first;
+      }
+    }
+  }
+}
+
+string cmd_normalize_alias(const string& s)
+{
+  auto iter = cmd_alias_map.find(s);
+  if (iter == cmd_alias_map.end()) {
+    return s;
+  }
+
+  return iter->second;
+}
 
 
 BIIndexType get_bi_index_type(const string& type_str) {
@@ -2402,7 +2434,6 @@ int main(int argc, const char **argv)
   uint32_t perm_mask = 0;
   RGWUserInfo info;
   int opt_cmd = OPT_NO_CMD;
-  bool need_more;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   bool set_perm = false;
@@ -2528,16 +2559,19 @@ int main(int argc, const char **argv)
 
   cmd_node cmd_root;
 
+  init_cmd_alias_map();
+
   for (auto& cmd : all_cmds) {
     vector<string> words;
     get_str_vec(cmd.cmd, " ", words);
 
     auto node = &cmd_root;
     for (auto& word : words) {
+      auto norm = cmd_normalize_alias(word);
       auto parent = node;
-      node = &node->next[word];
+      node = &node->next[norm];
 
-      if (word == "[*]") { /* optional param at the end */
+      if (norm == "[*]") { /* optional param at the end */
         parent->next["*"] = *node; /* can be also looked up by '*' */
         parent->opt = cmd.opt;
       }
@@ -2914,7 +2948,8 @@ int main(int argc, const char **argv)
     std::optional<int> found_opt;
 
     for (auto& arg : args) {
-      auto iter = node->next.find(arg);
+      string norm = cmd_normalize_alias(arg);
+      auto iter = node->next.find(norm);
       if (iter == node->next.end()) {
         iter = node->next.find("*");
         if (iter == node->next.end()) {
