@@ -124,10 +124,13 @@ class TestRun(object):
     @patch("__builtin__.open")
     @patch("sys.exit")
     def test_report_outcome(self, m_sys_exit, m_open, m_email_results, m_try_push_job_info, m_safe_dump, m_nuke, m_get_status):
-        config = {"nuke-on-error": True, "email-on-error": True}
         m_get_status.return_value = "fail"
         fake_ctx = Mock()
         summary = {"failure_reason": "reasons"}
+        summary_dump = "failure_reason: reasons\n"
+        config = {"nuke-on-error": True, "email-on-error": True}
+        config_dump = "nuke-on-error: true\nemail-on-error: true\n"
+        m_safe_dump.side_effect = [None, summary_dump, config_dump]
         run.report_outcome(config, "the/archive/path", summary, fake_ctx)
         assert m_nuke.called
         m_try_push_job_info.assert_called_with(config, summary)
