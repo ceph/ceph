@@ -10532,7 +10532,7 @@ int BlueStore::_open_super_meta()
       derr << __func__ << " unable to read nid_max" << dendl;
       return -EIO;
     }
-    dout(10) << __func__ << " old nid_max " << nid_max << dendl;
+    dout(1) << __func__ << " old nid_max " << nid_max << dendl;
     nid_last = nid_max.load();
   }
 
@@ -10550,7 +10550,7 @@ int BlueStore::_open_super_meta()
       derr << __func__ << " unable to read blobid_max" << dendl;
       return -EIO;
     }
-    dout(10) << __func__ << " old blobid_max " << blobid_max << dendl;
+    dout(1) << __func__ << " old blobid_max " << blobid_max << dendl;
     blobid_last = blobid_max.load();
   }
 
@@ -10560,7 +10560,7 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "freelist_type", &bl);
     if (bl.length()) {
       freelist_type = std::string(bl.c_str(), bl.length());
-      dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
+      dout(1) << __func__ << " freelist_type " << freelist_type << dendl;
     } else {
       ceph_abort_msg("Not Support extent freelist manager");
     }
@@ -10598,7 +10598,7 @@ int BlueStore::_open_super_meta()
 	}
       }
     }
-    dout(10) << __func__ << " ondisk_format " << ondisk_format
+    dout(1) << __func__ << " ondisk_format " << ondisk_format
 	     << " compat_ondisk_format " << compat_ondisk_format
 	     << dendl;
   }
@@ -10624,7 +10624,7 @@ int BlueStore::_open_super_meta()
       derr << __func__ << " unable to read min_alloc_size" << dendl;
       return -EIO;
     }
-    dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
+    dout(1) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	     << std::dec << dendl;
   }
   _open_statfs();
