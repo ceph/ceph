@@ -53,6 +53,10 @@ const char *parse_good[] = {
   "allow service foo_foo r, allow service bar r",
   "allow service foo-foo r, allow service bar r",
   "allow service \" foo \" w, allow service bar r",
+  "allow module foo x",
+  "allow module=foo x",
+  "allow module foo_foo r",
+  "allow module \" foo \" w",
   "allow command abc with arg=foo arg2=bar, allow service foo r",
   "allow command abc.def with arg=foo arg2=bar, allow service foo r",
   "allow command \"foo bar\" with arg=\"baz\"",
@@ -105,6 +109,8 @@ const char *parse_identity[] = {
   "allow service foo_foo r, allow service bar r",
   "allow service foo-foo r, allow service bar r",
   "allow service \" foo \" w, allow service bar r",
+  "allow module foo x",
+  "allow module \" foo_foo \" r",
   "allow command abc with arg=foo arg2=bar, allow service foo r",
   0
 };
@@ -193,8 +199,8 @@ TEST(MgrCap, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", nullptr));
   ASSERT_TRUE(cap.is_allow_all());
-  ASSERT_TRUE(cap.is_capable(nullptr, {}, "foo", "asdf", {}, true, true, true,
-                             {}));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "foo", "", "asdf", {}, true, true,
+                             true, {}));
 
   MgrCap cap2;
   ASSERT_FALSE(cap2.is_allow_all());
@@ -212,12 +218,12 @@ TEST(MgrCap, Network) {
   b.parse("192.168.2.3");
   c.parse("192.167.2.3");
 
-  ASSERT_TRUE(cap.is_capable(nullptr, {}, "foo", "asdf", {}, true, true, true,
-                             a));
-  ASSERT_TRUE(cap.is_capable(nullptr, {}, "foo", "asdf", {}, true, true, true,
-			     b));
-  ASSERT_FALSE(cap.is_capable(nullptr, {}, "foo", "asdf", {}, true, true, true,
-			     c));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "foo", "", "asdf", {}, true, true,
+                             true, a));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "foo", "", "asdf", {}, true, true,
+                             true, b));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "foo", "", "asdf", {}, true, true,
+                              true, c));
 }
 
 TEST(MgrCap, CommandRegEx) {
@@ -228,12 +234,27 @@ TEST(MgrCap, CommandRegEx) {
 
   EntityName name;
   name.from_str("osd.123");
-  ASSERT_TRUE(cap.is_capable(nullptr, name, "", "abc", {{"arg", "12345abcde"}},
-                             true, true, true, {}));
-  ASSERT_FALSE(cap.is_capable(nullptr, name, "", "abc", {{"arg", "~!@#$"}},
+  ASSERT_TRUE(cap.is_capable(nullptr, name, "", "", "abc",
+                             {{"arg", "12345abcde"}}, true, true, true, {}));
+  ASSERT_FALSE(cap.is_capable(nullptr, name, "", "", "abc", {{"arg", "~!@#$"}},
                               true, true, true, {}));
 
   ASSERT_TRUE(cap.parse("allow command abc with arg regex \"[*\"", nullptr));
-  ASSERT_FALSE(cap.is_capable(nullptr, name, "", "abc", {{"arg", ""}}, true,
+  ASSERT_FALSE(cap.is_capable(nullptr, name, "", "", "abc", {{"arg", ""}}, true,
                               true, true, {}));
+}
+
+TEST(MgrCap, Module) {
+  MgrCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("allow module abc r, allow module bcd w", nullptr));
+
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "abc", "", {}, true, true, false,
+                              {}));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "abc", "", {}, true, false, false,
+                             {}));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "bcd", "", {}, true, true, false,
+                              {}));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "bcd", "", {}, false, true, false,
+                             {}));
 }
