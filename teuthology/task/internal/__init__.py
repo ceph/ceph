@@ -140,7 +140,7 @@ def add_remotes(ctx, config):
         return
     remotes = []
     machs = []
-    for name in ctx.config['targets'].iterkeys():
+    for name in ctx.config['targets'].keys():
         machs.append(name)
     for t, key in ctx.config['targets'].items():
         t = misc.canonicalize_hostname(t)
@@ -167,7 +167,7 @@ def connect(ctx, config):
     Connect to all remotes in ctx.cluster
     """
     log.info('Opening connections...')
-    for rem in ctx.cluster.remotes.iterkeys():
+    for rem in ctx.cluster.remotes.keys():
         log.debug('connecting to %s', rem.name)
         rem.connect()
 
@@ -357,7 +357,7 @@ def archive(ctx, config):
             logdir = os.path.join(ctx.archive, 'remote')
             if (not os.path.exists(logdir)):
                 os.mkdir(logdir)
-            for rem in ctx.cluster.remotes.iterkeys():
+            for rem in ctx.cluster.remotes.keys():
                 path = os.path.join(logdir, rem.shortname)
                 misc.pull_directory(rem, archive_dir, path)
                 # Check for coredumps and pull binaries
@@ -442,7 +442,7 @@ def coredump(ctx, config):
 
         # set status = 'fail' if the dir is still there = coredumps were
         # seen
-        for rem in ctx.cluster.remotes.iterkeys():
+        for rem in ctx.cluster.remotes.keys():
             r = rem.run(
                 args=[
                     'if', 'test', '!', '-e', '{adir}/coredump'.format(adir=archive_dir), run.Raw(';'), 'then',

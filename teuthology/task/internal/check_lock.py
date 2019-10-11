@@ -16,7 +16,7 @@ def check_lock(ctx, config, check_up=True):
         log.info('Lock checking disabled.')
         return
     log.info('Checking locks...')
-    for machine in ctx.config['targets'].iterkeys():
+    for machine in ctx.config['targets'].keys():
         status = teuthology.lock.query.get_status(machine)
         log.debug('machine status is %s', repr(status))
         assert status is not None, \

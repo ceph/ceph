@@ -63,7 +63,7 @@ def install(ctx, config):
     else:
         raise RuntimeError("Unsupported RH Ceph version %s", version)
     with parallel() as p:
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             if remote.os.name == 'rhel':
                 log.info("Installing on RHEL node: %s", remote.shortname)
                 p.spawn(install_pkgs, ctx, remote, version, downstream_config)
@@ -79,7 +79,7 @@ def install(ctx, config):
             log.info("Skipping uninstall of Ceph")
         else:
             with parallel() as p:
-                for remote in ctx.cluster.remotes.iterkeys():
+                for remote in ctx.cluster.remotes.keys():
                     p.spawn(uninstall_pkgs, ctx, remote, downstream_config)
 
 

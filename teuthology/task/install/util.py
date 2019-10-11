@@ -75,7 +75,7 @@ def ship_utilities(ctx, config):
                 ) as f:
             fn = os.path.join(testdir, 'valgrind.supp')
             filenames.append(fn)
-            for rem in ctx.cluster.remotes.iterkeys():
+            for rem in ctx.cluster.remotes.keys():
                 teuthology.sudo_write_file(
                     remote=rem,
                     path=fn,
@@ -93,7 +93,7 @@ def ship_utilities(ctx, config):
         dst = os.path.join(destdir, filename)
         filenames.append(dst)
         with open(src, 'rb') as f:
-            for rem in ctx.cluster.remotes.iterkeys():
+            for rem in ctx.cluster.remotes.keys():
                 teuthology.sudo_write_file(
                     remote=rem,
                     path=dst,

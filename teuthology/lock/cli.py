@@ -41,7 +41,7 @@ def main(ctx):
                 g = yaml.safe_load_all(f)
                 for new in g:
                     if 'targets' in new:
-                        for t in new['targets'].iterkeys():
+                        for t in new['targets'].keys():
                             machines.append(t)
         except IOError as e:
             raise argparse.ArgumentTypeError(str(e))
@@ -284,6 +284,6 @@ def updatekeys(args):
         with open(targets) as f:
             docs = yaml.safe_load_all(f)
             for doc in docs:
-                machines = [n for n in doc.get('targets', dict()).iterkeys()]
+                machines = [n for n in doc.get('targets', dict()).keys()]
 
     return keys.do_update_keys(machines, all_)[0]

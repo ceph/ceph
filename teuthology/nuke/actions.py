@@ -176,7 +176,7 @@ def reboot(ctx, remotes):
 def reset_syslog_dir(ctx):
     log.info('Resetting syslog output locations...')
     nodes = {}
-    for remote in ctx.cluster.remotes.iterkeys():
+    for remote in ctx.cluster.remotes.keys():
         proc = remote.run(
             args=[
                 'if', 'test', '-e', '/etc/rsyslog.d/80-cephtest.conf',
@@ -199,7 +199,7 @@ def reset_syslog_dir(ctx):
 
 
 def dpkg_configure(ctx):
-    for remote in ctx.cluster.remotes.iterkeys():
+    for remote in ctx.cluster.remotes.keys():
         if remote.os.package_type != 'deb':
             continue
         log.info(
@@ -221,7 +221,7 @@ def dpkg_configure(ctx):
 def remove_yum_timedhosts(ctx):
     # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1233329
     log.info("Removing yum timedhosts files...")
-    for remote in ctx.cluster.remotes.iterkeys():
+    for remote in ctx.cluster.remotes.keys():
         if remote.os.package_type != 'rpm':
             continue
         remote.run(
@@ -247,7 +247,7 @@ def remove_ceph_packages(ctx):
                                'ceph-deploy', 'libapache2-mod-fastcgi'
                                ]
     pkgs = str.join(' ', ceph_packages_to_remove)
-    for remote in ctx.cluster.remotes.iterkeys():
+    for remote in ctx.cluster.remotes.keys():
         if remote.os.package_type == 'rpm':
             log.info("Remove any broken repos")
             remote.run(
@@ -381,7 +381,7 @@ def undo_multipath(ctx):
     come back unless specifically requested by the test.
     """
     log.info('Removing any multipath config/pkgs...')
-    for remote in ctx.cluster.remotes.iterkeys():
+    for remote in ctx.cluster.remotes.keys():
         remote.run(
             args=[
                 'sudo', 'multipath', '-F',

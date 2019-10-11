@@ -43,7 +43,7 @@ def syslog(ctx, config):
     ]
     conf_fp = StringIO('\n'.join(conf_lines))
     try:
-        for rem in ctx.cluster.remotes.iterkeys():
+        for rem in ctx.cluster.remotes.keys():
             log_context = 'system_u:object_r:var_log_t:s0'
             for log_path in (kern_log, misc_log):
                 rem.run(args=['install', '-m', '666', '/dev/null', log_path])
@@ -93,7 +93,7 @@ def syslog(ctx, config):
         # flush the file fully. oh well.
 
         log.info('Checking logs for errors...')
-        for rem in ctx.cluster.remotes.iterkeys():
+        for rem in ctx.cluster.remotes.keys():
             log.debug('Checking %s', rem.name)
             r = rem.run(
                 args=[

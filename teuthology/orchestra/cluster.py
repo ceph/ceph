@@ -60,7 +60,7 @@ class Cluster(object):
 
         Returns a list of `RemoteProcess`.
         """
-        remotes = sorted(self.remotes.iterkeys(), key=lambda rem: rem.name)
+        remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
         return [remote.run(**kwargs) for remote in remotes]
 
     def write_file(self, file_name, content, sudo=False, perms=None, owner=None):
@@ -72,7 +72,7 @@ class Cluster(object):
         :param sudo: use sudo
         :param perms: file permissions (passed to chmod) ONLY if sudo is True
         """
-        remotes = sorted(self.remotes.iterkeys(), key=lambda rem: rem.name)
+        remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
         for remote in remotes:
             if sudo:
                 teuthology.misc.sudo_write_file(remote, file_name, content, perms=perms, owner=owner)

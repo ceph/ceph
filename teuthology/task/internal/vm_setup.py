@@ -21,7 +21,7 @@ def vm_setup(ctx, config):
     ansible_hosts = set()
     with parallel():
         editinfo = os.path.join(os.path.dirname(__file__), 'edit_sudoers.sh')
-        for rem in ctx.cluster.remotes.iterkeys():
+        for rem in ctx.cluster.remotes.keys():
             if rem.is_vm:
                 ansible_hosts.add(rem.shortname)
                 r = rem.run(args=['test', '-e', '/ceph-qa-ready'],

@@ -37,7 +37,7 @@ def setup_additional_repo(ctx, config):
     """
     if ctx.config.get('redhat').get('set-add-repo', None):
         add_repo = ctx.config.get('redhat').get('set-add-repo')
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             if remote.os.package_type == 'rpm':
                 remote.run(args=['sudo', 'wget', '-O', '/etc/yum.repos.d/rh_add.repo',
                                  add_repo])
@@ -69,7 +69,7 @@ def setup_base_repo(ctx, config):
             yield
         finally:
             log.info("Cleaning up repo's")
-            for remote in ctx.cluster.remotes.iterkeys():
+            for remote in ctx.cluster.remotes.keys():
                 if remote.os.package_type == 'rpm':
                     remote.run(args=['sudo', 'rm',
                                      run.Raw('/etc/yum.repos.d/rh*.repo'),
@@ -81,7 +81,7 @@ def _setup_latest_repo(ctx, config):
     Setup repo based on redhat nodes
     """
     with parallel():
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             if remote.os.package_type == 'rpm':
                 remote.run(args=['sudo', 'subscription-manager', 'repos',
                                  run.Raw('--disable=*ceph*')])

@@ -7,7 +7,7 @@ class TestLocking(object):
         os_type = ctx.config.get("os_type")
         if os_type is None:
             pytest.skip('os_type was not defined')
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             assert remote.os.name == os_type
 
     def test_correct_os_version(self, ctx, config):
@@ -16,10 +16,10 @@ class TestLocking(object):
             pytest.skip('os_version was not defined')
         if ctx.config.get("os_type") == "debian":
             pytest.skip('known issue with debian versions; see: issue #10878')
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             assert remote.inventory_info['os_version'] == os_version
 
     def test_correct_machine_type(self, ctx, config):
         machine_type = ctx.machine_type
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             assert remote.machine_type in machine_type

@@ -27,7 +27,7 @@ def parallel_test(ctx, config):
         log.info('Executing command on all hosts concurrently with role "%s"' % role)
         cluster = ctx.cluster.only(role)
         nodes = {}
-        for remote in cluster.remotes.iterkeys():
+        for remote in cluster.remotes.keys():
             """Call run for each remote host, but use 'wait=False' to have it return immediately."""
             proc = remote.run(args=['sleep', '5', run.Raw(';'), 'date', run.Raw(';'), 'hostname'], wait=False,)
             nodes[remote.name] = proc
