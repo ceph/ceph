@@ -5691,7 +5691,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("The maximum number of metadata items that can be put via single request"),
 
     Option("rgw_override_bucket_index_max_shards", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(0)
+    .set_default(11)
     .set_description(""),
 
     Option("rgw_bucket_index_max_aio", Option::TYPE_UINT, Option::LEVEL_ADVANCED)

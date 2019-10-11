@@ -560,7 +560,7 @@ struct RGWZone {
   bool sync_from_all;
   set<std::string> sync_from; /* list of zones to sync from */
 
-  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0),
+  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(11),
               sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
