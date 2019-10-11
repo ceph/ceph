@@ -5,6 +5,7 @@ overrides:
         ms inject socket failures: 1000
         mon mgr beacon grace: 90
         mon client hunt interval max multiple: 2
+        mon client directed command retry: 5
       mgr:
         debug monc: 10
     log-whitelist:
