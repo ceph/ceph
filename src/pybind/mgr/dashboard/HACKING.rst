@@ -836,7 +836,7 @@ parameter.
 For ``POST`` and ``PUT`` methods, all method parameters are considered
 body parameters by default. To override this default, one can use the
 ``path_params`` and ``query_params`` to specify which method parameters are
-path and query parameters respectivelly.
+path and query parameters respectively.
 Body parameters are decoded from the request body, either from a form format, or
 from a dictionary in JSON format.
 
@@ -1667,9 +1667,11 @@ API endpoints.However, by default it is not very detailed. There are two
 decorators that can be used to add more information:
 
 * ``@EndpointDoc()`` for documentation of endpoints. It has four optional arguments
-  (explained below): ``description``, ``group``, ``parameters`` and``responses``.
+  (explained below): ``description``, ``group``, ``parameters`` and
+  ``responses``.
 * ``@ControllerDoc()`` for documentation of controller or group associated with
-  the endpoints. It only takes the two first arguments: ``description`` and``group``.
+  the endpoints. It only takes the two first arguments: ``description`` and
+  ``group``.
 
 
 ``description``: A a string with a short (1-2 sentences) description of the object.
