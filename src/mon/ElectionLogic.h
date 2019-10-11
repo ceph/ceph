@@ -149,6 +149,10 @@ class ElectionLogic {
    */
   epoch_t epoch = 0;
   /**
+   * The last rank which won an election we participated in
+   */
+  int last_election_winner = -1;
+  /**
    * Indicates who we have acked
    */
   int leader_acked;
@@ -189,6 +193,7 @@ public:
 
   ElectionLogic(ElectionOwner *e, ConnectionTracker *t,
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
+				  last_election_winner(-1),
 				  leader_acked(-1),
 				  strategy(CLASSIC),
 				  participating(true),
@@ -305,8 +310,8 @@ public:
    * @returns Our current epoch number
    */
   epoch_t get_epoch() const { return epoch; }
-  int get_acked_leader() { return leader_acked; }
-  
+  int get_election_winner() { return last_election_winner; }
+
 private:
   /**
    * Initiate the ElectionLogic class.
