@@ -431,10 +431,6 @@ class OpenStack(object):
         log.debug("sorted flavors = " + str(sorted_flavors))
         return sorted_flavors
 
-    def __flavor(self, hint, arch, select):
-        flavors = self.get_sorted_flavors(arch, select)
-        return self.__flavor(self, hint, flavors)
-
     def __flavor(self, hint, flavors):
         """
         Return the smallest flavor that satisfies the desired size.
@@ -448,10 +444,6 @@ class OpenStack(object):
         raise NoFlavorException("openstack flavor list: " + str(flavors) +
                                 " does not contain a flavor in which" +
                                 " the desired " + str(hint) + " can fit")
-
-    def __flavor_range(self, min, good, arch, select):
-        flavors = self.get_sorted_flavors(arch, select)
-        return self.__flavor_range(self, min, good, flavors)
 
     def __flavor_range(self, min, good, flavors):
         """
