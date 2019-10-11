@@ -262,11 +262,13 @@ enum {
   l_rgw_keystone_token_cache_hit,
   l_rgw_keystone_token_cache_miss,
 
+  l_rgw_gc_retire,
+
   l_rgw_last,
 };
 
 
- /* size should be the required string size + 1 */
+/* size should be the required string size + 1 */
 int gen_rand_base64(CephContext *cct, char *dest, int size);
 void gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
 void gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size);
