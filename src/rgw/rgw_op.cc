@@ -5285,6 +5285,9 @@ void RGWCopyObj::execute()
 	   this,
 	   s->yield);
 
+  if(-ERR_PRECONDITION_FAILED == op_ret) {
+    s->err.message = "At least one of the pre-conditions you specified did not hold";
+  }
   const auto ret = rgw::notify::publish(s, s->object, s->obj_size, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;

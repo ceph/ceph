@@ -4112,6 +4112,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   ret = read_op.prepare(y);
   if (ret < 0) {
+    if (ret == -ERR_NOT_MODIFIED) {
+      return -ERR_PRECONDITION_FAILED;
+    }
     return ret;
   }
   if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
