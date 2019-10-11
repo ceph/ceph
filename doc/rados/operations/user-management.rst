@@ -149,7 +149,7 @@ Capability syntax follows the form::
 
 	mgr 'allow {access-spec} [network {network/prefix}]'
 
-	mgr 'profile {name} [network {network/prefix}]'
+	mgr 'profile {name} [{key1} {match-type} {value1} ...] [network {network/prefix}]'
 
   Manager capabilities can also be specified for specific commands,
   all commands exported by a built-in manager service, or all commands
@@ -159,7 +159,7 @@ Capability syntax follows the form::
 
         mgr 'allow service {service-name} {access-spec} [network {network/prefix}]'
 
-        mgr 'allow module {module-name} {access-spec} [network {network/prefix}]'
+        mgr 'allow module {module-name} [with {key1} {match-type} {value1} ...] {access-spec} [network {network/prefix}]'
 
   The ``{access-spec}`` syntax is as follows: ::
 
