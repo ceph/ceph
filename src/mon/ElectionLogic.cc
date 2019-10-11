@@ -154,6 +154,7 @@ void ElectionLogic::end_election_period()
 void ElectionLogic::declare_victory()
 {
   ldout(cct, 5) << "I win! acked_me=" << acked_me << dendl;
+  last_election_winner = elector->get_my_rank();
   leader_acked = -1;
   electing_me = false;
 
@@ -312,6 +313,7 @@ bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
 {
   ceph_assert(victory_makes_sense(from));
 
+  last_election_winner = from;
   leader_acked = -1;
 
   // i should have seen this election if i'm getting the victory.
