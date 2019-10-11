@@ -389,7 +389,10 @@ class Module(MgrModule):
                         'pgp_num': pool['pg_placement_num'],
                         'size': pool['size'],
                         'min_size': pool['min_size'],
-                        'crush_rule': pool['crush_rule']
+                        'crush_rule': pool['crush_rule'],
+                        'pg_autoscale_mode': pool['pg_autoscale_mode'],
+                        'target_max_bytes': pool['target_max_bytes'],
+                        'target_max_objects': pool['target_max_objects'],
                     }
                 )
 
