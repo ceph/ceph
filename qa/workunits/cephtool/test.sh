@@ -1169,8 +1169,10 @@ function test_mon_mon()
   ceph mon dump
   ceph mon getmap -o $TEMP_DIR/monmap.$$
   [ -s $TEMP_DIR/monmap.$$ ]
+
   # ceph mon tell
-  ceph mon_status
+  first=$(ceph mon dump -f json | jq -r '.mons[0].name')
+  ceph tell mon.$first mon_status
 
   # test mon features
   ceph mon feature ls
