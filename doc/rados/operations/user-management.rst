@@ -144,6 +144,35 @@ Capability syntax follows the form::
   the use of this capability is restricted to clients connecting from
   this network.
 
+- **Manager Caps:** Manager (``ceph-mgr``) capabilities include
+  ``r``, ``w``, ``x`` access settings or ``profile {name}``. For example: ::
+
+	mgr 'allow {access-spec} [network {network/prefix}]'
+
+	mgr 'profile {name} [network {network/prefix}]'
+
+  Manager capabilities can also be specified for specific commands,
+  all commands exported by a built-in manager service, or all commands
+  exported by a specific add-on module. For example: ::
+
+        mgr 'allow command "{command-prefix}" [with {key1} {match-type} {value1} ...] [network {network/prefix}]'
+
+        mgr 'allow service {service-name} {access-spec} [network {network/prefix}]'
+
+        mgr 'allow module {module-name} {access-spec} [network {network/prefix}]'
+
+  The ``{access-spec}`` syntax is as follows: ::
+
+        * | all | [r][w][x]
+
+  The ``{service-name}`` is one of the following: ::
+
+        mgr | osd | pg | py
+
+  The ``{match-type}`` is one of the following: ::
+
+        = | prefix | regex
+
 - **Metadata Server Caps:** For administrators, use ``allow *``.  For all
   other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
 

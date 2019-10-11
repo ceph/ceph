@@ -700,7 +700,7 @@ bool DaemonServer::_allowed_command(
   bool capable = s->caps.is_capable(
     g_ceph_context,
     s->entity_name,
-    module, prefix, param_str_map,
+    module, "", prefix, param_str_map,
     cmd_r, cmd_w, cmd_x,
     s->get_peer_addr());
 
