@@ -412,6 +412,7 @@ public:
 private:
   struct Node {
     map<string, Node> next;
+    set<string> expected; /* separate un-normalized list */
     std::any opt;
   };
 
@@ -438,6 +439,13 @@ private:
         }
       }
     }
+  }
+
+  bool gen_next_expected(Node *node, vector<string> *expected, bool ret) {
+    for (auto& next_cmd : node->expected) {
+      expected->push_back(next_cmd);
+    }
+    return ret;
   }
 
   Node root;
@@ -469,6 +477,9 @@ public:
       for (auto& word : words) {
         auto norm = normalize_alias(word);
         auto parent = node;
+
+        node->expected.insert(word);
+
         node = &node->next[norm];
 
         if (norm == "[*]") { /* optional param at the end */
@@ -485,7 +496,8 @@ public:
   bool find_command(Container& args,
                     std::any *opt_cmd,
                     vector<string> *extra_args,
-                    string *error) {
+                    string *error,
+                    vector<string> *expected) {
     auto node = &cmd_root;
 
     std::optional<std::any> found_opt;
@@ -496,8 +508,8 @@ public:
       if (iter == node->next.end()) {
         iter = node->next.find("*");
         if (iter == node->next.end()) {
-          *error = string("unrecognized arg ") + arg;
-          return false;
+          *error = string("ERROR: Unrecognized argument: '") + arg + "'";
+          return gen_next_expected(node, expected, false);
         }
         extra_args->push_back(arg);
         if (!found_opt) {
@@ -510,8 +522,8 @@ public:
     *opt_cmd = found_opt.value_or(node->opt);
 
     if (!opt_cmd->has_value()) {
-      *error ="no command";
-      return false;
+      *error ="ERROR: Unknown command";
+      return gen_next_expected(node, expected, false);
     }
 
     return true;
@@ -3028,11 +3040,21 @@ int main(int argc, const char **argv)
   }
   else {
     std::vector<string> extra_args;
+    std::vector<string> expected;
 
     std::any _opt_cmd;
 
-    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err)) {
-      cerr << err << std::endl;
+    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err, &expected)) {
+      if (!expected.empty()) {
+        cerr << err << std::endl;
+        cerr << "Expected one of the following:" << std::endl;
+        for (auto& exp : expected) {
+          if (exp == "*" || exp == "[*]") {
+            continue;
+          }
+          cerr << "  " << exp << std::endl;
+        }
+      }
       exit(1);
     }
 
