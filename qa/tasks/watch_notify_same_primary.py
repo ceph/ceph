@@ -44,7 +44,7 @@ def task(ctx, config):
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(role).remotes.keys()
     manager = ctx.managers['ceph']
     manager.raw_cluster_cmd('osd', 'set', 'noout')
 
