@@ -516,25 +516,22 @@ public:
 
   bool get_obj(rgw_bucket_dir_entry *obj) {
     if (obj_iter == objs.end()) {
-      delay();
-      return false;
-    }
-    if (is_truncated && (obj_iter + 1)==objs.end()) {
-      list_op.params.marker = obj_iter->key;
-
-      int ret = fetch();
-      if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: list_op returned ret=" << ret << dendl;
-        return ret;
-      } 
-      obj_iter = objs.begin();
-      if (obj_iter == objs.end()) {
+      if (!is_truncated) {
+        delay();
         return false;
+      } else {
+        list_op.params.marker = pre_obj.key;
+
+        int ret = fetch();
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: list_op returned ret=" << ret << dendl;
+          return ret;
+        }
       }
       delay();
     }
     *obj = *obj_iter;
-    return true;
+    return obj_iter != objs.end();
   }
 
   rgw_bucket_dir_entry get_prev_obj() {
