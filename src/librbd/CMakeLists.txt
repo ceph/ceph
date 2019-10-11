@@ -147,6 +147,11 @@ if(WITH_EVENTTRACE)
   list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
 endif()
 
+if(WITH_RBD_RWL)
+  set(librbd_internal_srcs
+    ${librbd_internal_srcs}
+    cache/ReplicatedWriteLog.cc)
+endif()
 
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
@@ -164,6 +169,12 @@ endif()
 target_link_libraries(rbd_internal PRIVATE
   ceph_immutable_object_cache_lib
   osdc)
+
+if(WITH_RBD_RWL)
+  target_link_libraries(rbd_internal PRIVATE
+    pmem::pmemobj
+    pmem::pmem)
+endif()
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)

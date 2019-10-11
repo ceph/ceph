@@ -16,6 +16,10 @@ namespace librbd {
 struct ImageCtx;
 namespace cache {
 
+enum ImageCacheType {
+  IMAGE_CACHE_TYPE_RWL = 1,
+};
+
 template <typename ImageCtxT = ImageCtx>
 class ImageCacheState {
 protected:
