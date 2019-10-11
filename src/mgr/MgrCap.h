@@ -63,26 +63,30 @@ struct MgrCapGrant {
    *  - a service allow ('allow service mds rw')
    *    - this will match against a specific service and the r/w/x flags.
    *
-   *  - a module allow ('allow module rbd_support rw')
+   *  - a module allow ('allow module rbd_support rw, allow module rbd_support with pool=rbd rw')
    *    - this will match against a specific python add-on module and the r/w/x
    *      flags.
    *
-   *  - a profile ('profile read-only')
+   *  - a profile ('profile read-only, profile rbd pool=rbd')
    *    - this will match against specific MGR-enforced semantics of what
    *      this type of user should need to do.  examples include 'read-write',
    *      'read-only', 'crash'.
    *
    *  - a command ('allow command foo', 'allow command bar with arg1=val1 arg2 prefix val2')
-   *      this includes the command name (the prefix string), and a set
-   *      of key/value pairs that constrain use of that command.  if no pairs
-   *      are specified, any arguments are allowed; if a pair is specified, that
-   *      argument must be present and equal or match a prefix.
+   *      this includes the command name (the prefix string)
+   *
+   *  The command, module, and profile caps can also accept an optional
+   *  key/value map. If not provided, all command arguments and module
+   *  meta-arguments are allowed. If a key/value pair is specified, that
+   *  argument must be present and must match the provided constraint.
    */
+  typedef std::map<std::string, MgrCapGrantConstraint> Arguments;
+
   std::string service;
   std::string module;
   std::string profile;
   std::string command;
-  std::map<std::string, MgrCapGrantConstraint> command_args;
+  Arguments arguments;
 
   // restrict by network
   std::string network;
@@ -107,12 +111,15 @@ struct MgrCapGrant {
               std::string&& module,
               std::string&& profile,
               std::string&& command,
-              std::map<std::string, MgrCapGrantConstraint>&& command_args,
+              Arguments&& arguments,
               mgr_rwxa_t allow)
     : service(std::move(service)), module(std::move(module)),
       profile(std::move(profile)), command(std::move(command)),
-      command_args(std::move(command_args)), allow(allow) {
+      arguments(std::move(arguments)), allow(allow) {
   }
+
+  bool validate_arguments(
+      const std::map<std::string, std::string>& arguments) const;
 
   /**
    * check if given request parameters match our constraints
@@ -122,7 +129,7 @@ struct MgrCapGrant {
    * @param service service (if any)
    * @param module module (if any)
    * @param command command (if any)
-   * @param command_args command args (if any)
+   * @param arguments profile/module/command args (if any)
    * @return bits we allow
    */
   mgr_rwxa_t get_allowed(
@@ -131,7 +138,7 @@ struct MgrCapGrant {
       const std::string& service,
       const std::string& module,
       const std::string& command,
-      const std::map<std::string, std::string>& command_args) const;
+      const std::map<std::string, std::string>& arguments) const;
 
   bool is_allow_all() const {
     return (allow == MGR_CAP_ANY &&
@@ -168,7 +175,7 @@ struct MgrCap {
    * @param service service name
    * @param module module name
    * @param command command id
-   * @param command_args
+   * @param arguments
    * @param op_may_read whether the operation may need to read
    * @param op_may_write whether the operation may need to write
    * @param op_may_exec whether the operation may exec
@@ -179,7 +186,7 @@ struct MgrCap {
 		  const std::string& service,
 		  const std::string& module,
 		  const std::string& command,
-		  const std::map<std::string, std::string>& command_args,
+		  const std::map<std::string, std::string>& arguments,
 		  bool op_may_read, bool op_may_write, bool op_may_exec,
 		  const entity_addr_t& addr) const;
 
