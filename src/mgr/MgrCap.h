@@ -63,6 +63,10 @@ struct MgrCapGrant {
    *  - a service allow ('allow service mds rw')
    *    - this will match against a specific service and the r/w/x flags.
    *
+   *  - a module allow ('allow module rbd_support rw')
+   *    - this will match against a specific python add-on module and the r/w/x
+   *      flags.
+   *
    *  - a profile ('profile read-only')
    *    - this will match against specific MGR-enforced semantics of what
    *      this type of user should need to do.  examples include 'read-write',
@@ -75,6 +79,7 @@ struct MgrCapGrant {
    *      argument must be present and equal or match a prefix.
    */
   std::string service;
+  std::string module;
   std::string profile;
   std::string command;
   std::map<std::string, MgrCapGrantConstraint> command_args;
@@ -99,13 +104,14 @@ struct MgrCapGrant {
 
   MgrCapGrant() : allow(0) {}
   MgrCapGrant(std::string&& service,
+              std::string&& module,
               std::string&& profile,
               std::string&& command,
               std::map<std::string, MgrCapGrantConstraint>&& command_args,
               mgr_rwxa_t allow)
-    : service(std::move(service)), profile(std::move(profile)),
-      command(std::move(command)), command_args(std::move(command_args)),
-      allow(allow) {
+    : service(std::move(service)), module(std::move(module)),
+      profile(std::move(profile)), command(std::move(command)),
+      command_args(std::move(command_args)), allow(allow) {
   }
 
   /**
@@ -114,6 +120,7 @@ struct MgrCapGrant {
    * @param cct context
    * @param name entity name
    * @param service service (if any)
+   * @param module module (if any)
    * @param command command (if any)
    * @param command_args command args (if any)
    * @return bits we allow
@@ -122,12 +129,14 @@ struct MgrCapGrant {
       CephContext *cct,
       EntityName name,
       const std::string& service,
+      const std::string& module,
       const std::string& command,
       const std::map<std::string, std::string>& command_args) const;
 
   bool is_allow_all() const {
     return (allow == MGR_CAP_ANY &&
             service.empty() &&
+            module.empty() &&
             profile.empty() &&
             command.empty());
   }
@@ -157,6 +166,7 @@ struct MgrCap {
    * what the capability has specified.
    *
    * @param service service name
+   * @param module module name
    * @param command command id
    * @param command_args
    * @param op_may_read whether the operation may need to read
@@ -167,6 +177,7 @@ struct MgrCap {
   bool is_capable(CephContext *cct,
 		  EntityName name,
 		  const std::string& service,
+		  const std::string& module,
 		  const std::string& command,
 		  const std::map<std::string, std::string>& command_args,
 		  bool op_may_read, bool op_may_write, bool op_may_exec,

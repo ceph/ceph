@@ -82,6 +82,8 @@ ostream& operator<<(ostream& out, const MgrCapGrant& m) {
     out << "allow";
     if (!m.service.empty()) {
       out << " service " << maybe_quote_string(m.service);
+    } else if (!m.module.empty()) {
+      out << " module " << maybe_quote_string(m.module);
     } else if (!m.command.empty()) {
       out << " command " << maybe_quote_string(m.command);
       if (!m.command_args.empty()) {
@@ -110,6 +112,7 @@ typedef std::map<std::string, MgrCapGrantConstraint> kvmap;
 
 BOOST_FUSION_ADAPT_STRUCT(MgrCapGrant,
                           (std::string, service)
+                          (std::string, module)
                           (std::string, profile)
                           (std::string, command)
                           (kvmap, command_args)
@@ -135,38 +138,45 @@ void MgrCapGrant::expand_profile() const {
 
   if (profile == "read-only") {
     // grants READ-ONLY caps MGR-wide
-    profile_grants.push_back({{}, {}, {}, {}, mgr_rwxa_t{MGR_CAP_R}});
+    profile_grants.push_back({{}, {}, {}, {}, {}, mgr_rwxa_t{MGR_CAP_R}});
     return;
   }
 
   if (profile == "read-write") {
     // grants READ-WRITE caps MGR-wide
-    profile_grants.push_back({{}, {}, {}, {},
+    profile_grants.push_back({{}, {}, {}, {}, {},
                               mgr_rwxa_t{MGR_CAP_R | MGR_CAP_W}});
     return;
   }
 
   if (profile == "crash") {
-    profile_grants.push_back({{}, {}, "crash post", {}, {}});
+    profile_grants.push_back({{}, {}, {}, "crash post", {}, {}});
     return;
   }
 }
 
 mgr_rwxa_t MgrCapGrant::get_allowed(
     CephContext *cct, EntityName name, const std::string& s,
-    const std::string& c,
+    const std::string& m, const std::string& c,
     const std::map<std::string, std::string>& c_args) const {
   if (!profile.empty()) {
     expand_profile();
     mgr_rwxa_t a;
     for (auto& grant : profile_grants) {
-      a = a | grant.get_allowed(cct, name, s, c, c_args);
+      a = a | grant.get_allowed(cct, name, s, m, c, c_args);
     }
     return a;
   }
 
   if (!service.empty()) {
     if (service != s) {
+      return mgr_rwxa_t{};
+    }
+    return allow;
+  }
+
+  if (!module.empty()) {
+    if (module != m) {
       return mgr_rwxa_t{};
     }
     return allow;
@@ -238,7 +248,7 @@ bool MgrCap::is_allow_all() const {
 
 void MgrCap::set_allow_all() {
   grants.clear();
-  grants.push_back({{}, {}, {}, {}, mgr_rwxa_t{MGR_CAP_ANY}});
+  grants.push_back({{}, {}, {}, {}, {}, mgr_rwxa_t{MGR_CAP_ANY}});
   text = "allow *";
 }
 
@@ -246,12 +256,14 @@ bool MgrCap::is_capable(
     CephContext *cct,
     EntityName name,
     const std::string& service,
+    const std::string& module,
     const std::string& command,
     const std::map<std::string, std::string>& command_args,
     bool op_may_read, bool op_may_write, bool op_may_exec,
     const entity_addr_t& addr) const {
   if (cct) {
     ldout(cct, 20) << "is_capable service=" << service << " "
+                   << "module=" << module << " "
                    << "command=" << command
                    << (op_may_read ? " read":"")
                    << (op_may_write ? " write":"")
@@ -283,7 +295,7 @@ bool MgrCap::is_capable(
     }
 
     // check enumerated caps
-    allow = allow | grant.get_allowed(cct, name, service, command,
+    allow = allow | grant.get_allowed(cct, name, service, module, command,
                                       command_args);
     if ((!op_may_read || (allow & MGR_CAP_R)) &&
         (!op_may_write || (allow & MGR_CAP_W)) &&
@@ -376,7 +388,9 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
 
     // command := command[=]cmd [k1=v1 k2=v2 ...]
     command_match = -spaces >> lit("allow") >> spaces >> lit("command") >> (lit('=') | spaces)
-                            >> qi::attr(std::string()) >> qi::attr(std::string())
+                            >> qi::attr(std::string())
+                            >> qi::attr(std::string())
+                            >> qi::attr(std::string())
                             >> str
                             >> -(spaces >> lit("with") >> spaces >> kv_map)
                             >> qi::attr(0)
@@ -384,14 +398,28 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
 
     // service foo rwxa
     service_match %= -spaces >> lit("allow") >> spaces >> lit("service") >> (lit('=') | spaces)
-                             >> str >> qi::attr(std::string()) >> qi::attr(std::string())
+                             >> str
+                             >> qi::attr(std::string())
+                             >> qi::attr(std::string())
+                             >> qi::attr(std::string())
                              >> qi::attr(map<std::string, MgrCapGrantConstraint>())
                              >> spaces >> rwxa
                              >> -(spaces >> lit("network") >> spaces >> network_str);
 
+    // module foo rwxa
+    module_match %= -spaces >> lit("allow") >> spaces >> lit("module") >> (lit('=') | spaces)
+                            >> qi::attr(std::string())
+                            >> str
+                            >> qi::attr(std::string())
+                            >> qi::attr(std::string())
+                            >> qi::attr(map<std::string, MgrCapGrantConstraint>())
+                            >> spaces >> rwxa
+                            >> -(spaces >> lit("network") >> spaces >> network_str);
+
     // profile foo
     profile_match %= -spaces >> -(lit("allow") >> spaces)
                              >> lit("profile") >> (lit('=') | spaces)
+                             >> qi::attr(std::string())
                              >> qi::attr(std::string())
                              >> str
                              >> qi::attr(std::string())
@@ -401,7 +429,10 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
 
     // rwxa
     rwxa_match %= -spaces >> lit("allow") >> spaces
-                          >> qi::attr(std::string()) >> qi::attr(std::string()) >> qi::attr(std::string())
+                          >> qi::attr(std::string())
+                          >> qi::attr(std::string())
+                          >> qi::attr(std::string())
+                          >> qi::attr(std::string())
                           >> qi::attr(std::map<std::string,MgrCapGrantConstraint>())
                           >> rwxa
                           >> -(spaces >> lit("network") >> spaces >> network_str);
@@ -418,7 +449,8 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
         );
 
     // grant := allow ...
-    grant = -spaces >> (rwxa_match | profile_match | service_match | command_match) >> -spaces;
+    grant = -spaces >> (rwxa_match | profile_match | service_match |
+                        module_match | command_match) >> -spaces;
 
     // mgrcap := grant [grant ...]
     grants %= (grant % (*lit(' ') >> (lit(';') | lit(',')) >> *lit(' ')));
@@ -438,6 +470,7 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
   qi::rule<Iterator, MgrCapGrant()> rwxa_match;
   qi::rule<Iterator, MgrCapGrant()> command_match;
   qi::rule<Iterator, MgrCapGrant()> service_match;
+  qi::rule<Iterator, MgrCapGrant()> module_match;
   qi::rule<Iterator, MgrCapGrant()> profile_match;
   qi::rule<Iterator, MgrCapGrant()> grant;
   qi::rule<Iterator, std::vector<MgrCapGrant>()> grants;
