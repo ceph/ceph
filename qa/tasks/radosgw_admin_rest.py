@@ -43,7 +43,7 @@ def rgwadmin(ctx, client, cmd):
         '--format', 'json',
         ]
     pre.extend(cmd)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(client).remotes.keys()
     proc = remote.run(
         args=pre,
         check_status=False,
@@ -207,7 +207,7 @@ def task(ctx, config):
     logging.error(err)
     assert not err
 
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(client).remotes.keys()
     remote_host = remote.name.split('@')[1]
     admin_conn = boto.s3.connection.S3Connection(
         aws_access_key_id=admin_access_key,
@@ -693,4 +693,3 @@ def task(ctx, config):
     # TESTCASE 'rm-user3','user','info','deleted user','fails'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
     assert ret == 404
-

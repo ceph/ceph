@@ -46,7 +46,7 @@ def _run_one_client(ctx, config, role):
     krbd = config.get('krbd', False)
     nbd = config.get('nbd', False)
     testdir = teuthology.get_testdir(ctx)
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(role).remotes.keys()
 
     args = []
     if krbd or nbd:

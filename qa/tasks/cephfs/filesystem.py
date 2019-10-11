@@ -143,7 +143,7 @@ class CephCluster(object):
     @property
     def admin_remote(self):
         first_mon = misc.get_first_mon(self._ctx, None)
-        (result,) = self._ctx.cluster.only(first_mon).remotes.iterkeys()
+        (result,) = self._ctx.cluster.only(first_mon).remotes.keys()
         return result
 
     def __init__(self, ctx):

@@ -137,6 +137,6 @@ def task(ctx, config):
                           'grep', 'ceph'])
     # wait for HEALTH_OK
     mon = get_first_mon(ctx, config)
-    (mon_remote,) = ctx.cluster.only(mon).remotes.iterkeys()
+    (mon_remote,) = ctx.cluster.only(mon).remotes.keys()
     wait_until_healthy(ctx, mon_remote, use_sudo=True)
     yield

@@ -171,7 +171,7 @@ def run_radosbench(ctx, config, f, num_osds, size, replica, rep):
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
 
         proc = remote.run(
             args=[
@@ -217,5 +217,5 @@ def run_radosbench(ctx, config, f, num_osds, size, replica, rep):
 
 def wait_until_healthy(ctx, config):
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
     teuthology.wait_until_healthy(ctx, mon_remote)

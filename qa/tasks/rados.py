@@ -242,7 +242,7 @@ def task(ctx, config):
                         manager.raw_cluster_cmd(
                             'osd', 'pool', 'set', pool, 'min_size', str(min_size))
 
-                (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+                (remote,) = ctx.cluster.only(role).remotes.keys()
                 proc = remote.run(
                     args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args +
                     ["--pool", pool],

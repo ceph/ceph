@@ -102,7 +102,7 @@ def task(ctx, config):
 
     # Create scratch dirs for any non-all workunits
     log.info('Making a separate scratch dir for every client...')
-    for role in clients.iterkeys():
+    for role in clients.keys():
         assert isinstance(role, basestring)
         if role == "all":
             continue

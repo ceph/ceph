@@ -98,7 +98,7 @@ def create_users(ctx, config):
     try:
         yield
     finally:
-        for client in config['clients']:
+        for client in config.keys():
             for user in users.itervalues():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -130,7 +130,7 @@ def configure(ctx, config):
         testswift_conf = config['testswift_conf'][client]
         if properties is not None and 'rgw_server' in properties:
             host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
+            for target, roles in zip(ctx.config['targets'].keys(), ctx.config['roles']):
                 log.info('roles: ' + str(roles))
                 log.info('target: ' + str(target))
                 if properties['rgw_server'] in roles:

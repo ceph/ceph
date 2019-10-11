@@ -48,7 +48,7 @@ def task(ctx, config):
     log.info('Beginning recovery bench...')
 
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -113,7 +113,7 @@ class RecoveryBencher:
         io_size = self.config.get("io_size", 4096)
 
         osd = str(random.choice(self.osds))
-        (osd_remote,) = self.ceph_manager.ctx.cluster.only('osd.%s' % osd).remotes.iterkeys()
+        (osd_remote,) = self.ceph_manager.ctx.cluster.only('osd.%s' % osd).remotes.keys()
 
         testdir = teuthology.get_testdir(self.ceph_manager.ctx)
 

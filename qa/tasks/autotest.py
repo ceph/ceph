@@ -42,17 +42,17 @@ def task(ctx, config):
     log.info('Setting up autotest...')
     testdir = teuthology.get_testdir(ctx)
     with parallel() as p:
-        for role in config.iterkeys():
+        for role in config.keys():
             (remote,) = ctx.cluster.only(role).remotes.keys()
             p.spawn(_download, testdir, remote)
 
     log.info('Making a separate scratch dir for every client...')
-    for role in config.iterkeys():
+    for role in config.keys():
         assert isinstance(role, basestring)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
         remote.run(

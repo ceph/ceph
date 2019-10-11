@@ -171,7 +171,7 @@ def configure(ctx, config):
         s3tests_conf = config['s3tests_conf'][client]
         if properties is not None and 'rgw_server' in properties:
             host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
+            for target, roles in zip(ctx.config['targets'].keys(), ctx.config['roles']):
                 log.info('roles: ' + str(roles))
                 log.info('target: ' + str(target))
                 if properties['rgw_server'] in roles:
@@ -309,7 +309,7 @@ def task(ctx, config):
 
     overrides = ctx.config.get('overrides', {})
     # merge each client section, not the top level.
-    for client in config.iterkeys():
+    for client in config.keys():
         if not config[client]:
             config[client] = {}
         teuthology.deep_merge(config[client], overrides.get('s3readwrite', {}))

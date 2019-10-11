@@ -256,7 +256,7 @@ class MDSThrasher(Greenlet):
     def kill_mds(self, mds):
         if self.config.get('powercycle'):
             (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
-                         remotes.iterkeys())
+                         remotes.keys())
             self.log('kill_mds on mds.{m} doing powercycle of {s}'.
                      format(m=mds, s=remote.name))
             self._assert_ipmi(remote)
@@ -277,7 +277,7 @@ class MDSThrasher(Greenlet):
         """
         if self.config.get('powercycle'):
             (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
-                         remotes.iterkeys())
+                         remotes.keys())
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.
                      format(m=mds, s=remote.name))
             self._assert_ipmi(remote)
@@ -506,7 +506,7 @@ def task(ctx, config):
     log.info('mds thrasher using random seed: {seed}'.format(seed=seed))
     random.seed(seed)
 
-    (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.iterkeys()
+    (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.keys()
     manager = ceph_manager.CephManager(
         first, ctx=ctx, logger=log.getChild('ceph_manager'),
     )
