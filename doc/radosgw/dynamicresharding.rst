@@ -144,3 +144,75 @@ Manual immediate bucket resharding
 ::
 
    # radosgw-admin bucket reshard --bucket <bucket_name> --num-shards <new number of shards>
+
+
+Troubleshooting
+===============
+
+Clusters prior to Luminous 12.2.11 and Mimic 13.2.5 left behind stale bucket
+instance entries, which were not automatically cleaned up. The issue also affected
+LifeCycle policies, which were not applied to resharded buckets anymore. Both of
+these issues can be worked around using a couple of radosgw-admin commands.
+
+Stale instance management
+-------------------------
+
+List the stale instances in a cluster that are ready to be cleaned up.
+
+::
+
+   # radosgw-admin reshard stale-instances list
+
+Clean up the stale instances in a cluster. Note: cleanup of these
+instances should only be done on a single site cluster.
+
+::
+
+   # radosgw-admin reshard stale-instances rm
+
+
+Lifecycle fixes
+---------------
+
+For clusters that had resharded instances, it is highly likely that the old
+lifecycle processes would have flagged and deleted lifecycle processing as the
+bucket instance changed during a reshard. While this is fixed for newer clusters
+(from Mimic 13.2.6 and Luminous 12.2.12), older buckets that had lifecycle policies and
+that have undergone resharding will have to be manually fixed.
+
+The command to do so is:
+
+::
+
+   # radosgw-admin lc reshard fix --bucket {bucketname}
+
+
+As a convenience wrapper, if the ``--bucket`` argument is dropped then this
+command will try and fix lifecycle policies for all the buckets in the cluster.
+
+Object Expirer fixes
+--------------------
+
+Objects subject to Swift object expiration on older clusters may have
+been dropped from the log pool and never deleted after the bucket was
+resharded. This would happen if their expiration time was before the
+cluster was upgraded, but if their expiration was after the upgrade
+the objects would be correctly handled. To manage these expire-stale
+objects, radosgw-admin provides two subcommands.
+
+Listing:
+
+::
+
+   # radosgw-admin objects expire-stale list --bucket {bucketname}
+
+Displays a list of object names and expiration times in JSON format.
+
+Deleting:
+
+::
+
+   # radosgw-admin objects expire-stale rm --bucket {bucketname}
+
+
+Initiates deletion of such objects, displaying a list of object names, expiration times, and deletion status in JSON format.

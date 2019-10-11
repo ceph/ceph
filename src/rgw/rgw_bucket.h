@@ -187,13 +187,16 @@ extern int rgw_link_bucket(RGWRados* store,
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
-extern int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key);
+extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
 extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max);
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker);
+extern int rgw_object_get_attr(RGWRados* store, const RGWBucketInfo& bucket_info,
+                               const rgw_obj& obj, const char* attr_name,
+                               bufferlist& out_bl);
 
 extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix);
 
@@ -312,6 +315,8 @@ public:
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy);
 
   void clear_failure() { failure = false; }
+
+  const RGWBucketInfo& get_bucket_info() const { return bucket_info; }
 };
 
 class RGWBucketAdminOp
@@ -344,6 +349,8 @@ public:
 
   static int clear_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher);
+  static int fix_obj_expiry(RGWRados *store, RGWBucketAdminOpState& op_state,
+			    RGWFormatterFlusher& flusher, bool dry_run = false);
 };
 
 
