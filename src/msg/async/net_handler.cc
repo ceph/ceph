@@ -67,6 +67,14 @@ int NetHandler::set_nonblock(int sd)
   int flags;
   int r = 0;
 
+  #ifdef _WIN32
+  ULONG mode = 1;
+  r = ioctlsocket(sd, FIONBIO, &mode);
+  if (r) {
+    lderr(cct) << __func__ << " ioctlsocket(FIONBIO) failed: " << r << dendl;
+    return -r;
+  }
+  #else
   /* Set the socket nonblocking.
    * Note that fcntl(2) for F_GETFL and F_SETFL can't be
    * interrupted by a signal. */
@@ -80,6 +88,7 @@ int NetHandler::set_nonblock(int sd)
     lderr(cct) << __func__ << " fcntl(F_SETFL,O_NONBLOCK): " << cpp_strerror(r) << dendl;
     return -r;
   }
+  #endif
 
   return 0;
 }
