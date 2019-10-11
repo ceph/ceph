@@ -89,7 +89,7 @@ def run_vault(ctx, config):
     assert isinstance(config, dict)
 
     for (client, cconf) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         cluster_name, _, client_id = teuthology.split_role(client)
 
         _, port = ctx.vault.endpoints[client]
@@ -210,7 +210,7 @@ def task(ctx, config):
 
     overrides = ctx.config.get('overrides', {})
     # merge each client section, not the top level.
-    for client in config.iterkeys():
+    for client in config.keys():
         if not config[client]:
             config[client] = {}
         teuthology.deep_merge(config[client], overrides.get('vault', {}))
