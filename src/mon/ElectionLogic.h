@@ -191,11 +191,11 @@ public:
    */
   std::set<int> acked_me;
 
-  ElectionLogic(ElectionOwner *e, ConnectionTracker *t,
+  ElectionLogic(ElectionOwner *e, election_strategy es, ConnectionTracker *t,
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
 				  last_election_winner(-1),
 				  leader_acked(-1),
-				  strategy(CLASSIC),
+				  strategy(es),
 				  participating(true),
 				  electing_me(false) {}
   /**
