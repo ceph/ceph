@@ -1028,12 +1028,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         and a few other values are substituted.
         """
         path = tempfile.mktemp()
-        # if self.user_data.startswith('/'):
-        #     user_data = self.user_data
-        # else:
-        #     user_data = os.path.join(os.path.dirname(__file__),
-        #                              '../..', self.user_data)
-        # template = open(user_data).read()
+
         with open(os.path.dirname(__file__) + '/bootstrap-teuthology.sh', 'rb') as f:
             b64_bootstrap = base64.b64encode(f.read())
             bootstrap_content = str(b64_bootstrap.decode())
@@ -1058,10 +1053,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                 openrc_sh += 'export %s=%s\n' % (var, value)
         b64_openrc_sh = base64.b64encode(openrc_sh.encode())
         openrc_sh_content = str(b64_openrc_sh.decode())
-        # if self.args.upload:
-        #     upload = '--archive-upload ' + self.args.archive_upload
-        # else:
-        #     upload = ''
+
         network = OpenStack().get_network()
         ceph_workbench = ''
         if self.args.ceph_workbench_git_url:
@@ -1069,7 +1061,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                                self.args.ceph_workbench_branch)
             ceph_workbench += (" --ceph-workbench-git-url " +
                                self.args.ceph_workbench_git_url)
-        # canonical_tags = "--no-canonical-tags" if self.args.no_canonical_tags else ""
+
         setup_options = [
             '--keypair %s' % self.key_pair(),
             '--selfname %s' % self.args.name,
