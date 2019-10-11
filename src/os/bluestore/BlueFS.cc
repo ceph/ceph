@@ -652,12 +652,12 @@ void BlueFS::_stop_alloc()
 
   for (auto p : alloc) {
     if (p != nullptr && p != shared_bdev_alloc) {
-      p->shutdown();
-      delete p;
     }
   }
   for (size_t i = 0; i < alloc.size(); ++i) {
-    if (alloc[i] != shared_bdev_alloc) {
+    if (alloc[i] && alloc[i] != shared_bdev_alloc) {
+      alloc[i]->shutdown();
+      delete alloc[i];
       alloc[i] = nullptr;
     }
   }
