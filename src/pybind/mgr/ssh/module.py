@@ -546,16 +546,24 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             })
             self.log.debug('config %s' % config)
 
+            ret, crash_keyring, err = self.mon_command({
+                'prefix': 'auth get-or-create',
+                'entity': 'client.crash.%s' % host,
+                'caps': ['mon', 'allow profile crash',
+                         'mgr', 'allow profile crash'],
+            })
+
             j = json.dumps({
                 'config': config,
                 'keyring': keyring,
+                'crash_keyring': crash_keyring,
             })
 
             out, code = self._run_ceph_daemon(
                 host, name, 'deploy',
                 [
                     '--name', name,
-                    '--config-and-keyring', '-',
+                    '--config-and-keyrings', '-',
                 ] + extra_args,
                 stdin=j)
             self.log.debug('create_daemon code %s out %s' % (code, out))
