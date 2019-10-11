@@ -86,17 +86,18 @@ ostream& operator<<(ostream& out, const MgrCapGrant& m) {
       out << " module " << maybe_quote_string(m.module);
     } else if (!m.command.empty()) {
       out << " command " << maybe_quote_string(m.command);
-      if (!m.command_args.empty()) {
-        out << " with";
-        for (auto& [key, constraint] : m.command_args) {
-          out << " " << maybe_quote_string(key) << constraint;
-        }
-      }
     }
+  }
 
-    if (m.allow != 0) {
-      out << " " << m.allow;
+  if (!m.arguments.empty()) {
+    out << (!m.profile.empty() ? "" : " with");
+    for (auto& [key, constraint] : m.arguments) {
+      out << " " << maybe_quote_string(key) << constraint;
     }
+  }
+
+  if (m.allow != 0) {
+    out << " " << m.allow;
   }
 
   if (m.network.size()) {
@@ -115,7 +116,7 @@ BOOST_FUSION_ADAPT_STRUCT(MgrCapGrant,
                           (std::string, module)
                           (std::string, profile)
                           (std::string, command)
-                          (kvmap, command_args)
+                          (kvmap, arguments)
                           (mgr_rwxa_t, allow)
                           (std::string, network))
 
@@ -155,15 +156,52 @@ void MgrCapGrant::expand_profile() const {
   }
 }
 
+bool MgrCapGrant::validate_arguments(
+      const std::map<std::string, std::string>& args) const {
+  for (auto& [key, constraint] : arguments) {
+    auto q = args.find(key);
+
+    // argument must be present if a constraint exists
+    if (q == args.end()) {
+      return false;
+    }
+
+    switch (constraint.match_type) {
+    case MgrCapGrantConstraint::MATCH_TYPE_EQUAL:
+      if (constraint.value != q->second)
+        return false;
+      break;
+    case MgrCapGrantConstraint::MATCH_TYPE_PREFIX:
+      if (q->second.find(constraint.value) != 0)
+        return false;
+      break;
+    case MgrCapGrantConstraint::MATCH_TYPE_REGEX:
+      try {
+        std::regex pattern(constraint.value, std::regex::extended);
+        if (!std::regex_match(q->second, pattern)) {
+          return false;
+        }
+      } catch(const std::regex_error&) {
+        return false;
+      }
+      break;
+    default:
+      return false;
+    }
+  }
+
+  return true;
+}
+
 mgr_rwxa_t MgrCapGrant::get_allowed(
     CephContext *cct, EntityName name, const std::string& s,
     const std::string& m, const std::string& c,
-    const std::map<std::string, std::string>& c_args) const {
+    const std::map<std::string, std::string>& args) const {
   if (!profile.empty()) {
     expand_profile();
     mgr_rwxa_t a;
     for (auto& grant : profile_grants) {
-      a = a | grant.get_allowed(cct, name, s, m, c, c_args);
+      a = a | grant.get_allowed(cct, name, s, m, c, args);
     }
     return a;
   }
@@ -179,6 +217,11 @@ mgr_rwxa_t MgrCapGrant::get_allowed(
     if (module != m) {
       return mgr_rwxa_t{};
     }
+
+    // don't test module arguments when validating a specific command
+    if (c.empty() && !validate_arguments(args)) {
+      return mgr_rwxa_t{};
+    }
     return allow;
   }
 
@@ -186,37 +229,8 @@ mgr_rwxa_t MgrCapGrant::get_allowed(
     if (command != c) {
       return mgr_rwxa_t{};
     }
-
-    for (auto& [key, constraint] : command_args) {
-      auto q = c_args.find(key);
-
-      // argument must be present if a constraint exists
-      if (q == c_args.end()) {
-        return mgr_rwxa_t{};
-      }
-
-      switch (constraint.match_type) {
-      case MgrCapGrantConstraint::MATCH_TYPE_EQUAL:
-        if (constraint.value != q->second)
-          return mgr_rwxa_t{};
-        break;
-      case MgrCapGrantConstraint::MATCH_TYPE_PREFIX:
-        if (q->second.find(constraint.value) != 0)
-          return mgr_rwxa_t{};
-        break;
-      case MgrCapGrantConstraint::MATCH_TYPE_REGEX:
-        try {
-          std::regex pattern(constraint.value, std::regex::extended);
-          if (!std::regex_match(q->second, pattern)) {
-            return mgr_rwxa_t{};
-          }
-        } catch(const std::regex_error&) {
-          return mgr_rwxa_t{};
-        }
-        break;
-      default:
-        break;
-      }
+    if (!validate_arguments(args)) {
+      return mgr_rwxa_t{};
     }
     return mgr_rwxa_t{MGR_CAP_ANY};
   }
@@ -345,6 +359,10 @@ void MgrCap::generate_test_instances(list<MgrCap*>& ls) {
   ls.back()->parse("allow command bar with k1=v1 x");
   ls.push_back(new MgrCap);
   ls.back()->parse("allow command bar with k1=v1 k2=v2 x");
+  ls.push_back(new MgrCap);
+  ls.back()->parse("allow module bar with k1=v1 k2=v2 x");
+  ls.push_back(new MgrCap);
+  ls.back()->parse("profile rbd pool=rbd");
 }
 
 // grammar
@@ -412,7 +430,7 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
                             >> str
                             >> qi::attr(std::string())
                             >> qi::attr(std::string())
-                            >> qi::attr(map<std::string, MgrCapGrantConstraint>())
+                            >> -(spaces >> lit("with") >> spaces >> kv_map)
                             >> spaces >> rwxa
                             >> -(spaces >> lit("network") >> spaces >> network_str);
 
@@ -423,7 +441,7 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
                              >> qi::attr(std::string())
                              >> str
                              >> qi::attr(std::string())
-                             >> qi::attr(std::map<std::string, MgrCapGrantConstraint>())
+                             >> -(spaces >> kv_map)
                              >> qi::attr(0)
                              >> -(spaces >> lit("network") >> spaces >> network_str);
 
