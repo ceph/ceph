@@ -21,6 +21,7 @@ overrides:
         ms inject delay type: mon
         ms inject internal delays: 0.002
         ms inject socket failures: 2500
+        mon client directed command retry: 5
 tasks:
 - install: null
 - ceph:
