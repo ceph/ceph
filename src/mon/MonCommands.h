@@ -242,10 +242,6 @@ COMMAND("mon ok-to-rm " \
 	"check whether removing the specified mon would break quorum",
 	"mon", "r")
 
-COMMAND_WITH_FLAG("heap " \
-	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
-	     "show heap usage info (available only if compiled with tcmalloc)", \
-	     "mon", "rw", FLAG(NOFORWARD))
 COMMAND("tell " \
 	"name=target,type=CephName " \
 	"name=args,type=CephString,n=N", \
