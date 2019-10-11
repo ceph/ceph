@@ -584,6 +584,8 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   _stop_alloc();
   _shutdown_logger();
 
+  after_mkfs = true;
+
   dout(10) << __func__ << " success" << dendl;
   return 0;
 }
@@ -650,10 +652,6 @@ void BlueFS::_stop_alloc()
       p->discard_drain();
   }
 
-  for (auto p : alloc) {
-    if (p != nullptr && p != shared_bdev_alloc) {
-    }
-  }
   for (size_t i = 0; i < alloc.size(); ++i) {
     if (alloc[i] && alloc[i] != shared_bdev_alloc) {
       alloc[i]->shutdown();
@@ -699,9 +697,13 @@ int BlueFS::mount()
   for (auto& p : file_map) {
     dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
-      alloc[q.bdev]->init_rm_free(q.offset, q.length);
       if (alloc[q.bdev] == shared_bdev_alloc) {
+        if (!after_mkfs) {
+          alloc[q.bdev]->init_rm_free(q.offset, q.length);
+        }
         shared_bdev_used += q.length;
+      } else {
+        alloc[q.bdev]->init_rm_free(q.offset, q.length);
       }
     }
   }
@@ -714,6 +716,8 @@ int BlueFS::mount()
   dout(10) << __func__ << " log write pos set to 0x"
            << std::hex << log_writer->pos << std::dec
            << dendl;
+
+  after_mkfs = false;
 
   return 0;
 
