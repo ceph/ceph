@@ -403,7 +403,7 @@ class SimpleCmd {
 public:
   struct Def {
     string cmd;
-    int opt{-1};
+    std::any opt;
   };
 
   using Aliases = std::vector<std::set<string> >;
@@ -412,7 +412,7 @@ public:
 private:
   struct Node {
     map<string, Node> next;
-    int opt{-1};
+    std::any opt;
   };
 
   Node cmd_root;
@@ -483,12 +483,12 @@ public:
 
   template <class Container>
   bool find_command(Container& args,
-                    int *opt_cmd,
+                    std::any *opt_cmd,
                     vector<string> *extra_args,
                     string *error) {
     auto node = &cmd_root;
 
-    std::optional<int> found_opt;
+    std::optional<std::any> found_opt;
 
     for (auto& arg : args) {
       string norm = normalize_alias(arg);
@@ -509,7 +509,7 @@ public:
 
     *opt_cmd = found_opt.value_or(node->opt);
 
-    if (*opt_cmd < 0) {
+    if (!opt_cmd->has_value()) {
       *error ="no command";
       return false;
     }
@@ -518,7 +518,7 @@ public:
   }
 };
 
-enum {
+enum CMDLINE_OPTS {
   OPT_NO_CMD = 0,
   OPT_USER_CREATE,
   OPT_USER_INFO,
@@ -3005,10 +3005,14 @@ int main(int argc, const char **argv)
   else {
     std::vector<string> extra_args;
 
-    if (!cmd.find_command(args, &opt_cmd, &extra_args, &err)) {
+    std::any _opt_cmd;
+
+    if (!cmd.find_command(args, &_opt_cmd, &extra_args, &err)) {
       cerr << err << std::endl;
       exit(1);
     }
+
+    opt_cmd = std::any_cast<CMDLINE_OPTS>(_opt_cmd);
 
     /* some commands may have an optional extra param */
     if (!extra_args.empty()) {
