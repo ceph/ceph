@@ -49,7 +49,7 @@ struct Election {
 
   vector< function<void()> > messages;
 
-  Election(int c, ElectionLogic::election_strategy es=ElectionLogic::CLASSIC, double tracker_halflife=5);
+  Election(int c, ElectionLogic::election_strategy es, double tracker_halflife=5);
   ~Election();
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
@@ -90,11 +90,9 @@ struct Owner : public ElectionOwner, RankProvider {
        Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
     peer_tracker(this, tracker_halflife),
-    logic(this, &peer_tracker, g_ceph_context),
+    logic(this, es, &peer_tracker, g_ceph_context),
     victory_accepters(0),
-    timer_steps(-1), timer_election(true) {
-        logic.set_election_strategy(es);
-  }
+    timer_steps(-1), timer_election(true) {}
     
   // in-memory store: just save to variable
   void persist_epoch(epoch_t e) { persisted_epoch = e; }
@@ -359,10 +357,10 @@ void Election::unblock_bidirectional_messages(int a, int b)
 }
 
 
-TEST(election, single_startup_election_completes)
+void single_startup_election_completes(ElectionLogic::election_strategy strategy)
 {
   for (int starter = 0; starter < 5; ++starter) {
-    Election election(5);
+    Election election(5, strategy);
     election.start_one(starter);
     // This test is not actually legit since you should start
     // all the ElectionLogics, but it seems to work
@@ -374,9 +372,9 @@ TEST(election, single_startup_election_completes)
   }
 }
 
-TEST(election, everybody_starts_completes)
+void everybody_starts_completes(ElectionLogic::election_strategy strategy)
 {
-  Election election(5);
+  Election election(5, strategy);
   election.start_all();
   int steps = election.run_timesteps(0);
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
@@ -385,9 +383,9 @@ TEST(election, everybody_starts_completes)
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
-TEST(election, blocked_connection_continues_election)
+void blocked_connection_continues_election(ElectionLogic::election_strategy strategy)
 {
-  Election election(5);
+  Election election(5, strategy);
   election.block_bidirectional_messages(0, 1);
   election.start_all();
   int steps = election.run_timesteps(100);
@@ -402,11 +400,11 @@ TEST(election, blocked_connection_continues_election)
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
-TEST(election, disallowed_doesnt_win)
+void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
 {
   int MON_COUNT = 5;
   for (int i = 0; i < MON_COUNT - 1; ++i) {
-    Election election(MON_COUNT, ElectionLogic::DISALLOW);
+    Election election(MON_COUNT, strategy);
     for (int j = 0; j <= i; ++j) {
       election.add_disallowed_leader(j);
     }
@@ -422,7 +420,7 @@ TEST(election, disallowed_doesnt_win)
     }
   }
   for (int i = MON_COUNT - 1; i > 0; --i) {
-    Election election(MON_COUNT);
+    Election election(MON_COUNT, strategy);
     for (int j = i; j <= MON_COUNT - 1; ++j) {
       election.add_disallowed_leader(j);
     }
@@ -440,3 +438,24 @@ TEST(election, disallowed_doesnt_win)
 }
 
 // TODO: Write a test that disallowing and disconnecting 0 is otherwise stable?
+
+#define test_classic(utest) TEST(classic, utest) { utest(ElectionLogic::CLASSIC); }
+
+#define test_disallowed(utest) TEST(disallowed, utest) { utest(ElectionLogic::DISALLOW); }
+
+#define test_connectivity(utest) TEST(connectivity, utest) { utest(ElectionLogic::CONNECTIVITY); }
+
+
+test_classic(single_startup_election_completes)
+test_classic(everybody_starts_completes)
+test_classic(blocked_connection_continues_election)
+
+test_disallowed(single_startup_election_completes)
+test_disallowed(everybody_starts_completes)
+test_disallowed(blocked_connection_continues_election)
+test_disallowed(disallowed_doesnt_win)
+
+test_connectivity(single_startup_election_completes)
+test_connectivity(everybody_starts_completes)
+test_connectivity(blocked_connection_continues_election)
+test_connectivity(disallowed_doesnt_win)
