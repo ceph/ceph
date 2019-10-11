@@ -2,7 +2,6 @@
 Miscellaneous teuthology functions.
 Used by other modules, but mostly called from tasks.
 """
-
 import argparse
 import os
 import logging
@@ -29,6 +28,8 @@ from teuthology.orchestra import run
 from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.opsys import DEFAULT_OS_VERSION
+
+from six import reraise
 
 log = logging.getLogger(__name__)
 
@@ -1208,7 +1209,7 @@ def stop_daemons_of_type(ctx, type_, cluster='ceph'):
             exc_info = sys.exc_info()
             log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
     if exc_info != (None, None, None):
-        raise exc_info[0], exc_info[1], exc_info[2]
+        reraise(*exc_info)
 
 
 def get_system_type(remote, distro=False, version=False):
