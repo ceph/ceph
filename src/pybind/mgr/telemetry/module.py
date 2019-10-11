@@ -422,6 +422,13 @@ class Module(MgrModule):
             for key, value in service_map['services'].items():
                 report['services'][key] += 1
 
+            try:
+                report['balancer'] = self.remote('balancer', 'gather_telemetry')
+            except ImportError:
+                report['balancer'] = {
+                    'active': False
+                }
+
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
 
