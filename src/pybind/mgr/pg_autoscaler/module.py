@@ -350,6 +350,11 @@ class PgAutoscaler(MgrModule):
         pools = osdmap.get_pools()
         for pool_id in list(self._event):
             ev = self._event[pool_id]
+            if int(pool_id) not in pools:
+                # pool is gone
+                self.remote('progress', 'complete', ev._ev_id)
+                del self._event[pool_id]
+                continue
             pool_data = pools[int(pool_id)]
             pg_num = pool_data['pg_num']
             pg_num_target = pool_data['pg_num_target']
