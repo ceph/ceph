@@ -2,7 +2,6 @@
 Miscellaneous teuthology functions.
 Used by other modules, but mostly called from tasks.
 """
-from cStringIO import StringIO
 
 import argparse
 import os
