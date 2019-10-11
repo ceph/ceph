@@ -12,7 +12,7 @@ import cherrypy
 import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
-              DeletePermission, CreatePermission, ReadPermission
+              DeletePermission, CreatePermission
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -349,11 +349,6 @@ class Rbd(RESTController):
         """
         rbd_inst = rbd.RBD()
         return _rbd_call(pool_name, rbd_inst.trash_move, image_name, delay)
-
-    @RESTController.Resource()
-    @ReadPermission
-    def configuration(self, pool_name, image_name):
-        return RbdConfiguration(pool_name, image_name).list()
 
 
 @ApiController('/block/image/{pool_name}/{image_name}/snap', Scope.RBD_IMAGE)
