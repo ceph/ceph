@@ -2,6 +2,8 @@
 
 from __future__ import absolute_import
 
+import time
+
 from .helper import DashboardTestCase
 
 
@@ -22,6 +24,12 @@ class UserTest(DashboardTestCase):
             data['roles'] = roles
         data['enabled'] = enabled
         cls._post("/api/user", data)
+
+    @classmethod
+    def _reset_login_to_admin(cls, username):
+        cls.logout()
+        cls.delete_user(username)
+        cls.login('admin', 'admin')
 
     def test_crud_user(self):
         self._create_user(username='user1',
@@ -64,7 +72,7 @@ class UserTest(DashboardTestCase):
 
     def test_crd_disabled_user(self):
         self._create_user(username='klara',
-                          password='123456789',
+                          password='mypassword10#',
                           name='Klara Musterfrau',
                           email='klara@musterfrau.com',
                           roles=['administrator'],
@@ -75,6 +83,7 @@ class UserTest(DashboardTestCase):
         # Restart dashboard module.
         self._unload_module('dashboard')
         self._load_module('dashboard')
+        time.sleep(10)
 
         self._get('/api/user/klara')
         self.assertStatus(200)
@@ -177,8 +186,8 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypassword10#'
         })
         self.assertStatus(400)
-        self.assertError(code='the_same_as_old_password', component='user')
-        self.delete_user('test1')
+        self.assertError(code='pwd-must-not-be-last-one', component='user')
+        self._reset_login_to_admin('test1')
 
     def test_change_password_contains_username(self):
         self.create_user('test1', 'mypassword10#', ['read-only'])
@@ -188,8 +197,8 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypasstest1@#'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_username', component='user')
-        self.delete_user('test1')
+        self.assertError(code='pwd-must-not-contain-username', component='user')
+        self._reset_login_to_admin('test1')
 
     def test_change_password_contains_forbidden_words(self):
         self.create_user('test1', 'mypassword10#', ['read-only'])
@@ -199,8 +208,8 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypassOSD01'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_forbidden_words', component='user')
-        self.delete_user('test1')
+        self.assertError(code='pwd-must-not-contain-forbidden-keywords', component='user')
+        self._reset_login_to_admin('test1')
 
     def test_change_password_contains_sequential_characters(self):
         self.create_user('test1', 'mypassword10#', ['read-only'])
@@ -210,8 +219,8 @@ class UserTest(DashboardTestCase):
             'new_password': 'mypass123456!@$'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_sequential_characters', component='user')
-        self.delete_user('test1')    
+        self.assertError(code='pwd-must-not-contain-sequential-chars', component='user')
+        self._reset_login_to_admin('test1')
 
     def test_change_password_contains_repetetive_characters(self):
         self.create_user('test1', 'mypassword10#', ['read-only'])
@@ -221,8 +230,8 @@ class UserTest(DashboardTestCase):
             'new_password': 'aaaaA1@!#'
         })
         self.assertStatus(400)
-        self.assertError(code='contains_repetetive_characters', component='user')
-        self.delete_user('test1')
+        self.assertError(code='pwd-must-not-contain-repetitive-chars', component='user')
+        self._reset_login_to_admin('test1')
 
     def test_change_password(self):
         self.create_user('test1', 'mypassword10#', ['read-only'])
