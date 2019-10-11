@@ -291,6 +291,7 @@ export class RbdListComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'RBD',
+        itemNames: [`${poolName}/${imageName}`],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('rbd/delete', {

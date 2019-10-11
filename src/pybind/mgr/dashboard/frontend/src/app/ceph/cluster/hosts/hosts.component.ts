@@ -108,6 +108,7 @@ export class HostsComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'Host',
+        itemNames: [hostname],
         actionDescription: 'remove',
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
