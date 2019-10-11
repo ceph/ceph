@@ -242,12 +242,6 @@ COMMAND("mon ok-to-rm " \
 	"check whether removing the specified mon would break quorum",
 	"mon", "r")
 
-COMMAND_WITH_FLAG("sync force " \
-	"name=yes_i_really_mean_it,type=CephBool,req=false " \
-	"name=i_know_what_i_am_doing,type=CephBool,req=false", \
-	"force sync of and clear monitor store", \
-        "mon", "rw", \
-        FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("heap " \
 	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	     "show heap usage info (available only if compiled with tcmalloc)", \
@@ -273,12 +267,6 @@ COMMAND_WITH_FLAG("mon scrub",
     "scrub the monitor stores", \
     "mon", "rw", \
     FLAG(NONE))
-COMMAND_WITH_FLAG("mon sync force " \
-    "name=yes_i_really_mean_it,type=CephBool,req=false " \
-    "name=i_know_what_i_am_doing,type=CephBool,req=false", \
-    "force sync of and clear monitor store", \
-    "mon", "rw", \
-    FLAG(NOFORWARD))
 COMMAND("mon metadata name=id,type=CephString,req=false",
 	"fetch metadata for mon <id>",
 	"mon", "r")

@@ -397,7 +397,7 @@ public:
   /**
    * force a sync on next mon restart
    */
-  void sync_force(Formatter *f, ostream& ss);
+  void sync_force(Formatter *f);
 
 private:
   /**
