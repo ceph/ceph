@@ -325,7 +325,7 @@ class VolumeClient(object):
             return -errno.ESHUTDOWN, "", "shutdown in progress"
 
         self.purge_queue.cancel_purge_job(volname)
-        self.connection_pool.del_fs_handle(volname)
+        self.connection_pool.del_fs_handle(volname, wait=True)
         # Tear down MDS daemons
         try:
             completion = self.mgr.remove_stateless_service("mds", volname)
