@@ -515,365 +515,372 @@ public:
   }
 };
 
-enum CMDLINE_OPTS {
-  OPT_NO_CMD = 0,
-  OPT_USER_CREATE,
-  OPT_USER_INFO,
-  OPT_USER_MODIFY,
-  OPT_USER_RENAME,
-  OPT_USER_RM,
-  OPT_USER_SUSPEND,
-  OPT_USER_ENABLE,
-  OPT_USER_CHECK,
-  OPT_USER_STATS,
-  OPT_USER_LIST,
-  OPT_SUBUSER_CREATE,
-  OPT_SUBUSER_MODIFY,
-  OPT_SUBUSER_RM,
-  OPT_KEY_CREATE,
-  OPT_KEY_RM,
-  OPT_BUCKETS_LIST,
-  OPT_BUCKET_LIMIT_CHECK,
-  OPT_BUCKET_LINK,
-  OPT_BUCKET_UNLINK,
-  OPT_BUCKET_STATS,
-  OPT_BUCKET_CHECK,
-  OPT_BUCKET_SYNC_STATUS,
-  OPT_BUCKET_SYNC_MARKERS,
-  OPT_BUCKET_SYNC_INIT,
-  OPT_BUCKET_SYNC_RUN,
-  OPT_BUCKET_SYNC_DISABLE,
-  OPT_BUCKET_SYNC_ENABLE,
-  OPT_BUCKET_RM,
-  OPT_BUCKET_REWRITE,
-  OPT_BUCKET_RESHARD,
-  OPT_BUCKET_CHOWN,
-  OPT_POLICY,
-  OPT_POOL_ADD,
-  OPT_POOL_RM,
-  OPT_POOLS_LIST,
-  OPT_LOG_LIST,
-  OPT_LOG_SHOW,
-  OPT_LOG_RM,
-  OPT_USAGE_SHOW,
-  OPT_USAGE_TRIM,
-  OPT_USAGE_CLEAR,
-  OPT_OBJECT_PUT,
-  OPT_OBJECT_RM,
-  OPT_OBJECT_UNLINK,
-  OPT_OBJECT_STAT,
-  OPT_OBJECT_REWRITE,
-  OPT_OBJECTS_EXPIRE,
-  OPT_OBJECTS_EXPIRE_STALE_LIST,
-  OPT_OBJECTS_EXPIRE_STALE_RM,
-  OPT_BI_GET,
-  OPT_BI_PUT,
-  OPT_BI_LIST,
-  OPT_BI_PURGE,
-  OPT_OLH_GET,
-  OPT_OLH_READLOG,
-  OPT_QUOTA_SET,
-  OPT_QUOTA_ENABLE,
-  OPT_QUOTA_DISABLE,
-  OPT_GC_LIST,
-  OPT_GC_PROCESS,
-  OPT_LC_LIST,
-  OPT_LC_GET,
-  OPT_LC_PROCESS,
-  OPT_LC_RESHARD_FIX,
-  OPT_ORPHANS_FIND,
-  OPT_ORPHANS_FINISH,
-  OPT_ORPHANS_LIST_JOBS,
-  OPT_ZONEGROUP_ADD,
-  OPT_ZONEGROUP_CREATE,
-  OPT_ZONEGROUP_DEFAULT,
-  OPT_ZONEGROUP_DELETE,
-  OPT_ZONEGROUP_GET,
-  OPT_ZONEGROUP_MODIFY,
-  OPT_ZONEGROUP_SET,
-  OPT_ZONEGROUP_LIST,
-  OPT_ZONEGROUP_REMOVE,
-  OPT_ZONEGROUP_RENAME,
-  OPT_ZONEGROUP_PLACEMENT_ADD,
-  OPT_ZONEGROUP_PLACEMENT_MODIFY,
-  OPT_ZONEGROUP_PLACEMENT_RM,
-  OPT_ZONEGROUP_PLACEMENT_LIST,
-  OPT_ZONEGROUP_PLACEMENT_DEFAULT,
-  OPT_ZONE_CREATE,
-  OPT_ZONE_DELETE,
-  OPT_ZONE_GET,
-  OPT_ZONE_MODIFY,
-  OPT_ZONE_SET,
-  OPT_ZONE_LIST,
-  OPT_ZONE_RENAME,
-  OPT_ZONE_DEFAULT,
-  OPT_ZONE_PLACEMENT_ADD,
-  OPT_ZONE_PLACEMENT_MODIFY,
-  OPT_ZONE_PLACEMENT_RM,
-  OPT_ZONE_PLACEMENT_LIST,
-  OPT_CAPS_ADD,
-  OPT_CAPS_RM,
-  OPT_METADATA_GET,
-  OPT_METADATA_PUT,
-  OPT_METADATA_RM,
-  OPT_METADATA_LIST,
-  OPT_METADATA_SYNC_STATUS,
-  OPT_METADATA_SYNC_INIT,
-  OPT_METADATA_SYNC_RUN,
-  OPT_MDLOG_LIST,
-  OPT_MDLOG_AUTOTRIM,
-  OPT_MDLOG_TRIM,
-  OPT_MDLOG_FETCH,
-  OPT_MDLOG_STATUS,
-  OPT_SYNC_ERROR_LIST,
-  OPT_SYNC_ERROR_TRIM,
-  OPT_BILOG_LIST,
-  OPT_BILOG_TRIM,
-  OPT_BILOG_STATUS,
-  OPT_BILOG_AUTOTRIM,
-  OPT_DATA_SYNC_STATUS,
-  OPT_DATA_SYNC_INIT,
-  OPT_DATA_SYNC_RUN,
-  OPT_DATALOG_LIST,
-  OPT_DATALOG_STATUS,
-  OPT_DATALOG_AUTOTRIM,
-  OPT_DATALOG_TRIM,
-  OPT_REALM_CREATE,
-  OPT_REALM_DELETE,
-  OPT_REALM_GET,
-  OPT_REALM_GET_DEFAULT,
-  OPT_REALM_LIST,
-  OPT_REALM_LIST_PERIODS,
-  OPT_REALM_RENAME,
-  OPT_REALM_SET,
-  OPT_REALM_DEFAULT,
-  OPT_REALM_PULL,
-  OPT_PERIOD_DELETE,
-  OPT_PERIOD_GET,
-  OPT_PERIOD_GET_CURRENT,
-  OPT_PERIOD_PULL,
-  OPT_PERIOD_PUSH,
-  OPT_PERIOD_LIST,
-  OPT_PERIOD_UPDATE,
-  OPT_PERIOD_COMMIT,
-  OPT_GLOBAL_QUOTA_GET,
-  OPT_GLOBAL_QUOTA_SET,
-  OPT_GLOBAL_QUOTA_ENABLE,
-  OPT_GLOBAL_QUOTA_DISABLE,
-  OPT_SYNC_STATUS,
-  OPT_ROLE_CREATE,
-  OPT_ROLE_DELETE,
-  OPT_ROLE_GET,
-  OPT_ROLE_MODIFY,
-  OPT_ROLE_LIST,
-  OPT_ROLE_POLICY_PUT,
-  OPT_ROLE_POLICY_LIST,
-  OPT_ROLE_POLICY_GET,
-  OPT_ROLE_POLICY_DELETE,
-  OPT_RESHARD_ADD,
-  OPT_RESHARD_LIST,
-  OPT_RESHARD_STATUS,
-  OPT_RESHARD_PROCESS,
-  OPT_RESHARD_CANCEL,
-  OPT_MFA_CREATE,
-  OPT_MFA_REMOVE,
-  OPT_MFA_GET,
-  OPT_MFA_LIST,
-  OPT_MFA_CHECK,
-  OPT_MFA_RESYNC,
-  OPT_RESHARD_STALE_INSTANCES_LIST,
-  OPT_RESHARD_STALE_INSTANCES_DELETE,
-  OPT_PUBSUB_TOPICS_LIST,
-  OPT_PUBSUB_TOPIC_CREATE,
-  OPT_PUBSUB_TOPIC_GET,
-  OPT_PUBSUB_TOPIC_RM,
-  OPT_PUBSUB_NOTIFICATION_CREATE,
-  OPT_PUBSUB_NOTIFICATION_RM,
-  OPT_PUBSUB_SUB_GET,
-  OPT_PUBSUB_SUB_CREATE,
-  OPT_PUBSUB_SUB_RM,
-  OPT_PUBSUB_SUB_PULL,
-  OPT_PUBSUB_EVENT_RM,
+
+namespace rgw_admin {
+
+enum class OPT {
+  NO_CMD,
+  USER_CREATE,
+  USER_INFO,
+  USER_MODIFY,
+  USER_RENAME,
+  USER_RM,
+  USER_SUSPEND,
+  USER_ENABLE,
+  USER_CHECK,
+  USER_STATS,
+  USER_LIST,
+  SUBUSER_CREATE,
+  SUBUSER_MODIFY,
+  SUBUSER_RM,
+  KEY_CREATE,
+  KEY_RM,
+  BUCKETS_LIST,
+  BUCKET_LIMIT_CHECK,
+  BUCKET_LINK,
+  BUCKET_UNLINK,
+  BUCKET_STATS,
+  BUCKET_CHECK,
+  BUCKET_SYNC_STATUS,
+  BUCKET_SYNC_MARKERS,
+  BUCKET_SYNC_INIT,
+  BUCKET_SYNC_RUN,
+  BUCKET_SYNC_DISABLE,
+  BUCKET_SYNC_ENABLE,
+  BUCKET_RM,
+  BUCKET_REWRITE,
+  BUCKET_RESHARD,
+  BUCKET_CHOWN,
+  POLICY,
+  POOL_ADD,
+  POOL_RM,
+  POOLS_LIST,
+  LOG_LIST,
+  LOG_SHOW,
+  LOG_RM,
+  USAGE_SHOW,
+  USAGE_TRIM,
+  USAGE_CLEAR,
+  OBJECT_PUT,
+  OBJECT_RM,
+  OBJECT_UNLINK,
+  OBJECT_STAT,
+  OBJECT_REWRITE,
+  OBJECTS_EXPIRE,
+  OBJECTS_EXPIRE_STALE_LIST,
+  OBJECTS_EXPIRE_STALE_RM,
+  BI_GET,
+  BI_PUT,
+  BI_LIST,
+  BI_PURGE,
+  OLH_GET,
+  OLH_READLOG,
+  QUOTA_SET,
+  QUOTA_ENABLE,
+  QUOTA_DISABLE,
+  GC_LIST,
+  GC_PROCESS,
+  LC_LIST,
+  LC_GET,
+  LC_PROCESS,
+  LC_RESHARD_FIX,
+  ORPHANS_FIND,
+  ORPHANS_FINISH,
+  ORPHANS_LIST_JOBS,
+  ZONEGROUP_ADD,
+  ZONEGROUP_CREATE,
+  ZONEGROUP_DEFAULT,
+  ZONEGROUP_DELETE,
+  ZONEGROUP_GET,
+  ZONEGROUP_MODIFY,
+  ZONEGROUP_SET,
+  ZONEGROUP_LIST,
+  ZONEGROUP_REMOVE,
+  ZONEGROUP_RENAME,
+  ZONEGROUP_PLACEMENT_ADD,
+  ZONEGROUP_PLACEMENT_MODIFY,
+  ZONEGROUP_PLACEMENT_RM,
+  ZONEGROUP_PLACEMENT_LIST,
+  ZONEGROUP_PLACEMENT_DEFAULT,
+  ZONE_CREATE,
+  ZONE_DELETE,
+  ZONE_GET,
+  ZONE_MODIFY,
+  ZONE_SET,
+  ZONE_LIST,
+  ZONE_RENAME,
+  ZONE_DEFAULT,
+  ZONE_PLACEMENT_ADD,
+  ZONE_PLACEMENT_MODIFY,
+  ZONE_PLACEMENT_RM,
+  ZONE_PLACEMENT_LIST,
+  CAPS_ADD,
+  CAPS_RM,
+  METADATA_GET,
+  METADATA_PUT,
+  METADATA_RM,
+  METADATA_LIST,
+  METADATA_SYNC_STATUS,
+  METADATA_SYNC_INIT,
+  METADATA_SYNC_RUN,
+  MDLOG_LIST,
+  MDLOG_AUTOTRIM,
+  MDLOG_TRIM,
+  MDLOG_FETCH,
+  MDLOG_STATUS,
+  SYNC_ERROR_LIST,
+  SYNC_ERROR_TRIM,
+  BILOG_LIST,
+  BILOG_TRIM,
+  BILOG_STATUS,
+  BILOG_AUTOTRIM,
+  DATA_SYNC_STATUS,
+  DATA_SYNC_INIT,
+  DATA_SYNC_RUN,
+  DATALOG_LIST,
+  DATALOG_STATUS,
+  DATALOG_AUTOTRIM,
+  DATALOG_TRIM,
+  REALM_CREATE,
+  REALM_DELETE,
+  REALM_GET,
+  REALM_GET_DEFAULT,
+  REALM_LIST,
+  REALM_LIST_PERIODS,
+  REALM_RENAME,
+  REALM_SET,
+  REALM_DEFAULT,
+  REALM_PULL,
+  PERIOD_DELETE,
+  PERIOD_GET,
+  PERIOD_GET_CURRENT,
+  PERIOD_PULL,
+  PERIOD_PUSH,
+  PERIOD_LIST,
+  PERIOD_UPDATE,
+  PERIOD_COMMIT,
+  GLOBAL_QUOTA_GET,
+  GLOBAL_QUOTA_SET,
+  GLOBAL_QUOTA_ENABLE,
+  GLOBAL_QUOTA_DISABLE,
+  SYNC_STATUS,
+  ROLE_CREATE,
+  ROLE_DELETE,
+  ROLE_GET,
+  ROLE_MODIFY,
+  ROLE_LIST,
+  ROLE_POLICY_PUT,
+  ROLE_POLICY_LIST,
+  ROLE_POLICY_GET,
+  ROLE_POLICY_DELETE,
+  RESHARD_ADD,
+  RESHARD_LIST,
+  RESHARD_STATUS,
+  RESHARD_PROCESS,
+  RESHARD_CANCEL,
+  MFA_CREATE,
+  MFA_REMOVE,
+  MFA_GET,
+  MFA_LIST,
+  MFA_CHECK,
+  MFA_RESYNC,
+  RESHARD_STALE_INSTANCES_LIST,
+  RESHARD_STALE_INSTANCES_DELETE,
+  PUBSUB_TOPICS_LIST,
+  PUBSUB_TOPIC_CREATE,
+  PUBSUB_TOPIC_GET,
+  PUBSUB_TOPIC_RM,
+  PUBSUB_NOTIFICATION_CREATE,
+  PUBSUB_NOTIFICATION_RM,
+  PUBSUB_SUB_GET,
+  PUBSUB_SUB_CREATE,
+  PUBSUB_SUB_RM,
+  PUBSUB_SUB_PULL,
+  PUBSUB_EVENT_RM,
 };
 
+}
+
+using namespace rgw_admin;
+
 static SimpleCmd::Commands all_cmds = {
-  { "user create", OPT_USER_CREATE },
-  { "user info", OPT_USER_INFO },
-  { "user modify", OPT_USER_MODIFY },
-  { "user rename", OPT_USER_RENAME },
-  { "user rm", OPT_USER_RM },
-  { "user suspend", OPT_USER_SUSPEND },
-  { "user enable", OPT_USER_ENABLE },
-  { "user check", OPT_USER_CHECK },
-  { "user stats", OPT_USER_STATS },
-  { "user list", OPT_USER_LIST },
-  { "subuser create", OPT_SUBUSER_CREATE },
-  { "subuser modify", OPT_SUBUSER_MODIFY },
-  { "subuser rm", OPT_SUBUSER_RM },
-  { "key create", OPT_KEY_CREATE },
-  { "key rm", OPT_KEY_RM },
-  { "buckets list", OPT_BUCKETS_LIST },
-  { "bucket limit check", OPT_BUCKET_LIMIT_CHECK },
-  { "bucket link", OPT_BUCKET_LINK },
-  { "bucket unlink", OPT_BUCKET_UNLINK },
-  { "bucket stats", OPT_BUCKET_STATS },
-  { "bucket check", OPT_BUCKET_CHECK },
-  { "bucket sync status", OPT_BUCKET_SYNC_STATUS },
-  { "bucket sync markers", OPT_BUCKET_SYNC_MARKERS },
-  { "bucket sync init", OPT_BUCKET_SYNC_INIT },
-  { "bucket sync run", OPT_BUCKET_SYNC_RUN },
-  { "bucket sync disable", OPT_BUCKET_SYNC_DISABLE },
-  { "bucket sync enable", OPT_BUCKET_SYNC_ENABLE },
-  { "bucket rm", OPT_BUCKET_RM },
-  { "bucket rewrite", OPT_BUCKET_REWRITE },
-  { "bucket reshard", OPT_BUCKET_RESHARD },
-  { "bucket chown", OPT_BUCKET_CHOWN },
-  { "policy", OPT_POLICY },
-  { "pool add", OPT_POOL_ADD },
-  { "pool rm", OPT_POOL_RM },
-  { "pools list", OPT_POOLS_LIST },
-  { "log list", OPT_LOG_LIST },
-  { "log show", OPT_LOG_SHOW },
-  { "log rm", OPT_LOG_RM },
-  { "usage show", OPT_USAGE_SHOW },
-  { "usage trim", OPT_USAGE_TRIM },
-  { "usage clear", OPT_USAGE_CLEAR },
-  { "object put", OPT_OBJECT_PUT },
-  { "object rm", OPT_OBJECT_RM },
-  { "object unlink", OPT_OBJECT_UNLINK },
-  { "object stat", OPT_OBJECT_STAT },
-  { "object rewrite", OPT_OBJECT_REWRITE },
-  { "objects expire", OPT_OBJECTS_EXPIRE },
-  { "objects expire stale list", OPT_OBJECTS_EXPIRE_STALE_LIST },
-  { "objects expire stale rm", OPT_OBJECTS_EXPIRE_STALE_RM },
-  { "bi get", OPT_BI_GET },
-  { "bi put", OPT_BI_PUT },
-  { "bi list", OPT_BI_LIST },
-  { "bi purge", OPT_BI_PURGE },
-  { "olh get", OPT_OLH_GET },
-  { "olh readlog", OPT_OLH_READLOG },
-  { "quota set", OPT_QUOTA_SET },
-  { "quota enable", OPT_QUOTA_ENABLE },
-  { "quota disable", OPT_QUOTA_DISABLE },
-  { "gc list", OPT_GC_LIST },
-  { "gc process", OPT_GC_PROCESS },
-  { "lc list", OPT_LC_LIST },
-  { "lc get", OPT_LC_GET },
-  { "lc process", OPT_LC_PROCESS },
-  { "lc reshard fix", OPT_LC_RESHARD_FIX },
-  { "orphans find", OPT_ORPHANS_FIND },
-  { "orphans finish", OPT_ORPHANS_FINISH },
-  { "orphans list jobs", OPT_ORPHANS_LIST_JOBS },
-  { "zonegroup add", OPT_ZONEGROUP_ADD },
-  { "zonegroup create", OPT_ZONEGROUP_CREATE },
-  { "zonegroup default", OPT_ZONEGROUP_DEFAULT },
-  { "zonegroup delete", OPT_ZONEGROUP_DELETE },
-  { "zonegroup get", OPT_ZONEGROUP_GET },
-  { "zonegroup modify", OPT_ZONEGROUP_MODIFY },
-  { "zonegroup set", OPT_ZONEGROUP_SET },
-  { "zonegroup list", OPT_ZONEGROUP_LIST },
-  { "zonegroup remove", OPT_ZONEGROUP_REMOVE },
-  { "zonegroup rename", OPT_ZONEGROUP_RENAME },
-  { "zonegroup placement add", OPT_ZONEGROUP_PLACEMENT_ADD },
-  { "zonegroup placement modify", OPT_ZONEGROUP_PLACEMENT_MODIFY },
-  { "zonegroup placement rm", OPT_ZONEGROUP_PLACEMENT_RM },
-  { "zonegroup placement list", OPT_ZONEGROUP_PLACEMENT_LIST },
-  { "zonegroup placement default", OPT_ZONEGROUP_PLACEMENT_DEFAULT },
-  { "zone create", OPT_ZONE_CREATE },
-  { "zone delete", OPT_ZONE_DELETE },
-  { "zone get", OPT_ZONE_GET },
-  { "zone modify", OPT_ZONE_MODIFY },
-  { "zone set", OPT_ZONE_SET },
-  { "zone list", OPT_ZONE_LIST },
-  { "zone rename", OPT_ZONE_RENAME },
-  { "zone default", OPT_ZONE_DEFAULT },
-  { "zone placement add", OPT_ZONE_PLACEMENT_ADD },
-  { "zone placement modify", OPT_ZONE_PLACEMENT_MODIFY },
-  { "zone placement rm", OPT_ZONE_PLACEMENT_RM },
-  { "zone placement list", OPT_ZONE_PLACEMENT_LIST },
-  { "caps add", OPT_CAPS_ADD },
-  { "caps rm", OPT_CAPS_RM },
-  { "metadata get [*]", OPT_METADATA_GET },
-  { "metadata put [*]", OPT_METADATA_PUT },
-  { "metadata rm [*]", OPT_METADATA_RM },
-  { "metadata list [*]", OPT_METADATA_LIST },
-  { "metadata sync status", OPT_METADATA_SYNC_STATUS },
-  { "metadata sync init", OPT_METADATA_SYNC_INIT },
-  { "metadata sync run", OPT_METADATA_SYNC_RUN },
-  { "mdlog list", OPT_MDLOG_LIST },
-  { "mdlog autotrim", OPT_MDLOG_AUTOTRIM },
-  { "mdlog trim", OPT_MDLOG_TRIM },
-  { "mdlog fetch", OPT_MDLOG_FETCH },
-  { "mdlog status", OPT_MDLOG_STATUS },
-  { "sync error list", OPT_SYNC_ERROR_LIST },
-  { "sync error trim", OPT_SYNC_ERROR_TRIM },
-  { "bilog list", OPT_BILOG_LIST },
-  { "bilog trim", OPT_BILOG_TRIM },
-  { "bilog status", OPT_BILOG_STATUS },
-  { "bilog autotrim", OPT_BILOG_AUTOTRIM },
-  { "data sync status", OPT_DATA_SYNC_STATUS },
-  { "data sync init", OPT_DATA_SYNC_INIT },
-  { "data sync run", OPT_DATA_SYNC_RUN },
-  { "datalog list", OPT_DATALOG_LIST },
-  { "datalog status", OPT_DATALOG_STATUS },
-  { "datalog autotrim", OPT_DATALOG_AUTOTRIM },
-  { "datalog trim", OPT_DATALOG_TRIM },
-  { "realm create", OPT_REALM_CREATE },
-  { "realm delete", OPT_REALM_DELETE },
-  { "realm get", OPT_REALM_GET },
-  { "realm get default", OPT_REALM_GET_DEFAULT },
-  { "realm list", OPT_REALM_LIST },
-  { "realm list periods", OPT_REALM_LIST_PERIODS },
-  { "realm rename", OPT_REALM_RENAME },
-  { "realm set", OPT_REALM_SET },
-  { "realm default", OPT_REALM_DEFAULT },
-  { "realm pull", OPT_REALM_PULL },
-  { "period delete", OPT_PERIOD_DELETE },
-  { "period get", OPT_PERIOD_GET },
-  { "period get current", OPT_PERIOD_GET_CURRENT },
-  { "period pull", OPT_PERIOD_PULL },
-  { "period push", OPT_PERIOD_PUSH },
-  { "period list", OPT_PERIOD_LIST },
-  { "period update", OPT_PERIOD_UPDATE },
-  { "period commit", OPT_PERIOD_COMMIT },
-  { "global quota get", OPT_GLOBAL_QUOTA_GET },
-  { "global quota set", OPT_GLOBAL_QUOTA_SET },
-  { "global quota enable", OPT_GLOBAL_QUOTA_ENABLE },
-  { "global quota disable", OPT_GLOBAL_QUOTA_DISABLE },
-  { "sync status", OPT_SYNC_STATUS },
-  { "role create", OPT_ROLE_CREATE },
-  { "role delete", OPT_ROLE_DELETE },
-  { "role get", OPT_ROLE_GET },
-  { "role modify", OPT_ROLE_MODIFY },
-  { "role list", OPT_ROLE_LIST },
-  { "role policy put", OPT_ROLE_POLICY_PUT },
-  { "role policy list", OPT_ROLE_POLICY_LIST },
-  { "role policy get", OPT_ROLE_POLICY_GET },
-  { "role policy delete", OPT_ROLE_POLICY_DELETE },
-  { "reshard add", OPT_RESHARD_ADD },
-  { "reshard list", OPT_RESHARD_LIST },
-  { "reshard status", OPT_RESHARD_STATUS },
-  { "reshard process", OPT_RESHARD_PROCESS },
-  { "reshard cancel", OPT_RESHARD_CANCEL },
-  { "mfa create", OPT_MFA_CREATE },
-  { "mfa remove", OPT_MFA_REMOVE },
-  { "mfa get", OPT_MFA_GET },
-  { "mfa list", OPT_MFA_LIST },
-  { "mfa check", OPT_MFA_CHECK },
-  { "mfa resync", OPT_MFA_RESYNC },
-  { "reshard stale instances list", OPT_RESHARD_STALE_INSTANCES_LIST },
-  { "reshard stale instances delete", OPT_RESHARD_STALE_INSTANCES_DELETE },
-  { "pubsub topics list", OPT_PUBSUB_TOPICS_LIST },
-  { "pubsub topic create", OPT_PUBSUB_TOPIC_CREATE },
-  { "pubsub topic get", OPT_PUBSUB_TOPIC_GET },
-  { "pubsub topic rm", OPT_PUBSUB_TOPIC_RM },
-  { "pubsub notification create", OPT_PUBSUB_NOTIFICATION_CREATE },
-  { "pubsub notification rm", OPT_PUBSUB_NOTIFICATION_RM },
-  { "pubsub sub get", OPT_PUBSUB_SUB_GET },
-  { "pubsub sub create", OPT_PUBSUB_SUB_CREATE },
-  { "pubsub sub rm", OPT_PUBSUB_SUB_RM },
-  { "pubsub sub pull", OPT_PUBSUB_SUB_PULL },
-  { "pubsub event rm", OPT_PUBSUB_EVENT_RM },
+  { "user create", OPT::USER_CREATE },
+  { "user info", OPT::USER_INFO },
+  { "user modify", OPT::USER_MODIFY },
+  { "user rename", OPT::USER_RENAME },
+  { "user rm", OPT::USER_RM },
+  { "user suspend", OPT::USER_SUSPEND },
+  { "user enable", OPT::USER_ENABLE },
+  { "user check", OPT::USER_CHECK },
+  { "user stats", OPT::USER_STATS },
+  { "user list", OPT::USER_LIST },
+  { "subuser create", OPT::SUBUSER_CREATE },
+  { "subuser modify", OPT::SUBUSER_MODIFY },
+  { "subuser rm", OPT::SUBUSER_RM },
+  { "key create", OPT::KEY_CREATE },
+  { "key rm", OPT::KEY_RM },
+  { "buckets list", OPT::BUCKETS_LIST },
+  { "bucket limit check", OPT::BUCKET_LIMIT_CHECK },
+  { "bucket link", OPT::BUCKET_LINK },
+  { "bucket unlink", OPT::BUCKET_UNLINK },
+  { "bucket stats", OPT::BUCKET_STATS },
+  { "bucket check", OPT::BUCKET_CHECK },
+  { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
+  { "bucket sync markers", OPT::BUCKET_SYNC_MARKERS },
+  { "bucket sync init", OPT::BUCKET_SYNC_INIT },
+  { "bucket sync run", OPT::BUCKET_SYNC_RUN },
+  { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
+  { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
+  { "bucket rm", OPT::BUCKET_RM },
+  { "bucket rewrite", OPT::BUCKET_REWRITE },
+  { "bucket reshard", OPT::BUCKET_RESHARD },
+  { "bucket chown", OPT::BUCKET_CHOWN },
+  { "policy", OPT::POLICY },
+  { "pool add", OPT::POOL_ADD },
+  { "pool rm", OPT::POOL_RM },
+  { "pools list", OPT::POOLS_LIST },
+  { "log list", OPT::LOG_LIST },
+  { "log show", OPT::LOG_SHOW },
+  { "log rm", OPT::LOG_RM },
+  { "usage show", OPT::USAGE_SHOW },
+  { "usage trim", OPT::USAGE_TRIM },
+  { "usage clear", OPT::USAGE_CLEAR },
+  { "object put", OPT::OBJECT_PUT },
+  { "object rm", OPT::OBJECT_RM },
+  { "object unlink", OPT::OBJECT_UNLINK },
+  { "object stat", OPT::OBJECT_STAT },
+  { "object rewrite", OPT::OBJECT_REWRITE },
+  { "objects expire", OPT::OBJECTS_EXPIRE },
+  { "objects expire stale list", OPT::OBJECTS_EXPIRE_STALE_LIST },
+  { "objects expire stale rm", OPT::OBJECTS_EXPIRE_STALE_RM },
+  { "bi get", OPT::BI_GET },
+  { "bi put", OPT::BI_PUT },
+  { "bi list", OPT::BI_LIST },
+  { "bi purge", OPT::BI_PURGE },
+  { "olh get", OPT::OLH_GET },
+  { "olh readlog", OPT::OLH_READLOG },
+  { "quota set", OPT::QUOTA_SET },
+  { "quota enable", OPT::QUOTA_ENABLE },
+  { "quota disable", OPT::QUOTA_DISABLE },
+  { "gc list", OPT::GC_LIST },
+  { "gc process", OPT::GC_PROCESS },
+  { "lc list", OPT::LC_LIST },
+  { "lc get", OPT::LC_GET },
+  { "lc process", OPT::LC_PROCESS },
+  { "lc reshard fix", OPT::LC_RESHARD_FIX },
+  { "orphans find", OPT::ORPHANS_FIND },
+  { "orphans finish", OPT::ORPHANS_FINISH },
+  { "orphans list jobs", OPT::ORPHANS_LIST_JOBS },
+  { "zonegroup add", OPT::ZONEGROUP_ADD },
+  { "zonegroup create", OPT::ZONEGROUP_CREATE },
+  { "zonegroup default", OPT::ZONEGROUP_DEFAULT },
+  { "zonegroup delete", OPT::ZONEGROUP_DELETE },
+  { "zonegroup get", OPT::ZONEGROUP_GET },
+  { "zonegroup modify", OPT::ZONEGROUP_MODIFY },
+  { "zonegroup set", OPT::ZONEGROUP_SET },
+  { "zonegroup list", OPT::ZONEGROUP_LIST },
+  { "zonegroup remove", OPT::ZONEGROUP_REMOVE },
+  { "zonegroup rename", OPT::ZONEGROUP_RENAME },
+  { "zonegroup placement add", OPT::ZONEGROUP_PLACEMENT_ADD },
+  { "zonegroup placement modify", OPT::ZONEGROUP_PLACEMENT_MODIFY },
+  { "zonegroup placement rm", OPT::ZONEGROUP_PLACEMENT_RM },
+  { "zonegroup placement list", OPT::ZONEGROUP_PLACEMENT_LIST },
+  { "zonegroup placement default", OPT::ZONEGROUP_PLACEMENT_DEFAULT },
+  { "zone create", OPT::ZONE_CREATE },
+  { "zone delete", OPT::ZONE_DELETE },
+  { "zone get", OPT::ZONE_GET },
+  { "zone modify", OPT::ZONE_MODIFY },
+  { "zone set", OPT::ZONE_SET },
+  { "zone list", OPT::ZONE_LIST },
+  { "zone rename", OPT::ZONE_RENAME },
+  { "zone default", OPT::ZONE_DEFAULT },
+  { "zone placement add", OPT::ZONE_PLACEMENT_ADD },
+  { "zone placement modify", OPT::ZONE_PLACEMENT_MODIFY },
+  { "zone placement rm", OPT::ZONE_PLACEMENT_RM },
+  { "zone placement list", OPT::ZONE_PLACEMENT_LIST },
+  { "caps add", OPT::CAPS_ADD },
+  { "caps rm", OPT::CAPS_RM },
+  { "metadata get [*]", OPT::METADATA_GET },
+  { "metadata put [*]", OPT::METADATA_PUT },
+  { "metadata rm [*]", OPT::METADATA_RM },
+  { "metadata list [*]", OPT::METADATA_LIST },
+  { "metadata sync status", OPT::METADATA_SYNC_STATUS },
+  { "metadata sync init", OPT::METADATA_SYNC_INIT },
+  { "metadata sync run", OPT::METADATA_SYNC_RUN },
+  { "mdlog list", OPT::MDLOG_LIST },
+  { "mdlog autotrim", OPT::MDLOG_AUTOTRIM },
+  { "mdlog trim", OPT::MDLOG_TRIM },
+  { "mdlog fetch", OPT::MDLOG_FETCH },
+  { "mdlog status", OPT::MDLOG_STATUS },
+  { "sync error list", OPT::SYNC_ERROR_LIST },
+  { "sync error trim", OPT::SYNC_ERROR_TRIM },
+  { "bilog list", OPT::BILOG_LIST },
+  { "bilog trim", OPT::BILOG_TRIM },
+  { "bilog status", OPT::BILOG_STATUS },
+  { "bilog autotrim", OPT::BILOG_AUTOTRIM },
+  { "data sync status", OPT::DATA_SYNC_STATUS },
+  { "data sync init", OPT::DATA_SYNC_INIT },
+  { "data sync run", OPT::DATA_SYNC_RUN },
+  { "datalog list", OPT::DATALOG_LIST },
+  { "datalog status", OPT::DATALOG_STATUS },
+  { "datalog autotrim", OPT::DATALOG_AUTOTRIM },
+  { "datalog trim", OPT::DATALOG_TRIM },
+  { "realm create", OPT::REALM_CREATE },
+  { "realm delete", OPT::REALM_DELETE },
+  { "realm get", OPT::REALM_GET },
+  { "realm get default", OPT::REALM_GET_DEFAULT },
+  { "realm list", OPT::REALM_LIST },
+  { "realm list periods", OPT::REALM_LIST_PERIODS },
+  { "realm rename", OPT::REALM_RENAME },
+  { "realm set", OPT::REALM_SET },
+  { "realm default", OPT::REALM_DEFAULT },
+  { "realm pull", OPT::REALM_PULL },
+  { "period delete", OPT::PERIOD_DELETE },
+  { "period get", OPT::PERIOD_GET },
+  { "period get current", OPT::PERIOD_GET_CURRENT },
+  { "period pull", OPT::PERIOD_PULL },
+  { "period push", OPT::PERIOD_PUSH },
+  { "period list", OPT::PERIOD_LIST },
+  { "period update", OPT::PERIOD_UPDATE },
+  { "period commit", OPT::PERIOD_COMMIT },
+  { "global quota get", OPT::GLOBAL_QUOTA_GET },
+  { "global quota set", OPT::GLOBAL_QUOTA_SET },
+  { "global quota enable", OPT::GLOBAL_QUOTA_ENABLE },
+  { "global quota disable", OPT::GLOBAL_QUOTA_DISABLE },
+  { "sync status", OPT::SYNC_STATUS },
+  { "role create", OPT::ROLE_CREATE },
+  { "role delete", OPT::ROLE_DELETE },
+  { "role get", OPT::ROLE_GET },
+  { "role modify", OPT::ROLE_MODIFY },
+  { "role list", OPT::ROLE_LIST },
+  { "role policy put", OPT::ROLE_POLICY_PUT },
+  { "role policy list", OPT::ROLE_POLICY_LIST },
+  { "role policy get", OPT::ROLE_POLICY_GET },
+  { "role policy delete", OPT::ROLE_POLICY_DELETE },
+  { "reshard add", OPT::RESHARD_ADD },
+  { "reshard list", OPT::RESHARD_LIST },
+  { "reshard status", OPT::RESHARD_STATUS },
+  { "reshard process", OPT::RESHARD_PROCESS },
+  { "reshard cancel", OPT::RESHARD_CANCEL },
+  { "mfa create", OPT::MFA_CREATE },
+  { "mfa remove", OPT::MFA_REMOVE },
+  { "mfa get", OPT::MFA_GET },
+  { "mfa list", OPT::MFA_LIST },
+  { "mfa check", OPT::MFA_CHECK },
+  { "mfa resync", OPT::MFA_RESYNC },
+  { "reshard stale instances list", OPT::RESHARD_STALE_INSTANCES_LIST },
+  { "reshard stale instances delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
+  { "pubsub topics list", OPT::PUBSUB_TOPICS_LIST },
+  { "pubsub topic create", OPT::PUBSUB_TOPIC_CREATE },
+  { "pubsub topic get", OPT::PUBSUB_TOPIC_GET },
+  { "pubsub topic rm", OPT::PUBSUB_TOPIC_RM },
+  { "pubsub notification create", OPT::PUBSUB_NOTIFICATION_CREATE },
+  { "pubsub notification rm", OPT::PUBSUB_NOTIFICATION_RM },
+  { "pubsub sub get", OPT::PUBSUB_SUB_GET },
+  { "pubsub sub create", OPT::PUBSUB_SUB_CREATE },
+  { "pubsub sub rm", OPT::PUBSUB_SUB_RM },
+  { "pubsub sub pull", OPT::PUBSUB_SUB_PULL },
+  { "pubsub event rm", OPT::PUBSUB_EVENT_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -1139,18 +1146,18 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
   return true;
 }
 
-void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t max_objects,
+void set_quota_info(RGWQuotaInfo& quota, OPT opt_cmd, int64_t max_size, int64_t max_objects,
                     bool have_max_size, bool have_max_objects)
 {
   switch (opt_cmd) {
-    case OPT_QUOTA_ENABLE:
-    case OPT_GLOBAL_QUOTA_ENABLE:
+    case OPT::QUOTA_ENABLE:
+    case OPT::GLOBAL_QUOTA_ENABLE:
       quota.enabled = true;
 
       // falling through on purpose
 
-    case OPT_QUOTA_SET:
-    case OPT_GLOBAL_QUOTA_SET:
+    case OPT::QUOTA_SET:
+    case OPT::GLOBAL_QUOTA_SET:
       if (have_max_objects) {
         if (max_objects < 0) {
           quota.max_objects = -1;
@@ -1166,14 +1173,16 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
         }
       }
       break;
-    case OPT_QUOTA_DISABLE:
-    case OPT_GLOBAL_QUOTA_DISABLE:
+    case OPT::QUOTA_DISABLE:
+    case OPT::GLOBAL_QUOTA_DISABLE:
       quota.enabled = false;
+      break;
+    default:
       break;
   }
 }
 
-int set_bucket_quota(rgw::sal::RGWRadosStore *store, int opt_cmd,
+int set_bucket_quota(rgw::sal::RGWRadosStore *store, OPT opt_cmd,
                      const string& tenant_name, const string& bucket_name,
                      int64_t max_size, int64_t max_objects,
                      bool have_max_size, bool have_max_objects)
@@ -1196,7 +1205,7 @@ int set_bucket_quota(rgw::sal::RGWRadosStore *store, int opt_cmd,
   return 0;
 }
 
-int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
                           bool have_max_size, bool have_max_objects)
 {
   RGWUserInfo& user_info = op_state.get_user_info();
@@ -1214,7 +1223,7 @@ int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
   return 0;
 }
 
-int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
                    bool have_max_size, bool have_max_objects)
 {
   RGWUserInfo& user_info = op_state.get_user_info();
@@ -2537,7 +2546,7 @@ int main(int argc, const char **argv)
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
   RGWUserInfo info;
-  int opt_cmd = OPT_NO_CMD;
+  OPT opt_cmd = OPT::NO_CMD;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   bool set_perm = false;
@@ -3028,15 +3037,15 @@ int main(int argc, const char **argv)
       exit(1);
     }
 
-    opt_cmd = std::any_cast<CMDLINE_OPTS>(_opt_cmd);
+    opt_cmd = std::any_cast<OPT>(_opt_cmd);
 
     /* some commands may have an optional extra param */
     if (!extra_args.empty()) {
       switch (opt_cmd) {
-        case OPT_METADATA_GET:
-        case OPT_METADATA_PUT:
-        case OPT_METADATA_RM:
-        case OPT_METADATA_LIST:
+        case OPT::METADATA_GET:
+        case OPT::METADATA_PUT:
+        case OPT::METADATA_RM:
+        case OPT::METADATA_LIST:
           metadata_key = extra_args[0];
           break;
         default:
@@ -3047,18 +3056,18 @@ int main(int argc, const char **argv)
     if (tenant.empty()) {
       tenant = user_id.tenant;
     } else {
-      if (user_id.empty() && opt_cmd != OPT_ROLE_CREATE
-                          && opt_cmd != OPT_ROLE_DELETE
-                          && opt_cmd != OPT_ROLE_GET
-                          && opt_cmd != OPT_ROLE_MODIFY
-                          && opt_cmd != OPT_ROLE_LIST
-                          && opt_cmd != OPT_ROLE_POLICY_PUT
-                          && opt_cmd != OPT_ROLE_POLICY_LIST
-                          && opt_cmd != OPT_ROLE_POLICY_GET
-                          && opt_cmd != OPT_ROLE_POLICY_DELETE
-                          && opt_cmd != OPT_RESHARD_ADD
-                          && opt_cmd != OPT_RESHARD_CANCEL
-                          && opt_cmd != OPT_RESHARD_STATUS) {
+      if (user_id.empty() && opt_cmd != OPT::ROLE_CREATE
+                          && opt_cmd != OPT::ROLE_DELETE
+                          && opt_cmd != OPT::ROLE_GET
+                          && opt_cmd != OPT::ROLE_MODIFY
+                          && opt_cmd != OPT::ROLE_LIST
+                          && opt_cmd != OPT::ROLE_POLICY_PUT
+                          && opt_cmd != OPT::ROLE_POLICY_LIST
+                          && opt_cmd != OPT::ROLE_POLICY_GET
+                          && opt_cmd != OPT::ROLE_POLICY_DELETE
+                          && opt_cmd != OPT::RESHARD_ADD
+                          && opt_cmd != OPT::RESHARD_CANCEL
+                          && opt_cmd != OPT::RESHARD_STATUS) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -3102,83 +3111,83 @@ int main(int argc, const char **argv)
   RGWStreamFlusher f(formatter, cout);
 
   // not a raw op if 'period update' needs to commit to master
-  bool raw_period_update = opt_cmd == OPT_PERIOD_UPDATE && !commit;
-  std::set<int> raw_storage_ops_list = {OPT_ZONEGROUP_ADD, OPT_ZONEGROUP_CREATE, OPT_ZONEGROUP_DELETE,
-			 OPT_ZONEGROUP_GET, OPT_ZONEGROUP_LIST,
-                         OPT_ZONEGROUP_SET, OPT_ZONEGROUP_DEFAULT,
-			 OPT_ZONEGROUP_RENAME, OPT_ZONEGROUP_MODIFY,
-			 OPT_ZONEGROUP_REMOVE,
-			 OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
-			 OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
-			 OPT_ZONEGROUP_PLACEMENT_DEFAULT,
-			 OPT_ZONE_CREATE, OPT_ZONE_DELETE,
-                         OPT_ZONE_GET, OPT_ZONE_SET, OPT_ZONE_RENAME,
-                         OPT_ZONE_LIST, OPT_ZONE_MODIFY, OPT_ZONE_DEFAULT,
-			 OPT_ZONE_PLACEMENT_ADD, OPT_ZONE_PLACEMENT_RM,
-			 OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
-			 OPT_REALM_CREATE,
-			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
-			 OPT_PERIOD_PULL,
-			 OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
-			 OPT_GLOBAL_QUOTA_GET, OPT_GLOBAL_QUOTA_SET,
-			 OPT_GLOBAL_QUOTA_ENABLE, OPT_GLOBAL_QUOTA_DISABLE,
-			 OPT_REALM_DELETE, OPT_REALM_GET, OPT_REALM_LIST,
-			 OPT_REALM_LIST_PERIODS,
-			 OPT_REALM_GET_DEFAULT,
-			 OPT_REALM_RENAME, OPT_REALM_SET,
-			 OPT_REALM_DEFAULT, OPT_REALM_PULL};
+  bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
+  std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE, OPT::ZONEGROUP_DELETE,
+			 OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
+                         OPT::ZONEGROUP_SET, OPT::ZONEGROUP_DEFAULT,
+			 OPT::ZONEGROUP_RENAME, OPT::ZONEGROUP_MODIFY,
+			 OPT::ZONEGROUP_REMOVE,
+			 OPT::ZONEGROUP_PLACEMENT_ADD, OPT::ZONEGROUP_PLACEMENT_RM,
+			 OPT::ZONEGROUP_PLACEMENT_MODIFY, OPT::ZONEGROUP_PLACEMENT_LIST,
+			 OPT::ZONEGROUP_PLACEMENT_DEFAULT,
+			 OPT::ZONE_CREATE, OPT::ZONE_DELETE,
+                         OPT::ZONE_GET, OPT::ZONE_SET, OPT::ZONE_RENAME,
+                         OPT::ZONE_LIST, OPT::ZONE_MODIFY, OPT::ZONE_DEFAULT,
+			 OPT::ZONE_PLACEMENT_ADD, OPT::ZONE_PLACEMENT_RM,
+			 OPT::ZONE_PLACEMENT_MODIFY, OPT::ZONE_PLACEMENT_LIST,
+			 OPT::REALM_CREATE,
+			 OPT::PERIOD_DELETE, OPT::PERIOD_GET,
+			 OPT::PERIOD_PULL,
+			 OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
+			 OPT::GLOBAL_QUOTA_GET, OPT::GLOBAL_QUOTA_SET,
+			 OPT::GLOBAL_QUOTA_ENABLE, OPT::GLOBAL_QUOTA_DISABLE,
+			 OPT::REALM_DELETE, OPT::REALM_GET, OPT::REALM_LIST,
+			 OPT::REALM_LIST_PERIODS,
+			 OPT::REALM_GET_DEFAULT,
+			 OPT::REALM_RENAME, OPT::REALM_SET,
+			 OPT::REALM_DEFAULT, OPT::REALM_PULL};
 
-  std::set<int> readonly_ops_list = {
-                         OPT_USER_INFO,
-			 OPT_USER_STATS,
-			 OPT_BUCKETS_LIST,
-			 OPT_BUCKET_LIMIT_CHECK,
-			 OPT_BUCKET_STATS,
-			 OPT_BUCKET_SYNC_STATUS,
-			 OPT_BUCKET_SYNC_MARKERS,
-			 OPT_LOG_LIST,
-			 OPT_LOG_SHOW,
-			 OPT_USAGE_SHOW,
-			 OPT_OBJECT_STAT,
-			 OPT_BI_GET,
-			 OPT_BI_LIST,
-			 OPT_OLH_GET,
-			 OPT_OLH_READLOG,
-			 OPT_GC_LIST,
-			 OPT_LC_LIST,
-			 OPT_ORPHANS_LIST_JOBS,
-			 OPT_ZONEGROUP_GET,
-			 OPT_ZONEGROUP_LIST,
-			 OPT_ZONEGROUP_PLACEMENT_LIST,
-			 OPT_ZONE_GET,
-			 OPT_ZONE_LIST,
-			 OPT_ZONE_PLACEMENT_LIST,
-			 OPT_METADATA_GET,
-			 OPT_METADATA_LIST,
-			 OPT_METADATA_SYNC_STATUS,
-			 OPT_MDLOG_LIST,
-			 OPT_MDLOG_STATUS,
-			 OPT_SYNC_ERROR_LIST,
-			 OPT_BILOG_LIST,
-			 OPT_BILOG_STATUS,
-			 OPT_DATA_SYNC_STATUS,
-			 OPT_DATALOG_LIST,
-			 OPT_DATALOG_STATUS,
-			 OPT_REALM_GET,
-			 OPT_REALM_GET_DEFAULT,
-			 OPT_REALM_LIST,
-			 OPT_REALM_LIST_PERIODS,
-			 OPT_PERIOD_GET,
-			 OPT_PERIOD_GET_CURRENT,
-			 OPT_PERIOD_LIST,
-			 OPT_GLOBAL_QUOTA_GET,
-			 OPT_SYNC_STATUS,
-			 OPT_ROLE_GET,
-			 OPT_ROLE_LIST,
-			 OPT_ROLE_POLICY_LIST,
-			 OPT_ROLE_POLICY_GET,
-			 OPT_RESHARD_LIST,
-			 OPT_RESHARD_STATUS,
+  std::set<OPT> readonly_ops_list = {
+                         OPT::USER_INFO,
+			 OPT::USER_STATS,
+			 OPT::BUCKETS_LIST,
+			 OPT::BUCKET_LIMIT_CHECK,
+			 OPT::BUCKET_STATS,
+			 OPT::BUCKET_SYNC_STATUS,
+			 OPT::BUCKET_SYNC_MARKERS,
+			 OPT::LOG_LIST,
+			 OPT::LOG_SHOW,
+			 OPT::USAGE_SHOW,
+			 OPT::OBJECT_STAT,
+			 OPT::BI_GET,
+			 OPT::BI_LIST,
+			 OPT::OLH_GET,
+			 OPT::OLH_READLOG,
+			 OPT::GC_LIST,
+			 OPT::LC_LIST,
+			 OPT::ORPHANS_LIST_JOBS,
+			 OPT::ZONEGROUP_GET,
+			 OPT::ZONEGROUP_LIST,
+			 OPT::ZONEGROUP_PLACEMENT_LIST,
+			 OPT::ZONE_GET,
+			 OPT::ZONE_LIST,
+			 OPT::ZONE_PLACEMENT_LIST,
+			 OPT::METADATA_GET,
+			 OPT::METADATA_LIST,
+			 OPT::METADATA_SYNC_STATUS,
+			 OPT::MDLOG_LIST,
+			 OPT::MDLOG_STATUS,
+			 OPT::SYNC_ERROR_LIST,
+			 OPT::BILOG_LIST,
+			 OPT::BILOG_STATUS,
+			 OPT::DATA_SYNC_STATUS,
+			 OPT::DATALOG_LIST,
+			 OPT::DATALOG_STATUS,
+			 OPT::REALM_GET,
+			 OPT::REALM_GET_DEFAULT,
+			 OPT::REALM_LIST,
+			 OPT::REALM_LIST_PERIODS,
+			 OPT::PERIOD_GET,
+			 OPT::PERIOD_GET_CURRENT,
+			 OPT::PERIOD_LIST,
+			 OPT::GLOBAL_QUOTA_GET,
+			 OPT::SYNC_STATUS,
+			 OPT::ROLE_GET,
+			 OPT::ROLE_LIST,
+			 OPT::ROLE_POLICY_LIST,
+			 OPT::ROLE_POLICY_GET,
+			 OPT::RESHARD_LIST,
+			 OPT::RESHARD_STATUS,
   };
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
@@ -3220,7 +3229,7 @@ int main(int argc, const char **argv)
 
   if (raw_storage_op) {
     switch (opt_cmd) {
-    case OPT_PERIOD_DELETE:
+    case OPT::PERIOD_DELETE:
       {
 	if (period_id.empty()) {
 	  cerr << "missing period id" << std::endl;
@@ -3240,7 +3249,7 @@ int main(int argc, const char **argv)
 
       }
       break;
-    case OPT_PERIOD_GET:
+    case OPT::PERIOD_GET:
       {
 	epoch_t epoch = 0;
 	if (!period_epoch.empty()) {
@@ -3268,7 +3277,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_PERIOD_GET_CURRENT:
+    case OPT::PERIOD_GET_CURRENT:
       {
         int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
 	if (ret < 0) {
@@ -3280,7 +3289,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_PERIOD_LIST:
+    case OPT::PERIOD_LIST:
       {
 	list<string> periods;
 	int ret = store->svc()->zone->list_periods(periods);
@@ -3294,7 +3303,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_PERIOD_UPDATE:
+    case OPT::PERIOD_UPDATE:
       {
         int ret = update_period(realm_id, realm_name, period_id, period_epoch,
                                 commit, remote, url, access_key, secret_key,
@@ -3304,7 +3313,7 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_PERIOD_PULL:
+    case OPT::PERIOD_PULL:
       {
         boost::optional<RGWRESTConn> conn;
         RGWRESTConn *remote_conn = nullptr;
@@ -3348,10 +3357,10 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_GLOBAL_QUOTA_GET:
-    case OPT_GLOBAL_QUOTA_SET:
-    case OPT_GLOBAL_QUOTA_ENABLE:
-    case OPT_GLOBAL_QUOTA_DISABLE:
+    case OPT::GLOBAL_QUOTA_GET:
+    case OPT::GLOBAL_QUOTA_SET:
+    case OPT::GLOBAL_QUOTA_ENABLE:
+    case OPT::GLOBAL_QUOTA_DISABLE:
       {
         if (realm_id.empty()) {
           RGWRealm realm(g_ceph_context, store->svc()->sysobj);
@@ -3393,7 +3402,7 @@ int main(int argc, const char **argv)
                          max_size, max_objects,
                          have_max_size, have_max_objects);
           encode_json("user quota", period_config.user_quota, formatter);
-        } else if (quota_scope.empty() && opt_cmd == OPT_GLOBAL_QUOTA_GET) {
+        } else if (quota_scope.empty() && opt_cmd == OPT::GLOBAL_QUOTA_GET) {
           // if no scope is given for GET, print both
           encode_json("bucket quota", period_config.bucket_quota, formatter);
           encode_json("user quota", period_config.user_quota, formatter);
@@ -3404,7 +3413,7 @@ int main(int argc, const char **argv)
         }
         formatter->close_section();
 
-        if (opt_cmd != OPT_GLOBAL_QUOTA_GET) {
+        if (opt_cmd != OPT::GLOBAL_QUOTA_GET) {
           // write the modified period config
           ret = period_config.write(store->svc()->sysobj, realm_id);
           if (ret < 0) {
@@ -3425,7 +3434,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_REALM_CREATE:
+    case OPT::REALM_CREATE:
       {
 	if (realm_name.empty()) {
 	  cerr << "missing realm name" << std::endl;
@@ -3450,7 +3459,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_REALM_DELETE:
+    case OPT::REALM_DELETE:
       {
 	RGWRealm realm(realm_id, realm_name);
 	if (realm_name.empty() && realm_id.empty()) {
@@ -3470,7 +3479,7 @@ int main(int argc, const char **argv)
 
       }
       break;
-    case OPT_REALM_GET:
+    case OPT::REALM_GET:
       {
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store->svc()->sysobj);
@@ -3486,7 +3495,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_REALM_GET_DEFAULT:
+    case OPT::REALM_GET_DEFAULT:
       {
 	RGWRealm realm(g_ceph_context, store->svc()->sysobj);
 	string default_id;
@@ -3501,7 +3510,7 @@ int main(int argc, const char **argv)
 	cout << "default realm: " << default_id << std::endl;
       }
       break;
-    case OPT_REALM_LIST:
+    case OPT::REALM_LIST:
       {
 	RGWRealm realm(g_ceph_context, store->svc()->sysobj);
 	string default_id;
@@ -3522,7 +3531,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_REALM_LIST_PERIODS:
+    case OPT::REALM_LIST_PERIODS:
       {
         int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
 	if (ret < 0) {
@@ -3542,7 +3551,7 @@ int main(int argc, const char **argv)
       }
       break;
 
-    case OPT_REALM_RENAME:
+    case OPT::REALM_RENAME:
       {
 	RGWRealm realm(realm_id, realm_name);
 	if (realm_new_name.empty()) {
@@ -3568,7 +3577,7 @@ int main(int argc, const char **argv)
             "on each of the realm's other clusters." << std::endl;
       }
       break;
-    case OPT_REALM_SET:
+    case OPT::REALM_SET:
       {
 	if (realm_id.empty() && realm_name.empty()) {
 	  cerr << "no realm name or id provided" << std::endl;
@@ -3620,7 +3629,7 @@ int main(int argc, const char **argv)
       }
       break;
 
-    case OPT_REALM_DEFAULT:
+    case OPT::REALM_DEFAULT:
       {
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store->svc()->sysobj);
@@ -3635,7 +3644,7 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_REALM_PULL:
+    case OPT::REALM_PULL:
       {
         if (url.empty()) {
           cerr << "A --url must be provided." << std::endl;
@@ -3709,7 +3718,7 @@ int main(int argc, const char **argv)
       }
       break;
 
-    case OPT_ZONEGROUP_ADD:
+    case OPT::ZONEGROUP_ADD:
       {
 	if (zonegroup_id.empty() && zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
@@ -3768,7 +3777,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_CREATE:
+    case OPT::ZONEGROUP_CREATE:
       {
 	if (zonegroup_name.empty()) {
 	  cerr << "Missing zonegroup name" << std::endl;
@@ -3800,7 +3809,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_DEFAULT:
+    case OPT::ZONEGROUP_DEFAULT:
       {
 	if (zonegroup_id.empty() && zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
@@ -3821,7 +3830,7 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_ZONEGROUP_DELETE:
+    case OPT::ZONEGROUP_DELETE:
       {
 	if (zonegroup_id.empty() && zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
@@ -3840,7 +3849,7 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_ZONEGROUP_GET:
+    case OPT::ZONEGROUP_GET:
       {
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
@@ -3853,7 +3862,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_LIST:
+    case OPT::ZONEGROUP_LIST:
       {
 	RGWZoneGroup zonegroup;
 	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj, false);
@@ -3880,7 +3889,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_MODIFY:
+    case OPT::ZONEGROUP_MODIFY:
       {
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store->svc()->sysobj);
@@ -3951,7 +3960,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_SET:
+    case OPT::ZONEGROUP_SET:
       {
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store->svc()->sysobj);
@@ -3998,7 +4007,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_REMOVE:
+    case OPT::ZONEGROUP_REMOVE:
       {
         RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
         int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
@@ -4036,7 +4045,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_RENAME:
+    case OPT::ZONEGROUP_RENAME:
       {
 	if (zonegroup_new_name.empty()) {
 	  cerr << " missing zonegroup new name" << std::endl;
@@ -4059,7 +4068,7 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_ZONEGROUP_PLACEMENT_LIST:
+    case OPT::ZONEGROUP_PLACEMENT_LIST:
       {
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
@@ -4072,10 +4081,10 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_PLACEMENT_ADD:
-    case OPT_ZONEGROUP_PLACEMENT_MODIFY:
-    case OPT_ZONEGROUP_PLACEMENT_RM:
-    case OPT_ZONEGROUP_PLACEMENT_DEFAULT:
+    case OPT::ZONEGROUP_PLACEMENT_ADD:
+    case OPT::ZONEGROUP_PLACEMENT_MODIFY:
+    case OPT::ZONEGROUP_PLACEMENT_RM:
+    case OPT::ZONEGROUP_PLACEMENT_DEFAULT:
       {
         if (placement_id.empty()) {
           cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -4100,8 +4109,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD ||
-            opt_cmd == OPT_ZONEGROUP_PLACEMENT_MODIFY) {
+        if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_ADD ||
+            opt_cmd == OPT::ZONEGROUP_PLACEMENT_MODIFY) {
           RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
           if (!tags.empty()) {
             target.tags.clear();
@@ -4117,9 +4126,9 @@ int main(int argc, const char **argv)
             target.tags.insert(t);
           }
           target.storage_classes.insert(rule.get_storage_class());
-        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
+        } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_RM) {
           zonegroup.placement_targets.erase(placement_id);
-        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
+        } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {
           if (!zonegroup.placement_targets.count(placement_id)) {
             cerr << "failed to find a zonegroup placement target named '"
                 << placement_id << "'" << std::endl;
@@ -4139,7 +4148,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_CREATE:
+    case OPT::ZONE_CREATE:
       {
         if (zone_name.empty()) {
 	  cerr << "zone name not provided" << std::endl;
@@ -4214,7 +4223,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_DEFAULT:
+    case OPT::ZONE_DEFAULT:
       {
 	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
@@ -4238,7 +4247,7 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_ZONE_DELETE:
+    case OPT::ZONE_DELETE:
       {
 	if (zone_id.empty() && zone_name.empty()) {
 	  cerr << "no zone name or id provided" << std::endl;
@@ -4279,7 +4288,7 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_ZONE_GET:
+    case OPT::ZONE_GET:
       {
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, store->svc()->sysobj);
@@ -4291,7 +4300,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_SET:
+    case OPT::ZONE_SET:
       {
 	RGWZoneParams zone(zone_name);
 	int ret = zone.init(g_ceph_context, store->svc()->sysobj, false);
@@ -4374,7 +4383,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_LIST:
+    case OPT::ZONE_LIST:
       {
 	list<string> zones;
 	int ret = store->svc()->zone->list_zones(zones);
@@ -4401,7 +4410,7 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_MODIFY:
+    case OPT::ZONE_MODIFY:
       {
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, store->svc()->sysobj);
@@ -4501,7 +4510,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_RENAME:
+    case OPT::ZONE_RENAME:
       {
 	if (zone_new_name.empty()) {
 	  cerr << " missing zone new name" << std::endl;
@@ -4536,9 +4545,9 @@ int main(int argc, const char **argv)
 	}
       }
       break;
-    case OPT_ZONE_PLACEMENT_ADD:
-    case OPT_ZONE_PLACEMENT_MODIFY:
-    case OPT_ZONE_PLACEMENT_RM:
+    case OPT::ZONE_PLACEMENT_ADD:
+    case OPT::ZONE_PLACEMENT_MODIFY:
+    case OPT::ZONE_PLACEMENT_RM:
       {
         if (placement_id.empty()) {
           cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -4558,8 +4567,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD ||
-	    opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
+        if (opt_cmd == OPT::ZONE_PLACEMENT_ADD ||
+	    opt_cmd == OPT::ZONE_PLACEMENT_MODIFY) {
 	  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	  ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
 	  if (ret < 0) {
@@ -4622,7 +4631,7 @@ int main(int argc, const char **argv)
                  << "' does not support omap" << std::endl;
              return ret;
           }
-        } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
+        } else if (opt_cmd == OPT::ZONE_PLACEMENT_RM) {
           zone.placement_pools.erase(placement_id);
         }
 
@@ -4636,7 +4645,7 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_PLACEMENT_LIST:
+    case OPT::ZONE_PLACEMENT_LIST:
       {
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, store->svc()->sysobj);
@@ -4648,22 +4657,24 @@ int main(int argc, const char **argv)
 	formatter->flush(cout);
       }
       break;
+    default:
+      break;
     }
     return 0;
   }
 
   bool non_master_cmd = (!store->svc()->zone->is_meta_master() && !yes_i_really_mean_it);
-  std::set<int> non_master_ops_list = {OPT_USER_CREATE, OPT_USER_RM, 
-                                        OPT_USER_MODIFY, OPT_USER_ENABLE,
-                                        OPT_USER_SUSPEND, OPT_SUBUSER_CREATE,
-                                        OPT_SUBUSER_MODIFY, OPT_SUBUSER_RM,
-                                        OPT_BUCKET_LINK, OPT_BUCKET_UNLINK,
-                                        OPT_BUCKET_RESHARD, OPT_BUCKET_RM,
-                                        OPT_METADATA_PUT, OPT_METADATA_RM,
-                                        OPT_RESHARD_CANCEL, OPT_RESHARD_ADD,
-                                        OPT_MFA_CREATE, OPT_MFA_REMOVE,
-                                        OPT_MFA_RESYNC, OPT_CAPS_ADD,
-                                        OPT_CAPS_RM};
+  std::set<OPT> non_master_ops_list = {OPT::USER_CREATE, OPT::USER_RM, 
+                                        OPT::USER_MODIFY, OPT::USER_ENABLE,
+                                        OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
+                                        OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
+                                        OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
+                                        OPT::BUCKET_RESHARD, OPT::BUCKET_RM,
+                                        OPT::METADATA_PUT, OPT::METADATA_RM,
+                                        OPT::RESHARD_CANCEL, OPT::RESHARD_ADD,
+                                        OPT::MFA_CREATE, OPT::MFA_REMOVE,
+                                        OPT::MFA_RESYNC, OPT::CAPS_ADD,
+                                        OPT::CAPS_RM};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
@@ -4746,9 +4757,9 @@ int main(int argc, const char **argv)
     user_op.set_key_type(key_type);
 
   // set suspension operation parameters
-  if (opt_cmd == OPT_USER_ENABLE)
+  if (opt_cmd == OPT::USER_ENABLE)
     user_op.set_suspension(false);
-  else if (opt_cmd == OPT_USER_SUSPEND)
+  else if (opt_cmd == OPT::USER_SUSPEND)
     user_op.set_suspension(true);
 
   // RGWUser to use for user operations
@@ -4776,13 +4787,13 @@ int main(int argc, const char **argv)
   bool output_user_info = true;
 
   switch (opt_cmd) {
-  case OPT_USER_INFO:
+  case OPT::USER_INFO:
     if (user_id.empty() && access_key.empty()) {
       cerr << "ERROR: --uid or --access-key required" << std::endl;
       return EINVAL;
     }
     break;
-  case OPT_USER_CREATE:
+  case OPT::USER_CREATE:
     if (!user_op.has_existing_user()) {
       user_op.set_generate_key(); // generate a new key by default
     }
@@ -4802,7 +4813,7 @@ int main(int argc, const char **argv)
       }
     }
     break;
-  case OPT_USER_RM:
+  case OPT::USER_RM:
     ret = user.remove(user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
@@ -4811,7 +4822,7 @@ int main(int argc, const char **argv)
 
     output_user_info = false;
     break;
-  case OPT_USER_RENAME:
+  case OPT::USER_RENAME:
     if (yes_i_really_mean_it) {
       user_op.set_overwrite_new_user(true);
     }
@@ -4825,9 +4836,9 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_USER_ENABLE:
-  case OPT_USER_SUSPEND:
-  case OPT_USER_MODIFY:
+  case OPT::USER_ENABLE:
+  case OPT::USER_SUSPEND:
+  case OPT::USER_MODIFY:
     ret = user.modify(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not modify user: " << err_msg << std::endl;
@@ -4835,7 +4846,7 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_SUBUSER_CREATE:
+  case OPT::SUBUSER_CREATE:
     ret = user.subusers.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not create subuser: " << err_msg << std::endl;
@@ -4843,7 +4854,7 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_SUBUSER_MODIFY:
+  case OPT::SUBUSER_MODIFY:
     ret = user.subusers.modify(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not modify subuser: " << err_msg << std::endl;
@@ -4851,7 +4862,7 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_SUBUSER_RM:
+  case OPT::SUBUSER_RM:
     ret = user.subusers.remove(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not remove subuser: " << err_msg << std::endl;
@@ -4859,7 +4870,7 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_CAPS_ADD:
+  case OPT::CAPS_ADD:
     ret = user.caps.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not add caps: " << err_msg << std::endl;
@@ -4867,7 +4878,7 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_CAPS_RM:
+  case OPT::CAPS_RM:
     ret = user.caps.remove(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not remove caps: " << err_msg << std::endl;
@@ -4875,7 +4886,7 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_KEY_CREATE:
+  case OPT::KEY_CREATE:
     ret = user.keys.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not create key: " << err_msg << std::endl;
@@ -4883,14 +4894,14 @@ int main(int argc, const char **argv)
     }
 
     break;
-  case OPT_KEY_RM:
+  case OPT::KEY_RM:
     ret = user.keys.remove(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not remove key: " << err_msg << std::endl;
       return -ret;
     }
     break;
-  case OPT_PERIOD_PUSH:
+  case OPT::PERIOD_PUSH:
     {
       RGWEnv env;
       req_info info(g_ceph_context, &env);
@@ -4929,7 +4940,7 @@ int main(int argc, const char **argv)
       }
     }
     return 0;
-  case OPT_PERIOD_UPDATE:
+  case OPT::PERIOD_UPDATE:
     {
       int ret = update_period(realm_id, realm_name, period_id, period_epoch,
                               commit, remote, url, access_key, secret_key,
@@ -4939,7 +4950,7 @@ int main(int argc, const char **argv)
       }
     }
     return 0;
-  case OPT_PERIOD_COMMIT:
+  case OPT::PERIOD_COMMIT:
     {
       // read realm and staging period
       RGWRealm realm(realm_id, realm_name);
@@ -4965,7 +4976,7 @@ int main(int argc, const char **argv)
       formatter->flush(cout);
     }
     return 0;
-  case OPT_ROLE_CREATE:
+  case OPT::ROLE_CREATE:
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
@@ -4991,7 +5002,7 @@ int main(int argc, const char **argv)
       show_role_info(role, formatter);
       return 0;
     }
-  case OPT_ROLE_DELETE:
+  case OPT::ROLE_DELETE:
     {
       if (role_name.empty()) {
         cerr << "ERROR: empty role name" << std::endl;
@@ -5005,7 +5016,7 @@ int main(int argc, const char **argv)
       cout << "role: " << role_name << " successfully deleted" << std::endl;
       return 0;
     }
-  case OPT_ROLE_GET:
+  case OPT::ROLE_GET:
     {
       if (role_name.empty()) {
         cerr << "ERROR: empty role name" << std::endl;
@@ -5019,7 +5030,7 @@ int main(int argc, const char **argv)
       show_role_info(role, formatter);
       return 0;
     }
-  case OPT_ROLE_MODIFY:
+  case OPT::ROLE_MODIFY:
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
@@ -5052,7 +5063,7 @@ int main(int argc, const char **argv)
       cout << "Assume role policy document updated successfully for role: " << role_name << std::endl;
       return 0;
     }
-  case OPT_ROLE_LIST:
+  case OPT::ROLE_LIST:
     {
       vector<RGWRole> result;
       ret = RGWRole::get_roles_by_path_prefix(store->getRados(), g_ceph_context, path_prefix, tenant, result);
@@ -5062,7 +5073,7 @@ int main(int argc, const char **argv)
       show_roles_info(result, formatter);
       return 0;
     }
-  case OPT_ROLE_POLICY_PUT:
+  case OPT::ROLE_POLICY_PUT:
     {
       if (role_name.empty()) {
         cerr << "role name is empty" << std::endl;
@@ -5100,7 +5111,7 @@ int main(int argc, const char **argv)
       cout << "Permission policy attached successfully" << std::endl;
       return 0;
     }
-  case OPT_ROLE_POLICY_LIST:
+  case OPT::ROLE_POLICY_LIST:
     {
       if (role_name.empty()) {
         cerr << "ERROR: Role name is empty" << std::endl;
@@ -5115,7 +5126,7 @@ int main(int argc, const char **argv)
       show_policy_names(policy_names, formatter);
       return 0;
     }
-  case OPT_ROLE_POLICY_GET:
+  case OPT::ROLE_POLICY_GET:
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
@@ -5139,7 +5150,7 @@ int main(int argc, const char **argv)
       show_perm_policy(perm_policy, formatter);
       return 0;
     }
-  case OPT_ROLE_POLICY_DELETE:
+  case OPT::ROLE_POLICY_DELETE:
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
@@ -5181,7 +5192,7 @@ int main(int argc, const char **argv)
     show_user_info(info, formatter);
   }
 
-  if (opt_cmd == OPT_POLICY) {
+  if (opt_cmd == OPT::POLICY) {
     if (format == "xml") {
       int ret = RGWBucketAdminOp::dump_s3_policy(store, bucket_op, cout);
       if (ret < 0) {
@@ -5197,7 +5208,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_LIMIT_CHECK) {
+  if (opt_cmd == OPT::BUCKET_LIMIT_CHECK) {
     void *handle;
     std::list<std::string> user_ids;
     metadata_key = "user";
@@ -5240,9 +5251,9 @@ int main(int argc, const char **argv)
       store->ctl()->meta.mgr->list_keys_complete(handle);
     }
     return -ret;
-  } /* OPT_BUCKET_LIMIT_CHECK */
+  } /* OPT::BUCKET_LIMIT_CHECK */
 
-  if (opt_cmd == OPT_BUCKETS_LIST) {
+  if (opt_cmd == OPT::BUCKETS_LIST) {
     if (bucket_name.empty()) {
       if (!user_id.empty()) {
         if (!user_op.has_existing_user()) {
@@ -5300,9 +5311,9 @@ int main(int argc, const char **argv)
       formatter->close_section();
       formatter->flush(cout);
     } /* have bucket_name */
-  } /* OPT_BUCKETS_LIST */
+  } /* OPT::BUCKETS_LIST */
 
-  if (opt_cmd == OPT_BUCKET_STATS) {
+  if (opt_cmd == OPT::BUCKET_STATS) {
     bucket_op.set_fetch_stats(true);
 
     int r = RGWBucketAdminOp::info(store, bucket_op, f);
@@ -5312,7 +5323,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_LINK) {
+  if (opt_cmd == OPT::BUCKET_LINK) {
     bucket_op.set_bucket_id(bucket_id);
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
@@ -5323,7 +5334,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_UNLINK) {
+  if (opt_cmd == OPT::BUCKET_UNLINK) {
     int r = RGWBucketAdminOp::unlink(store, bucket_op);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
@@ -5331,7 +5342,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_CHOWN) {
+  if (opt_cmd == OPT::BUCKET_CHOWN) {
 
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
@@ -5345,7 +5356,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_LOG_LIST) {
+  if (opt_cmd == OPT::LOG_LIST) {
     // filter by date?
     if (date.size() && date.size() != 10) {
       cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
@@ -5380,7 +5391,7 @@ int main(int argc, const char **argv)
     cout << std::endl;
   }
 
-  if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
+  if (opt_cmd == OPT::LOG_SHOW || opt_cmd == OPT::LOG_RM) {
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
       cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
       exit(1);
@@ -5397,7 +5408,7 @@ int main(int argc, const char **argv)
       oid += bucket_name;
     }
 
-    if (opt_cmd == OPT_LOG_SHOW) {
+    if (opt_cmd == OPT::LOG_SHOW) {
       RGWAccessHandle h;
 
       int r = store->getRados()->log_show_init(oid, &h);
@@ -5470,7 +5481,7 @@ next:
       formatter->flush(cout);
       cout << std::endl;
     }
-    if (opt_cmd == OPT_LOG_RM) {
+    if (opt_cmd == OPT::LOG_RM) {
       int r = store->getRados()->log_remove(oid);
       if (r < 0) {
 	cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;
@@ -5479,7 +5490,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_POOL_ADD) {
+  if (opt_cmd == OPT::POOL_ADD) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
       exit(1);
@@ -5490,7 +5501,7 @@ next:
       cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
   }
 
-  if (opt_cmd == OPT_POOL_RM) {
+  if (opt_cmd == OPT::POOL_RM) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to remove!" << std::endl;
       exit(1);
@@ -5501,7 +5512,7 @@ next:
       cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
   }
 
-  if (opt_cmd == OPT_POOLS_LIST) {
+  if (opt_cmd == OPT::POOLS_LIST) {
     set<rgw_pool> pools;
     int ret = store->svc()->zone->list_placement_set(pools);
     if (ret < 0) {
@@ -5520,7 +5531,7 @@ next:
     cout << std::endl;
   }
 
-  if (opt_cmd == OPT_USAGE_SHOW) {
+  if (opt_cmd == OPT::USAGE_SHOW) {
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
 
@@ -5551,7 +5562,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_USAGE_TRIM) {
+  if (opt_cmd == OPT::USAGE_TRIM) {
     if (user_id.empty() && bucket_name.empty() &&
 	start_date.empty() && end_date.empty() && !yes_i_really_mean_it) {
       cerr << "usage trim without user/date/bucket specified will remove *all* users data" << std::endl;
@@ -5586,7 +5597,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_USAGE_CLEAR) {
+  if (opt_cmd == OPT::USAGE_CLEAR) {
     if (!yes_i_really_mean_it) {
       cerr << "usage clear would remove *all* users usage data for all time" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
@@ -5600,7 +5611,7 @@ next:
   }
 
 
-  if (opt_cmd == OPT_OLH_GET || opt_cmd == OPT_OLH_READLOG) {
+  if (opt_cmd == OPT::OLH_GET || opt_cmd == OPT::OLH_READLOG) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -5611,7 +5622,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OLH_GET) {
+  if (opt_cmd == OPT::OLH_GET) {
     RGWBucketInfo bucket_info;
     int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
@@ -5629,7 +5640,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_OLH_READLOG) {
+  if (opt_cmd == OPT::OLH_READLOG) {
     RGWBucketInfo bucket_info;
     int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
@@ -5661,7 +5672,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_BI_GET) {
+  if (opt_cmd == OPT::BI_GET) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
@@ -5693,7 +5704,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_BI_PUT) {
+  if (opt_cmd == OPT::BI_PUT) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
@@ -5721,7 +5732,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BI_LIST) {
+  if (opt_cmd == OPT::BI_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
@@ -5780,7 +5791,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_BI_PURGE) {
+  if (opt_cmd == OPT::BI_PURGE) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
@@ -5825,7 +5836,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OBJECT_PUT) {
+  if (opt_cmd == OPT::OBJECT_PUT) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -5866,7 +5877,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OBJECT_RM) {
+  if (opt_cmd == OPT::OBJECT_RM) {
     RGWBucketInfo bucket_info;
     int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
@@ -5882,7 +5893,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OBJECT_REWRITE) {
+  if (opt_cmd == OPT::OBJECT_REWRITE) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -5919,14 +5930,14 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OBJECTS_EXPIRE) {
+  if (opt_cmd == OPT::OBJECTS_EXPIRE) {
     if (!store->getRados()->process_expire_objects()) {
       cerr << "ERROR: process_expire_objects() processing returned error." << std::endl;
       return 1;
     }
   }
 
-  if (opt_cmd == OPT_OBJECTS_EXPIRE_STALE_LIST) {
+  if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_LIST) {
     ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, true);
     if (ret < 0) {
       cerr << "ERROR: listing returned " << cpp_strerror(-ret) << std::endl;
@@ -5934,7 +5945,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OBJECTS_EXPIRE_STALE_RM) {
+  if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_RM) {
     ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, false);
     if (ret < 0) {
       cerr << "ERROR: removing returned " << cpp_strerror(-ret) << std::endl;
@@ -5942,7 +5953,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_REWRITE) {
+  if (opt_cmd == OPT::BUCKET_REWRITE) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -6045,7 +6056,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_BUCKET_RESHARD) {
+  if (opt_cmd == OPT::BUCKET_RESHARD) {
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
@@ -6075,7 +6086,7 @@ next:
                       verbose, &cout, formatter);
   }
 
-  if (opt_cmd == OPT_RESHARD_ADD) {
+  if (opt_cmd == OPT::RESHARD_ADD) {
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
@@ -6108,7 +6119,7 @@ next:
     return reshard.add(entry);
   }
 
-  if (opt_cmd == OPT_RESHARD_LIST) {
+  if (opt_cmd == OPT::RESHARD_LIST) {
     list<cls_rgw_reshard_entry> entries;
     int ret;
     int count = 0;
@@ -6151,7 +6162,7 @@ next:
     return 0;
   }
 
-  if (opt_cmd == OPT_RESHARD_STATUS) {
+  if (opt_cmd == OPT::RESHARD_STATUS) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -6178,7 +6189,7 @@ next:
     show_reshard_status(status, formatter);
   }
 
-  if (opt_cmd == OPT_RESHARD_PROCESS) {
+  if (opt_cmd == OPT::RESHARD_PROCESS) {
     RGWReshard reshard(store, true, &cout);
 
     int ret = reshard.process_all_logshards();
@@ -6188,7 +6199,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_RESHARD_CANCEL) {
+  if (opt_cmd == OPT::RESHARD_CANCEL) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -6231,7 +6242,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OBJECT_UNLINK) {
+  if (opt_cmd == OPT::OBJECT_UNLINK) {
     RGWBucketInfo bucket_info;
     int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
@@ -6250,7 +6261,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_OBJECT_STAT) {
+  if (opt_cmd == OPT::OBJECT_STAT) {
     RGWBucketInfo bucket_info;
     int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
@@ -6310,7 +6321,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_BUCKET_CHECK) {
+  if (opt_cmd == OPT::BUCKET_CHECK) {
     if (check_head_obj_locator) {
       if (bucket_name.empty()) {
         cerr << "ERROR: need to specify bucket name" << std::endl;
@@ -6322,7 +6333,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_RM) {
+  if (opt_cmd == OPT::BUCKET_RM) {
     if (!inconsistent_index) {
       RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, bypass_gc, true);
     } else {
@@ -6335,7 +6346,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_GC_LIST) {
+  if (opt_cmd == OPT::GC_LIST) {
     int index = 0;
     bool truncated;
     formatter->open_array_section("entries");
@@ -6371,7 +6382,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_GC_PROCESS) {
+  if (opt_cmd == OPT::GC_PROCESS) {
     int ret = store->getRados()->process_gc(!include_all);
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
@@ -6379,7 +6390,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_LC_LIST) {
+  if (opt_cmd == OPT::LC_LIST) {
     formatter->open_array_section("lifecycle_list");
     map<string, int> bucket_lc_map;
     string marker;
@@ -6410,7 +6421,7 @@ next:
   }
 
 
-  if (opt_cmd == OPT_LC_GET) {
+  if (opt_cmd == OPT::LC_GET) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -6443,7 +6454,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_LC_PROCESS) {
+  if (opt_cmd == OPT::LC_PROCESS) {
     int ret = store->getRados()->process_lc();
     if (ret < 0) {
       cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
@@ -6452,7 +6463,7 @@ next:
   }
 
 
-  if (opt_cmd == OPT_LC_RESHARD_FIX) {
+  if (opt_cmd == OPT::LC_RESHARD_FIX) {
     ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op,f);
     if (ret < 0) {
       cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
@@ -6460,7 +6471,7 @@ next:
 
   }
 
-  if (opt_cmd == OPT_ORPHANS_FIND) {
+  if (opt_cmd == OPT::ORPHANS_FIND) {
     if (!yes_i_really_mean_it) {
       cerr << "accidental removal of active objects can not be reversed; "
 	   << "do you really mean it? (requires --yes-i-really-mean-it)"
@@ -6496,7 +6507,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_ORPHANS_FINISH) {
+  if (opt_cmd == OPT::ORPHANS_FINISH) {
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
@@ -6516,7 +6527,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_ORPHANS_LIST_JOBS){
+  if (opt_cmd == OPT::ORPHANS_LIST_JOBS){
     RGWOrphanStore orphan_store(store);
     int ret = orphan_store.init();
     if (ret < 0){
@@ -6542,11 +6553,11 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_USER_CHECK) {
+  if (opt_cmd == OPT::USER_CHECK) {
     check_bad_user_bucket_mapping(store, user_id, fix);
   }
 
-  if (opt_cmd == OPT_USER_STATS) {
+  if (opt_cmd == OPT::USER_STATS) {
     if (user_id.empty()) {
       cerr << "ERROR: uid not specified" << std::endl;
       return EINVAL;
@@ -6619,7 +6630,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_METADATA_GET) {
+  if (opt_cmd == OPT::METADATA_GET) {
     int ret = store->ctl()->meta.mgr->get(metadata_key, formatter, null_yield);
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
@@ -6629,7 +6640,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_METADATA_PUT) {
+  if (opt_cmd == OPT::METADATA_PUT) {
     bufferlist bl;
     int ret = read_input(infile, bl);
     if (ret < 0) {
@@ -6643,7 +6654,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_METADATA_RM) {
+  if (opt_cmd == OPT::METADATA_RM) {
     int ret = store->ctl()->meta.mgr->remove(metadata_key, null_yield);
     if (ret < 0) {
       cerr << "ERROR: can't remove key: " << cpp_strerror(-ret) << std::endl;
@@ -6651,8 +6662,8 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_USER_LIST) {
-    if (opt_cmd == OPT_USER_LIST) {
+  if (opt_cmd == OPT::METADATA_LIST || opt_cmd == OPT::USER_LIST) {
+    if (opt_cmd == OPT::USER_LIST) {
       metadata_key = "user";
     }
     void *handle;
@@ -6703,7 +6714,7 @@ next:
     store->ctl()->meta.mgr->list_keys_complete(handle);
   }
 
-  if (opt_cmd == OPT_MDLOG_LIST) {
+  if (opt_cmd == OPT::MDLOG_LIST) {
     utime_t start_time, end_time;
 
     int ret = parse_date_str(start_date, start_time);
@@ -6759,7 +6770,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_MDLOG_STATUS) {
+  if (opt_cmd == OPT::MDLOG_STATUS) {
     int i = (specified_shard_id ? shard_id : 0);
 
     if (period_id.empty()) {
@@ -6789,7 +6800,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_MDLOG_AUTOTRIM) {
+  if (opt_cmd == OPT::MDLOG_AUTOTRIM) {
     // need a full history for purging old mdlog periods
     store->svc()->mdlog->init_oldest_log_period();
 
@@ -6809,7 +6820,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_MDLOG_TRIM) {
+  if (opt_cmd == OPT::MDLOG_TRIM) {
     utime_t start_time, end_time;
 
     if (!specified_shard_id) {
@@ -6842,11 +6853,11 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_SYNC_STATUS) {
+  if (opt_cmd == OPT::SYNC_STATUS) {
     sync_status(formatter);
   }
 
-  if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
+  if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
     RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
 
     int ret = sync.init();
@@ -6887,7 +6898,7 @@ next:
 
   }
 
-  if (opt_cmd == OPT_METADATA_SYNC_INIT) {
+  if (opt_cmd == OPT::METADATA_SYNC_INIT) {
     RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
 
     int ret = sync.init();
@@ -6903,7 +6914,7 @@ next:
   }
 
 
-  if (opt_cmd == OPT_METADATA_SYNC_RUN) {
+  if (opt_cmd == OPT::METADATA_SYNC_RUN) {
     RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
 
     int ret = sync.init();
@@ -6919,7 +6930,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_DATA_SYNC_STATUS) {
+  if (opt_cmd == OPT::DATA_SYNC_STATUS) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
@@ -6982,7 +6993,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_DATA_SYNC_INIT) {
+  if (opt_cmd == OPT::DATA_SYNC_INIT) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
@@ -7003,7 +7014,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_DATA_SYNC_RUN) {
+  if (opt_cmd == OPT::DATA_SYNC_RUN) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
@@ -7032,7 +7043,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_SYNC_INIT) {
+  if (opt_cmd == OPT::BUCKET_SYNC_INIT) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
@@ -7060,12 +7071,12 @@ next:
     }
   }
 
-  if ((opt_cmd == OPT_BUCKET_SYNC_DISABLE) || (opt_cmd == OPT_BUCKET_SYNC_ENABLE)) {
+  if ((opt_cmd == OPT::BUCKET_SYNC_DISABLE) || (opt_cmd == OPT::BUCKET_SYNC_ENABLE)) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     } 
-    if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
+    if (opt_cmd == OPT::BUCKET_SYNC_DISABLE) {
       bucket_op.set_sync_bucket(false);
     } else {
       bucket_op.set_sync_bucket(true);
@@ -7079,7 +7090,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
+  if (opt_cmd == OPT::BUCKET_SYNC_STATUS) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -7093,7 +7104,7 @@ next:
     bucket_sync_status(store, bucket_info, source_zone, std::cout);
   }
 
-  if (opt_cmd == OPT_BUCKET_SYNC_MARKERS) {
+  if (opt_cmd == OPT::BUCKET_SYNC_MARKERS) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
@@ -7126,7 +7137,7 @@ next:
     formatter->flush(cout);
   }
 
- if (opt_cmd == OPT_BUCKET_SYNC_RUN) {
+ if (opt_cmd == OPT::BUCKET_SYNC_RUN) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
@@ -7155,7 +7166,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BILOG_LIST) {
+  if (opt_cmd == OPT::BILOG_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -7195,7 +7206,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_SYNC_ERROR_LIST) {
+  if (opt_cmd == OPT::SYNC_ERROR_LIST) {
     if (max_entries < 0) {
       max_entries = 1000;
     }
@@ -7273,7 +7284,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_SYNC_ERROR_TRIM) {
+  if (opt_cmd == OPT::SYNC_ERROR_TRIM) {
     utime_t start_time, end_time;
     int ret = parse_date_str(start_date, start_time);
     if (ret < 0)
@@ -7301,7 +7312,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BILOG_TRIM) {
+  if (opt_cmd == OPT::BILOG_TRIM) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -7319,7 +7330,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_BILOG_STATUS) {
+  if (opt_cmd == OPT::BILOG_STATUS) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -7342,7 +7353,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_BILOG_AUTOTRIM) {
+  if (opt_cmd == OPT::BILOG_AUTOTRIM) {
     RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
     RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
     int ret = http.start();
@@ -7367,7 +7378,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_DATALOG_LIST) {
+  if (opt_cmd == OPT::DATALOG_LIST) {
     formatter->open_array_section("entries");
     bool truncated;
     int count = 0;
@@ -7416,7 +7427,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_DATALOG_STATUS) {
+  if (opt_cmd == OPT::DATALOG_STATUS) {
     int i = (specified_shard_id ? shard_id : 0);
 
     formatter->open_array_section("entries");
@@ -7436,7 +7447,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_DATALOG_AUTOTRIM) {
+  if (opt_cmd == OPT::DATALOG_AUTOTRIM) {
     RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
     RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
     int ret = http.start();
@@ -7454,7 +7465,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_DATALOG_TRIM) {
+  if (opt_cmd == OPT::DATALOG_TRIM) {
     utime_t start_time, end_time;
 
     int ret = parse_date_str(start_date, start_time);
@@ -7484,7 +7495,7 @@ next:
     }
   }
 
-  bool quota_op = (opt_cmd == OPT_QUOTA_SET || opt_cmd == OPT_QUOTA_ENABLE || opt_cmd == OPT_QUOTA_DISABLE);
+  bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
 
   if (quota_op) {
     if (bucket_name.empty() && user_id.empty()) {
@@ -7511,7 +7522,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_MFA_CREATE) {
+  if (opt_cmd == OPT::MFA_CREATE) {
     rados::cls::otp::otp_info_t config;
 
     if (user_id.empty()) {
@@ -7578,7 +7589,7 @@ next:
     }
   }
 
- if (opt_cmd == OPT_MFA_REMOVE) {
+ if (opt_cmd == OPT::MFA_REMOVE) {
     if (user_id.empty()) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
@@ -7614,7 +7625,7 @@ next:
     }
   }
 
- if (opt_cmd == OPT_MFA_GET) {
+ if (opt_cmd == OPT::MFA_GET) {
     if (user_id.empty()) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
@@ -7641,7 +7652,7 @@ next:
     formatter->flush(cout);
   }
 
- if (opt_cmd == OPT_MFA_LIST) {
+ if (opt_cmd == OPT::MFA_LIST) {
     if (user_id.empty()) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
@@ -7659,7 +7670,7 @@ next:
     formatter->flush(cout);
   }
 
- if (opt_cmd == OPT_MFA_CHECK) {
+ if (opt_cmd == OPT::MFA_CHECK) {
     if (user_id.empty()) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
@@ -7685,7 +7696,7 @@ next:
     cout << "ok" << std::endl;
   }
 
- if (opt_cmd == OPT_MFA_RESYNC) {
+ if (opt_cmd == OPT::MFA_RESYNC) {
     if (user_id.empty()) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
@@ -7749,7 +7760,7 @@ next:
 
  }
 
- if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_LIST) {
+ if (opt_cmd == OPT::RESHARD_STALE_INSTANCES_LIST) {
    if (!store->svc()->zone->can_reshard() && !yes_i_really_mean_it) {
      cerr << "Resharding disabled in a multisite env, stale instances unlikely from resharding" << std::endl;
      cerr << "These instances may not be safe to delete." << std::endl;
@@ -7763,7 +7774,7 @@ next:
    }
  }
 
- if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_DELETE) {
+ if (opt_cmd == OPT::RESHARD_STALE_INSTANCES_DELETE) {
    if (!store->svc()->zone->can_reshard()) {
      cerr << "Resharding disabled in a multisite env. Stale instances are not safe to be deleted." << std::endl;
      return EINVAL;
@@ -7775,7 +7786,7 @@ next:
    }
  }
 
-  if (opt_cmd == OPT_PUBSUB_TOPICS_LIST) {
+  if (opt_cmd == OPT::PUBSUB_TOPICS_LIST) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -7818,7 +7829,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_PUBSUB_TOPIC_CREATE) {
+  if (opt_cmd == OPT::PUBSUB_TOPIC_CREATE) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -7841,7 +7852,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_PUBSUB_TOPIC_GET) {
+  if (opt_cmd == OPT::PUBSUB_TOPIC_GET) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -7867,7 +7878,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_PUBSUB_NOTIFICATION_CREATE) {
+  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_CREATE) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -7904,7 +7915,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_PUBSUB_NOTIFICATION_RM) {
+  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_RM) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -7941,7 +7952,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_PUBSUB_TOPIC_RM) {
+  if (opt_cmd == OPT::PUBSUB_TOPIC_RM) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -7964,7 +7975,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_PUBSUB_SUB_GET) {
+  if (opt_cmd == OPT::PUBSUB_SUB_GET) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -7992,7 +8003,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_PUBSUB_SUB_CREATE) {
+  if (opt_cmd == OPT::PUBSUB_SUB_CREATE) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -8041,7 +8052,7 @@ next:
     }
   }
 
- if (opt_cmd == OPT_PUBSUB_SUB_RM) {
+ if (opt_cmd == OPT::PUBSUB_SUB_RM) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -8065,7 +8076,7 @@ next:
     }
   }
 
- if (opt_cmd == OPT_PUBSUB_SUB_PULL) {
+ if (opt_cmd == OPT::PUBSUB_SUB_PULL) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
@@ -8094,7 +8105,7 @@ next:
     formatter->flush(cout);
  }
 
- if (opt_cmd == OPT_PUBSUB_EVENT_RM) {
+ if (opt_cmd == OPT::PUBSUB_EVENT_RM) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
       return EINVAL;
