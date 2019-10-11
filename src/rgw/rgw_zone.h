@@ -565,11 +565,18 @@ struct RGWZone {
  */
   uint32_t bucket_index_max_shards;
 
+  // pre-shard buckets on creation to enable some write-parallism by default,
+  // delay the need to reshard as the bucket grows, and (in multisite) get some
+  // bucket index sharding where dynamic resharding is not supported
+  static constexpr uint32_t default_bucket_index_max_shards = 11;
+
   bool sync_from_all;
   set<std::string> sync_from; /* list of zones to sync from */
 
-  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0),
-              sync_from_all(true) {}
+  RGWZone()
+    : log_meta(false), log_data(false), read_only(false),
+      bucket_index_max_shards(default_bucket_index_max_shards),
+      sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(7, 1, bl);
