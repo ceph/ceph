@@ -24,6 +24,7 @@
 #include <seastar/core/lowres_clock.hh>
 #endif
 
+#include "include/compat.h"
 #include "include/types.h"
 #include "include/timegm.h"
 #include "common/strtol.h"
@@ -466,11 +467,15 @@ public:
       }
     }
 
+    #ifndef _WIN32
     // apply the tm_gmtoff manually below, since none of mktime,
     // gmtime, and localtime seem to do it.  zero it out here just in
     // case some other libc *does* apply it.  :(
     auto gmtoff = tm.tm_gmtoff;
     tm.tm_gmtoff = 0;
+    #else
+    auto gmtoff = _timezone;
+    #endif /* _WIN32 */
 
     time_t t = internal_timegm(&tm);
     if (epoch)
