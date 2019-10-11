@@ -307,13 +307,18 @@ bool Election::election_stable()
 
 bool Election::check_leader_agreement()
 {
-  int leader = electors[0]->logic.get_acked_leader();
+  int leader = electors[0]->logic.get_election_winner();
+  ldout(g_ceph_context, 10) << "check_leader_agreement on " << leader << dendl;
   for (auto i: electors) {
-    if (leader != i.second->logic.get_acked_leader()) {
+    if (leader != i.second->logic.get_election_winner()) {
+      ldout(g_ceph_context, 10) << "rank " << i.first << " has different leader "
+				<< i.second->logic.get_election_winner() << dendl;
       return false;
     }
   }
   if (disallowed_leaders.count(leader)) {
+    ldout(g_ceph_context, 10) << "that leader is disallowed! member of "
+			      << disallowed_leaders << dendl;
     return false;
   }
   return true;
@@ -407,7 +412,7 @@ TEST(election, disallowed_doesnt_win)
     ASSERT_TRUE(election.election_stable());
     ASSERT_TRUE(election.check_leader_agreement());
     ASSERT_TRUE(election.check_epoch_agreement());
-    int leader = election.electors[0]->logic.get_acked_leader();
+    int leader = election.electors[0]->logic.get_election_winner();
     for (int j = 0; j <= i; ++j) {
       ASSERT_NE(j, leader);
     }
@@ -423,7 +428,7 @@ TEST(election, disallowed_doesnt_win)
     ASSERT_TRUE(election.election_stable());
     ASSERT_TRUE(election.check_leader_agreement());
     ASSERT_TRUE(election.check_epoch_agreement());
-    int leader = election.electors[0]->logic.get_acked_leader();
+    int leader = election.electors[0]->logic.get_election_winner();
     for (int j = i; j < MON_COUNT; ++j) {
       ASSERT_NE(j, leader);
     }
