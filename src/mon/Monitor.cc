@@ -271,13 +271,13 @@ public:
 	   std::ostream& errss,
 	   bufferlist& out) override {
     stringstream outss;
-    mon->do_admin_command(command, cmdmap, f, errss, outss);
+    int r = mon->do_admin_command(command, cmdmap, f, errss, outss);
     out.append(outss);
-    return 0;
+    return r;
   }
 };
 
-void Monitor::do_admin_command(
+int Monitor::do_admin_command(
   std::string_view command,
   const cmdmap_t& cmdmap,
   Formatter *f,
@@ -286,6 +286,7 @@ void Monitor::do_admin_command(
 {
   std::lock_guard l(lock);
 
+  int r = 0;
   string args;
   for (auto p = cmdmap.begin();
        p != cmdmap.end(); ++p) {
@@ -405,7 +406,7 @@ void Monitor::do_admin_command(
     << "entity='admin socket' "
     << "cmd=" << command << " "
     << "args=" << args << ": finished";
-  return;
+  return r;
 
 abort:
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -413,6 +414,7 @@ abort:
     << "entity='admin socket' "
     << "cmd=" << command << " "
     << "args=" << args << ": aborted";
+  return r;
 }
 
 void Monitor::handle_signal(int signum)
