@@ -1869,6 +1869,7 @@ static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen
   return 0;
 }
 
+#ifndef _WIN32
 int buffer::list::write_fd(int fd) const
 {
   // use writev!
@@ -1948,6 +1949,36 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   }
   return 0;
 }
+#else
+int buffer::list::write_fd(int fd) const
+{
+  // There's no writev on Windows. WriteFileGather may be an option,
+  // but it has strict requirements in terms of buffer size and alignment.
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
+  while (left_pbrs) {
+    int written = 0;
+    while (written < p->length()) {
+      int r = ::write(fd, p->c_str(), p->length() - written);
+      if (r < 0)
+        return -errno;
+
+      written += r;
+    }
+  }
+
+  return 0;
+
+}
+int buffer::list::write_fd(int fd, uint64_t offset) const
+{
+  int r = ::lseek64(fd, offset, SEEK_SET);
+  if (r != offset)
+    return -errno;
+
+  return write_fd(fd);
+}
+#endif
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {

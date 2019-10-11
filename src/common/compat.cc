@@ -213,6 +213,9 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen)
 
 #ifdef _WIN32
 
+#include <iomanip>
+#include <ctime>
+
 // chown is not available on Windows. Plus, changing file owners is not
 // a common practice on Windows.
 int chown(const char *path, uid_t owner, gid_t group) {
@@ -225,6 +228,119 @@ int fchown(int fd, uid_t owner, gid_t group) {
 
 int lchown(const char *path, uid_t owner, gid_t group) {
   return 0;
+}
+
+int posix_memalign(void **memptr, size_t alignment, size_t size) {
+  *memptr = _aligned_malloc(size, alignment);
+  return *memptr ? 0 : errno;
+}
+
+char *strptime(const char *s, const char *format, struct tm *tm) {
+  std::istringstream input(s);
+  input.imbue(std::locale(setlocale(LC_ALL, nullptr)));
+  input >> std::get_time(tm, format);
+  if (input.fail()) {
+    return nullptr;
+  }
+  return (char*)(s + input.tellg());
+}
+
+int pipe(int pipefd[2]) {
+  // We'll use the same pipe size as Linux (64kb).
+  return _pipe(pipefd, 0x10000, O_NOINHERIT);
+}
+
+// lrand48 is not available on Windows. We'll generate a pseudo-random
+// value in the 0 - 2^31 range by calling rand twice.
+long int lrand48(void) {
+  long int val;
+  val = (long int) rand();
+  val << 16;
+  val += (long int) rand();
+  return val;
+}
+
+int fsync(int fd) {
+  HANDLE handle = (HANDLE*)_get_osfhandle(fd);
+  if (handle == INVALID_HANDLE_VALUE)
+    return -1;
+  if (!FlushFileBuffers(handle))
+    return -1;
+  return 0;
+}
+
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
+  DWORD bytes_written = 0;
+
+  HANDLE handle = (HANDLE*)_get_osfhandle(fd);
+  if (handle == INVALID_HANDLE_VALUE)
+    return -1;
+
+  OVERLAPPED overlapped = { 0 };
+  ULARGE_INTEGER offsetUnion;
+  offsetUnion.QuadPart = offset;
+
+  overlapped.Offset = offsetUnion.LowPart;
+  overlapped.OffsetHigh = offsetUnion.HighPart;
+
+  if (!WriteFile(handle, buf, count, &bytes_written, &overlapped))
+    // we may consider mapping error codes, although that may
+    // not be exhaustive.
+    return -1;
+
+  return bytes_written;
+}
+
+ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
+  DWORD bytes_read = 0;
+
+  HANDLE handle = (HANDLE*)_get_osfhandle(fd);
+  if (handle == INVALID_HANDLE_VALUE)
+    return -1;
+
+  OVERLAPPED overlapped = { 0 };
+  ULARGE_INTEGER offsetUnion;
+  offsetUnion.QuadPart = offset;
+
+  overlapped.Offset = offsetUnion.LowPart;
+  overlapped.OffsetHigh = offsetUnion.HighPart;
+
+  if (!ReadFile(handle, buf, count, &bytes_read, &overlapped)) {
+    if (GetLastError() != ERROR_HANDLE_EOF)
+      return -1;
+  }
+
+  return bytes_read;
+}
+
+ssize_t preadv(int fd, const struct iovec *iov, int iov_cnt) {
+  ssize_t read = 0;
+
+  for (int i = 0; i < iov_cnt; i++) {
+    int r = ::read(fd, iov[i].iov_base, iov[i].iov_len);
+    if (r < 0)
+      return r;
+    read += r;
+    if (r < iov[i].iov_len)
+      break;
+  }
+
+  return read;
+}
+
+ssize_t writev(int fd, const struct iovec *iov, int iov_cnt) {
+  ssize_t written = 0;
+
+  for (int i = 0; i < iov_cnt; i++) {
+    int r = ::write(fd, iov[i].iov_base, iov[i].iov_len);
+    if (r < 0)
+      return r;
+    written += r;
+    if (r < iov[i].iov_len)
+      break;
+  }
+
+  return written;
 }
 
 #endif /* _WIN32 */
