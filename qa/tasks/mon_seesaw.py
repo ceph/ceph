@@ -145,7 +145,7 @@ def task(ctx, config):
     replacer     the id of the new mon (use "${victim}_prime" if not specified)
     """
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     manager = CephManager(mon, ctx=ctx, logger=log.getChild('ceph_manager'))
 
     if config is None:

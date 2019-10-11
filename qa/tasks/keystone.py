@@ -32,7 +32,7 @@ def install_packages(ctx, config):
 	'rpm': [ 'libffi-devel', 'openssl-devel' ],
     }
     for (client, _) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         for dep in deps[remote.os.package_type]:
             install_package(dep, remote)
     try:
@@ -41,7 +41,7 @@ def install_packages(ctx, config):
         log.info('Removing packaged dependencies of Keystone...')
 
         for (client, _) in config.items():
-            (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+            (remote,) = ctx.cluster.only(client).remotes.keys()
             for dep in deps[remote.os.package_type]:
                 remove_package(dep, remote)
 
@@ -176,7 +176,7 @@ def run_keystone(ctx, config):
     log.info('Configuring keystone...')
 
     for (client, _) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         cluster_name, _, client_id = teuthology.split_role(client)
 
         # start the public endpoint
