@@ -274,14 +274,14 @@ public:
         break;
     }
 
-    int num_completions, r = 0;
+    int num_completions = 0, r = 0;
     map<int, string> objs;
     map<int, string> *pobjs = (need_multiple_rounds() ? &objs : NULL);
     while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r, pobjs)) {
       if (r >= 0 && ret >= 0) {
-        for(int i = 0; i < num_completions && iter != objs_container.end(); ++i, ++iter) {
+        for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
           int issue_ret = issue_op(iter->first, iter->second);
-          if(issue_ret < 0) {
+          if (issue_ret < 0) {
             ret = issue_ret;
             break;
           }
@@ -293,6 +293,14 @@ public:
         // For those objects which need another round, use them to reset
         // the container
         reset_container(objs);
+        iter = objs_container.begin();
+        for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
+          int issue_ret = issue_op(iter->first, iter->second);
+          if (issue_ret < 0) {
+            ret = issue_ret;
+            break;
+          }
+        }
       }
     }
 
