@@ -716,7 +716,7 @@ static inline void dump_header_if_nonempty(struct req_state* s,
 static inline std::string compute_domain_uri(const struct req_state *s) {
   std::string uri = (!s->info.domain.empty()) ? s->info.domain :
     [&s]() -> std::string {
-    auto env = *(s->info.env);
+    RGWEnv const &env(*(s->info.env));
     std::string uri =
     env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
     if (env.exists("SERVER_NAME")) {
