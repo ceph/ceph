@@ -1,6 +1,10 @@
 import logging
 import os
-import urllib
+
+try:
+    from urllib.parse import urlencode
+except ImportError:
+    from urllib import urlencode
 
 import requests
 
@@ -58,7 +62,7 @@ def list_locks(keyed_by_name=False, **kwargs):
     if kwargs:
         if 'machine_type' in kwargs:
             kwargs['machine_type'] = kwargs['machine_type'].replace(',','|')
-        uri += '?' + urllib.urlencode(kwargs)
+        uri += '?' + urlencode(kwargs)
     try:
         response = requests.get(uri)
     except requests.ConnectionError:

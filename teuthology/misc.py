@@ -13,12 +13,18 @@ import subprocess
 import sys
 import tarfile
 import time
-import urllib2
-import urlparse
 import yaml
 import json
 import re
 import pprint
+
+try:
+    from urllib.parse import urljoin
+    from urllib.request import urlopen
+    from urllib.error import HTTPError
+except ImportError:
+    from urlparse import urljoin
+    from urllib2 import urlopen,  HTTPError
 
 from netaddr.strategy.ipv4 import valid_str as _is_ipv4
 from netaddr.strategy.ipv6 import valid_str as _is_ipv6
@@ -230,19 +236,19 @@ def get_ceph_binary_url(package=None,
                 branch = 'master'
             ref = branch
 
-        sha1_url = urlparse.urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
+        sha1_url = urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
         log.debug('Translating ref to sha1 using url %s', sha1_url)
 
         try:
-            sha1_fp = urllib2.urlopen(sha1_url)
+            sha1_fp = urlopen(sha1_url)
             sha1 = sha1_fp.read().rstrip('\n')
             sha1_fp.close()
-        except urllib2.HTTPError as e:
+        except HTTPError as e:
             log.error('Failed to get url %s', sha1_url)
             raise e
 
     log.debug('Using %s %s sha1 %s', package, format, sha1)
-    bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
+    bindir_url = urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
     return (sha1, bindir_url)
 
 

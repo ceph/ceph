@@ -3,8 +3,12 @@ import re
 import requests
 import socket
 import time
-import urllib
 import yaml
+
+try:
+    from urllib.parse import  urlencode
+except ImportError:
+    from urllib import urlencode
 
 from copy import deepcopy
 from libcloud.common.exceptions import RateLimitReachedError, BaseHTTPError
@@ -289,7 +293,7 @@ class OpenStackProvisioner(base.Provisioner):
                 log.exception("Could not destroy volume %s", vol)
 
     def _update_dns(self):
-        query = urllib.urlencode(dict(
+        query = urlencode(dict(
             name=self.name,
             ip=self.ips[0],
         ))

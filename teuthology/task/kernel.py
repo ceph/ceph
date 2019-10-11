@@ -7,7 +7,11 @@ import logging
 import os
 import re
 import shlex
-import urlparse
+
+try:
+    from urllib.parse import urljoin
+except ImportError:
+    from urlparse import urljoin
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
@@ -370,7 +374,7 @@ def download_kernel(ctx, config):
             if teuth_config.use_shaman:
                 if role_remote.os.package_type == 'rpm':
                     arch = builder.arch
-                    baseurl = urlparse.urljoin(
+                    baseurl = urljoin(
                         builder.base_url,
                         '/'.join([arch, ''])
                     )
@@ -380,7 +384,7 @@ def download_kernel(ctx, config):
                     )
                 elif role_remote.os.package_type == 'deb':
                     arch = 'amd64'  # FIXME
-                    baseurl = urlparse.urljoin(
+                    baseurl = urljoin(
                         builder.base_url,
                         '/'.join([
                             'pool', 'main', 'l',

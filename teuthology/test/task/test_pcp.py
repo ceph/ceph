@@ -1,6 +1,10 @@
 import os
 import requests
-import urlparse
+
+try:
+    from urllib.parse import parse_qs, urljoin
+except ImportError:
+    from urlparse import parse_qs, urljoin
 
 from mock import patch, DEFAULT, Mock, mock_open, call
 from pytest import raises
@@ -87,7 +91,7 @@ class TestPCPGrapher(TestPCPDataSource):
         assert obj.hosts == hosts
         assert obj.time_from == time_from
         assert obj.time_until == time_until
-        expected_url = urlparse.urljoin(config.pcp_host, self.klass._endpoint)
+        expected_url = urljoin(config.pcp_host, self.klass._endpoint)
         assert obj.base_url == expected_url
 
 
@@ -103,13 +107,13 @@ class TestGrafanaGrapher(TestPCPGrapher):
             time_from=time_from,
             time_until=time_until,
         )
-        base_url = urlparse.urljoin(
+        base_url = urljoin(
             config.pcp_host,
             'grafana/index.html#/dashboard/script/index.js',
         )
         assert obj.base_url == base_url
         got_url = obj.build_graph_url()
-        parsed_query = urlparse.parse_qs(got_url.split('?')[1])
+        parsed_query = parse_qs(got_url.split('?')[1])
         assert parsed_query['hosts'] == hosts
         assert len(parsed_query['time_from']) == 1
         assert parsed_query['time_from'][0] == time_from
