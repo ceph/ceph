@@ -2442,6 +2442,9 @@ int OSD::set_numa_affinity()
 	dout(1) << __func__ << " objectstore and network numa nodes do not match"
 		<< dendl;
       }
+    } else {
+      derr << __func__ << " unable to identify cluster interface '" << back_iface
+           << "' numa node: " << cpp_strerror(r) << dendl;
     }
   } else {
     derr << __func__ << " unable to identify public interface '" << front_iface
