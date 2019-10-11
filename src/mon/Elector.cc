@@ -58,7 +58,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 		<< ").elector(" << epoch << ") ";
 }
 
-Elector::Elector(Monitor *m) : logic(this,
+Elector::Elector(Monitor *m) : logic(this, ElectionLogic::CLASSIC,
 				     &peer_tracker, m->cct),
 			       peer_tracker(this, 12*60*60), // TODO: make configurable
 			       ping_timeout(2),
