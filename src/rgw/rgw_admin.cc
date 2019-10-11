@@ -399,6 +399,125 @@ void usage()
 }
 
 
+class SimpleCmd {
+public:
+  struct Def {
+    string cmd;
+    int opt{-1};
+  };
+
+  using Aliases = std::vector<std::set<string> >;
+  using Commands = std::vector<Def>;
+
+private:
+  struct Node {
+    map<string, Node> next;
+    int opt{-1};
+  };
+
+  Node cmd_root;
+  map<string, string> alias_map;
+
+  string normalize_alias(const string& s) const {
+    auto iter = alias_map.find(s);
+    if (iter == alias_map.end()) {
+      return s;
+    }
+
+    return iter->second;
+  }
+  void init_alias_map(Aliases& aliases) {
+    for (auto& alias_set : aliases) {
+      std::optional<string> first;
+
+      for (auto& alias : alias_set) {
+        if (!first) {
+          first = alias;
+        } else {
+          alias_map[alias] = *first;
+        }
+      }
+    }
+  }
+
+  Node root;
+
+public:
+  SimpleCmd() {}
+
+  SimpleCmd(std::optional<Commands> cmds,
+            std::optional<Aliases> aliases) {
+    if (aliases) {
+      add_aliases(*aliases);
+    }
+
+    if (cmds) {
+      add_commands(*cmds);
+    }
+  }
+
+  void add_aliases(Aliases& aliases) {
+    init_alias_map(aliases);
+  }
+
+  void add_commands(std::vector<Def>& cmds) {
+    for (auto& cmd : cmds) {
+      vector<string> words;
+      get_str_vec(cmd.cmd, " ", words);
+
+      auto node = &cmd_root;
+      for (auto& word : words) {
+        auto norm = normalize_alias(word);
+        auto parent = node;
+        node = &node->next[norm];
+
+        if (norm == "[*]") { /* optional param at the end */
+          parent->next["*"] = *node; /* can be also looked up by '*' */
+          parent->opt = cmd.opt;
+        }
+      }
+
+      node->opt = cmd.opt;
+    }
+  }
+
+  template <class Container>
+  bool find_command(Container& args,
+                    int *opt_cmd,
+                    vector<string> *extra_args,
+                    string *error) {
+    auto node = &cmd_root;
+
+    std::optional<int> found_opt;
+
+    for (auto& arg : args) {
+      string norm = normalize_alias(arg);
+      auto iter = node->next.find(norm);
+      if (iter == node->next.end()) {
+        iter = node->next.find("*");
+        if (iter == node->next.end()) {
+          *error = string("unrecognized arg ") + arg;
+          return false;
+        }
+        extra_args->push_back(arg);
+        if (!found_opt) {
+          found_opt = node->opt;
+        }
+      }
+      node = &(iter->second);
+    }
+
+    *opt_cmd = found_opt.value_or(node->opt);
+
+    if (*opt_cmd < 0) {
+      *error ="no command";
+      return false;
+    }
+
+    return true;
+  }
+};
+
 enum {
   OPT_NO_CMD = 0,
   OPT_USER_CREATE,
@@ -582,12 +701,7 @@ enum {
   OPT_PUBSUB_EVENT_RM,
 };
 
-struct cmd_def {
-  string cmd;
-  int opt{OPT_NO_CMD};
-};
-
-static std::vector<cmd_def> all_cmds = {
+static SimpleCmd::Commands all_cmds = {
   { "user create", OPT_USER_CREATE },
   { "user info", OPT_USER_INFO },
   { "user modify", OPT_USER_MODIFY },
@@ -769,37 +883,11 @@ static std::vector<cmd_def> all_cmds = {
   { "pubsub event rm", OPT_PUBSUB_EVENT_RM },
 };
 
-static set<string> cmd_aliases[] = {
+static SimpleCmd::Aliases cmd_aliases = {
   { "delete", "del", "rm", "remove"},
   { "rename", "mv" },
 };
 
-static map<string, string> cmd_alias_map;
-
-static void init_cmd_alias_map()
-{
-  for (auto& alias_set : cmd_aliases) {
-    std::optional<string> first;
-
-    for (auto& alias : alias_set) {
-      if (!first) {
-        first = alias;
-      } else {
-        cmd_alias_map[alias] = *first;
-      }
-    }
-  }
-}
-
-string cmd_normalize_alias(const string& s)
-{
-  auto iter = cmd_alias_map.find(s);
-  if (iter == cmd_alias_map.end()) {
-    return s;
-  }
-
-  return iter->second;
-}
 
 
 BIIndexType get_bi_index_type(const string& type_str) {
@@ -2552,34 +2640,7 @@ int main(int argc, const char **argv)
   string event_id;
   rgw::notify::EventTypeList event_types;
 
-  struct cmd_node {
-    map<string, cmd_node> next;
-    int opt{OPT_NO_CMD};
-  };
-
-  cmd_node cmd_root;
-
-  init_cmd_alias_map();
-
-  for (auto& cmd : all_cmds) {
-    vector<string> words;
-    get_str_vec(cmd.cmd, " ", words);
-
-    auto node = &cmd_root;
-    for (auto& word : words) {
-      auto norm = cmd_normalize_alias(word);
-      auto parent = node;
-      node = &node->next[norm];
-
-      if (norm == "[*]") { /* optional param at the end */
-        parent->next["*"] = *node; /* can be also looked up by '*' */
-        parent->opt = cmd.opt;
-      }
-    }
-
-    node->opt = cmd.opt;
-  };
-
+  SimpleCmd cmd(all_cmds, cmd_aliases);
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -2942,32 +3003,10 @@ int main(int argc, const char **argv)
     exit(1);
   }
   else {
-    auto node = &cmd_root;
+    std::vector<string> extra_args;
 
-    vector<string> extra_args;
-    std::optional<int> found_opt;
-
-    for (auto& arg : args) {
-      string norm = cmd_normalize_alias(arg);
-      auto iter = node->next.find(norm);
-      if (iter == node->next.end()) {
-        iter = node->next.find("*");
-        if (iter == node->next.end()) {
-          cerr << "unrecognized arg " << arg << std::endl;
-          exit(1);
-        }
-        extra_args.push_back(arg);
-        if (!found_opt) {
-          found_opt = node->opt;
-        }
-      }
-      node = &(iter->second);
-    }
-
-    opt_cmd = found_opt.value_or(node->opt);
-
-    if (opt_cmd == OPT_NO_CMD) {
-      cerr << "no command" << std::endl;
+    if (!cmd.find_command(args, &opt_cmd, &extra_args, &err)) {
+      cerr << err << std::endl;
       exit(1);
     }
 
