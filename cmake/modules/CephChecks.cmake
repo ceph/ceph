@@ -124,3 +124,14 @@ int main(int argc, char **argv)
 else(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
   message(STATUS "Assuming unaligned access is supported")
 endif(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+
+# should use LINK_OPTIONS instead of LINK_LIBRARIES, if we can use cmake v3.14+
+try_compile(HAVE_LINK_VERSION_SCRIPT
+  ${CMAKE_CURRENT_BINARY_DIR}
+  SOURCES ${CMAKE_CURRENT_LIST_DIR}/CephCheck_link.c
+  LINK_LIBRARIES "-Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/CephCheck_link.map")
+
+try_compile(HAVE_LINK_EXCLUDE_LIBS
+  ${CMAKE_CURRENT_BINARY_DIR}
+  SOURCES ${CMAKE_CURRENT_LIST_DIR}/CephCheck_link.c
+  LINK_LIBRARIES "-Wl,--exclude-libs,ALL")

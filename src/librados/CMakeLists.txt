@@ -16,9 +16,11 @@ if(ENABLE_SHARED)
     VERSION 2.0.0
     SOVERSION 2
     VISIBILITY_INLINES_HIDDEN ON)
-  if(NOT APPLE)
+  if(HAVE_LINK_EXCLUDE_LIBS)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -Wl,--exclude-libs,ALL")
+  endif()
+  if(HAVE_LINK_VERSION_SCRIPT)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/librados.map")
   endif()
