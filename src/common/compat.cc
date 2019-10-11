@@ -201,7 +201,10 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen)
 {
-#ifdef STRERROR_R_CHAR_P
+#ifdef _WIN32
+  strerror_s(buf, buflen, errnum);
+  return buf;
+#elif defined(STRERROR_R_CHAR_P)
   return strerror_r(errnum, buf, buflen);
 #else
   if (strerror_r(errnum, buf, buflen)) {

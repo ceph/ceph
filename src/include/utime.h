@@ -485,12 +485,12 @@ public:
 
     if (out_date) {
       char buf[32];
-      strftime(buf, sizeof(buf), "%F", &tm);
+      strftime(buf, sizeof(buf), "%Y-%m-%d", &tm);
       *out_date = buf;
     }
     if (out_time) {
       char buf[32];
-      strftime(buf, sizeof(buf), "%T", &tm);
+      strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
       *out_time = buf;
     }
 
