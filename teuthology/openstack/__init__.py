@@ -1034,8 +1034,9 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         #     user_data = os.path.join(os.path.dirname(__file__),
         #                              '../..', self.user_data)
         # template = open(user_data).read()
-        with open(os.path.dirname(__file__) + '/bootstrap-teuthology.sh', 'r') as f:
-            bootstrap_content = cmd_str(f.read().encode('base64'))
+        with open(os.path.dirname(__file__) + '/bootstrap-teuthology.sh', 'rb') as f:
+            b64_bootstrap = base64.b64encode(f.read())
+            bootstrap_content = str(b64_bootstrap.decode())
 
         openrc_sh = ''
         cacert_cmd = None
@@ -1055,6 +1056,8 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                         data=open(cacert_file).read())
             elif var.startswith('OS_'):
                 openrc_sh += 'export %s=%s\n' % (var, value)
+        b64_openrc_sh = base64.b64encode(openrc_sh.encode())
+        openrc_sh_content = str(b64_openrc_sh.decode())
         # if self.args.upload:
         #     upload = '--archive-upload ' + self.args.archive_upload
         # else:
@@ -1156,14 +1159,14 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             'write_files': [
                 {
                     'path': '/tmp/bootstrap-teuthology.sh',
-                    'content': bootstrap_content,
+                    'content': cmd_str(bootstrap_content),
                     'encoding': 'b64',
                     'permissions': '0755',
                 },
                 {
                     'path': '/tmp/openrc.sh',
                     'owner': self.username,
-                    'content': cmd_str(openrc_sh.encode('base64')),
+                    'content': cmd_str(openrc_sh_content),
                     'encoding': 'b64',
                     'permissions': '0644',
                 }
