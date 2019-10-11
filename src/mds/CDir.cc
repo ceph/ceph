@@ -229,9 +229,10 @@ bool CDir::check_rstats(bool scrub)
 
   dout(25) << "check_rstats on " << this << dendl;
   if (!is_complete() || !is_auth() || is_frozen()) {
-    ceph_assert(!scrub);
-    dout(10) << "check_rstats bailing out -- incomplete or non-auth or frozen dir!" << dendl;
-    return true;
+    dout(3) << "check_rstats " << (scrub ? "(scrub) " : "")
+            << "bailing out -- incomplete or non-auth or frozen dir on " 
+            << *this << dendl;
+    return !scrub;
   }
 
   frag_info_t frag_info;
