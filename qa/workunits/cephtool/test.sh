@@ -2121,7 +2121,8 @@ function test_mon_pg()
   ceph pg stat | grep 'pgs:'
   ceph pg 1.0 query
   ceph tell 1.0 query
-  ceph quorum enter
+  first=$(ceph mon dump -f json | jq -r '.mons[0].name')
+  ceph tell mon.$first quorum enter
   ceph quorum_status
   ceph report | grep osd_stats
   ceph status
