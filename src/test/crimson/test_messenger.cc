@@ -1220,17 +1220,27 @@ class FailoverSuite : public Dispatcher {
  public:
   seastar::future<> connect_peer() {
     logger().info("[Test] connect_peer({})", test_peer_addr);
-    ceph_assert(!tracked_conn);
     return test_msgr.connect(test_peer_addr, entity_name_t::TYPE_OSD
     ).then([this] (auto xconn) {
-      ceph_assert(!tracked_conn);
-
       auto conn = xconn->release();
       auto result = interceptor.find_result(conn);
       ceph_assert(result != nullptr);
 
+      if (tracked_conn) {
+        if (tracked_conn->is_closed()) {
+          ceph_assert(tracked_conn != conn);
+          logger().info("[Test] this is a new session replacing an closed one");
+        } else {
+          ceph_assert(tracked_index == result->index);
+          ceph_assert(tracked_conn == conn);
+          logger().info("[Test] this is not a new session");
+        }
+      } else {
+        logger().info("[Test] this is a new session");
+      }
       tracked_index = result->index;
       tracked_conn = conn;
+
       return flush_pending_send();
     });
   }
@@ -1251,6 +1261,12 @@ class FailoverSuite : public Dispatcher {
     logger().info("[Test] keepalive_peer()");
     ceph_assert(tracked_conn);
     return tracked_conn->keepalive();
+  }
+
+  seastar::future<> markdown() {
+    logger().info("[Test] markdown()");
+    ceph_assert(tracked_conn);
+    return tracked_conn->close();
   }
 
   seastar::future<> wait_blocked() {
@@ -2877,6 +2893,55 @@ test_v2_stale_reaccept(FailoverTest& test) {
 }
 
 seastar::future<>
+test_v2_lossy_client(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_lossy_client",
+      TestInterceptor(),
+      policy_t::lossy_client,
+      policy_t::stateless_server,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return suite.connect_peer();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+    }).then([&suite] {
+      logger().info("-- 1 --");
+      logger().info("[Test] client markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 0);
+      // TODO: further tests
+      logger().info("-- 2 --");
+      logger().info("[Test] server markdown...");
+      logger().info("-- 3 --");
+      logger().info("[Test] client reconnect...");
+    });
+  });
+}
+
+seastar::future<>
 test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
                  entity_addr_t cmd_peer_addr = entity_addr_t()) {
   if (test_addr == entity_addr_t() || cmd_peer_addr == entity_addr_t()) {
@@ -2967,6 +3032,8 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
       return test_v2_stale_establishing(*test);
     }).then([test] {
       return test_v2_stale_reaccept(*test);
+    }).then([test] {
+      return test_v2_lossy_client(*test);
     }).finally([test] {
       return test->shutdown().then([test] {});
     });
