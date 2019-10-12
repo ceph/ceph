@@ -389,7 +389,10 @@ class Module(MgrModule):
                         'pgp_num': pool['pg_placement_num'],
                         'size': pool['size'],
                         'min_size': pool['min_size'],
-                        'crush_rule': pool['crush_rule']
+                        'crush_rule': pool['crush_rule'],
+                        'pg_autoscale_mode': pool['pg_autoscale_mode'],
+                        'target_max_bytes': pool['target_max_bytes'],
+                        'target_max_objects': pool['target_max_objects'],
                     }
                 )
 
@@ -418,6 +421,13 @@ class Module(MgrModule):
             report['services'] = defaultdict(int)
             for key, value in service_map['services'].items():
                 report['services'][key] += 1
+
+            try:
+                report['balancer'] = self.remote('balancer', 'gather_telemetry')
+            except ImportError:
+                report['balancer'] = {
+                    'active': False
+                }
 
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()

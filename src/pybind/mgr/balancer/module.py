@@ -1322,3 +1322,9 @@ class Module(MgrModule):
                 return r, outs
         self.log.debug('done')
         return 0, ''
+
+    def gather_telemetry(self):
+        return {
+            'active': self.active,
+            'mode': self.mode,
+        }
