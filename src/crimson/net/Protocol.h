@@ -144,6 +144,7 @@ class Protocol {
   // it needs to wait for exit_open until writing is stopped or failed.
   std::optional<seastar::shared_promise<>> exit_open;
 
+  seastar::future<stop_t> try_exit_sweep();
   seastar::future<> do_write_dispatch_sweep();
   void write_event();
 };
