@@ -883,6 +883,7 @@ enum class cmd_t : char {
   suite_connect_me,
   suite_send_me,
   suite_keepalive_me,
+  suite_markdown,
   suite_recv_op
 };
 
@@ -1482,6 +1483,11 @@ class FailoverTest : public Dispatcher {
     ceph_assert(test_suite);
     return prepare_cmd(cmd_t::suite_keepalive_me);
   }
+
+  seastar::future<> markdown_peer() {
+    logger().info("[Test] markdown_peer()");
+    return prepare_cmd(cmd_t::suite_markdown);
+  }
 };
 
 class FailoverSuitePeer : public Dispatcher {
@@ -1555,11 +1561,22 @@ class FailoverSuitePeer : public Dispatcher {
 
   seastar::future<> connect_peer(entity_addr_t addr) {
     logger().info("[TestPeer] connect_peer({})", addr);
-    ceph_assert(!tracked_conn);
     return peer_msgr.connect(addr, entity_name_t::TYPE_OSD
     ).then([this] (auto xconn) {
-      ceph_assert(!tracked_conn);
-      tracked_conn = xconn->release();
+      auto new_tracked_conn = xconn->release();
+      if (tracked_conn) {
+        if (tracked_conn->is_closed()) {
+          ceph_assert(tracked_conn != new_tracked_conn);
+          logger().info("[TestPeer] this is a new session"
+                        " replacing an closed one");
+        } else {
+          ceph_assert(tracked_conn == new_tracked_conn);
+          logger().info("[TestPeer] this is not a new session");
+        }
+      } else {
+        logger().info("[TestPeer] this is a new session");
+      }
+      tracked_conn = new_tracked_conn;
       return flush_pending_send();
     });
   }
@@ -1579,6 +1596,12 @@ class FailoverSuitePeer : public Dispatcher {
     logger().info("[TestPeer] keepalive_peer()");
     ceph_assert(tracked_conn);
     return tracked_conn->keepalive();
+  }
+
+  seastar::future<> markdown() {
+    logger().info("[TestPeer] markdown()");
+    ceph_assert(tracked_conn);
+    return tracked_conn->close();
   }
 
   static seastar::future<std::unique_ptr<FailoverSuitePeer>>
@@ -1668,6 +1691,9 @@ class FailoverTestPeer : public Dispatcher {
      case cmd_t::suite_keepalive_me:
       ceph_assert(test_suite);
       return test_suite->keepalive_peer();
+     case cmd_t::suite_markdown:
+      ceph_assert(test_suite);
+      return test_suite->markdown();
      default:
       logger().error("TestPeer got unexpected command {} from Test", m_cmd);
       ceph_abort();
@@ -2942,6 +2968,55 @@ test_v2_lossy_client(FailoverTest& test) {
 }
 
 seastar::future<>
+test_v2_stateless_server(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_stateless_server",
+      TestInterceptor(),
+      policy_t::stateless_server,
+      policy_t::lossy_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 1 --");
+      logger().info("[Test] client markdown...");
+      return test.markdown_peer();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(1, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+      // TODO: further tests
+      logger().info("-- 2 --");
+      logger().info("[Test] server markdown...");
+      logger().info("-- 3 --");
+      logger().info("[Test] client reconnect...");
+    });
+  });
+}
+
+seastar::future<>
 test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
                  entity_addr_t cmd_peer_addr = entity_addr_t()) {
   if (test_addr == entity_addr_t() || cmd_peer_addr == entity_addr_t()) {
@@ -3034,6 +3109,8 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
       return test_v2_stale_reaccept(*test);
     }).then([test] {
       return test_v2_lossy_client(*test);
+    }).then([test] {
+      return test_v2_stateless_server(*test);
     }).finally([test] {
       return test->shutdown().then([test] {});
     });
