@@ -496,7 +496,7 @@ def remove_pv(pv_name):
     )
 
 
-def get_pv(pv_name=None, pv_uuid=None, pv_tags=None):
+def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
     """
     Return a matching pv (physical volume) for the current system, requiring
     ``pv_name``, ``pv_uuid``, or ``pv_tags``. Raises an error if more than one
@@ -504,7 +504,9 @@ def get_pv(pv_name=None, pv_uuid=None, pv_tags=None):
     """
     if not any([pv_name, pv_uuid, pv_tags]):
         return None
-    pvs = PVolumes()
+    if pvs is None or len(pvs) == 0:
+        pvs = PVolumes()
+
     return pvs.get(pv_name=pv_name, pv_uuid=pv_uuid, pv_tags=pv_tags)
 
 
