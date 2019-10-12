@@ -5921,8 +5921,8 @@ bool MDCache::open_undef_inodes_dirfrags()
 
   MDSGatherBuilder gather(g_ceph_context,
       new MDSInternalContextWrapper(mds,
-	new FunctionContext([this](int r) {
-	    if (rejoin_gather.empty())
+	new LambdaContext([this](int r) {
+	    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid()))
 	      rejoin_gather_finish();
 	  })
 	)
