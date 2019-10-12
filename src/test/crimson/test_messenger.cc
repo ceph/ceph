@@ -2945,8 +2945,8 @@ test_v2_lossy_client(FailoverTest& test) {
       return suite.markdown();
     }).then([&suite] {
       return suite.connect_peer();
-    }).then([&test] {
-      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.send_peer();
     }).then([&suite] {
       return suite.wait_results(2);
     }).then([] (ConnResults& results) {
@@ -2995,7 +2995,7 @@ test_v2_stateless_server(FailoverTest& test) {
     }).then([&test] {
       return test.peer_connect_me();
     }).then([&test] {
-      return test.send_bidirectional();
+      return test.peer_send_me();
     }).then([&suite] {
       return suite.wait_results(2);
     }).then([] (ConnResults& results) {
