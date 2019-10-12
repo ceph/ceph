@@ -77,6 +77,32 @@ function bail_out_github_api {
     false
 }
 
+function check_tracker_status {
+    local -a ok_statuses=("new" "need more info")
+    local ts="$1"
+    local tslc="${ts,,}"
+    local tslc_is_ok=
+    for oks in "${ok_statuses[@]}"; do
+        if [ "$tslc" = "$oks" ] ; then
+            debug "Tracker status $ts is OK for backport to proceed"
+            tslc_is_ok="yes"
+            break
+        fi
+    done
+    if [ "$tslc_is_ok" ] ; then
+        true
+    else
+        if [ "$tslc" = "in progress" ] ; then
+            error "Backport $redmine_url is already in progress"
+            false
+        else
+            error "Backport $redmine_url is closed (status: ${ts})"
+            false
+        fi
+    fi
+    echo "$tslc_is_ok"
+}
+
 function cherry_pick_phase {
     local offset=0
     populate_original_issue
@@ -201,6 +227,18 @@ function failed_mandatory_var_check {
     setup_ok=""
 }
 
+# takes a string and a substring - returns position of substring within string,
+# or -1 if not found
+# NOTE: position of first character in string is 0
+function grep_for_substr {
+    munged="${1%%$2*}"
+    if [ "$munged" = "$1" ] ; then
+        echo "-1"
+    else
+        echo "${#munged}"
+    fi
+}
+
 # takes PR title, attempts to guess component
 function guess_component {
     local comp=
@@ -248,6 +286,19 @@ function init_mandatory_vars {
     debug "Initializing mandatory variables - GitHub remotes"
     upstream_remote="${upstream_remote:-$(deduce_remote upstream)}"
     fork_remote="${fork_remote:-$(deduce_remote fork)}"
+}
+
+function is_active_milestone {
+    local is_active=
+    local milestone_under_test="$1"
+    for m in $active_milestones ; do
+        if [ "$milestone_under_test" = "$m" ] ; then
+            verbose "Milestone $m is active"
+            is_active="yes"
+            break
+        fi
+    done
+    echo "$is_active"
 }
 
 function log {
@@ -418,18 +469,6 @@ EOM
     fi
 }
 
-# takes a string and a substring - returns position of substring within string,
-# or -1 if not found
-# NOTE: position of first character in string is 0
-function grep_for_substr {
-    munged="${1%%$2*}"
-    if [ "$munged" = "$1" ] ; then
-        echo "-1"
-    else
-        echo "${#munged}"
-    fi
-}
-
 function troubleshooting_advice {
     cat <<EOM
 Troubleshooting notes
@@ -574,6 +613,10 @@ For more information on Ceph backporting, see:
 EOM
 }
 
+function verbose {
+    log verbose "$@"
+}
+
 function warning {
     log warning "$@"
 }
@@ -686,6 +729,17 @@ else
     fi
 fi
 
+#
+# query remote GitHub API for active milestones
+#
+
+verbose "Querying GitHub API for active milestones"
+remote_api_output="$(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)"
+active_milestones="$(echo $remote_api_output | jq -r '.[] | .title')"
+if [ "$active_milestones" = "null" ] ; then
+    error "Could not determine the active milestones"
+    bail_out_github_api "$remote_api_output"
+fi
 
 #
 # query remote Redmine API for information about the Backport tracker issue
@@ -713,6 +767,16 @@ else
     false
 fi
 
+debug "Looking up status of $redmine_url"
+tracker_status=$(echo $remote_api_output | jq -r '.issue.status.name')
+if [ "$tracker_status" ] ; then
+    debug "Tracker status: $tracker_status"
+    test "$(check_tracker_status "$tracker_status")"
+else
+    error "could not obtain status from ${redmine_url}"
+    false
+fi
+
 tracker_title=$(echo $remote_api_output | jq -r '.issue.subject')
 debug "Title of $redmine_url is ->$tracker_title<-"
 
@@ -725,6 +789,12 @@ if [ "$tracker_assignee_id" = "null" -o "$tracker_assignee_id" = "$redmine_user_
 else
     error "$redmine_url is assigned to $tracker_assignee_name (ID $tracker_assignee_id)"
     info "Cowardly refusing to work on an issue that is assigned to someone else"
+    false
+fi
+
+if [ -z "$(is_active_milestone "$milestone")" ] ; then
+    error "$redmine_url is a backport to $milestone which is not an active milestone"
+    info "Cowardly refusing to work on a backport to an inactive release"
     false
 fi
 
