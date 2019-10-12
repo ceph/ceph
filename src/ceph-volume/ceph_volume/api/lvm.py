@@ -841,7 +841,7 @@ def remove_vg(vg_name):
     )
 
 
-def get_vg(vg_name=None, vg_tags=None):
+def get_vg(vg_name=None, vg_tags=None, vgs=None):
     """
     Return a matching vg for the current system, requires ``vg_name`` or
     ``tags``. Raises an error if more than one vg is found.
@@ -851,7 +851,9 @@ def get_vg(vg_name=None, vg_tags=None):
     """
     if not any([vg_name, vg_tags]):
         return None
-    vgs = VolumeGroups()
+    if vgs is None or len(vgs) == 0:
+        vgs = VolumeGroups()
+
     return vgs.get(vg_name=vg_name, vg_tags=vg_tags)
 
 
