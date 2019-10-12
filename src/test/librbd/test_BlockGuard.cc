@@ -5,6 +5,9 @@
 #include "test/librbd/test_support.h"
 #include "librbd/BlockGuard.h"
 
+void register_test_blockguard() {
+}
+
 namespace librbd {
 
 class TestIOBlockGuard : public TestFixture {

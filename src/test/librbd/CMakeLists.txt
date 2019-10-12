@@ -21,6 +21,10 @@ set(librbd_test
   test_Trash.cc
   journal/test_Entries.cc
   journal/test_Replay.cc)
+if(WITH_RBD_RWL)
+  list(APPEND librbd_test
+    cache/rwl/test_LogMap.cc)
+endif()
 add_library(rbd_test STATIC ${librbd_test})
 target_link_libraries(rbd_test PRIVATE
   rbd_test_support
@@ -109,6 +113,13 @@ set(unittest_librbd_srcs
   trash/test_mock_RemoveRequest.cc
   watcher/test_mock_RewatchRequest.cc
   )
+
+if(WITH_RBD_RWL)
+   set(unittest_librbd_srcs
+     ${unittest_librbd_srcs}
+     cache/test_mock_ReplicatedWriteLog.cc)
+endif(WITH_RBD_RWL)
+
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)

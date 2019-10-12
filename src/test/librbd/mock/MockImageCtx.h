@@ -280,6 +280,9 @@ struct MockImageCtx {
   MockContextWQ *op_work_queue;
 
   cache::MockImageCache *image_cache = nullptr;
+  bool ignore_image_cache_init_failure = false;
+  bool image_cache_init_succeeded = false;
+  bool disable_zero_copy = false;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;

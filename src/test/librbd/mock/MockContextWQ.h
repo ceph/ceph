@@ -12,6 +12,7 @@ namespace librbd {
 
 struct MockContextWQ {
   MOCK_METHOD2(queue, void(Context *, int r));
+  MOCK_METHOD1(queue, void(Context *));
 };
 
 } // namespace librbd

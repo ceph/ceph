@@ -34,6 +34,7 @@ struct MockImageCache {
   MOCK_METHOD2(aio_flush, void(librbd::io::FlushSource, Context *));
   MOCK_METHOD1(flush, void(Context *));
   MOCK_METHOD2(invalidate, void(bool, Context *));
+  MOCK_METHOD1(clear_image_cache_state, void(Context *));
   MOCK_METHOD5(aio_writesame_mock, void(uint64_t, uint64_t, ceph::bufferlist& bl,
                                         int, Context *));
   void aio_writesame(uint64_t off, uint64_t len, ceph::bufferlist&& bl,
