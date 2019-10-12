@@ -755,7 +755,7 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,milestones,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhpsv --long "component:,debug,help,milestones,prepare,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
