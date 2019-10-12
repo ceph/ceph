@@ -3,6 +3,7 @@ overrides:
     conf:
       global:
         ms inject socket failures: 5000
+        mon client directed command retry: 5
     log-whitelist:
     - but it is still running
     - \(OSD_SLOW_PING_TIME

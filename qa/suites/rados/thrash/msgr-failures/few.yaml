@@ -3,6 +3,7 @@ overrides:
     conf:
       global:
         ms inject socket failures: 5000
+        mon client directed command retry: 5
       osd:
         osd heartbeat use min delay socket: true
     log-whitelist:
