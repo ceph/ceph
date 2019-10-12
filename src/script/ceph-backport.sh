@@ -66,6 +66,8 @@ declare -A comp_hash=(
 ["tool"]="tools"
 )
 
+declare -A flagged_pr_hash=()
+
 function bail_out_github_api {
     local api_said="$1"
     info "GitHub API said:"
@@ -75,6 +77,22 @@ function bail_out_github_api {
     info "(hint) Check the value of github_token"
     info "(hint) Run the script with --debug"
     false
+}
+
+function blindly_set_pr_metadata {
+    local pr_number="$1"
+    local json_blob="$2"
+    curl --silent --data-binary "$json_blob" 'https://api.github.com/repos/ceph/ceph/issues/'$pr_number'?access_token='$github_token >/dev/null 2>&1 || true
+}
+
+function check_milestones {
+    local milestones_to_check="$(echo "$1" | tr '\n' ' ' | xargs)"
+    info "Active milestones: $milestones_to_check"
+    for m in $milestones_to_check ; do
+        info "Examining all PRs targeting base branch \"$m\""
+        vet_prs_for_milestone "$m"
+    done
+    dump_flagged_prs
 }
 
 function check_tracker_status {
@@ -179,6 +197,10 @@ function cherry_pick_phase {
     info "Cherry picking completed without conflicts"
 }
 
+function clear_line {
+    log overwrite "                                                                             \r"
+}
+
 function debug {
     log debug "$@"
 }
@@ -211,6 +233,23 @@ function display_version_message_and_exit {
     exit 0 
 }
 
+function dump_flagged_prs {
+    local url=
+    clear_line
+    if [ "${#flagged_pr_hash[@]}" -eq "0" ] ; then
+        info "All backport PRs appear to have milestone set correctly"
+    else
+        warning "Some backport PRs had problematic milestone settings"
+        log bare "==========="
+        log bare "Flagged PRs"
+        log bare "==========="
+        for url in "${!flagged_pr_hash[@]}" ; do
+            log bare "$url - ${flagged_pr_hash[$url]}"
+        done
+        log bare "==========="
+    fi
+}
+
 function eol {
     log mtt=$1
     error "$mtt is EOL"
@@ -225,6 +264,14 @@ function failed_mandatory_var_check {
     local varname="$1"
     error "$varname not defined"
     setup_ok=""
+}
+
+function flag_pr {
+    local pr_num="$1"
+    local pr_url="$2"
+    local flag_reason="$3"
+    warning "flagging PR#${pr_num} because $flag_reason"
+    flagged_pr_hash["${pr_url}"]="$flag_reason"
 }
 
 # takes a string and a substring - returns position of substring within string,
@@ -303,6 +350,7 @@ function is_active_milestone {
 
 function log {
     local level="$1"
+    local trailing_newline="yes"
     shift
     local msg="$@"
     prefix="${this_script}: "
@@ -317,6 +365,10 @@ function log {
         bare)
             prefix=
             ;;
+        overwrite)
+            trailing_newline=
+            prefix=
+            ;;
         warn|warning)
             prefix="${prefix}WARNING: "
             ;;
@@ -329,7 +381,11 @@ function log {
         true
     else
         msg="${prefix}${msg}"
-        echo "$msg" >&2
+        if [ "$trailing_newline" ] ; then
+            echo "${msg}" >&2
+        else
+            echo -en "${msg}" >&2
+        fi
     fi
 }
 
@@ -457,15 +513,15 @@ EOM
         log bare "--------------------------------"
         log bare "$setup_summary"
         log bare "================================"
-    elif [ "$VERBOSE" ] ; then
-        debug "redmine_endpoint $redmine_endpoint_display"
-        debug "redmine_user_id  $redmine_user_id_display"
-        debug "redmine_key      $redmine_key_display"
-        debug "github_endpoint  $github_endpoint_display"
-        debug "github_user      $github_user_display"
-        debug "github_token     $github_token_display"
-        debug "upstream_remote  $upstream_remote_display"
-        debug "fork_remote      $fork_remote_display"
+    else
+        verbose "redmine_endpoint $redmine_endpoint_display"
+        verbose "redmine_user_id  $redmine_user_id_display"
+        verbose "redmine_key      $redmine_key_display"
+        verbose "github_endpoint  $github_endpoint_display"
+        verbose "github_user      $github_user_display"
+        verbose "github_token     $github_token_display"
+        verbose "upstream_remote  $upstream_remote_display"
+        verbose "fork_remote      $fork_remote_display"
     fi
 }
 
@@ -510,6 +566,7 @@ function try_known_milestones {
         luminous) mn="10" ;;
         mimic) mn="11" ;;
         nautilus) mn="12" ;;
+        octopus) echo "Octopus milestone number is unknown! Update the script now." ; exit -1 ;;
     esac
     echo "$mn"
 }
@@ -539,9 +596,11 @@ Usage:
    ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER
 
 Options (not needed in normal operation):
-    -c/--component COMPONENT (will try to set this label in the PR; if
-                       omitted, the script will try to guess the component)
+    -c/--component COMPONENT
+                       (explicitly set the component label; if omitted, the
+                        script will try to guess the component)
     --debug            (turns on "set -x")
+    --milestones       (vet all backport PRs for correct milestone setting)
     -s/--setup         (check the setup and report any problems found)
     --update-version   (this option exists as a convenience for the script
                         maintainer only: not intended for day-to-day usage)
@@ -617,6 +676,64 @@ function verbose {
     log verbose "$@"
 }
 
+function vet_pr_milestone {
+    local pr_number="$1"
+    local pr_title="$2"
+    local pr_url="$3"
+    local milestone_stanza="$4"
+    local milestone_title_should_be="$5"
+    local milestone_number_should_be=$(try_known_milestones "$milestone_title_should_be")
+    local milestone_number_is=
+    local milestone_title_is=
+    log overwrite "Vetting milestone of PR#${pr_number}\r"
+    if [ "$milestone_stanza" = "null" ] ; then
+        blindly_set_pr_metadata "$pr_number" "{\"milestone\": $milestone_number_should_be}"
+        warning "$pr_url: set milestone to \"$milestone_title_should_be\""
+        flag_pr "$pr_number" "$pr_url" "milestone not set"
+    else
+        milestone_title_is=$(echo "$milestone_stanza" | jq -r '.title')
+        milestone_number_is=$(echo "$milestone_stanza" | jq -r '.number')
+        if [ "$milestone_number_is" -eq "$milestone_number_should_be" ] ; then
+            true
+        else
+            blindly_set_pr_metadata "$pr_number" "{\"milestone\": $milestone_number_should_be}"
+            warning "$pr_url: changed milestone from \"$milestone_title_is\" to \"$milestone_title_should_be\""
+            flag_pr "$pr_number" "$pr_url" "milestone set to wrong value \"$milestone_title_is\""
+        fi
+    fi
+}
+
+function vet_prs_for_milestone {
+    local milestone_title="$1"
+    local pages_of_output=
+    local pr_number=
+    local pr_title=
+    local pr_url=
+    # determine last page (i.e., total number of pages)
+    remote_api_output=$(curl --silent --head https://api.github.com/repos/ceph/ceph/pulls?base=${milestone_title}\&access_token=${github_token} | grep -E '^Link' || true)
+    if [ "$remote_api_output" ] ; then
+         # Link: <https://api.github.com/repositories/2310495/pulls?base=luminous&access_token=f9b0beb6922e418663396f3ff2ab69467a3268f9&page=2>; rel="next", <https://api.github.com/repositories/2310495/pulls?base=luminous&access_token=f9b0beb6922e418663396f3ff2ab69467a3268f9&page=2>; rel="last"
+         pages_of_output=$(echo "$remote_api_output" | sed 's/^.*&page\=\([0-9]\+\)>; rel=\"last\".*$/\1/g')
+    else
+         pages_of_output="1"
+    fi
+    verbose "GitHub has $pages_of_output pages of pull request data for \"base:${milestone_title}\""
+    for ((page=1; page<=${pages_of_output}; page++)) ; do
+        verbose "Fetching PRs (page $page of ${pages_of_output})"
+        remote_api_output=$(curl --silent -X GET https://api.github.com/repos/ceph/ceph/pulls?base=${milestone_title}\&access_token=${github_token}\&page=${page})
+        prs_in_page=$(echo "$remote_api_output" | jq -r '. | length')
+        verbose "Page $page of remote API output contains information on $prs_in_page PRs"
+        for ((i=0; i<${prs_in_page}; i++)) ; do
+            pr_number=$(echo "$remote_api_output" | jq -r '.['$i'].number')
+            pr_title=$(echo "$remote_api_output" | jq -r '.['$i'].title')
+            pr_url="${github_endpoint}/pull/${pr_number}"
+            milestone_stanza=$(echo "$remote_api_output" | jq -r '.['$i'].milestone')
+            vet_pr_milestone "$pr_number" "$pr_title" "$pr_url" "$milestone_stanza" "$milestone_title"
+        done
+        clear_line
+    done
+}
+
 function warning {
     log warning "$@"
 }
@@ -638,10 +755,11 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,milestones,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
+CHECK_MILESTONES=""
 DEBUG=""
 EXPLICIT_COMPONENT=""
 EXPLICIT_PREPARE=""
@@ -657,6 +775,7 @@ while true ; do
         --component|-c) shift ; EXPLICIT_COMPONENT="$1" ; shift ;;
         --debug|-d) DEBUG="$1" ; shift ;;
         --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
+        --milestones) CHECK_MILESTONES="$1" ; shift ;;
         --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
         --setup|-s) SETUP_ONLY="$1" ; shift ;;
         --setup-advice) ADVICE="1" ; SETUP_ADVICE="$1" ; shift ;;
@@ -678,7 +797,7 @@ if [ "$ADVICE" ] ; then
     exit 0
 fi
 
-[ "$SETUP_ONLY" ] && ISSUE="0"
+[ "$SETUP_ONLY" -o "$CHECK_MILESTONES" ] && ISSUE="0"
 if [[ $ISSUE =~ ^[0-9]+$ ]] ; then
     issue=$ISSUE
 else
@@ -739,6 +858,11 @@ active_milestones="$(echo $remote_api_output | jq -r '.[] | .title')"
 if [ "$active_milestones" = "null" ] ; then
     error "Could not determine the active milestones"
     bail_out_github_api "$remote_api_output"
+fi
+
+if [ "$CHECK_MILESTONES" ] ; then
+    check_milestones "$active_milestones"
+    exit 0
 fi
 
 #
@@ -887,7 +1011,7 @@ else
     debug "Attempting to set ${milestone} milestone in ${backport_pr_url}"
     data_binary='{"milestone":'$milestone_number'}'
 fi
-curl --silent --data-binary "$data_binary" 'https://api.github.com/repos/ceph/ceph/issues/'$backport_pr_number'?access_token='$github_token >/dev/null 2>&1 || true
+blindly_set_pr_metadata "$backport_pr_number" "$data_binary"
 
 pgrep firefox >/dev/null && firefox ${backport_pr_url}
 
