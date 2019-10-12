@@ -3449,7 +3449,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   if (dnl->is_null()) {
-    if (!create) {
+    if (!create && okexist) {
       respond_to_request(mdr, -ENOENT);
       return nullptr;
     }
@@ -6066,16 +6066,49 @@ void Server::handle_client_link(MDRequestRef& mdr)
 	  << " to " << req->get_filepath2()
 	  << dendl;
 
-  auto [destdn, srcdn] = rdlock_two_paths_xlock_destdn(mdr, false);
-  if (!destdn)
-    return;
+  mdr->disable_lock_cache();
 
-  if (!destdn->get_projected_linkage()->is_null()) {
-    respond_to_request(mdr, -EEXIST);
-    return;
+  CDentry *destdn;
+  CInode *targeti;
+
+  if (req->get_filepath2().depth() == 0) {
+    targeti = mdcache->get_inode(req->get_filepath2().get_ino());
+    if (!targeti) {
+      dout(10) << "ESTALE on path2, attempting recovery" << dendl;
+      mdcache->find_ino_peers(req->get_filepath2().get_ino(), new C_MDS_TryFindInode(this, mdr));
+    }
+    mdr->pin(targeti);
+
+    if (!(mdr->locking_state & MutationImpl::SNAP2_LOCKED)) {
+      CDentry *pdn = targeti->get_projected_parent_dn();
+      if (!pdn) {
+	dout(7) << "target has no parent dn, failing..." << dendl;
+	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+      if (!mds->locker->try_rdlock_snap_layout(pdn->get_dir()->get_inode(), mdr, 1))
+	return;
+      mdr->locking_state |= MutationImpl::SNAP2_LOCKED;
+    }
+
+    destdn = rdlock_path_xlock_dentry(mdr, false);
+    if (!destdn)
+      return;
+
+  } else {
+    auto ret = rdlock_two_paths_xlock_destdn(mdr, false);
+    destdn = ret.first;
+    if (!destdn)
+      return;
+
+    if (!destdn->get_projected_linkage()->is_null()) {
+      respond_to_request(mdr, -EEXIST);
+      return;
+    }
+
+    targeti = ret.second->get_projected_linkage()->get_inode();
   }
 
-  CInode *targeti = srcdn->get_projected_linkage()->get_inode();
   if (targeti->is_dir()) {
     dout(7) << "target is a dir, failing..." << dendl;
     respond_to_request(mdr, -EINVAL);
@@ -6095,6 +6128,11 @@ void Server::handle_client_link(MDRequestRef& mdr)
       return;
 
     mdr->locking_state |= MutationImpl::ALL_LOCKED;
+  }
+
+  if (targeti->get_projected_inode()->nlink == 0) {
+    dout(7) << "target has no link, failing..." << dendl;
+    respond_to_request(mdr, -ENOENT);
   }
 
   if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
