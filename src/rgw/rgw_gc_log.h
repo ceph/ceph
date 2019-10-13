@@ -9,7 +9,7 @@
 
 // initialize the cls_rgw_gc queue
 void gc_log_init2(librados::ObjectWriteOperation& op,
-                  uint64_t max_size, uint64_t max_urgent);
+                  uint64_t max_size, uint64_t max_deferred);
 
 // enqueue a gc entry to omap with cls_rgw
 void gc_log_enqueue1(librados::ObjectWriteOperation& op,

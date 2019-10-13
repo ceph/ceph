@@ -5,21 +5,21 @@
 
 struct cls_rgw_gc_queue_init_op {
   uint64_t size;
-  uint64_t num_urgent_data_entries{0};
+  uint64_t num_deferred_entries{0};
 
   cls_rgw_gc_queue_init_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(size, bl);
-    encode(num_urgent_data_entries, bl);
+    encode(num_deferred_entries, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(size, bl);
-    decode(num_urgent_data_entries, bl);
+    decode(num_deferred_entries, bl);
     DECODE_FINISH(bl);
   }
 

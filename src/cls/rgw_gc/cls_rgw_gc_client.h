@@ -6,7 +6,7 @@
 #include "cls/queue/cls_queue_ops.h"
 #include "common/ceph_time.h"
 
-void cls_rgw_gc_queue_init(librados::ObjectWriteOperation& op, uint64_t size, uint64_t num_urgent_data_entries);
+void cls_rgw_gc_queue_init(librados::ObjectWriteOperation& op, uint64_t size, uint64_t num_deferred_entries);
 int cls_rgw_gc_queue_get_capacity(librados::IoCtx& io_ctx, const string& oid, uint64_t& size);
 void cls_rgw_gc_queue_enqueue(librados::ObjectWriteOperation& op, uint32_t expiration_secs, const cls_rgw_gc_obj_info& info);
 int cls_rgw_gc_queue_list_entries(librados::IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max, bool expired_only,

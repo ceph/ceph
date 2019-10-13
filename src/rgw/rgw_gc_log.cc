@@ -9,11 +9,11 @@
 
 
 void gc_log_init2(librados::ObjectWriteOperation& op,
-                  uint64_t max_size, uint64_t max_urgent)
+                  uint64_t max_size, uint64_t max_deferred)
 {
   obj_version objv; // objv.ver = 0
   cls_version_check(op, objv, VER_COND_EQ);
-  cls_rgw_gc_queue_init(op, max_size, max_urgent);
+  cls_rgw_gc_queue_init(op, max_size, max_deferred);
   objv.ver = 1;
   cls_version_set(op, objv);
 }
