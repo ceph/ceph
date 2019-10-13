@@ -38,14 +38,14 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
   }
 
   cls_rgw_gc_urgent_data urgent_data;
-  urgent_data.num_urgent_data_entries = op.num_urgent_data_entries;
+  urgent_data.num_urgent_data_entries = op.num_deferred_entries;
 
   cls_queue_init_op init_op;
 
   CLS_LOG(10, "INFO: cls_rgw_gc_queue_init: queue size is %lu\n", op.size);
 
   init_op.queue_size = op.size;
-  init_op.max_urgent_data_size = g_ceph_context->_conf->rgw_gc_max_urgent_data_size;
+  init_op.max_urgent_data_size = g_ceph_context->_conf->rgw_gc_max_deferred_entries_size;
   encode(urgent_data, init_op.bl_urgent_data);
 
   return queue_init(hctx, init_op);

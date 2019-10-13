@@ -11,12 +11,12 @@
 
 using namespace librados;
 
-void cls_rgw_gc_queue_init(ObjectWriteOperation& op, uint64_t size, uint64_t num_urgent_data_entries)
+void cls_rgw_gc_queue_init(ObjectWriteOperation& op, uint64_t size, uint64_t num_deferred_entries)
 {
   bufferlist in;
   cls_rgw_gc_queue_init_op call;
   call.size = size;
-  call.num_urgent_data_entries = num_urgent_data_entries;
+  call.num_deferred_entries = num_deferred_entries;
   encode(call, in);
   op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_INIT, in);
 }

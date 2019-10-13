@@ -1564,6 +1564,6 @@ OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web t
 OPTION(rgw_sts_client_id, OPT_STR) // Client Id
 OPTION(rgw_sts_client_secret, OPT_STR) // Client Secret
 OPTION(debug_allow_any_pool_priority, OPT_BOOL)
-OPTION(rgw_gc_max_urgent_data_size, OPT_U64) // GC urgent data size
+OPTION(rgw_gc_max_deferred_entries_size, OPT_U64) // GC deferred entries size in queue head
 OPTION(rgw_gc_max_queue_size, OPT_U64) // GC max queue size
-OPTION(rgw_gc_num_urgent_data_entries, OPT_U64) // GC number of urgent data entries
+OPTION(rgw_gc_max_deferred, OPT_U64) // GC max number of deferred entries
