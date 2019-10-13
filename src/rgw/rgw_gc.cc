@@ -47,8 +47,8 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
     //version = 1 -> marked ready for transition
     librados::ObjectWriteOperation op;
     op.create(false);
-    const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_urgent_data_entries = cct->_conf->rgw_gc_num_urgent_data_entries;
-    gc_log_init2(op, queue_size, num_urgent_data_entries);
+    const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_deferred_entries = cct->_conf->rgw_gc_max_deferred;
+    gc_log_init2(op, queue_size, num_deferred_entries);
     store->gc_operate(obj_names[i], &op);
   }
 }

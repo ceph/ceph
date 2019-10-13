@@ -6462,9 +6462,9 @@ std::vector<Option> get_rgw_options() {
     .set_description("Max number of keys to remove from garbage collector log in a single operation")
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_concurrent_io"}),
 
-    Option("rgw_gc_max_urgent_data_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_gc_max_deferred_entries_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3072)
-    .set_description("maximum allowed size of urgent data in queue head for gc"),
+    .set_description("maximum allowed size of deferred entries in queue head for gc"),
 
     Option("rgw_gc_max_queue_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128_M)
@@ -6474,9 +6474,9 @@ std::vector<Option> get_rgw_options() {
         "be greater than osd_max_object_size.")
     .add_see_also({"osd_max_object_size"}),
 
-    Option("rgw_gc_num_urgent_data_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_gc_max_deferred", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
-    .set_description("Number of urgent data entries to be stored in queue for gc"),
+    .set_description("Number of maximum deferred data entries to be stored in queue for gc"),
 
     Option("rgw_s3_success_create_obj_status", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
