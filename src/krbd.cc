@@ -44,6 +44,8 @@
 #include <blkid/blkid.h>
 #include <libudev.h>
 
+static const int UDEV_BUF_SIZE = 1 << 20;  /* doubled to 2M (SO_RCVBUFFORCE) */
+
 struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
@@ -345,6 +347,13 @@ static int do_map(struct udev *udev, const char *pool, const char *image,
   if (r < 0)
     goto out_mon;
 
+  r = udev_monitor_set_receive_buffer_size(mon, UDEV_BUF_SIZE);
+  if (r < 0) {
+    std::cerr << "rbd: failed to set udev buffer size: " << cpp_strerror(r)
+              << std::endl;
+    /* not fatal */
+  }
+
   r = udev_monitor_enable_receiving(mon);
   if (r < 0)
     goto out_mon;
@@ -611,6 +620,13 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
   r = udev_monitor_filter_add_match_subsystem_devtype(mon, "block", "disk");
   if (r < 0)
     goto out_mon;
+
+  r = udev_monitor_set_receive_buffer_size(mon, UDEV_BUF_SIZE);
+  if (r < 0) {
+    std::cerr << "rbd: failed to set udev buffer size: " << cpp_strerror(r)
+              << std::endl;
+    /* not fatal */
+  }
 
   r = udev_monitor_enable_receiving(mon);
   if (r < 0)
