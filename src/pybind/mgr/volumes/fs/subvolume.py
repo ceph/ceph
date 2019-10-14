@@ -151,22 +151,20 @@ class SubVolume(object):
         def rmtree(root_path):
             log.debug("rmtree {0}".format(root_path))
             try:
-                dir_handle = self.fs.opendir(root_path)
+                with self.fs.opendir(root_path) as dir_handle:
+                    d = self.fs.readdir(dir_handle)
+                    while d and not should_cancel():
+                        if d.d_name not in (b".", b".."):
+                            d_full = os.path.join(root_path, d.d_name)
+                            if d.is_dir():
+                                rmtree(d_full)
+                            else:
+                                self.fs.unlink(d_full)
+                        d = self.fs.readdir(dir_handle)
             except cephfs.ObjectNotFound:
                 return
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
-            d = self.fs.readdir(dir_handle)
-            while d and not should_cancel():
-                if d.d_name not in (b".", b".."):
-                    d_full = os.path.join(root_path, d.d_name)
-                    if d.is_dir():
-                        rmtree(d_full)
-                    else:
-                        self.fs.unlink(d_full)
-
-                d = self.fs.readdir(dir_handle)
-            self.fs.closedir(dir_handle)
             # remove the directory only if we were not asked to cancel
             # (else we would fail to remove this anyway)
             if not should_cancel():
