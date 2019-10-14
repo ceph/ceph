@@ -31,3 +31,8 @@
   The warning can be silenced with::
 
     ceph config set global mon_warn_on_pool_no_redundancy false
+
+* RGW: bucket listing performance on sharded bucket indexes has been
+  notably improved by heuristically -- and significantly, in many
+  cases -- reducing the number of entries requested from each bucket
+  index shard.
