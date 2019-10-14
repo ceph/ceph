@@ -6604,11 +6604,20 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_crypt_vault_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("Base URL to the Vault server.")
+    .set_description("Vault server base address.")
     .add_see_also({
       "rgw_crypt_s3_kms_backend",
       "rgw_crypt_vault_auth",
-      "rgw_crypt_vault_token_file"}),
+      "rgw_crypt_vault_prefix"}),
+
+    Option("rgw_crypt_vault_prefix", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Vault secret URL prefix, which can be used to restrict "
+                     "access to a particular subset of the Vault secret space.")
+    .add_see_also({
+      "rgw_crypt_s3_kms_backend",
+      "rgw_crypt_vault_addr",
+      "rgw_crypt_vault_auth"}),
 
     Option("rgw_crypt_suppress_logs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
