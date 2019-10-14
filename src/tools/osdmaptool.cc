@@ -50,6 +50,8 @@ void usage()
   cout << "                           commands to <file> [default: - for stdout]" << std::endl;
   cout << "   --upmap <file>          calculate pg upmap entries to balance pg layout" << std::endl;
   cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
+  cout << "   --upmap-by-primary-osd <file> calculate pg upmap entries to balance pg layout by pg's primary osd" << std::endl;
+  cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
   cout << "   --upmap-max <max-count> set max upmap entries to calculate [default: 100]" << std::endl;
   cout << "   --upmap-deviation <max-deviation>" << std::endl;
   cout << "                           max deviation from target [default: .01]" << std::endl;
@@ -138,6 +140,7 @@ int main(int argc, const char **argv)
   bool test_random = false;
   bool upmap_cleanup = false;
   bool upmap = false;
+  bool upmap_primary_osd = false;
   bool upmap_save = false;
   bool health = false;
   std::string upmap_file = "-";
@@ -173,6 +176,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap", (char*)NULL)) {
       upmap_cleanup = true;
       upmap = true;
+    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-by-primary-osd", (char*)NULL)) {
+      upmap_cleanup = true;
+      upmap = true;
+      upmap_primary_osd = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_max, err, "--upmap-max", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_deviation, err, "--upmap-deviation", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--upmap-pool", (char*)NULL)) {
@@ -388,10 +395,18 @@ int main(int argc, const char **argv)
     if (!pools.empty())
       cout << " limiting to pools " << upmap_pools << " (" << pools << ")"
 	   << std::endl;
-    int changed = osdmap.calc_pg_upmaps(
+    int changed = 0;
+    if (upmap_primary_osd == true) {
+      changed = osdmap.calc_pg_upmaps_by_primary_osd(
+      g_ceph_context, upmap_deviation,
+      upmap_max, pools,
+      &pending_inc);    
+    } else {
+      changed = osdmap.calc_pg_upmaps(
       g_ceph_context, upmap_deviation,
       upmap_max, pools,
       &pending_inc);
+    }
     if (changed) {
       print_inc_upmaps(pending_inc, upmap_fd);
       if (upmap_save) {
