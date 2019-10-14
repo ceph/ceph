@@ -1203,24 +1203,21 @@ int BlueFS::device_migrate_to_existing(
     dout(0) << __func__ << " super to be written to " << dev_target << dendl;
   }
 
-  for (auto& p : file_map) {
+  for (auto& [ino, file_ref] : file_map) {
     //do not copy log
-    if (p.second->fnode.ino == 1) {
+    if (file_ref->fnode.ino == 1) {
       continue;
     }
-    dout(10) << __func__ << " " << p.first << " " << p.second->fnode << dendl;
+    dout(10) << __func__ << " " << ino << " " << file_ref->fnode << dendl;
 
-    auto& fnode_extents = p.second->fnode.extents;
+    auto& fnode_extents = file_ref->fnode.extents;
 
-    bool rewrite = false;
-    for (auto ext_it = fnode_extents.begin();
-	 ext_it != p.second->fnode.extents.end();
-	 ++ext_it) {
-      if (ext_it->bdev != dev_target && devs_source.count(ext_it->bdev)) {
-	rewrite = true;
-	break;
-      }
-    }
+    bool rewrite = std::any_of(
+      fnode_extents.begin(),
+      fnode_extents.end(),
+      [=](auto& ext) {
+	return ext.bdev != dev_target && devs_source.count(ext.bdev);
+      });
     if (rewrite) {
       dout(10) << __func__ << "  migrating" << dendl;
 
@@ -1276,19 +1273,17 @@ int BlueFS::device_migrate_to_existing(
 	fnode_extents.emplace_back(dev_target_new, i.offset, i.length);
       }
     } else {
-      for (auto ext_it = fnode_extents.begin();
-	   ext_it != p.second->fnode.extents.end();
-	   ++ext_it) {
-	if (dev_target != dev_target_new && ext_it->bdev == dev_target) {
+      for (auto& ext : fnode_extents) {
+	if (dev_target != dev_target_new && ext.bdev == dev_target) {
 	  dout(20) << __func__ << "  " << " ... adjusting extent 0x"
-		   << std::hex << ext_it->offset << std::dec
+		   << std::hex << ext.offset << std::dec
 		   << " bdev " << dev_target << " -> " << dev_target_new
 		   << dendl;
-	  ext_it->bdev = dev_target_new;
+	  ext.bdev = dev_target_new;
 	}
       }
     }
-    auto& prefer_bdev = p.second->fnode.prefer_bdev;
+    auto& prefer_bdev = file_ref->fnode.prefer_bdev;
     if (prefer_bdev != dev_target && devs_source.count(prefer_bdev)) {
       dout(20) << __func__ << "  " << " ... adjusting prefer_bdev "
 	       << prefer_bdev << " -> " << dev_target_new << dendl;
@@ -1797,12 +1792,12 @@ void BlueFS::_compact_log_dump_metadata(bluefs_transaction_t *t,
       t->op_alloc_add(bdev_new, q.get_start(), q.get_len());
     }
   }
-  for (auto& p : file_map) {
-    if (p.first == 1)
+  for (auto& [ino, file_ref] : file_map) {
+    if (ino == 1)
       continue;
-    ceph_assert(p.first > 1);
+    ceph_assert(ino > 1);
 
-    for(auto& e : p.second->fnode.extents) {
+    for(auto& e : file_ref->fnode.extents) {
       auto bdev = e.bdev;
       auto bdev_new = bdev;
       ceph_assert(!((flags & REMOVE_WAL) && bdev == BDEV_WAL));
@@ -1824,16 +1819,16 @@ void BlueFS::_compact_log_dump_metadata(bluefs_transaction_t *t,
       }
       e.bdev = bdev_new;
     }
-    dout(20) << __func__ << " op_file_update " << p.second->fnode << dendl;
-    t->op_file_update(p.second->fnode);
+    dout(20) << __func__ << " op_file_update " << file_ref->fnode << dendl;
+    t->op_file_update(file_ref->fnode);
   }
-  for (auto& p : dir_map) {
-    dout(20) << __func__ << " op_dir_create " << p.first << dendl;
-    t->op_dir_create(p.first);
-    for (auto& q : p.second->file_map) {
-      dout(20) << __func__ << " op_dir_link " << p.first << "/" << q.first
-	       << " to " << q.second->fnode.ino << dendl;
-      t->op_dir_link(p.first, q.first, q.second->fnode.ino);
+  for (auto& [path, dir_ref] : dir_map) {
+    dout(20) << __func__ << " op_dir_create " << path << dendl;
+    t->op_dir_create(path);
+    for (auto& [fname, file_ref] : dir_ref->file_map) {
+      dout(20) << __func__ << " op_dir_link " << path << "/" << fname
+	       << " to " << file_ref->fnode.ino << dendl;
+      t->op_dir_link(path, fname, file_ref->fnode.ino);
     }
   }
 }
