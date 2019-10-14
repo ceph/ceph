@@ -1,4 +1,5 @@
 import json
+import random
 
 from teuthology import misc
 from teuthology.contextutil import safe_while
@@ -127,6 +128,9 @@ def introspect_roles(ctx, logger, quiet=True):
     nodes_gateway = []
     nodes_storage = []
     nodes_storage_only = []
+    nodes_monitor = []
+    nodes_random_monitor = []
+    nodes_random_storage = []
     remotes = {}
     role_types = []
     role_lookup_table = {}
@@ -165,12 +169,19 @@ def introspect_roles(ctx, logger, quiet=True):
                 non_storage_cluster_nodes += [remote.hostname]
             if role_type == 'osd':
                 nodes_storage += [remote.hostname]
+            if role_type == 'mon':
+                nodes_monitor += [remote.hostname]
             if role_type not in role_types[idx]:
                 role_types[idx] += [role_type]
         idx += 1
     nodes_cluster = list(set(nodes_cluster))
     nodes_gateway = list(set(nodes_gateway))
     nodes_storage = list(set(nodes_storage))
+    nodes_monitor = list(set(nodes_monitor))
+
+    nodes_random_storage = random.sample(nodes_storage, 2 if len(nodes_storage) > 1 else 1)
+    nodes_random_monitor = random.sample(nodes_monitor, 2 if len(nodes_monitor) > 1 else 1)
+
     nodes_storage_only = []
     for node in nodes_storage:
         if node not in non_storage_cluster_nodes:
@@ -187,6 +198,9 @@ def introspect_roles(ctx, logger, quiet=True):
         'nodes_cluster',
         'nodes_gateway',
         'nodes_storage',
+        'nodes_random_storage',
+        'nodes_monitor',
+        'nodes_random_monitor',
         'nodes_storage_only',
         'remote_lookup_table',
         'remotes',
@@ -195,7 +209,14 @@ def introspect_roles(ctx, logger, quiet=True):
         ]
     for var in assign_vars:
         exec("ctx['{var}'] = {var}".format(var=var))
-    ctx['dev_env'] = True if len(nodes_cluster) < 4 else False
+    if len(nodes_cluster) < 4:
+        ctx['dev_env'] = True
+    elif len(nodes_storage) < 4:
+        ctx['dev_env'] = True
+    elif len(nodes_monitor) < 3:
+        ctx['dev_env'] = True
+    else:
+        ctx['dev_env'] = False    
     if not quiet:
         # report phase
         logger.info("ROLE INTROSPECTION REPORT")

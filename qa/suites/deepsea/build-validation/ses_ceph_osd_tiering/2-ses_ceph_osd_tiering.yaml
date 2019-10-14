@@ -1,0 +1,12 @@
+tasks:
+    - deepsea.create_pools:
+        cold-storage:
+        hot-storage:
+    - deepsea.orch:
+        stage: 4
+    - exec:
+        client.salt_master:
+          - 'ceph -s'
+    - ses_qa:
+    - ses_qa.validation:
+        ses_ceph_osd_tiering:

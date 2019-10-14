@@ -1,0 +1,7 @@
+tasks:
+    - exec:
+        client.salt_master:
+          - 'ceph -s'
+    - ses_qa:
+    - ses_qa.validation:
+        ses_monitor_failover:

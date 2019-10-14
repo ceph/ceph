@@ -22,17 +22,19 @@ function json_total_osds {
     ceph osd ls --format json | jq '. | length'
 }
 
+function power2() { echo "x=l($1)/l(2); scale=0; 2^((x+0.5)/1)" | bc -l; }
+
 function pgs_per_pool {
     local TOTALPOOLS=$1
     test -n "$TOTALPOOLS"
+    SIZE=`ceph-conf -c /dev/null -D --format=json | jq -r .osd_pool_default_size`
     local TOTALOSDS=$(json_total_osds)
     test -n "$TOTALOSDS"
     # given the total number of pools and OSDs,
     # assume triple replication and equal number of PGs per pool
     # and aim for 100 PGs per OSD
-    let "TOTALPGS = $TOTALOSDS * 100"
-    let "PGSPEROSD = $TOTALPGS / $TOTALPOOLS / 3"
-    echo $PGSPEROSD
+    let "PGSPERPOOL = $(power2 `echo "(($TOTALOSDS * 100) / $SIZE) / $TOTALPOOLS" | bc`)"
+    echo $PGSPERPOOL
 }
 
 function create_all_pools_at_once {
@@ -82,7 +84,7 @@ fi
 echo "About to create pools ->$POOLS<-"
 create_all_pools_at_once $POOLS
 if [ "$APPLICATION_ENABLE" ] ; then
-    for pool in "$APPLICATION_ENABLE" ; do
+    for pool in $APPLICATION_ENABLE ; do
         ceph osd pool application enable $pool deepsea_qa
     done
 fi

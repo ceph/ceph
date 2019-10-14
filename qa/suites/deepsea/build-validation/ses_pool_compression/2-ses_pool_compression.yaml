@@ -1,0 +1,13 @@
+tasks:
+    - deepsea.create_pools:
+        pool_passive:
+        pool_aggressive:
+        pool_force:
+    - deepsea.orch:
+        stage: 4
+    - exec:
+        client.salt_master:
+          - 'ceph -s'
+    - ses_qa:
+    - ses_qa.validation:
+        ses_pool_compression:

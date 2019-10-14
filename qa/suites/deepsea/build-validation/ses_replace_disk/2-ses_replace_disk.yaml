@@ -1,0 +1,15 @@
+tasks:
+    - deepsea.create_pools:
+        replace_disk:
+    - exec:
+        client.salt_master:
+          - 'ceph -s'
+    - ses_qa:
+    - ses_qa.validation:
+        ses_replace_disk:
+          part: 1
+    - deepsea.orch:
+        stage: 3
+    - ses_qa.validation:
+        ses_replace_disk:
+          part: 2

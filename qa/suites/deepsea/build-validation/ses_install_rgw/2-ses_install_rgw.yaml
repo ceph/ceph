@@ -1,0 +1,41 @@
+tasks:
+    - exec:
+        client.salt_master:
+          - 'ceph -s'
+    - ses_qa:
+    - ses_qa.validation:
+        ses_install_rgw:
+          part: 1
+    - deepsea.orch:
+        stage: 2
+    - deepsea.orch:
+        stage: 3
+    - deepsea.orch:
+        stage: 4
+    - ses_qa.validation:
+        ses_install_rgw:
+          part: 2
+    - deepsea.orch:
+        stage: 2
+    - deepsea.orch:
+        stage: 5
+    - ses_qa.validation:
+        ses_install_rgw:
+          part: 3
+    - deepsea.orch:
+        stage: 2
+    - deepsea.orch:
+        stage: 3
+    - deepsea.orch:
+        stage: 4
+    - ses_qa.validation:
+        ses_install_rgw:
+          part: 4
+    - deepsea.orch:
+        stage: 2
+    - deepsea.orch:
+        stage: 5
+    - exec:
+        client.salt_master:
+          - 'ceph health | grep HEALTH_OK'
+

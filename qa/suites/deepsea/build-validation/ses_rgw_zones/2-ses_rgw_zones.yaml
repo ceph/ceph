@@ -1,0 +1,27 @@
+tasks:
+    - exec:
+        client.salt_master:
+          - 'ceph -s'
+    - ses_qa:
+    - ses_qa.validation:
+        ses_rgw_zones:
+          part: 1
+    - deepsea.orch:
+        stage: 1
+    - deepsea.orch:
+        stage: 2
+    - deepsea.orch:
+        stage: 3
+    - deepsea.orch:
+        stage: 4
+    - ses_qa.validation:
+        ses_rgw_zones:
+          part: 2
+    - deepsea.orch:
+        stage: 2
+    - deepsea.orch:
+        stage: 5
+    - ses_qa.validation:
+        ses_rgw_zones:
+          part: 3
+

@@ -1,0 +1,6 @@
+tasks:
+    - deepsea.create_pools:
+        testpool1:
+    - ses_qa:
+    - ses_qa.validation:
+        ses_happy_path_scenario:

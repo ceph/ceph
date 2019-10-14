@@ -39,7 +39,10 @@ class SESQA(Task):
         self.nodes_cluster = self.ctx['nodes_cluster']
         self.nodes_gateway = self.ctx['nodes_gateway']
         self.nodes_storage = self.ctx['nodes_storage']
+        self.nodes_random_storage = self.ctx['nodes_random_storage']
         self.nodes_storage_only = self.ctx['nodes_storage_only']
+        self.nodes_monitor = self.ctx['nodes_monitor']
+        self.nodes_random_monitor = self.ctx['nodes_random_monitor']
         self.remote_lookup_table = self.ctx['remote_lookup_table']
         self.remotes = self.ctx['remotes']
         self.roles = self.ctx['roles']
@@ -177,6 +180,185 @@ class Validation(SESQA):
         drive_group = next(x for x in self.ctx['config']['tasks']
                            if 'deepsea' in x and 'drive_group' in x['deepsea'])
         return int(drive_group['deepsea']['drive_group']['custom']['data_devices']['limit'])
+
+    def ses_rack_dc_region_unavailability(self, **kwargs):
+        """
+        Simulates rack, DC and region unavailability by 
+        modifying Ceph crushmap
+        """
+        self.scripts.run(
+                self.master_remote,
+                'ses_rack_dc_region_unavailability.sh',
+                )
+    
+    def ses_network_failure(self, **kwargs):
+        """
+        Simulates network failure using tc netem tool
+        """
+        self.scripts.run(
+                self.master_remote,
+                'ses_network_failure.sh',
+                )
+
+    def ses_cephfs_test_mount(self, **kwargs):
+        if kwargs['part'] == 1:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_cephfs_test_mount_part1.sh',
+                    args=self.nodes_monitor,
+                    )
+        if kwargs['part'] == 2:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_cephfs_test_mount_part2.sh',
+                    args=self.nodes_monitor,
+                    )
+
+    def ses_ceph_osd_tiering(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_ceph_osd_tiering.sh',
+                )
+
+    def ses_disk_fault_injection(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_disk_fault_injection.sh',
+                args=self.nodes_random_storage,
+                )
+
+    def ses_erasure_code_profile(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_erasure_code_profile.sh',
+                )
+
+    def ses_happy_path_scenario(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_happy_path_scenario.sh',
+                args=self.nodes_random_storage,
+                )
+
+    def ses_install_nfs_ganesha(self, **kwargs):
+        if kwargs['part'] == 1:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_install_nfs_ganesha_part1.sh',
+                    args=self.nodes_random_storage,
+                    )
+        if kwargs['part'] == 2:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_install_nfs_ganesha_part2.sh',
+                    args=self.nodes_random_storage,
+                    )
+
+    def ses_install_rgw(self, **kwargs):
+        if kwargs['part'] == 1:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_install_rgw_part1.sh',
+                    args=self.nodes_random_storage,
+                    )
+        if kwargs['part'] == 2:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_install_rgw_part2.sh',
+                    args=self.nodes_random_storage,
+                    )
+        if kwargs['part'] == 3:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_install_rgw_part3.sh',
+                    args=self.nodes_random_storage,
+                    )
+        if kwargs['part'] == 4:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_install_rgw_part4.sh',
+                    args=self.nodes_random_storage,
+                    )
+
+    def ses_monitor_failover(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_monitor_failover.sh',
+                args=self.nodes_monitor,
+                )
+
+    def ses_pool_compression(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_pool_compression.sh',
+                )
+
+    def ses_rbd_persistent(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_rbd_persistent.sh',
+                args=self.nodes_random_storage,
+                )
+
+    def ses_rgw_zones(self, **kwargs):
+        if kwargs['part'] == 1:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_rgw_zones_part1.sh',
+                    args=self.nodes_random_storage,
+                    )
+        if kwargs['part'] == 2:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_rgw_zones_part2.sh',
+                    args=self.nodes_random_storage,
+                    )
+        if kwargs['part'] == 3:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_rgw_zones_part3.sh',
+                    args=self.nodes_random_storage,
+                    )
+
+    def ses_removing_osd(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_removing_osd.sh',
+                args=self.nodes_random_storage,
+                )
+
+    def ses_replace_disk(self, **kwargs):
+        if kwargs['part'] == 1:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_replace_disk_part1.sh',
+                    args=self.nodes_random_storage,
+                    )
+        if kwargs['part'] == 2:
+            self.scripts.run(
+                    self.master_remote,
+                    'ses_replace_disk_part2.sh',
+                    args=self.nodes_random_storage,
+                    )
+
+    def ses_stop_osd_daemon(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_stop_osd_daemon.sh',
+                args=self.nodes_random_storage,
+                )
+
+    def ses_tuned(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_tuned.sh',
+                )
+
+    def ses_uninstall_ceph(self, **kwargs):
+        self.scripts.run(
+                self.master_remote,
+                'ses_uninstall_ceph.sh',
+                )
 
 
 task = SESQA

@@ -1,0 +1,9 @@
+tasks:
+    - deepsea.orch:
+        stage: 4
+    - exec:
+        client.salt_master:
+          - 'ceph -s'
+    - ses_qa:
+    - ses_qa.validation:
+        ses_uninstall_ceph:
