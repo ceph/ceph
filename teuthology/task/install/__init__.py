@@ -76,13 +76,13 @@ def install_packages(ctx, pkgs, config):
         "rpm": rpm._update_package_list_and_install,
     }
     with parallel() as p:
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             system_type = teuthology.get_system_type(remote)
             p.spawn(
                 install_pkgs[system_type],
                 ctx, remote, pkgs[system_type], config)
 
-    for remote in ctx.cluster.remotes.iterkeys():
+    for remote in ctx.cluster.remotes.keys():
         # verifies that the install worked as expected
         verify_package_version(ctx, config, remote)
 
@@ -100,7 +100,7 @@ def remove_packages(ctx, config, pkgs):
         "rpm": rpm._remove,
     }
     with parallel() as p:
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             system_type = teuthology.get_system_type(remote)
             p.spawn(remove_pkgs[
                     system_type], ctx, config, remote, pkgs[system_type])
@@ -121,7 +121,7 @@ def remove_sources(ctx, config):
         project = config.get('project', 'ceph')
         log.info("Removing {proj} sources lists".format(
             proj=project))
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             remove_fn = remove_sources_pkgs[remote.os.package_type]
             p.spawn(remove_fn, ctx, config, remote)
 
@@ -267,7 +267,7 @@ def upgrade_remote_to_config(ctx, config):
     # build a normalized remote -> config dict
     remotes = {}
     if 'all' in config:
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             remotes[remote] = config.get('all')
     else:
         for role in config.keys():

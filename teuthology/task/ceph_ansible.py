@@ -122,9 +122,9 @@ class CephAnsible(Task):
         ansible_loc = self.ctx.cluster.only('installer.0')
         (ceph_first_mon,) = self.ctx.cluster.only(
             misc.get_first_mon(self.ctx,
-                               self.config)).remotes.iterkeys()
+                               self.config)).remotes.keys()
         if ansible_loc.remotes:
-            (ceph_installer,) = ansible_loc.remotes.iterkeys()
+            (ceph_installer,) = ansible_loc.remotes.keys()
         else:
             ceph_installer = ceph_first_mon
         self.ceph_first_mon = ceph_first_mon
@@ -502,7 +502,7 @@ class CephAnsible(Task):
 
     def fix_keyring_permission(self):
         clients_only = lambda role: role.startswith('client')
-        for client in self.cluster.only(clients_only).remotes.iterkeys():
+        for client in self.cluster.only(clients_only).remotes.keys():
             client.run(args=[
                 'sudo',
                 'chmod',

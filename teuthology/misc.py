@@ -1002,7 +1002,7 @@ def get_clients(ctx, roles):
         assert isinstance(role, basestring)
         assert 'client.' in role
         _, _, id_ = split_role(role)
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
         yield (id_, remote)
 
 

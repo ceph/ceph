@@ -118,7 +118,7 @@ def lock_machines(ctx, config):
                 if teuthology.lock.keys.do_update_keys(keys_dict)[0]:
                     log.info("Error in virtual machine keys")
                 newscandict = {}
-                for dkey in all_locked.iterkeys():
+                for dkey in all_locked.keys():
                     stats = teuthology.lock.query.get_status(dkey)
                     newscandict[dkey] = stats['ssh_pub_key']
                 ctx.config['targets'] = newscandict
@@ -156,5 +156,5 @@ def lock_machines(ctx, config):
         )
         if get_status(ctx.summary) == 'pass' or unlock_on_failure:
             log.info('Unlocking machines...')
-            for machine in ctx.config['targets'].iterkeys():
+            for machine in ctx.config['targets'].keys():
                 teuthology.lock.ops.unlock_one(ctx, machine, ctx.owner, ctx.archive)

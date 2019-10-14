@@ -219,7 +219,7 @@ def install_firmware(ctx, config):
     uri = teuth_config.linux_firmware_git_url or linux_firmware_git_upstream
     fw_dir = '/lib/firmware/updates'
 
-    for role in config.iterkeys():
+    for role in config.keys():
         if isinstance(config[role], str) and config[role].find('distro') >= 0:
             log.info('Skipping firmware on distro kernel');
             return
@@ -452,7 +452,7 @@ def install_latest_rh_kernel(ctx, config):
     if config.get('skip'):
         return
     with parallel() as p:
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             p.spawn(update_rh_kernel, remote)
 
 

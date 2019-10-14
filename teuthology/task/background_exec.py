@@ -47,7 +47,7 @@ def task(ctx, config):
 
     tasks = {}
     for role, cmd in config.items():
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running background command on role %s host %s', role,
                  remote.name)
         if isinstance(cmd, list):

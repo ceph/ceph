@@ -30,7 +30,7 @@ def task(ctx, config):
     """
 
     log.info('Syncing clocks and checking initial clock skew...')
-    for rem in ctx.cluster.remotes.iterkeys():
+    for rem in ctx.cluster.remotes.keys():
         rem.run(
             args = [
                 'sudo', 'systemctl', 'stop', 'ntp.service', run.Raw('||'),
@@ -56,7 +56,7 @@ def task(ctx, config):
 
     finally:
         log.info('Checking final clock skew...')
-        for rem in ctx.cluster.remotes.iterkeys():
+        for rem in ctx.cluster.remotes.keys():
             rem.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
@@ -76,7 +76,7 @@ def check(ctx, config):
     :param config: Configuration
     """
     log.info('Checking initial clock skew...')
-    for rem in ctx.cluster.remotes.iterkeys():
+    for rem in ctx.cluster.remotes.keys():
         rem.run(
             args=[
                 'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
@@ -91,7 +91,7 @@ def check(ctx, config):
 
     finally:
         log.info('Checking final clock skew...')
-        for rem in ctx.cluster.remotes.iterkeys():
+        for rem in ctx.cluster.remotes.keys():
             rem.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),

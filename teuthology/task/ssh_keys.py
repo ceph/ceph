@@ -134,7 +134,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
     # add an entry for all hosts in ctx to auth_keys_data
     auth_keys_data = ''
 
-    for inner_host in ctx.cluster.remotes.iterkeys():
+    for inner_host in ctx.cluster.remotes.keys():
         inner_username, inner_hostname = str(inner_host).split('@')
         # create a 'user@hostname' string using our fake hostname
         fake_hostname = '{user}@{host}'.format(user=ssh_keys_user, host=str(inner_hostname))
