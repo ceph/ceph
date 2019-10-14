@@ -409,6 +409,7 @@ void dump_name(Formatter *formatter, const librados::NObjectIterator& i, [[maybe
 } // namespace detail
 
 unsigned default_op_size = 1 << 22;
+static const unsigned MAX_OMAP_BYTES_PER_REQUEST = 1 << 10;
 
 [[noreturn]] static void usage_exit()
 {
@@ -2872,10 +2873,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     string oid(nargs[1]);
     string last_read = "";
-    int MAX_READ = 512;
     do {
       map<string, bufferlist> values;
-      ret = io_ctx.omap_get_vals(oid, last_read, MAX_READ, &values);
+      ret = io_ctx.omap_get_vals(oid, last_read, MAX_OMAP_BYTES_PER_REQUEST, &values);
       if (ret < 0) {
 	cerr << "error getting omap keys " << pool_name << "/" << oid << ": "
 	     << cpp_strerror(ret) << std::endl;
@@ -2900,7 +2900,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	it->second.hexdump(cout);
 	cout << std::endl;
       }
-    } while (ret == MAX_READ);
+    } while (ret == MAX_OMAP_BYTES_PER_REQUEST);
     ret = 0;
   }
   else if (strcmp(nargs[0], "cp") == 0) {
@@ -3344,18 +3344,22 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
 
-    set<string> out_keys;
-    ret = io_ctx.omap_get_keys(nargs[1], "", LONG_MAX, &out_keys);
-    if (ret < 0) {
-      cerr << "error getting omap key set " << pool_name << "/"
-	   << nargs[1] << ": "  << cpp_strerror(ret) << std::endl;
-      return 1;
-    }
+    string last_read;
+    bool more = true;
+    do {
+      set<string> out_keys;
+      ret = io_ctx.omap_get_keys2(nargs[1], last_read, MAX_OMAP_BYTES_PER_REQUEST, &out_keys, &more);
+      if (ret < 0) {
+        cerr << "error getting omap key set " << pool_name << "/"
+             << nargs[1] << ": "  << cpp_strerror(ret) << std::endl;
+        return 1;
+      }
 
-    for (set<string>::iterator iter = out_keys.begin();
-	 iter != out_keys.end(); ++iter) {
-      cout << *iter << std::endl;
-    }
+      for (auto &key : out_keys) {
+        cout << key << std::endl;
+        last_read = std::move(key);
+      }
+    } while (more);
   } else if (strcmp(nargs[0], "lock") == 0) {
     if (!pool_name) {
       usage(cerr);
