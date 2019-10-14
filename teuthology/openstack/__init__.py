@@ -807,7 +807,7 @@ class TeuthologyOpenStack(OpenStack):
 
         with open(path) as f:
             if path.endswith('.yaml') or path.endswith('.yml'):
-                data = yaml.load(f)
+                data = yaml.safe_load(f)
             elif path.endswith('.json') or path.endswith('.jsn'):
                 data = json.load(f)
             else:
