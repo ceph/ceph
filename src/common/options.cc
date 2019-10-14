@@ -6467,12 +6467,12 @@ std::vector<Option> get_rgw_options() {
     .set_description("maximum allowed size of deferred entries in queue head for gc"),
 
     Option("rgw_gc_max_queue_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(128_M)
+    .set_default(134213632)
     .set_description("Maximum allowed queue size for gc")
     .set_long_description(
         "The maximum allowed size of each gc queue, and its value should not "
-        "be greater than osd_max_object_size.")
-    .add_see_also({"osd_max_object_size"}),
+        "be greater than (osd_max_object_size - rgw_gc_max_deferred_entries_size - 1K).")
+    .add_see_also({"osd_max_object_size", "rgw_gc_max_deferred_entries_size"}),
 
     Option("rgw_gc_max_deferred", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
