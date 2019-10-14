@@ -269,12 +269,15 @@ The following entries describe valid capability profiles:
               so they have permissions to add keys, etc. when bootstrapping
               an ``rbd-mirror`` daemon.
 
-``profile rbd`` (Monitor and OSD)
+``profile rbd`` (Manager, Monitor, and OSD)
 
 :Description: Gives a user permissions to manipulate RBD images. When used
               as a Monitor cap, it provides the minimal privileges required
-              by an RBD client application. When used as an OSD cap, it
-              provides read-write access to an RBD client application.
+              by an RBD client application; this includes the ability
+	      to blacklist other client users. When used as an OSD cap, it
+              provides read-write access to the specified pool to an
+	      RBD client application. The Manager cap supports optional
+              ``pool`` and ``namespace`` keyword arguments.
 
 ``profile rbd-mirror`` (Monitor only)
 
@@ -282,9 +285,11 @@ The following entries describe valid capability profiles:
               RBD mirroring config-key secrets. It provides the minimal
               privileges required for the ``rbd-mirror`` daemon.
 
-``profile rbd-read-only`` (OSD only)
+``profile rbd-read-only`` (Manager and OSD)
 
-:Description: Gives a user read-only permissions to RBD images.
+:Description: Gives a user read-only permissions to RBD images. The Manager
+              cap supports optional ``pool`` and ``namespace`` keyword
+              arguments.
 
 
 Pool

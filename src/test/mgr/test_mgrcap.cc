@@ -262,3 +262,34 @@ TEST(MgrCap, Module) {
   ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "bcd", "", {}, false, true, false,
                              {}));
 }
+
+TEST(MgrCap, Profile) {
+  MgrCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+
+  ASSERT_TRUE(cap.parse("profile rbd", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "abc", "", {}, true, false,
+                              false, {}));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "rbd_support", "", {}, true,
+                             true, false, {}));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "rbd_support", "", {}, true,
+                             false, false, {}));
+
+  ASSERT_TRUE(cap.parse("profile rbd pool=abc namespace prefix def", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "rbd_support", "", {},
+                              true, true, false, {}));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "rbd_support", "",
+                              {{"pool", "abc"}},
+                              true, true, false, {}));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "rbd_support", "",
+                             {{"pool", "abc"}, {"namespace", "defghi"}},
+                             true, true, false, {}));
+
+  ASSERT_TRUE(cap.parse("profile rbd-read-only", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "abc", "", {}, true, false,
+                              false, {}));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "rbd_support", "", {}, true,
+                              true, false, {}));
+  ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "rbd_support", "", {}, true,
+                             false, false, {}));
+}

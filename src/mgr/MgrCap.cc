@@ -154,6 +154,26 @@ void MgrCapGrant::expand_profile() const {
     profile_grants.push_back({{}, {}, {}, "crash post", {}, {}});
     return;
   }
+
+  if (profile == "rbd" || profile == "rbd-read-only") {
+    Arguments filtered_arguments;
+    for (auto& [key, constraint] : arguments) {
+      if (key == "pool" || key == "namespace") {
+        filtered_arguments[key] = std::move(constraint);
+      }
+    }
+
+    mgr_rwxa_t perms = mgr_rwxa_t{MGR_CAP_R};
+    if (profile == "rbd") {
+      perms = mgr_rwxa_t{MGR_CAP_R | MGR_CAP_W};
+    }
+
+    // whitelist all 'rbd_support' commands (restricted by optional
+    // pool/namespace constraints)
+    profile_grants.push_back({{}, "rbd_support", {}, {},
+                              std::move(filtered_arguments), perms});
+    return;
+  }
 }
 
 bool MgrCapGrant::validate_arguments(
