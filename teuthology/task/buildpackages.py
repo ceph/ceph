@@ -61,7 +61,7 @@ def get_config_install(ctx, config):
 def get_config_install_upgrade(ctx, config):
     log.debug('install.upgrade config before override %s' % config)
     configs = []
-    for (role, role_config) in config.iteritems():
+    for (role, role_config) in config.items():
         if role_config is None:
             role_config = {}
         o = apply_overrides(ctx, role_config)
@@ -86,7 +86,7 @@ def lookup_configs(ctx, node):
         for leaf in node:
             configs.extend(lookup_configs(ctx, leaf))
     elif type(node) is types.DictType:
-        for (key, value) in node.iteritems():
+        for (key, value) in node.items():
             if key in ('install', 'install.upgrade'):
                 configs.extend(GET_CONFIG_FUNCTIONS[key](ctx, value))
             elif key in ('overrides',):
