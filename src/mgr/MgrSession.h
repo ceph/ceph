@@ -27,7 +27,7 @@ struct MgrSession : public RefCountedObject {
   explicit MgrSession(CephContext *cct) : RefCountedObject(cct, 0) {}
   ~MgrSession() override {}
 
-  const entity_addr_t& get_peer_addr() {
+  const entity_addr_t& get_peer_addr() const {
     return inst.addr;
   }
 };
