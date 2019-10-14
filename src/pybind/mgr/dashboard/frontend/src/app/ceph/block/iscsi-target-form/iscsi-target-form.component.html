@@ -152,10 +152,6 @@
               </span>
             </ng-container>
 
-            <span class="invalid-feedback"
-                  *ngIf="targetForm.showError('disks', formDir, 'required')"
-                  i18n>At least 1 image is required.</span>
-
             <div class="row">
               <div class="col-md-12">
                 <cd-select [data]="disks.value"
