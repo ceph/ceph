@@ -1436,6 +1436,22 @@ public:
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
+  int calc_pg_upmaps_by_osd(
+    CephContext *cct,
+    float max_deviation_ratio,  ///< max deviation from target (value < 1.0)
+    int max_iterations,         ///< max iterations to run
+    map<int,set<pg_t>> *pgs_by_osd, ///< a map contains pgs in osd 
+    map<int,float> *osd_weight, ///< a map contains osd's weight
+    OSDMap& tmp,                ///< a tmp OSDMap which pg_upmap_items will be changed
+    map<pg_t,mempool::osdmap::vector<pair<int,int>>> *pg_upmaps); ///< output  pg upmap items
+
+  int calc_pg_upmaps_by_primary_osd(
+    CephContext *cct,
+    float max_deviation, ///< max deviation from target (value < 1.0)
+    int max_iterations,  ///< max iterations to run
+    const set<int64_t>& pools,        ///< [optional] restrict to pool
+    Incremental *pending_inc);
+
   int calc_pg_upmaps(
     CephContext *cct,
     float max_deviation, ///< max deviation from target (value < 1.0)
