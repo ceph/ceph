@@ -54,7 +54,7 @@ def task(ctx, config):
     log.info('1. Verify warning messages when exceeding nearfull_ratio')
 
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     proc = mon.run(
              args=[
