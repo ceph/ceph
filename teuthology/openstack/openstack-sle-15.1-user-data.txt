@@ -2,9 +2,6 @@
 bootcmd:
  - echo nameserver {nameserver} | tee /etc/resolv.conf
  - echo search {lab_domain} | tee -a /etc/resolv.conf
- - sed -i -e 's/PEERDNS="yes"/PEERDNS="no"/' /etc/sysconfig/network/ifcfg-eth0
- - ( curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//' ; eval printf "%03d%03d%03d%03d.{lab_domain}" $(curl --silent http://169.254.169.254/2009-04-04/meta-data/local-ipv4 | tr . ' ' ) ) | tee /etc/hostname
- - hostname $(cat /etc/hostname)
  - ( echo ; echo "MaxSessions 1000" ) >> /etc/ssh/sshd_config
 # See https://github.com/ceph/ceph-cm-ansible/blob/master/roles/cobbler/templates/snippets/cephlab_user
  - ( echo 'Defaults !requiretty' ; echo 'Defaults visiblepw' ) | tee /etc/sudoers.d/cephlab_sudo ; chmod 0440 /etc/sudoers.d/cephlab_sudo
@@ -15,13 +12,26 @@ users:
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     groups: users
 runcmd:
+ - |
+    for i in $(seq 1 30) ; do
+        ping -q -c 1 8.8.8.8 && break
+        sleep 10
+    done
+    ETH=$(ip route list | grep "scope link" | cut -f 3 -d ' ')
+    sed -i -e 's/PEERDNS="yes"/PEERDNS="no"/' /etc/sysconfig/network/ifcfg-$ETH
+    (
+        curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname |
+            sed -e 's/[\.-].*//'
+        eval printf "%03d%03d%03d%03d.{lab_domain}" $(
+            curl --silent http://169.254.169.254/2009-04-04/meta-data/local-ipv4 |
+                tr . ' ' )
+    ) | tee /etc/hostname
+    hostname $(cat /etc/hostname)
  - ( MYHOME=/home/{username} ; mkdir $MYHOME/.ssh ; chmod 700 $MYHOME/.ssh ; cp /root/.ssh/authorized_keys $MYHOME/.ssh ; chown -R {username}.users $MYHOME/.ssh )
- - 'zypper rr openSUSE-Leap-Cloud-Tools || :'
  - zypper --non-interactive --no-gpg-checks refresh
- - zypper --non-interactive remove systemd-logger
- - zypper --non-interactive install --no-recommends python wget git ntp rsyslog lsb-release make gcc gcc-c++
+ - zypper --non-interactive install --no-recommends wget rsyslog lsb-release make gcc gcc-c++ chrony
+ - sed -i -e 's/^! pool/pool/' /etc/chrony.conf
+ - systemctl enable chronyd.service
+ - systemctl start chronyd.service
  - sed -i -e "s/^#master:.*$/master:\ $(curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//')$(eval printf "%03d%03d%03d%03d.{lab_domain}" $(echo "{nameserver}" | tr . ' '))/" /etc/salt/minion
- - ( if ! grep '^server' /etc/ntp.conf ; then for i in 0 1 2 3 ; do echo "server $i.opensuse.pool.ntp.org iburst" >> /etc/ntp.conf ; done ; fi )
- - systemctl enable ntpd.service
- - systemctl restart ntpd.service
 final_message: "{up}, after $UPTIME seconds"

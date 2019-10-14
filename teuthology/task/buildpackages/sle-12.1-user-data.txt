@@ -1,7 +1,6 @@
 #cloud-config
 bootcmd:
  - echo nameserver 8.8.8.8 | tee -a /etc/resolv.conf # last resort, in case the DHCP server does not provide a resolver
- - SUSEConnect -p sle-sdk/12.2/x86_64
 manage_etc_hosts: true
 preserve_hostname: true
 users:
