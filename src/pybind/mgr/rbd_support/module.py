@@ -82,6 +82,17 @@ TASK_RETRY_INTERVAL = timedelta(seconds=30)
 MAX_COMPLETED_TASKS = 50
 
 
+def is_authorized(module, pool, namespace):
+    return module.is_authorized({"pool": pool or '',
+                                 "namespace": namespace or ''})
+
+
+def authorize_request(module, pool, namespace):
+    if not is_authorized(module, pool, namespace):
+        raise PermissionError("not authorized on pool={}, namespace={}".format(
+            pool, namespace))
+
+
 def extract_pool_key(pool_spec):
     if not pool_spec:
         return GLOBAL_POOL_KEY
@@ -302,7 +313,8 @@ class PerfHandler:
     def resolve_pool_id(self, pool_name):
         pool_id = self.module.rados.pool_lookup(pool_name)
         if not pool_id:
-            raise rados.ObjectNotFound("Pool '{}' not found".format(pool_name))
+            raise rados.ObjectNotFound("Pool '{}' not found".format(pool_name),
+                                       errno.ENOENT)
         return pool_id
 
     def scrub_expired_queries(self):
@@ -479,6 +491,8 @@ class PerfHandler:
         self.scrub_expired_queries()
 
         pool_key = extract_pool_key(pool_spec)
+        authorize_request(self.module, pool_key[0], pool_key[1])
+
         user_query = self.register_query(pool_key)
 
         now = datetime.now()
@@ -985,6 +999,8 @@ class TaskHandler:
 
     def queue_flatten(self, image_spec):
         image_spec = self.extract_image_spec(image_spec)
+
+        authorize_request(self.module, image_spec[0], image_spec[1])
         self.log.info("queue_flatten: {}".format(image_spec))
 
         refs = {TASK_REF_ACTION: TASK_REF_ACTION_FLATTEN,
@@ -1023,6 +1039,8 @@ class TaskHandler:
 
     def queue_remove(self, image_spec):
         image_spec = self.extract_image_spec(image_spec)
+
+        authorize_request(self.module, image_spec[0], image_spec[1])
         self.log.info("queue_remove: {}".format(image_spec))
 
         refs = {TASK_REF_ACTION: TASK_REF_ACTION_REMOVE,
@@ -1057,6 +1075,8 @@ class TaskHandler:
 
     def queue_trash_remove(self, image_id_spec):
         image_id_spec = self.extract_image_spec(image_id_spec)
+
+        authorize_request(self.module, image_id_spec[0], image_id_spec[1])
         self.log.info("queue_trash_remove: {}".format(image_id_spec))
 
         refs = {TASK_REF_ACTION: TASK_REF_ACTION_TRASH_REMOVE,
@@ -1096,6 +1116,8 @@ class TaskHandler:
 
     def queue_migration_execute(self, image_spec):
         image_spec = self.extract_image_spec(image_spec)
+
+        authorize_request(self.module, image_spec[0], image_spec[1])
         self.log.info("queue_migration_execute: {}".format(image_spec))
 
         refs = {TASK_REF_ACTION: TASK_REF_ACTION_MIGRATION_EXECUTE,
@@ -1132,6 +1154,8 @@ class TaskHandler:
 
     def queue_migration_commit(self, image_spec):
         image_spec = self.extract_image_spec(image_spec)
+
+        authorize_request(self.module, image_spec[0], image_spec[1])
         self.log.info("queue_migration_commit: {}".format(image_spec))
 
         refs = {TASK_REF_ACTION: TASK_REF_ACTION_MIGRATION_COMMIT,
@@ -1160,6 +1184,8 @@ class TaskHandler:
 
     def queue_migration_abort(self, image_spec):
         image_spec = self.extract_image_spec(image_spec)
+
+        authorize_request(self.module, image_spec[0], image_spec[1])
         self.log.info("queue_migration_abort: {}".format(image_spec))
 
         refs = {TASK_REF_ACTION: TASK_REF_ACTION_MIGRATION_ABORT,
@@ -1185,10 +1211,12 @@ class TaskHandler:
     def task_cancel(self, task_id):
         self.log.info("task_cancel: {}".format(task_id))
 
-        if task_id not in self.tasks_by_id:
+        task = self.tasks_by_id.get(task_id)
+        if not task or not is_authorized(self.module,
+                                         task.refs[TASK_REF_POOL_NAME],
+                                         task.refs[TASK_REF_POOL_NAMESPACE]):
             return -errno.ENOENT, '', "No such task {}".format(task_id)
 
-        task = self.tasks_by_id[task_id]
         task.cancel()
 
         remove_in_memory = True
@@ -1210,15 +1238,21 @@ class TaskHandler:
         self.log.info("task_list: {}".format(task_id))
 
         if task_id:
-            if task_id not in self.tasks_by_id:
+            task = self.tasks_by_id.get(task_id)
+            if not task or not is_authorized(self.module,
+                                             task.refs[TASK_REF_POOL_NAME],
+                                             task.refs[TASK_REF_POOL_NAMESPACE]):
                 return -errno.ENOENT, '', "No such task {}".format(task_id)
 
-            result = self.tasks_by_id[task_id].to_dict()
+            result = task.to_dict()
         else:
             result = []
             for sequence in sorted(self.tasks_by_sequence.keys()):
                 task = self.tasks_by_sequence[sequence]
-                result.append(task.to_dict())
+                if is_authorized(self.module,
+                                 task.refs[TASK_REF_POOL_NAME],
+                                 task.refs[TASK_REF_POOL_NAMESPACE]):
+                    result.append(task.to_dict())
 
         return 0, json.dumps(result), ""
 
@@ -1350,5 +1384,7 @@ class Module(MgrModule):
             return -errno.ENOENT, "", str(ex)
         except ValueError as ex:
             return -errno.EINVAL, "", str(ex)
+        except PermissionError as ex:
+            return -errno.EACCES, "", str(ex)
 
         raise NotImplementedError(cmd['prefix'])
