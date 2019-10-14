@@ -9479,7 +9479,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
      * change out from under us.
      */
     if (f->flags & O_APPEND) {
-      int r = _lseek(f, 0, SEEK_END);
+      auto r = _lseek(f, 0, SEEK_END);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
