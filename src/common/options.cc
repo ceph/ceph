@@ -7719,6 +7719,11 @@ std::vector<Option> get_mds_options() {
     .set_default(1000)
     .set_description("number of unused inodes to pre-allocate to clients for file creation"),
 
+    Option("mds_client_delegate_inos_pct", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("percentage of preallocated inos to delegate to client"),
+
     Option("mds_early_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("additional reply to clients that metadata requests are complete but not yet durable"),

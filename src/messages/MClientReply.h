@@ -262,6 +262,27 @@ struct InodeStat {
   // see CInode::encode_inodestat for encoder.
 };
 
+struct openc_response_t {
+  _inodeno_t			created_ino;
+  interval_set<inodeno_t>	delegated_inos;
+
+public:
+  void encode(ceph::buffer::list& bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(created_ino, bl);
+    encode(delegated_inos, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &p) {
+    using ceph::decode;
+    DECODE_START(1, p);
+    decode(created_ino, p);
+    decode(delegated_inos, p);
+    DECODE_FINISH(p);
+  }
+} __attribute__ ((__may_alias__));
+WRITE_CLASS_ENCODER(openc_response_t)
 
 class MClientReply : public SafeMessage {
 public:
