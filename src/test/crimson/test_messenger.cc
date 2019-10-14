@@ -961,7 +961,9 @@ class FailoverSuite : public Dispatcher {
       ceph_abort();
     }
 
-    if (tracked_conn && tracked_conn != conn) {
+    if (tracked_conn &&
+        !tracked_conn->is_closed() &&
+        tracked_conn != conn) {
       logger().error("[{}] {} got accepted, but there's already traced_conn [{}] {}",
                      result->index, *conn, tracked_index, *tracked_conn);
       ceph_abort();
@@ -1297,6 +1299,11 @@ class FailoverSuite : public Dispatcher {
       return std::reference_wrapper<ConnResults>(interceptor.results);
     });
   }
+
+  bool is_standby() {
+    ceph_assert(tracked_conn);
+    return !(tracked_conn->is_connected() || tracked_conn->is_closed());
+  }
 };
 
 class FailoverTest : public Dispatcher {
@@ -1507,7 +1514,9 @@ class FailoverSuitePeer : public Dispatcher {
   }
 
   seastar::future<> ms_handle_accept(ConnectionRef conn) override {
-    ceph_assert(!tracked_conn || tracked_conn == conn);
+    ceph_assert(!tracked_conn ||
+                tracked_conn->is_closed() ||
+                tracked_conn == conn);
     tracked_conn = conn;
     return flush_pending_send();
   }
@@ -2958,9 +2967,22 @@ test_v2_lossy_client(FailoverTest& test) {
       results[1].assert_connect(1, 1, 0, 1);
       results[1].assert_accept(0, 0, 0, 0);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([&test] {
       logger().info("-- 2 --");
       logger().info("[Test] server markdown...");
+      return test.markdown_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(1, 0);
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] client reconnect...");
     });
@@ -3007,9 +3029,22 @@ test_v2_stateless_server(FailoverTest& test) {
       results[1].assert_connect(0, 0, 0, 0);
       results[1].assert_accept(1, 1, 0, 1);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([&suite] {
       logger().info("-- 2 --");
       logger().info("[Test] server markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(1, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] client reconnect...");
     });
@@ -3056,9 +3091,22 @@ test_v2_lossless_client(FailoverTest& test) {
       results[1].assert_connect(1, 1, 0, 1);
       results[1].assert_accept(0, 0, 0, 0);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([&test] {
       logger().info("-- 2 --");
       logger().info("[Test] server markdown...");
+      return test.markdown_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(2, 2, 1, 2);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 1);
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] client reconnect...");
     });
@@ -3105,9 +3153,26 @@ test_v2_stateful_server(FailoverTest& test) {
       results[1].assert_connect(0, 0, 0, 0);
       results[1].assert_accept(1, 1, 0, 0);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([&suite] {
       logger().info("-- 2 --");
       logger().info("[Test] server markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+      results[2].assert_state_at(conn_state_t::established);
+      results[2].assert_connect(0, 0, 0, 0);
+      results[2].assert_accept(1, 1, 1, 1);
+      results[2].assert_reset(0, 0);
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] client reconnect...");
     });
@@ -3154,9 +3219,15 @@ test_v2_peer_reuse_connector(FailoverTest& test) {
       results[1].assert_connect(1, 1, 0, 1);
       results[1].assert_accept(0, 0, 0, 0);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([&test] {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
+      return test.markdown_peer();
+    }).then([] {
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      ceph_assert(suite.is_standby());
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] connector reconnect...");
     });
@@ -3203,9 +3274,24 @@ test_v2_peer_reuse_acceptor(FailoverTest& test) {
       results[1].assert_connect(0, 0, 0, 0);
       results[1].assert_accept(1, 1, 0, 0);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([] {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] connector reconnect...");
     });
@@ -3252,9 +3338,15 @@ test_v2_lossless_peer_connector(FailoverTest& test) {
       results[1].assert_connect(1, 1, 0, 1);
       results[1].assert_accept(0, 0, 0, 0);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([&test] {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
+      return test.markdown_peer();
+    }).then([] {
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      ceph_assert(suite.is_standby());
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] connector reconnect...");
     });
@@ -3301,9 +3393,24 @@ test_v2_lossless_peer_acceptor(FailoverTest& test) {
       results[1].assert_connect(0, 0, 0, 0);
       results[1].assert_accept(1, 1, 0, 0);
       results[1].assert_reset(0, 0);
-      // TODO: further tests
+    }).then([] {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+      // TODO: further tests
       logger().info("-- 3 --");
       logger().info("[Test] connector reconnect...");
     });
