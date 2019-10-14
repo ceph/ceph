@@ -24,7 +24,7 @@ struct MgrSession : public RefCountedObject {
 
   std::set<std::string> declared_types;
 
-  const entity_addr_t& get_peer_addr() {
+  const entity_addr_t& get_peer_addr() const {
     return inst.addr;
   }
 
