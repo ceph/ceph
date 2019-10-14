@@ -1499,7 +1499,8 @@ OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encr
 OPTION(rgw_crypt_s3_kms_backend, OPT_STR) // Where SSE-KMS encryption keys are stored
 OPTION(rgw_crypt_vault_auth, OPT_STR) // Type of authentication method to be used with Vault
 OPTION(rgw_crypt_vault_token_file, OPT_STR) // Path to the token file for Vault authentication
-OPTION(rgw_crypt_vault_addr, OPT_STR) // URL to Vault server endpoint
+OPTION(rgw_crypt_vault_addr, OPT_STR) // Vault server base address
+OPTION(rgw_crypt_vault_prefix, OPT_STR) // Optional URL prefix to Vault secret path
 
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms
                                                       // defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="

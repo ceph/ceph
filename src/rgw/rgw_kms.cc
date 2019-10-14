@@ -5,6 +5,7 @@
  * Server-side encryption integrations with Key Management Systems (SSE-KMS)
  */
 
+#include <sys/stat.h>
 #include "include/str_map.h"
 #include "common/safe_io.h"
 #include "rgw/rgw_crypt.h"
@@ -21,6 +22,22 @@ static map<string,string> get_str_map(const string &str) {
   map<string,string> m;
   get_str_map(str, &m, ";, \t");
   return m;
+}
+
+/**
+ * Construct a full URL string by concatenating a "base" URL with another path,
+ * ensuring there is one and only one forward slash between them. If path is
+ * empty, the URL is not changed.
+ */
+static void concat_url(std::string &url, std::string path) {
+  if (!path.empty()) {
+    if (url.back() == '/' && path.front() == '/') {
+      url.pop_back();
+    } else if (url.back() != '/' && path.front() != '/') {
+      url.push_back('/');
+    }
+    url.append(path);
+  }
 }
 
 static int get_actual_key_from_conf(CephContext *cct,
@@ -66,33 +83,19 @@ static int get_actual_key_from_conf(CephContext *cct,
   return res;
 }
 
-static int get_barbican_url(CephContext * const cct,
-                            std::string& url)
-{
-  url = cct->_conf->rgw_barbican_url;
-  if (url.empty()) {
-    ldout(cct, 0) << "ERROR: conf rgw_barbican_url is not set" << dendl;
-    return -EINVAL;
-  }
-
-  if (url.back() != '/') {
-    url.append("/");
-  }
-
-  return 0;
-}
-
 static int request_key_from_barbican(CephContext *cct,
                                      boost::string_view key_id,
                                      const std::string& barbican_token,
                                      std::string& actual_key) {
-  std::string secret_url;
   int res;
-  res = get_barbican_url(cct, secret_url);
-  if (res < 0) {
-     return res;
+
+  std::string secret_url = cct->_conf->rgw_barbican_url;
+  if (secret_url.empty()) {
+    ldout(cct, 0) << "ERROR: conf rgw_barbican_url is not set" << dendl;
+    return -EINVAL;
   }
-  secret_url += "v1/secrets/" + std::string(key_id);
+  concat_url(secret_url, "/v1/secrets/");
+  concat_url(secret_url, std::string(key_id));
 
   bufferlist secret_bl;
   RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
@@ -142,7 +145,7 @@ static int request_key_from_vault_with_token(CephContext *cct,
                                              boost::string_view key_id,
                                              bufferlist *secret_bl)
 {
-  std::string token_file, vault_addr, vault_token;
+  std::string token_file, secret_url, vault_token;
   int res = 0;
 
   token_file = cct->_conf->rgw_crypt_vault_token_file;
@@ -152,15 +155,25 @@ static int request_key_from_vault_with_token(CephContext *cct,
   }
   ldout(cct, 20) << "Vault token file: " << token_file << dendl;
 
+  struct stat token_st;
+  if (stat(token_file.c_str(), &token_st) != 0) {
+    ldout(cct, 0) << "ERROR: Vault token file '" << token_file << "' not found  " << dendl;
+    return -ENOENT;
+  }
+
+  if (token_st.st_mode & (S_IRWXG | S_IRWXO)) {
+    ldout(cct, 0) << "ERROR: Vault token file '" << token_file << "' permissions are "
+                  << "too open, it must not be accessible by other users" << dendl;
+    return -EACCES;
+  }
+
   char buf[2048];
   res = safe_read_file("", token_file.c_str(), buf, sizeof(buf));
   if (res < 0) {
-    if (-ENOENT == res) {
-      ldout(cct, 0) << "ERROR: Token file '" << token_file << "' not found  " << dendl;
-    } else if (-EACCES == res) {
-      ldout(cct, 0) << "ERROR: Permission denied reading token file" << dendl;
+    if (-EACCES == res) {
+      ldout(cct, 0) << "ERROR: Permission denied reading Vault token file" << dendl;
     } else {
-      ldout(cct, 0) << "ERROR: Failed to read token file with error " << res << dendl;
+      ldout(cct, 0) << "ERROR: Failed to read Vault token file with error " << res << dendl;
     }
     return res;
   }
@@ -171,13 +184,14 @@ static int request_key_from_vault_with_token(CephContext *cct,
   vault_token = std::string{buf, static_cast<size_t>(res)};
   memset(buf, 0, sizeof(buf));
 
-  vault_addr = cct->_conf->rgw_crypt_vault_addr;
-  if (vault_addr.empty()) {
+  secret_url = cct->_conf->rgw_crypt_vault_addr;
+  if (secret_url.empty()) {
     ldout(cct, 0) << "ERROR: Vault address not set in rgw_crypt_vault_addr" << dendl;
     return -EINVAL;
   }
+  concat_url(secret_url, cct->_conf->rgw_crypt_vault_prefix);
+  concat_url(secret_url, std::string(key_id));
 
-  std::string secret_url = vault_addr + std::string(key_id);
   RGWHTTPTransceiver secret_req(cct, "GET", secret_url, secret_bl);
   secret_req.append_header("X-Vault-Token", vault_token);
   vault_token.replace(0, vault_token.length(), vault_token.length(), '\000');

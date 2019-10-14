@@ -6,5 +6,5 @@ tasks:
         kms_key: my-key-1
         kms_key2: my-key-2
       vault:
-        key_path: /v1/kv/data/my-key-1
-        key_path2: /v1/kv/data/my-key-2
+        key_path: my-key-1
+        key_path2: my-key-2
