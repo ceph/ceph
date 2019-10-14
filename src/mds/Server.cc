@@ -4366,7 +4366,14 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, in);
 
-  if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+  if (mdr->session->info.has_feature(CEPHFS_FEATURE_OCTOPUS)) {
+    openc_response_t	ocresp;
+
+    dout(10) << "adding created_ino and delegated_inos" << dendl;
+    ocresp.created_ino = in->inode.ino;
+    ocresp.delegated_inos = mdr->session->info.delegated_inos;
+    encode(ocresp, mdr->reply_extra_bl);
+  } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
     dout(10) << "adding ino to reply to indicate inode was created" << dendl;
     // add the file created flag onto the reply if create_flags features is supported
     encode(in->inode.ino, mdr->reply_extra_bl);
