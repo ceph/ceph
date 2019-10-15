@@ -33,12 +33,14 @@ function create_config() {
     local nameserver="$3"
     local labdomain="$4"
     local ip="$5"
-    local flavor_select="$6"
-    local archive_upload="$7"
-
-    if test "$flavor_select" ; then
-        flavor_select="flavor-select-regexp: $flavor_select"
-    fi
+    local archive_upload="$6"
+    local canonical_tags="$7"
+    local selfname="$8"
+    local keypair="$9"
+    local server_name="${10}"
+    local server_group="${11}"
+    local worker_group="${12}"
+    local package_repo="${13}"
 
     if test "$network" ; then
         network="network: $network"
@@ -50,6 +52,7 @@ function create_config() {
 
     cat > ~/.teuthology.yaml <<EOF
 $archive_upload
+use_shaman: false
 archive_upload_key: teuthology/openstack/archive-key
 lock_server: http://localhost:8080/
 results_server: http://localhost:8080/
@@ -62,11 +65,18 @@ queue_host: localhost
 lab_domain: $labdomain
 max_job_time: 32400 # 9 hours
 teuthology_path: .
+canonical_tags: $canonical_tags
 openstack:
   clone: git clone http://github.com/ceph/teuthology
   user-data: teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt
   ip: $ip
   nameserver: $nameserver
+  keypair: $keypair
+  selfname: $selfname
+  server_name: $server_name
+  server_group: $server_group
+  worker_group: $worker_group
+  package_repo: $package_repo
   #
   # OpenStack has predefined machine sizes (called flavors)
   # For a given job requiring N machines, the following will select
@@ -89,7 +99,6 @@ openstack:
   volumes:
     count: 0
     size: 1 # GB
-  $flavor_select
   subnet: $subnet
   $network
 EOF
@@ -97,6 +106,41 @@ EOF
     echo 'no password' > ~/.vault_pass.txt
     echo "OVERRIDE ~/.vault_pass.txt"
     return 0
+}
+
+function apt_get_update() {
+    sudo apt-get update
+}
+
+function setup_docker() {
+    if test -f /etc/apt/sources.list.d/docker.list ; then
+        echo "OK docker is installed"
+    else
+        sudo apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
+        echo deb https://apt.dockerproject.org/repo ubuntu-trusty main | sudo tee -a /etc/apt/sources.list.d/docker.list
+        sudo apt-get -qq install -y docker-engine
+        echo "INSTALLED docker"
+    fi
+}
+
+function setup_fail2ban() {
+    if test -f /usr/bin/fail2ban-server; then
+        echo "OK fail2ban is installed"
+    else
+        sudo apt-get -qq install -y fail2ban
+        echo "INSTALLED fail2ban"
+    fi
+    sudo systemctl restart fail2ban
+    sudo systemctl enable fail2ban
+    echo "STARTED fail2ban"
+}
+
+function setup_salt_master() {
+    if test -f /etc/salt/master ; then
+        echo "OK salt-master is installed"
+    else
+        sudo apt-get -qq install -y salt-master
+    fi
 }
 
 function teardown_paddles() {
@@ -119,7 +163,7 @@ function setup_paddles() {
         git clone https://github.com/ceph/paddles.git $paddles_dir || return 1
     fi
 
-    sudo apt-get -qq install -y beanstalkd postgresql postgresql-contrib postgresql-server-dev-all supervisor
+    sudo apt-get -qq install -y --force-yes beanstalkd postgresql postgresql-contrib postgresql-server-dev-all supervisor
 
     if ! sudo /etc/init.d/postgresql status ; then
         sudo mkdir -p /etc/postgresql
@@ -152,7 +196,7 @@ function setup_paddles() {
 }
 
 function populate_paddles() {
-    local subnet=$1
+    local subnets="$1"
     local labdomain=$2
 
     local paddles_dir=$(dirname $0)/../../../paddles
@@ -171,8 +215,10 @@ function populate_paddles() {
 
         (
             echo "begin transaction;"
-            subnet_names_and_ips $subnet | while read name ip ; do
-                echo "insert into nodes (name,machine_type,is_vm,locked,up) values ('${name}.${labdomain}', 'openstack', TRUE, FALSE, TRUE);"
+            for subnet in $subnets ; do
+                subnet_names_and_ips $subnet | while read name ip ; do
+                    echo "insert into nodes (name,machine_type,is_vm,locked,up) values ('${name}.${labdomain}', 'openstack', TRUE, FALSE, TRUE);"
+                done
             done
             echo "commit transaction;"
         ) | psql --quiet $url
@@ -212,11 +258,15 @@ function setup_pulpito() {
         git clone https://github.com/ceph/pulpito.git $pulpito_dir || return 1
     fi
 
-    sudo apt-get -qq install -y nginx
+    sudo apt-get -qq install -y --force-yes nginx
     local nginx_conf=/etc/nginx/sites-available/default
+    sudo sed -i '/text\/plain/a\    text\/plain                            log;' \
+        /etc/nginx/mime.types
+    sudo perl -pi -e 's|root /var/www/html|root /usr/share/nginx/html|' $nginx_conf
     if ! grep -qq 'autoindex on' $nginx_conf ; then
         sudo perl -pi -e 's|location / {|location / { autoindex on;|' $nginx_conf
         sudo /etc/init.d/nginx restart
+        sudo rm -f /usr/share/nginx/html/*.html
         echo "ADDED autoindex on to nginx configuration"
     fi
     sudo chown $USER /usr/share/nginx/html
@@ -227,6 +277,8 @@ function setup_pulpito() {
         sed -e "s|paddles_address.*|paddles_address = 'http://localhost:8080'|" < config.py.in > prod.py
         virtualenv ./virtualenv
         source ./virtualenv/bin/activate
+        pip install --upgrade pip
+        pip install 'setuptools==18.2.0'
         pip install -r requirements.txt
         python run.py &
     )
@@ -287,6 +339,30 @@ function remove_crontab() {
     crontab -r
 }
 
+function setup_ceph_workbench() {
+    local url=$1
+    local branch=$2
+
+    (
+        cd $HOME
+        source teuthology/virtualenv/bin/activate
+        if test "$url" ; then
+            git clone -b $branch $url
+            cd ceph-workbench
+            pip install -e .
+            echo "INSTALLED ceph-workbench from $url"
+        else
+            pip install ceph-workbench
+            echo "INSTALLED ceph-workbench from pypi"
+        fi
+        mkdir -p ~/.ceph-workbench
+        chmod 700 ~/.ceph-workbench
+        cp -a $HOME/openrc.sh ~/.ceph-workbench
+        cp -a $HOME/.ssh/id_rsa ~/.ceph-workbench/teuthology.pem
+        echo "RESET ceph-workbench credentials (key & OpenStack)"
+    )
+}
+
 function get_or_create_keypair() {
     local keypair=$1
 
@@ -327,10 +403,15 @@ function delete_keypair() {
 }
 
 function setup_dnsmasq() {
+    local provider=$1
+    local dev=$2
 
     if ! test -f /etc/dnsmasq.d/resolv ; then
         resolver=$(grep nameserver /etc/resolv.conf | head -1 | perl -ne 'print $1 if(/\s*nameserver\s+([\d\.]+)/)')
-        sudo apt-get -qq install -y dnsmasq resolvconf
+        sudo apt-get -qq install -y --force-yes dnsmasq resolvconf
+        # FIXME: this opens up dnsmasq to DNS reflection/amplification attacks, and can be reverted
+        # FIXME: once we figure out how to configure dnsmasq to accept DNS queries from all subnets
+        sudo perl -pi -e 's/--local-service//' /etc/init.d/dnsmasq
         echo resolv-file=/etc/dnsmasq-resolv.conf | sudo tee /etc/dnsmasq.d/resolv
         echo nameserver $resolver | sudo tee /etc/dnsmasq-resolv.conf
         # restart is not always picking up changes
@@ -339,6 +420,10 @@ function setup_dnsmasq() {
         sudo sed -ie 's/^#IGNORE_RESOLVCONF=yes/IGNORE_RESOLVCONF=yes/' /etc/default/dnsmasq
         echo nameserver 127.0.0.1 | sudo tee /etc/resolvconf/resolv.conf.d/head
         sudo resolvconf -u
+        if test $provider = cloudlab ; then
+            sudo perl -pi -e 's/.*(prepend domain-name-servers 127.0.0.1;)/\1/' /etc/dhcp/dhclient.conf
+            sudo bash -c "ifdown $dev ; ifup $dev"
+        fi
         echo "INSTALLED dnsmasq and configured to be a resolver"
     else
         echo "OK dnsmasq installed"
@@ -355,12 +440,14 @@ function subnet_names_and_ips() {
 }
 
 function define_dnsmasq() {
-    local subnet=$1
+    local subnets="$1"
     local labdomain=$2
     local host_records=/etc/dnsmasq.d/teuthology
     if ! test -f $host_records ; then
-        subnet_names_and_ips $subnet | while read name ip ; do
-            echo host-record=$name.$labdomain,$ip
+        for subnet in $subnets ; do
+            subnet_names_and_ips $subnet | while read name ip ; do
+                echo host-record=$name.$labdomain,$ip
+            done
         done | sudo tee $host_records > /tmp/dnsmasq
         head -2 /tmp/dnsmasq
         echo 'etc.'
@@ -381,14 +468,16 @@ function undefine_dnsmasq() {
 }
 
 function setup_ansible() {
-    local subnet=$1
+    local subnets="$1"
     local labdomain=$2
     local dir=/etc/ansible/hosts
     if ! test -f $dir/teuthology ; then
         sudo mkdir -p $dir/group_vars
         echo '[testnodes]' | sudo tee $dir/teuthology
-        subnet_names_and_ips $subnet | while read name ip ; do
-            echo $name.$labdomain
+        for subnet in $subnets ; do
+            subnet_names_and_ips $subnet | while read name ip ; do
+                echo $name.$labdomain
+            done
         done | sudo tee -a $dir/teuthology > /tmp/ansible
         head -2 /tmp/ansible
         echo 'etc.'
@@ -405,7 +494,7 @@ function teardown_ansible() {
 
 function remove_images() {
     glance image-list --property-filter ownedby=teuthology | grep -v -e ---- -e 'Disk Format' | cut -f4 -d ' ' | while read image ; do
-        echo "DELETED iamge $image"
+        echo "DELETED image $image"
         glance image-delete $image
     done
 }
@@ -417,8 +506,8 @@ function install_packages() {
         sudo apt-get update
     fi
 
-    local packages="jq realpath"
-    sudo apt-get -qq install -y $packages
+    local packages="jq realpath curl"
+    sudo apt-get -qq install -y --force-yes $packages
 
     echo "INSTALL required packages $packages"
 }
@@ -436,6 +525,8 @@ function verify_openstack() {
         provider=ovh
     elif echo $OS_AUTH_URL | grep -qq entercloudsuite.com ; then
         provider=entercloudsuite
+    elif echo $OS_AUTH_URL | grep -qq cloudlab.us ; then
+        provider=cloudlab
     else
         provider=any
     fi
@@ -445,15 +536,25 @@ function verify_openstack() {
 
 function main() {
     local network
-    local subnet
+    local subnets
     local nameserver
     local labdomain=teuthology
     local nworkers=2
-    local flavor_select
     local keypair=teuthology
+    local selfname=teuthology
+    local server_name=teuthology
+    local server_group=teuthology
+    local worker_group=teuthology
+    local package_repo=packages-repository
     local archive_upload
+    local ceph_workbench_git_url
+    local ceph_workbench_branch
 
     local do_setup_keypair=false
+    local do_apt_get_update=false
+    local do_setup_docker=false
+    local do_setup_salt_master=false
+    local do_ceph_workbench=false
     local do_create_config=false
     local do_setup_dnsmasq=false
     local do_install_packages=false
@@ -461,6 +562,7 @@ function main() {
     local do_populate_paddles=false
     local do_setup_pulpito=false
     local do_clobber=false
+    local canonical_tags=true
 
     export LC_ALL=C
 
@@ -474,13 +576,17 @@ function main() {
                 shift
                 nameserver=$1
                 ;;
-            --subnet)
+            --subnets)
                 shift
-                subnet=$1
+                subnets=$1
                 ;;
             --labdomain)
                 shift
                 labdomain=$1
+                ;;
+            --network)
+                shift
+                network=$1
                 ;;
             --nworkers)
                 shift
@@ -490,17 +596,63 @@ function main() {
                 shift
                 archive_upload=$1
                 ;;
+            --ceph-workbench-git-url)
+                shift
+                ceph_workbench_git_url=$1
+                ;;
+            --ceph-workbench-branch)
+                shift
+                ceph_workbench_branch=$1
+                ;;
             --install)
                 do_install_packages=true
                 ;;
             --config)
                 do_create_config=true
                 ;;
+            --setup-docker)
+                do_apt_get_update=true
+                do_setup_docker=true
+                ;;
+            --setup-salt-master)
+                do_apt_get_update=true
+                do_setup_salt_master=true
+                ;;
+            --server-name)
+                shift
+                server_name=$1
+                ;;
+            --server-group)
+                shift
+                server_group=$1
+                ;;
+            --worker-group)
+                shift
+                worker_group=$1
+                ;;
+            --package-repo)
+                shift
+                package_repo=$1
+                ;;
+            --selfname)
+                shift
+                selfname=$1
+                ;;
+            --keypair)
+                shift
+                keypair=$1
+                ;;
             --setup-keypair)
                 do_setup_keypair=true
                 ;;
+            --setup-ceph-workbench)
+                do_ceph_workbench=true
+                ;;
             --setup-dnsmasq)
                 do_setup_dnsmasq=true
+                ;;
+            --setup-fail2ban)
+                do_setup_fail2ban=true
                 ;;
             --setup-paddles)
                 do_setup_paddles=true
@@ -513,15 +665,23 @@ function main() {
                 ;;
             --setup-all)
                 do_install_packages=true
+                do_ceph_workbench=true
                 do_create_config=true
                 do_setup_keypair=true
+                do_apt_get_update=true
+                do_setup_docker=true
+                do_setup_salt_master=true
                 do_setup_dnsmasq=true
+                do_setup_fail2ban=true
                 do_setup_paddles=true
                 do_setup_pulpito=true
                 do_populate_paddles=true
                 ;;
             --clobber)
                 do_clobber=true
+                ;;
+            --no-canonical-tags)
+                canonical_tags=false
                 ;;
             *)
                 echo $1 is not a known option
@@ -537,30 +697,40 @@ function main() {
 
     local provider=$(verify_openstack)
 
-    eval local default_subnet=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr')
-    if test -z "$default_subnet" ; then
-        default_subnet=$(nova tenant-network-list | grep / | cut -f6 -d' ' | head -1)
-    fi
-    : ${subnet:=$default_subnet}
+    #
+    # assume the first available IPv4 subnet is going to be used to assign IP to the instance
+    #
+    [ -z "$network" ] && {
+        local default_subnets=$(openstack subnet list --ip-version 4 -f json | jq -r '.[] | .Subnet' | sort | uniq)
+    } || {
+        local network_id=$(openstack network list -f json | jq -r ".[] | select(.Name == \"$network\") | .ID")
+        local default_subnets=$(openstack subnet list --ip-version 4 -f json \
+            | jq -r ".[] | select(.Network == \"$network_id\") | .Subnet" | sort | uniq)
+    }
+    subnets=$(echo $subnets $default_subnets)
 
     case $provider in
         entercloudsuite)
-            eval local network=$(neutron net-list -f json | jq '.[] | select(.subnets | contains("'$subnet'")) | .name')
+            eval network=$(neutron net-list -f json | jq '.[] | select(.subnets | contains("'$subnet'")) | .name')
+            ;;
+        cloudlab)
+            network='flat-lan-1-net'
+            subnet='10.11.10.0/24'
             ;;
     esac
 
-    case $provider in
-        ovh)
-            flavor_select='^(vps|hg)-.*ssd'
-            ;;
-    esac
-
-    local ip=$(ip a show dev eth0 | sed -n "s:.*inet \(.*\)/.*:\1:p")
+    local ip
+    for dev in eth0 ens3 ; do
+        ip=$(ip a show dev $dev 2>/dev/null | sed -n "s:.*inet \(.*\)/.*:\1:p")
+        test "$ip" && break
+    done
     : ${nameserver:=$ip}
 
     if $do_create_config ; then
-        create_config "$network" "$subnet" "$nameserver" "$labdomain" "$ip" "$flavor_select" "$archive_upload" || return 1
-        setup_ansible $subnet $labdomain || return 1
+        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" \
+            "$archive_upload" "$canonical_tags" "$selfname" "$keypair" \
+            "$server_name" "$server_group" "$worker_group" "$package_repo" || return 1
+        setup_ansible "$subnets" $labdomain || return 1
         setup_ssh_config || return 1
         setup_authorized_keys || return 1
         setup_bashrc || return 1
@@ -572,9 +742,29 @@ function main() {
         get_or_create_keypair $keypair || return 1
     fi
 
+    if $do_ceph_workbench ; then
+        setup_ceph_workbench $ceph_workbench_git_url $ceph_workbench_branch || return 1
+    fi
+
+    if $do_apt_get_update ; then
+        apt_get_update || return 1
+    fi
+
+    if test $provider != "cloudlab" && $do_setup_docker ; then
+        setup_docker || return 1
+    fi
+
+    if $do_setup_salt_master ; then
+        setup_salt_master || return 1
+    fi
+
+    if $do_setup_fail2ban ; then
+        setup_fail2ban || return 1
+    fi
+
     if $do_setup_dnsmasq ; then
-        setup_dnsmasq || return 1
-        define_dnsmasq $subnet $labdomain || return 1
+        setup_dnsmasq $provider $dev || return 1
+        define_dnsmasq "$subnets" $labdomain || return 1
     fi
 
     if $do_setup_paddles ; then
@@ -582,7 +772,7 @@ function main() {
     fi
 
     if $do_populate_paddles ; then
-        populate_paddles $subnet $labdomain || return 1
+        populate_paddles "$subnets" $labdomain || return 1
     fi
 
     if $do_setup_pulpito ; then

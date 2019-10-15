@@ -194,7 +194,10 @@ case $1 in
                 /etc/init.d/beanstalkd stop
                 source /home/$user/teuthology/virtualenv/bin/activate
                 source /home/$user/openrc.sh
-                ip=$(ip a show dev eth0 | sed -n "s:.*inet \(.*\)/.*:\1:p")
+		for dev in eth0 ens3 ; do
+		    ip=$(ip a show dev $dev 2>/dev/null | sed -n "s:.*inet \(.*\)/.*:\1:p")
+		    test "$ip" && break
+		done
                 openstack server list --long -f json --name target | \
                     jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
                     xargs --no-run-if-empty --max-args 1 -P20 openstack server delete --wait

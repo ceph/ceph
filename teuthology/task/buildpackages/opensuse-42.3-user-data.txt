@@ -1,0 +1,1 @@
+opensuse-42.2-user-data.txt

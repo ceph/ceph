@@ -1,7 +1,8 @@
 #cloud-config
 bootcmd:
   - touch /tmp/init.out
-  - echo nameserver 8.8.8.8 | sudo tee -a /etc/resolv.conf # last resort, in case the DHCP server does not provide a resolver
+  - echo nameserver 8.8.8.8 | tee -a /etc/resolv.conf # last resort, in case the DHCP server does not provide a resolver
+manage_etc_hosts: true
 system_info:
   default_user:
     name: TEUTHOLOGY_USERNAME
@@ -12,6 +13,10 @@ packages:
 runcmd:
  - su - -c '(set -x ; CLONE_OPENSTACK && cd teuthology && ./bootstrap install)' TEUTHOLOGY_USERNAME >> /tmp/init.out 2>&1
  - echo 'export OPENRC' | tee /home/TEUTHOLOGY_USERNAME/openrc.sh
- - su - -c '(set -x ; source openrc.sh ; cd teuthology ; source virtualenv/bin/activate ; openstack keypair delete teuthology || true ; teuthology/openstack/setup-openstack.sh --nworkers NWORKERS UPLOAD --setup-all)' TEUTHOLOGY_USERNAME >> /tmp/init.out 2>&1
- - /etc/init.d/teuthology restart
+ - su - -c '(set -x ; source openrc.sh ; cd teuthology ; source virtualenv/bin/activate ; teuthology/openstack/setup-openstack.sh --nworkers NWORKERS UPLOAD CEPH_WORKBENCH CANONICAL_TAGS SETUP_OPTIONS)' TEUTHOLOGY_USERNAME >> /tmp/init.out 2>&1
+ # wa: we want to stop paddles and pulpito started by setup-openstack, before start teuthology service
+ - pkill -f 'pecan serve'
+ - pkill -f 'python run.py'
+ - systemctl enable teuthology
+ - systemctl start teuthology
 final_message: "teuthology is up and running after $UPTIME seconds"

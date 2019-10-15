@@ -197,10 +197,37 @@ def get_openstack_parser():
         default='teuthology',
     )
     parser.add_argument(
+        '--nameserver',
+        help='nameserver ip address (optional)',
+    )
+    parser.add_argument(
         '--simultaneous-jobs',
         help='maximum number of jobs running in parallel',
         type=int,
         default=1,
+    )
+    parser.add_argument(
+        '--controller-cpus',
+        help='override default minimum vCPUs when selecting flavor for teuthology VM',
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        '--controller-ram',
+        help='override default minimum RAM (in megabytes) when selecting flavor for teuthology VM',
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        '--controller-disk',
+        help='override default minimum disk size (in gigabytes) when selecting flavor for teuthology VM',
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        '--setup',
+        action='store_true', default=False,
+        help='deploy the cluster, if it does not exist',
     )
     parser.add_argument(
         '--teardown',
@@ -216,6 +243,15 @@ def get_openstack_parser():
         '--teuthology-branch',
         help="use this teuthology branch instead of master",
         default=os.getenv('TEUTH_BRANCH', 'master'),
+    )
+    parser.add_argument(
+        '--ceph-workbench-git-url',
+        help="git clone url for ceph-workbench",
+    )
+    parser.add_argument(
+        '--ceph-workbench-branch',
+        help="use this ceph-workbench branch instead of master",
+        default='master',
     )
     parser.add_argument(
         '--upload',
@@ -238,6 +274,11 @@ def get_openstack_parser():
         help=('Package repository to be added on test nodes, which are specified '
               'as NAME:URL, NAME!PRIORITY:URL or @FILENAME, for details see below.'),
         default=None,
+    )
+    parser.add_argument(
+        '--no-canonical-tags',
+        action='store_true', default=False,
+        help='configure remote teuthology to not fetch tags from http://github.com/ceph/ceph.git in buildpackages task',
     )
     return parser
 
