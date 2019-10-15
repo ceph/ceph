@@ -245,11 +245,6 @@ def create_secrets(ctx, config):
     (cclient, cconfig) = config.items()[0]
 
     rgw_user = cconfig['rgw_user']
-    ctx.barbican.token[cclient] = {
-        "username": rgw_user["username"],
-        "password": rgw_user["password"],
-        "tenant": rgw_user["tenantName"]
-    }
 
     keystone_role = cconfig.get('use-keystone-role', None)
     keystone_host, keystone_port = ctx.keystone.public_endpoints[keystone_role]
@@ -504,7 +499,6 @@ def task(ctx, config):
 
     ctx.barbican = argparse.Namespace()
     ctx.barbican.endpoints = assign_ports(ctx, config, 9311)
-    ctx.barbican.token = {}
     ctx.barbican.keys = {}
     
     with contextutil.nested(
