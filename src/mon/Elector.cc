@@ -18,6 +18,7 @@
 #include "common/Timer.h"
 #include "MonitorDBStore.h"
 #include "messages/MMonElection.h"
+#include "messages/MMonPing.h"
 
 #include "common/config.h"
 #include "include/ceph_assert.h"
@@ -57,8 +58,11 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 		<< ").elector(" << epoch << ") ";
 }
 
-Elector::Elector(Monitor *m) : logic(this, m->cct),
-					mon(m), elector(this) {}
+Elector::Elector(Monitor *m) : logic(this,
+				     &peer_tracker, m->cct),
+			       peer_tracker(this, 12*60*60), // TODO: make configurable
+			       ping_timeout(2),
+			       mon(m), elector(this) {}
 
 
 void Elector::persist_epoch(epoch_t e)
@@ -189,6 +193,14 @@ void Elector::cancel_timer()
     mon->timer.cancel_event(expire_event);
     expire_event = 0;
   }
+}
+
+void Elector::assimilate_connection_reports(const map<string,ConnectionReport>& reports)
+{
+  for (auto i : reports) {
+    peer_tracker.receive_peer_report(i.second);
+  }
+  return;
 }
 
 void Elector::message_victory(const std::set<int>& quorum)
@@ -407,10 +419,125 @@ void Elector::handle_nak(MonOpRequestRef op)
   // the end!
 }
 
+void Elector::begin_peer_ping(int peer)
+{
+  if (live_pinging.count(peer)) {
+    return;
+  }
+
+  dout(5) << __func__ << " against " << peer << dendl;
+
+  peer_tracker.report_live_connection(peer, 0); // init this peer as existing
+  live_pinging.insert(peer);
+  peer_acked_ping[peer] = ceph_clock_now();
+  send_peer_ping(peer);
+  mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
+			     new C_MonContext{mon, [this, peer](int) {
+				 ping_check(peer);
+			       }});
+}
+
+void Elector::send_peer_ping(int peer, const utime_t *n)
+{
+  dout(10) << __func__ << " to peer " << peer << dendl;
+  map<string, ConnectionReport> reports;
+  
+  for (int i = 0; i < static_cast<int>(mon->monmap->size()); ++i) {
+    if (i == get_my_rank()) {
+      continue;
+    }
+    const ConnectionReport *view = peer_tracker.get_peer_view(i);
+    if (view != NULL) {
+      reports[mon->monmap->get_name(i)] = *view;
+    }
+  }
+  peer_tracker.generate_report_of_peers(&reports[mon->monmap->get_name(get_my_rank())]);
+
+  utime_t now;
+  if (n != NULL) {
+    now = *n;
+  } else {
+    now = ceph_clock_now();
+  }
+  MMonPing *ping = new MMonPing(MMonPing::PING, now, reports);
+  mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer)); // TODO: this is deprecated, figure out using Connection
+  peer_sent_ping[peer] = now;
+}
+
+void Elector::ping_check(int peer) {
+  dout(20) << __func__ << " to peer " << peer << dendl;
+  utime_t now = ceph_clock_now();
+  utime_t& acked_ping = peer_acked_ping[peer];
+  utime_t& newest_ping = peer_sent_ping[peer];
+  if (!acked_ping.is_zero() && acked_ping < now - ping_timeout) {
+    peer_tracker.report_dead_connection(peer, now - acked_ping);
+    acked_ping = now;
+    live_pinging.erase(peer);
+    return;
+  }
+
+  if (acked_ping == newest_ping) {
+    send_peer_ping(peer, &now);
+  }
+
+  mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
+			     new C_MonContext{mon, [this, peer](int) {
+				 ping_check(peer);
+			       }});
+}
+
+void Elector::handle_ping(MonOpRequestRef op)
+{
+  MMonPing *m = static_cast<MMonPing*>(op->get_req());
+  dout(10) << __func__ << " " << *m << dendl;
+
+  int prank = mon->monmap->get_rank(m->get_source_addr());
+  begin_peer_ping(prank);
+  assimilate_connection_reports(m->peer_reports);
+  switch(m->op) {
+  case MMonPing::PING:
+    {
+      map<string, ConnectionReport> reports;
+      for (int i = 0; i < static_cast<int>(mon->monmap->size()); ++i) {
+	if (i == get_my_rank()) {
+	  continue;
+	}
+	const ConnectionReport *r = peer_tracker.get_peer_view(i);
+	if (r != NULL) {
+	  reports[mon->monmap->get_name(i)] = *r;
+	}
+      }
+      peer_tracker.generate_report_of_peers(&reports[mon->monmap->get_name(get_my_rank())]);
+      MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, reports);
+      m->get_connection()->send_message(reply);
+    }
+    break;
+
+  case MMonPing::PING_REPLY:
+    const utime_t& previous_acked = peer_acked_ping[prank];
+    const utime_t& newest = peer_sent_ping[prank];
+    if (m->stamp > newest && !newest.is_zero()) {
+      derr << "dropping PING_REPLY stamp " << m->stamp
+	   << " as it is newer than newest sent " << newest << dendl;
+      return;
+    }
+    if (m->stamp > previous_acked) {
+      peer_tracker.report_live_connection(prank, m->stamp - previous_acked);
+      peer_acked_ping[prank] = m->stamp;
+    }
+    utime_t now = ceph_clock_now();
+    if (now - m->stamp > ping_timeout / PING_DIVISOR) {
+      send_peer_ping(prank, &now);
+    }
+    break;
+  }
+  // TODO: Really need to persist the ConnectionTracker at some point (note early return statements above)
+}
+
 void Elector::dispatch(MonOpRequestRef op)
 {
   op->mark_event("elector:dispatch");
-  ceph_assert(op->is_type_election());
+  ceph_assert(op->is_type_election_or_ping());
 
   switch (op->get_req()->get_type()) {
     
@@ -463,6 +590,7 @@ void Elector::dispatch(MonOpRequestRef op)
 		<< dendl;
       } 
 
+      begin_peer_ping(mon->monmap->get_rank(em->get_source_addr()));
       switch (em->op) {
       case MMonElection::OP_PROPOSE:
 	handle_propose(op);
@@ -488,6 +616,10 @@ void Elector::dispatch(MonOpRequestRef op)
 	ceph_abort();
       }
     }
+    break;
+
+  case MSG_MON_PING:
+    handle_ping(op);
     break;
     
   default: 

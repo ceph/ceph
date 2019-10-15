@@ -41,6 +41,7 @@
 #include "messages/MMonJoin.h"
 #include "messages/MMonElection.h"
 #include "messages/MMonSync.h"
+#include "messages/MMonPing.h"
 #include "messages/MMonScrub.h"
 
 #include "messages/MLog.h"
@@ -414,6 +415,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_MON_SYNC:
     m = make_message<MMonSync>();
+    break;
+  case MSG_MON_PING:
+    m = make_message<MMonPing>();
     break;
   case MSG_MON_SCRUB:
     m = make_message<MMonScrub>();
