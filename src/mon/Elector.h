@@ -208,7 +208,9 @@ class Elector : public ElectionOwner, RankProvider {
    * @defgroup Elector_h_ElectionOwner Functions from the ElectionOwner interface
    * @{
    */
-  /* Commit the given epoch to our MonStore */
+  /* Commit the given epoch to our MonStore.
+   * We also take the opportunity to persist our peer_tracker.
+   */
   void persist_epoch(epoch_t e);
   /* Read the epoch out of our MonStore */
   epoch_t read_persisted_epoch() const;
@@ -256,6 +258,10 @@ class Elector : public ElectionOwner, RankProvider {
   /*
    * @}
    */
+  /**
+   * Persist our peer_tracker to disk.
+   */
+  void persist_connectivity_scores();
 
   Elector *elector;
   

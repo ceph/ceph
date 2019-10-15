@@ -33,13 +33,12 @@ bool ConnectionTracker::increase_epoch(epoch_t e)
   return false;
 }
 
-bool ConnectionTracker::increase_version(uint64_t v)
+void ConnectionTracker::increase_version()
 {
-  if (v > version) {
-    version = v;
-    return true;
+  ++version;
+  if ((version % 10) == 0 ) { // TODO: make this configurable?
+    owner->persist_connectivity_scores();
   }
-  return false;
 }
 
 void ConnectionTracker::generate_report_of_peers(ConnectionReport *report) const
@@ -77,7 +76,7 @@ void ConnectionTracker::report_live_connection(int rank, double units_alive)
     ( units_alive / (2*half_life) );
   conn.score = std::min(conn.score, 1.0);
   conn.alive = true;
-  ++version;
+  increase_version();
 }
 
 void ConnectionTracker::report_dead_connection(int rank, double units_dead)
@@ -87,7 +86,7 @@ void ConnectionTracker::report_dead_connection(int rank, double units_dead)
     ( units_dead / (2*half_life) );
   conn.score = std::max(conn.score, 0.0);
   conn.alive = false;
-  ++version;
+  increase_version();
 }
 
 void ConnectionTracker::get_connection_score(int rank, double *rating, bool *alive) const
