@@ -1032,12 +1032,11 @@ EOF
 
 	    # wait for volume module to load
 	    while ! ceph_adm fs volume ls ; do sleep 1 ; done
-
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
                 ceph_adm fs volume create ${name}
-                ceph_adm fs authorize ${name} "client.fs_${name}" / rwp
+                ceph_adm fs authorize ${name} "client.fs_${name}" / rwp >> "$keyring_fn"
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done
