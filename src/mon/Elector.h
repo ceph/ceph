@@ -23,8 +23,10 @@
 #include "mon/MonOpRequest.h"
 #include "mon/mon_types.h"
 #include "mon/ElectionLogic.h"
+#include "mon/ConnectionTracker.h"
 
 class Monitor;
+
 
 /**
  * This class is responsible for handling messages and maintaining
@@ -32,12 +34,19 @@ class Monitor;
  * a new Leader. We may win or we may lose. If we win, it means we became the
  * Leader; if we lose, it means we are a Peon.
  */
-class Elector : public ElectionOwner {
+class Elector : public ElectionOwner, RankProvider {
   /**
    * @defgroup Elector_h_class Elector
    * @{
    */
   ElectionLogic logic;
+  // connectivity validation and scoring
+  ConnectionTracker peer_tracker;
+  map<int, utime_t> peer_acked_ping; // rank -> last ping stamp they acked
+  map<int, utime_t> peer_sent_ping; // rank -> last ping stamp we sent
+  set<int> live_pinging; // ranks which we are currently pinging
+  double ping_timeout; // the timeout after which we consider a ping to be dead
+  const static int PING_DIVISOR = 2;  // TODO: make divisor configurable?
 
    /**
    * @defgroup Elector_h_internal_types Internal Types
@@ -174,6 +183,25 @@ class Elector : public ElectionOwner {
    * @param m A message with an operation type of OP_NAK
    */
   void handle_nak(MonOpRequestRef op);
+  /**
+   * Send a ping to the specified peer.
+   * @n optional time that we will use instead of calling ceph_clock_now()
+   */
+  void send_peer_ping(int peer, const utime_t *n=NULL);
+  /**
+   * Check the state of pinging the specified peer. This is our
+   * "tick" for heartbeating; scheduled by itself and begin_peer_ping().
+   */
+  void ping_check(int peer);
+  /**
+   * Handle a ping from another monitor and assimilate the data it contains.
+   */
+  void handle_ping(MonOpRequestRef op);
+  /**
+   * Update our view of everybody else's connectivity based on the provided
+   * reports
+   */
+  void assimilate_connection_reports(const map<string,ConnectionReport>& reports);
   
  public:
   /**
@@ -262,7 +290,12 @@ class Elector : public ElectionOwner {
   void declare_standalone_victory() {
     logic.declare_standalone_victory();
   }
-
+  /**
+   * Tell the Elector to start pinging a given peer.
+   * Do this when you discover a peer and it has a rank assigned.
+   * We do it ourselves on receipt of pings and when receiving other messages.
+   */
+  void begin_peer_ping(int peer);
   /**
    * Handle received messages.
    *
