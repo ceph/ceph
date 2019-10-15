@@ -211,7 +211,7 @@ struct OSDCapGrant {
   bool is_capable(const string& pool_name, const string& ns,
 		  const OSDCapPoolTag::app_map_t& application_metadata,
                   const string& object, bool op_may_read, bool op_may_write,
-                  const std::vector<OpRequest::ClassInfo>& classes,
+                  const std::vector<OpInfo::ClassInfo>& classes,
 		  const entity_addr_t& addr,
                   std::vector<bool>* class_allowed) const;
 
@@ -249,7 +249,7 @@ struct OSDCap {
   bool is_capable(const string& pool_name, const string& ns,
 		  const OSDCapPoolTag::app_map_t& application_metadata,
 		  const string& object, bool op_may_read, bool op_may_write,
-		  const std::vector<OpRequest::ClassInfo>& classes,
+		  const std::vector<OpInfo::ClassInfo>& classes,
 		  const entity_addr_t& addr) const;
 };
 

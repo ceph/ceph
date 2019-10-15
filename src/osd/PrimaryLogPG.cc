@@ -1849,8 +1849,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
-  if (op->rmw_flags == 0) {
-    int r = osd->osd->init_op_flags(op);
+  {
+    int r = op->maybe_init_op_info(*get_osdmap());
     if (r) {
       osd->reply_op_error(op, r);
       return;
