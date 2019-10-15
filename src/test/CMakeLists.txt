@@ -335,6 +335,18 @@ target_link_libraries(ceph_test_rgw_token
   ${EXTRALIBS}
   )
 
+# ceph_test_rgw_cksum (flexible digest of object bytes)
+add_executable(ceph_test_rgw_cksum
+  test_rgw_cksum.cc
+  )
+target_link_libraries(ceph_test_rgw_cksum
+  rgw
+  os
+  global
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+
 # librgw_file_gp (just the rgw_file get-put bucket ops)
 add_executable(test_rgw_ldap
   ${CMAKE_SOURCE_DIR}/src/rgw/rgw_ldap.cc
