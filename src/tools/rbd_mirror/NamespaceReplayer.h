@@ -13,7 +13,7 @@
 #include "tools/rbd_mirror/ImageMap.h"
 #include "tools/rbd_mirror/InstanceReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
-#include "tools/rbd_mirror/MirrorStatusWatcher.h"
+#include "tools/rbd_mirror/MirrorStatusUpdater.h"
 #include "tools/rbd_mirror/PoolWatcher.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_map/Types.h"
@@ -48,15 +48,17 @@ public:
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
       const std::string &remote_mirror_uuid,
+      const std::string &local_site_name,
       Threads<ImageCtxT> *threads,
       Throttler<ImageCtxT> *image_sync_throttler,
       Throttler<ImageCtxT> *image_deletion_throttler,
       ServiceDaemon<ImageCtxT> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler) {
     return new NamespaceReplayer(name, local_ioctx, remote_ioctx,
-                                 local_mirror_uuid, remote_mirror_uuid, threads,
-                                 image_sync_throttler, image_deletion_throttler,
-                                 service_daemon, cache_manager_handler);
+                                 local_mirror_uuid, remote_mirror_uuid,
+                                 local_site_name, threads, image_sync_throttler,
+                                 image_deletion_throttler, service_daemon,
+                                 cache_manager_handler);
   }
 
   NamespaceReplayer(const std::string &name,
@@ -64,6 +66,7 @@ public:
                     librados::IoCtx &remote_ioctx,
                     const std::string &local_mirror_uuid,
                     const std::string &remote_mirror_uuid,
+                    const std::string &local_site_name,
                     Threads<ImageCtxT> *threads,
                     Throttler<ImageCtxT> *image_sync_throttler,
                     Throttler<ImageCtxT> *image_deletion_throttler,
@@ -93,22 +96,25 @@ private:
   /**
    * @verbatim
    *
-   * <uninitialized> <----------------------\
-   *    | (init)           ^ (error)        |
-   *    v                  *                |
-   * INIT_STATUS_WATCHER * *   * * * * > SHUT_DOWN_STATUS_WATCHER
-   *    |                      * (error)    ^
-   *    v                      *            |
-   * INIT_INSTANCE_REPLAYER  * *   * * > SHUT_DOWN_INSTANCE_REPLAYER
-   *    |                          *        ^
-   *    v                          *        |
-   * INIT_INSTANCE_WATCHER * * * * *     SHUT_DOWN_INSTANCE_WATCHER
-   *    |                       (error)     ^
-   *    |                                   |
-   *    v                                STOP_INSTANCE_REPLAYER
-   *    |                                   ^
-   *    |    (shut down)                    |
-   *    |  /--------------------------------/
+   * <uninitialized> <------------------------------------\
+   *    | (init)                 ^ (error)                |
+   *    v                        *                        |
+   * INIT_LOCAL_STATUS_UPDATER * *   * * * * * * > SHUT_DOWN_LOCAL_STATUS_UPDATER
+   *    |                            * (error)            ^
+   *    v                            *                    |
+   * INIT_REMOTE_STATUS_UPDATER  * * *   * * * * > SHUT_DOWN_REMOTE_STATUS_UPDATER
+   *    |                                * (error)        ^
+   *    v                                *                |
+   * INIT_INSTANCE_REPLAYER  * * * * * * *   * * > SHUT_DOWN_INSTANCE_REPLAYER
+   *    |                                    *            ^
+   *    v                                    *            |
+   * INIT_INSTANCE_WATCHER * * * * * * * * * *     SHUT_DOWN_INSTANCE_WATCHER
+   *    |                       (error)                   ^
+   *    |                                                 |
+   *    v                                          STOP_INSTANCE_REPLAYER
+   *    |                                                 ^
+   *    |    (shut down)                                  |
+   *    |  /----------------------------------------------/
    *    v  |
    * <follower> <---------------------------\
    *    .                                   |
@@ -195,8 +201,11 @@ private:
                  const std::string &description, RadosRef *rados_ref,
                  bool strip_cluster_overrides);
 
-  void init_status_watcher();
-  void handle_init_status_watcher(int r);
+  void init_local_status_updater();
+  void handle_init_local_status_updater(int r);
+
+  void init_remote_status_updater();
+  void handle_init_remote_status_updater(int r);
 
   void init_instance_replayer();
   void handle_init_instance_replayer(int r);
@@ -213,8 +222,11 @@ private:
   void shut_down_instance_replayer();
   void handle_shut_down_instance_replayer(int r);
 
-  void shut_down_status_watcher();
-  void handle_shut_down_status_watcher(int r);
+  void shut_down_remote_status_updater();
+  void handle_shut_down_remote_status_updater(int r);
+
+  void shut_down_local_status_updater();
+  void handle_shut_down_local_status_updater(int r);
 
   void init_image_map(Context *on_finish);
   void handle_init_image_map(int r, Context *on_finish);
@@ -252,6 +264,7 @@ private:
   librados::IoCtx m_remote_io_ctx;
   std::string m_local_mirror_uuid;
   std::string m_remote_mirror_uuid;
+  std::string m_local_site_name;
   Threads<ImageCtxT> *m_threads;
   Throttler<ImageCtxT> *m_image_sync_throttler;
   Throttler<ImageCtxT> *m_image_deletion_throttler;
@@ -263,7 +276,8 @@ private:
   int m_ret_val = 0;
   Context *m_on_finish = nullptr;
 
-  std::unique_ptr<MirrorStatusWatcher<ImageCtxT>> m_status_watcher;
+  std::unique_ptr<MirrorStatusUpdater<ImageCtxT>> m_local_status_updater;
+  std::unique_ptr<MirrorStatusUpdater<ImageCtxT>> m_remote_status_updater;
 
   PoolWatcherListener m_local_pool_watcher_listener;
   std::unique_ptr<PoolWatcher<ImageCtxT>> m_local_pool_watcher;

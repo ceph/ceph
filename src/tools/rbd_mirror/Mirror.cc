@@ -548,7 +548,8 @@ void Mirror::run()
     std::unique_lock l{m_lock};
     if (!m_manual_stop) {
       if (refresh_pools) {
-        update_pool_replayers(m_local_cluster_watcher->get_pool_peers());
+        update_pool_replayers(m_local_cluster_watcher->get_pool_peers(),
+                              m_local_cluster_watcher->get_site_name());
       }
       m_cache_manager_handler->run_cache_manager();
     }
@@ -658,7 +659,8 @@ void Mirror::release_leader()
   }
 }
 
-void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
+void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
+                                   const std::string& site_name)
 {
   dout(20) << "enter" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
@@ -685,16 +687,23 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
       auto pool_replayers_it = m_pool_replayers.find(pool_peer);
       if (pool_replayers_it != m_pool_replayers.end()) {
         auto& pool_replayer = pool_replayers_it->second;
-        if (pool_replayer->is_blacklisted()) {
+        if (!m_site_name.empty() && !site_name.empty() &&
+            m_site_name != site_name) {
+          dout(0) << "restarting pool replayer for " << peer << " due to "
+                  << "updated site name" << dendl;
+          // TODO: make async
+          pool_replayer->shut_down();
+          pool_replayer->init(site_name);
+        } else if (pool_replayer->is_blacklisted()) {
           derr << "restarting blacklisted pool replayer for " << peer << dendl;
           // TODO: make async
           pool_replayer->shut_down();
-          pool_replayer->init();
+          pool_replayer->init(site_name);
         } else if (!pool_replayer->is_running()) {
           derr << "restarting failed pool replayer for " << peer << dendl;
           // TODO: make async
           pool_replayer->shut_down();
-          pool_replayer->init();
+          pool_replayer->init(site_name);
         }
       } else {
         dout(20) << "starting pool replayer for " << peer << dendl;
@@ -704,13 +713,15 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
                                m_args));
 
         // TODO: make async
-        pool_replayer->init();
+        pool_replayer->init(site_name);
         m_pool_replayers.emplace(pool_peer, std::move(pool_replayer));
       }
     }
 
     // TODO currently only support a single peer
   }
+
+  m_site_name = site_name;
 }
 
 } // namespace mirror
