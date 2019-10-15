@@ -120,7 +120,7 @@ class ControllerTestCase(helper.CPWebCase):
         })
         super(ControllerTestCase, self).__init__(*args, **kwargs)
 
-    def _request(self, url, method, data=None):
+    def _request(self, url, method, data=None, headers=None):
         if not data:
             b = None
             h = None
@@ -128,10 +128,12 @@ class ControllerTestCase(helper.CPWebCase):
             b = json.dumps(data)
             h = [('Content-Type', 'application/json'),
                  ('Content-Length', str(len(b)))]
+        if headers:
+            h = headers
         self.getPage(url, method=method, body=b, headers=h)
 
-    def _get(self, url):
-        self._request(url, 'GET')
+    def _get(self, url, headers=None):
+        self._request(url, 'GET', headers=headers)
 
     def _post(self, url, data=None):
         self._request(url, 'POST', data)
