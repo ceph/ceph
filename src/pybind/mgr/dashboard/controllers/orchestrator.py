@@ -2,10 +2,12 @@
 from __future__ import absolute_import
 
 import cherrypy
+from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
 
 from . import ApiController, Endpoint, ReadPermission
 from . import RESTController, Task
 from .. import mgr
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.orchestrator import OrchClient
 from ..tools import wraps
@@ -94,3 +96,15 @@ class OrchestratorService(RESTController):
     def list(self, hostname=None):
         orch = OrchClient.instance()
         return [service.to_json() for service in orch.services.list(None, None, hostname)]
+
+
+@ApiController('/orchestrator/osd', Scope.OSD)
+class OrchestratorOsd(RESTController):
+
+    @raise_if_no_orchestrator
+    def create(self, drive_group, all_hosts=None):
+        orch = OrchClient.instance()
+        try:
+            orch.osds.create(DriveGroupSpec.from_json(drive_group), all_hosts)
+        except (ValueError, TypeError, DriveGroupValidationError) as e:
+            raise DashboardException(e, component='osd')
