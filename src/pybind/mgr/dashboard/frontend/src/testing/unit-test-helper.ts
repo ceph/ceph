@@ -242,14 +242,33 @@ export class FixtureHelper {
     this.fixture.detectChanges();
   }
 
+  selectElement(css: string, value: string) {
+    const nativeElement = this.getElementByCss(css).nativeElement;
+    nativeElement.value = value;
+    nativeElement.dispatchEvent(new Event('change'));
+    this.fixture.detectChanges();
+  }
+
   getText(css: string) {
     const e = this.getElementByCss(css);
     return e ? e.nativeElement.textContent.trim() : null;
   }
 
+  getTextAll(css: string) {
+    const elements = this.getElementByCssAll(css);
+    return elements.map((element) => {
+      return element ? element.nativeElement.textContent.trim() : null;
+    });
+  }
+
   getElementByCss(css: string) {
     this.fixture.detectChanges();
     return this.fixture.debugElement.query(By.css(css));
+  }
+
+  getElementByCssAll(css: string) {
+    this.fixture.detectChanges();
+    return this.fixture.debugElement.queryAll(By.css(css));
   }
 }
 

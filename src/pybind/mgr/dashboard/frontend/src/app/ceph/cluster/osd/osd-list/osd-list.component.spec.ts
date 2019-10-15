@@ -239,6 +239,7 @@ describe('OsdListComponent', () => {
     expect(tableActions).toEqual({
       'create,update,delete': {
         actions: [
+          'Create',
           'Scrub',
           'Deep Scrub',
           'Reweight',
@@ -249,22 +250,25 @@ describe('OsdListComponent', () => {
           'Purge',
           'Destroy'
         ],
-        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Create' }
       },
       'create,update': {
-        actions: ['Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
-        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+        actions: ['Create', 'Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Create' }
       },
       'create,delete': {
-        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        actions: ['Create', 'Mark Lost', 'Purge', 'Destroy'],
         primary: {
-          multiple: 'Mark Lost',
+          multiple: 'Create',
           executing: 'Mark Lost',
           single: 'Mark Lost',
-          no: 'Mark Lost'
+          no: 'Create'
         }
       },
-      create: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      create: {
+        actions: ['Create'],
+        primary: { multiple: 'Create', executing: 'Create', single: 'Create', no: 'Create' }
+      },
       'update,delete': {
         actions: [
           'Scrub',
@@ -312,13 +316,16 @@ describe('OsdListComponent', () => {
       fixture.detectChanges();
     }));
 
-    it('has all menu entries disabled', () => {
+    it('has all menu entries disabled except create', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
       const toClassName = TestBed.get(TableActionsComponent).toClassName;
       const getActionClasses = (action: CdTableAction) =>
         tableActionElement.query(By.css(`.${toClassName(action.name)} .dropdown-item`)).classes;
 
       component.tableActions.forEach((action) => {
+        if (action.name === 'Create') {
+          return;
+        }
         expect(getActionClasses(action).disabled).toBe(true);
       });
     });
