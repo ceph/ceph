@@ -95,6 +95,8 @@ struct Owner : public ElectionOwner {
   // pass back to ElectionLogic; we don't need this redirect ourselves
   void trigger_new_election() { logic.start(); }
   int get_my_rank() const { return rank; }
+  // we don't need to persist scores as we don't reset and lose memory state
+  void persist_connectivity_scores() {}
   void propose_to_peers(epoch_t e) {
     for (int i = 0; i < parent->get_paxos_size(); ++i) {
       if (i == rank) continue;
