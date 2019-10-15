@@ -1621,6 +1621,8 @@ static void dump_obj_errors(const obj_err_t &err, Formatter &f)
     f.dump_string("error", "snapset_inconsistency");
   if (err.has_hinfo_inconsistency())
     f.dump_string("error", "hinfo_inconsistency");
+  if (err.has_size_too_large())
+    f.dump_string("error", "size_too_large");
   f.close_section();
 }
 
