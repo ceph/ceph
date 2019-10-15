@@ -146,8 +146,6 @@ def start_rgw(ctx, config, clients):
             ctx.cluster.only(client).run(args=['cat', token_path])
 
             rgw_cmd.extend([
-                '--rgw_crypt_s3_kms_backend', 'vault',
-                '--rgw_crypt_vault_auth', 'token',
                 '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
                 '--rgw_crypt_vault_token_file', token_path
             ])
