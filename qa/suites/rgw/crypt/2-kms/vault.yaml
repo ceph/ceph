@@ -1,4 +1,9 @@
 overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: vault
+        rgw crypt vault auth: token
   rgw:
     client.0:
       use-vault-role: client.0
