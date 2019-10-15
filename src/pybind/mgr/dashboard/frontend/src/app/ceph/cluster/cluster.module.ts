@@ -24,12 +24,17 @@ import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
 import { HostFormComponent } from './hosts/host-form/host-form.component';
 import { HostsComponent } from './hosts/hosts.component';
+import { InventoryDevicesComponent } from './inventory/inventory-devices/inventory-devices.component';
 import { InventoryComponent } from './inventory/inventory.component';
 import { LogsComponent } from './logs/logs.component';
 import { MgrModulesModule } from './mgr-modules/mgr-modules.module';
 import { MonitorComponent } from './monitor/monitor.component';
+import { OsdCreationPreviewModalComponent } from './osd/osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
+import { OsdDevicesSelectionGroupsComponent } from './osd/osd-devices-selection-groups/osd-devices-selection-groups.component';
+import { OsdDevicesSelectionModalComponent } from './osd/osd-devices-selection-modal/osd-devices-selection-modal.component';
 import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
+import { OsdFormComponent } from './osd/osd-form/osd-form.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
 import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogram/osd-performance-histogram.component';
 import { OsdPgScrubModalComponent } from './osd/osd-pg-scrub-modal/osd-pg-scrub-modal.component';
@@ -53,7 +58,9 @@ import { ServicesComponent } from './services/services.component';
     OsdReweightModalComponent,
     OsdPgScrubModalComponent,
     OsdReweightModalComponent,
-    SilenceMatcherModalComponent
+    SilenceMatcherModalComponent,
+    OsdDevicesSelectionModalComponent,
+    OsdCreationPreviewModalComponent
   ],
   imports: [
     CommonModule,
@@ -102,7 +109,12 @@ import { ServicesComponent } from './services/services.component';
     ServicesComponent,
     InventoryComponent,
     HostFormComponent,
-    OsdSmartListComponent
+    OsdSmartListComponent,
+    OsdFormComponent,
+    OsdDevicesSelectionModalComponent,
+    InventoryDevicesComponent,
+    OsdDevicesSelectionGroupsComponent,
+    OsdCreationPreviewModalComponent
   ]
 })
 export class ClusterModule {}

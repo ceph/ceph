@@ -6,10 +6,9 @@ export class SysAPI {
   human_readable_size: string;
 }
 
-export class Device {
+export class InventoryDevice {
   hostname: string;
   uid: string;
-  osd_ids: number[];
 
   path: string;
   sys_api: SysAPI;
@@ -17,9 +16,5 @@ export class Device {
   rejected_reasons: string[];
   device_id: string;
   human_readable_type: string;
-}
-
-export class InventoryNode {
-  name: string;
-  devices: Device[];
+  osd_ids: number[];
 }

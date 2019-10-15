@@ -1,11 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
-
-import { RouterTestingModule } from '@angular/router/testing';
+import { of } from 'rxjs';
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
@@ -23,6 +23,7 @@ describe('HostDetailsComponent', () => {
       HttpClientTestingModule,
       TabsModule.forRoot(),
       BsDropdownModule.forRoot(),
+      NgBootstrapFormValidationModule.forRoot(),
       RouterTestingModule,
       CephModule,
       CoreModule
@@ -41,7 +42,7 @@ describe('HostDetailsComponent', () => {
     });
     const orchService = TestBed.get(OrchestratorService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-    spyOn(orchService, 'inventoryList').and.returnValue(of([]));
+    spyOn(orchService, 'inventoryDeviceList').and.returnValue(of([]));
     spyOn(orchService, 'serviceList').and.returnValue(of([]));
     fixture.detectChanges();
   });

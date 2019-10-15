@@ -14,6 +14,7 @@ import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
+import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { AlertListComponent } from './ceph/cluster/prometheus/alert-list/alert-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
@@ -107,7 +108,14 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'Cluster/OSDs' },
-    children: [{ path: '', component: OsdListComponent }]
+    children: [
+      { path: '', component: OsdListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: OsdFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      }
+    ]
   },
   {
     path: 'configuration',

@@ -1,0 +1,26 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>Add {{ deviceType }} devices</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+        <div class="col-sm-12">
+          <cd-inventory-devices [devices]="devices"
+                                [filterColumns]="filterColumns"
+                                [hiddenColumns]="['available', 'osd_ids']"
+                                (filterChange)="onFilterChange($event)">
+          </cd-inventory-devices>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="onSubmit()"
+                          [form]="formGroup"
+                          [disabled]="!canSubmit || filterInDevices.length === 0">{{ action | titlecase }}</cd-submit-button>
+        <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
