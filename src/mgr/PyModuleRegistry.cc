@@ -40,10 +40,10 @@ void PyModuleRegistry::init()
   // Set up global python interpreter
 #if PY_MAJOR_VERSION >= 3
 #define WCHAR(s) L ## #s
-  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(PYTHON_EXECUTABLE)));
+  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(MGR_PYTHON_EXECUTABLE)));
 #undef WCHAR
 #else
-  Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
+  Py_SetProgramName(const_cast<char*>(MGR_PYTHON_EXECUTABLE));
 #endif
   // Add more modules
   if (g_conf->get_val<bool>("daemonize")) {
