@@ -2037,8 +2037,6 @@ private:
   void handle_fast_scrub(struct MOSDScrub2 *m);
   void handle_osd_ping(class MOSDPing *m);
 
-  int init_op_flags(OpRequestRef& op);
-
   size_t get_num_cache_shards();
   int get_num_op_shards();
   int get_num_op_threads();
