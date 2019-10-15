@@ -18,6 +18,7 @@
 
 #include <map>
 #include "include/types.h"
+#include "ConnectionTracker.h"
 
 class ElectionOwner {
 public:
@@ -127,6 +128,8 @@ public:
 
 class ElectionLogic {
   ElectionOwner *elector;
+  ConnectionTracker *peer_tracker;
+  
   CephContext *cct;
   /**
    * Latest epoch we've seen.
@@ -167,10 +170,11 @@ public:
    */
   std::set<int> acked_me;
 
-  ElectionLogic(ElectionOwner *e, CephContext *c) : elector(e), cct(c),
-						    leader_acked(-1),
-						    participating(true),
-						    electing_me(false) {}
+  ElectionLogic(ElectionOwner *e, ConnectionTracker *t,
+		CephContext *c) : elector(e), peer_tracker(t), cct(c),
+				  leader_acked(-1),
+				  participating(true),
+				  electing_me(false) {}
   /**
    * If there are no other peers in this Paxos group, ElectionOwner
    * can simply declare victory and we will make it so.
