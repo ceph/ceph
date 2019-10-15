@@ -52,7 +52,7 @@ class HomeController(BaseController):
                 logger.debug("reached max accepted languages, skipping remaining")
                 break
 
-            tag_match = self.LANG_TAG_RE.match(m[1])
+            tag_match = self.LANG_TAG_RE.match(m.group(1))
             if tag_match is None:
                 raise cherrypy.HTTPError(400, "Malformed 'Accept-Language' header")
             locale = tag_match.group('locale').lower()
