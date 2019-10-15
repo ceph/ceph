@@ -95,7 +95,7 @@ class HomeController(BaseController):
                 accept_lang_header = cherrypy.request.headers['Accept-Language']
                 langs = self._parse_accept_language(accept_lang_header)
             else:
-                langs = [DEFAULT_LANGUAGE]
+                langs = [DEFAULT_LANGUAGE.lower()]
             logger.debug("frontend language from headers: %s", langs)
 
         base_dir = self._language_dir(langs)
