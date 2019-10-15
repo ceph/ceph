@@ -395,7 +395,7 @@ def task(ctx, config):
                 'DEFAULT':
                     {
                     'port'      : endpoint.port,
-                    'is_secure' : 'yes' if endpoint.cert else 'no',
+                    'is_secure' : endpoint.cert is not None,
                     'api_name'  : 'default',
                     },
                 'fixtures' : {},

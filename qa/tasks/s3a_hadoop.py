@@ -20,7 +20,7 @@ def task(ctx, config):
            bucket-name: 's3atest' (default)
            access-key: 'anykey' (uses a default value)
            secret-key: 'secretkey' ( uses a default value)
-           dnsmasq-name: 's3.ceph.com'
+           role: client.0
     """
     if config is None:
         config = {}
@@ -28,19 +28,23 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "task only supports a dictionary for configuration"
 
+    assert hasattr(ctx, 'rgw'), 's3a-hadoop must run after the rgw task'
+
     overrides = ctx.config.get('overrides', {})
     misc.deep_merge(config, overrides.get('s3a-hadoop', {}))
     testdir = misc.get_testdir(ctx)
-    rgws = ctx.cluster.only(misc.is_type('rgw'))
-    # use the first rgw node to test s3a
-    rgw_node = rgws.remotes.keys()[0]
+
+    role = config.get('role')
+    (remote,) = ctx.cluster.only(role).remotes.keys()
+    endpoint = ctx.rgw.role_endpoints.get(role)
+    assert endpoint, 's3tests: no rgw endpoint for {}'.format(role)
+
     # get versions
     maven_major = config.get('maven-major', 'maven-3')
     maven_version = config.get('maven-version', '3.3.9')
     hadoop_ver = config.get('hadoop-version', '2.7.3')
     bucket_name = config.get('bucket-name', 's3atest')
     access_key = config.get('access-key', 'EGAQRD2ULOIFKFSKCT4F')
-    dnsmasq_name = config.get('dnsmasq-name', 's3.ceph.com')
     secret_key = config.get(
         'secret-key',
         'zi816w1vZKfaSM85Cl0BxXTwSLyN7zB4RbTswrGb')
@@ -52,8 +56,8 @@ def task(ctx, config):
         '{maven_major}/{maven_version}/binaries/'.format(maven_major=maven_major, maven_version=maven_version) + apache_maven
     hadoop_git = 'https://github.com/apache/hadoop'
     hadoop_rel = 'hadoop-{ver} rel/release-{ver}'.format(ver=hadoop_ver)
-    install_prereq(rgw_node)
-    rgw_node.run(
+    install_prereq(remote)
+    remote.run(
         args=[
             'cd',
             testdir,
@@ -78,9 +82,8 @@ def task(ctx, config):
             run.Raw(hadoop_rel)
         ]
     )
-    configure_s3a(rgw_node, dnsmasq_name, access_key, secret_key, bucket_name, testdir)
-    fix_rgw_config(rgw_node, dnsmasq_name)
-    setup_user_bucket(rgw_node, dnsmasq_name, access_key, secret_key, bucket_name, testdir)
+    configure_s3a(remote, endpoint.dns_name, access_key, secret_key, bucket_name, testdir)
+    setup_user_bucket(remote, endpoint.dns_name, access_key, secret_key, bucket_name, testdir)
     if hadoop_ver.startswith('2.8'):
         # test all ITtests but skip AWS test using public bucket landsat-pds
         # which is not available from within this test
@@ -90,12 +93,12 @@ def task(ctx, config):
     else:
         test_options = 'test -Dtest=S3a*,TestS3A*'
     try:
-        run_s3atest(rgw_node, maven_version, testdir, test_options)
+        run_s3atest(remote, maven_version, testdir, test_options)
         yield
     finally:
         log.info("Done s3a testing, Cleaning up")
         for fil in ['apache*', 'hadoop*', 'venv*', 'create*']:
-            rgw_node.run(args=['rm', run.Raw('-rf'), run.Raw('{tdir}/{file}'.format(tdir=testdir, file=fil))])
+            remote.run(args=['rm', run.Raw('-rf'), run.Raw('{tdir}/{file}'.format(tdir=testdir, file=fil))])
 
 
 def install_prereq(client):
@@ -116,41 +119,6 @@ def install_prereq(client):
                     'dnsmasq'
                     ]
                 )
-
-
-def fix_rgw_config(client, name):
-    """
-    Fix RGW config in ceph.conf, we need rgw dns name entry
-    and also modify the port to use :80 for s3a tests to work
-    """
-    rgw_dns_name = 'rgw dns name = {name}'.format(name=name)
-    ceph_conf_path = '/etc/ceph/ceph.conf'
-    # append rgw_dns_name
-    client.run(
-        args=[
-            'sudo',
-            'sed',
-            run.Raw('-i'),
-            run.Raw("'/client.rgw*/a {rgw_name}'".format(rgw_name=rgw_dns_name)),
-            ceph_conf_path
-
-        ]
-    )
-    # listen on port 80
-    client.run(
-        args=[
-            'sudo',
-            'sed',
-            run.Raw('-i'),
-            run.Raw('s/:8080/:80/'),
-            ceph_conf_path
-        ]
-    )
-    client.run(args=['cat', ceph_conf_path])
-    client.run(args=['sudo', 'systemctl', 'restart', 'ceph-radosgw.target'])
-    client.run(args=['sudo', 'systemctl', 'status', 'ceph-radosgw.target'])
-    # sleep for daemon to be completely up before creating admin user
-    time.sleep(10)
 
 
 def setup_user_bucket(client, dns_name, access_key, secret_key, bucket_name, testdir):
