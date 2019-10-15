@@ -115,7 +115,6 @@ def start_rgw(ctx, config, clients):
 
 
         vault_role = client_config.get('use-vault-role', None)
-        testing_role = client_config.get('use-testing-role', None)
         barbican_role = client_config.get('use-barbican-role', None)
 
         token_path = teuthology.get_testdir(ctx) + '/vault-token'
@@ -154,11 +153,6 @@ def start_rgw(ctx, config, clients):
                 '--rgw_crypt_vault_auth', 'token',
                 '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
                 '--rgw_crypt_vault_token_file', token_path
-            ])
-        elif testing_role is not None:
-            rgw_cmd.extend([
-                '--rgw_crypt_s3_kms_backend', 'testing',
-                '--rgw_crypt_s3_kms_encryption_keys', 'testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo='
             ])
 
         rgw_cmd.extend([
