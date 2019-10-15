@@ -5422,20 +5422,40 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   }
 
   if (gift) {
-    // round up to alloc size
-    gift = p2roundup(gift, cct->_conf->bluefs_alloc_size);
-
     // hard cap to fit into 32 bits
     gift = std::min<uint64_t>(gift, 1ull << 31);
     dout(10) << __func__ << " gifting " << gift
 	     << " (" << byte_u_t(gift) << ")" << dendl;
 
-    int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+    // first try to allocate larger chunks (usually the bluefs alloc
+    // size is larger, but behave regardless)
+    auto max_alloc_size = std::max<uint64_t>(
+      cct->_conf->bluefs_alloc_size,
+      cct->_conf->bluefs_shared_alloc_size);
+    int64_t first_attempt = std::min<int64_t>(p2roundup(gift, max_alloc_size),
+					      1ull<<31);
+    int64_t alloc_len = alloc->allocate(first_attempt, max_alloc_size,
 					0, 0, extents);
-
     if (alloc_len <= 0) {
-      dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
-              << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+      // if that fails, then try the shared size...
+      int64_t second_attempt =
+	std::min<int64_t>(p2roundup(gift, cct->_conf->bluefs_shared_alloc_size),
+			  1ull<<31);
+      dout(10) << __func__ << " failed to alloc 0x " << std::hex << first_attempt
+	       << " with larger chunks (0x"
+	       << max_alloc_size
+	       << "), fall back to 0x" << second_attempt
+	       << " shared_alloc_size (0x"
+	       << cct->_conf->bluefs_shared_alloc_size
+	       << std::dec << ")" << dendl;
+      alloc_len = alloc->allocate(
+	second_attempt,
+	cct->_conf->bluefs_shared_alloc_size,
+	0, 0, extents);
+    }
+    if (alloc_len <= 0) {
+      dout(0) << __func__ << " no allocate on 0x" << std::hex << gift << std::dec
+	      << dendl;
       _dump_alloc_on_rebalance_failure();
       return 0;
     } else if (alloc_len < (int64_t)gift) {
@@ -5454,7 +5474,8 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   // reclaim from bluefs?
   if (reclaim) {
     // round up to alloc size
-    reclaim = p2roundup(reclaim, cct->_conf->bluefs_alloc_size);
+    uint64_t alloc_size = bluefs->get_alloc_size(bluefs_shared_bdev);
+    reclaim = p2roundup(reclaim, alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
@@ -10913,9 +10934,12 @@ int BlueStore::_do_alloc_write(
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     0, &prealloc);
-  if (prealloc_left  < 0) {
+  if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
     derr << __func__ << " failed to allocate 0x" << std::hex << need << std::dec
 	 << dendl;
+    if (prealloc_left > 0) {
+      alloc->release(prealloc);
+    }
     return -ENOSPC;
   }
   ceph_assert(prealloc_left == (int64_t)need);
