@@ -131,15 +131,6 @@ def start_rgw(ctx, config, clients):
                 'http://{bhost}:{bport}'.format(bhost=barbican_host,
                                                 bport=barbican_port),
                 ])
-
-            log.info("Barbican access data: %s",ctx.barbican.token[barbican_role])
-            access_data = ctx.barbican.token[barbican_role]
-            rgw_cmd.extend([
-                '--rgw_crypt_s3_kms_backend', 'barbican',
-                '--rgw_keystone_barbican_user', access_data['username'],
-                '--rgw_keystone_barbican_password', access_data['password'],
-                '--rgw_keystone_barbican_tenant', access_data['tenant'],
-                ])
         elif vault_role is not None:
             if not ctx.vault.root_token:
                 raise ConfigError('vault: no "root_token" specified')
