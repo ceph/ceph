@@ -79,6 +79,23 @@ namespace ceph {
       public:
 	OpenSSLDigest (const EVP_MD *_type);
 	~OpenSSLDigest ();
+
+	OpenSSLDigest(const OpenSSLDigest&) = delete; // illegal
+
+	/* these are ok */
+	OpenSSLDigest(OpenSSLDigest&& rhs)
+	  : mpContext(rhs.mpContext), mpType(rhs.mpType)
+	  {
+	    rhs.mpContext = nullptr;
+	  }
+
+	OpenSSLDigest& operator=(OpenSSLDigest&& rhs) {
+	  mpContext = rhs.mpContext;
+	  mpType = rhs.mpType;
+	  rhs.mpContext = nullptr;
+	  return *this;
+	}
+
 	void Restart();
 	void Update (const unsigned char *input, size_t length);
 	void Final (unsigned char *digest);
