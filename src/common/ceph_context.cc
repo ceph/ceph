@@ -196,6 +196,9 @@ public:
   {
     while (1) {
       std::unique_lock l(_lock);
+      if (_exit_thread) {
+        break;
+      }
 
       if (_cct->_conf->heartbeat_interval) {
         auto interval = ceph::make_timespan(_cct->_conf->heartbeat_interval);
