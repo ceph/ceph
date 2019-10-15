@@ -62,13 +62,32 @@ Elector::Elector(Monitor *m) : logic(this,
 				     &peer_tracker, m->cct),
 			       peer_tracker(this, 12*60*60), // TODO: make configurable
 			       ping_timeout(2),
-			       mon(m), elector(this) {}
+			       mon(m), elector(this) {
+  bufferlist bl;
+  mon->store->get(Monitor::MONITOR_NAME, "connectivity_scores", bl);
+  if (bl.length()) {
+    bufferlist::const_iterator bi = bl.begin();
+    peer_tracker.decode(bi);
+  }
+}
 
 
 void Elector::persist_epoch(epoch_t e)
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_epoch", e);
+  bufferlist bl;
+  encode(peer_tracker, bl);
+  t->put(Monitor::MONITOR_NAME, "connectivity_scores", bl);
+  mon->store->apply_transaction(t);
+}
+
+void Elector::persist_connectivity_scores()
+{
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  bufferlist bl;
+  encode(peer_tracker, bl);
+  t->put(Monitor::MONITOR_NAME, "connectivity_scores", bl);
   mon->store->apply_transaction(t);
 }
 
@@ -531,7 +550,6 @@ void Elector::handle_ping(MonOpRequestRef op)
     }
     break;
   }
-  // TODO: Really need to persist the ConnectionTracker at some point (note early return statements above)
 }
 
 void Elector::dispatch(MonOpRequestRef op)

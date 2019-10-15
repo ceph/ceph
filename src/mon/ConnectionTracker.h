@@ -54,6 +54,11 @@ class RankProvider {
    * or get_total_connection_score() with an unknown rank.
    */
   virtual int get_my_rank() const = 0;
+  /**
+   * Asks our owner to encode us and persist it to disk.
+   * Presently we do this every tenth update.
+   */
+  virtual void persist_connectivity_scores() = 0;
   virtual ~RankProvider() {}
 };
 
@@ -72,9 +77,9 @@ class ConnectionTracker {
   bool increase_epoch(epoch_t e);
   /**
    * Bump up the version within our epoch.
-   * Validates that it is > current version; returns false if not.
+   * If the new version is a multiple of ten, we also persist it.
    */
-  bool increase_version(uint64_t v);
+  void increase_version();
   /**
    * Fill in the report with our liveness and reliability
    * scores for all peers.
