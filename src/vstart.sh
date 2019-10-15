@@ -477,21 +477,22 @@ quoted_print() {
     printf '\n'
 }
 
+debug() {
+  if [ -w /dev/tty -a ! -t 2 ]; then
+    "$@" | tee /dev/tty >&2
+  else
+    "$@" >&2
+  fi
+}
+
 prunb() {
-    quoted_print "$@" '&'
+    debug quoted_print "$@" '&'
     "$@" &
 }
 
 prun() {
-    quoted_print "$@"
+    debug quoted_print "$@"
     "$@"
-}
-
-prun_to_file() {
-	f=$1
-	shift
-	quoted_print "$@"
-	"$@" >> $f
 }
 
 run() {
@@ -1128,17 +1129,6 @@ ceph_adm() {
     fi
 }
 
-ceph_adm_to_file() {
-	f=$1
-	shift
-
-	if [ "$cephx" -eq 1 ]; then
-		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" -k "$keyring_fn" "$@"
-	else
-		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" "$@"
-	fi
-}
-
 if [ $inc_osd_num -gt 0 ]; then
     start_osd
     exit
@@ -1368,10 +1358,11 @@ do_rgw()
     for n in $(seq 1 $CEPH_NUM_RGW); do
         rgw_name="client.rgw.${current_port}"
 
-        ceph_adm_to_file $keyring_fn auth get-or-create $rgw_name \
+        ceph_adm auth get-or-create $rgw_name \
             mon 'allow rw' \
             osd 'allow rwx' \
             mgr 'allow rw' \
+            >> "$keyring_fn"
 
         echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
         run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \
