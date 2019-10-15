@@ -44,6 +44,13 @@ public:
     return TestMemIoCtxImpl::aio_notify(o, c, bl, timeout_ms, pbl);
   }
 
+  MOCK_METHOD5(aio_operate, int(const std::string&, TestObjectOperationImpl&,
+                                AioCompletionImpl*, SnapContext*, int));
+  int do_aio_operate(const std::string& o, TestObjectOperationImpl& ops,
+                     AioCompletionImpl* c, SnapContext* snapc, int flags) {
+    return TestMemIoCtxImpl::aio_operate(o, ops, c, snapc, flags);
+  }
+
   MOCK_METHOD4(aio_watch, int(const std::string& o, AioCompletionImpl *c,
                               uint64_t *handle, librados::WatchCtx2 *ctx));
   int do_aio_watch(const std::string& o, AioCompletionImpl *c,
@@ -198,6 +205,7 @@ public:
 
     ON_CALL(*this, clone()).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_clone));
     ON_CALL(*this, aio_notify(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_notify));
+    ON_CALL(*this, aio_operate(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_operate));
     ON_CALL(*this, aio_watch(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_watch));
     ON_CALL(*this, aio_unwatch(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_unwatch));
     ON_CALL(*this, assert_exists(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_assert_exists));

@@ -46,6 +46,7 @@ public:
   // Caller controls frequency of calls
   void refresh_pools();
   const PoolPeers& get_pool_peers() const;
+  std::string get_site_name() const;
 
 private:
   typedef std::unordered_map<int64_t, service_daemon::CalloutId> ServicePools;
@@ -56,11 +57,14 @@ private:
 
   ServicePools m_service_pools;
   PoolPeers m_pool_peers;
+  std::string m_site_name;
 
   void read_pool_peers(PoolPeers *pool_peers);
 
-  int resolve_peer_config_keys(int64_t pool_id, const std::string& pool_name,
-                               PeerSpec* peer);
+  int read_site_name(std::string* site_name);
+
+  int resolve_peer_site_config_keys(
+      int64_t pool_id, const std::string& pool_name, PeerSpec* peer);
 };
 
 } // namespace mirror
