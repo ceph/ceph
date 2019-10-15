@@ -771,12 +771,6 @@ start_mon() {
              --cap mgr 'allow *' \
              "$keyring_fn"
 
-        prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs\
-             --cap mon 'allow r' \
-             --cap osd 'allow rw tag cephfs data=*' \
-             --cap mds 'allow rwp' \
-             "$keyring_fn"
-
         # build a fresh fs monmap, mon fs
         local params=()
         local count=0
@@ -1226,6 +1220,8 @@ fi
 
 if [ $CEPH_NUM_MDS -gt 0 ]; then
     start_mds
+    # key with access to all FS
+    ceph_adm fs authorize \* "client.fs" / rwp >> "$keyring_fn"
 fi
 
 # Don't set max_mds until all the daemons are started, otherwise
