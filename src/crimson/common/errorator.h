@@ -289,6 +289,7 @@ struct errorator {
                 "no error type in errorator can be duplicated");
 
   struct ready_future_marker{};
+  struct exception_future_marker{};
 
 private:
   // see the comment for `using future = _future` below.
@@ -383,6 +384,10 @@ private:
     [[gnu::always_inline]]
     _future(ready_future_marker, A&&... a)
       : base_t(::seastar::make_ready_future<ValuesT...>(std::forward<A>(a)...)) {
+    }
+    [[gnu::always_inline]]
+    _future(exception_future_marker, std::exception_ptr&& ep)
+      : base_t(::seastar::make_exception_future<ValuesT...>(std::move(ep))) {
     }
 
     template <template <class...> class ErroratedFuture,
@@ -638,6 +643,17 @@ public:
     return future<T...>(ready_future_marker(), std::forward<A>(value)...);
   }
 
+  template <typename... T>
+  static
+  future<T...> make_exception_future2(std::exception_ptr&& ex) noexcept {
+    return future<T...>(exception_future_marker(), std::move(ex));
+  }
+  template <typename... T, typename Exception>
+  static
+  future<T...> make_exception_future2(Exception&& ex) noexcept {
+    return make_exception_future2<T...>(std::make_exception_ptr(std::forward<Exception>(ex)));
+  }
+
   static auto now() {
     return make_ready_future<>();
   }
@@ -690,7 +706,7 @@ private:
 
     template <typename Arg>
     static type make_exception_future(Arg&& arg) {
-      return ::seastar::make_exception_future<ValuesT...>(std::forward<Arg>(arg));
+      return ::crimson::errorator<AllowedErrors...>::make_exception_future2<ValuesT...>(std::forward<Arg>(arg));
     }
   };
 
@@ -820,7 +836,7 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   template <typename Arg>
   [[gnu::always_inline]]
   static type make_exception_future(Arg&& arg) {
-    return ::seastar::make_exception_future<Values...>(std::forward<Arg>(arg));
+    return errorator_type::template make_exception_future2<Values...>(std::forward<Arg>(arg));
   }
 };
 
