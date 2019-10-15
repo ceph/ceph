@@ -384,6 +384,7 @@ class Module(MgrModule):
                 report['pools'].append(
                     {
                         'pool': pool['pool'],
+                        'pool_name': pool['pool_name'],
                         'type': pool['type'],
                         'pg_num': pool['pg_num'],
                         'pgp_num': pool['pg_placement_num'],
