@@ -169,3 +169,18 @@ The output of this will look something like::
    http://objects.dreamhost.com/my-bucket-name/hello.txt
    http://objects.dreamhost.com/my-bucket-name/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
 
+Using S3 API Extensions 
+-----------------------
+
+To use the boto3 client to tests the RadosGW extensions to the S3 API, the `extensions file`_ should be placed under: ``~/.aws/models/s3/2006-03-01/`` directory.
+For example, unordered list of objects could be fetched using:
+
+.. code-block:: python
+
+    print conn.list_objects(Bucket='my-new-bucket', AllowUnordered=True)
+
+
+Without the extensions file, in the above example, boto3 would complain that the ``AllowUnordered`` argument is invalid.
+
+
+.. _extensions file: https://github.com/ceph/ceph/blob/master/examples/examples/boto3/service-2.sdk-extras.json
