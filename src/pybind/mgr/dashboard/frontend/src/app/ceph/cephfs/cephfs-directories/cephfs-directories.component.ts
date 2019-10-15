@@ -1,15 +1,25 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
+import * as moment from 'moment';
 import { NodeEvent, Tree, TreeComponent, TreeModel } from 'ng2-tree';
 
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { CephfsService } from '../../../shared/api/cephfs.service';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FormModalComponent } from '../../../shared/components/form-modal/form-modal.component';
+import { Icons } from '../../../shared/enum/icons.enum';
+import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CephfsDir } from '../../../shared/models/cephfs-directory-models';
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { CephfsDir, CephfsSnapshot } from '../../../shared/models/cephfs-directory-models';
+import { Permission } from '../../../shared/models/permissions';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { NotificationService } from '../../../shared/services/notification.service';
 
 @Component({
   selector: 'cd-cephfs-directories',
@@ -25,29 +35,40 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   @Input()
   id: number;
 
+  private modalRef: BsModalRef;
   private dirs: CephfsDir[];
   private nodeIds: { [path: string]: CephfsDir };
   private requestedPaths: string[];
+  private selectedNode: Tree;
 
+  permission: Permission;
   selectedDir: CephfsDir;
-  tree: TreeModel;
   settings: {
     name: string;
     value: number | string;
     origin: string;
   }[];
-
   settingsColumns: CdTableColumn[];
-  snapshot: { columns: CdTableColumn[]; sortProperties: SortPropDir[] };
+  snapshot: {
+    columns: CdTableColumn[];
+    selection: CdTableSelection;
+    tableActions: CdTableAction[];
+    updateSelection: Function;
+  };
+  tree: TreeModel;
 
   constructor(
+    private authStorageService: AuthStorageService,
+    private modalService: BsModalService,
     private cephfsService: CephfsService,
     private cdDatePipe: CdDatePipe,
     private i18n: I18n,
+    private notificationService: NotificationService,
     private dimlessBinaryPipe: DimlessBinaryPipe
   ) {}
 
   ngOnInit() {
+    this.permission = this.authStorageService.getPermissions().cephfs;
     this.settingsColumns = [
       {
         prop: 'name',
@@ -88,10 +109,25 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           pipe: this.cdDatePipe
         }
       ],
-      sortProperties: [
+      selection: new CdTableSelection(),
+      updateSelection: (selection: CdTableSelection) => {
+        this.snapshot.selection = selection;
+      },
+      tableActions: [
         {
-          dir: SortDirection.desc,
-          prop: 'created'
+          name: this.i18n('Create'),
+          icon: Icons.add,
+          permission: 'create',
+          canBePrimary: (selection) => !selection.hasSelection,
+          click: () => this.createSnapshot()
+        },
+        {
+          name: this.i18n('Delete'),
+          icon: Icons.destroy,
+          permission: 'delete',
+          click: () => this.deleteSnapshotModal(),
+          canBePrimary: (selection) => selection.hasSelection,
+          disable: (selection) => !selection.hasSelection
         }
       ]
     };
@@ -148,11 +184,11 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   private loadDirectory(data: CephfsDir[], path: string, callback: (x: any[]) => void) {
     if (path !== '/') {
-      // Removes duplicate directories
+      // As always to levels are loaded all sub-directories of the current called path are
+      // already loaded, that's why they are filtered out.
       data = data.filter((dir) => dir.parent !== path);
     }
-    const dirs = this.dirs.concat(data);
-    this.dirs = dirs;
+    this.dirs = this.dirs.concat(data);
     this.getChildren(path, callback);
   }
 
@@ -187,6 +223,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     this.treeComponent.getControllerByNodeId(node.id).expand();
     this.setSettings(node);
     this.selectedDir = this.getDirectory(node);
+    this.selectedNode = node;
   }
 
   private setSettings(node: Tree) {
@@ -235,5 +272,82 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   private getDirectory(node: Tree): CephfsDir {
     const path = node.id as string;
     return this.nodeIds[path];
+  }
+
+  createSnapshot() {
+    // Create a snapshot. Auto-generate a snapshot name by default.
+    const path = this.selectedDir.path;
+    this.modalService.show(FormModalComponent, {
+      initialState: {
+        titleText: this.i18n('Create Snapshot'),
+        message: this.i18n('Please enter the name of the snapshot.'),
+        fields: [
+          {
+            type: 'inputText',
+            name: 'name',
+            value: `${moment().toISOString(true)}`,
+            required: true
+          }
+        ],
+        submitButtonText: this.i18n('Create Snapshot'),
+        onSubmit: (values) => {
+          this.cephfsService.mkSnapshot(this.id, path, values.name).subscribe((name) => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Created snapshot "{{name}}" for "{{path}}"', {
+                name: name,
+                path: path
+              })
+            );
+            this.forceDirRefresh();
+          });
+        }
+      }
+    });
+  }
+
+  /**
+   * Forces an update of the current selected directory
+   *
+   * As all nodes point by their path on an directory object, the easiest way is to update
+   * the objects by merge with their latest change.
+   */
+  private forceDirRefresh() {
+    const path = this.selectedNode.parent.id as string;
+    this.cephfsService.lsDir(this.id, path).subscribe((data) =>
+      data.forEach((d) => {
+        Object.assign(this.dirs.find((sub) => sub.path === d.path), d);
+      })
+    );
+  }
+
+  deleteSnapshotModal() {
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: 'CephFs Snapshot',
+        itemNames: this.snapshot.selection.selected.map(
+          (snapshot: CephfsSnapshot) => snapshot.name
+        ),
+        submitAction: () => this.deleteSnapshot()
+      }
+    });
+  }
+
+  deleteSnapshot() {
+    const path = this.selectedDir.path;
+    this.snapshot.selection.selected.forEach((snapshot: CephfsSnapshot) => {
+      const name = snapshot.name;
+      this.cephfsService.rmSnapshot(this.id, path, name).subscribe(() => {
+        this.notificationService.show(
+          NotificationType.success,
+          this.i18n('Deleted snapshot "{{name}}" for "{{path}}"', {
+            name: name,
+            path: path
+          })
+        );
+      });
+    });
+    this.modalRef.hide();
+    this.forceDirRefresh();
   }
 }
