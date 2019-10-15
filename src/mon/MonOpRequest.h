@@ -167,7 +167,7 @@ public:
   void set_type_paxos() {
     set_op_type(OP_TYPE_PAXOS);
   }
-  void set_type_election() {
+  void set_type_election_or_ping() {
     set_op_type(OP_TYPE_ELECTION);
   }
   void set_type_command() {
@@ -187,7 +187,7 @@ public:
   bool is_type_paxos() {
     return (get_op_type() == OP_TYPE_PAXOS);
   }
-  bool is_type_election() {
+  bool is_type_election_or_ping() {
     return (get_op_type() == OP_TYPE_ELECTION);
   }
   bool is_type_command() {
