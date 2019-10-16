@@ -649,8 +649,9 @@ enum class OPT {
   MDLOG_STATUS,
   SYNC_ERROR_LIST,
   SYNC_ERROR_TRIM,
+  SYNC_GROUP_CREATE,
+  SYNC_GROUP_REMOVE,
   SYNC_POLICY_GET,
-  SYNC_POLICY_CONNECT,
   BILOG_LIST,
   BILOG_TRIM,
   BILOG_STATUS,
@@ -844,6 +845,9 @@ static SimpleCmd::Commands all_cmds = {
   { "mdlog status", OPT::MDLOG_STATUS },
   { "sync error list", OPT::SYNC_ERROR_LIST },
   { "sync error trim", OPT::SYNC_ERROR_TRIM },
+  { "sync policy get", OPT::SYNC_POLICY_GET },
+  { "sync group create", OPT::SYNC_GROUP_CREATE },
+  { "sync group remove", OPT::SYNC_GROUP_REMOVE },
   { "bilog list", OPT::BILOG_LIST },
   { "bilog trim", OPT::BILOG_TRIM },
   { "bilog status", OPT::BILOG_STATUS },
@@ -2752,6 +2756,10 @@ int main(int argc, const char **argv)
   string sub_dest_bucket;
   string sub_push_endpoint;
   string event_id;
+
+  std::optional<string> group_id;
+  std::optional<string> opt_status;
+
   rgw::notify::EventTypeList event_types;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
@@ -3102,6 +3110,10 @@ int main(int argc, const char **argv)
       event_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--event-type", "--event-types", (char*)NULL)) {
       rgw::notify::from_string_list(val, event_types);
+    } else if (ceph_argparse_witharg(args, i, &val, "--group-id", (char*)NULL)) {
+      group_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--status", (char*)NULL)) {
+      opt_status = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -7528,6 +7540,76 @@ next:
         break;
       }
     }
+  }
+
+  if (opt_cmd == OPT::SYNC_GROUP_CREATE) {
+    if (!group_id) {
+      cerr << "ERROR: --group-id is not specified" << std::endl;
+      return EINVAL;
+    }
+    if (!opt_status) {
+      cerr << "ERROR: --status is not specified (options: forbidden, enabled, activated)" << std::endl;
+      return EINVAL;
+    }
+
+    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto& group = zonegroup.sync_policy.groups[*group_id];
+    group.id = *group_id;
+
+    if (opt_status) {
+      if (!group.set_status(*opt_status)) {
+        cerr << "ERROR: unrecognized status (options: forbidden, enabled, activated)" << std::endl;
+        return EINVAL;
+      }
+    }
+
+    ret = zonegroup.update();
+    if (ret < 0) {
+      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    {
+      Formatter::ObjectSection os(*formatter, "result");
+      encode_json("sync_policy", zonegroup.sync_policy, formatter);
+    }
+
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::SYNC_GROUP_REMOVE) {
+    if (!group_id) {
+      cerr << "ERROR: --group-id not specified" << std::endl;
+      return EINVAL;
+    }
+
+    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    zonegroup.sync_policy.groups.erase(*group_id);
+
+    ret = zonegroup.update();
+    if (ret < 0) {
+      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    {
+      Formatter::ObjectSection os(*formatter, "result");
+      encode_json("sync_policy", zonegroup.sync_policy, formatter);
+    }
+
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::SYNC_POLICY_GET) {
