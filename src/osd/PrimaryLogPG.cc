@@ -14520,6 +14520,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef 
   if (!eio_errors_to_process) {
     eio_errors_to_process = true;
     assert(is_clean());
+    state_clear(PG_STATE_CLEAN);
     queue_peering_event(
         CephPeeringEvtRef(
 	  std::make_shared<CephPeeringEvt>(
