@@ -4,6 +4,8 @@ try:
 except ImportError:
     from unittest import mock
 
+from ceph.deployment.inventory import Devices
+
 from orchestrator import InventoryNode, ServiceDescription
 
 from . import ControllerTestCase
