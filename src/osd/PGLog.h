@@ -778,6 +778,8 @@ public:
   }
 
   void reset_complete_to(pg_info_t *info) {
+    if (log.log.empty()) // caller is split_into()
+      return;
     log.complete_to = log.log.begin();
     while (!missing.get_items().empty() && log.complete_to->version <
 	   missing.get_items().at(

@@ -2350,10 +2350,9 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   info.log_tail = pg_log.get_tail();
   child->info.log_tail = child->pg_log.get_tail();
 
-  if (info.last_complete < pg_log.get_tail())
-    info.last_complete = pg_log.get_tail();
-  if (child->info.last_complete < child->pg_log.get_tail())
-    child->info.last_complete = child->pg_log.get_tail();
+  // reset last_complete, we might have modified pg_log & missing above
+  pg_log.reset_complete_to(&info);
+  child->pg_log.reset_complete_to(&child->info);
 
   // Info
   child->info.history = info.history;
