@@ -1,9 +1,9 @@
 import sys
 
 try:
-    from mock import Mock
+    from mock import Mock, patch
 except ImportError:
-    from unittest.mock import Mock
+    from unittest.mock import Mock, patch
 
 
 class MockRadosError(Exception):
@@ -24,3 +24,16 @@ def pytest_configure(config):
         'rbd': Mock(),
         'cephfs': Mock(),
     })
+
+    # we need the following patches to fix the issue of multiple inheritance when
+    # one of the base classes is being mocked.
+    # Error example:
+    # TypeError: metaclass conflict: the metaclass of a derived class must be a (non-strict) \
+    # subclass of the metaclasses of all its bases
+    class _BaseMgrModule:
+        pass
+
+    patcher = patch("ceph_module.BaseMgrStandbyModule", new=_BaseMgrModule)
+    patcher.start()
+    patcher = patch("ceph_module.BaseMgrModule", new=_BaseMgrModule)
+    patcher.start()
