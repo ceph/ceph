@@ -67,6 +67,8 @@ void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
+#warning FIXME
+#if 0
 void rgw_sync_flow_rule::get_zone_peers(const string& zone_id,
                                         std::set<string> *sources,
                                         std::set<string> *targets) const
@@ -87,6 +89,7 @@ void rgw_sync_flow_rule::get_zone_peers(const string& zone_id,
     *targets = *sources;
   }
 }
+#endif
 
 class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
   static constexpr int MAX_CONCURRENT_SHARDS = 16;
