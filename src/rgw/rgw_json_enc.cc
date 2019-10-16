@@ -928,15 +928,7 @@ void rgw_sync_policy_group::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("pipes", pipes, obj);
   string s;
   JSONDecoder::decode_json("status", s, obj);
-  if (s == "forbidden") {
-    status = rgw_sync_policy_group::Status::FORBIDDEN;
-  } else if (s == "allowed") {
-    status = rgw_sync_policy_group::Status::ALLOWED;
-  } else if (s == "enabled") {
-    status = rgw_sync_policy_group::Status::ENABLED;
-  } else {
-    status = rgw_sync_policy_group::Status::UNKNOWN;
-  }
+  set_status(s);
 }
 
 void rgw_sync_policy_info::dump(Formatter *f) const

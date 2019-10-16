@@ -391,6 +391,21 @@ struct rgw_sync_policy_group {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  bool set_status(const string& s) {
+    if (s == "forbidden") {
+      status = rgw_sync_policy_group::Status::FORBIDDEN;
+    } else if (s == "allowed") {
+      status = rgw_sync_policy_group::Status::ALLOWED;
+    } else if (s == "enabled") {
+      status = rgw_sync_policy_group::Status::ENABLED;
+    } else {
+      status = rgw_sync_policy_group::Status::UNKNOWN;
+      return false;
+    }
+
+    return true;
+  }
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_group)
 
