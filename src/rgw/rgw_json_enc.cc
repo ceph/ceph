@@ -933,12 +933,21 @@ void rgw_sync_policy_group::decode_json(JSONObj *obj)
 
 void rgw_sync_policy_info::dump(Formatter *f) const
 {
-  encode_json("groups", groups, f);
+  Formatter::ArraySection section(*f, "groups");
+  for (auto& group : groups ) {
+    encode_json("group", group.second, f);
+  }
 }
 
 void rgw_sync_policy_info::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("groups", groups, obj);
+  vector<rgw_sync_policy_group> groups_vec;
+
+  JSONDecoder::decode_json("groups", groups_vec, obj);
+
+  for (auto& group : groups_vec) {
+    groups.emplace(std::make_pair(group.id, std::move(group)));
+  }
 }
 
 void RGWBucketSyncPolicyHandler::peer_info::dump(Formatter *f) const
