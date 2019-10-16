@@ -1114,7 +1114,7 @@ sub-directories, files')
     df_parser = argparse.ArgumentParser(description='Show information about\
                 the amount of available disk space')
     df_parser.add_argument('file', help='Name of the file', nargs='*',
-                           action=path_to_bytes)
+                           default=['.'], action=path_to_bytes)
 
     @with_argparser(df_parser)
     def do_df(self, arglist):
@@ -1122,8 +1122,8 @@ sub-directories, files')
         Display the amount of available disk space for file systems
         """
         header = True    # Set to true for printing header only once
-        if not arglist.file:
-            arglist.file = ls(cephfs.getcwd())
+        if b'.' == arglist.file[0]:
+            arglist.file = ls(b'.')
 
         for file in arglist.file:
             if isinstance(file, libcephfs.DirEntry):
