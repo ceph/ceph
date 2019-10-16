@@ -491,7 +491,7 @@ int execute_restore(const po::variables_map &vm,
                 << std::endl;
     } else if (r == -EEXIST) {
       std::cerr << "rbd: error: an image with the same name already exists, "
-                << "try again with with a different name"
+                << "try again with a different name"
                 << std::endl;
     } else {
       std::cerr << "rbd: restore error: " << cpp_strerror(r) << std::endl;
