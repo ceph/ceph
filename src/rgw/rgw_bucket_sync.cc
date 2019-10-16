@@ -12,14 +12,14 @@
 
 static std::vector<rgw_sync_bucket_pipe> filter_relevant_pipes(const std::vector<rgw_sync_bucket_pipe>& pipes,
                                                                const string& source_zone,
-                                                               const string& target_zone)
+                                                               const string& dest_zone)
 {
   std::vector<rgw_sync_bucket_pipe> relevant_pipes;
   for (auto& pipe : relevant_pipes) {
     if (pipe.source.match_zone(source_zone)) {
       relevant_pipes.push_back(pipe);
     }
-    if (pipe.target.match_zone(target_zone)) {
+    if (pipe.dest.match_zone(dest_zone)) {
       relevant_pipes.push_back(pipe);
     }
   }
@@ -56,20 +56,20 @@ struct group_pipe_map {
   using zb_pipe_map_t = std::multimap<zone_bucket, rgw_sync_bucket_pipe>;
 
   zb_pipe_map_t sources; /* all the pipes where zone is pulling from, by source_zone, s */
-  zb_pipe_map_t targets; /* all the pipes that pull from zone */
+  zb_pipe_map_t dests; /* all the pipes that pull from zone */
 
 
   template <typename CB1, typename CB2>
   void try_add_to_pipe_map(const string& source_zone,
-                           const string& target_zone,
+                           const string& dest_zone,
                            const std::vector<rgw_sync_bucket_pipe>& pipes,
                            zb_pipe_map_t *pipe_map,
                            CB1 filter_cb,
                            CB2 call_filter_cb) {
-    if (!filter_cb(source_zone, nullopt, target_zone, nullopt)) {
+    if (!filter_cb(source_zone, nullopt, dest_zone, nullopt)) {
       return;
     }
-    auto relevant_pipes = filter_relevant_pipes(pipes, source_zone, target_zone);
+    auto relevant_pipes = filter_relevant_pipes(pipes, source_zone, dest_zone);
 
     for (auto& pipe : relevant_pipes) {
       zone_bucket zb;
@@ -82,31 +82,31 @@ struct group_pipe_map {
           
   template <typename CB>
   void try_add_source(const string& source_zone,
-                  const string& target_zone,
+                  const string& dest_zone,
                   const std::vector<rgw_sync_bucket_pipe>& pipes,
                   CB filter_cb)
   {
-    return try_add_to_pipe_map(source_zone, target_zone, pipes,
+    return try_add_to_pipe_map(source_zone, dest_zone, pipes,
                                &sources,
                                filter_cb,
                                [&](const rgw_sync_bucket_pipe& pipe, zone_bucket *zb) {
         *zb = zone_bucket{source_zone, pipe.source.get_bucket()};
-        return filter_cb(source_zone, zb->bucket, target_zone, pipe.target.get_bucket());
+        return filter_cb(source_zone, zb->bucket, dest_zone, pipe.dest.get_bucket());
       });
   }
           
   template <typename CB>
-  void try_add_target(const string& source_zone,
-                  const string& target_zone,
+  void try_add_dest(const string& source_zone,
+                  const string& dest_zone,
                   const std::vector<rgw_sync_bucket_pipe>& pipes,
                   CB filter_cb)
   {
-    return try_add_to_pipe_map(source_zone, target_zone, pipes,
-                               &targets,
+    return try_add_to_pipe_map(source_zone, dest_zone, pipes,
+                               &dests,
                                filter_cb,
                                [&](const rgw_sync_bucket_pipe& pipe, zone_bucket *zb) {
-        *zb = zone_bucket{target_zone, pipe.target.get_bucket()};
-        return filter_cb(source_zone, pipe.source.get_bucket(), target_zone, zb->bucket);
+        *zb = zone_bucket{dest_zone, pipe.dest.get_bucket()};
+        return filter_cb(source_zone, pipe.source.get_bucket(), dest_zone, zb->bucket);
       });
   }
           
@@ -168,7 +168,7 @@ struct group_pipe_map {
           for (auto& z : symmetrical_group.zones) {
             if (z != zone) {
               try_add_source(z, zone, zone_pipes, filter_cb);
-              try_add_target(zone, z, zone_pipes, filter_cb);
+              try_add_dest(zone, z, zone_pipes, filter_cb);
             }
           }
         }
@@ -179,8 +179,8 @@ struct group_pipe_map {
     if (flow.directional) {
       for (auto& rule : *flow.directional) {
         if (rule.source_zone == zone) {
-          try_add_target(zone, rule.target_zone, zone_pipes, filter_cb);
-        } else if (rule.target_zone == zone) {
+          try_add_dest(zone, rule.dest_zone, zone_pipes, filter_cb);
+        } else if (rule.dest_zone == zone) {
           try_add_source(rule.source_zone, zone, zone_pipes, filter_cb);
         }
       }
@@ -188,18 +188,18 @@ struct group_pipe_map {
   }
 
   /*
-   * find all relevant pipes in our zone that match {target_bucket} <- {source_zone, source_bucket}
+   * find all relevant pipes in our zone that match {dest_bucket} <- {source_zone, source_bucket}
    */
   vector<rgw_sync_bucket_pipe> find_source_pipes(const string& source_zone,
                                                  std::optional<rgw_bucket> source_bucket,
-                                                 std::optional<rgw_bucket> target_bucket) {
+                                                 std::optional<rgw_bucket> dest_bucket) {
     vector<rgw_sync_bucket_pipe> result;
 
     auto range = find_pipes(sources, source_zone, source_bucket);
 
     for (auto iter = range.first; iter != range.second; ++iter) {
       auto pipe = iter->second;
-      if (pipe.target.match_bucket(target_bucket)) {
+      if (pipe.dest.match_bucket(dest_bucket)) {
         result.push_back(pipe);
       }
     }
@@ -208,14 +208,14 @@ struct group_pipe_map {
 
   /*
    * find all relevant pipes in other zones that pull from a specific
-   * source bucket in out zone {source_bucket} -> {target_zone, target_bucket}
+   * source bucket in out zone {source_bucket} -> {dest_zone, dest_bucket}
    */
-  vector<rgw_sync_bucket_pipe> find_target_pipes(std::optional<rgw_bucket> source_bucket,
-                                                 const string& target_zone,
-                                                 std::optional<rgw_bucket> target_bucket) {
+  vector<rgw_sync_bucket_pipe> find_dest_pipes(std::optional<rgw_bucket> source_bucket,
+                                                 const string& dest_zone,
+                                                 std::optional<rgw_bucket> dest_bucket) {
     vector<rgw_sync_bucket_pipe> result;
 
-    auto range = find_pipes(targets, target_zone, target_bucket);
+    auto range = find_pipes(dests, dest_zone, dest_bucket);
 
     for (auto iter = range.first; iter != range.second; ++iter) {
       auto pipe = iter->second;
@@ -228,18 +228,18 @@ struct group_pipe_map {
   }
 
   /*
-   * find all relevant pipes from {source_zone, source_bucket} -> {target_zone, target_bucket}
+   * find all relevant pipes from {source_zone, source_bucket} -> {dest_zone, dest_bucket}
    */
   vector<rgw_sync_bucket_pipe> find_pipes(const string& source_zone,
                                           std::optional<rgw_bucket> source_bucket,
-                                          const string& target_zone,
-                                          std::optional<rgw_bucket> target_bucket) {
-    if (target_zone == zone) {
-      return find_source_pipes(source_zone, source_bucket, target_bucket);
+                                          const string& dest_zone,
+                                          std::optional<rgw_bucket> dest_bucket) {
+    if (dest_zone == zone) {
+      return find_source_pipes(source_zone, source_bucket, dest_bucket);
     }
 
     if (source_zone == zone) {
-      return find_target_pipes(source_bucket, target_zone, target_bucket);
+      return find_dest_pipes(source_bucket, dest_zone, dest_bucket);
     }
 
     return vector<rgw_sync_bucket_pipe>();
@@ -262,8 +262,8 @@ class RGWBucketSyncFlowManager {
 
   bool allowed_data_flow(const string& source_zone,
                          std::optional<rgw_bucket> source_bucket,
-                         const string& target_zone,
-                         std::optional<rgw_bucket> target_bucket,
+                         const string& dest_zone,
+                         std::optional<rgw_bucket> dest_bucket,
                          bool check_activated) {
     bool found = false;
     bool found_activated = false;
@@ -271,7 +271,7 @@ class RGWBucketSyncFlowManager {
     for (auto m : flow_groups) {
       auto& fm = m.second;
       auto pipes = fm.find_pipes(source_zone, source_bucket,
-                                 target_zone, target_bucket);
+                                 dest_zone, dest_bucket);
 
       bool is_found = !pipes.empty();
 
@@ -302,7 +302,7 @@ class RGWBucketSyncFlowManager {
   using flow_map_t = map<rgw_bucket, pipe_flow>;
 
   flow_map_t flow_by_source;
-  flow_map_t flow_by_target;
+  flow_map_t flow_by_dest;
 
 
   /*
@@ -324,7 +324,7 @@ class RGWBucketSyncFlowManager {
   void update_flow_maps(const rgw_sync_bucket_pipe& pipe,
                         group_pipe_map *flow_group) {
     auto source_bucket = pipe.source.get_bucket();
-    auto target_bucket = pipe.target.get_bucket();
+    auto dest_bucket = pipe.dest.get_bucket();
 
     if (!bucket ||
         *bucket != source_bucket) {
@@ -334,10 +334,10 @@ class RGWBucketSyncFlowManager {
     }
 
     if (!bucket ||
-        *bucket != target_bucket) {
-      auto& by_target = flow_by_target[target_bucket];
-      by_target.flow_groups.push_back(flow_group);
-      by_target.pipe.push_back(pipe);
+        *bucket != dest_bucket) {
+      auto& by_dest = flow_by_dest[dest_bucket];
+      by_dest.flow_groups.push_back(flow_group);
+      by_dest.pipe.push_back(pipe);
     }
   }
 
@@ -345,7 +345,7 @@ class RGWBucketSyncFlowManager {
 #if 0
   bool allowed_sync_flow(std::optional<rgw_bucket> bucket,
                          const string& source,
-                         const string& target) {
+                         const string& dest) {
     auto& zone = zone_svc->zone_name();
 
     if (source == zone) {
@@ -376,15 +376,15 @@ public:
       flow_group_map.init(zone_svc->zone_name(), bucket, group,
                           [&](const string& source_zone,
                               std::optional<rgw_bucket> source_bucket,
-                              const string& target_zone,
-                              std::optional<rgw_bucket> target_bucket) {
+                              const string& dest_zone,
+                              std::optional<rgw_bucket> dest_bucket) {
                             if (!parent) {
                               return true;
                             }
                             return parent->allowed_data_flow(source_zone,
                                                              source_bucket,
-                                                             target_zone,
-                                                             target_bucket,
+                                                             dest_zone,
+                                                             dest_bucket,
                                                              false); /* just check that it's not disabled */
                           });
 
@@ -406,8 +406,8 @@ public:
 #if 0
   bool get_bucket_sources(const rgw_bucket& bucket,
                           std::vector<rgw_sync_bucket_entity> *sources) {
-    auto iter = find_bucket_flow(flow_by_target, bucket);
-    if (iter == flow_by_target.end()) {
+    auto iter = find_bucket_flow(flow_by_dest, bucket);
+    if (iter == flow_by_dest.end()) {
       if (!parent) {
         return false;
       }
@@ -436,23 +436,23 @@ int RGWBucketSyncPolicyHandler::init()
 
   auto& sync_policy = *bucket_info.sync_policy;
 
-  if (sync_policy.targets) {
-    for (auto& target : *sync_policy.targets) {
-      if (!(target.bucket || *target.bucket == bucket_info.bucket)) {
+  if (sync_policy.dests) {
+    for (auto& dest : *sync_policy.dests) {
+      if (!(dest.bucket || *dest.bucket == bucket_info.bucket)) {
         continue;
       }
 
-      if (target.zones.find("*") == target.zones.end() &&
-          target.zones.find(zone_id) == target.zones.end()) {
+      if (dest.zones.find("*") == dest.zones.end() &&
+          dest.zones.find(zone_id) == dest.zones.end()) {
         continue;
       }
 
-      if (target.flow_rules) {
+      if (dest.flow_rules) {
         /* populate trivial peers */
-        for (auto& rule : *target.flow_rules) {
+        for (auto& rule : *dest.flow_rules) {
           set<string> source_zones;
-          set<string> target_zones;
-          rule.get_zone_peers(zone_id, &source_zones, &target_zones);
+          set<string> dest_zones;
+          rule.get_zone_peers(zone_id, &source_zones, &dest_zones);
 
           for (auto& sz : source_zones) {
             peer_info sinfo;
@@ -460,16 +460,16 @@ int RGWBucketSyncPolicyHandler::init()
             sources[sz].insert(sinfo);
           }
 
-          for (auto& tz : target_zones) {
+          for (auto& tz : dest_zones) {
             peer_info tinfo;
             tinfo.bucket = bucket_info.bucket;
-            targets[tz].insert(tinfo);
+            dests[tz].insert(tinfo);
           }
         }
       }
 
       /* non trivial sources */
-      for (auto& source : target.sources) {
+      for (auto& source : dest.sources) {
         if (!source.bucket ||
             *source.bucket == bucket_info.bucket) {
           if ((source.type.empty() || source.type == "rgw") &&

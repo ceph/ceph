@@ -195,19 +195,19 @@ WRITE_CLASS_ENCODER(rgw_sync_symmetric_group)
 
 struct rgw_sync_directional_rule {
   string source_zone;
-  string target_zone;
+  string dest_zone;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(source_zone, bl);
-    encode(target_zone, bl);
+    encode(dest_zone, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(source_zone, bl);
-    decode(target_zone, bl);
+    decode(dest_zone, bl);
     DECODE_FINISH(bl);
   }
 
@@ -286,41 +286,41 @@ private:
 
 public:
   rgw_sync_bucket_entity source;
-  rgw_sync_bucket_entity target;
+  rgw_sync_bucket_entity dest;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(source, bl);
-    encode(target, bl);
+    encode(dest, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(source, bl);
-    decode(target, bl);
+    decode(dest, bl);
     DECODE_FINISH(bl);
   }
 
   bool contains_bucket(std::optional<rgw_bucket> b) const {
-    return (source.match_bucket(b) || target.match_bucket(b));
+    return (source.match_bucket(b) || dest.match_bucket(b));
   }
   bool contains_zone(const string& zone) const {
-    return (source.match_zone(zone) || target.match_zone(zone));
+    return (source.match_zone(zone) || dest.match_zone(zone));
   }
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 
   void get_bucket_pair(rgw_bucket *source_bucket,
-                       rgw_bucket *target_bucket) const {
+                       rgw_bucket *dest_bucket) const {
     *source_bucket = source.get_bucket();
-    *target_bucket = target.get_bucket();
+    *dest_bucket = dest.get_bucket();
 
-    symmetrical_copy_if_empty(source_bucket->tenant, target_bucket->tenant);
-    symmetrical_copy_if_empty(source_bucket->name, target_bucket->name);
-    if (source_bucket->name == target_bucket->name) { /* doesn't make sense to copy bucket id if not same bucket name */
-      symmetrical_copy_if_empty(source_bucket->bucket_id, target_bucket->bucket_id);
+    symmetrical_copy_if_empty(source_bucket->tenant, dest_bucket->tenant);
+    symmetrical_copy_if_empty(source_bucket->name, dest_bucket->name);
+    if (source_bucket->name == dest_bucket->name) { /* doesn't make sense to copy bucket id if not same bucket name */
+      symmetrical_copy_if_empty(source_bucket->bucket_id, dest_bucket->bucket_id);
     }
   }
 };
