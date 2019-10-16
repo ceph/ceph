@@ -135,7 +135,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
       "snap1", 0, false);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -165,7 +165,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, AllocateSnapIdError) {
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
       "snap1", 0, false);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -204,7 +204,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapStale) {
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
       "snap1", 0, false);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -235,7 +235,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapError) {
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
       "snap1", 0, false);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -266,7 +266,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, ReleaseSnapIdError) {
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
       "snap1", 0, false);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -303,7 +303,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, SkipObjectMap) {
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
       "snap1", 0, true);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());

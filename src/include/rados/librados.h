@@ -130,6 +130,8 @@ enum {
   LIBRADOS_OPERATION_FULL_FORCE		= 128,
   LIBRADOS_OPERATION_IGNORE_REDIRECT	= 256,
   LIBRADOS_OPERATION_ORDERSNAP          = 512,
+  /* enable/allow >0 return values and payloads on write/update */
+  LIBRADOS_OPERATION_RETURNVEC          = 1024,
 };
 /** @} */
 
@@ -3043,6 +3045,23 @@ CEPH_RADOS_API void rados_write_op_omap_rm_keys2(rados_write_op_t write_op,
                                                 const size_t* key_lens,
                                                 size_t keys_len);
 
+
+/**
+ * Remove key/value pairs from an object whose keys are in the range
+ * [key_begin, key_end)
+ *
+ * @param write_op operation to add this action to
+ * @param key_begin the lower bound of the key range to remove
+ * @param key_begin_len length of key_begin
+ * @param key_end the upper bound of the key range to remove
+ * @param key_end_len length of key_end
+ */
+CEPH_RADOS_API void rados_write_op_omap_rm_range2(rados_write_op_t write_op,
+                                                  const char *key_begin,
+                                                  size_t key_begin_len,
+                                                  const char *key_end,
+                                                  size_t key_end_len);
+
 /**
  * Remove all key/value pairs from an object
  *
@@ -3628,9 +3647,15 @@ CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
 				       char *client_address,
 				       uint32_t expire_seconds);
 
-CEPH_RADOS_API void rados_set_osdmap_full_try(rados_ioctx_t io);
+CEPH_RADOS_API void rados_set_osdmap_full_try(rados_ioctx_t io)
+  __attribute__((deprecated));
 
-CEPH_RADOS_API void rados_unset_osdmap_full_try(rados_ioctx_t io);
+CEPH_RADOS_API void rados_unset_osdmap_full_try(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+CEPH_RADOS_API void rados_set_pool_full_try(rados_ioctx_t io);
+
+CEPH_RADOS_API void rados_unset_pool_full_try(rados_ioctx_t io);
 
 /**
  * Enable an application on a pool
@@ -3788,6 +3813,38 @@ CEPH_RADOS_API int rados_mgr_command(rados_t cluster, const char **cmd,
                                      size_t inbuflen, char **outbuf,
                                      size_t *outbuflen, char **outs,
                                      size_t *outslen);
+
+/**
+ * Send ceph-mgr tell command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param name mgr name to target
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param inbuflen input buffer length
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_mgr_command_target(
+  rados_t cluster,
+  const char *name,
+  const char **cmd,
+  size_t cmdlen, const char *inbuf,
+  size_t inbuflen, char **outbuf,
+  size_t *outbuflen, char **outs,
+  size_t *outslen);
 
 /**
  * Send monitor command to a specific monitor.

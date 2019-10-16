@@ -1,9 +1,10 @@
 import { Component, Input, OnInit } from '@angular/core';
 
+import * as _ from 'lodash';
 import { defineLocale } from 'ngx-bootstrap/chronos';
 import { BsLocaleService } from 'ngx-bootstrap/datepicker';
 
-import { LocaleHelper } from '../../../locale.helper';
+import { LanguageService } from '../../services/language.service';
 import { languageBootstrapMapping, SupportedLanguages } from './supported-languages.enum';
 
 @Component({
@@ -15,14 +16,18 @@ export class LanguageSelectorComponent implements OnInit {
   @Input()
   isDropdown = true;
 
-  supportedLanguages = SupportedLanguages;
+  supportedLanguages: Object = SupportedLanguages;
   selectedLanguage: string;
 
-  constructor(private localeService: BsLocaleService) {}
+  constructor(private localeService: BsLocaleService, private languageService: LanguageService) {}
 
   ngOnInit() {
-    this.selectedLanguage = LocaleHelper.getLocale();
+    this.selectedLanguage = this.languageService.getLocale();
     this.defineUsedLanguage();
+
+    this.languageService.getLanguages().subscribe((langs) => {
+      this.supportedLanguages = _.pick(this.supportedLanguages, langs) as Object;
+    });
   }
 
   /**
@@ -39,8 +44,16 @@ export class LanguageSelectorComponent implements OnInit {
     }
   }
 
-  changeLanguage(lang: string) {
-    LocaleHelper.setLocale(lang);
+  /**
+   * Jest is being more restricted regarding spying on the reload method.
+   * This will allow us to spyOn this method instead.
+   */
+  reloadWindow() {
     window.location.reload();
+  }
+
+  changeLanguage(lang: string) {
+    this.languageService.setLocale(lang);
+    this.reloadWindow();
   }
 }

@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import _ = require('lodash');
+import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { EMPTY, of } from 'rxjs';
@@ -27,6 +27,7 @@ import { PerformanceCounterModule } from '../../../performance-counter/performan
 import { OsdDetailsComponent } from '../osd-details/osd-details.component';
 import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
+import { OsdSmartListComponent } from '../osd-smart-list/osd-smart-list.component';
 import { OsdListComponent } from './osd-list.component';
 
 describe('OsdListComponent', () => {
@@ -84,7 +85,12 @@ describe('OsdListComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule
     ],
-    declarations: [OsdListComponent, OsdDetailsComponent, OsdPerformanceHistogramComponent],
+    declarations: [
+      OsdListComponent,
+      OsdDetailsComponent,
+      OsdPerformanceHistogramComponent,
+      OsdSmartListComponent
+    ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
@@ -123,7 +129,8 @@ describe('OsdListComponent', () => {
       stats: {
         stat_bytes_used: n * n,
         stat_bytes: n * n * n
-      }
+      },
+      state: []
     });
 
     const expectAttributeOnEveryOsd = (attr: string) =>
@@ -148,6 +155,15 @@ describe('OsdListComponent', () => {
     it('should have custom attribute "collectedStates"', () => {
       expectAttributeOnEveryOsd('collectedStates');
       expect(component.osds[0].collectedStates).toEqual(['in', 'up']);
+    });
+
+    it('should have "destroyed" state in "collectedStates"', () => {
+      osds[0].state.push('destroyed');
+      osds[0].up = 0;
+      component.getOsdList();
+
+      expectAttributeOnEveryOsd('collectedStates');
+      expect(component.osds[0].collectedStates).toEqual(['in', 'destroyed']);
     });
 
     it('should have custom attribute "stats_history.out_bytes"', () => {
@@ -216,33 +232,72 @@ describe('OsdListComponent', () => {
     });
   });
 
-  describe('show table actions as defined', () => {
-    let tableActions: TableActionsComponent;
-    let scenario: { fn; empty; single };
-    let permissionHelper: PermissionHelper;
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permissions.osd);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
 
-    const getTableActionComponent = () => {
-      fixture.detectChanges();
-      return fixture.debugElement.query(By.css('#osd-actions')).componentInstance;
-    };
-
-    beforeEach(() => {
-      permissionHelper = new PermissionHelper(component.permissions.osd, () =>
-        getTableActionComponent()
-      );
-      scenario = {
-        fn: () => tableActions.getCurrentButton().name,
-        single: 'Scrub',
-        empty: 'Scrub'
-      };
-      tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-    });
-
-    it('shows action button', () => permissionHelper.testScenarios(scenario));
-
-    it('shows all actions', () => {
-      expect(tableActions.tableActions.length).toBe(9);
-      expect(tableActions.tableActions).toEqual(component.tableActions);
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: [
+          'Scrub',
+          'Deep Scrub',
+          'Reweight',
+          'Mark Out',
+          'Mark In',
+          'Mark Down',
+          'Mark Lost',
+          'Purge',
+          'Destroy'
+        ],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      'create,update': {
+        actions: ['Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      'create,delete': {
+        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        primary: {
+          multiple: 'Mark Lost',
+          executing: 'Mark Lost',
+          single: 'Mark Lost',
+          no: 'Mark Lost'
+        }
+      },
+      create: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      'update,delete': {
+        actions: [
+          'Scrub',
+          'Deep Scrub',
+          'Reweight',
+          'Mark Out',
+          'Mark In',
+          'Mark Down',
+          'Mark Lost',
+          'Purge',
+          'Destroy'
+        ],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      update: {
+        actions: ['Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      delete: {
+        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        primary: {
+          multiple: 'Mark Lost',
+          executing: 'Mark Lost',
+          single: 'Mark Lost',
+          no: 'Mark Lost'
+        }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 

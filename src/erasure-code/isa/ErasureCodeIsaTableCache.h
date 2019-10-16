@@ -26,7 +26,7 @@
 #define CEPH_ERASURE_CODE_ISA_TABLE_CACHE_H
 
 // -----------------------------------------------------------------------------
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "erasure-code/ErasureCodeInterface.h"
 // -----------------------------------------------------------------------------
 #include <list>
@@ -55,14 +55,12 @@ public:
   typedef std::map< std::string, lru_entry_t > lru_map_t;
   typedef std::list< std::string > lru_list_t;
 
-  ErasureCodeIsaTableCache() :
-  codec_tables_guard("isa-lru-cache")
-  {
-  }
+  ErasureCodeIsaTableCache() = default;
 
   virtual ~ErasureCodeIsaTableCache();
 
-  Mutex codec_tables_guard; // mutex used to protect modifications in encoding/decoding table maps
+  // mutex used to protect modifications in encoding/decoding table maps
+  ceph::mutex codec_tables_guard = ceph::make_mutex("isa-lru-cache");
 
   bool getDecodingTableFromCache(std::string &signature,
                                  unsigned char* &table,
@@ -98,7 +96,7 @@ private:
 
   lru_list_t* getDecodingTablesLru(int matrix_type);
 
-  Mutex* getLock();
+  ceph::mutex* getLock();
 
 };
 

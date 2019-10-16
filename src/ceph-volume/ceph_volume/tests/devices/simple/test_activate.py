@@ -51,10 +51,10 @@ class TestEnableSystemdUnits(object):
         activation.activate = lambda x: True
         activation.main()
         activation.enable_systemd_units('0', '1234')
-        out, err = capsys.readouterr()
-        assert 'Skipping enabling of `simple`' in out
-        assert 'Skipping masking of ceph-disk' in out
-        assert 'Skipping enabling and starting OSD simple' in out
+        stdout, stderr = capsys.readouterr()
+        assert 'Skipping enabling of `simple`' in stderr
+        assert 'Skipping masking of ceph-disk' in stderr
+        assert 'Skipping enabling and starting OSD simple' in stderr
 
     def test_no_systemd_flag_is_true(self, tmpfile, is_root):
         json_config = tmpfile(contents='{}')
@@ -145,23 +145,33 @@ class TestValidateDevices(object):
         with pytest.raises(RuntimeError):
             activation.validate_devices({'type': 'filestore', 'journal': {}})
         stdout, stderr = capsys.readouterr()
-        assert "devices found: ['journal']" in stdout
+        assert "devices found: ['journal']" in stderr
 
     def test_filestore_data_device_found(self, capsys):
         activation = activate.Activate([])
         with pytest.raises(RuntimeError):
             activation.validate_devices({'type': 'filestore', 'data': {}})
         stdout, stderr = capsys.readouterr()
-        assert "devices found: ['data']" in stdout
+        assert "devices found: ['data']" in stderr
 
     def test_filestore_with_all_devices(self):
         activation = activate.Activate([])
         result = activation.validate_devices({'type': 'filestore', 'journal': {}, 'data': {}})
         assert result is True
 
+    def test_filestore_without_type(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'journal': {}, 'data': {}})
+        assert result is True
+
     def test_bluestore_with_all_devices(self):
         activation = activate.Activate([])
         result = activation.validate_devices({'type': 'bluestore', 'data': {}, 'block': {}})
+        assert result is True
+
+    def test_bluestore_without_type(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'data': {}, 'block': {}})
         assert result is True
 
     def test_bluestore_is_default(self):
@@ -174,7 +184,7 @@ class TestValidateDevices(object):
         with pytest.raises(RuntimeError):
             activation.validate_devices({'data': {}})
         stdout, stderr = capsys.readouterr()
-        assert "devices found: ['data']" in stdout
+        assert "devices found: ['data']" in stderr
 
     def test_bluestore_missing_data(self):
         activation = activate.Activate([])
@@ -187,4 +197,4 @@ class TestValidateDevices(object):
         with pytest.raises(RuntimeError):
             activation.validate_devices({'block': {}})
         stdout, stderr = capsys.readouterr()
-        assert "devices found: ['block']" in stdout
+        assert "devices found: ['block']" in stderr

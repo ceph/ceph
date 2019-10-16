@@ -105,13 +105,13 @@ int Snapshot<I>::get_group_namespace(I *ictx, uint64_t snap_id,
     return r;
   }
 
-  RWLock::RLocker image_locker(ictx->image_lock);
+  std::shared_lock image_locker{ictx->image_lock};
   auto snap_info = ictx->get_snap_info(snap_id);
   if (snap_info == nullptr) {
     return -ENOENT;
   }
 
-  GetGroupVisitor ggv = GetGroupVisitor(ictx->cct, &ictx->data_ctx, group_snap);
+  GetGroupVisitor ggv = GetGroupVisitor(ictx->cct, &ictx->md_ctx, group_snap);
   r = boost::apply_visitor(ggv, snap_info->snap_namespace);
   if (r < 0) {
     return r;
@@ -128,7 +128,7 @@ int Snapshot<I>::get_trash_namespace(I *ictx, uint64_t snap_id,
     return r;
   }
 
-  RWLock::RLocker image_locker(ictx->image_lock);
+  std::shared_lock image_locker{ictx->image_lock};
   auto snap_info = ictx->get_snap_info(snap_id);
   if (snap_info == nullptr) {
     return -ENOENT;
@@ -151,7 +151,7 @@ int Snapshot<I>::get_namespace_type(I *ictx, uint64_t snap_id,
     return r;
   }
 
-  RWLock::RLocker l(ictx->image_lock);
+  std::shared_lock l{ictx->image_lock};
   auto snap_info = ictx->get_snap_info(snap_id);
   if (snap_info == nullptr) {
     return -ENOENT;
@@ -174,7 +174,7 @@ int Snapshot<I>::remove(I *ictx, uint64_t snap_id) {
   cls::rbd::SnapshotNamespace snapshot_namespace;
   std::string snapshot_name;
   {
-    RWLock::RLocker image_locker(ictx->image_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     auto it = ictx->snap_info.find(snap_id);
     if (it == ictx->snap_info.end()) {
       return -ENOENT;

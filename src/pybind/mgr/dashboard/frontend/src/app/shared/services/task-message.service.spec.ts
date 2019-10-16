@@ -18,6 +18,7 @@ describe('TaskManagerMessageService', () => {
   beforeEach(() => {
     service = TestBed.get(TaskMessageService);
     finishedTask = new FinishedTask();
+    finishedTask.duration = 30;
   });
 
   it('should be created', () => {
@@ -48,7 +49,7 @@ describe('TaskManagerMessageService', () => {
       expect(service.getErrorTitle(finishedTask)).toBe(
         'Failed to ' + operation.failure + ' ' + involves
       );
-      expect(service.getSuccessTitle(finishedTask)).toBe(operation.success + ' ' + involves);
+      expect(service.getSuccessTitle(finishedTask)).toBe(`${operation.success} ${involves}`);
     };
 
     const testCreate = (involves: string) => {
@@ -139,9 +140,7 @@ describe('TaskManagerMessageService', () => {
         defaultMsg = `RBD '${metadata.pool_name}/${metadata.image_name}'`;
         childMsg = `RBD '${metadata.child_pool_name}/${metadata.child_image_name}'`;
         destinationMsg = `RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}'`;
-        snapMsg = `RBD snapshot '${metadata.pool_name}/${metadata.image_name}@${
-          metadata.snapshot_name
-        }'`;
+        snapMsg = `RBD snapshot '${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`;
         finishedTask.metadata = metadata;
       });
 

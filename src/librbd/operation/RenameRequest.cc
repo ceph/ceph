@@ -81,7 +81,7 @@ bool RenameRequest<I>::should_complete(int r) {
     return true;
   }
 
-  RWLock::RLocker owner_lock(image_ctx.owner_lock);
+  std::shared_lock owner_lock{image_ctx.owner_lock};
   switch (m_state) {
   case STATE_READ_SOURCE_HEADER:
     send_write_destination_header();
@@ -105,7 +105,7 @@ int RenameRequest<I>::filter_return_code(int r) const {
   CephContext *cct = image_ctx.cct;
 
   if (m_state == STATE_READ_SOURCE_HEADER && r == -ENOENT) {
-    RWLock::RLocker image_locker(image_ctx.image_lock);
+    std::shared_lock image_locker{image_ctx.image_lock};
     if (image_ctx.name == m_dest_name) {
       // signal that replay raced with itself
       return -EEXIST;

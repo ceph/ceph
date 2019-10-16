@@ -25,9 +25,6 @@
 
 #define dout_subsys ceph_subsys_
 
-#define _STR(x) #x
-#define STRINGIFY(x) _STR(x)
-
 #ifndef WITH_SEASTAR
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags)

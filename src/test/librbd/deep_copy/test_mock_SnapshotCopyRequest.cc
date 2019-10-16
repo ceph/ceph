@@ -148,8 +148,7 @@ public:
     if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
       return;
     }
-    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(
-      ReturnNew<FunctionContext>([](int) {}));
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(Return(new LambdaContext([](int){})));
   }
 
   void expect_get_snap_namespace(librbd::MockTestImageCtx &mock_image_ctx,

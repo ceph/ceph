@@ -62,14 +62,18 @@ describe('RgwBucketService', () => {
   });
 
   it('should call create', () => {
-    service.create('foo', 'bar').subscribe();
-    const req = httpTesting.expectOne('api/rgw/bucket?bucket=foo&uid=bar');
+    service.create('foo', 'bar', 'default', 'default-placement').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement'
+    );
     expect(req.request.method).toBe('POST');
   });
 
   it('should call update', () => {
-    service.update('foo', 'bar', 'baz').subscribe();
-    const req = httpTesting.expectOne('api/rgw/bucket/foo?bucket_id=bar&uid=baz');
+    service.update('foo', 'bar', 'baz', 'Enabled').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/bucket/foo?bucket_id=bar&uid=baz&versioning_state=Enabled'
+    );
     expect(req.request.method).toBe('PUT');
   });
 

@@ -1,6 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -53,216 +52,45 @@ describe('SilenceListComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('show action buttons and drop down actions depending on permissions', () => {
-    let tableActions: TableActionsComponent;
-    let scenario: { fn; empty; single };
-    let permissionHelper: PermissionHelper;
-    let silenceState: string;
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
 
-    const getTableActionComponent = (): TableActionsComponent => {
-      fixture.detectChanges();
-      return fixture.debugElement.query(By.directive(TableActionsComponent)).componentInstance;
-    };
-
-    const setSilenceState = (state) => {
-      silenceState = state;
-    };
-
-    const testNonExpiredSilenceScenario = () => {
-      setSilenceState('active');
-      permissionHelper.testScenarios(scenario);
-      setSilenceState('pending');
-      permissionHelper.testScenarios(scenario);
-    };
-
-    beforeEach(() => {
-      permissionHelper = new PermissionHelper(component.permission, () =>
-        getTableActionComponent()
-      );
-      permissionHelper.createSelection = () => ({ status: { state: silenceState } });
-      scenario = {
-        fn: () => tableActions.getCurrentButton().name,
-        single: 'Edit',
-        empty: 'Create'
-      };
-    });
-
-    describe('with all', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-      });
-
-      it(`shows 'Edit' for single non expired silence else 'Create' as main action`, () => {
-        scenario.single = 'Edit';
-        testNonExpiredSilenceScenario();
-      });
-
-      it(`shows 'Recreate' for single expired silence else 'Create' as main action`, () => {
-        scenario.single = 'Recreate';
-        setSilenceState('expired');
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it('can use all actions', () => {
-        expect(tableActions.tableActions.length).toBe(4);
-        expect(tableActions.tableActions).toEqual(component.tableActions);
-      });
-    });
-
-    describe('with read, create and update', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 0);
-      });
-
-      it(`shows 'Edit' for single non expired silence else 'Create' as main action`, () => {
-        scenario.single = 'Edit';
-        testNonExpiredSilenceScenario();
-      });
-
-      it(`shows 'Recreate' for single expired silence else 'Create' as main action`, () => {
-        scenario.single = 'Recreate';
-        setSilenceState('expired');
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`can use all actions except for 'Expire'`, () => {
-        expect(tableActions.tableActions.length).toBe(3);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[0],
-          component.tableActions[1],
-          component.tableActions[2]
-        ]);
-      });
-    });
-
-    describe('with read, create and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 1);
-      });
-
-      it(`shows 'Expire' for single non expired silence else 'Create' as main action`, () => {
-        scenario.single = 'Expire';
-        testNonExpiredSilenceScenario();
-      });
-
-      it(`shows 'Recreate' for single expired silence else 'Create' as main action`, () => {
-        scenario.single = 'Recreate';
-        setSilenceState('expired');
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`can use 'Create' and 'Expire' action`, () => {
-        expect(tableActions.tableActions.length).toBe(3);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[0],
-          component.tableActions[1],
-          component.tableActions[3]
-        ]);
-      });
-    });
-
-    describe('with read, edit and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 1);
-      });
-
-      it(`shows always 'Edit' as main action for any state`, () => {
-        scenario.single = 'Edit';
-        scenario.empty = 'Edit';
-        testNonExpiredSilenceScenario();
-        setSilenceState('expired');
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`can use 'Edit' and 'Expire' action`, () => {
-        expect(tableActions.tableActions.length).toBe(2);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[2],
-          component.tableActions[3]
-        ]);
-      });
-    });
-
-    describe('with read and create', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 0);
-      });
-
-      it(`shows always 'Create' as main action for single non expired silences`, () => {
-        scenario.single = 'Create';
-        testNonExpiredSilenceScenario();
-      });
-
-      it(`shows 'Recreate' for single expired silence else 'Create' as main action`, () => {
-        scenario.single = 'Recreate';
-        setSilenceState('expired');
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`can use 'Create' and 'Recreate' actions`, () => {
-        expect(tableActions.tableActions.length).toBe(2);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[0],
-          component.tableActions[1]
-        ]);
-      });
-    });
-
-    describe('with read and edit', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 0);
-      });
-
-      it(`shows always 'Edit' as main action for any state`, () => {
-        scenario.single = 'Edit';
-        scenario.empty = 'Edit';
-        testNonExpiredSilenceScenario();
-        setSilenceState('expired');
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`can use 'Edit' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[2]]);
-      });
-    });
-
-    describe('with read and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 1);
-      });
-
-      it(`shows always 'Expire' as main action for any state`, () => {
-        scenario.single = 'Expire';
-        scenario.empty = 'Expire';
-        testNonExpiredSilenceScenario();
-        setSilenceState('expired');
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`can use 'Expire' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[3]]);
-      });
-    });
-
-    describe('with only read', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 0);
-      });
-
-      it('shows no main action', () => {
-        permissionHelper.testScenarios({
-          fn: () => tableActions.getCurrentButton(),
-          single: undefined,
-          empty: undefined
-        });
-      });
-
-      it('can use no actions', () => {
-        expect(tableActions.tableActions.length).toBe(0);
-        expect(tableActions.tableActions).toEqual([]);
-      });
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: ['Create', 'Recreate', 'Edit', 'Expire'],
+        primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
+      },
+      'create,update': {
+        actions: ['Create', 'Recreate', 'Edit'],
+        primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
+      },
+      'create,delete': {
+        actions: ['Create', 'Recreate', 'Expire'],
+        primary: { multiple: 'Create', executing: 'Expire', single: 'Expire', no: 'Create' }
+      },
+      create: {
+        actions: ['Create', 'Recreate'],
+        primary: { multiple: 'Create', executing: 'Create', single: 'Create', no: 'Create' }
+      },
+      'update,delete': {
+        actions: ['Edit', 'Expire'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      update: {
+        actions: ['Edit'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      delete: {
+        actions: ['Expire'],
+        primary: { multiple: 'Expire', executing: 'Expire', single: 'Expire', no: 'Expire' }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 

@@ -58,6 +58,7 @@ elif [ -n "$CEPH_ROOT" ]; then
     [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
     [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
     [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
+    [ -z "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON=$CEPH_ROOT/src/python-common
 fi
 
 if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
@@ -66,7 +67,10 @@ fi
 
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
-export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:$PYTHONPATH
+[ -n "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON="$CEPH_PYTHON_COMMON:"
+CYTHON_PYTHONPATH="$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}"
+export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON$PYTHONPATH
+
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
@@ -122,6 +126,7 @@ redirect=0
 smallmds=0
 short=0
 ec=0
+ssh=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
@@ -160,6 +165,7 @@ conf_fn="$CEPH_CONF_PATH/ceph.conf"
 keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
+inc_osd_num=0
 
 msgr="21"
 
@@ -203,6 +209,8 @@ usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
+usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
+usage=$usage"\t--ssh: enable ssh orchestrator with ~/.ssh/id_rsa[.pub]\n"
 
 usage_exit() {
     printf "$usage"
@@ -231,6 +239,16 @@ case $1 in
     --new | -n )
         new=1
         ;;
+    --inc-osd )
+        new=0
+        kill_all=0
+        inc_osd_num=$2
+        if [ "$inc_osd_num" == "" ]; then
+            inc_osd_num=1
+        else
+            shift
+        fi
+        ;;
     --not-new | -N )
 	new=0
 	;;
@@ -252,6 +270,9 @@ case $1 in
         ;;
     --msgr21 )
         msgr="21"
+        ;;
+    --ssh )
+        ssh=1
         ;;
     --valgrind )
         [ -z "$2" ] && usage_exit
@@ -466,6 +487,13 @@ prun() {
     "$@"
 }
 
+prun_to_file() {
+	f=$1
+	shift
+	quoted_print "$@"
+	"$@" >> $f
+}
+
 run() {
     type=$1
     shift
@@ -501,6 +529,26 @@ get_pci_selector() {
 
 get_pci_selector_num() {
     lspci -mm -n -D -d $pci_id | cut -d' ' -f 1 | wc -l
+}
+
+do_rgw_conf() {
+
+    if [ $CEPH_NUM_RGW -eq 0 ]; then
+        return 0
+    fi
+
+    # setup each rgw on a sequential port, starting at $CEPH_RGW_PORT.
+    # individual rgw's ids will be their ports.
+    current_port=$CEPH_RGW_PORT
+    for n in $(seq 1 $CEPH_NUM_RGW); do
+        wconf << EOF
+[client.rgw.${current_port}]
+        rgw frontends = $rgw_frontend port=${current_port}
+        admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
+EOF
+        current_port=$((current_port + 1))
+done
+
 }
 
 prepare_conf() {
@@ -623,16 +671,25 @@ EOF
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
-$extra_conf
-[client.rgw]
-        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
-        admin socket = ${CEPH_OUT_DIR}/radosgw.${CEPH_RGW_PORT}.asok
+
         ; needed for s3tests
+        rgw crypt s3 kms backend = testing
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
+        ; The following settings are for SSE-KMS with Vault
+        ; rgw crypt s3 kms backend = vault
+        ; rgw crypt vault auth = token
+        ; rgw crypt vault addr = http://127.0.0.1:8200
+        ; rgw crypt vault token file = /path/to/token.file
+
+$extra_conf
+EOF
+
+	do_rgw_conf
+	wconf << EOF
 [mds]
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
@@ -642,6 +699,7 @@ $extra_conf
 [mgr]
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
+        ceph daemon path = $CEPH_ROOT/src/ceph-daemon
 $DAEMONOPTS
 $extra_conf
 [osd]
@@ -717,12 +775,6 @@ start_mon() {
              --cap mds 'allow rwp' \
              "$keyring_fn"
 
-        prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
-             --cap mon 'allow rw' \
-             --cap osd 'allow rwx' \
-             --cap mgr 'allow rw' \
-             "$keyring_fn"
-
         # build a fresh fs monmap, mon fs
         local params=()
         local count=0
@@ -771,9 +823,18 @@ EOF
 }
 
 start_osd() {
-    for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
+    if [ $inc_osd_num -gt 0 ]; then
+        old_maxosd=$($CEPH_BIN/ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+        start=$old_maxosd
+        end=$(($start-1+$inc_osd_num))
+        overwrite_conf=1 # fake wconf
+    else
+        start=0
+        end=$(($CEPH_NUM_OSD-1))
+    fi
+    for osd in `seq $start $end`
     do
-	if [ "$new" -eq 1 ]; then
+	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
 [osd.$osd]
         host = $HOSTNAME
@@ -818,8 +879,20 @@ EOF
 EOF
         fi
         echo start osd.$osd
-        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
+        local extra_seastar_args
+        if [ "$ceph_osd" == "crimson-osd" ]; then
+            # designate a single CPU node $osd for osd.$osd
+            extra_seastar_args="--smp 1 --cpuset $osd"
+        fi
+        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
+            $extra_seastar_args $extra_osd_args \
+            -i $osd $ARGS $COSD_ARGS
     done
+    if [ $inc_osd_num -gt 0 ]; then
+        # update num osd
+        new_maxosd=$($CEPH_BIN/ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+        sed -i "s/num osd = .*/num osd = $new_maxosd/g" $conf_fn
+    fi
 }
 
 start_mgr() {
@@ -872,20 +945,26 @@ EOF
         run 'mgr' $name $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
-    # use tell mgr here because the first mgr might not have activated yet
-    # to register the python module commands.
     if [ "$new" -eq 1 ]; then
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
-            ceph_adm tell mgr dashboard ac-user-create admin admin administrator
+            while ! ceph_adm -h | grep -c -q ^dashboard ; do
+                echo 'waiting for mgr dashboard module to start'
+                sleep 1
+            done
+            ceph_adm dashboard ac-user-create admin admin administrator
             if [ "$ssl" != "0" ]; then
-                if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+                if ! ceph_adm dashboard create-self-signed-cert;  then
                     echo dashboard module not working correctly!
                 fi
             fi
         fi
 
-        if ceph_adm tell mgr restful create-self-signed-cert; then
+        while ! ceph_adm -h | grep -c -q ^restful ; do
+            echo 'waiting for mgr restful module to start'
+            sleep 1
+        done
+        if ceph_adm restful create-self-signed-cert; then
             SF=`mktemp`
             ceph_adm restful create-key admin -o $SF
             RESTFUL_SECRET=`cat $SF`
@@ -893,6 +972,15 @@ EOF
         else
             echo MGR Restful is not working, perhaps the package is not installed?
         fi
+    fi
+
+    if [ "$ssh" -eq 1 ]; then
+        echo Enabling ssh orchestrator
+        ceph_adm config-key set mgr/ssh/ssh_identity_key -i ~/.ssh/id_rsa
+        ceph_adm config-key set mgr/ssh/ssh_identity_pub -i ~/.ssh/id_rsa.pub
+        ceph_adm mgr module enable ssh
+        ceph_adm orchestrator set backend ssh
+        ceph_adm orchestrator host add $HOSTNAME
     fi
 }
 
@@ -993,17 +1081,21 @@ fi
 [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
 
 # sudo if btrfs
-test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
+[ -d $CEPH_DEV_DIR/osd0/. ] && [ -e $CEPH_DEV_DIR/sudo ] && SUDO="sudo"
 
-prun $SUDO rm -f core*
+if [ $inc_osd_num -eq 0 ]; then
+    prun $SUDO rm -f core*
+fi
 
-test -d $CEPH_ASOK_DIR || mkdir $CEPH_ASOK_DIR
-test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
-test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
-$SUDO rm -rf $CEPH_OUT_DIR/*
-test -d gmon && $SUDO rm -rf gmon/*
+[ -d $CEPH_ASOK_DIR ] || mkdir -p $CEPH_ASOK_DIR
+[ -d $CEPH_OUT_DIR  ] || mkdir -p $CEPH_OUT_DIR
+[ -d $CEPH_DEV_DIR  ] || mkdir -p $CEPH_DEV_DIR
+if [ $inc_osd_num -eq 0 ]; then
+    $SUDO rm -rf $CEPH_OUT_DIR/*
+fi
+[ -d gmon ] && $SUDO rm -rf gmon/*
 
-[ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
+[ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && [ -e $keyring_fn ] && rm $keyring_fn
 
 
 # figure machine's ip
@@ -1036,6 +1128,22 @@ ceph_adm() {
     fi
 }
 
+ceph_adm_to_file() {
+	f=$1
+	shift
+
+	if [ "$cephx" -eq 1 ]; then
+		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" -k "$keyring_fn" "$@"
+	else
+		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" "$@"
+	fi
+}
+
+if [ $inc_osd_num -gt 0 ]; then
+    start_osd
+    exit
+fi
+
 if [ "$new" -eq 1 ]; then
     prepare_conf
 fi
@@ -1048,7 +1156,6 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
 [global]
 osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
 osd_pool_default_min_size = 1
-mon_pg_warn_min_per_osd = 3
 
 [mon]
 mon_osd_reporter_subtree_level = osd
@@ -1066,6 +1173,10 @@ osd_copyfrom_max_chunk = 524288
 mds_debug_frag = true
 mds_debug_auth_pins = true
 mds_debug_subtrees = true
+
+[mgr]
+mgr/telemetry/nag = false
+mgr/telemetry/enable = false
 
 EOF
 
@@ -1146,7 +1257,7 @@ done
 if [ "$ec" -eq 1 ]; then
     ceph_adm <<EOF
 osd erasure-code-profile set ec-profile m=2 k=2
-osd pool create ec 8 8 erasure ec-profile
+osd pool create ec erasure ec-profile
 EOF
 fi
 
@@ -1156,7 +1267,7 @@ do_cache() {
         shift
         echo "creating cache for pool $p ..."
         ceph_adm <<EOF
-osd pool create ${p}-cache 8
+osd pool create ${p}-cache
 osd tier add $p ${p}-cache
 osd tier cache-mode ${p}-cache writeback
 osd tier set-overlay $p ${p}-cache
@@ -1252,14 +1363,29 @@ do_rgw()
     fi
     RGWSUDO=
     [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
-    n=$(($CEPH_NUM_RGW - 1))
-    i=0
-    for rgw in j k l m n o p q r s t u v; do
-        current_port=$((CEPH_RGW_PORT_NUM + i))
+
+    current_port=$CEPH_RGW_PORT
+    for n in $(seq 1 $CEPH_NUM_RGW); do
+        rgw_name="client.rgw.${current_port}"
+
+        ceph_adm_to_file $keyring_fn auth get-or-create $rgw_name \
+            mon 'allow rw' \
+            osd 'allow rwx' \
+            mgr 'allow rw' \
+
         echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
-        run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+        run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \
+            --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
+            --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
+            --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
+            ${RGWDEBUG} \
+            -n ${rgw_name} \
+            "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
+
+        current_port=$((current_port+1))
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then
@@ -1288,7 +1414,7 @@ echo ""
     echo "#"
 } > $CEPH_DIR/vstart_environment.sh
 {
-    echo "export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:\$PYTHONPATH"
+    echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
 
     if [ "$CEPH_DIR" != "$PWD" ]; then

@@ -126,20 +126,20 @@ struct MockImageCtx {
   }
 
   void wait_for_async_requests() {
-    async_ops_lock.Lock();
+    async_ops_lock.lock();
     if (async_requests.empty()) {
-      async_ops_lock.Unlock();
+      async_ops_lock.unlock();
       return;
     }
 
     C_SaferCond ctx;
     async_requests_waiters.push_back(&ctx);
-    async_ops_lock.Unlock();
+    async_ops_lock.unlock();
 
     ctx.wait();
   }
 
-  MOCK_METHOD0(init_layout, void());
+  MOCK_METHOD1(init_layout, void(int64_t));
 
   MOCK_CONST_METHOD1(get_object_name, std::string(uint64_t));
   MOCK_CONST_METHOD0(get_object_size, uint64_t());
@@ -190,7 +190,7 @@ struct MockImageCtx {
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
   MOCK_CONST_METHOD2(test_features, bool(uint64_t test_features,
-                                         const RWLock &in_image_lock));
+                                         const ceph::shared_mutex &in_image_lock));
 
   MOCK_CONST_METHOD1(test_op_features, bool(uint64_t op_features));
 
@@ -213,9 +213,9 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_stripe_count, uint64_t());
   MOCK_CONST_METHOD0(get_stripe_period, uint64_t());
 
-  static void set_timer_instance(MockSafeTimer *timer, Mutex *timer_lock);
+  static void set_timer_instance(MockSafeTimer *timer, ceph::mutex *timer_lock);
   static void get_timer_instance(CephContext *cct, MockSafeTimer **timer,
-                                 Mutex **timer_lock);
+                                 ceph::mutex **timer_lock);
 
   ImageCtx *image_ctx;
   CephContext *cct;
@@ -244,11 +244,11 @@ struct MockImageCtx {
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;
 
-  RWLock &owner_lock;
-  RWLock &image_lock;
-  RWLock &timestamp_lock;
-  Mutex &async_ops_lock;
-  Mutex &copyup_list_lock;
+  ceph::shared_mutex &owner_lock;
+  ceph::shared_mutex &image_lock;
+  ceph::shared_mutex &timestamp_lock;
+  ceph::mutex &async_ops_lock;
+  ceph::mutex &copyup_list_lock;
 
   uint8_t order;
   uint64_t size;

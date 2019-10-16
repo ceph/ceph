@@ -1,9 +1,34 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_compression.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs,
+                                      bool& need_decompress,
+                                      RGWCompressionInfo& cs_info) {
+  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_COMPRESSION);
+  if (value != attrs.end()) {
+    auto bliter = value->second.cbegin();
+    try {
+      decode(cs_info, bliter);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+    if (cs_info.blocks.size() == 0) {
+      return -EIO;
+    }
+    if (cs_info.compression_type != "none")
+      need_decompress = true;
+    else
+      need_decompress = false;
+    return 0;
+  } else {
+    need_decompress = false;
+    return 0;
+  }
+}
 
 //------------RGWPutObj_Compress---------------
 
@@ -98,7 +123,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     in_bl.copy(ofs_in_bl, first_block->len, tmp);
     int cr = compressor->decompress(tmp, out_bl);
     if (cr < 0) {
-      lderr(cct) << "Compression failed with exit code " << cr << dendl;
+      lderr(cct) << "Decompression failed with exit code " << cr << dendl;
       return cr;
     }
     ++first_block;

@@ -28,6 +28,7 @@
 #include "common/TrackedOp.h"
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
+#include "messages/MClientReply.h"
 
 class LogSegment;
 class Capability;
@@ -281,6 +282,8 @@ struct MDRequestImpl : public MutationImpl {
   // indicates how may retries of request have been made
   int retry;
 
+  bool is_batch_head = false;
+
   // indicator for vxattr osdmap update
   bool waited_for_osdmap;
 
@@ -398,6 +401,7 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
+  bool is_batch_op();
 
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
@@ -407,6 +411,7 @@ struct MDRequestImpl : public MutationImpl {
 
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
+  std::vector<Ref> batch_reqs;
 protected:
   void _dump(Formatter *f) const override;
   void _dump_op_descriptor_unlocked(ostream& stream) const override;

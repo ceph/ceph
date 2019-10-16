@@ -46,8 +46,7 @@ void AttachChildRequest<I>::v1_add_child() {
   ldout(m_cct, 15) << dendl;
 
   librados::ObjectWriteOperation op;
-  cls_client::add_child(&op, {m_parent_image_ctx->md_ctx.get_id(),
-                              m_parent_image_ctx->md_ctx.get_namespace(),
+  cls_client::add_child(&op, {m_parent_image_ctx->md_ctx.get_id(), "",
                               m_parent_image_ctx->id,
                               m_parent_snap_id}, m_image_ctx->id);
 
@@ -93,7 +92,7 @@ void AttachChildRequest<I>::handle_v1_refresh(int r) {
 
   bool snap_protected = false;
   if (r == 0) {
-    RWLock::RLocker image_locker(m_parent_image_ctx->image_lock);
+    std::shared_lock image_locker{m_parent_image_ctx->image_lock};
     r = m_parent_image_ctx->is_snap_protected(m_parent_snap_id,
                                               &snap_protected);
   }

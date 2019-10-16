@@ -100,15 +100,15 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-int EventCenter::init(int n, unsigned i, const std::string &t)
+int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
 {
   // can't init multi times
-  ceph_assert(nevent == 0);
+  ceph_assert(this->nevent == 0);
 
-  type = t;
-  idx = i;
+  this->type = type;
+  this->center_id = center_id;
 
-  if (t == "dpdk") {
+  if (type == "dpdk") {
 #ifdef HAVE_DPDK
     driver = new DPDKDriver(cct);
 #endif
@@ -129,20 +129,20 @@ int EventCenter::init(int n, unsigned i, const std::string &t)
     return -1;
   }
 
-  int r = driver->init(this, n);
+  int r = driver->init(this, nevent);
   if (r < 0) {
     lderr(cct) << __func__ << " failed to init event driver." << dendl;
     return r;
   }
 
-  file_events.resize(n);
-  nevent = n;
+  file_events.resize(nevent);
+  this->nevent = nevent;
 
   if (!driver->need_wakeup())
     return 0;
 
   int fds[2];
-  if (pipe_cloexec(fds) < 0) {
+  if (pipe_cloexec(fds, 0) < 0) {
     int e = errno;
     lderr(cct) << __func__ << " can't create notify pipe: " << cpp_strerror(e) << dendl;
     return -e;
@@ -190,13 +190,13 @@ EventCenter::~EventCenter()
 void EventCenter::set_owner()
 {
   owner = pthread_self();
-  ldout(cct, 2) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
+  ldout(cct, 2) << __func__ << " center_id=" << center_id << " owner=" << owner << dendl;
   if (!global_centers) {
     global_centers = &cct->lookup_or_create_singleton_object<
       EventCenter::AssociatedCenters>(
 	"AsyncMessenger::EventCenter::global_center::" + type, true);
     ceph_assert(global_centers);
-    global_centers->centers[idx] = this;
+    global_centers->centers[center_id] = this;
     if (driver->need_wakeup()) {
       notify_handler = new C_handle_notify(this, cct);
       int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
@@ -367,62 +367,54 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
   int numevents;
   bool trigger_time = false;
   auto now = clock_type::now();
+  clock_type::time_point end_time = now + std::chrono::microseconds(timeout_microseconds);
 
   auto it = time_events.begin();
-  bool blocking = pollers.empty() && !external_num_events.load();
-  // If exists external events or poller, don't block
-  if (!blocking) {
-    if (it != time_events.end() && now >= it->first)
-      trigger_time = true;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-  } else {
-    clock_type::time_point shortest;
-    shortest = now + std::chrono::microseconds(timeout_microseconds); 
+  if (it != time_events.end() && end_time >= it->first) {
+    trigger_time = true;
+    end_time = it->first;
 
-    if (it != time_events.end() && shortest >= it->first) {
-      ldout(cct, 30) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
-      shortest = it->first;
-      trigger_time = true;
-      if (shortest > now) {
-        timeout_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-            shortest - now).count();
-      } else {
-        shortest = now;
-        timeout_microseconds = 0;
-      }
+    if (end_time > now) {
+      timeout_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - now).count();
+    } else {
+      timeout_microseconds = 0;
     }
-    tv.tv_sec = timeout_microseconds / 1000000;
-    tv.tv_usec = timeout_microseconds % 1000000;
   }
+
+  bool blocking = pollers.empty() && !external_num_events.load();
+  if (!blocking)
+    timeout_microseconds = 0;
+  tv.tv_sec = timeout_microseconds / 1000000;
+  tv.tv_usec = timeout_microseconds % 1000000;
 
   ldout(cct, 30) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
   auto working_start = ceph::mono_clock::now();
-  for (int j = 0; j < numevents; j++) {
+  for (int event_id = 0; event_id < numevents; event_id++) {
     int rfired = 0;
     FileEvent *event;
     EventCallbackRef cb;
-    event = _get_file_event(fired_events[j].fd);
+    event = _get_file_event(fired_events[event_id].fd);
 
     /* note the event->mask & mask & ... code: maybe an already processed
     * event removed an element that fired and we still didn't
     * processed, so we check if the event is still valid. */
-    if (event->mask & fired_events[j].mask & EVENT_READABLE) {
+    if (event->mask & fired_events[event_id].mask & EVENT_READABLE) {
       rfired = 1;
       cb = event->read_cb;
-      cb->do_request(fired_events[j].fd);
+      cb->do_request(fired_events[event_id].fd);
     }
 
-    if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
+    if (event->mask & fired_events[event_id].mask & EVENT_WRITABLE) {
       if (!rfired || event->read_cb != event->write_cb) {
         cb = event->write_cb;
-        cb->do_request(fired_events[j].fd);
+        cb->do_request(fired_events[event_id].fd);
       }
     }
 
-    ldout(cct, 30) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
+    ldout(cct, 30) << __func__ << " event_wq process is " << fired_events[event_id].fd
+                   << " mask is " << fired_events[event_id].mask << dendl;
   }
 
   if (trigger_time)

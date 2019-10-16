@@ -85,6 +85,7 @@ void PGLog::IndexedLog::trim(
 	  auto it = e.extra_reqid_return_codes.find(idx);
 	  if (it != e.extra_reqid_return_codes.end()) {
 	    return_code = it->second;
+	    // FIXME: we aren't setting op_returns for these extra_reqids
 	  }
 	}
 	++idx;
@@ -269,11 +270,11 @@ void PGLog::proc_replica_log(
     limit :
     first_non_divergent->version;
 
-  // We need to preserve the original crt before it gets updated in rewind_from_head().
-  // Later, in merge_object_divergent_entries(), we use it to check whether we can rollback
-  // a divergent entry or not.
-  eversion_t original_crt = log.get_can_rollback_to();
-  dout(20) << __func__ << " original_crt = " << original_crt << dendl;
+  // we merge and adjust the replica's log, rollback the rollbackable divergent entry, 
+  // remove the unrollbackable divergent entry and mark the according object as missing. 
+  // the rollback boundary must choose crt of the olog which going to be merged. 
+  // The replica log's(olog) crt will not be modified, so it could get passed
+  // to _merge_divergent_entries() directly.
   IndexedLog folog(olog);
   auto divergent = folog.rewind_from_head(lu);
   _merge_divergent_entries(
@@ -281,7 +282,6 @@ void PGLog::proc_replica_log(
     divergent,
     oinfo,
     olog.get_can_rollback_to(),
-    original_crt,
     omissing,
     0,
     this);
@@ -345,7 +345,6 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
     log,
     divergent,
     info,
-    log.get_can_rollback_to(),
     original_crt,
     missing,
     rollbacker,
@@ -471,7 +470,6 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
       log,
       divergent,
       info,
-      log.get_can_rollback_to(),
       original_crt,
       missing,
       rollbacker,
@@ -484,6 +482,9 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
 
     info.last_user_version = oinfo.last_user_version;
     info.purged_snaps = oinfo.purged_snaps;
+    // update num_missing too
+    // we might have appended some more missing objects above
+    info.stats.stats.sum.num_objects_missing = missing.num_missing();
 
     changed = true;
   }

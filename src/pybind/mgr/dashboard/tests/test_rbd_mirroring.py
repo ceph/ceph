@@ -1,12 +1,16 @@
 from __future__ import absolute_import
 
 import json
-import mock
+try:
+    import mock
+except ImportError:
+    import unittest.mock as mock
 
 from . import ControllerTestCase
 from .. import mgr
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirroringSummary
+from ..services import progress
 
 
 mock_list_servers = [{
@@ -48,7 +52,7 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
         mgr.list_servers.return_value = mock_list_servers
-        mgr.get_metadata.return_value = mock_get_metadata
+        mgr.get_metadata = mock.Mock(return_value=mock_get_metadata)
         mgr.get_daemon_status.return_value = mock_get_daemon_status
         mgr.get.side_effect = lambda key: {
             'osd_map': mock_osd_map,
@@ -67,6 +71,9 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
                       '(23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) ' \
                       'nautilus (dev)'
 
+        progress.get_progress_tasks = mock.MagicMock()
+        progress.get_progress_tasks.return_value = ([], [])
+
         # pylint: disable=protected-access
         RbdMirroringSummary._cp_config['tools.authenticate.on'] = False
         Summary._cp_config['tools.authenticate.on'] = False
@@ -77,7 +84,7 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
     def test_default(self, rbd_mock):  # pylint: disable=W0613
         self._get('/test/api/block/mirroring/summary')
-        result = self.jsonBody()
+        result = self.json_body()
         self.assertStatus(200)
         self.assertEqual(result['status'], 0)
         for k in ['daemons', 'pools', 'image_error', 'image_syncing', 'image_ready']:
@@ -91,5 +98,5 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
         self._get('/test/api/summary')
         self.assertStatus(200)
 
-        summary = self.jsonBody()['rbd_mirroring']
+        summary = self.json_body()['rbd_mirroring']
         self.assertEqual(summary, {'errors': 0, 'warnings': 1})

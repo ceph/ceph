@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <vector>
 #include <string>
@@ -9,6 +9,10 @@
 #include "rgw_cr_rest.h"
 #include "rgw_data_sync.h"
 #include "rgw_zone.h"
+#include "rgw_bucket.h"
+
+#include "services/svc_zone.h"
+#include "services/svc_datalog_rados.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -49,7 +53,7 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
 
 class DataLogTrimCR : public RGWCoroutine {
   using TrimCR = RGWSyncLogTrimCR;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWHTTPManager *http;
   const int num_shards;
   const std::string& zone_id; //< my zone id
@@ -59,12 +63,12 @@ class DataLogTrimCR : public RGWCoroutine {
   int ret{0};
 
  public:
-  DataLogTrimCR(RGWRados *store, RGWHTTPManager *http,
+  DataLogTrimCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                    int num_shards, std::vector<std::string>& last_trim)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       num_shards(num_shards),
-      zone_id(store->svc.zone->get_zone().id),
-      peer_status(store->svc.zone->get_zone_data_notify_to_map().size()),
+      zone_id(store->svc()->zone->get_zone().id),
+      peer_status(store->svc()->zone->get_zone_data_notify_to_map().size()),
       min_shard_markers(num_shards, TrimCR::max_marker),
       last_trim(last_trim)
   {}
@@ -87,7 +91,7 @@ int DataLogTrimCR::operate()
       };
 
       auto p = peer_status.begin();
-      for (auto& c : store->svc.zone->get_zone_data_notify_to_map()) {
+      for (auto& c : store->svc()->zone->get_zone_data_notify_to_map()) {
         ldout(cct, 20) << "query sync status from " << c.first << dendl;
         using StatusCR = RGWReadRESTResourceCR<rgw_data_sync_status>;
         spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
@@ -124,7 +128,7 @@ int DataLogTrimCR::operate()
         ldout(cct, 10) << "trimming log shard " << i
             << " at marker=" << m
             << " last_trim=" << last_trim[i] << dendl;
-        spawn(new TrimCR(store, store->data_log->get_oid(i),
+        spawn(new TrimCR(store, store->svc()->datalog_rados->get_oid(i),
                          m, &last_trim[i]),
               true);
       }
@@ -134,7 +138,7 @@ int DataLogTrimCR::operate()
   return 0;
 }
 
-RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
+RGWCoroutine* create_admin_data_log_trim_cr(rgw::sal::RGWRadosStore *store,
                                             RGWHTTPManager *http,
                                             int num_shards,
                                             std::vector<std::string>& markers)
@@ -143,7 +147,7 @@ RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
 }
 
 class DataLogTrimPollCR : public RGWCoroutine {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWHTTPManager *http;
   const int num_shards;
   const utime_t interval; //< polling interval
@@ -152,11 +156,11 @@ class DataLogTrimPollCR : public RGWCoroutine {
   std::vector<std::string> last_trim; //< last trimmed marker per shard
 
  public:
-  DataLogTrimPollCR(RGWRados *store, RGWHTTPManager *http,
+  DataLogTrimPollCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                     int num_shards, utime_t interval)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       num_shards(num_shards), interval(interval),
-      lock_oid(store->data_log->get_oid(0)),
+      lock_oid(store->svc()->datalog_rados->get_oid(0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       last_trim(num_shards)
   {}
@@ -174,8 +178,8 @@ int DataLogTrimPollCR::operate()
       // request a 'data_trim' lock that covers the entire wait interval to
       // prevent other gateways from attempting to trim for the duration
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
-                                          rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, lock_oid),
+      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
+                                          rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, lock_oid),
                                           "data_trim", lock_cookie,
                                           interval.sec()));
       if (retcode < 0) {
@@ -195,7 +199,7 @@ int DataLogTrimPollCR::operate()
   return 0;
 }
 
-RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
+RGWCoroutine* create_data_log_trim_cr(rgw::sal::RGWRadosStore *store,
                                       RGWHTTPManager *http,
                                       int num_shards, utime_t interval)
 {

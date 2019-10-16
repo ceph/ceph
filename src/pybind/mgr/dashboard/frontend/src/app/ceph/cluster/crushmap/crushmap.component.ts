@@ -61,15 +61,16 @@ export class CrushmapComponent implements OnInit {
     const status: string = node.status;
 
     const children: any[] = [];
+    const resultNode = { value, status, settings, id, type: node.type };
     if (node.children) {
       node.children.sort().forEach((childId) => {
         children.push(treeNodeMap[childId]);
       });
 
-      return { value, status, settings, id, children };
+      resultNode['children'] = children;
     }
 
-    return { value, status, settings, id };
+    return resultNode;
   }
 
   onNodeSelected(e: NodeEvent) {

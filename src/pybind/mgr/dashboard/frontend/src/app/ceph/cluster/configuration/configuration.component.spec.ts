@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -34,5 +35,11 @@ describe('ConfigurationComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should check header text', () => {
+    expect(fixture.debugElement.query(By.css('.datatable-header')).nativeElement.textContent).toBe(
+      ['Name', 'Description', 'Current value', 'Default', 'Editable'].join('')
+    );
   });
 });

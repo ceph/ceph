@@ -14,6 +14,7 @@
 #include "include/rados/objclass.h"
 
 struct obj_list_watch_response_t;
+class PGLSFilter;
 
 extern "C" {
 #endif
@@ -74,36 +75,6 @@ extern void class_fini(void);
 
 #ifdef __cplusplus
 }
-class PGLSFilter {
-  CephContext* cct;
-protected:
-  std::string xattr;
-public:
-  PGLSFilter();
-  virtual ~PGLSFilter();
-  virtual bool filter(const hobject_t &obj, ceph::buffer::list& xattr_data,
-                      ceph::buffer::list& outdata) = 0;
-
-  /**
-   * Arguments passed from the RADOS client.  Implementations must
-   * handle any encoding errors, and return an appropriate error code,
-   * or 0 on valid input.
-   */
-  virtual int init(ceph::buffer::list::const_iterator &params) = 0;
-
-  /**
-   * xattr key, or empty string.  If non-empty, this xattr will be fetched
-   * and the value passed into ::filter
-   */
-  virtual std::string& get_xattr() { return xattr; }
-
-  /**
-   * If true, objects without the named xattr (if xattr name is not empty)
-   * will be rejected without calling ::filter
-   */
-  virtual bool reject_empty_xattr() { return true; }
-};
-
 // Classes expose a filter constructor that returns a subclass of PGLSFilter
 typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
 
@@ -145,6 +116,10 @@ extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
                                 const std::map<std::string, ceph::buffer::list> *map);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl);
 extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const std::string &key);
+/* remove keys in the range [key_begin, key_end) */
+extern int cls_cxx_map_remove_range(cls_method_context_t hctx,
+                                    const std::string& key_begin,
+                                    const std::string& key_end);
 extern int cls_cxx_map_update(cls_method_context_t hctx, ceph::buffer::list *inbl);
 
 extern int cls_cxx_list_watchers(cls_method_context_t hctx,

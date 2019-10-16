@@ -274,7 +274,9 @@ def is_lv(dev, lvs=None):
     splitname = dmsetup_splitname(dev)
     # Allowing to optionally pass `lvs` can help reduce repetitive checks for
     # multiple devices at once.
-    lvs = lvs if lvs is not None else Volumes()
+    if lvs is None or len(lvs) == 0:
+        lvs = Volumes()
+
     if splitname.get('LV_NAME'):
         lvs.filter(lv_name=splitname['LV_NAME'], vg_name=splitname['VG_NAME'])
         return len(lvs) > 0
@@ -364,7 +366,7 @@ def get_lv_from_argument(argument):
     return get_lv(lv_name=lv_name, vg_name=vg_name)
 
 
-def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
+def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None, lvs=None):
     """
     Return a matching lv for the current system, requiring ``lv_name``,
     ``vg_name``, ``lv_path`` or ``tags``. Raises an error if more than one lv
@@ -376,7 +378,8 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None)
     """
     if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
         return None
-    lvs = Volumes()
+    if lvs is None:
+        lvs = Volumes()
     return lvs.get(
         lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_uuid=lv_uuid,
         lv_tags=lv_tags
@@ -707,8 +710,9 @@ class VolumeGroups(list):
     to filter them via keyword arguments.
     """
 
-    def __init__(self):
-        self._populate()
+    def __init__(self, populate=True):
+        if populate:
+            self._populate()
 
     def _populate(self):
         # get all the vgs in the current system
@@ -760,15 +764,10 @@ class VolumeGroups(list):
         """
         if not any([vg_name, vg_tags]):
             raise TypeError('.filter() requires vg_name or vg_tags (none given)')
-        # first find the filtered volumes with the values in self
-        filtered_groups = self._filter(
-            vg_name=vg_name,
-            vg_tags=vg_tags
-        )
-        # then purge everything
-        self._purge()
-        # and add the filtered items
-        self.extend(filtered_groups)
+
+        filtered_vgs = VolumeGroups(populate=False)
+        filtered_vgs.extend(self._filter(vg_name, vg_tags))
+        return filtered_vgs
 
     def get(self, vg_name=None, vg_tags=None):
         """
@@ -910,8 +909,9 @@ class PVolumes(list):
     to filter them via keyword arguments.
     """
 
-    def __init__(self):
-        self._populate()
+    def __init__(self, populate=True):
+        if populate:
+            self._populate()
 
     def _populate(self):
         # get all the pvs in the current system
@@ -956,24 +956,19 @@ class PVolumes(list):
     def filter(self, pv_name=None, pv_uuid=None, pv_tags=None):
         """
         Filter out volumes on top level attributes like ``pv_name`` or by
-        ``pv_tags`` where a dict is required. For example, to find a physical volume
-        that has an OSD ID of 0, the filter would look like::
+        ``pv_tags`` where a dict is required. For example, to find a physical
+        volume that has an OSD ID of 0, the filter would look like::
 
             pv_tags={'ceph.osd_id': '0'}
 
         """
         if not any([pv_name, pv_uuid, pv_tags]):
-            raise TypeError('.filter() requires pv_name, pv_uuid, or pv_tags (none given)')
-        # first find the filtered volumes with the values in self
-        filtered_volumes = self._filter(
-            pv_name=pv_name,
-            pv_uuid=pv_uuid,
-            pv_tags=pv_tags
-        )
-        # then purge everything
-        self._purge()
-        # and add the filtered items
-        self.extend(filtered_volumes)
+            raise TypeError('.filter() requires pv_name, pv_uuid, or pv_tags'
+                            '(none given)')
+
+        filtered_pvs = PVolumes(populate=False)
+        filtered_pvs.extend(self._filter(pv_name, pv_uuid, pv_tags))
+        return filtered_pvs
 
     def get(self, pv_name=None, pv_uuid=None, pv_tags=None):
         """

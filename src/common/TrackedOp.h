@@ -15,11 +15,10 @@
 #define TRACKEDREQUEST_H_
 
 #include <atomic>
+#include "common/ceph_mutex.h"
 #include "common/histogram.h"
-#include "common/RWLock.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
-#include "common/ceph_mutex.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
 
@@ -59,19 +58,16 @@ class OpHistory {
   std::set<std::pair<utime_t, TrackedOpRef> > slow_op;
   ceph::mutex ops_history_lock = ceph::make_mutex("OpHistory::ops_history_lock");
   void cleanup(utime_t now);
-  uint32_t history_size;
-  uint32_t history_duration;
-  uint32_t history_slow_op_size;
-  uint32_t history_slow_op_threshold;
-  std::atomic_bool shutdown;
+  std::atomic_size_t history_size{0};
+  std::atomic_uint32_t history_duration{0};
+  std::atomic_size_t history_slow_op_size{0};
+  std::atomic_uint32_t history_slow_op_threshold{0};
+  std::atomic_bool shutdown{false};
   OpHistoryServiceThread opsvc;
   friend class OpHistoryServiceThread;
 
 public:
-  OpHistory()
-    : history_size(0), history_duration(0),
-      history_slow_op_size(0), history_slow_op_threshold(0),
-      shutdown(false), opsvc(this) {
+  OpHistory() : opsvc(this) {
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
@@ -91,11 +87,11 @@ public:
   void dump_ops(utime_t now, ceph::Formatter *f, std::set<std::string> filters = {""}, bool by_duration=false);
   void dump_slow_ops(utime_t now, ceph::Formatter *f, std::set<std::string> filters = {""});
   void on_shutdown();
-  void set_size_and_duration(uint32_t new_size, uint32_t new_duration) {
+  void set_size_and_duration(size_t new_size, uint32_t new_duration) {
     history_size = new_size;
     history_duration = new_duration;
   }
-  void set_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
+  void set_slow_op_size_and_threshold(size_t new_size, uint32_t new_threshold) {
     history_slow_op_size = new_size;
     history_slow_op_threshold = new_threshold;
   }
@@ -111,7 +107,7 @@ class OpTracker {
   float complaint_time;
   int log_threshold;
   std::atomic<bool> tracking_enabled;
-  RWLock       lock;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("OpTracker::lock");
 
 public:
   CephContext *cct;

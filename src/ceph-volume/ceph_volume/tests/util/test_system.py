@@ -213,6 +213,6 @@ class TestWhich(object):
         monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
         monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
         system.which('exedir')
-        stdout, stderr = capsys.readouterr()
-        assert 'Absolute path not found for executable: exedir' in stdout
-        assert 'Ensure $PATH environment variable contains common executable locations' in stdout
+        cap = capsys.readouterr()
+        assert 'Absolute path not found for executable: exedir' in cap.err
+        assert 'Ensure $PATH environment variable contains common executable locations' in cap.err

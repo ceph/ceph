@@ -15,10 +15,12 @@
 #include <ostream>
 #include "include/ceph_assert.h"
 #include "os/bluestore/bluestore_types.h"
+#include <functional>
 
 class Allocator {
 public:
-  virtual ~Allocator() {}
+  explicit Allocator(const std::string& name);
+  virtual ~Allocator();
 
   /*
    * Allocate required number of blocks in n number of extents.
@@ -44,19 +46,24 @@ public:
   void release(const PExtentVector& release_set);
 
   virtual void dump() = 0;
+  virtual void dump(std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;
-  virtual double get_fragmentation(uint64_t alloc_unit)
+  virtual double get_fragmentation()
   {
     return 0.0;
   }
-
+  virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
+
   static Allocator *create(CephContext* cct, string type, int64_t size,
-			   int64_t block_size);
+			   int64_t block_size, const std::string& name = "");
+private:
+  class SocketHook;
+  SocketHook* asok_hook = nullptr;
 };
 
 #endif

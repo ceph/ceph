@@ -2,7 +2,7 @@
 # there are two sections
 #
 # releases: ... for named releases
-# developement: ... for dev releases
+# development: ... for dev releases
 #
 # by default a `version` is interpreted as a sphinx reference when rendered (see
 # schedule.rst for the existing tags such as `_13.2.2`). If a version should not
@@ -14,6 +14,12 @@
 releases:
   nautilus:
     releases:
+      - version: 14.2.4
+        released: 2019-09-17
+      - version: 14.2.3
+        released: 2019-09-04
+      - version: 14.2.2
+        released: 2019-07-17
       - version: 14.2.1
         released: 2019-04-29
       - version: 14.2.0
@@ -220,6 +226,9 @@ releases:
 
 development:
   releases:
+    - version: 15.0.0
+      released: 2019-04-03
+      skip_ref: true        
     - version: 14.1.1
       released:  2019-03-11
       skip_ref: true        
@@ -352,11 +361,3 @@ development:
       released: 2013-12-01
     - version: '0.73'
       released: 2013-12-01
-    - version: '0.71'
-      released: 2013-10-01
-    - version: '0.70'
-      released: 2013-10-01
-    - version: '0.69'
-      released: 2013-09-01
-    - version: '0.68'
-      released: 2013-09-01

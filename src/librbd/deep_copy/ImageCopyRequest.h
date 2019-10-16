@@ -6,7 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "librbd/Types.h"
 #include "librbd/deep_copy/Types.h"
@@ -77,7 +77,7 @@ private:
   Context *m_on_finish;
 
   CephContext *m_cct;
-  Mutex m_lock;
+  ceph::mutex m_lock;
   bool m_canceled = false;
 
   uint64_t m_object_no = 0;

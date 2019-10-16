@@ -1,24 +1,23 @@
-import { Helper } from '../helper.po';
-import { NfsPage } from './nfs.po';
+import { NfsPageHelper } from './nfs.po';
 
 describe('Nfs page', () => {
-  let page: NfsPage;
+  let nfs: NfsPageHelper;
 
   beforeAll(() => {
-    page = new NfsPage();
+    nfs = new NfsPageHelper();
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await NfsPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      page.navigateTo();
+    beforeAll(async () => {
+      await nfs.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(NfsPage.getBreadcrumbText()).toEqual('NFS');
+    it('should open and show breadcrumb', async () => {
+      await nfs.waitTextToBePresent(nfs.getBreadcrumb(), 'NFS');
     });
   });
 });

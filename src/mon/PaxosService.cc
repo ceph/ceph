@@ -32,7 +32,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 bool PaxosService::dispatch(MonOpRequestRef op)
 {
   ceph_assert(op->is_type_service() || op->is_type_command());
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   op->mark_event("psvc:dispatch");
 
   dout(10) << __func__ << " " << m << " " << *m
@@ -117,7 +117,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
        * Callback class used to propose the pending value once the proposal_timer
        * fires up.
        */
-    auto do_propose = new C_MonContext(mon, [this](int r) {
+    auto do_propose = new C_MonContext{mon, [this](int r) {
         proposal_timer = 0;
         if (r >= 0) {
           propose_pending();
@@ -126,7 +126,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
         } else {
           ceph_abort_msg("bad return value for proposal_timer");
         }
-    });
+    }};
     dout(10) << " setting proposal_timer " << do_propose
              << " with delay of " << delay << dendl;
     proposal_timer = mon->timer.add_event_after(delay, do_propose);

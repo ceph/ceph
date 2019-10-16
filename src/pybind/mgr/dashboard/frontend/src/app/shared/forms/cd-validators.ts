@@ -206,22 +206,18 @@ export class CdValidators {
   ) {
     conditionalValidators = conditionalValidators.concat(permanentValidators);
 
-    formControl.setValidators(
-      (
-        control: AbstractControl
-      ): {
-        [key: string]: any;
-      } => {
-        const value = condition.call(this);
-        if (value) {
-          return Validators.compose(conditionalValidators)(control);
-        }
-        if (permanentValidators.length > 0) {
-          return Validators.compose(permanentValidators)(control);
-        }
-        return null;
+    formControl.setValidators((control: AbstractControl): {
+      [key: string]: any;
+    } => {
+      const value = condition.call(this);
+      if (value) {
+        return Validators.compose(conditionalValidators)(control);
       }
-    );
+      if (permanentValidators.length > 0) {
+        return Validators.compose(permanentValidators)(control);
+      }
+      return null;
+    });
 
     watchControls.forEach((control: AbstractControl) => {
       control.valueChanges.subscribe(() => {
@@ -243,6 +239,9 @@ export class CdValidators {
     return (control: AbstractControl): { [key: string]: any } => {
       const ctrl1 = control.get(path1);
       const ctrl2 = control.get(path2);
+      if (!ctrl1 || !ctrl2) {
+        return null;
+      }
       if (ctrl1.value !== ctrl2.value) {
         ctrl2.setErrors({ match: true });
       } else {

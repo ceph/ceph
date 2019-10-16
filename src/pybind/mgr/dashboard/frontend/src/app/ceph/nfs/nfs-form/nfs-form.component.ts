@@ -18,7 +18,9 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
+import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 
@@ -28,7 +30,7 @@ import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.compo
   styleUrls: ['./nfs-form.component.scss']
 })
 export class NfsFormComponent implements OnInit {
-  @ViewChild('nfsClients')
+  @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
   permission: Permission;
@@ -51,11 +53,13 @@ export class NfsFormComponent implements OnInit {
   allCephxClients: any[] = null;
   allFsNames: any[] = null;
 
+  defaultAccessType = { RGW: 'RO' };
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
   nfsSquash: any[] = this.nfsService.nfsSquash;
 
   action: string;
   resource: string;
+  docsUrl: string;
 
   daemonsSelections: SelectOption[] = [];
   daemonsMessages = new SelectMessages(
@@ -81,6 +85,8 @@ export class NfsFormComponent implements OnInit {
     private router: Router,
     private rgwUserService: RgwUserService,
     private formBuilder: CdFormBuilder,
+    private summaryservice: SummaryService,
+    private cephReleaseNamePipe: CephReleaseNamePipe,
     private taskWrapper: TaskWrapperService,
     private cdRef: ChangeDetectorRef,
     private i18n: I18n,
@@ -116,6 +122,10 @@ export class NfsFormComponent implements OnInit {
       this.action = this.actionLabels.CREATE;
       this.getData(promises);
     }
+
+    const summary = this.summaryservice.getCurrentSummary();
+    const releaseName = this.cephReleaseNamePipe.transform(summary.version);
+    this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/radosgw/nfs/`;
   }
 
   getData(promises) {
@@ -319,12 +329,19 @@ export class NfsFormComponent implements OnInit {
   fsalChangeHandler() {
     this.nfsForm.patchValue({
       tag: this._generateTag(),
-      pseudo: this._generatePseudo()
+      pseudo: this._generatePseudo(),
+      access_type: this._updateAccessType()
     });
 
     this.setPathValidation();
 
     this.cdRef.detectChanges();
+  }
+
+  accessTypeChangeHandler() {
+    const name = this.nfsForm.getValue('name');
+    const accessType = this.nfsForm.getValue('access_type');
+    this.defaultAccessType[name] = accessType;
   }
 
   setPathValidation() {
@@ -435,6 +452,17 @@ export class NfsFormComponent implements OnInit {
       }
     }
     return newPseudo;
+  }
+
+  _updateAccessType() {
+    const name = this.nfsForm.getValue('name');
+    let accessType = this.defaultAccessType[name];
+
+    if (!accessType) {
+      accessType = 'RW';
+    }
+
+    return accessType;
   }
 
   onClusterChange() {

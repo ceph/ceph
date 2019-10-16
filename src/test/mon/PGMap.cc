@@ -25,7 +25,7 @@ namespace {
         define_column("", TextTable::LEFT, TextTable::LEFT);
       }
       if (verbose) {
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 9; i++) {
           define_column("", TextTable::LEFT, TextTable::LEFT);
         }
       }
@@ -80,7 +80,7 @@ TEST(pgmap, dump_object_stat_sum_0)
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, &pool);  
+			      pool.get_size(), verbose, true, true, &pool);  
   float copies_rate =
     (static_cast<float>(sum.num_object_copies - sum.num_objects_degraded) /
       sum.num_object_copies) * pool.get_size();
@@ -90,8 +90,12 @@ TEST(pgmap, dump_object_stat_sum_0)
 
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(stored)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(stored)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(sum.num_objects)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(used_percent), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/copies_rate)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(pool.quota_max_objects)), tbl.get(0, col++));
@@ -117,10 +121,14 @@ TEST(pgmap, dump_object_stat_sum_1)
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, &pool);  
+			      pool.get_size(), verbose, true, true, &pool);  
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
@@ -148,7 +156,7 @@ TEST(pgmap, dump_object_stat_sum_2)
   pool.type = pg_pool_t::TYPE_REPLICATED;
 
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, &pool);  
+			      pool.get_size(), verbose, true, true, &pool);  
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));

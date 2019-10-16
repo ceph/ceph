@@ -17,6 +17,8 @@ overrides:
       - overall HEALTH_
 # valgrind is slow.. we might get PGs stuck peering etc
       - \(PG_
+# mons sometimes are left off of initial quorum due to valgrind slowness.  ok to whitelist here because we'll still catch an actual crash due to the core
+      - \(MON_DOWN\)
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]

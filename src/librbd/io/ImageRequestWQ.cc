@@ -93,12 +93,13 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
 				  time_t ti, ThreadPool *tp)
   : ThreadPool::PointerWQ<ImageDispatchSpec<I> >(name, ti, 0, tp),
     m_image_ctx(*image_ctx),
-    m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)) {
+    m_lock(ceph::make_shared_mutex(
+      util::unique_lock_name("ImageRequestWQ<I>::m_lock", this))) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
 
   SafeTimer *timer;
-  Mutex *timer_lock;
+  ceph::mutex *timer_lock;
   ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
 
   for (auto flag : throttle_flags) {
@@ -137,9 +138,9 @@ ssize_t ImageRequestWQ<I>::write(uint64_t off, uint64_t len,
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
-  m_image_ctx.image_lock.get_read();
+  m_image_ctx.image_lock.lock_shared();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.image_lock.put_read();
+  m_image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -163,9 +164,9 @@ ssize_t ImageRequestWQ<I>::discard(uint64_t off, uint64_t len,
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
-  m_image_ctx.image_lock.get_read();
+  m_image_ctx.image_lock.lock_shared();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.image_lock.put_read();
+  m_image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -189,9 +190,9 @@ ssize_t ImageRequestWQ<I>::writesame(uint64_t off, uint64_t len,
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << ", data_len " << bl.length() << dendl;
 
-  m_image_ctx.image_lock.get_read();
+  m_image_ctx.image_lock.lock_shared();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.image_lock.put_read();
+  m_image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -218,9 +219,9 @@ ssize_t ImageRequestWQ<I>::compare_and_write(uint64_t off, uint64_t len,
   ldout(cct, 20) << "compare_and_write ictx=" << &m_image_ctx << ", off="
                  << off << ", " << "len = " << len << dendl;
 
-  m_image_ctx.image_lock.get_read();
+  m_image_ctx.image_lock.lock_shared();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.image_lock.put_read();
+  m_image_ctx.image_lock.unlock_shared();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -283,7 +284,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 
   // if journaling is enabled -- we need to replay the journal because
   // it might contain an uncommitted write
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
       require_lock_on_read()) {
     queue(ImageDispatchSpec<I>::create_read_request(
@@ -323,7 +324,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
     return;
   }
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(ImageDispatchSpec<I>::create_write_request(
             m_image_ctx, c, {{off, len}}, std::move(bl), op_flags, trace));
@@ -362,7 +363,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
     return;
   }
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(ImageDispatchSpec<I>::create_discard_request(
             m_image_ctx, c, off, len, discard_granularity_bytes, trace));
@@ -397,7 +398,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
     return;
   }
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
     queue(ImageDispatchSpec<I>::create_flush_request(
             m_image_ctx, c, FLUSH_SOURCE_USER, trace));
@@ -435,7 +436,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     return;
   }
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(ImageDispatchSpec<I>::create_write_same_request(
             m_image_ctx, c, off, len, std::move(bl), op_flags, trace));
@@ -476,7 +477,7 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
     return;
   }
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(ImageDispatchSpec<I>::create_compare_and_write_request(
             m_image_ctx, c, {{off, len}}, std::move(cmp_bl), std::move(bl),
@@ -493,10 +494,10 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
 
 template <typename I>
 void ImageRequestWQ<I>::shut_down(Context *on_shutdown) {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
 
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     ceph_assert(!m_shutdown);
     m_shutdown = true;
 
@@ -522,11 +523,11 @@ int ImageRequestWQ<I>::block_writes() {
 
 template <typename I>
 void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     ++m_write_blockers;
     ldout(cct, 5) << &m_image_ctx << ", " << "num="
                   << m_write_blockers << dendl;
@@ -547,7 +548,7 @@ void ImageRequestWQ<I>::unblock_writes() {
   bool wake_up = false;
   Contexts waiter_contexts;
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     ceph_assert(m_write_blockers > 0);
     --m_write_blockers;
 
@@ -569,11 +570,11 @@ void ImageRequestWQ<I>::unblock_writes() {
 
 template <typename I>
 void ImageRequestWQ<I>::wait_on_writes_unblocked(Context *on_unblocked) {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     ldout(cct, 20) << &m_image_ctx << ", " << "write_blockers="
                    << m_write_blockers << dendl;
     if (!m_unblocked_write_waiter_contexts.empty() || m_write_blockers > 0) {
@@ -592,7 +593,7 @@ void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
 
   bool wake_up = false;
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     switch (direction) {
     case DIRECTION_READ:
       wake_up = (enabled != m_require_lock_on_read);
@@ -720,7 +721,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
   bool lock_required;
   bool refresh_required = m_image_ctx.state->is_refresh_required();
   {
-    RWLock::RLocker locker(m_lock);
+    std::shared_lock locker{m_lock};
     bool write_op = peek_item->is_write_op();
     lock_required = is_lock_required(write_op);
     if (write_op) {
@@ -742,7 +743,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
 
   if (lock_required) {
     this->get_pool_lock().unlock();
-    m_image_ctx.owner_lock.get_read();
+    m_image_ctx.owner_lock.lock_shared();
     if (m_image_ctx.exclusive_lock != nullptr) {
       ldout(cct, 5) << "exclusive lock required: delaying IO " << item << dendl;
       if (!m_image_ctx.get_exclusive_lock_policy()->may_auto_request_lock()) {
@@ -761,7 +762,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
       // raced with the exclusive lock being disabled
       lock_required = false;
     }
-    m_image_ctx.owner_lock.put_read();
+    m_image_ctx.owner_lock.unlock_shared();
     this->get_pool_lock().lock();
 
     if (lock_required) {
@@ -804,7 +805,7 @@ void ImageRequestWQ<I>::process(ImageDispatchSpec<I> *req) {
 
 template <typename I>
 void ImageRequestWQ<I>::finish_queued_io(ImageDispatchSpec<I> *req) {
-  RWLock::RLocker locker(m_lock);
+  std::shared_lock locker{m_lock};
   if (req->is_write_op()) {
     ceph_assert(m_queued_writes > 0);
     m_queued_writes--;
@@ -818,7 +819,7 @@ template <typename I>
 void ImageRequestWQ<I>::finish_in_flight_write() {
   bool writes_blocked = false;
   {
-    RWLock::RLocker locker(m_lock);
+    std::shared_lock locker{m_lock};
     ceph_assert(m_in_flight_writes > 0);
     if (--m_in_flight_writes == 0 &&
         !m_write_blocker_contexts.empty()) {
@@ -833,13 +834,21 @@ void ImageRequestWQ<I>::finish_in_flight_write() {
 
 template <typename I>
 int ImageRequestWQ<I>::start_in_flight_io(AioCompletion *c) {
-  RWLock::RLocker locker(m_lock);
+  std::shared_lock locker{m_lock};
 
   if (m_shutdown) {
     CephContext *cct = m_image_ctx.cct;
     lderr(cct) << "IO received on closed image" << dendl;
 
     c->fail(-ESHUTDOWN);
+    return false;
+  }
+
+  if (!m_image_ctx.data_ctx.is_valid()) {
+    CephContext *cct = m_image_ctx.cct;
+    lderr(cct) << "missing data pool" << dendl;
+
+    c->fail(-ENODEV);
     return false;
   }
 
@@ -851,7 +860,7 @@ template <typename I>
 void ImageRequestWQ<I>::finish_in_flight_io() {
   Context *on_shutdown;
   {
-    RWLock::RLocker locker(m_lock);
+    std::shared_lock locker{m_lock};
     if (--m_in_flight_ios > 0 || !m_shutdown) {
       return;
     }
@@ -877,14 +886,14 @@ void ImageRequestWQ<I>::fail_in_flight_io(
 
 template <typename I>
 bool ImageRequestWQ<I>::is_lock_required(bool write_op) const {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   return ((write_op && m_require_lock_on_write) ||
           (!write_op && m_require_lock_on_read));
 }
 
 template <typename I>
 void ImageRequestWQ<I>::queue(ImageDispatchSpec<I> *req) {
-  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
@@ -941,7 +950,7 @@ template <typename I>
 void ImageRequestWQ<I>::handle_blocked_writes(int r) {
   Contexts contexts;
   {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     contexts.swap(m_write_blocker_contexts);
   }
 

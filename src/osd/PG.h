@@ -98,10 +98,10 @@ class PGRecoveryStats {
     per_state_info() : enter(0), exit(0), events(0) {}
   };
   map<const char *,per_state_info> info;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("PGRecoverStats::lock");
 
   public:
-  PGRecoveryStats() : lock("PGRecoverStats::lock") {}
+  PGRecoveryStats() = default;
 
   void reset() {
     std::lock_guard l(lock);
@@ -217,14 +217,8 @@ public:
     handle.reset_tp_timeout();
   }
   void lock(bool no_lockdep = false) const;
-  void unlock() const {
-    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    ceph_assert(!recovery_state.debug_has_dirty_state());
-    _lock.Unlock();
-  }
-  bool is_locked() const {
-    return _lock.is_locked();
-  }
+  void unlock() const;
+  bool is_locked() const;
 
   const spg_t& get_pgid() const {
     return pg_id;
@@ -280,8 +274,8 @@ public:
   bool is_deleted() const {
     return recovery_state.is_deleted();
   }
-  bool is_replica() const {
-    return recovery_state.is_replica();
+  bool is_nonprimary() const {
+    return recovery_state.is_nonprimary();
   }
   bool is_primary() const {
     return recovery_state.is_primary();
@@ -362,7 +356,7 @@ public:
     __u8 &);
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
 
-  void rm_backoff(BackoffRef b);
+  void rm_backoff(const ceph::ref_t<Backoff>& b);
 
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
@@ -395,6 +389,7 @@ public:
   void on_role_change() override;
   virtual void plpg_on_role_change() = 0;
 
+  void init_collection_pool_opts();
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
@@ -483,6 +478,11 @@ public:
 
   void send_pg_created(pg_t pgid) override;
 
+  ceph::signedspan get_mnow() override;
+  HeartbeatStampsRef get_hb_stamps(int peer) override;
+  void schedule_renew_lease(epoch_t lpr, ceph::timespan delay) override;
+  void queue_check_readable(epoch_t lpr, ceph::timespan delay) override;
+
   void rebuild_missing_set_with_deletes(PGLog &pglog) override;
 
   void queue_peering_event(PGPeeringEventRef evt);
@@ -534,13 +534,11 @@ public:
   virtual int get_cache_obj_count() = 0;
 
   virtual void snap_trimmer(epoch_t epoch_queued) = 0;
-  virtual int do_command(
-    cmdmap_t cmdmap,
-    ostream& ss,
-    bufferlist& idata,
-    bufferlist& odata,
-    ConnectionRef conn,
-    ceph_tid_t tid) = 0;
+  virtual void do_command(
+    const string_view& prefix,
+    const cmdmap_t& cmdmap,
+    const bufferlist& idata,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) = 0;
 
   virtual bool agent_work(int max) = 0;
   virtual bool agent_work(int max, int agent_flush_quota) = 0;
@@ -606,12 +604,14 @@ protected:
   // get() should be called on pointer copy (to another thread, etc.).
   // put() should be called on destruction of some previously copied pointer.
   // unlock() when done with the current pointer (_most common_).
-  mutable Mutex _lock = {"PG::_lock"};
-
+  mutable ceph::mutex _lock = ceph::make_mutex("PG::_lock");
+#ifndef CEPH_DEBUG_MUTEX
+  mutable std::thread::id locked_by;
+#endif
   std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS
-  Mutex _ref_id_lock = {"PG::_ref_id_lock"};
+  ceph::mutex _ref_id_lock = ceph::make_mutex("PG::_ref_id_lock");
   map<uint64_t, string> _live_ids;
   map<string, uint64_t> _tag_counts;
   uint64_t _ref_id = 0;
@@ -685,7 +685,8 @@ protected:
   void set_probe_targets(const set<pg_shard_t> &probe_set) override;
   void clear_probe_targets() override;
 
-  Mutex heartbeat_peer_lock;
+  ceph::mutex heartbeat_peer_lock =
+    ceph::make_mutex("PG::heartbeat_peer_lock");
   set<int> heartbeat_peers;
   set<int> probe_targets;
 
@@ -835,7 +836,7 @@ public:
   // The value of num_bytes could be negative,
   // but we don't let info.stats.stats.sum.num_bytes go negative.
   void add_num_bytes(int64_t num_bytes) {
-    ceph_assert(_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(_lock));
     if (num_bytes) {
       recovery_state.update_stats(
 	[num_bytes](auto &history, auto &stats) {
@@ -848,7 +849,7 @@ public:
     }
   }
   void sub_num_bytes(int64_t num_bytes) {
-    ceph_assert(_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(_lock));
     ceph_assert(num_bytes >= 0);
     if (num_bytes) {
       recovery_state.update_stats(
@@ -864,7 +865,7 @@ public:
 
   // Only used in testing so not worried about needing the PG lock here
   int64_t get_stats_num_bytes() {
-    Mutex::Locker l(_lock);
+    std::lock_guard l{_lock};
     int num_bytes = info.stats.stats.sum.num_bytes;
     if (pool.info.is_erasure()) {
       num_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
@@ -909,6 +910,9 @@ protected:
    *  - waiting_for_active
    *    - !is_active()
    *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_readable
+   *    - now > readable_until
+   *    - unblocks when we get fresh(er) osd_pings
    *  - waiting_for_scrub
    *    - starts and stops blocking for varying intervals during scrub
    *  - waiting_for_unreadable_object
@@ -946,6 +950,9 @@ protected:
   // ops waiting on peered
   list<OpRequestRef>            waiting_for_peered;
 
+  /// ops waiting on readble
+  list<OpRequestRef>            waiting_for_readable;
+
   // ops waiting on active (require peered as well)
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_flush;
@@ -965,7 +972,9 @@ protected:
   map<hobject_t, list<Context*>> callbacks_for_degraded_object;
 
   map<eversion_t,
-      list<tuple<OpRequestRef, version_t, int> > > waiting_for_ondisk;
+      list<
+	tuple<OpRequestRef, version_t, int,
+	      vector<pg_log_op_return_item_t>>>> waiting_for_ondisk;
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m);
   void requeue_op(OpRequestRef op);
@@ -975,7 +984,8 @@ protected:
   object_stat_collection_t unstable_stats;
 
   // publish stats
-  Mutex pg_stats_publish_lock;
+  ceph::mutex pg_stats_publish_lock =
+    ceph::make_mutex("PG::pg_stats_publish_lock");
   bool pg_stats_publish_valid;
   pg_stat_t pg_stats_publish;
 
@@ -1059,17 +1069,18 @@ protected:
   friend class C_DeleteMore;
 
   // -- backoff --
-  Mutex backoff_lock;  // orders inside Backoff::lock
-  map<hobject_t,set<BackoffRef>> backoffs;
+  ceph::mutex backoff_lock = // orders inside Backoff::lock
+    ceph::make_mutex("PG::backoff_lock");
+  map<hobject_t,set<ceph::ref_t<Backoff>>> backoffs;
 
-  void add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end);
+  void add_backoff(const ceph::ref_t<Session>& s, const hobject_t& begin, const hobject_t& end);
   void release_backoffs(const hobject_t& begin, const hobject_t& end);
   void release_backoffs(const hobject_t& o) {
     release_backoffs(o, o);
   }
   void clear_backoffs();
 
-  void add_pg_backoff(SessionRef s) {
+  void add_pg_backoff(const ceph::ref_t<Session>& s) {
     hobject_t begin = info.pgid.pgid.get_hobj_start();
     hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
     add_backoff(s, begin, end);
@@ -1088,7 +1099,7 @@ public:
 
     // metadata
     set<pg_shard_t> reserved_peers;
-    bool reserved, reserve_failed;
+    bool local_reserved, remote_reserved, reserve_failed;
     epoch_t epoch_start;
 
     // common to both scrubs
@@ -1399,6 +1410,8 @@ protected:
   bool is_recovering() const { return recovery_state.is_recovering(); }
   bool is_premerge() const { return recovery_state.is_premerge(); }
   bool is_repair() const { return recovery_state.is_repair(); }
+  bool is_laggy() const { return state_test(PG_STATE_LAGGY); }
+  bool is_wait() const { return state_test(PG_STATE_WAIT); }
 
   bool is_empty() const { return recovery_state.is_empty(); }
 
@@ -1429,7 +1442,8 @@ protected:
     const osd_reqid_t &r,
     eversion_t *version,
     version_t *user_version,
-    int *return_code) const;
+    int *return_code,
+    vector<pg_log_op_return_item_t> *op_returns) const;
   eversion_t projected_last_update;
   eversion_t get_next_version() const {
     eversion_t at_version(

@@ -568,11 +568,11 @@ There are three types of transformations possible:
    since the previous rule distributed across devices of multiple
    classes but the adjusted rules will only map to devices of the
    specified *device-class*, but that often is an accepted level of
-   data movement when the nubmer of outlier devices is small.
+   data movement when the number of outlier devices is small.
 
 #. ``--reclassify-bucket <match-pattern> <device-class> <default-parent>``
 
-   This will allow you to merge a parallel type-specific hiearchy with the normal hierarchy.  For example, many users have maps like::
+   This will allow you to merge a parallel type-specific hierarchy with the normal hierarchy.  For example, many users have maps like::
 
      host node1 {
         id -2           # do not change unnecessarily

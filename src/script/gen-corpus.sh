@@ -13,6 +13,8 @@ function get_jobs() {
     fi
 }
 
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
 function build() {
     local encode_dump_path=$1
     shift
@@ -22,7 +24,7 @@ function build() {
         -DWITH_DPDK=OFF \
         -DWITH_SPDK=OFF \
         -DCMAKE_CXX_FLAGS="-DENCODE_DUMP_PATH=${encode_dump_path}"
-    cd build
+    cd ${BUILD_DIR}
     cmake --build . -- -j$(get_jobs)
 }
 
@@ -31,7 +33,7 @@ function run() {
 
     local old_path="$PATH"
     export PATH="bin:$PATH"
-    ceph osd pool create mypool 8
+    ceph osd pool create mypool
     rados -p mypool bench 10 write -b 123
     ceph osd out 0
     ceph osd in 0

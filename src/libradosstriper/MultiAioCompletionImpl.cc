@@ -18,7 +18,7 @@
 
 void libradosstriper::MultiAioCompletionImpl::complete_request(ssize_t r)
 {
-  lock.Lock();
+  lock.lock();
   if (rval >= 0) {
     if (r < 0 && r != -EEXIST)
       rval = r;
@@ -35,7 +35,7 @@ void libradosstriper::MultiAioCompletionImpl::complete_request(ssize_t r)
 
 void libradosstriper::MultiAioCompletionImpl::safe_request(ssize_t r)
 {
-  lock.Lock();
+  lock.lock();
   if (rval >= 0) {
     if (r < 0 && r != -EEXIST)
       rval = r;
@@ -50,14 +50,13 @@ void libradosstriper::MultiAioCompletionImpl::safe_request(ssize_t r)
 
 void libradosstriper::MultiAioCompletionImpl::finish_adding_requests()
 {
-  lock.Lock();
+  std::scoped_lock l{lock};
   ceph_assert(building);
   building = false;
   if (!pending_complete)
     complete();
   if (!pending_safe)
     safe();
-  lock.Unlock();
 }
 
 void intrusive_ptr_add_ref(libradosstriper::MultiAioCompletionImpl* ptr)

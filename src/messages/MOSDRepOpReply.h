@@ -17,6 +17,7 @@
 #define CEPH_MOSDREPOPREPLY_H
 
 #include "MOSDFastDispatchOp.h"
+#include "MOSDRepOp.h"
 
 /*
  * OSD Client Subop reply

@@ -353,6 +353,37 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
 }
 
 // bluestore_blob_use_tracker_t
+bluestore_blob_use_tracker_t::bluestore_blob_use_tracker_t(
+  const bluestore_blob_use_tracker_t& tracker)
+ : au_size{tracker.au_size},
+   num_au{tracker.num_au},
+   bytes_per_au{nullptr}
+{
+  if (num_au > 0) {
+    allocate();
+    std::copy(tracker.bytes_per_au, tracker.bytes_per_au + num_au, bytes_per_au);
+  } else {
+    total_bytes = tracker.total_bytes;
+  }
+}
+
+bluestore_blob_use_tracker_t&
+bluestore_blob_use_tracker_t::operator=(const bluestore_blob_use_tracker_t& rhs)
+{
+  if (this == &rhs) {
+    return *this;
+  }
+  clear();
+  au_size = rhs.au_size;
+  num_au = rhs.num_au;
+  if (rhs.num_au > 0) {
+    allocate();
+    std::copy(rhs.bytes_per_au, rhs.bytes_per_au + num_au, bytes_per_au);
+  } else {
+    total_bytes = rhs.total_bytes;
+  }
+  return *this;
+}
 
 void bluestore_blob_use_tracker_t::allocate()
 {
@@ -421,6 +452,7 @@ bool bluestore_blob_use_tracker_t::put(
 	if (release_units) {
           if (release_units->empty() || next_offs != pos * au_size) {
   	    release_units->emplace_back(pos * au_size, au_size);
+            next_offs = pos * au_size;
           } else {
             release_units->back().length += au_size;
           }

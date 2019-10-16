@@ -13,7 +13,7 @@ namespace mirror {
 class BaseRequest : public RefCountedObject {
 public:
   BaseRequest(const std::string& name, CephContext *cct, Context *on_finish)
-    : RefCountedObject(cct, 1), m_name(name), m_cct(cct),
+    : RefCountedObject(cct), m_name(name), m_cct(cct),
       m_on_finish(on_finish) {
   }
 

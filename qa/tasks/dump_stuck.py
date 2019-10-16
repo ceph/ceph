@@ -20,7 +20,7 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     :param num_manager: Ceph manager
     :param num_inactive: number of inaactive pages that are stuck
     :param num_unclean: number of unclean pages that are stuck
-    :paran num_stale: number of stale pages that are stuck
+    :param num_stale: number of stale pages that are stuck
     :param timeout: timeout value for get_stuck_pgs calls
     """
     inactive = manager.get_stuck_pgs('inactive', timeout)
@@ -48,7 +48,7 @@ def task(ctx, config):
 
     timeout = 60
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -59,7 +59,7 @@ def task(ctx, config):
     manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
-    manager.raw_cluster_cmd('tell', 'mon.0', 'injectargs', '--',
+    manager.raw_cluster_cmd('tell', 'mon.a', 'injectargs', '--',
 #                            '--mon-osd-report-timeout 90',
                             '--mon-pg-stuck-threshold 10')
 

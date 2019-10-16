@@ -26,6 +26,7 @@
 #include "librbd/api/Image.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
+#include "common/Cond.h"
 #include <boost/scope_exit.hpp>
 #include <boost/assign/list_of.hpp>
 #include <utility>
@@ -33,6 +34,29 @@
 
 void register_test_mirroring() {
 }
+
+namespace librbd {
+
+static bool operator==(const mirror_peer_site_t& lhs,
+                       const mirror_peer_site_t& rhs) {
+  return (lhs.uuid == rhs.uuid &&
+          lhs.direction == rhs.direction &&
+          lhs.site_name == rhs.site_name &&
+          lhs.client_name == rhs.client_name &&
+          lhs.last_seen == rhs.last_seen);
+}
+
+static std::ostream& operator<<(std::ostream& os,
+                                const mirror_peer_site_t& rhs) {
+  os << "uuid=" << rhs.uuid << ", "
+     << "direction=" << rhs.direction << ", "
+     << "site_name=" << rhs.site_name << ", "
+     << "client_name=" << rhs.client_name << ", "
+     << "last_seen=" << rhs.last_seen;
+  return os;
+}
+
+};
 
 class TestMirroring : public TestFixture {
 public:
@@ -51,6 +75,22 @@ public:
   }
 
   std::string image_name = "mirrorimg1";
+
+  int get_local_mirror_image_site_status(
+      const librbd::mirror_image_global_status_t& status,
+      librbd::mirror_image_site_status_t* local_status) {
+    auto it = std::find_if(status.site_statuses.begin(),
+                           status.site_statuses.end(),
+                           [](auto& site_status) {
+        return (site_status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+      });
+    if (it == status.site_statuses.end()) {
+      return -ENOENT;
+    }
+
+    *local_status = *it;
+    return 0;
+  }
 
   void check_mirror_image_enable(rbd_mirror_mode_t mirror_mode,
                                  uint64_t features,
@@ -72,9 +112,11 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    librbd::mirror_image_status_t status;
-    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
-    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+    librbd::mirror_image_global_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_global_status(&status, sizeof(status)));
+    librbd::mirror_image_site_status_t local_status;
+    ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
 
     std::string instance_id;
     ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
@@ -105,9 +147,11 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    librbd::mirror_image_status_t status;
-    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
-    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+    librbd::mirror_image_global_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_global_status(&status, sizeof(status)));
+    librbd::mirror_image_site_status_t local_status;
+    ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
 
     std::string instance_id;
     ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
@@ -127,8 +171,9 @@ public:
   }
 
   void check_mirroring_status(size_t *images_count) {
-    std::map<std::string, librbd::mirror_image_status_t> images;
-    ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, "", 4096, &images));
+    std::map<std::string, librbd::mirror_image_global_status_t> images;
+    ASSERT_EQ(0, m_rbd.mirror_image_global_status_list(m_ioctx, "", 4096,
+                                                       &images));
 
     std::map<librbd::mirror_image_status_state_t, int> states;
     ASSERT_EQ(0, m_rbd.mirror_image_status_summary(m_ioctx, &states));
@@ -164,9 +209,11 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    librbd::mirror_image_status_t status;
-    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
-    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+    librbd::mirror_image_global_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_global_status(&status, sizeof(status)));
+    librbd::mirror_image_site_status_t local_status;
+    ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
 
     size_t mirror_images_new_count = 0;
     check_mirroring_status(&mirror_images_new_count);
@@ -208,9 +255,11 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
-    librbd::mirror_image_status_t status;
-    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
-    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+    librbd::mirror_image_global_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_global_status(&status, sizeof(status)));
+    librbd::mirror_image_site_status_t local_status;
+    ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
 
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
@@ -251,9 +300,12 @@ public:
       ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
       ASSERT_EQ(mirror_state, mirror_image.state);
 
-      librbd::mirror_image_status_t status;
-      ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
-      ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+      librbd::mirror_image_global_status_t status;
+      ASSERT_EQ(0, image.mirror_image_get_global_status(&status,
+                                                        sizeof(status)));
+      librbd::mirror_image_site_status_t local_status;
+      ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+      ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
 
       ASSERT_EQ(0, image.close());
       ASSERT_EQ(0, m_rbd.remove(m_ioctx, img_name_str.c_str()));
@@ -442,9 +494,11 @@ TEST_F(TestMirroring, DisableImageMirrorWithPeer) {
                                            sizeof(mirror_image)));
   ASSERT_EQ(RBD_MIRROR_IMAGE_DISABLED, mirror_image.state);
 
-  librbd::mirror_image_status_t status;
-  ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
-  ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+  librbd::mirror_image_global_status_t status;
+  ASSERT_EQ(0, image.mirror_image_get_global_status(&status, sizeof(status)));
+  librbd::mirror_image_site_status_t local_status;
+  ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+  ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
 
   ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
@@ -477,9 +531,11 @@ TEST_F(TestMirroring, DisableJournalingWithPeer) {
                                            sizeof(mirror_image)));
   ASSERT_EQ(RBD_MIRROR_IMAGE_DISABLED, mirror_image.state);
 
-  librbd::mirror_image_status_t status;
-  ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
-  ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+  librbd::mirror_image_global_status_t status;
+  ASSERT_EQ(0, image.mirror_image_get_global_status(&status, sizeof(status)));
+  librbd::mirror_image_site_status_t local_status;
+  ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+  ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
 
   ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
@@ -731,23 +787,27 @@ TEST_F(TestMirroring, MirrorStatusList) {
   setup_images_with_mirror_mode(RBD_MIRROR_MODE_POOL, features_vec);
 
   std::string last_read = "";
-  std::map<std::string, librbd::mirror_image_status_t> images;
-  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 2, &images));
+  std::map<std::string, librbd::mirror_image_global_status_t> images;
+  ASSERT_EQ(0, m_rbd.mirror_image_global_status_list(m_ioctx, last_read, 2,
+                                                     &images));
   ASSERT_EQ(2U, images.size());
 
   last_read = images.rbegin()->first;
   images.clear();
-  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 2, &images));
+  ASSERT_EQ(0, m_rbd.mirror_image_global_status_list(m_ioctx, last_read, 2,
+                                                     &images));
   ASSERT_EQ(2U, images.size());
 
   last_read = images.rbegin()->first;
   images.clear();
-  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 4096, &images));
+  ASSERT_EQ(0, m_rbd.mirror_image_global_status_list(m_ioctx, last_read, 4096,
+                                                     &images));
   ASSERT_EQ(1U, images.size());
 
   last_read = images.rbegin()->first;
   images.clear();
-  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 4096, &images));
+  ASSERT_EQ(0, m_rbd.mirror_image_global_status_list(m_ioctx, last_read, 4096,
+                                                     &images));
   ASSERT_EQ(0U, images.size());
 }
 
@@ -922,13 +982,13 @@ TEST_F(TestMirroring, AioGetStatus) {
   }
 
   std::list<librbd::RBD::AioCompletion *> aio_comps;
-  std::list<librbd::mirror_image_status_t> statuses;
+  std::list<librbd::mirror_image_global_status_t> statuses;
   for (auto &image : images) {
     aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
     statuses.emplace_back();
-    ASSERT_EQ(0, image.aio_mirror_image_get_status(&statuses.back(),
-                                                   sizeof(statuses.back()),
-                                                   aio_comps.back()));
+    ASSERT_EQ(0, image.aio_mirror_image_get_global_status(
+                   &statuses.back(), sizeof(statuses.back()),
+                   aio_comps.back()));
   }
   for (auto aio_comp : aio_comps) {
     ASSERT_EQ(0, aio_comp->wait_for_complete());
@@ -943,9 +1003,79 @@ TEST_F(TestMirroring, AioGetStatus) {
     ASSERT_NE("", status.info.global_id);
     ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, status.info.state);
     ASSERT_TRUE(status.info.primary);
-    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
-    ASSERT_EQ("status not found", status.description);
-    ASSERT_FALSE(status.up);
-    ASSERT_EQ(0, status.last_update);
+
+    librbd::mirror_image_site_status_t local_status;
+    ASSERT_EQ(0, get_local_mirror_image_site_status(status, &local_status));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, local_status.state);
+    ASSERT_EQ("status not found", local_status.description);
+    ASSERT_FALSE(local_status.up);
+    ASSERT_EQ(0, local_status.last_update);
   }
+}
+
+TEST_F(TestMirroring, SiteName) {
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  const std::string expected_site_name("us-east-1a");
+  ASSERT_EQ(0, m_rbd.mirror_site_name_set(_rados, expected_site_name));
+
+  std::string site_name;
+  ASSERT_EQ(0, m_rbd.mirror_site_name_get(_rados, &site_name));
+  ASSERT_EQ(expected_site_name, site_name);
+
+  ASSERT_EQ(0, m_rbd.mirror_site_name_set(_rados, ""));
+
+  std::string fsid;
+  ASSERT_EQ(0, _rados.cluster_fsid(&fsid));
+  ASSERT_EQ(0, m_rbd.mirror_site_name_get(_rados, &site_name));
+  ASSERT_EQ(fsid, site_name);
+}
+
+TEST_F(TestMirroring, Bootstrap) {
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  std::string token_b64;
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+  ASSERT_EQ(-EINVAL, m_rbd.mirror_peer_bootstrap_create(m_ioctx, &token_b64));
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
+  ASSERT_EQ(0, m_rbd.mirror_peer_bootstrap_create(m_ioctx, &token_b64));
+
+  bufferlist token_b64_bl;
+  token_b64_bl.append(token_b64);
+
+  bufferlist token_bl;
+  token_bl.decode_base64(token_b64_bl);
+
+  // cannot import token into same cluster
+  ASSERT_EQ(-EINVAL,
+            m_rbd.mirror_peer_bootstrap_import(
+              m_ioctx, RBD_MIRROR_PEER_DIRECTION_RX, token_b64));
+}
+
+TEST_F(TestMirroring, PeerDirection) {
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
+
+  std::string uuid;
+  ASSERT_EQ(-EINVAL, m_rbd.mirror_peer_site_add(
+                       m_ioctx, &uuid, RBD_MIRROR_PEER_DIRECTION_TX, "siteA",
+                       "client.admin"));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &uuid,
+                                          RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                                          "siteA", "client.admin"));
+
+  std::vector<librbd::mirror_peer_site_t> peers;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_list(m_ioctx, &peers));
+  std::vector<librbd::mirror_peer_site_t> expected_peers = {
+    {uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, "siteA", "", "client.admin", 0}};
+  ASSERT_EQ(expected_peers, peers);
+
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_set_direction(
+                 m_ioctx, uuid, RBD_MIRROR_PEER_DIRECTION_RX));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_list(m_ioctx, &peers));
+  expected_peers = {
+    {uuid, RBD_MIRROR_PEER_DIRECTION_RX, "siteA", "", "client.admin", 0}};
+  ASSERT_EQ(expected_peers, peers);
+
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, uuid));
 }

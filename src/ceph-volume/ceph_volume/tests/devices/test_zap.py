@@ -25,4 +25,4 @@ class TestZap(object):
         with pytest.raises(SystemExit):
             lvm.zap.Zap(argv=[device_name]).main()
         stdout, stderr = capsys.readouterr()
-        assert 'Refusing to zap' in stdout
+        assert 'Refusing to zap' in stderr

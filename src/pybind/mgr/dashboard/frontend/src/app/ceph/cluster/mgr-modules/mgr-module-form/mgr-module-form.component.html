@@ -1,7 +1,8 @@
 <cd-loading-panel *ngIf="loading && !error"
                   i18n>Loading configuration...</cd-loading-panel>
-<cd-error-panel *ngIf="loading && error"
-                i18n>The configuration could not be loaded.</cd-error-panel>
+<cd-alert-panel type="error"
+                *ngIf="loading && error"
+                i18n>The configuration could not be loaded.</cd-alert-panel>
 
 <div class="col-sm-12 col-lg-6"
      *ngIf="!loading && !error">
@@ -17,7 +18,7 @@
              *ngFor="let moduleOption of moduleOptions | keyvalue">
 
           <!-- Field label -->
-          <label class="col-form-label col-sm-3"
+          <label class="col-form-label col-sm-5"
                  for="{{ moduleOption.value.name }}">
             {{ moduleOption.value.name }}
             <cd-helper *ngIf="moduleOption.value.long_desc || moduleOption.value.desc">

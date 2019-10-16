@@ -24,9 +24,6 @@ namespace journal {
 
 struct CacheManagerHandler;
 
-class JournalMetadata;
-class JournalPlayer;
-class JournalRecorder;
 class JournalTrimmer;
 class ReplayEntry;
 class ReplayHandler;
@@ -41,8 +38,8 @@ public:
     ThreadPool *thread_pool = nullptr;
     ContextWQ *work_queue = nullptr;
 
-    SafeTimer *timer = nullptr;
-    Mutex timer_lock;
+    SafeTimer *timer;
+    ceph::mutex timer_lock = ceph::make_mutex("Journaler::timer_lock");
   };
 
   typedef cls::journal::Tag Tag;
@@ -56,7 +53,7 @@ public:
   Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
 	    const std::string &client_id, const Settings &settings,
             CacheManagerHandler *cache_manager_handler);
-  Journaler(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+  Journaler(ContextWQ *work_queue, SafeTimer *timer, ceph::mutex *timer_lock,
             librados::IoCtx &header_ioctx, const std::string &journal_id,
 	    const std::string &client_id, const Settings &settings,
             CacheManagerHandler *cache_manager_handler);
@@ -103,8 +100,8 @@ public:
   void get_tags(uint64_t start_after_tag_tid, uint64_t tag_class, Tags *tags,
                 Context *on_finish);
 
-  void start_replay(ReplayHandler *replay_handler);
-  void start_live_replay(ReplayHandler *replay_handler, double interval);
+  void start_replay(ReplayHandler* replay_handler);
+  void start_live_replay(ReplayHandler* replay_handler, double interval);
   bool try_pop_front(ReplayEntry *replay_entry, uint64_t *tag_tid = nullptr);
   void stop_replay();
   void stop_replay(Context *on_finish);
@@ -149,17 +146,17 @@ private:
   std::string m_object_oid_prefix;
 
   bool m_initialized = false;
-  JournalMetadata *m_metadata = nullptr;
-  JournalPlayer *m_player = nullptr;
-  JournalRecorder *m_recorder = nullptr;
+  ceph::ref_t<class JournalMetadata> m_metadata;
+  std::unique_ptr<class JournalPlayer> m_player;
+  std::unique_ptr<class JournalRecorder> m_recorder;
   JournalTrimmer *m_trimmer = nullptr;
 
-  void set_up(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+  void set_up(ContextWQ *work_queue, SafeTimer *timer, ceph::mutex *timer_lock,
               librados::IoCtx &header_ioctx, const std::string &journal_id,
               const Settings &settings);
 
   int init_complete();
-  void create_player(ReplayHandler *replay_handler);
+  void create_player(ReplayHandler* replay_handler);
 
   friend std::ostream &operator<<(std::ostream &os,
 				  const Journaler &journaler);

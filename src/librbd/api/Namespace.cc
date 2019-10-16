@@ -3,6 +3,7 @@
 
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/api/Mirror.h"
 #include "librbd/api/Namespace.h"
 #include "librbd/ImageCtx.h"
 
@@ -115,6 +116,13 @@ int Namespace<I>::remove(librados::IoCtx& io_ctx, const std::string& name)
   } else if (!trash_entries.empty()) {
     ldout(cct, 5) << "image trash not empty" << dendl;
     goto rollback;
+  }
+
+  r = Mirror<I>::mode_set(ns_ctx, RBD_MIRROR_MODE_DISABLED);
+  if (r < 0) {
+    lderr(cct) << "failed to disable mirroring: " << cpp_strerror(r)
+               << dendl;
+    return r;
   }
 
   r = cls_client::namespace_remove(&default_ns_ctx, name);

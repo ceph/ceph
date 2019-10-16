@@ -29,6 +29,7 @@ template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
     m_initialized(false), m_connecting(false) {
+  ceph_assert(m_image_ctx->data_ctx.is_valid());
   std::string controller_path =
     ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
   m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
@@ -49,7 +50,7 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
     return;
   }
 
-  Context* create_session_ctx = new FunctionContext([this, on_finish](int ret) {
+  Context* create_session_ctx = new LambdaContext([this, on_finish](int ret) {
     m_connecting.store(false);
     if (on_finish != nullptr) {
       on_finish->complete(ret);
@@ -89,7 +90,7 @@ bool ParentCacheObjectDispatch<I>::read(
        * So, we need to check if session is normal again. If session work,
        * we need set m_connecting to false. */
       if (!m_cache_client->is_session_work()) {
-        Context* on_finish = new FunctionContext([this](int ret) {
+        Context* on_finish = new LambdaContext([this](int ret) {
           m_connecting.store(false);
         });
         create_cache_session(on_finish, true);
@@ -166,7 +167,7 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  Context* register_ctx = new FunctionContext([this, cct, on_finish](int ret) {
+  Context* register_ctx = new LambdaContext([this, cct, on_finish](int ret) {
     if (ret < 0) {
       lderr(cct) << "Parent cache fail to register client." << dendl;
     } else {
@@ -176,7 +177,7 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
     on_finish->complete(ret);
   });
 
-  Context* connect_ctx = new FunctionContext(
+  Context* connect_ctx = new LambdaContext(
     [this, cct, register_ctx](int ret) {
     if (ret < 0) {
       lderr(cct) << "Parent cache fail to connect RO daeomn." << dendl;

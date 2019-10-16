@@ -38,7 +38,6 @@ set(osd_srcs
   MissingLoc.cc
   osd_perf_counters.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
-  ${CMAKE_SOURCE_DIR}/src/objclass/class_api.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}
   ${osdc_osd_srcs})
@@ -54,7 +53,7 @@ target_link_libraries(osd
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()
-if(WITH_LTTNG AND WITH_EVENTTRACE)
+if(WITH_EVENTTRACE)
   add_dependencies(osd eventtrace_tp)
 endif()
 if(WITH_OSD_INSTRUMENT_FUNCTIONS)

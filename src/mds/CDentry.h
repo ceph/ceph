@@ -28,6 +28,7 @@
 #include "include/elist.h"
 #include "include/filepath.h"
 
+#include "BatchOp.h"
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
 #include "SimpleLock.h"
@@ -41,8 +42,6 @@ class CDentry;
 class LogSegment;
 
 class Session;
-
-
 
 // define an ordering
 bool operator<(const CDentry& l, const CDentry& r);
@@ -243,22 +242,11 @@ public:
   bool is_new() const { return state_test(STATE_NEW); }
   void clear_new() { state_clear(STATE_NEW); }
   
-  // -- replication
-  void encode_replica(mds_rank_t mds, bufferlist& bl, bool need_recover) {
-    __u32 nonce = add_replica(mds);
-    encode(nonce, bl);
-    encode(first, bl);
-    encode(linkage.remote_ino, bl);
-    encode(linkage.remote_d_type, bl);
-    lock.encode_state_for_replica(bl);
-    encode(need_recover, bl);
-  }
-  void decode_replica(bufferlist::const_iterator& p, bool is_new);
-
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
   void encode_export(bufferlist& bl) {
+    ENCODE_START(1, 1, bl);
     encode(first, bl);
     encode(state, bl);
     encode(version, bl);
@@ -266,6 +254,7 @@ public:
     encode(lock, bl);
     encode(get_replicas(), bl);
     get(PIN_TEMPEXPORTING);
+    ENCODE_FINISH(bl);
   }
   void finish_export() {
     // twiddle
@@ -280,6 +269,7 @@ public:
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::const_iterator& blp, LogSegment *ls) {
+    DECODE_START(1, blp);
     decode(first, blp);
     __u32 nstate;
     decode(nstate, blp);
@@ -296,6 +286,7 @@ public:
     if (is_replicated())
       get(PIN_REPLICATED);
     replica_nonce = 0;
+    DECODE_FINISH(blp);
   }
 
   // -- locking --
@@ -354,6 +345,7 @@ public:
   LocalLock versionlock; // FIXME referenced containers not in mempool
 
   mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
+  std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
 
 protected:

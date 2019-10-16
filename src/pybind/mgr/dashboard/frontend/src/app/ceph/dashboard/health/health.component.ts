@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { Subscription } from 'rxjs/Subscription';
+import { Subscription } from 'rxjs';
 
 import { HealthService } from '../../../shared/api/health.service';
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -148,6 +148,7 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   preparePgStatus(chart, data) {
     const categoryPgAmount = {};
+    let totalPgs = 0;
 
     _.forEach(data.pg_info.statuses, (pgAmount, pgStatesText) => {
       const categoryType = this.pgCategoryService.getTypeByStates(pgStatesText);
@@ -156,6 +157,7 @@ export class HealthComponent implements OnInit, OnDestroy {
         categoryPgAmount[categoryType] = 0;
       }
       categoryPgAmount[categoryType] += pgAmount;
+      totalPgs += pgAmount;
     });
 
     chart.dataset[0].data = this.pgCategoryService
@@ -163,22 +165,10 @@ export class HealthComponent implements OnInit, OnDestroy {
       .map((categoryType) => categoryPgAmount[categoryType]);
 
     chart.labels = [
-      `${this.i18n('Clean')} (${this.calcPercentage(
-        categoryPgAmount['clean'],
-        data.pg_info.pgs_per_osd
-      )}%)`,
-      `${this.i18n('Working')} (${this.calcPercentage(
-        categoryPgAmount['working'],
-        data.pg_info.pgs_per_osd
-      )}%)`,
-      `${this.i18n('Warning')} (${this.calcPercentage(
-        categoryPgAmount['warning'],
-        data.pg_info.pgs_per_osd
-      )}%)`,
-      `${this.i18n('Unknown')} (${this.calcPercentage(
-        categoryPgAmount['unknown'],
-        data.pg_info.pgs_per_osd
-      )}%)`
+      `${this.i18n('Clean')} (${this.calcPercentage(categoryPgAmount['clean'], totalPgs)}%)`,
+      `${this.i18n('Working')} (${this.calcPercentage(categoryPgAmount['working'], totalPgs)}%)`,
+      `${this.i18n('Warning')} (${this.calcPercentage(categoryPgAmount['warning'], totalPgs)}%)`,
+      `${this.i18n('Unknown')} (${this.calcPercentage(categoryPgAmount['unknown'], totalPgs)}%)`
     ];
   }
 

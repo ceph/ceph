@@ -5,6 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { ButtonsModule } from 'ngx-bootstrap/buttons';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
@@ -48,7 +49,8 @@ describe('UserFormComponent', () => {
         ReactiveFormsModule,
         ComponentsModule,
         ToastrModule.forRoot(),
-        SharedModule
+        SharedModule,
+        ButtonsModule.forRoot()
       ],
       declarations: [UserFormComponent, FakeComponent],
       providers: i18nProviders
@@ -99,6 +101,41 @@ describe('UserFormComponent', () => {
       formHelper.expectValidChange('confirmpassword', 'aaa');
     });
 
+    it('should validate password strength very strong', () => {
+      formHelper.setValue('password', 'testpassword#!$!@$');
+      component.checkPassword('testpassword#!$!@$');
+      expect(component.passwordStrengthDescription).toBe('Very strong');
+      expect(component.passwordStrengthLevel).toBe('passwordStrengthLevel4');
+    });
+
+    it('should validate password strength strong', () => {
+      formHelper.setValue('password', 'testpassword0047!@');
+      component.checkPassword('testpassword0047!@');
+      expect(component.passwordStrengthDescription).toBe('Strong');
+      expect(component.passwordStrengthLevel).toBe('passwordStrengthLevel3');
+    });
+
+    it('should validate password strength ok ', () => {
+      formHelper.setValue('password', 'mypassword1!@');
+      component.checkPassword('mypassword1!@');
+      expect(component.passwordStrengthDescription).toBe('OK');
+      expect(component.passwordStrengthLevel).toBe('passwordStrengthLevel2');
+    });
+
+    it('should validate password strength weak', () => {
+      formHelper.setValue('password', 'mypassword1');
+      component.checkPassword('mypassword1');
+      expect(component.passwordStrengthDescription).toBe('Weak');
+      expect(component.passwordStrengthLevel).toBe('passwordStrengthLevel1');
+    });
+
+    it('should validate password strength too weak', () => {
+      formHelper.setValue('password', 'bar0');
+      component.checkPassword('bar0');
+      expect(component.passwordStrengthDescription).toBe('Too weak');
+      expect(component.passwordStrengthLevel).toBe('passwordStrengthLevel0');
+    });
+
     it('should validate email', () => {
       formHelper.expectErrorChange('email', 'aaa', 'email');
     });
@@ -113,7 +150,8 @@ describe('UserFormComponent', () => {
         password: 'pass0',
         name: 'User 0',
         email: 'user0@email.com',
-        roles: ['administrator']
+        roles: ['administrator'],
+        enabled: true
       };
       formHelper.setMultipleValues(user);
       formHelper.setValue('confirmpassword', user.password);
@@ -132,7 +170,8 @@ describe('UserFormComponent', () => {
       password: undefined,
       name: 'User 1',
       email: 'user1@email.com',
-      roles: ['administrator']
+      roles: ['administrator'],
+      enabled: true
     };
     const roles = [
       {
@@ -222,7 +261,8 @@ describe('UserFormComponent', () => {
         password: '',
         name: 'User 1',
         email: 'user1@email.com',
-        roles: ['administrator']
+        roles: ['administrator'],
+        enabled: true
       });
       userReq.flush({});
       expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);

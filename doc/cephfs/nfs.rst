@@ -8,7 +8,7 @@ CephFS namespaces can be exported over NFS protocol using the
 Requirements
 ============
 
--  Ceph filesystem (preferably latest stable luminous or higher versions)
+-  Ceph file system (preferably latest stable luminous or higher versions)
 -  In the NFS server host machine, 'libcephfs2' (preferably latest stable
    luminous or higher), 'nfs-ganesha' and 'nfs-ganesha-ceph' packages (latest
    ganesha v2.5 stable or higher versions)
@@ -77,5 +77,5 @@ From the command line::
 Current limitations
 ===================
 
-- Per running ganesha daemon, FSAL_CEPH can only export one Ceph filesystem
-  although multiple directories in a Ceph filesystem may be exported.
+- Per running ganesha daemon, FSAL_CEPH can only export one Ceph file system
+  although multiple directories in a Ceph file system may be exported.

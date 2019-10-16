@@ -134,7 +134,7 @@ static string indent_who(const string& who)
 
 bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   std::stringstream ss;
   int err = 0;
 
@@ -257,7 +257,8 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "who", who);
 
     EntityName entity;
-    if (!entity.from_str(who)) {
+    if (!entity.from_str(who) &&
+	!entity.from_str(who + ".")) {
       ss << "unrecognized entity '" << who << "'";
       err = -EINVAL;
       goto reply;
@@ -412,7 +413,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 
 void ConfigMonitor::handle_get_config(MonOpRequestRef op)
 {
-  MGetConfig *m = static_cast<MGetConfig*>(op->get_req());
+  auto m = op->get_req<MGetConfig>();
   dout(10) << __func__ << " " << m->name << " host " << m->host << dendl;
 
   const OSDMap& osdmap = mon->osdmon()->osdmap;
@@ -447,7 +448,7 @@ bool ConfigMonitor::prepare_update(MonOpRequestRef op)
 
 bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   std::stringstream ss;
   int err = -EINVAL;
 

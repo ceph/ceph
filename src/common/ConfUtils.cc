@@ -122,7 +122,9 @@ int ConfFile::parse_file(const std::string &fname,
       return -EINVAL;
     }
   } catch (const fs::filesystem_error& e) {
-    if (fs::is_other(fname)) {
+    std::error_code ec;
+    auto is_other = fs::is_other(fname, ec);
+    if (!ec && is_other) {
       // /dev/null?
       return 0;
     } else {

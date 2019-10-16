@@ -189,13 +189,13 @@ void CloneRequest<I>::validate_parent() {
     return;
   }
 
-  m_parent_image_ctx->image_lock.get_read();
+  m_parent_image_ctx->image_lock.lock_shared();
   uint64_t p_features = m_parent_image_ctx->features;
   m_size = m_parent_image_ctx->get_image_size(m_parent_image_ctx->snap_id);
 
   bool snap_protected;
   int r = m_parent_image_ctx->is_snap_protected(m_parent_image_ctx->snap_id, &snap_protected);
-  m_parent_image_ctx->image_lock.put_read();
+  m_parent_image_ctx->image_lock.unlock_shared();
 
   if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
     lderr(m_cct) << "parent image must support layering" << dendl;
@@ -276,7 +276,7 @@ void CloneRequest<I>::create_child() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_child>(this);
 
-  RWLock::RLocker image_locker(m_parent_image_ctx->image_lock);
+  std::shared_lock image_locker{m_parent_image_ctx->image_lock};
   CreateRequest<I> *req = CreateRequest<I>::create(
     m_config, m_ioctx, m_name, m_id, m_size, m_opts,
     m_non_primary_global_image_id, m_primary_mirror_uuid, true,

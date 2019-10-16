@@ -24,7 +24,8 @@ enum class OperationTypeCode {
   compound_peering_request = 2,
   pg_advance_map = 3,
   pg_creation = 4,
-  last_op = 5
+  replicated_request = 5,
+  last_op = 6
 };
 
 static constexpr const char* const OP_NAMES[] = {
@@ -33,6 +34,7 @@ static constexpr const char* const OP_NAMES[] = {
   "compound_peering_request",
   "pg_advance_map",
   "pg_creation",
+  "replicated_request",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:

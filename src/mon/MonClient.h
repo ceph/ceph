@@ -14,8 +14,13 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
+#include <functional>
+#include <list>
+#include <map>
 #include <memory>
 #include <set>
+#include <string>
+#include <vector>
 
 #include "msg/Messenger.h"
 
@@ -97,6 +102,9 @@ public:
   bool is_con(Connection *c) const {
     return con.get() == c;
   }
+  void queue_command(Message *m) {
+    pending_tell_command = m;
+  }
 
 private:
   int _negotiate(MAuthReply *m,
@@ -125,6 +133,8 @@ private:
   std::unique_ptr<AuthClientHandler> auth;
   uint64_t global_id;
 
+  MessageRef pending_tell_command;
+
   AuthRegistry *auth_registry;
 };
 
@@ -132,8 +142,8 @@ private:
 struct MonClientPinger : public Dispatcher,
 			 public AuthClient {
 
-  Mutex lock;
-  Cond ping_recvd_cond;
+  ceph::mutex lock = ceph::make_mutex("MonClientPinger::lock");
+  ceph::condition_variable ping_recvd_cond;
   std::string *result;
   bool done;
   RotatingKeyRing *keyring;
@@ -143,24 +153,24 @@ struct MonClientPinger : public Dispatcher,
 		  RotatingKeyRing *keyring,
 		  std::string *res_) :
     Dispatcher(cct_),
-    lock("MonClientPinger::lock"),
     result(res_),
     done(false),
     keyring(keyring)
   { }
 
   int wait_for_reply(double timeout = 0.0) {
-    utime_t until = ceph_clock_now();
-    until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
-    done = false;
-
-    int ret = 0;
-    while (!done) {
-      ret = ping_recvd_cond.WaitUntil(lock, until);
-      if (ret == ETIMEDOUT)
-        break;
+    std::unique_lock locker{lock};
+    if (timeout <= 0) {
+      timeout = cct->_conf->client_mount_timeout;
     }
-    return ret;
+    done = false;
+    if (ping_recvd_cond.wait_for(locker,
+				 ceph::make_timespan(timeout),
+				 [this] { return done; })) {
+      return 0;
+    } else {
+      return ETIMEDOUT;
+    }
   }
 
   bool ms_dispatch(Message *m) override {
@@ -175,14 +185,14 @@ struct MonClientPinger : public Dispatcher,
       decode(*result, p);
     }
     done = true;
-    ping_recvd_cond.SignalAll();
+    ping_recvd_cond.notify_all();
     m->put();
     return true;
   }
   bool ms_handle_reset(Connection *con) override {
     std::lock_guard l(lock);
     done = true;
-    ping_recvd_cond.SignalAll();
+    ping_recvd_cond.notify_all();
     return true;
   }
   void ms_handle_remote_reset(Connection *con) override {}
@@ -247,7 +257,7 @@ private:
 
   EntityName entity_name;
 
-  mutable Mutex monc_lock;
+  mutable ceph::mutex monc_lock = ceph::make_mutex("MonClient::monc_lock");
   SafeTimer timer;
   Finisher finisher;
 
@@ -275,7 +285,7 @@ private:
 
   // monclient
   bool want_monmap;
-  Cond map_cond;
+  ceph::condition_variable map_cond;
   bool passthrough_monmap = false;
   bool got_config = false;
 
@@ -283,11 +293,11 @@ private:
   std::unique_ptr<AuthClientHandler> auth;
   uint32_t want_keys = 0;
   uint64_t global_id = 0;
-  Cond auth_cond;
+  ceph::condition_variable auth_cond;
   int authenticate_err = 0;
   bool authenticated = false;
 
-  std::list<Message*> waiting_for_session;
+  std::list<MessageRef> waiting_for_session;
   utime_t last_rotating_renew_sent;
   std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
@@ -304,7 +314,7 @@ private:
   MonConnection& _add_conn(unsigned rank, uint64_t global_id);
   void _un_backoff();
   void _add_conns(uint64_t global_id);
-  void _send_mon_message(Message *m);
+  void _send_mon_message(MessageRef m);
 
   std::map<entity_addrvec_t, MonConnection>::iterator _find_pending_con(
     const ConnectionRef& con) {
@@ -448,9 +458,9 @@ public:
   int ping_monitor(const std::string &mon_id, std::string *result_reply);
 
   void send_mon_message(Message *m) {
-    std::lock_guard l(monc_lock);
-    _send_mon_message(m);
+    send_mon_message(MessageRef{m, false});
   }
+  void send_mon_message(MessageRef m);
   /**
    * If you specify a callback, you should not call
    * reopen_session() again until it has been triggered. The MonClient
@@ -499,8 +509,14 @@ private:
   uint64_t last_mon_command_tid;
 
   struct MonCommand {
+    // for tell only
     std::string target_name;
     int target_rank;
+    ConnectionRef target_con;
+    std::unique_ptr<MonConnection> target_session;
+    unsigned send_attempts = 0;  ///< attempt count for legacy mons
+    utime_t last_send_attempt;
+
     uint64_t tid;
     std::vector<std::string> cmd;
     ceph::buffer::list inbl;
@@ -514,15 +530,21 @@ private:
 	tid(t),
 	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL), ontimeout(NULL)
     {}
+
+    bool is_tell() const {
+      return target_name.size() || target_rank >= 0;
+    }
   };
   std::map<uint64_t,MonCommand*> mon_commands;
 
   void _send_command(MonCommand *r);
+  void _check_tell_commands();
   void _resend_mon_commands();
   int _cancel_mon_command(uint64_t tid);
   void _finish_command(MonCommand *r, int ret, std::string rs);
   void _finish_auth();
   void handle_mon_command_ack(MMonCommandAck *ack);
+  void handle_command_reply(MCommandReply *reply);
 
 public:
   void start_mon_command(const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,

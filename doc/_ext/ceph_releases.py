@@ -106,7 +106,7 @@ class CephReleases(Directive):
 
 class CephTimeline(Directive):
     has_content = False
-    required_arguments = 13
+    required_arguments = 12
     optional_arguments = 0
     option_spec = {}
 

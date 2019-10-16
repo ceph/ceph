@@ -35,8 +35,16 @@ class Activate(object):
         try:
             objectstore = json_config['type']
         except KeyError:
-            logger.warning('"type" was not defined, will assume "bluestore"')
-            objectstore = 'bluestore'
+            if {'data', 'journal'}.issubset(set(devices)):
+                logger.warning(
+                    '"type" key not found, assuming "filestore" since journal key is present'
+                )
+                objectstore = 'filestore'
+            else:
+                logger.warning(
+                    '"type" key not found, assuming "bluestore" since journal key is not present'
+                )
+                objectstore = 'bluestore'
 
         # Go through all the device combinations that are absolutely required,
         # raise an error describing what was expected and what was found

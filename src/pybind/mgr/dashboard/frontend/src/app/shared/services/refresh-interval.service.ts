@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, NgZone, OnDestroy } from '@angular/core';
 
 import { BehaviorSubject, interval, Subscription } from 'rxjs';
 
@@ -13,7 +13,7 @@ export class RefreshIntervalService implements OnDestroy {
   // Observable streams
   intervalData$ = this.intervalDataSource.asObservable();
 
-  constructor() {
+  constructor(private ngZone: NgZone) {
     const initialInterval = parseInt(sessionStorage.getItem('dashboard_interval'), 10) || 5000;
     this.setRefreshInterval(initialInterval);
   }
@@ -25,9 +25,13 @@ export class RefreshIntervalService implements OnDestroy {
     if (this.intervalSubscription) {
       this.intervalSubscription.unsubscribe();
     }
-    this.intervalSubscription = interval(this.intervalTime).subscribe(() =>
-      this.intervalDataSource.next(this.intervalTime)
-    );
+    this.ngZone.runOutsideAngular(() => {
+      this.intervalSubscription = interval(this.intervalTime).subscribe(() =>
+        this.ngZone.run(() => {
+          this.intervalDataSource.next(this.intervalTime);
+        })
+      );
+    });
   }
 
   getRefreshInterval() {

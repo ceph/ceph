@@ -24,8 +24,8 @@ template <typename I>
 WriteAroundObjectDispatch<I>::WriteAroundObjectDispatch(
     I* image_ctx, size_t max_dirty, bool writethrough_until_flush)
   : m_image_ctx(image_ctx), m_init_max_dirty(max_dirty), m_max_dirty(max_dirty),
-    m_lock(util::unique_lock_name(
-      "librbd::cache::WriteAroundObjectDispatch::lock", this)) {
+    m_lock(ceph::make_mutex(util::unique_lock_name(
+      "librbd::cache::WriteAroundObjectDispatch::lock", this))) {
   if (writethrough_until_flush) {
     m_max_dirty = 0;
   }
@@ -132,7 +132,7 @@ bool WriteAroundObjectDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   if (flush_source == io::FLUSH_SOURCE_USER && !m_user_flushed) {
     m_user_flushed = true;
     if (m_max_dirty == 0 && m_init_max_dirty > 0) {
@@ -150,7 +150,7 @@ bool WriteAroundObjectDispatch<I>::flush(
   auto ctx = util::create_async_context_callback(*m_image_ctx, *on_finish);
 
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  *on_finish = new FunctionContext([this, tid](int r) {
+  *on_finish = new LambdaContext([this, tid](int r) {
       handle_in_flight_flush_complete(r, tid);
     });
 
@@ -173,12 +173,12 @@ bool WriteAroundObjectDispatch<I>::dispatch_unoptimized_io(
     io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
 
-  m_lock.Lock();
+  m_lock.lock();
   auto in_flight_extents_it = m_in_flight_extents.find(object_no);
   if (in_flight_extents_it == m_in_flight_extents.end() ||
       !in_flight_extents_it->second.intersects(object_off, object_len)) {
     // no IO in-flight to the specified extent
-    m_lock.Unlock();
+    m_lock.unlock();
     return false;
   }
 
@@ -189,7 +189,7 @@ bool WriteAroundObjectDispatch<I>::dispatch_unoptimized_io(
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
   m_blocked_unoptimized_ios[object_no].emplace(
     tid, BlockedIO{object_off, object_len, nullptr, on_dispatched});
-  m_lock.Unlock();
+  m_lock.unlock();
 
   return true;
 }
@@ -201,16 +201,16 @@ bool WriteAroundObjectDispatch<I>::dispatch_io(
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
 
-  m_lock.Lock();
+  m_lock.lock();
   if (m_max_dirty == 0) {
     // write-through mode is active -- no-op the cache
-    m_lock.Unlock();
+    m_lock.unlock();
     return false;
   }
 
   if ((op_flags & LIBRADOS_OP_FLAG_FADVISE_FUA) != 0) {
     // force unit access flag is set -- disable write-around
-    m_lock.Unlock();
+    m_lock.unlock();
     return dispatch_unoptimized_io(object_no, object_off, object_len,
                                    dispatch_result, on_dispatched);
   }
@@ -219,7 +219,7 @@ bool WriteAroundObjectDispatch<I>::dispatch_io(
   auto ctx = util::create_async_context_callback(*m_image_ctx, *on_finish);
 
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  *on_finish = new FunctionContext(
+  *on_finish = new LambdaContext(
     [this, tid, object_no, object_off, object_len](int r) {
       handle_in_flight_io_complete(r, tid, object_no, object_off, object_len);
     });
@@ -231,9 +231,9 @@ bool WriteAroundObjectDispatch<I>::dispatch_io(
     m_queued_or_blocked_io_tids.insert(tid);
     m_blocked_ios[object_no].emplace(tid, BlockedIO{object_off, object_len, ctx,
                                                     on_dispatched});
-    m_lock.Unlock();
+    m_lock.unlock();
   } else if (can_dispatch_io(tid, object_len)) {
-    m_lock.Unlock();
+    m_lock.unlock();
 
     ldout(cct, 20) << "dispatching: tid=" << tid << dendl;
     on_dispatched->complete(0);
@@ -242,7 +242,7 @@ bool WriteAroundObjectDispatch<I>::dispatch_io(
     ldout(cct, 20) << "queueing: tid=" << tid << dendl;
     m_queued_or_blocked_io_tids.insert(tid);
     m_queued_ios.emplace(tid, QueuedIO{object_len, ctx, on_dispatched});
-    m_lock.Unlock();
+    m_lock.unlock();
   }
   return true;
 }
@@ -264,7 +264,7 @@ void WriteAroundObjectDispatch<I>::unblock_overlapping_ios(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     Contexts* unoptimized_io_dispatches) {
   auto cct = m_image_ctx->cct;
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   auto in_flight_extents_it = m_in_flight_extents.find(object_no);
   ceph_assert(in_flight_extents_it != m_in_flight_extents.end());
@@ -337,7 +337,7 @@ void WriteAroundObjectDispatch<I>::unblock_overlapping_ios(
 template <typename I>
 bool WriteAroundObjectDispatch<I>::can_dispatch_io(
     uint64_t tid, uint64_t length) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   if (m_in_flight_bytes == 0 || m_in_flight_bytes + length <= m_max_dirty) {
     // no in-flight IO or still under max write-around in-flight limit.
@@ -358,7 +358,7 @@ void WriteAroundObjectDispatch<I>::handle_in_flight_io_complete(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "r=" << r << ", tid=" << tid << dendl;
 
-  m_lock.Lock();
+  m_lock.lock();
   m_in_flight_io_tids.erase(tid);
   ceph_assert(m_in_flight_bytes >= object_len);
   m_in_flight_bytes -= object_len;
@@ -388,7 +388,7 @@ void WriteAroundObjectDispatch<I>::handle_in_flight_io_complete(
 
   // collect any queued flushes that were tied to queued IOs
   auto ready_flushes = collect_ready_flushes();
-  m_lock.Unlock();
+  m_lock.unlock();
 
   // dispatch any ready unoptimized IOs
   for (auto& it : unoptimized_io_dispatches) {
@@ -424,7 +424,7 @@ void WriteAroundObjectDispatch<I>::handle_in_flight_flush_complete(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "r=" << r << ", tid=" << tid << dendl;
 
-  m_lock.Lock();
+  m_lock.lock();
 
   // move the in-flight flush to the pending completion list
   auto it = m_in_flight_flushes.find(tid);
@@ -439,7 +439,7 @@ void WriteAroundObjectDispatch<I>::handle_in_flight_flush_complete(
   if (!finished_flushes.empty()) {
     std::swap(pending_flush_error, m_pending_flush_error);
   }
-  m_lock.Unlock();
+  m_lock.unlock();
 
   // complete flushes that were waiting on in-flight IO
   // (and propogate any IO errors)
@@ -453,7 +453,7 @@ void WriteAroundObjectDispatch<I>::handle_in_flight_flush_complete(
 template <typename I>
 typename WriteAroundObjectDispatch<I>::QueuedIOs
 WriteAroundObjectDispatch<I>::collect_ready_ios() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   QueuedIOs queued_ios;
 
@@ -474,7 +474,7 @@ WriteAroundObjectDispatch<I>::collect_ready_ios() {
 template <typename I>
 typename WriteAroundObjectDispatch<I>::Contexts
 WriteAroundObjectDispatch<I>::collect_ready_flushes() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   Contexts ready_flushes;
   auto io_tid_it = m_queued_or_blocked_io_tids.begin();
@@ -497,7 +497,7 @@ WriteAroundObjectDispatch<I>::collect_ready_flushes() {
 template <typename I>
 typename WriteAroundObjectDispatch<I>::Contexts
 WriteAroundObjectDispatch<I>::collect_finished_flushes() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   Contexts finished_flushes;
   auto io_tid_it = m_in_flight_io_tids.begin();

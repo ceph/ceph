@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/compat.h"
 #include "include/rados/rgw_file.h"
@@ -28,6 +28,8 @@
 #include "rgw_lib_frontend.h"
 #include "rgw_perf_counters.h"
 #include "common/errno.h"
+
+#include "services/svc_zone.h"
 
 #include <atomic>
 
@@ -589,7 +591,7 @@ namespace rgw {
       /* save attrs */
       rgw_fh->encode_attrs(ux_key, ux_attrs);
       if (st)
-        rgw_fh->stat(st);
+        rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
       get<0>(mkr) = rgw_fh;
     } else {
       get<1>(mkr) = -EIO;
@@ -720,7 +722,7 @@ namespace rgw {
 	  parent->set_ctime(real_clock::to_timespec(t));
 	}
         if (st)
-          (void) rgw_fh->stat(st);
+	  (void) rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
 
         rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
         rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
@@ -1264,8 +1266,11 @@ namespace rgw {
     }
 
     bool initial_off;
+    char* mk{nullptr};
+
     if (likely(!! get<const char*>(&offset))) {
-      initial_off = ! get<const char*>(offset);
+      mk = const_cast<char*>(get<const char*>(offset));
+      initial_off = !mk;
     } else {
       initial_off = (*get<uint64_t*>(offset) == 0);
     }
@@ -1478,10 +1483,14 @@ namespace rgw {
     }
   }
 
-  void RGWFileHandle::advance_mtime() {
+  void RGWFileHandle::advance_mtime(uint32_t flags) {
     /* intended for use on directories, fast-forward mtime so as to
      * ensure a new, higher value for the change attribute */
-    lock_guard guard(mtx);
+    unique_lock uniq(mtx, std::defer_lock);
+    if (likely(! (flags & RGWFileHandle::FLAG_LOCKED))) {
+      uniq.lock();
+    }
+
     /* advance mtime only if stored mtime is older than the
      * configured namespace expiration */
     auto now = real_clock::now();
@@ -1506,7 +1515,7 @@ namespace rgw {
     struct req_state* s = get_state();
 
     auto compression_type =
-      get_store()->svc.zone->get_zone_params().get_compression_type(
+      get_store()->svc()->zone->get_zone_params().get_compression_type(
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */
@@ -1542,7 +1551,7 @@ namespace rgw {
       if (!version_id.empty()) {
         obj.key.set_instance(version_id);
       } else {
-        get_store()->gen_rand_obj_instance_name(&obj);
+        get_store()->getRados()->gen_rand_obj_instance_name(&obj);
         version_id = obj.key.instance;
       }
     }
@@ -1588,7 +1597,7 @@ namespace rgw {
       return -EIO;
     }
 
-    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+    op_ret = get_store()->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket,
                                       user_quota, bucket_quota, real_ofs, true);
     /* max_size exceed */
     if (op_ret < 0)
@@ -1631,15 +1640,9 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+    op_ret = get_store()->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket,
 				      user_quota, bucket_quota, s->obj_size, true);
     /* max_size exceed */
-    if (op_ret < 0) {
-      goto done;
-    }
-
-    op_ret = get_store()->check_bucket_shards(s->bucket_info, s->bucket,
-					      bucket_quota);
     if (op_ret < 0) {
       goto done;
     }

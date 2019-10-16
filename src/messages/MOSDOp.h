@@ -257,22 +257,22 @@ public:
       // here is the old structure we are encoding to: //
 #if 0
 struct ceph_osd_request_head {
-	__le32 client_inc;                 /* client incarnation */
+	ceph_le32 client_inc;              /* client incarnation */
 	struct ceph_object_layout layout;  /* pgid */
-	__le32 osdmap_epoch;               /* client's osdmap epoch */
+	ceph_le32 osdmap_epoch;            /* client's osdmap epoch */
 
-	__le32 flags;
+	ceph_le32 flags;
 
 	struct ceph_timespec mtime;        /* for mutations only */
 	struct ceph_eversion reassert_version; /* if we are replaying op */
 
-	__le32 object_len;     /* length of object name */
+	ceph_le32 object_len;     /* length of object name */
 
-	__le64 snapid;         /* snapid to read */
-	__le64 snap_seq;       /* writer's snap context */
-	__le32 num_snaps;
+	ceph_le64 snapid;         /* snapid to read */
+	ceph_le64 snap_seq;       /* writer's snap context */
+	ceph_le32 num_snaps;
 
-	__le16 num_ops;
+	ceph_le16 num_ops;
 	struct ceph_osd_op ops[];  /* followed by ops[], obj, ticket, snaps */
 } __attribute__ ((packed));
 #endif

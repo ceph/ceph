@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef RGW_FILE_H
 #define RGW_FILE_H
@@ -238,7 +238,7 @@ namespace rgw {
     };
 
     void clear_state();
-    void advance_mtime();
+    void advance_mtime(uint32_t flags = FLAG_NONE);
 
     boost::variant<file, directory> variant_type;
 
@@ -436,7 +436,7 @@ namespace rgw {
 	state.ctime = st->st_ctim;
     }
 
-    int stat(struct stat* st) {
+    int stat(struct stat* st, uint32_t flags = FLAG_NONE) {
       /* partial Unix attrs */
       memset(st, 0, sizeof(struct stat));
       st->st_dev = state.dev;
@@ -450,7 +450,7 @@ namespace rgw {
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
 	/* virtual directories are always invalid */
-	advance_mtime();
+	advance_mtime(flags);
 	st->st_nlink = state.nlink;
 	break;
       case RGW_FS_TYPE_FILE:
@@ -502,17 +502,17 @@ namespace rgw {
 	reserve += (1 + tfh->object_name().length());
 	tfh = tfh->parent;
       }
-      bool first = true;
+      int pos = 1;
       path.reserve(reserve);
       for (auto& s : boost::adaptors::reverse(segments)) {
-	if (! first)
+	if (pos > 1) {
 	  path += "/";
-	else {
+	} else {
 	  if (!omit_bucket && (path.front() != '/')) // pretty-print
 	    path += "/";
-	  first = false;
 	}
 	path += *s;
+	++pos;
       }
       return path;
     }
@@ -972,8 +972,8 @@ namespace rgw {
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
 
-    int authorize(RGWRados* store) {
-      int ret = rgw_get_user_info_by_access_key(store, key.id, user);
+    int authorize(rgw::sal::RGWRadosStore* store) {
+      int ret = store->ctl()->user->get_info_by_access_key(key.id, &user, null_yield);
       if (ret == 0) {
 	RGWAccessKey* k = user.get_key(key.id);
 	if (!k || (k->key != key.key))
@@ -992,9 +992,10 @@ namespace rgw {
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
-	  if (rgw_get_user_info_by_uid(store, token.id, user) < 0) {
-	    int ret = rgw_store_user_info(store, user, NULL, NULL, real_time(),
-					  true);
+	  if (store->ctl()->user->get_info_by_uid(rgw_user(token.id), &user, null_yield) < 0) {
+	    int ret = store->ctl()->user->store_info(user, null_yield,
+                                                  RGWUserCtl::PutParams()
+                                                  .set_exclusive(true));
 	    if (ret < 0) {
 	      lsubdout(get_context(), rgw, 10)
 		<< "NOTICE: failed to store new user's info: ret=" << ret
@@ -1077,7 +1078,7 @@ namespace rgw {
       fh_key fhk = parent->make_fhk(obj_name);
 
       lsubdout(get_context(), rgw, 10)
-	<< __func__ << " lookup called on "
+	<< __func__ << " called on "
 	<< parent->object_name() << " for " << key_name
 	<< " (" << obj_name << ")"
 	<< " -> " << fhk
@@ -1276,7 +1277,8 @@ namespace rgw {
 
     void update_user() {
       RGWUserInfo _user = user;
-      int ret = rgw_get_user_info_by_access_key(rgwlib.get_store(), key.id, user);
+      auto user_ctl = rgwlib.get_store()->ctl()->user;
+      int ret = user_ctl->get_info_by_access_key(key.id, &user, null_yield);
       if (ret != 0)
         user = _user;
     }
@@ -1377,17 +1379,17 @@ public:
     sent_data = true;
   }
 
-  void send_response_data(RGWUserBuckets& buckets) override {
+  void send_response_data(rgw::sal::RGWBucketList& buckets) override {
     if (!sent_data)
       return;
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
+    map<string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
     for (const auto& iter : m) {
       boost::string_ref marker{iter.first};
-      const RGWBucketEnt& ent = iter.second;
-      if (! this->operator()(ent.bucket.name, marker)) {
+      rgw::sal::RGWSalBucket* ent = iter.second;
+      if (! this->operator()(ent->get_name(), marker)) {
 	/* caller cannot accept more */
 	lsubdout(cct, rgw, 5) << "ListBuckets rcb failed"
-			      << " dirent=" << ent.bucket.name
+			      << " dirent=" << ent->get_name()
 			      << " call count=" << ix
 			      << dendl;
 	rcb_eof = true;
@@ -1465,8 +1467,9 @@ public:
       const char* mk = get<const char*>(offset);
       if (mk) {
 	std::string tmark{rgw_fh->relative_object_name()};
-	tmark += "/";
-	tmark += mk;	
+	if (tmark.length() > 0)
+	  tmark += "/";
+	tmark += mk;
 	marker = rgw_obj_key{std::move(tmark), "", ""};
       }
     }
@@ -2240,7 +2243,7 @@ public:
   }
 
   real_time get_ctime() const {
-    return bucket.creation_time;
+    return bucket->get_creation_time();
   }
 
   bool only_bucket() override { return false; }
@@ -2281,16 +2284,16 @@ public:
   }
 
   void send_response() override {
-    bucket.creation_time = get_state()->bucket_info.creation_time;
-    bs.size = bucket.size;
-    bs.size_rounded = bucket.size_rounded;
-    bs.creation_time = bucket.creation_time;
-    bs.num_entries = bucket.count;
+    bucket->get_creation_time() = get_state()->bucket_info.creation_time;
+    bs.size = bucket->get_size();
+    bs.size_rounded = bucket->get_size_rounded();
+    bs.creation_time = bucket->get_creation_time();
+    bs.num_entries = bucket->get_count();
     std::swap(attrs, get_state()->bucket_attrs);
   }
 
   bool matched() {
-    return (bucket.bucket.name.length() > 0);
+    return (bucket->get_name().length() > 0);
   }
 
 }; /* RGWStatBucketRequest */

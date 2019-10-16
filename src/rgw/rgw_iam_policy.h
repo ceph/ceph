@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_IAM_POLICY_H
 #define CEPH_RGW_IAM_POLICY_H
@@ -31,7 +31,6 @@
 #include "rgw_string.h"
 #include "rgw_arn.h"
 
-class RGWRados;
 namespace rgw {
 namespace auth {
 class Identity;

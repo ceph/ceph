@@ -13,6 +13,8 @@
 
 #include "DaemonState.h"
 
+#include <experimental/iterator>
+
 #include "MgrSession.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
@@ -103,7 +105,7 @@ void DeviceState::dump(Formatter *f) const
   f->close_section();
   f->open_array_section("daemons");
   for (auto& i : daemons) {
-    f->dump_string("daemon", to_string(i));
+    f->dump_stream("daemon") << i;
   }
   f->close_section();
   if (life_expectancy.first != utime_t()) {
@@ -120,11 +122,9 @@ void DeviceState::print(ostream& out) const
   for (auto& i : devnames) {
     out << "attachment " << i.first << ":" << i.second << "\n";
   }
-  set<string> d;
-  for (auto& j : daemons) {
-    d.insert(to_string(j));
-  }
-  out << "daemons " << d << "\n";
+  std::copy(std::begin(daemons), std::end(daemons),
+            std::experimental::make_ostream_joiner(out, ","));
+  out << '\n';
   if (life_expectancy.first != utime_t()) {
     out << "life_expectancy " << life_expectancy.first << " to "
 	<< life_expectancy.second
@@ -134,7 +134,7 @@ void DeviceState::print(ostream& out) const
 
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
   _insert(dm);
 }
 
@@ -156,7 +156,7 @@ void DaemonStateIndex::_insert(DaemonStatePtr dm)
 
 void DaemonStateIndex::_erase(const DaemonKey& dmk)
 {
-  ceph_assert(lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_wlocked(lock));
 
   const auto to_erase = all.find(dmk);
   ceph_assert(to_erase != all.end());
@@ -184,13 +184,13 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
 DaemonStateCollection DaemonStateIndex::get_by_service(
   const std::string& svc) const
 {
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
 
   DaemonStateCollection result;
 
-  for (const auto &i : all) {
-    if (i.first.first == svc) {
-      result[i.first] = i.second;
+  for (const auto& [key, state] : all) {
+    if (key.type == svc) {
+      result[key] = state;
     }
   }
 
@@ -200,7 +200,7 @@ DaemonStateCollection DaemonStateIndex::get_by_service(
 DaemonStateCollection DaemonStateIndex::get_by_server(
   const std::string &hostname) const
 {
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
 
   if (by_server.count(hostname)) {
     return by_server.at(hostname);
@@ -211,14 +211,14 @@ DaemonStateCollection DaemonStateIndex::get_by_server(
 
 bool DaemonStateIndex::exists(const DaemonKey &key) const
 {
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
 
   return all.count(key) > 0;
 }
 
 DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 {
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
 
   auto iter = all.find(key);
   if (iter != all.end()) {
@@ -230,7 +230,7 @@ DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 
 void DaemonStateIndex::rm(const DaemonKey &key)
 {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
   _rm(key);
 }
 
@@ -246,15 +246,15 @@ void DaemonStateIndex::cull(const std::string& svc_name,
 {
   std::vector<string> victims;
 
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
   auto begin = all.lower_bound({svc_name, ""});
   auto end = all.end();
   for (auto &i = begin; i != end; ++i) {
     const auto& daemon_key = i->first;
-    if (daemon_key.first != svc_name)
+    if (daemon_key.type != svc_name)
       break;
-    if (names_exist.count(daemon_key.second) == 0) {
-      victims.push_back(daemon_key.second);
+    if (names_exist.count(daemon_key.name) == 0) {
+      victims.push_back(daemon_key.name);
     }
   }
 

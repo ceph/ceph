@@ -26,6 +26,7 @@
 #include "common/errno.h"
 #include "common/version.h"
 
+#include "PyUtil.h"
 #include "BaseMgrModule.h"
 #include "Gil.h"
 
@@ -151,9 +152,9 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     // TODO: enhance MCommand interface so that it returns
     // latest cluster map versions on completion, and callers
     // can wait for those.
-    auto c = new FunctionContext([command_c, self](int command_r){
+    auto c = new LambdaContext([command_c, self](int command_r){
       self->py_modules->get_objecter().wait_for_latest_osdmap(
-          new FunctionContext([command_c, command_r](int wait_r){
+          new LambdaContext([command_c, command_r](int wait_r){
             command_c->complete(command_r);
           })
       );
@@ -267,6 +268,7 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
     health_status_t severity = HEALTH_OK;
     string summary;
     list<string> detail;
+    int64_t count = 0;
     PyObject *infols = PyDict_Items(check_info);
     for (int j = 0; j < PyList_Size(infols); ++j) {
       PyObject *pair = PyList_GET_ITEM(infols, j);
@@ -284,24 +286,31 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
       }
       string ks(k);
       if (ks == "severity") {
-	if (!PyString_Check(v)) {
+	if (auto [vs, valid] = PyString_ToString(v); !valid) {
 	  derr << __func__ << " check " << check_name
 	       << " severity value not string" << dendl;
 	  continue;
-	}
-	string vs(PyString_AsString(v));
-	if (vs == "warning") {
+	} else if (vs == "warning") {
 	  severity = HEALTH_WARN;
 	} else if (vs == "error") {
 	  severity = HEALTH_ERR;
 	}
       } else if (ks == "summary") {
-	if (!PyString_Check(v)) {
+	if (auto [vs, valid] = PyString_ToString(v); !valid) {
 	  derr << __func__ << " check " << check_name
-	       << " summary value not string" << dendl;
+	       << " summary value not [unicode] string" << dendl;
+	  continue;
+	} else {
+	  summary = std::move(vs);
+	}
+      } else if (ks == "count") {
+	if (PyInt_Check(v)) {
+	  count = PyInt_AsLong(v);
+	} else {
+	  derr << __func__ << " check " << check_name
+	       << " count value not int" << dendl;
 	  continue;
 	}
-	summary = PyString_AsString(v);
       } else if (ks == "detail") {
 	if (!PyList_Check(v)) {
 	  derr << __func__ << " check " << check_name
@@ -310,19 +319,20 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 	}
 	for (int k = 0; k < PyList_Size(v); ++k) {
 	  PyObject *di = PyList_GET_ITEM(v, k);
-	  if (!PyString_Check(di)) {
+	  if (auto [vs, valid] = PyString_ToString(di); !valid) {
 	    derr << __func__ << " check " << check_name
-		 << " detail item " << k << " not a string" << dendl;
+		 << " detail item " << k << " not a [unicode] string" << dendl;
 	    continue;
+	  } else {
+	    detail.push_back(std::move(vs));
 	  }
-	  detail.push_back(PyString_AsString(di));
 	}
       } else {
 	derr << __func__ << " check " << check_name
 	     << " unexpected key " << k << dendl;
       }
     }
-    auto& d = out_checks.add(check_name, severity, summary);
+    auto& d = out_checks.add(check_name, severity, summary, count);
     d.detail.swap(detail);
   }
 
@@ -384,11 +394,13 @@ ceph_option_get(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
 
-  std::string value;
-  int r = g_conf().get_val(string(what), &value);
-  if (r >= 0) {
+  const Option *opt = g_conf().find_option(string(what));
+  if (opt) {
+    std::string value;
+    int r = g_conf().get_val(string(what), &value);
+    assert(r >= 0);
     dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
-    return PyString_FromString(value.c_str());
+    return get_python_typed_option_value(opt->type, value);
   } else {
     dout(4) << "ceph_option_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
@@ -562,7 +574,13 @@ ceph_get_version(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject *
-ceph_get_context(BaseMgrModule *self, PyObject *args)
+ceph_get_release_name(BaseMgrModule *self, PyObject *args)
+{
+  return PyString_FromString(ceph_release_to_str());
+}
+
+static PyObject *
+ceph_get_context(BaseMgrModule *self)
 {
   return self->py_modules->get_context();
 }
@@ -935,16 +953,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
           }
           limit->order_by = it->second;
         } else if (limit_param_name == NAME_LIMIT_MAX_COUNT) {
-#if PY_MAJOR_VERSION <= 2
-          if (!PyInt_Check(limit_param_val) && !PyLong_Check(limit_param_val)) {
-#else
-          if (!PyLong_Check(limit_param_val)) {
-#endif
+          if (!PyInt_Check(limit_param_val)) {
             derr << __func__ << " " << limit_param_name << " not an int"
                  << dendl;
             Py_RETURN_NONE;
           }
-          limit->max_count = PyLong_AsLong(limit_param_val);
+          limit->max_count = PyInt_AsLong(limit_param_val);
         } else {
           derr << __func__ << " unknown limit param: " << limit_param_name
                << dendl;
@@ -1056,8 +1070,11 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_cluster_log", (PyCFunction)ceph_cluster_log, METH_VARARGS,
    "Emit a cluster log message"},
 
-  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_VARARGS,
+  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_NOARGS,
    "Get the ceph version of this process"},
+
+  {"_ceph_get_release_name", (PyCFunction)ceph_get_release_name, METH_NOARGS,
+   "Get the ceph release name of this process"},
 
   {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
     "Get a CephContext* in a python capsule"},

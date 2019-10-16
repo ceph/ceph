@@ -43,8 +43,7 @@ std::string Journaler::object_oid_prefix(int pool_id,
   return JOURNAL_OBJECT_PREFIX + stringify(pool_id) + "." + journal_id + ".";
 }
 
-Journaler::Threads::Threads(CephContext *cct)
-    : timer_lock("Journaler::timer_lock") {
+Journaler::Threads::Threads(CephContext *cct) {
   thread_pool = new ThreadPool(cct, "Journaler::thread_pool", "tp_journal", 1);
   thread_pool->start();
 
@@ -56,7 +55,7 @@ Journaler::Threads::Threads(CephContext *cct)
 
 Journaler::Threads::~Threads() {
   {
-    Mutex::Locker timer_locker(timer_lock);
+    std::lock_guard timer_locker{timer_lock};
     timer->shutdown();
   }
   delete timer;
@@ -82,7 +81,7 @@ Journaler::Journaler(librados::IoCtx &header_ioctx,
 }
 
 Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
-                     Mutex *timer_lock, librados::IoCtx &header_ioctx,
+                     ceph::mutex *timer_lock, librados::IoCtx &header_ioctx,
 		     const std::string &journal_id,
 		     const std::string &client_id, const Settings &settings,
                      CacheManagerHandler *cache_manager_handler)
@@ -92,7 +91,7 @@ Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
 }
 
 void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
-                       Mutex *timer_lock, librados::IoCtx &header_ioctx,
+                       ceph::mutex *timer_lock, librados::IoCtx &header_ioctx,
                        const std::string &journal_id,
                        const Settings &settings) {
   m_header_ioctx.dup(header_ioctx);
@@ -101,10 +100,9 @@ void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
   m_header_oid = header_oid(journal_id);
   m_object_oid_prefix = object_oid_prefix(m_header_ioctx.get_id(), journal_id);
 
-  m_metadata = new JournalMetadata(work_queue, timer, timer_lock,
+  m_metadata = ceph::make_ref<JournalMetadata>(work_queue, timer, timer_lock,
                                    m_header_ioctx, m_header_oid, m_client_id,
                                    settings);
-  m_metadata->get();
 }
 
 Journaler::~Journaler() {
@@ -115,8 +113,7 @@ Journaler::~Journaler() {
       // since we wouldn't expect shut_down to be invoked
       m_metadata->wait_for_ops();
     }
-    m_metadata->put();
-    m_metadata = nullptr;
+    m_metadata.reset();
   }
   ceph_assert(m_trimmer == nullptr);
   ceph_assert(m_player == nullptr);
@@ -176,13 +173,10 @@ void Journaler::shut_down(Context *on_finish) {
   ceph_assert(m_player == nullptr);
   ceph_assert(m_recorder == nullptr);
 
-  JournalMetadata *metadata = nullptr;
-  ceph_assert(m_metadata != nullptr);
-  std::swap(metadata, m_metadata);
-  ceph_assert(metadata != nullptr);
+  auto metadata = std::move(m_metadata);
+  ceph_assert(metadata);
 
-  on_finish = new FunctionContext([metadata, on_finish](int r) {
-      metadata->put();
+  on_finish = new LambdaContext([metadata, on_finish](int r) {
       on_finish->complete(0);
     });
 
@@ -193,7 +187,7 @@ void Journaler::shut_down(Context *on_finish) {
     return;
   }
 
-  on_finish = new FunctionContext([trimmer, metadata, on_finish](int r) {
+  on_finish = new LambdaContext([trimmer, metadata, on_finish](int r) {
       delete trimmer;
       metadata->shut_down(on_finish);
     });
@@ -242,7 +236,7 @@ void Journaler::create(uint8_t order, uint8_t splay_width,
 
 void Journaler::remove(bool force, Context *on_finish) {
   // chain journal removal (reverse order)
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       librados::AioCompletion *comp = librados::Rados::aio_create_completion(
         on_finish, nullptr, utils::rados_ctx_callback);
       r = m_header_ioctx.aio_remove(m_header_oid, comp);
@@ -250,7 +244,7 @@ void Journaler::remove(bool force, Context *on_finish) {
       comp->release();
     });
 
-  on_finish = new FunctionContext([this, force, on_finish](int r) {
+  on_finish = new LambdaContext([this, force, on_finish](int r) {
       m_trimmer->remove_objects(force, on_finish);
     });
 
@@ -337,12 +331,12 @@ void Journaler::get_tags(uint64_t start_after_tag_tid, uint64_t tag_class,
   m_metadata->get_tags(start_after_tag_tid, tag_class, tags, on_finish);
 }
 
-void Journaler::start_replay(ReplayHandler *replay_handler) {
+void Journaler::start_replay(ReplayHandler* replay_handler) {
   create_player(replay_handler);
   m_player->prefetch();
 }
 
-void Journaler::start_live_replay(ReplayHandler *replay_handler,
+void Journaler::start_live_replay(ReplayHandler* replay_handler,
                                   double interval) {
   create_player(replay_handler);
   m_player->prefetch_and_watch(interval);
@@ -372,16 +366,14 @@ void Journaler::stop_replay() {
 }
 
 void Journaler::stop_replay(Context *on_finish) {
-  JournalPlayer *player = nullptr;
-  ceph_assert(m_player != nullptr);
-  std::swap(player, m_player);
-  ceph_assert(player != nullptr);
+  auto player = std::move(m_player);
+  auto* playerp = player.get();
 
-  on_finish = new FunctionContext([player, on_finish](int r) {
-      delete player;
+  auto f = [player=std::move(player), on_finish](int r) {
       on_finish->complete(r);
-    });
-  player->shut_down(on_finish);
+    };
+  on_finish = new LambdaContext(std::move(f));
+  playerp->shut_down(on_finish);
 }
 
 void Journaler::committed(const ReplayEntry &replay_entry) {
@@ -389,7 +381,7 @@ void Journaler::committed(const ReplayEntry &replay_entry) {
 }
 
 void Journaler::committed(const Future &future) {
-  FutureImplPtr future_impl = future.get_future_impl();
+  auto& future_impl = future.get_future_impl();
   m_trimmer->committed(future_impl->get_commit_tid());
 }
 
@@ -398,7 +390,7 @@ void Journaler::start_append(uint64_t max_in_flight_appends) {
 
   // TODO verify active object set >= current replay object set
 
-  m_recorder = new JournalRecorder(m_data_ioctx, m_object_oid_prefix,
+  m_recorder = std::make_unique<JournalRecorder>(m_data_ioctx, m_object_oid_prefix,
 				   m_metadata, max_in_flight_appends);
 }
 
@@ -410,16 +402,14 @@ void Journaler::set_append_batch_options(int flush_interval,
 }
 
 void Journaler::stop_append(Context *on_safe) {
-  JournalRecorder *recorder = nullptr;
-  ceph_assert(m_recorder != nullptr);
-  std::swap(recorder, m_recorder);
-  ceph_assert(recorder != nullptr);
+  auto recorder = std::move(m_recorder);
+  ceph_assert(recorder);
 
-  on_safe = new FunctionContext([recorder, on_safe](int r) {
-      delete recorder;
+  auto* recorderp = recorder.get();
+  on_safe = new LambdaContext([recorder=std::move(recorder), on_safe](int r) {
       on_safe->complete(r);
     });
-  recorder->shut_down(on_safe);
+  recorderp->shut_down(on_safe);
 }
 
 uint64_t Journaler::get_max_append_size() const {
@@ -440,9 +430,9 @@ void Journaler::flush_append(Context *on_safe) {
   m_recorder->flush(on_safe);
 }
 
-void Journaler::create_player(ReplayHandler *replay_handler) {
+void Journaler::create_player(ReplayHandler* replay_handler) {
   ceph_assert(m_player == nullptr);
-  m_player = new JournalPlayer(m_data_ioctx, m_object_oid_prefix, m_metadata,
+  m_player = std::make_unique<JournalPlayer>(m_data_ioctx, m_object_oid_prefix, m_metadata,
                                replay_handler, m_cache_manager_handler);
 }
 

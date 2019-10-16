@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access
-from mock import patch
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
 
 from . import ControllerTestCase
 from .. import mgr
@@ -125,4 +128,4 @@ class PrometheusControllerTest(ControllerTestCase):
         self._get('/api/prometheus/notifications?from=' + next_to_last['id'])
         forelast = PrometheusReceiver.notifications[1]
         last = PrometheusReceiver.notifications[2]
-        self.assertEqual(self.jsonBody(), [forelast, last])
+        self.assertEqual(self.json_body(), [forelast, last])

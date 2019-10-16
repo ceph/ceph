@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <set>
 #include <string>
@@ -55,7 +55,7 @@ static int civetweb_callback(struct mg_connection* conn)
 int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 {
   /* Hold a read lock over access to env.store for reconfiguration. */
-  RWLock::RLocker lock(env.mutex);
+  std::shared_lock lock{env.mutex};
 
   RGWCivetWeb cw_client(conn);
   auto real_client_io = rgw::io::add_reordering(
@@ -65,7 +65,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
                                 &cw_client))));
   RGWRestfulIO client_io(dout_context, &real_client_io);
 
-  RGWRequest req(env.store->get_new_req_id());
+  RGWRequest req(env.store->getRados()->get_new_req_id());
   int http_ret = 0;
   //assert (scheduler != nullptr);
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,

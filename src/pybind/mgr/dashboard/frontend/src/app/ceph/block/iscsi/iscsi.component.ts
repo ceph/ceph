@@ -12,13 +12,13 @@ import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
   styleUrls: ['./iscsi.component.scss']
 })
 export class IscsiComponent implements OnInit {
-  @ViewChild('statusColorTpl')
+  @ViewChild('statusColorTpl', { static: true })
   statusColorTpl: TemplateRef<any>;
-  @ViewChild('iscsiSparklineTpl')
+  @ViewChild('iscsiSparklineTpl', { static: true })
   iscsiSparklineTpl: TemplateRef<any>;
-  @ViewChild('iscsiPerSecondTpl')
+  @ViewChild('iscsiPerSecondTpl', { static: true })
   iscsiPerSecondTpl: TemplateRef<any>;
-  @ViewChild('iscsiRelativeDateTpl')
+  @ViewChild('iscsiRelativeDateTpl', { static: true })
   iscsiRelativeDateTpl: TemplateRef<any>;
 
   gateways = [];

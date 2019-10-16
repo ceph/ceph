@@ -6,11 +6,13 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
+import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { CdValidators } from '../../../shared/forms/cd-validators';
 import { NotificationService } from '../../../shared/services/notification.service';
 
 @Component({
@@ -26,12 +28,15 @@ export class RgwBucketFormComponent implements OnInit {
   owners = null;
   action: string;
   resource: string;
+  zonegroup: string;
+  placementTargets: Object[] = [];
 
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private formBuilder: CdFormBuilder,
     private rgwBucketService: RgwBucketService,
+    private rgwSiteService: RgwSiteService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
     private i18n: I18n,
@@ -46,8 +51,10 @@ export class RgwBucketFormComponent implements OnInit {
   createForm() {
     this.bucketForm = this.formBuilder.group({
       id: [null],
-      bid: [null, [Validators.required], [this.bucketNameValidator()]],
-      owner: [null, [Validators.required]]
+      bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
+      owner: [null, [Validators.required]],
+      'placement-target': [null, this.editing ? [] : [Validators.required]],
+      versioning: [null, this.editing ? [Validators.required] : []]
     });
   }
 
@@ -57,31 +64,45 @@ export class RgwBucketFormComponent implements OnInit {
       this.owners = resp.sort();
     });
 
-    // Process route parameters.
-    this.route.params.subscribe(
-      (params: { bid: string }) => {
-        if (!params.hasOwnProperty('bid')) {
-          return;
-        }
-        const bid = decodeURIComponent(params.bid);
-        this.loading = true;
-
-        this.rgwBucketService.get(bid).subscribe((resp: object) => {
-          this.loading = false;
-          // Get the default values.
-          const defaults = _.clone(this.bucketForm.value);
-          // Extract the values displayed in the form.
-          let value = _.pick(resp, _.keys(this.bucketForm.value));
-          // Append default values.
-          value = _.merge(defaults, value);
-          // Update the form.
-          this.bucketForm.setValue(value);
+    if (!this.editing) {
+      // Get placement targets:
+      this.rgwSiteService.getPlacementTargets().subscribe((placementTargets) => {
+        this.zonegroup = placementTargets['zonegroup'];
+        _.forEach(placementTargets['placement_targets'], (placementTarget) => {
+          placementTarget['description'] = `${placementTarget['name']} (${this.i18n('pool')}: ${
+            placementTarget['data_pool']
+          })`;
+          this.placementTargets.push(placementTarget);
         });
-      },
-      (error) => {
-        this.error = error;
+
+        // If there is only 1 placement target, select it by default:
+        if (this.placementTargets.length === 1) {
+          this.bucketForm.get('placement-target').setValue(this.placementTargets[0]['name']);
+        }
+      });
+    }
+
+    // Process route parameters.
+    this.route.params.subscribe((params: { bid: string }) => {
+      if (!params.hasOwnProperty('bid')) {
+        return;
       }
-    );
+      const bid = decodeURIComponent(params.bid);
+      this.loading = true;
+
+      this.rgwBucketService.get(bid).subscribe((resp: object) => {
+        this.loading = false;
+        // Get the default values.
+        const defaults = _.clone(this.bucketForm.value);
+        // Extract the values displayed in the form.
+        let value = _.pick(resp, _.keys(this.bucketForm.value));
+        value['placement-target'] = resp['placement_rule'];
+        // Append default values.
+        value = _.merge(defaults, value);
+        // Update the form.
+        this.bucketForm.setValue(value);
+      });
+    });
   }
 
   goToListView() {
@@ -96,40 +117,59 @@ export class RgwBucketFormComponent implements OnInit {
     }
     const bidCtl = this.bucketForm.get('bid');
     const ownerCtl = this.bucketForm.get('owner');
+    const placementTargetCtl = this.bucketForm.get('placement-target');
     if (this.editing) {
       // Edit
       const idCtl = this.bucketForm.get('id');
-      this.rgwBucketService.update(bidCtl.value, idCtl.value, ownerCtl.value).subscribe(
-        () => {
-          this.notificationService.show(
-            NotificationType.success,
-            this.i18n('Updated Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
-          );
-          this.goToListView();
-        },
-        () => {
-          // Reset the 'Submit' button.
-          this.bucketForm.setErrors({ cdSubmitButton: true });
-        }
-      );
+      const versioningCtl = this.bucketForm.get('versioning');
+      this.rgwBucketService
+        .update(bidCtl.value, idCtl.value, ownerCtl.value, versioningCtl.value)
+        .subscribe(
+          () => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Updated Object Gateway bucket "{{bid}}".', { bid: bidCtl.value })
+            );
+            this.goToListView();
+          },
+          () => {
+            // Reset the 'Submit' button.
+            this.bucketForm.setErrors({ cdSubmitButton: true });
+          }
+        );
     } else {
       // Add
-      this.rgwBucketService.create(bidCtl.value, ownerCtl.value).subscribe(
-        () => {
-          this.notificationService.show(
-            NotificationType.success,
-            this.i18n('Created Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
-          );
-          this.goToListView();
-        },
-        () => {
-          // Reset the 'Submit' button.
-          this.bucketForm.setErrors({ cdSubmitButton: true });
-        }
-      );
+      this.rgwBucketService
+        .create(bidCtl.value, ownerCtl.value, this.zonegroup, placementTargetCtl.value)
+        .subscribe(
+          () => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Created Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
+            );
+            this.goToListView();
+          },
+          () => {
+            // Reset the 'Submit' button.
+            this.bucketForm.setErrors({ cdSubmitButton: true });
+          }
+        );
     }
   }
 
+  /**
+   * Validate the bucket name. In general, bucket names should follow domain
+   * name constraints:
+   * - Bucket names must be unique.
+   * - Bucket names cannot be formatted as IP address.
+   * - Bucket names can be between 3 and 63 characters long.
+   * - Bucket names must not contain uppercase characters or underscores.
+   * - Bucket names must start with a lowercase letter or number.
+   * - Bucket names must be a series of one or more labels. Adjacent
+   *   labels are separated by a single period (.). Bucket names can
+   *   contain lowercase letters, numbers, and hyphens. Each label must
+   *   start and end with a lowercase letter or a number.
+   */
   bucketNameValidator(): AsyncValidatorFn {
     const rgwBucketService = this.rgwBucketService;
     return (control: AbstractControl): Promise<ValidationErrors | null> => {
@@ -140,13 +180,42 @@ export class RgwBucketFormComponent implements OnInit {
           resolve(null);
           return;
         }
-        // Validate the bucket name.
-        const nameRe = /^[0-9A-Za-z][\w-\.]{2,254}$/;
-        if (!nameRe.test(control.value)) {
+        const constraints = [];
+        // - Bucket names cannot be formatted as IP address.
+        constraints.push((name) => {
+          const validatorFn = CdValidators.ip();
+          return !validatorFn(name);
+        });
+        // - Bucket names can be between 3 and 63 characters long.
+        constraints.push((name) => _.inRange(name.length, 3, 64));
+        // - Bucket names must not contain uppercase characters or underscores.
+        // - Bucket names must start with a lowercase letter or number.
+        // - Bucket names must be a series of one or more labels. Adjacent
+        //   labels are separated by a single period (.). Bucket names can
+        //   contain lowercase letters, numbers, and hyphens. Each label must
+        //   start and end with a lowercase letter or a number.
+        constraints.push((name) => {
+          const labels = _.split(name, '.');
+          return _.every(labels, (label) => {
+            // Bucket names must not contain uppercase characters or underscores.
+            if (label !== _.toLower(label) || label.includes('_')) {
+              return false;
+            }
+            // Bucket names can contain lowercase letters, numbers, and hyphens.
+            if (!/[0-9a-z-]/.test(label)) {
+              return false;
+            }
+            // Each label must start and end with a lowercase letter or a number.
+            return _.every([0, label.length], (index) => {
+              return /[a-z]/.test(label[index]) || _.isInteger(_.parseInt(label[index]));
+            });
+          });
+        });
+        if (!_.every(constraints, (func) => func(control.value))) {
           resolve({ bucketNameInvalid: true });
           return;
         }
-        // Does any bucket with the given name already exist?
+        // - Bucket names must be unique.
         rgwBucketService.exists(control.value).subscribe((resp: boolean) => {
           if (!resp) {
             resolve(null);

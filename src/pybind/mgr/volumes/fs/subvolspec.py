@@ -1,4 +1,5 @@
 import os
+import uuid
 
 class SubvolumeSpec(object):
     """
@@ -48,21 +49,28 @@ class SubvolumeSpec(object):
         """
         return the subvolume path from subvolume specification
         """
-        return os.path.join(self.subvolume_prefix, self.groupid, self.subvolumeid)
+        return os.path.join(self.group_path, self.subvolumeid.encode('utf-8'))
 
     @property
     def group_path(self):
         """
         return the group path from subvolume specification
         """
-        return os.path.join(self.subvolume_prefix, self.groupid)
+        return os.path.join(self.subvolume_prefix.encode('utf-8'), self.groupid.encode('utf-8'))
 
     @property
     def trash_path(self):
         """
         return the trash path from subvolume specification
         """
-        return os.path.join(self.subvolume_prefix, "_deleting", self.subvolumeid)
+        return os.path.join(self.subvolume_prefix.encode('utf-8'), b"_deleting", self.subvolumeid.encode('utf-8'))
+
+    @property
+    def unique_trash_path(self):
+        """
+        return a unique trash directory entry path
+        """
+        return os.path.join(self.subvolume_prefix.encode('utf-8'), b"_deleting", str(uuid.uuid4()).encode('utf-8'))
 
     @property
     def fs_namespace(self):
@@ -72,30 +80,35 @@ class SubvolumeSpec(object):
         return "{0}{1}".format(self.pool_ns_prefix, self.subvolumeid)
 
     @property
-    def group_dir(self):
-        """
-        return the group directory path
-        """
-        return self.subvolume_prefix
-
-    @property
     def trash_dir(self):
         """
         return the trash directory path
         """
-        return os.path.join(self.subvolume_prefix, "_deleting")
+        return os.path.join(self.subvolume_prefix.encode('utf-8'), b"_deleting")
 
     def make_subvol_snap_path(self, snapdir, snapname):
         """
         return the subvolume snapshot path for a given snapshot name
         """
-        return os.path.join(self.subvolume_path, snapdir, snapname)
+        return os.path.join(self.subvolume_path, snapdir.encode('utf-8'), snapname.encode('utf-8'))
+
+    def make_subvol_snapdir_path(self, snapdir):
+        """
+        return the subvolume snapdir path
+        """
+        return os.path.join(self.subvolume_path, snapdir.encode('utf-8'))
 
     def make_group_snap_path(self, snapdir, snapname):
         """
         return the group snapshot path for a given snapshot name
         """
-        return os.path.join(self.group_path, snapdir, snapname)
+        return os.path.join(self.group_path, snapdir.encode('utf-8'), snapname.encode('utf-8'))
+
+    def make_group_snapdir_path(self, snapdir):
+        """
+        return the group's snapdir path
+        """
+        return os.path.join(self.group_path, snapdir.encode('utf-8'))
 
     def __str__(self):
         return "{0}/{1}".format(self.groupid, self.subvolumeid)

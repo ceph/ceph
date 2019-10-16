@@ -23,6 +23,11 @@
 #include "../rados/librados.hpp"
 #include "librbd.h"
 
+#if __GNUC__ >= 4
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 namespace librbd {
 
   using librados::IoCtx;
@@ -74,11 +79,22 @@ namespace librbd {
     std::string address;
   } locker_t;
 
+  typedef rbd_mirror_peer_direction_t mirror_peer_direction_t;
+
   typedef struct {
     std::string uuid;
     std::string cluster_name;
     std::string client_name;
-  } mirror_peer_t;
+  } mirror_peer_t CEPH_RBD_DEPRECATED;
+
+  typedef struct {
+    std::string uuid;
+    mirror_peer_direction_t direction;
+    std::string site_name;
+    std::string fsid;
+    std::string client_name;
+    time_t last_seen;
+  } mirror_peer_site_t;
 
   typedef rbd_mirror_image_state_t mirror_image_state_t;
 
@@ -97,7 +113,21 @@ namespace librbd {
     std::string description;
     time_t last_update;
     bool up;
-  } mirror_image_status_t;
+  } mirror_image_status_t CEPH_RBD_DEPRECATED;
+
+  typedef struct {
+    std::string fsid;
+    mirror_image_status_state_t state;
+    std::string description;
+    time_t last_update;
+    bool up;
+  } mirror_image_site_status_t;
+
+  typedef struct {
+    std::string name;
+    mirror_image_info_t info;
+    std::vector<mirror_image_site_status_t> site_statuses;
+  } mirror_image_global_status_t;
 
   typedef rbd_group_image_state_t group_image_state_t;
 
@@ -212,7 +242,7 @@ public:
                                const char *snapname, RBD::AioCompletion *c);
 
   int list(IoCtx& io_ctx, std::vector<std::string>& names)
-    __attribute__((deprecated));
+    CEPH_RBD_DEPRECATED;
   int list2(IoCtx& io_ctx, std::vector<image_spec_t>* images);
 
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
@@ -263,30 +293,77 @@ public:
                        image_migration_status_t *status, size_t status_size);
 
   // RBD pool mirroring support functions
+  int mirror_site_name_get(librados::Rados& rados, std::string* site_name);
+  int mirror_site_name_set(librados::Rados& rados,
+                           const std::string& site_name);
+
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
-  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
-                      const std::string &cluster_name,
-                      const std::string &client_name);
-  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid);
-  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
-  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
-                             const std::string &client_name);
-  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
-                              const std::string &cluster_name);
-  int mirror_peer_get_attributes(
+
+  int mirror_peer_bootstrap_create(IoCtx& io_ctx, std::string* token);
+  int mirror_peer_bootstrap_import(IoCtx& io_ctx,
+                                   mirror_peer_direction_t direction,
+                                   const std::string &token);
+
+  int mirror_peer_site_add(IoCtx& io_ctx, std::string *uuid,
+                           mirror_peer_direction_t direction,
+                           const std::string &site_name,
+                           const std::string &client_name);
+  int mirror_peer_site_set_name(IoCtx& io_ctx, const std::string& uuid,
+                                const std::string &site_name);
+  int mirror_peer_site_set_client_name(IoCtx& io_ctx, const std::string& uuid,
+                                       const std::string &client_name);
+  int mirror_peer_site_set_direction(IoCtx& io_ctx, const std::string& uuid,
+                                     mirror_peer_direction_t direction);
+  int mirror_peer_site_remove(IoCtx& io_ctx, const std::string& uuid);
+  int mirror_peer_site_list(IoCtx& io_ctx,
+                            std::vector<mirror_peer_site_t> *peers);
+  int mirror_peer_site_get_attributes(
       IoCtx& io_ctx, const std::string &uuid,
       std::map<std::string, std::string> *key_vals);
-  int mirror_peer_set_attributes(
+  int mirror_peer_site_set_attributes(
       IoCtx& io_ctx, const std::string &uuid,
       const std::map<std::string, std::string>& key_vals);
 
-  int mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
-      size_t max, std::map<std::string, mirror_image_status_t> *images);
+  int mirror_image_global_status_list(
+      IoCtx& io_ctx, const std::string &start_id, size_t max,
+      std::map<std::string, mirror_image_global_status_t> *images);
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
   int mirror_image_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
       size_t max, std::map<std::string, std::string> *sevice_ids);
+
+  /// mirror_peer_ commands are deprecated to mirror_peer_site_ equivalents
+  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
+                      const std::string &cluster_name,
+                      const std::string &client_name)
+    CEPH_RBD_DEPRECATED;
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid)
+    CEPH_RBD_DEPRECATED;
+  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers)
+    CEPH_RBD_DEPRECATED;
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
+                             const std::string &client_name)
+    CEPH_RBD_DEPRECATED;
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
+                              const std::string &cluster_name)
+    CEPH_RBD_DEPRECATED;
+  int mirror_peer_get_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      std::map<std::string, std::string> *key_vals)
+    CEPH_RBD_DEPRECATED;
+  int mirror_peer_set_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      const std::map<std::string, std::string>& key_vals)
+    CEPH_RBD_DEPRECATED;
+
+  /// mirror_image_status_list command is deprecated to
+  /// mirror_image_global_status_list
+
+  int mirror_image_status_list(
+      IoCtx& io_ctx, const std::string &start_id, size_t max,
+      std::map<std::string, mirror_image_status_t> *images)
+    CEPH_RBD_DEPRECATED;
 
   // RBD groups support functions
   int group_create(IoCtx& io_ctx, const char *group_name);
@@ -411,10 +488,10 @@ public:
   int64_t get_data_pool_id();
   int parent_info(std::string *parent_poolname, std::string *parent_name,
 		  std::string *parent_snapname)
-      __attribute__((deprecated));
+      CEPH_RBD_DEPRECATED;
   int parent_info2(std::string *parent_poolname, std::string *parent_name,
                    std::string *parent_id, std::string *parent_snapname)
-      __attribute__((deprecated));
+      CEPH_RBD_DEPRECATED;
   int get_parent(linked_image_spec_t *parent_image, snap_spec_t *parent_snap);
 
   int old_format(uint8_t *old);
@@ -477,13 +554,13 @@ public:
    * of this image at the currently set snapshot.
    */
   int list_children(std::set<std::pair<std::string, std::string> > *children)
-      __attribute__((deprecated));
+      CEPH_RBD_DEPRECATED;
   /**
   * Returns a structure of poolname, imagename, imageid and trash flag
   * for each clone of this image at the currently set snapshot.
   */
   int list_children2(std::vector<librbd::child_info_t> *children)
-      __attribute__((deprecated));
+      CEPH_RBD_DEPRECATED;
   int list_children3(std::vector<linked_image_spec_t> *images);
   int list_descendants(std::vector<linked_image_spec_t> *images);
 
@@ -498,7 +575,7 @@ public:
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
   /* DEPRECATED; use snap_exists2 */
-  bool snap_exists(const char *snapname) __attribute__ ((deprecated));
+  bool snap_exists(const char *snapname) CEPH_RBD_DEPRECATED;
   int snap_exists2(const char *snapname, bool *exists);
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
@@ -635,15 +712,24 @@ public:
   int mirror_image_resync();
   int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                             size_t info_size);
-  int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
-			      size_t status_size);
+  int mirror_image_get_global_status(
+      mirror_image_global_status_t *mirror_image_global_status,
+      size_t status_size);
+  int mirror_image_get_status(
+      mirror_image_status_t *mirror_image_status, size_t status_size)
+    CEPH_RBD_DEPRECATED;
   int mirror_image_get_instance_id(std::string *instance_id);
   int aio_mirror_image_promote(bool force, RBD::AioCompletion *c);
   int aio_mirror_image_demote(RBD::AioCompletion *c);
   int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                                 size_t info_size, RBD::AioCompletion *c);
-  int aio_mirror_image_get_status(mirror_image_status_t *mirror_image_status,
-                                  size_t status_size, RBD::AioCompletion *c);
+  int aio_mirror_image_get_global_status(
+      mirror_image_global_status_t *mirror_image_global_status,
+      size_t status_size, RBD::AioCompletion *c);
+  int aio_mirror_image_get_status(
+      mirror_image_status_t *mirror_image_status, size_t status_size,
+      RBD::AioCompletion *c)
+    CEPH_RBD_DEPRECATED;
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
@@ -661,6 +747,10 @@ private:
   image_ctx_t ctx;
 };
 
-}
+} // namespace librbd
 
+#if __GNUC__ >= 4
+  #pragma GCC diagnostic pop
 #endif
+
+#endif // __LIBRBD_HPP

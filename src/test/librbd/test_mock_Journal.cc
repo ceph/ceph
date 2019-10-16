@@ -8,7 +8,7 @@
 #include "test/librbd/mock/MockJournalPolicy.h"
 #include "test/librbd/mock/io/MockObjectDispatch.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
 #include "librbd/Journal.h"
@@ -167,7 +167,7 @@ public:
   static OpenRequest *s_instance;
   static OpenRequest *create(MockJournalImageCtx *image_ctx,
                              ::journal::MockJournalerProxy *journaler,
-                             Mutex *lock, journal::ImageClientMeta *client_meta,
+                             ceph::mutex *lock, journal::ImageClientMeta *client_meta,
                              uint64_t *tag_tid, journal::TagData *tag_data,
                              Context *on_finish) {
     ceph_assert(s_instance != nullptr);
@@ -250,15 +250,13 @@ public:
   typedef std::function<void(::journal::ReplayHandler*)> ReplayAction;
   typedef std::list<Context *> Contexts;
 
-  TestMockJournal() : m_lock("lock") {
-  }
-
+  TestMockJournal() = default;
   ~TestMockJournal() override {
     ceph_assert(m_commit_contexts.empty());
   }
 
-  Mutex m_lock;
-  Cond m_cond;
+  ceph::mutex m_lock = ceph::make_mutex("lock");
+  ceph::condition_variable m_cond;
   Contexts m_commit_contexts;
 
   struct C_ReplayAction : public Context {
@@ -460,28 +458,28 @@ public:
     bufferlist bl;
     bl.append_zero(length);
 
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     return mock_journal.append_write_event(0, length, bl, false);
   }
 
   uint64_t when_append_io_event(MockJournalImageCtx &mock_image_ctx,
                                 MockJournal &mock_journal,
                                 int filter_ret_val) {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     return mock_journal.append_io_event(
       journal::EventEntry{journal::AioFlushEvent{}}, 0, 0, false,
                           filter_ret_val);
   }
 
   void save_commit_context(Context *ctx) {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_commit_contexts.push_back(ctx);
-    m_cond.Signal();
+    m_cond.notify_all();
   }
 
   void wake_up() {
-    Mutex::Locker locker(m_lock);
-    m_cond.Signal();
+    std::lock_guard locker{m_lock};
+    m_cond.notify_all();
   }
 
   void commit_replay(MockJournalImageCtx &mock_image_ctx, Context *on_flush,
@@ -494,7 +492,7 @@ public:
       mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
     }
 
-    on_flush = new FunctionContext([on_flush](int r) {
+    on_flush = new LambdaContext([on_flush](int r) {
         derr << "FLUSH START" << dendl;
         on_flush->complete(r);
         derr << "FLUSH FINISH" << dendl;
@@ -898,10 +896,8 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
 
   // wait for the process callback
   {
-    Mutex::Locker locker(m_lock);
-    while (m_commit_contexts.empty()) {
-      m_cond.Wait(m_lock);
-    }
+    std::unique_lock locker{m_lock};
+    m_cond.wait(locker, [this] { return !m_commit_contexts.empty(); });
   }
   on_ready->complete(0);
 
@@ -982,18 +978,14 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   // proceed with the flush
   {
     // wait for on_flush callback
-    Mutex::Locker locker(m_lock);
-    while (on_flush == nullptr) {
-      m_cond.Wait(m_lock);
-    }
+    std::unique_lock locker{m_lock};
+    m_cond.wait(locker, [&] {return on_flush != nullptr;});
   }
 
   {
     // wait for the on_safe process callback
-    Mutex::Locker locker(m_lock);
-    while (m_commit_contexts.empty()) {
-      m_cond.Wait(m_lock);
-    }
+    std::unique_lock locker{m_lock};
+    m_cond.wait(locker, [this] {return !m_commit_contexts.empty();});
   }
   m_commit_contexts.front()->complete(-EINVAL);
   m_commit_contexts.clear();
@@ -1351,7 +1343,7 @@ TEST_F(TestMockJournal, AppendDisabled) {
   };
 
   InSequence seq;
-  RWLock::RLocker image_locker(mock_image_ctx.image_lock);
+  std::shared_lock image_locker{mock_image_ctx.image_lock};
   EXPECT_CALL(mock_image_ctx, get_journal_policy()).WillOnce(
     Return(ictx->get_journal_policy()));
   ASSERT_TRUE(mock_journal.is_journal_appending());

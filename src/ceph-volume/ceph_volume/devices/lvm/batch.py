@@ -327,6 +327,7 @@ class Batch(object):
     def _get_explicit_strategy(self):
         # TODO assert that none of the device lists overlap?
         self._filter_devices()
+        self._ensure_disjoint_device_lists()
         if self.args.bluestore:
             if self.db_usable or self.wal_usable:
                 self.strategy = strategies.bluestore.MixedType(
@@ -360,8 +361,17 @@ class Batch(object):
             dev_list_prop = '{}devices'.format(dev_list)
             if hasattr(self.args, dev_list_prop):
                 usable_dev_list_prop = '{}usable'.format(dev_list)
-                usable = [d for d in getattr(self.args, dev_list_prop) if d.available]
+                usable = [d for d in getattr(self.args, dev_list_prop) if
+                          d.available]
                 setattr(self, usable_dev_list_prop, usable)
                 self.filtered_devices.update({d: used_reason for d in
                                               getattr(self.args, dev_list_prop)
                                               if d.used_by_ceph})
+
+    def _ensure_disjoint_device_lists(self):
+        # check that all device lists are disjoint with each other
+        if not(set(self.usable).isdisjoint(set(self.db_usable)) and
+               set(self.usable).isdisjoint(set(self.wal_usable)) and
+               set(self.usable).isdisjoint(set(self.journal_usable)) and
+               set(self.db_usable).isdisjoint(set(self.wal_usable))):
+            raise Exception('Device lists are not disjoint')

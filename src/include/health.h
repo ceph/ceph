@@ -68,3 +68,16 @@ inline std::ostream& operator<<(std::ostream &oss, const health_status_t status)
   }
   return oss;
 }
+
+inline const char *short_health_string(const health_status_t status) {
+  switch (status) {
+  case HEALTH_ERR:
+    return "ERR";
+  case HEALTH_WARN:
+    return "WRN";
+  case HEALTH_OK:
+    return "OK";
+  default:
+    return "???";
+  }
+}

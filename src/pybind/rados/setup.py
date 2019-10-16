@@ -88,10 +88,9 @@ def check_sanity():
     compiler = new_compiler()
     distutils.sysconfig.customize_compiler(compiler)
 
-    if {'MAKEFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
+    if 'CEPH_LIBDIR' in os.environ:
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
-
         compiler.set_include_dirs([os.path.join(CEPH_SRC_DIR, 'include')])
         compiler.set_library_dirs([os.environ.get('CEPH_LIBDIR')])
 

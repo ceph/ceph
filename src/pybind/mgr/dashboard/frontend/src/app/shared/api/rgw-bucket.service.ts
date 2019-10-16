@@ -48,17 +48,21 @@ export class RgwBucketService {
     return this.http.get(`${this.url}/${bucket}`);
   }
 
-  create(bucket: string, uid: string) {
+  create(bucket: string, uid: string, zonegroup: string, placementTarget: string) {
     let params = new HttpParams();
     params = params.append('bucket', bucket);
     params = params.append('uid', uid);
+    params = params.append('zonegroup', zonegroup);
+    params = params.append('placement_target', placementTarget);
+
     return this.http.post(this.url, null, { params: params });
   }
 
-  update(bucket: string, bucketId: string, uid: string) {
+  update(bucket: string, bucketId: string, uid: string, versioningState: string) {
     let params = new HttpParams();
     params = params.append('bucket_id', bucketId);
     params = params.append('uid', uid);
+    params = params.append('versioning_state', versioningState);
     return this.http.put(`${this.url}/${bucket}`, null, { params: params });
   }
 
@@ -70,7 +74,7 @@ export class RgwBucketService {
 
   /**
    * Check if the specified bucket exists.
-   * @param {string} uid The bucket name to check.
+   * @param {string} bucket The bucket name to check.
    * @return {Observable<boolean>}
    */
   exists(bucket: string) {

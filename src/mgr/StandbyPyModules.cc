@@ -56,20 +56,20 @@ void StandbyPyModules::shutdown()
     auto module = i.second.get();
     const auto& name = i.first;
     dout(10) << "waiting for module " << name << " to shutdown" << dendl;
-    lock.Unlock();
+    lock.unlock();
     module->shutdown();
-    lock.Lock();
+    lock.lock();
     dout(10) << "module " << name << " shutdown" << dendl;
   }
 
   // For modules implementing serve(), finish the threads where we
   // were running that.
   for (auto &i : modules) {
-    lock.Unlock();
+    lock.unlock();
     dout(10) << "joining thread for module " << i.first << dendl;
     i.second->thread.join();
     dout(10) << "joined thread for module " << i.first << dendl;
-    lock.Lock();
+    lock.lock();
   }
 
   modules.clear();
@@ -87,7 +87,7 @@ void StandbyPyModules::start_one(PyModuleRef py_module)
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
-  finisher.queue(new FunctionContext([this, standby_module, name](int) {
+  finisher.queue(new LambdaContext([this, standby_module, name](int) {
     int r = standby_module->load();
     if (r != 0) {
       derr << "Failed to run module in standby mode ('" << name << "')"

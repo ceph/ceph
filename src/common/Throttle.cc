@@ -151,6 +151,7 @@ int64_t Throttle::take(int64_t c)
 bool Throttle::get(int64_t c, int64_t m)
 {
   if (0 == max && 0 == m) {
+    count += c;
     return false;
   }
 
@@ -183,6 +184,7 @@ bool Throttle::get(int64_t c, int64_t m)
 bool Throttle::get_or_fail(int64_t c)
 {
   if (0 == max) {
+    count += c;
     return true;
   }
 
@@ -211,6 +213,7 @@ bool Throttle::get_or_fail(int64_t c)
 int64_t Throttle::put(int64_t c)
 {
   if (0 == max) {
+    count -= c;
     return 0;
   }
 
@@ -708,11 +711,11 @@ TokenBucketThrottle::TokenBucketThrottle(
     uint64_t capacity,
     uint64_t avg,
     SafeTimer *timer,
-    Mutex *timer_lock)
+    ceph::mutex *timer_lock)
   : m_cct(cct), m_name(name),
     m_throttle(m_cct, name + "_bucket", capacity),
     m_avg(avg), m_timer(timer), m_timer_lock(timer_lock),
-    m_lock(name + "_lock")
+    m_lock(ceph::make_mutex(name + "_lock"))
 {}
 
 TokenBucketThrottle::~TokenBucketThrottle() {
@@ -735,7 +738,7 @@ TokenBucketThrottle::~TokenBucketThrottle() {
 
 int TokenBucketThrottle::set_limit(uint64_t average, uint64_t burst) {
   {
-    std::lock_guard<Mutex> lock(m_lock);
+    std::lock_guard lock{m_lock};
 
     if (0 < burst && burst < average) {
       // the burst should never less than the average.
@@ -769,7 +772,7 @@ int TokenBucketThrottle::set_limit(uint64_t average, uint64_t burst) {
 
   // The schedule period will be changed when the average rate is set.
   {
-    std::lock_guard<Mutex> timer_locker(*m_timer_lock);
+    std::lock_guard timer_locker{*m_timer_lock};
     cancel_timer();
     schedule_timer();
   }
@@ -829,7 +832,7 @@ void TokenBucketThrottle::add_tokens() {
 }
 
 void TokenBucketThrottle::schedule_timer() {
-  m_token_ctx = new FunctionContext(
+  m_token_ctx = new LambdaContext(
       [this](int r) {
         schedule_timer();
       });

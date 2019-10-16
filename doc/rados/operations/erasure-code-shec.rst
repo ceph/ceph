@@ -141,4 +141,4 @@ Erasure code profile examples
              plugin=shec \
              k=8 m=4 c=3 \
              crush-failure-domain=host
-        $ ceph osd pool create shecpool 256 256 erasure SHECprofile
+        $ ceph osd pool create shecpool erasure SHECprofile

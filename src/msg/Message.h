@@ -25,6 +25,7 @@
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
+#include "common/ref.h"
 #include "common/debug.h"
 #include "common/zipkin_trace.h"
 #include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
@@ -33,6 +34,10 @@
 #include "msg/Connection.h"
 #include "msg/MessageRef.h"
 #include "msg_types.h"
+
+#ifdef WITH_SEASTAR
+#  include "crimson/net/SocketConnection.h"
+#endif // WITH_SEASTAR
 
 // monitor internal
 #define MSG_MON_SCRUB              64
@@ -71,6 +76,7 @@
 #define MSG_OSD_ALIVE        73
 #define MSG_OSD_MARK_ME_DOWN 74
 #define MSG_OSD_FULL         75
+#define MSG_OSD_MARK_ME_DEAD 123
 
 // removed right after luminous
 //#define MSG_OSD_SUBOP        76
@@ -81,10 +87,13 @@
 #define MSG_OSD_BEACON       79
 
 #define MSG_OSD_PG_NOTIFY      80
+#define MSG_OSD_PG_NOTIFY2    130
 #define MSG_OSD_PG_QUERY       81
+#define MSG_OSD_PG_QUERY2     131
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85
+#define MSG_OSD_PG_INFO2      132
 #define MSG_OSD_PG_TRIM        86
 
 #define MSG_PGSTATS            87
@@ -130,6 +139,9 @@
 #define MSG_OSD_SCRUB2          121
 
 #define MSG_OSD_PG_READY_TO_MERGE 122
+
+#define MSG_OSD_PG_LEASE        133
+#define MSG_OSD_PG_LEASE_ACK    134
 
 // *** MDS ***
 
@@ -213,12 +225,21 @@
 #define MSG_SERVICE_MAP           0x707
 
 #define MSG_MGR_CLOSE             0x708
+#define MSG_MGR_COMMAND           0x709
+#define MSG_MGR_COMMAND_REPLY     0x70a
 
 // ======================================================
 
 // abstract Message class
 
 class Message : public RefCountedObject {
+public:
+#ifdef WITH_SEASTAR
+  using ConnectionRef = ceph::net::ConnectionRef;
+#else
+  using ConnectionRef = ::ConnectionRef;
+#endif // WITH_SEASTAR
+
 protected:
   ceph_msg_header  header;      // headerelope
   ceph_msg_footer  footer;
@@ -315,8 +336,8 @@ protected:
   }
 public:
   const ConnectionRef& get_connection() const { return connection; }
-  void set_connection(const ConnectionRef& c) {
-    connection = c;
+  void set_connection(ConnectionRef c) {
+    connection = std::move(c);
   }
   CompletionHook* get_completion_hook() { return completion_hook; }
   void set_completion_hook(CompletionHook *hook) { completion_hook = hook; }
@@ -490,11 +511,14 @@ public:
   void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
 };
 
-extern Message *decode_message(CephContext *cct, int crcflags,
-			       ceph_msg_header &header,
-			       ceph_msg_footer& footer, ceph::buffer::list& front,
-			       ceph::buffer::list& middle, ceph::buffer::list& data,
-			       Connection* conn);
+extern Message *decode_message(CephContext *cct,
+                               int crcflags,
+                               ceph_msg_header& header,
+                               ceph_msg_footer& footer,
+                               ceph::buffer::list& front,
+                               ceph::buffer::list& middle,
+                               ceph::buffer::list& data,
+                               Message::ConnectionRef conn);
 inline std::ostream& operator<<(std::ostream& out, const Message& m) {
   m.print(out);
   if (m.get_header().version)
@@ -519,22 +543,8 @@ private:
 };
 
 namespace ceph {
-template<typename T> using ref_t = boost::intrusive_ptr<T>;
-template<typename T> using cref_t = boost::intrusive_ptr<const T>;
-template<class T, class U>
-boost::intrusive_ptr<T> ref_cast(const boost::intrusive_ptr<U>& r) noexcept {
-  return static_cast<T*>(r.get());
-}
-template<class T, class U>
-boost::intrusive_ptr<T> ref_cast(boost::intrusive_ptr<U>&& r) noexcept {
-  return {static_cast<T*>(r.detach()), false};
-}
-template<class T, class U>
-boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>& r) noexcept {
-  return static_cast<const T*>(r.get());
-}
 template<class T, typename... Args>
-boost::intrusive_ptr<T> make_message(Args&&... args) {
+ceph::ref_t<T> make_message(Args&&... args) {
   return {new T(std::forward<Args>(args)...), false};
 }
 }

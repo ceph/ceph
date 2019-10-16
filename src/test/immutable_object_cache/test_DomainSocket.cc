@@ -58,7 +58,7 @@ public:
       }
     }
 
-    auto ctx = new FunctionContext([](int reg) {
+    auto ctx = new LambdaContext([](int reg) {
       ASSERT_TRUE(reg == 0);
     });
     m_cache_client->register_client(ctx);

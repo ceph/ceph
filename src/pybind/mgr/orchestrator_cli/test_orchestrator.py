@@ -1,44 +1,58 @@
 from __future__ import absolute_import
+import json
+
 import pytest
 
+from orchestrator import ReadCompletion, raise_if_exception, RGWSpec
+from orchestrator import InventoryNode, InventoryDevice, ServiceDescription
+from orchestrator import OrchestratorValidationError
 
-from orchestrator import DriveGroupSpec, DeviceSelection, DriveGroupValidationError, \
-    InventoryDevice, ReadCompletion, raise_if_exception
+
+def _test_resource(data, resource_class, extra):
+    # create the instance with normal way
+    rsc = resource_class(**data)
+    if hasattr(rsc, 'pretty_print'):
+        assert rsc.pretty_print()
+
+    # ensure we can deserialize and serialize
+    rsc = resource_class.from_json(data)
+    rsc.to_json()
+
+    # if there is an unexpected data provided
+    data.update(extra)
+    with pytest.raises(OrchestratorValidationError):
+        resource_class.from_json(data)
 
 
-def test_DriveGroup():
-    dg_json = {
-        'host_pattern': 'hostname',
-        'data_devices': {'paths': ['/dev/sda']}
+def test_inventory():
+    json_data = {
+        'name': 'host0',
+        'devices': [
+            {
+                'type': 'hdd',
+                'id': '/dev/sda',
+                'size': 1024,
+                'rotates': True
+            }
+        ]
     }
+    _test_resource(json_data, InventoryNode, {'abc': False})
+    for devices in json_data['devices']:
+        _test_resource(devices, InventoryDevice, {'abc': False})
 
-    dg = DriveGroupSpec.from_json(dg_json)
-    assert dg.hosts(['hostname']) == ['hostname']
-    assert dg.data_devices.paths == ['/dev/sda']
-
-
-def test_DriveGroup_fail():
-    with pytest.raises(TypeError):
-        DriveGroupSpec.from_json({})
-
-
-def test_drivegroup_pattern():
-    dg = DriveGroupSpec('node[1-3]', DeviceSelection())
-    assert dg.hosts(['node{}'.format(i) for i in range(10)]) == ['node1', 'node2', 'node3']
+    json_data = [{}, {'name': 'host0'}, {'devices': []}]
+    for data in json_data:
+        with pytest.raises(OrchestratorValidationError):
+            InventoryNode.from_json(data)
 
 
-def test_drive_selection():
-    devs = DeviceSelection(paths=['/dev/sda'])
-    spec = DriveGroupSpec('node_name', data_devices=devs)
-    assert spec.data_devices.paths == ['/dev/sda']
-
-    with pytest.raises(DriveGroupValidationError, match='exclusive'):
-        DeviceSelection(paths=['/dev/sda'], rotates=False)
-
-def test_inventory_device():
-    i_d = InventoryDevice()
-    s = i_d.pretty_print()
-    assert len(s)
+def test_service_description():
+    json_data = {
+        'nodename': 'test',
+        'service_type': 'mon',
+        'service_instance': 'a'
+    }
+    _test_resource(json_data, ServiceDescription, {'abc': False})
 
 
 def test_raise():
@@ -46,3 +60,19 @@ def test_raise():
     c.exception = ZeroDivisionError()
     with pytest.raises(ZeroDivisionError):
         raise_if_exception(c)
+
+
+def test_rgwspec():
+    """
+    {
+        "rgw_zone": "zonename",
+        "rgw_frontend_port": 8080,
+        "rgw_zonegroup": "group",
+        "rgw_zone_user": "user",
+        "rgw_realm": "realm",
+        "count": 3
+    }
+    """
+    example = json.loads(test_rgwspec.__doc__.strip())
+    spec = RGWSpec.from_json(example)
+    assert spec.validate_add() is None

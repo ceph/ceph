@@ -5,7 +5,7 @@
 #define CEPH_RBD_MIRROR_H
 
 #include "common/ceph_context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
 #include "ClusterWatcher.h"
@@ -46,7 +46,7 @@ public:
   void run();
   void handle_signal(int signum);
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
   void start();
   void stop();
   void restart();
@@ -57,7 +57,8 @@ private:
   typedef ClusterWatcher::PoolPeers PoolPeers;
   typedef std::pair<int64_t, PeerSpec> PoolPeer;
 
-  void update_pool_replayers(const PoolPeers &pool_peers);
+  void update_pool_replayers(const PoolPeers &pool_peers,
+                             const std::string& site_name);
 
   void create_cache_manager();
   void run_cache_manager(utime_t *next_run_interval);
@@ -65,8 +66,8 @@ private:
   CephContext *m_cct;
   std::vector<const char*> m_args;
   Threads<librbd::ImageCtx> *m_threads = nullptr;
-  Mutex m_lock;
-  Cond m_cond;
+  ceph::mutex m_lock = ceph::make_mutex("rbd::mirror::Mirror");
+  ceph::condition_variable m_cond;
   RadosRef m_local;
   std::unique_ptr<ServiceDaemon<librbd::ImageCtx>> m_service_daemon;
 
@@ -77,6 +78,7 @@ private:
   std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;
+  std::string m_site_name;
 };
 
 } // namespace mirror

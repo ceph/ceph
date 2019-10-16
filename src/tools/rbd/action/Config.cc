@@ -20,6 +20,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/program_options.hpp>
 
+#include "json_spirit/json_spirit.h"
+
 namespace rbd {
 namespace action {
 namespace config {

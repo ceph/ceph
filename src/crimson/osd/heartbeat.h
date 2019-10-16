@@ -10,7 +10,10 @@
 #include "crimson/net/Fwd.h"
 
 class MOSDPing;
-class OSDMapService;
+
+namespace ceph::osd {
+  class ShardServices;
+}
 
 namespace ceph::mon {
   class Client;
@@ -22,7 +25,7 @@ class Heartbeat : public ceph::net::Dispatcher {
 public:
   using osd_id_t = int;
 
-  Heartbeat(const OSDMapService& service,
+  Heartbeat(const ceph::osd::ShardServices& service,
 	    ceph::mon::Client& monc,
 	    ceph::net::Messenger& front_msgr,
 	    ceph::net::Messenger& back_msgr);
@@ -64,12 +67,12 @@ private:
   /// @return peers not needed in this epoch
   seastar::future<osds_t> remove_down_peers();
   /// add enough reporters for fast failure detection
-  void add_reporter_peers(int whoami);
+  seastar::future<> add_reporter_peers(int whoami);
 
   seastar::future<> start_messenger(ceph::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);
 private:
-  const OSDMapService& service;
+  const ceph::osd::ShardServices& service;
   ceph::mon::Client& monc;
   ceph::net::Messenger& front_msgr;
   ceph::net::Messenger& back_msgr;

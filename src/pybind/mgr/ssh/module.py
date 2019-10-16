@@ -1,8 +1,10 @@
 import json
 import errno
+import logging
+from functools import wraps
+
 import six
 import os
-import datetime
 import tempfile
 import multiprocessing.pool
 
@@ -18,13 +20,17 @@ except ImportError as e:
     remoto = None
     remoto_import_error = str(e)
 
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f%z'
+logger = logging.getLogger(__name__)
+
+DEFAULT_SSH_CONFIG = ('Host *\n'
+                      'User root\n'
+                      'StrictHostKeyChecking no\n')
 
 # high-level TODO:
 #  - bring over some of the protections from ceph-deploy that guard against
 #    multiple bootstrapping / initialization
 
-class SSHReadCompletion(orchestrator.ReadCompletion):
+class SSHCompletionmMixin(object):
     def __init__(self, result):
         if isinstance(result, multiprocessing.pool.AsyncResult):
             self._result = [result]
@@ -36,34 +42,13 @@ class SSHReadCompletion(orchestrator.ReadCompletion):
     def result(self):
         return list(map(lambda r: r.get(), self._result))
 
+class SSHReadCompletion(SSHCompletionmMixin, orchestrator.ReadCompletion):
     @property
     def is_complete(self):
         return all(map(lambda r: r.ready(), self._result))
 
-class SSHReadCompletionReady(SSHReadCompletion):
-    def __init__(self, result):
-        self._result = result
 
-    @property
-    def result(self):
-        return self._result
-
-    @property
-    def is_complete(self):
-        return True
-
-class SSHWriteCompletion(orchestrator.WriteCompletion):
-    def __init__(self, result):
-        super(SSHWriteCompletion, self).__init__()
-        if isinstance(result, multiprocessing.pool.AsyncResult):
-            self._result = [result]
-        else:
-            self._result = result
-        assert isinstance(self._result, list)
-
-    @property
-    def result(self):
-        return list(map(lambda r: r.get(), self._result))
+class SSHWriteCompletion(SSHCompletionmMixin, orchestrator.WriteCompletion):
 
     @property
     def is_persistent(self):
@@ -103,17 +88,21 @@ class SSHWriteCompletionReady(SSHWriteCompletion):
     def is_errored(self):
         return False
 
-class SSHConnection(object):
-    """
-    Tie tempfile lifetime (e.g. ssh_config) to a remoto connection.
-    """
-    def __init__(self):
-        self.conn = None
-        self.temp_file = None
+def log_exceptions(f):
+    if six.PY3:
+        return f
+    else:
+        # Python 2 does no exception chaining, thus the
+        # real exception is lost
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            try:
+                return f(*args, **kwargs)
+            except Exception:
+                logger.exception('something went wrong.')
+                raise
+        return wrapper
 
-    # proxy to the remoto connection
-    def __getattr__(self, name):
-        return getattr(self.conn, name)
 
 class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
@@ -140,8 +129,73 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def __init__(self, *args, **kwargs):
         super(SSHOrchestrator, self).__init__(*args, **kwargs)
-        self._cluster_fsid = None
+        self._cluster_fsid = self.get('mon_map')['fsid']
+
+        path = self.get_ceph_option('ceph_daemon_path')
+        try:
+            with open(path, 'r') as f:
+                self._ceph_daemon = f.read()
+        except IOError as e:
+            raise RuntimeError("unable to read ceph-daemon at '%s': %s" % (
+                path, str(e)))
+
         self._worker_pool = multiprocessing.pool.ThreadPool(1)
+
+        self._reconfig_ssh()
+
+        # the keys in inventory_cache are authoritative.
+        #   You must not call remove_outdated()
+        # The values are cached by instance.
+        # cache is invalidated by
+        # 1. timeout
+        # 2. refresh parameter
+        self.inventory_cache = orchestrator.OutdatablePersistentDict(self, self._STORE_HOST_PREFIX)
+
+    def _reconfig_ssh(self):
+        temp_files = []
+        ssh_options = []
+
+        # ssh_config
+        ssh_config_fname = self.get_localized_module_option("ssh_config_file")
+        ssh_config = self.get_store("ssh_config")
+        if ssh_config is not None or ssh_config_fname is None:
+            if not ssh_config:
+                ssh_config = DEFAULT_SSH_CONFIG
+            f = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-conf-')
+            os.fchmod(f.fileno(), 0o600);
+            f.write(ssh_config.encode('utf-8'))
+            f.flush() # make visible to other processes
+            temp_files += [f]
+            ssh_config_fname = f.name
+        if ssh_config_fname:
+            if not os.path.isfile(ssh_config_fname):
+                raise Exception("ssh_config \"{}\" does not exist".format(
+                    ssh_config_fname))
+            ssh_options += ['-F', ssh_config_fname]
+
+        # identity
+        ssh_key = self.get_store("ssh_identity_key")
+        ssh_pub = self.get_store("ssh_identity_pub")
+        tpub = None
+        tkey = None
+        if ssh_key and ssh_pub:
+            tkey = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-identity-')
+            tkey.write(ssh_key.encode('utf-8'))
+            os.fchmod(tkey.fileno(), 0o600);
+            tkey.flush() # make visible to other processes
+            tpub = open(tkey.name + '.pub', 'w')
+            os.fchmod(tpub.fileno(), 0o600);
+            tpub.write(ssh_pub)
+            tpub.flush() # make visible to other processes
+            temp_files += [tkey, tpub]
+            ssh_options += ['-i', tkey.name]
+
+        self._temp_files = temp_files
+        if ssh_options:
+            self._ssh_options = ' '.join(ssh_options)
+        else:
+            self._ssh_options = None
+        self.log.info('ssh_options %s' % ssh_options)
 
     def handle_command(self, inbuf, command):
         if command["prefix"] == "ssh set-ssh-config":
@@ -170,29 +224,16 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         complete = True
         for c in completions:
+            if c.is_complete:
+                continue
+
             if not isinstance(c, SSHReadCompletion) and \
                     not isinstance(c, SSHWriteCompletion):
                 raise TypeError("unexpected completion: {}".format(c.__class__))
 
-            if c.is_complete:
-                continue
-
             complete = False
 
         return complete
-
-    @staticmethod
-    def time_from_string(timestr):
-        return datetime.datetime.strptime(timestr, DATEFMT)
-
-    def _get_cluster_fsid(self):
-        """
-        Fetch and cache the cluster fsid.
-        """
-        if not self._cluster_fsid:
-            self._cluster_fsid = self.get("mon_map")["fsid"]
-        assert isinstance(self._cluster_fsid, six.string_types)
-        return self._cluster_fsid
 
     def _require_hosts(self, hosts):
         """
@@ -200,12 +241,10 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         if isinstance(hosts, six.string_types):
             hosts = [hosts]
-        unregistered_hosts = []
-        for host in hosts:
-            key = self._hostname_to_store_key(host)
-            if not self.get_store(key):
-                unregistered_hosts.append(host)
+        keys = self.inventory_cache.keys()
+        unregistered_hosts = set(hosts) - keys
         if unregistered_hosts:
+            logger.warning('keys = {}'.format(keys))
             raise RuntimeError("Host(s) {} not registered".format(
                 ", ".join(map(lambda h: "'{}'".format(h),
                     unregistered_hosts))))
@@ -234,33 +273,15 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         Setup a connection for running commands on remote host.
         """
-        ssh_options = None
-
-        conn = SSHConnection()
-
-        ssh_config = self.get_store("ssh_config")
-        if ssh_config is not None:
-            conn.temp_file = tempfile.NamedTemporaryFile()
-            conn.temp_file.write(ssh_config.encode('utf-8'))
-            conn.temp_file.flush() # make visible to other processes
-            ssh_config_fname = conn.temp_file.name
-        else:
-            ssh_config_fname = self.get_localized_module_option("ssh_config_file")
-
-        if ssh_config_fname:
-            if not os.path.isfile(ssh_config_fname):
-                raise Exception("ssh_config \"{}\" does not exist".format(ssh_config_fname))
-            ssh_options = "-F {}".format(ssh_config_fname)
-
         self.log.info("opening connection to host '{}' with ssh "
-                "options '{}'".format(host, ssh_options))
+                "options '{}'".format(host, self._ssh_options))
 
-        conn.conn = remoto.Connection(host,
-                logger=self.log,
-                detect_sudo=True,
-                ssh_options=ssh_options)
+        conn = remoto.Connection(
+            'root@' + host,
+            logger=self.log,
+            ssh_options=self._ssh_options)
 
-        conn.conn.import_module(remotes)
+        conn.import_module(remotes)
 
         return conn
 
@@ -280,106 +301,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             executable_path))
         return executable_path
 
-    def _build_ceph_conf(self):
-        """
-        Build a minimal `ceph.conf` containing the current monitor hosts.
-
-        Notes:
-          - ceph-volume complains if no section header (e.g. global) exists
-          - other ceph cli tools complained about no EOF newline
-
-        TODO:
-          - messenger v2 syntax?
-        """
-        mon_map = self.get("mon_map")
-        mon_addrs = map(lambda m: m["addr"], mon_map["mons"])
-        mon_hosts = ", ".join(mon_addrs)
-        return "[global]\nmon host = {}\n".format(mon_hosts)
-
-    def _ensure_ceph_conf(self, conn, network=False):
-        """
-        Install ceph.conf on remote node if it doesn't exist.
-        """
-        conf = self._build_ceph_conf()
-        if network:
-            conf += "public_network = {}\n".format(network)
-        conn.remote_module.write_conf("/etc/ceph/ceph.conf", conf)
-
-    def _get_bootstrap_key(self, service_type):
-        """
-        Fetch a bootstrap key for a service type.
-
-        :param service_type: name (e.g. mds, osd, mon, ...)
-        """
-        identity_dict = {
-            'admin' : 'client.admin',
-            'mds' : 'client.bootstrap-mds',
-            'mgr' : 'client.bootstrap-mgr',
-            'osd' : 'client.bootstrap-osd',
-            'rgw' : 'client.bootstrap-rgw',
-            'mon' : 'mon.'
-        }
-
-        identity = identity_dict[service_type]
-
-        ret, out, err = self.mon_command({
-            "prefix": "auth get",
-            "entity": identity
-        })
-
-        if ret == -errno.ENOENT:
-            raise RuntimeError("Entity '{}' not found: '{}'".format(identity, err))
-        elif ret != 0:
-            raise RuntimeError("Error retrieving key for '{}' ret {}: '{}'".format(
-                identity, ret, err))
-
-        return out
-
-    def _bootstrap_mgr(self, conn):
-        """
-        Bootstrap a manager.
-
-          1. install a copy of ceph.conf
-          2. install the manager bootstrap key
-
-        :param conn: remote host connection
-        """
-        self._ensure_ceph_conf(conn)
-        keyring = self._get_bootstrap_key("mgr")
-        keyring_path = "/var/lib/ceph/bootstrap-mgr/ceph.keyring"
-        conn.remote_module.write_keyring(keyring_path, keyring)
-        return keyring_path
-
-    def _bootstrap_osd(self, conn):
-        """
-        Bootstrap an osd.
-
-          1. install a copy of ceph.conf
-          2. install the osd bootstrap key
-
-        :param conn: remote host connection
-        """
-        self._ensure_ceph_conf(conn)
-        keyring = self._get_bootstrap_key("osd")
-        keyring_path = "/var/lib/ceph/bootstrap-osd/ceph.keyring"
-        conn.remote_module.write_keyring(keyring_path, keyring)
-        return keyring_path
-
-    def _hostname_to_store_key(self, host):
-        return "{}.{}".format(self._STORE_HOST_PREFIX, host)
-
     def _get_hosts(self, wanted=None):
-        if wanted:
-            hosts_info = []
-            for host in wanted:
-                key = self._hostname_to_store_key(host)
-                info = self.get_store(key)
-                if info:
-                    hosts_info.append((key, info))
-        else:
-            hosts_info = six.iteritems(self.get_store_prefix(self._STORE_HOST_PREFIX))
-
-        return list(map(lambda kv: (kv[0], json.loads(kv[1])), hosts_info))
+        return self.inventory_cache.items_filtered(wanted)
 
     def add_host(self, host):
         """
@@ -387,13 +310,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         :param host: host name
         """
+        @log_exceptions
         def run(host):
-            key = self._hostname_to_store_key(host)
-            self.set_store(key, json.dumps({
-                "host": host,
-                "inventory": None,
-                "last_inventory_refresh": None
-            }))
+            self.inventory_cache[host] = orchestrator.OutdatableData()
             return "Added host '{}'".format(host)
 
         return SSHWriteCompletion(
@@ -405,9 +324,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         :param host: host name
         """
+        @log_exceptions
         def run(host):
-            key = self._hostname_to_store_key(host)
-            self.set_store(key, None)
+            del self.inventory_cache[host]
             return "Removed host '{}'".format(host)
 
         return SSHWriteCompletion(
@@ -423,31 +342,46 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         TODO:
           - InventoryNode probably needs to be able to report labels
         """
-        nodes = []
-        for key, host_info in self._get_hosts():
-            node = orchestrator.InventoryNode(host_info["host"], [])
-            nodes.append(node)
-        return SSHReadCompletionReady(nodes)
+        nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
+        return orchestrator.TrivialReadCompletion(nodes)
 
-    def _get_device_inventory(self, host):
+    def _run_ceph_daemon(self, host, entity, command, args, stdin=None):
         """
-        Query storage devices on a remote node.
-
-        :return: list of InventoryDevice
+        Run ceph-daemon on the remote host with the given command + args
         """
         conn = self._get_connection(host)
 
         try:
-            ceph_volume_executable = self._executable_path(conn, 'ceph-volume')
-            command = [
-                ceph_volume_executable,
-                "inventory",
-                "--format=json"
-            ]
+            # get container image
+            ret, image, err = self.mon_command({
+                'prefix': 'config get',
+                'who': entity,
+                'key': 'container_image',
+            })
+            image = image.strip()
+            self.log.debug('%s container image %s' % (entity, image))
 
-            out, err, code = remoto.process.check(conn, command)
-            host_devices = json.loads(out[0])
-            return host_devices
+            final_args = [
+                '--image', image,
+                command,
+                '--fsid', self._cluster_fsid,
+            ] + args
+
+            script = 'injected_argv = ' + json.dumps(final_args) + '\n'
+            if stdin:
+                script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
+            script += self._ceph_daemon
+            #self.log.debug('script is %s' % script)
+
+            out, err, code = remoto.process.check(
+                conn,
+                ['/usr/bin/python3', '-u'],
+                stdin=script.encode('utf-8'))
+            if code:
+                self.log.debug('code %s, err %s' % (code, err))
+            # ceph-daemon combines stdout and stderr, so ignore err.
+            self.log.debug('code %s out %s' % (code, out))
+            return out, code
 
         except Exception as ex:
             self.log.exception(ex)
@@ -473,42 +407,29 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             # this implies the returned hosts are registered
             hosts = self._get_hosts()
 
-        def run(key, host_info):
-            updated = False
-            host = host_info["host"]
+        @log_exceptions
+        def run(host, host_info):
+            # type: (str, orchestrator.OutdatableData) -> orchestrator.InventoryNode
 
-            if not host_info["inventory"]:
-                self.log.info("caching inventory for '{}'".format(host))
-                host_info["inventory"] = self._get_device_inventory(host)
-                updated = True
+            timeout_min = int(self.get_module_option(
+                "inventory_cache_timeout_min",
+                self._DEFAULT_INVENTORY_CACHE_TIMEOUT_MIN))
+
+            if host_info.outdated(timeout_min) or refresh:
+                self.log.info("refresh stale inventory for '{}'".format(host))
+                out, code = self._run_ceph_daemon(
+                    host, 'osd',
+                    'ceph-volume',
+                    ['--', 'inventory', '--format=json'])
+                # stdout and stderr get combined; assume last line is the real
+                # output and everything preceding it is an error.
+                data = json.loads(out[-1])
+                host_info = orchestrator.OutdatableData(data)
+                self.inventory_cache[host] = host_info
             else:
-                timeout_min = int(self.get_module_option(
-                    "inventory_cache_timeout_min",
-                    self._DEFAULT_INVENTORY_CACHE_TIMEOUT_MIN))
+                self.log.debug("reading cached inventory for '{}'".format(host))
 
-                cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-                        minutes=timeout_min)
-
-                last_update = self.time_from_string(host_info["last_inventory_refresh"])
-
-                if last_update < cutoff or refresh:
-                    self.log.info("refresh stale inventory for '{}'".format(host))
-                    host_info["inventory"] = self._get_device_inventory(host)
-                    updated = True
-                else:
-                    self.log.info("reading cached inventory for '{}'".format(host))
-                    pass
-
-            if updated:
-                now = datetime.datetime.utcnow()
-                now = now.strftime(DATEFMT)
-                host_info["last_inventory_refresh"] = now
-                self.set_store(key, json.dumps(host_info))
-
-            devices = list(map(lambda di:
-                orchestrator.InventoryDevice.from_ceph_volume_inventory(di),
-                host_info["inventory"]))
-
+            devices = orchestrator.InventoryDevice.from_ceph_volume_inventory_list(host_info.data)
             return orchestrator.InventoryNode(host, devices)
 
         results = []
@@ -518,31 +439,74 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return SSHReadCompletion(results)
 
+    @log_exceptions
     def _create_osd(self, host, drive_group):
-        conn = self._get_connection(host)
-        try:
-            devices = drive_group.data_devices.paths
-            self._bootstrap_osd(conn)
+        # get bootstrap key
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get',
+            'entity': 'client.bootstrap-osd',
+        })
+        self.log.debug('keyring %s' % keyring)
 
-            for device in devices:
-                ceph_volume_executable = self._executable_path(conn, "ceph-volume")
-                command = [
-                    ceph_volume_executable,
-                    "lvm",
-                    "create",
-                    "--cluster-fsid", self._get_cluster_fsid(),
+        # generate config
+        ret, config, err = self.mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+        self.log.debug('config %s' % config)
+
+        j = json.dumps({
+            'config': config,
+            'keyring': keyring,
+        })
+
+        devices = drive_group.data_devices.paths
+        for device in devices:
+            out, code = self._run_ceph_daemon(
+                host, 'osd', 'ceph-volume',
+                [
+                    '--config-and-keyring', '-',
+                    '--',
+                    'lvm', 'prepare',
+                    "--cluster-fsid", self._cluster_fsid,
                     "--{}".format(drive_group.objectstore),
-                    "--data", device
-                ]
-                remoto.process.run(conn, command)
+                    "--data", device,
+                ],
+                stdin=j)
+            self.log.debug('ceph-volume prepare: %s' % out)
 
-            return "Created osd on host '{}'".format(host)
+        # check result
+        out, code = self._run_ceph_daemon(
+            host, 'osd', 'ceph-volume',
+            [
+                '--',
+                'lvm', 'list',
+                '--format', 'json',
+            ])
+        self.log.debug('code %s out %s' % (code, out))
+        j = json.loads('\n'.join(out))
+        fsid = self._cluster_fsid
+        for osd_id, osds in j.items():
+            for osd in osds:
+                if osd['tags']['ceph.cluster_fsid'] != fsid:
+                    self.log.debug('mismatched fsid, skipping %s' % osd)
+                    continue
+                if len(list(set(devices) & set(osd['devices']))) == 0:
+                    self.log.debug('mismatched devices, skipping %s' % osd)
+                    continue
 
-        except:
-            raise
+                # create
+                ret, keyring, err = self.mon_command({
+                    'prefix': 'auth get',
+                    'entity': 'osd.%s' % str(osd_id),
+                })
+                self.log.debug('keyring %s' % keyring)
+                self._create_daemon(
+                    'osd', str(osd_id), host, keyring,
+                    extra_args=[
+                        '--osd-fsid', osd['tags']['ceph.osd_fsid'],
+                    ])
 
-        finally:
-            conn.exit()
+        return "Created osd(s) on host '{}'".format(host)
 
     def create_osds(self, drive_group, all_hosts=None):
         """
@@ -570,83 +534,65 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return SSHWriteCompletion(result)
 
+    def _create_daemon(self, daemon_type, daemon_id, host, keyring,
+                       extra_args=[]):
+        conn = self._get_connection(host)
+        try:
+            name = '%s.%s' % (daemon_type, daemon_id)
+
+            # generate config
+            ret, config, err = self.mon_command({
+                "prefix": "config generate-minimal-conf",
+            })
+            self.log.debug('config %s' % config)
+
+            ret, crash_keyring, err = self.mon_command({
+                'prefix': 'auth get-or-create',
+                'entity': 'client.crash.%s' % host,
+                'caps': ['mon', 'allow profile crash',
+                         'mgr', 'allow profile crash'],
+            })
+
+            j = json.dumps({
+                'config': config,
+                'keyring': keyring,
+                'crash_keyring': crash_keyring,
+            })
+
+            out, code = self._run_ceph_daemon(
+                host, name, 'deploy',
+                [
+                    '--name', name,
+                    '--config-and-keyrings', '-',
+                ] + extra_args,
+                stdin=j)
+            self.log.debug('create_daemon code %s out %s' % (code, out))
+
+            return "Created {} on host '{}'".format(name, host)
+
+        except Exception as e:
+            self.log.error("create_mgr({}): error: {}".format(host, e))
+            raise
+
+        finally:
+            self.log.info("create_mgr({}): finished".format(host))
+            conn.exit()
+
     def _create_mon(self, host, network):
         """
         Create a new monitor on the given host.
         """
         self.log.info("create_mon({}:{}): starting".format(host, network))
 
-        conn = self._get_connection(host)
+        # get mon. key
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get',
+            'entity': 'mon.',
+        })
+        self.log.debug('mon keyring %s' % keyring)
 
-        try:
-            self._ensure_ceph_conf(conn, network)
-
-            uid = conn.remote_module.path_getuid("/var/lib/ceph")
-            gid = conn.remote_module.path_getgid("/var/lib/ceph")
-
-            # install client admin key on target mon host
-            admin_keyring = self._get_bootstrap_key("admin")
-            admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
-            conn.remote_module.write_keyring(admin_keyring_path, admin_keyring, uid, gid)
-
-            mon_path = "/var/lib/ceph/mon/ceph-{name}".format(name=host)
-            conn.remote_module.create_mon_path(mon_path, uid, gid)
-
-            # bootstrap key
-            conn.remote_module.safe_makedirs("/var/lib/ceph/tmp")
-            monitor_keyring = self._get_bootstrap_key("mon")
-            mon_keyring_path = "/var/lib/ceph/tmp/ceph-{name}.mon.keyring".format(name=host)
-            conn.remote_module.write_file(
-                mon_keyring_path,
-                monitor_keyring,
-                0o600,
-                None,
-                uid,
-                gid
-            )
-
-            # monitor map
-            monmap_path = "/var/lib/ceph/tmp/ceph.{name}.monmap".format(name=host)
-            remoto.process.run(conn,
-                ['ceph', 'mon', 'getmap', '-o', monmap_path],
-            )
-
-            user_args = []
-            if uid != 0:
-                user_args = user_args + [ '--setuser', str(uid) ]
-            if gid != 0:
-                user_args = user_args + [ '--setgroup', str(gid) ]
-
-            remoto.process.run(conn,
-                ['ceph-mon', '--mkfs', '-i', host,
-                 '--monmap', monmap_path, '--keyring', mon_keyring_path
-                ] + user_args
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph.target'],
-                timeout=7,
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph-mon@{name}'.format(name=host)],
-                timeout=7,
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'start', 'ceph-mon@{name}'.format(name=host)],
-                timeout=7,
-            )
-
-            return "Created mon on host '{}'".format(host)
-
-        except Exception as e:
-            self.log.error("create_mon({}:{}): error: {}".format(host, network, e))
-            raise
-
-        finally:
-            self.log.info("create_mon({}:{}): finished".format(host, network))
-            conn.exit()
+        return self._create_daemon('mon', host, host, keyring,
+                                   extra_args=['--mon-network', network])
 
     def update_mons(self, num, hosts):
         """
@@ -694,55 +640,17 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         self.log.info("create_mgr({}): starting".format(host))
 
-        conn = self._get_connection(host)
+        # get mgr. key
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'mgr.%s' % host,
+            'caps': ['mon', 'allow profile mgr',
+                     'osd', 'allow *',
+                     'mds', 'allow *'],
+        })
+        self.log.debug('keyring %s' % keyring)
 
-        try:
-            bootstrap_keyring_path = self._bootstrap_mgr(conn)
-
-            mgr_path = "/var/lib/ceph/mgr/ceph-{name}".format(name=host)
-            conn.remote_module.safe_makedirs(mgr_path)
-            keyring_path = os.path.join(mgr_path, "keyring")
-
-            command = [
-                'ceph',
-                '--name', 'client.bootstrap-mgr',
-                '--keyring', bootstrap_keyring_path,
-                'auth', 'get-or-create', 'mgr.{name}'.format(name=host),
-                'mon', 'allow profile mgr',
-                'osd', 'allow *',
-                'mds', 'allow *',
-                '-o',
-                keyring_path
-            ]
-
-            out, err, ret = remoto.process.check(conn, command)
-            if ret != 0:
-                raise Exception("oops")
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph-mgr@{name}'.format(name=host)],
-                timeout=7
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'start', 'ceph-mgr@{name}'.format(name=host)],
-                timeout=7
-            )
-
-            remoto.process.run(conn,
-                ['systemctl', 'enable', 'ceph.target'],
-                timeout=7
-            )
-
-            return "Created mgr on host '{}'".format(host)
-
-        except Exception as e:
-            self.log.error("create_mgr({}): error: {}".format(host, e))
-            raise
-
-        finally:
-            self.log.info("create_mgr({}): finished".format(host))
-            conn.exit()
+        return self._create_daemon('mgr', host, host, keyring)
 
     def update_mgrs(self, num, hosts):
         """
@@ -758,7 +666,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             raise NotImplementedError("Removing managers is not supported")
 
         # check that all the hosts are registered
-        hosts = list(set(hosts))
         self._require_hosts(hosts)
 
         # we assume explicit placement by which there are the same number of

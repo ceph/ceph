@@ -27,7 +27,7 @@ Both the command and extra metadata gets persisted by systemd as part of the
     systemctl enable ceph-volume@lvm-0-0A3E1ED2-DA8A-4F0E-AA95-61DEC71768D6
 
 The enabled unit is a :term:`systemd oneshot` service, meant to start at boot
-after the local filesystem is ready to be used.
+after the local file system is ready to be used.
 
 
 Failure and Retries
@@ -42,7 +42,7 @@ behavior:
 * ``CEPH_VOLUME_SYSTEMD_TRIES``: Defaults to 30
 * ``CEPH_VOLUME_SYSTEMD_INTERVAL``: Defaults to 5
 
-The *"tries"* is a number that sets the maximum amount of times the unit will
+The *"tries"* is a number that sets the maximum number of times the unit will
 attempt to activate an OSD before giving up.
 
 The *"interval"* is a value in seconds that determines the waiting time before

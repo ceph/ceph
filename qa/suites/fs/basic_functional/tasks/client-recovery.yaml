@@ -7,6 +7,8 @@ overrides:
       - evicting unresponsive client
       - but it is still running
       - slow request
+      - MDS_CLIENT_LATE_RELEASE
+      - t responding to mclientcaps
 
 tasks:
   - cephfs_test_runner:

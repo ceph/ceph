@@ -1,5 +1,6 @@
 #!/bin/sh
-git grep COMMAND\( | grep -o "(\"[a-zA-z ]*\"" | grep -o "[a-zA-z ]*" > commands.txt
+
+git grep -e COMMAND\( -e COMMAND_WITH_FLAG\( | grep -o "(\"[a-zA-Z ]*\"" | grep -o "[a-zA-Z ]*" | sort | uniq > commands.txt
 missing_test=false
 good_tests=""
 bad_tests=""

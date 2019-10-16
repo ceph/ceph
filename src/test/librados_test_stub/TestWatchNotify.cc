@@ -42,7 +42,7 @@ struct TestWatchNotify::ObjectHandler : public TestCluster::ObjectHandler {
     auto _pool_id = pool_id;
     auto _nspace = nspace;
     auto _oid = oid;
-    auto ctx = new FunctionContext([_test_watch_notify, _pool_id, _nspace, _oid](int r) {
+    auto ctx = new LambdaContext([_test_watch_notify, _pool_id, _nspace, _oid](int r) {
         _test_watch_notify->handle_object_removed(_pool_id, _nspace, _oid);
       });
     test_rados_client->get_aio_finisher()->queue(ctx);
@@ -50,7 +50,7 @@ struct TestWatchNotify::ObjectHandler : public TestCluster::ObjectHandler {
 };
 
 TestWatchNotify::TestWatchNotify(TestCluster* test_cluster)
-  : m_test_cluster(test_cluster), m_lock("librados::TestWatchNotify::m_lock") {
+  : m_test_cluster(test_cluster) {
 }
 
 void TestWatchNotify::flush(TestRadosClient *rados_client) {
@@ -66,7 +66,7 @@ void TestWatchNotify::flush(TestRadosClient *rados_client) {
 int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
                                    const std::string& o,
                                    std::list<obj_watch_t> *out_watchers) {
-  Mutex::Locker lock(m_lock);
+  std::lock_guard lock{m_lock};
   SharedWatcher watcher = get_watcher(pool_id, nspace, o);
   if (!watcher) {
     return -ENOENT;
@@ -77,7 +77,8 @@ int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
          watcher->watch_handles.begin();
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
-    strcpy(obj.addr, it->second.addr.c_str());
+    strncpy(obj.addr, it->second.addr.c_str(), sizeof(obj.addr) - 1);
+    obj.addr[sizeof(obj.addr) - 1] = '\0';
     obj.watcher_id = static_cast<int64_t>(it->second.gid);
     obj.cookie = it->second.handle;
     obj.timeout_seconds = 30;
@@ -106,7 +107,7 @@ void TestWatchNotify::aio_watch(TestRadosClient *rados_client, int64_t pool_id,
                                 librados::WatchCtx *watch_ctx,
                                 librados::WatchCtx2 *watch_ctx2,
                                 Context *on_finish) {
-  auto ctx = new FunctionContext([=](int) {
+  auto ctx = new LambdaContext([=](int) {
       execute_watch(rados_client, pool_id, nspace, o, gid, handle, watch_ctx,
                     watch_ctx2, on_finish);
     });
@@ -122,7 +123,7 @@ int TestWatchNotify::unwatch(TestRadosClient *rados_client,
 
 void TestWatchNotify::aio_unwatch(TestRadosClient *rados_client,
                                   uint64_t handle, Context *on_finish) {
-  auto ctx = new FunctionContext([this, rados_client, handle, on_finish](int) {
+  auto ctx = new LambdaContext([this, rados_client, handle, on_finish](int) {
       execute_unwatch(rados_client, handle, on_finish);
     });
   rados_client->get_aio_finisher()->queue(ctx);
@@ -133,7 +134,7 @@ void TestWatchNotify::aio_notify(TestRadosClient *rados_client, int64_t pool_id,
                                  const std::string& oid, const bufferlist& bl,
                                  uint64_t timeout_ms, bufferlist *pbl,
                                  Context *on_notify) {
-  auto ctx = new FunctionContext([=](int) {
+  auto ctx = new LambdaContext([=](int) {
       execute_notify(rados_client, pool_id, nspace, oid, bl, pbl, on_notify);
     });
   rados_client->get_aio_finisher()->queue(ctx);
@@ -156,7 +157,7 @@ void TestWatchNotify::notify_ack(TestRadosClient *rados_client, int64_t pool_id,
   CephContext *cct = rados_client->cct();
   ldout(cct, 20) << "notify_id=" << notify_id << ", handle=" << handle
 		 << ", gid=" << gid << dendl;
-  Mutex::Locker lock(m_lock);
+  std::lock_guard lock{m_lock};
   WatcherID watcher_id = std::make_pair(gid, handle);
   ack_notify(rados_client, pool_id, nspace, o, notify_id, watcher_id, bl);
   finish_notify(rados_client, pool_id, nspace, o, notify_id);
@@ -170,10 +171,10 @@ void TestWatchNotify::execute_watch(TestRadosClient *rados_client,
                                     Context* on_finish) {
   CephContext *cct = rados_client->cct();
 
-  m_lock.Lock();
+  m_lock.lock();
   SharedWatcher watcher = get_watcher(pool_id, nspace, o);
   if (!watcher) {
-    m_lock.Unlock();
+    m_lock.unlock();
     on_finish->complete(-ENOENT);
     return;
   }
@@ -192,7 +193,7 @@ void TestWatchNotify::execute_watch(TestRadosClient *rados_client,
 
   ldout(cct, 20) << "oid=" << o << ", gid=" << gid << ": handle=" << *handle
 	         << dendl;
-  m_lock.Unlock();
+  m_lock.unlock();
 
   on_finish->complete(0);
 }
@@ -203,7 +204,7 @@ void TestWatchNotify::execute_unwatch(TestRadosClient *rados_client,
 
   ldout(cct, 20) << "handle=" << handle << dendl;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     for (FileWatchers::iterator it = m_file_watchers.begin();
          it != m_file_watchers.end(); ++it) {
       SharedWatcher watcher = it->second;
@@ -221,7 +222,7 @@ void TestWatchNotify::execute_unwatch(TestRadosClient *rados_client,
 
 TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
     int64_t pool_id, const std::string& nspace, const std::string& oid) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   auto it = m_file_watchers.find({pool_id, nspace, oid});
   if (it == m_file_watchers.end()) {
@@ -242,7 +243,7 @@ TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
 }
 
 void TestWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   // TODO
   if (watcher->watch_handles.empty() && watcher->notify_handles.empty()) {
@@ -266,13 +267,13 @@ void TestWatchNotify::execute_notify(TestRadosClient *rados_client,
                                      Context *on_notify) {
   CephContext *cct = rados_client->cct();
 
-  m_lock.Lock();
+  m_lock.lock();
   uint64_t notify_id = ++m_notify_id;
 
   SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
   if (!watcher) {
     ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
-    m_lock.Unlock();
+    m_lock.unlock();
     on_notify->complete(-ENOENT);
     return;
   }
@@ -292,7 +293,7 @@ void TestWatchNotify::execute_notify(TestRadosClient *rados_client,
 
     m_async_op_tracker.start_op();
     uint64_t notifier_id = rados_client->get_instance_id();
-    watch_handle.rados_client->get_aio_finisher()->queue(new FunctionContext(
+    watch_handle.rados_client->get_aio_finisher()->queue(new LambdaContext(
       [this, pool_id, nspace, oid, bl, notify_id, watch_handle, notifier_id](int r) {
         bufferlist notify_bl;
         notify_bl.append(bl);
@@ -315,7 +316,7 @@ void TestWatchNotify::execute_notify(TestRadosClient *rados_client,
   watcher->notify_handles[notify_id] = notify_handle;
 
   finish_notify(rados_client, pool_id, nspace, oid, notify_id);
-  m_lock.Unlock();
+  m_lock.unlock();
 }
 
 void TestWatchNotify::ack_notify(TestRadosClient *rados_client, int64_t pool_id,
@@ -325,7 +326,7 @@ void TestWatchNotify::ack_notify(TestRadosClient *rados_client, int64_t pool_id,
                                  const bufferlist &bl) {
   CephContext *cct = rados_client->cct();
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
   if (!watcher) {
     ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
@@ -358,7 +359,7 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
 
   ldout(cct, 20) << "oid=" << oid << ", notify_id=" << notify_id << dendl;
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
   if (!watcher) {
     ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
@@ -394,7 +395,7 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
 }
 
 void TestWatchNotify::blacklist(uint32_t nonce) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   for (auto file_it = m_file_watchers.begin();
        file_it != m_file_watchers.end(); ) {
@@ -416,7 +417,7 @@ void TestWatchNotify::blacklist(uint32_t nonce) {
 void TestWatchNotify::handle_object_removed(int64_t pool_id,
                                             const std::string& nspace,
                                             const std::string& oid) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   auto it = m_file_watchers.find({pool_id, nspace, oid});
   if (it == m_file_watchers.end()) {
     return;
@@ -437,7 +438,7 @@ void TestWatchNotify::handle_object_removed(int64_t pool_id,
     auto handle = watch_handle.handle;
     auto watch_ctx2 = watch_handle.watch_ctx2;
     if (watch_ctx2 != nullptr) {
-      auto ctx = new FunctionContext([handle, watch_ctx2](int) {
+      auto ctx = new LambdaContext([handle, watch_ctx2](int) {
           watch_ctx2->handle_error(handle, -ENOTCONN);
         });
       watch_handle.rados_client->get_aio_finisher()->queue(ctx);

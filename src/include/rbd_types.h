@@ -42,6 +42,7 @@
 #define RBD_DIRECTORY           "rbd_directory"
 #define RBD_INFO                "rbd_info"
 #define RBD_NAMESPACE           "rbd_namespace"
+#define RBD_TASK                "rbd_task"
 
 /*
  * rbd_children object in each pool contains omap entries
@@ -115,15 +116,18 @@
  * MON config-key prefix for storing optional remote cluster connectivity
  * parameters
  */
-#define RBD_MIRROR_PEER_CONFIG_KEY_PREFIX "rbd/mirror/peer/"
+#define RBD_MIRROR_CONFIG_KEY_PREFIX          "rbd/mirror/"
+#define RBD_MIRROR_SITE_NAME_CONFIG_KEY       RBD_MIRROR_CONFIG_KEY_PREFIX "site_name"
+#define RBD_MIRROR_PEER_CLIENT_ID_CONFIG_KEY  RBD_MIRROR_CONFIG_KEY_PREFIX "peer_client_id"
+#define RBD_MIRROR_PEER_CONFIG_KEY_PREFIX     RBD_MIRROR_CONFIG_KEY_PREFIX "peer/"
 
 struct rbd_info {
-	__le64 max_id;
+	ceph_le64 max_id;
 } __attribute__ ((packed));
 
 struct rbd_obj_snap_ondisk {
-	__le64 id;
-	__le64 image_size;
+	ceph_le64 id;
+	ceph_le64 image_size;
 } __attribute__((packed));
 
 struct rbd_obj_header_ondisk {
@@ -137,11 +141,11 @@ struct rbd_obj_header_ondisk {
 		__u8 comp_type;
 		__u8 unused;
 	} __attribute__((packed)) options;
-	__le64 image_size;
-	__le64 snap_seq;
-	__le32 snap_count;
-	__le32 reserved;
-	__le64 snap_names_len;
+	ceph_le64 image_size;
+	ceph_le64 snap_seq;
+	ceph_le32 snap_count;
+	ceph_le32 reserved;
+	ceph_le64 snap_names_len;
 	struct rbd_obj_snap_ondisk snaps[0];
 } __attribute__((packed));
 

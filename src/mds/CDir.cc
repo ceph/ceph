@@ -192,15 +192,9 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   cache(mdcache), inode(in), frag(fg),
-  first(2),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
-  projected_version(0),
   dirty_dentries(member_offset(CDentry, item_dir_dirty)),
   item_dirty(this), item_new(this),
-  num_head_items(0), num_head_null(0),
-  num_snap_items(0), num_snap_null(0),
-  num_dirty(0), committing_version(0), committed_version(0),
-  dir_auth_pins(0),
   dir_rep(REP_NONE),
   pop_me(mdcache->decayrate),
   pop_nested(mdcache->decayrate),
@@ -208,8 +202,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   pop_auth_subtree_nested(mdcache->decayrate),
   pop_spread(mdcache->decayrate),
   pop_lru_subdirs(member_offset(CInode, item_pop_lru)),
-  num_dentries_nested(0), num_dentries_auth_subtree(0),
-  num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
   // auth
@@ -2482,6 +2474,7 @@ void CDir::_committed(int r, version_t v)
 
 void CDir::encode_export(bufferlist& bl)
 {
+  ENCODE_START(1, 1, bl);
   ceph_assert(!is_projected());
   encode(first, bl);
   encode(fnode, bl);
@@ -2498,6 +2491,7 @@ void CDir::encode_export(bufferlist& bl)
   encode(get_replicas(), bl);
 
   get(PIN_TEMPEXPORTING);
+  ENCODE_FINISH(bl);
 }
 
 void CDir::finish_export()
@@ -2513,6 +2507,7 @@ void CDir::finish_export()
 
 void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
 {
+  DECODE_START(1, blp);
   decode(first, blp);
   decode(fnode, blp);
   decode(dirty_old_rstat, blp);
@@ -2563,6 +2558,7 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
       ls->dirty_dirfrag_dirfragtree.push_back(&inode->item_dirty_dirfrag_dirfragtree);
     }
   }
+  DECODE_FINISH(blp);
 }
 
 void CDir::abort_import()

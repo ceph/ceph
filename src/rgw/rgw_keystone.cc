@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
 #include <fnmatch.h>
@@ -370,14 +370,14 @@ int TokenEnvelope::parse(CephContext* const cct,
 bool TokenCache::find(const std::string& token_id,
                       rgw::keystone::TokenEnvelope& token)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   return find_locked(token_id, token);
 }
 
 bool TokenCache::find_locked(const std::string& token_id,
                              rgw::keystone::TokenEnvelope& token)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end()) {
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
@@ -404,14 +404,14 @@ bool TokenCache::find_locked(const std::string& token_id,
 
 bool TokenCache::find_admin(rgw::keystone::TokenEnvelope& token)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
 
   return find_locked(admin_token_id, token);
 }
 
 bool TokenCache::find_barbican(rgw::keystone::TokenEnvelope& token)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
 
   return find_locked(barbican_token_id, token);
 }
@@ -419,14 +419,14 @@ bool TokenCache::find_barbican(rgw::keystone::TokenEnvelope& token)
 void TokenCache::add(const std::string& token_id,
                      const rgw::keystone::TokenEnvelope& token)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   add_locked(token_id, token);
 }
 
 void TokenCache::add_locked(const std::string& token_id,
                             const rgw::keystone::TokenEnvelope& token)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter != tokens.end()) {
     token_entry& e = iter->second;
@@ -449,7 +449,7 @@ void TokenCache::add_locked(const std::string& token_id,
 
 void TokenCache::add_admin(const rgw::keystone::TokenEnvelope& token)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
 
   rgw_get_token_id(token.token.id, admin_token_id);
   add_locked(admin_token_id, token);
@@ -457,7 +457,7 @@ void TokenCache::add_admin(const rgw::keystone::TokenEnvelope& token)
 
 void TokenCache::add_barbican(const rgw::keystone::TokenEnvelope& token)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
 
   rgw_get_token_id(token.token.id, barbican_token_id);
   add_locked(barbican_token_id, token);
@@ -465,7 +465,7 @@ void TokenCache::add_barbican(const rgw::keystone::TokenEnvelope& token)
 
 void TokenCache::invalidate(const std::string& token_id)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end())
     return;

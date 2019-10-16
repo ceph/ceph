@@ -20,30 +20,20 @@ namespace {
 static const uint64_t MIN_FETCH_BYTES = 32768;
 
 struct C_HandleComplete : public Context {
-  ReplayHandler *replay_handler;
+  ReplayHandler* replay_handler;
 
-  explicit C_HandleComplete(ReplayHandler *_replay_handler)
-    : replay_handler(_replay_handler) {
-    replay_handler->get();
-  }
-  ~C_HandleComplete() override {
-    replay_handler->put();
-  }
+  explicit C_HandleComplete(ReplayHandler* r) : replay_handler(std::move(r)) {}
+  ~C_HandleComplete() override {}
   void finish(int r) override {
     replay_handler->handle_complete(r);
   }
 };
 
 struct C_HandleEntriesAvailable : public Context {
-  ReplayHandler *replay_handler;
+  ReplayHandler* replay_handler;
 
-  explicit C_HandleEntriesAvailable(ReplayHandler *_replay_handler)
-      : replay_handler(_replay_handler) {
-    replay_handler->get();
-  }
-  ~C_HandleEntriesAvailable() override {
-    replay_handler->put();
-  }
+  explicit C_HandleEntriesAvailable(ReplayHandler* r) : replay_handler(std::move(r)) {}
+  ~C_HandleEntriesAvailable() override {}
   void finish(int r) override {
     replay_handler->handle_entries_available();
   }
@@ -52,17 +42,16 @@ struct C_HandleEntriesAvailable : public Context {
 } // anonymous namespace
 
 JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
-                             const std::string &object_oid_prefix,
-                             const JournalMetadataPtr& journal_metadata,
-                             ReplayHandler *replay_handler,
+                             std::string_view object_oid_prefix,
+                             ceph::ref_t<JournalMetadata> journal_metadata,
+                             ReplayHandler* replay_handler,
                              CacheManagerHandler *cache_manager_handler)
-  : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
-    m_journal_metadata(journal_metadata), m_replay_handler(replay_handler),
+  : m_object_oid_prefix(object_oid_prefix),
+    m_journal_metadata(std::move(journal_metadata)),
+    m_replay_handler(std::move(replay_handler)),
     m_cache_manager_handler(cache_manager_handler),
-    m_cache_rebalance_handler(this), m_lock("JournalPlayer::m_lock"),
-    m_state(STATE_INIT), m_splay_offset(0), m_watch_enabled(false),
-    m_watch_scheduled(false), m_watch_interval(0) {
-  m_replay_handler->get();
+    m_cache_rebalance_handler(this)
+{
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
@@ -104,12 +93,11 @@ JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
 JournalPlayer::~JournalPlayer() {
   ceph_assert(m_async_op_tracker.empty());
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     ceph_assert(m_shut_down);
     ceph_assert(m_fetch_object_numbers.empty());
     ceph_assert(!m_watch_scheduled);
   }
-  m_replay_handler->put();
 
   if (m_cache_manager_handler != nullptr) {
     m_cache_manager_handler->unregister_cache(m_cache_name);
@@ -117,8 +105,12 @@ JournalPlayer::~JournalPlayer() {
 }
 
 void JournalPlayer::prefetch() {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_state == STATE_INIT);
+
+  if (m_shut_down) {
+    return;
+  }
 
   if (m_cache_manager_handler != nullptr && m_max_fetch_bytes == 0) {
     m_state = STATE_WAITCACHE;
@@ -162,7 +154,7 @@ void JournalPlayer::prefetch() {
 
 void JournalPlayer::prefetch_and_watch(double interval) {
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_watch_enabled = true;
     m_watch_interval = interval;
     m_watch_step = WATCH_STEP_FETCH_CURRENT;
@@ -172,7 +164,7 @@ void JournalPlayer::prefetch_and_watch(double interval) {
 
 void JournalPlayer::shut_down(Context *on_finish) {
   ldout(m_cct, 20) << __func__ << dendl;
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   ceph_assert(!m_shut_down);
   m_shut_down = true;
@@ -182,7 +174,7 @@ void JournalPlayer::shut_down(Context *on_finish) {
       m_journal_metadata, on_finish);
 
   if (m_watch_scheduled) {
-    ObjectPlayerPtr object_player = get_object_player();
+    auto object_player = get_object_player();
     switch (m_watch_step) {
     case WATCH_STEP_FETCH_FIRST:
       object_player = m_object_players.begin()->second;
@@ -200,7 +192,7 @@ void JournalPlayer::shut_down(Context *on_finish) {
 
 bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
   ldout(m_cct, 20) << __func__ << dendl;
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   if (m_state != STATE_PLAYBACK) {
     m_handler_notified = false;
@@ -216,7 +208,7 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
     return false;
   }
 
-  ObjectPlayerPtr object_player = get_object_player();
+  auto object_player = get_object_player();
   ceph_assert(object_player && !object_player->empty());
 
   object_player->front(entry);
@@ -248,7 +240,7 @@ void JournalPlayer::process_state(uint64_t object_number, int r) {
   ldout(m_cct, 10) << __func__ << ": object_num=" << object_number << ", "
                    << "r=" << r << dendl;
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   if (r >= 0) {
     switch (m_state) {
     case STATE_PREFETCH:
@@ -277,7 +269,7 @@ void JournalPlayer::process_state(uint64_t object_number, int r) {
 
 int JournalPlayer::process_prefetch(uint64_t object_number) {
   ldout(m_cct, 10) << __func__ << ": object_num=" << object_number << dendl;
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
   uint8_t splay_offset = object_number % splay_width;
@@ -290,7 +282,7 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
 
   bool prefetch_complete = false;
   ceph_assert(m_object_players.count(splay_offset) == 1);
-  ObjectPlayerPtr object_player = m_object_players[splay_offset];
+  auto object_player = m_object_players[splay_offset];
 
   // prefetch in-order since a newer splay object could prefetch first
   if (m_fetch_object_numbers.count(object_player->get_object_number()) == 0) {
@@ -382,7 +374,7 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
 
 int JournalPlayer::process_playback(uint64_t object_number) {
   ldout(m_cct, 10) << __func__ << ": object_num=" << object_number << dendl;
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   if (verify_playback_ready()) {
     notify_entries_available();
@@ -393,7 +385,7 @@ int JournalPlayer::process_playback(uint64_t object_number) {
 }
 
 bool JournalPlayer::is_object_set_ready() const {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   if (m_watch_scheduled || !m_fetch_object_numbers.empty()) {
     ldout(m_cct, 20) << __func__ << ": waiting for in-flight fetch" << dendl;
     return false;
@@ -403,7 +395,7 @@ bool JournalPlayer::is_object_set_ready() const {
 }
 
 bool JournalPlayer::verify_playback_ready() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   while (true) {
     if (!is_object_set_ready()) {
@@ -411,7 +403,7 @@ bool JournalPlayer::verify_playback_ready() {
       return false;
     }
 
-    ObjectPlayerPtr object_player = get_object_player();
+    auto object_player = get_object_player();
     ceph_assert(object_player);
     uint64_t object_num = object_player->get_object_number();
 
@@ -506,7 +498,7 @@ bool JournalPlayer::verify_playback_ready() {
 }
 
 void JournalPlayer::prune_tag(uint64_t tag_tid) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   ldout(m_cct, 10) << __func__ << ": pruning remaining entries for tag "
                    << tag_tid << dendl;
 
@@ -516,8 +508,8 @@ void JournalPlayer::prune_tag(uint64_t tag_tid) {
   }
 
   bool pruned = false;
-  for (auto &player_pair : m_object_players) {
-    ObjectPlayerPtr object_player(player_pair.second);
+  for (const auto &player_pair : m_object_players) {
+    auto& object_player = player_pair.second;
     ldout(m_cct, 15) << __func__ << ": checking " << object_player->get_oid()
                      << dendl;
     while (!object_player->empty()) {
@@ -537,20 +529,20 @@ void JournalPlayer::prune_tag(uint64_t tag_tid) {
   if (pruned) {
     ldout(m_cct, 15) << __func__ << ": resetting refetch state to immediate"
                      << dendl;
-    for (auto &player_pair : m_object_players) {
-      ObjectPlayerPtr object_player(player_pair.second);
+    for (const auto &player_pair : m_object_players) {
+      auto& object_player = player_pair.second;
       object_player->set_refetch_state(ObjectPlayer::REFETCH_STATE_IMMEDIATE);
     }
   }
 
   // trim empty player to prefetch the next available object
-  for (auto &player_pair : m_object_players) {
+  for (const auto &player_pair : m_object_players) {
     remove_empty_object_player(player_pair.second);
   }
 }
 
 void JournalPlayer::prune_active_tag(const boost::optional<uint64_t>& tag_tid) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(m_active_tag_tid);
 
   uint64_t active_tag_tid = *m_active_tag_tid;
@@ -563,8 +555,8 @@ void JournalPlayer::prune_active_tag(const boost::optional<uint64_t>& tag_tid) {
   prune_tag(active_tag_tid);
 }
 
-ObjectPlayerPtr JournalPlayer::get_object_player() const {
-  ceph_assert(m_lock.is_locked());
+ceph::ref_t<ObjectPlayer> JournalPlayer::get_object_player() const {
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   SplayedObjectPlayers::const_iterator it = m_object_players.find(
     m_splay_offset);
@@ -572,21 +564,21 @@ ObjectPlayerPtr JournalPlayer::get_object_player() const {
   return it->second;
 }
 
-ObjectPlayerPtr JournalPlayer::get_object_player(uint64_t object_number) const {
-  ceph_assert(m_lock.is_locked());
+ceph::ref_t<ObjectPlayer> JournalPlayer::get_object_player(uint64_t object_number) const {
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
   uint8_t splay_offset = object_number % splay_width;
   auto splay_it = m_object_players.find(splay_offset);
   ceph_assert(splay_it != m_object_players.end());
 
-  ObjectPlayerPtr object_player = splay_it->second;
+  auto object_player = splay_it->second;
   ceph_assert(object_player->get_object_number() == object_number);
   return object_player;
 }
 
 void JournalPlayer::advance_splay_object() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   ++m_splay_offset;
   m_splay_offset %= m_journal_metadata->get_splay_width();
   m_watch_step = WATCH_STEP_FETCH_CURRENT;
@@ -594,8 +586,8 @@ void JournalPlayer::advance_splay_object() {
                    << static_cast<uint32_t>(m_splay_offset) << dendl;
 }
 
-bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
-  ceph_assert(m_lock.is_locked());
+bool JournalPlayer::remove_empty_object_player(const ceph::ref_t<ObjectPlayer> &player) {
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!m_watch_scheduled);
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
@@ -611,7 +603,7 @@ bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
     ldout(m_cct, 20) << __func__ << ": new active set detected, all players "
                      << "require refetch" << dendl;
     m_active_set = active_set;
-    for (auto &pair : m_object_players) {
+    for (const auto& pair : m_object_players) {
       pair.second->set_refetch_state(ObjectPlayer::REFETCH_STATE_IMMEDIATE);
     }
     return false;
@@ -629,20 +621,20 @@ bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
 }
 
 void JournalPlayer::fetch(uint64_t object_num) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
-  ObjectPlayerPtr object_player(new ObjectPlayer(
+  auto object_player = ceph::make_ref<ObjectPlayer>(
     m_ioctx, m_object_oid_prefix, object_num, m_journal_metadata->get_timer(),
     m_journal_metadata->get_timer_lock(), m_journal_metadata->get_order(),
-    m_max_fetch_bytes));
+    m_max_fetch_bytes);
 
   auto splay_width = m_journal_metadata->get_splay_width();
   m_object_players[object_num % splay_width] = object_player;
   fetch(object_player);
 }
 
-void JournalPlayer::fetch(const ObjectPlayerPtr &object_player) {
-  ceph_assert(m_lock.is_locked());
+void JournalPlayer::fetch(const ceph::ref_t<ObjectPlayer> &object_player) {
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   uint64_t object_num = object_player->get_object_number();
   std::string oid = utils::get_object_name(m_object_oid_prefix, object_num);
@@ -660,7 +652,7 @@ void JournalPlayer::handle_fetched(uint64_t object_num, int r) {
                    << utils::get_object_name(m_object_oid_prefix, object_num)
                    << ": r=" << r << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_fetch_object_numbers.count(object_num) == 1);
   m_fetch_object_numbers.erase(object_num);
 
@@ -669,7 +661,7 @@ void JournalPlayer::handle_fetched(uint64_t object_num, int r) {
   }
 
   if (r == 0) {
-    ObjectPlayerPtr object_player = get_object_player(object_num);
+    auto object_player = get_object_player(object_num);
     remove_empty_object_player(object_player);
   }
   process_state(object_num, r);
@@ -677,7 +669,7 @@ void JournalPlayer::handle_fetched(uint64_t object_num, int r) {
 
 void JournalPlayer::refetch(bool immediate) {
   ldout(m_cct, 10) << __func__ << dendl;
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   m_handler_notified = false;
 
   // if watching the object, handle the periodic re-fetch
@@ -686,7 +678,7 @@ void JournalPlayer::refetch(bool immediate) {
     return;
   }
 
-  ObjectPlayerPtr object_player = get_object_player();
+  auto object_player = get_object_player();
   if (object_player->refetch_required()) {
     object_player->set_refetch_state(ObjectPlayer::REFETCH_STATE_NONE);
     fetch(object_player);
@@ -698,7 +690,7 @@ void JournalPlayer::refetch(bool immediate) {
 
 void JournalPlayer::schedule_watch(bool immediate) {
   ldout(m_cct, 10) << __func__ << dendl;
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   if (m_watch_scheduled) {
     return;
   }
@@ -712,14 +704,14 @@ void JournalPlayer::schedule_watch(bool immediate) {
                      << *m_active_tag_tid << dendl;
 
     m_async_op_tracker.start_op();
-    FunctionContext *ctx = new FunctionContext([this](int r) {
+    auto ctx = new LambdaContext([this](int r) {
         handle_watch_assert_active(r);
       });
     m_journal_metadata->assert_active_tag(*m_active_tag_tid, ctx);
     return;
   }
 
-  ObjectPlayerPtr object_player;
+  ceph::ref_t<ObjectPlayer> object_player;
   double watch_interval = m_watch_interval;
 
   switch (m_watch_step) {
@@ -759,7 +751,7 @@ void JournalPlayer::schedule_watch(bool immediate) {
 
 void JournalPlayer::handle_watch(uint64_t object_num, int r) {
   ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_watch_scheduled);
   m_watch_scheduled = false;
 
@@ -768,7 +760,7 @@ void JournalPlayer::handle_watch(uint64_t object_num, int r) {
     return;
   }
 
-  ObjectPlayerPtr object_player = get_object_player(object_num);
+  auto object_player = get_object_player(object_num);
   if (r == 0 && object_player->empty()) {
     // possibly need to prune this empty object player if we've
     // already fetched it after the active set was advanced with no
@@ -793,7 +785,7 @@ void JournalPlayer::handle_watch(uint64_t object_num, int r) {
 void JournalPlayer::handle_watch_assert_active(int r) {
   ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_watch_scheduled);
   m_watch_scheduled = false;
 
@@ -813,28 +805,26 @@ void JournalPlayer::handle_watch_assert_active(int r) {
 }
 
 void JournalPlayer::notify_entries_available() {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   if (m_handler_notified) {
     return;
   }
   m_handler_notified = true;
 
   ldout(m_cct, 10) << __func__ << ": entries available" << dendl;
-  m_journal_metadata->queue(new C_HandleEntriesAvailable(
-    m_replay_handler), 0);
+  m_journal_metadata->queue(new C_HandleEntriesAvailable(m_replay_handler), 0);
 }
 
 void JournalPlayer::notify_complete(int r) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   m_handler_notified = true;
 
   ldout(m_cct, 10) << __func__ << ": replay complete: r=" << r << dendl;
-  m_journal_metadata->queue(new C_HandleComplete(
-    m_replay_handler), r);
+  m_journal_metadata->queue(new C_HandleComplete(m_replay_handler), r);
 }
 
 void JournalPlayer::handle_cache_rebalanced(uint64_t new_cache_bytes) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   if (m_state == STATE_ERROR || m_shut_down) {
     return;
@@ -851,9 +841,11 @@ void JournalPlayer::handle_cache_rebalanced(uint64_t new_cache_bytes) {
   if (m_state == STATE_WAITCACHE) {
     m_state = STATE_INIT;
     if (m_max_fetch_bytes >= min_bytes) {
-      auto ctx = new FunctionContext(
+      m_async_op_tracker.start_op();
+      auto ctx = new LambdaContext(
         [this](int r) {
           prefetch();
+          m_async_op_tracker.finish_op();
         });
       m_journal_metadata->queue(ctx, 0);
       return;

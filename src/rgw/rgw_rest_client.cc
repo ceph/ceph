@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
@@ -908,13 +908,13 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
 }
 
 void RGWHTTPStreamRWRequest::set_stream_write(bool s) {
-  Mutex::Locker wl(write_lock);
+  std::lock_guard wl{write_lock};
   stream_writes = s;
 }
 
 void RGWHTTPStreamRWRequest::unpause_receive()
 {
-  Mutex::Locker req_locker(get_req_lock());
+  std::lock_guard req_locker{get_req_lock()};
   if (!read_paused) {
     _set_read_paused(false);
   }
@@ -922,22 +922,20 @@ void RGWHTTPStreamRWRequest::unpause_receive()
 
 void RGWHTTPStreamRWRequest::add_send_data(bufferlist& bl)
 {
-  Mutex::Locker req_locker(get_req_lock());
-  Mutex::Locker wl(write_lock);
+  std::scoped_lock locker{get_req_lock(), write_lock};
   outbl.claim_append(bl);
   _set_write_paused(false);
 }
 
 uint64_t RGWHTTPStreamRWRequest::get_pending_send_size()
 {
-  Mutex::Locker wl(write_lock);
+  std::lock_guard wl{write_lock};
   return outbl.length();
 }
 
 void RGWHTTPStreamRWRequest::finish_write()
 {
-  Mutex::Locker req_locker(get_req_lock());
-  Mutex::Locker wl(write_lock);
+  std::scoped_lock locker{get_req_lock(), write_lock};
   write_stream_complete = true;
   _set_write_paused(false);
 }
@@ -947,7 +945,7 @@ int RGWHTTPStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
   uint64_t out_len;
   uint64_t send_size;
   {
-    Mutex::Locker wl(write_lock);
+    std::lock_guard wl{write_lock};
 
     if (outbl.length() == 0) {
       if ((stream_writes && !write_stream_complete) ||

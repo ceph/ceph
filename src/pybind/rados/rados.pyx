@@ -176,6 +176,12 @@ cdef extern from "rados/librados.h" nogil:
                           const char *inbuf, size_t inbuflen,
                           char **outbuf, size_t *outbuflen,
                           char **outs, size_t *outslen)
+    int rados_mgr_command_target(rados_t cluster,
+                          const char *name,
+			  const char **cmd, size_t cmdlen,
+                          const char *inbuf, size_t inbuflen,
+                          char **outbuf, size_t *outbuflen,
+                          char **outs, size_t *outslen)
     int rados_mon_command_target(rados_t cluster, const char *name, const char **cmd, size_t cmdlen,
                                  const char *inbuf, size_t inbuflen,
                                  char **outbuf, size_t *outbuflen,
@@ -232,6 +238,8 @@ cdef extern from "rados/librados.h" nogil:
     void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap)
     int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t * snaps, int maxlen)
     int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t * t)
+    uint64_t rados_ioctx_get_id(rados_ioctx_t io)
+    int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf, unsigned maxlen)
 
     int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
                                             rados_snap_t *snapid)
@@ -351,7 +359,10 @@ class Error(Exception):
         return (self.__class__, (self.message, self.errno))
 
 class InvalidArgumentError(Error):
-    pass
+    def __init__(self, message, errno=None):
+        super(InvalidArgumentError, self).__init__(
+            "RADOS invalid argument (%s)" % message, errno)
+
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
@@ -359,72 +370,114 @@ class OSError(Error):
 
 class InterruptedOrTimeoutError(OSError):
     """ `InterruptedOrTimeoutError` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(InterruptedOrTimeoutError, self).__init__(
+            "RADOS interrupted or timeout (%s)" % message, errno)
 
 
 class PermissionError(OSError):
     """ `PermissionError` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(PermissionError, self).__init__(
+            "RADOS permission error (%s)" % message, errno)
 
 
 class PermissionDeniedError(OSError):
     """ deal with EACCES related. """
-    pass
+    def __init__(self, message, errno=None):
+        super(PermissionDeniedError, self).__init__(
+                "RADOS permission denied (%s)" % message, errno)
 
 
 class ObjectNotFound(OSError):
     """ `ObjectNotFound` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(ObjectNotFound, self).__init__(
+                "RADOS object not found (%s)" % message, errno)
 
 
 class NoData(OSError):
     """ `NoData` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(NoData, self).__init__(
+                "RADOS no data (%s)" % message, errno)
 
 
 class ObjectExists(OSError):
     """ `ObjectExists` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(ObjectExists, self).__init__(
+                "RADOS object exists (%s)" % message, errno)
 
 
 class ObjectBusy(OSError):
     """ `ObjectBusy` class, derived from `IOError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(ObjectBusy, self).__init__(
+                "RADOS object busy (%s)" % message, errno)
 
 
 class IOError(OSError):
     """ `ObjectBusy` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(IOError, self).__init__(
+                "RADOS I/O error (%s)" % message, errno)
 
 
 class NoSpace(OSError):
     """ `NoSpace` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(NoSpace, self).__init__(
+                "RADOS no space (%s)" % message, errno)
 
 
 class RadosStateError(Error):
     """ `RadosStateError` class, derived from `Error` """
-    pass
+    def __init__(self, message, errno=None):
+        super(RadosStateError, self).__init__(
+                "RADOS rados state (%s)" % message, errno)
 
 
 class IoctxStateError(Error):
     """ `IoctxStateError` class, derived from `Error` """
-    pass
+    def __init__(self, message, errno=None):
+        super(IoctxStateError, self).__init__(
+                "RADOS Ioctx state error (%s)" % message, errno)
 
 
 class ObjectStateError(Error):
     """ `ObjectStateError` class, derived from `Error` """
-    pass
+    def __init__(self, message, errno=None):
+        super(ObjectStateError, self).__init__(
+                "RADOS object state error (%s)" % message, errno)
 
 
 class LogicError(Error):
     """ `` class, derived from `Error` """
-    pass
+    def __init__(self, message, errno=None):
+        super(LogicError, self).__init__(
+            "RADOS logic error (%s)" % message, errno)
 
 
 class TimedOut(OSError):
     """ `TimedOut` class, derived from `OSError` """
-    pass
+    def __init__(self, message, errno=None):
+        super(TimedOut, self).__init__(
+                "RADOS timed out (%s)" % message, errno)
+
+
+class InProgress(Error):
+    """ `InProgress` class, derived from `Error` """
+    def __init__(self, message, errno=None):
+        super(InProgress, self).__init__(
+                "RADOS in progress error (%s)" % message, errno)
+
+
+class IsConnected(Error):
+    """ `IsConnected` class, derived from `Error` """
+    def __init__(self, message, errno=None):
+        super(IsConnected, self).__init__(
+                "RADOS is connected error (%s)" % message, errno)
 
 
 IF UNAME_SYSNAME == "FreeBSD":
@@ -439,6 +492,8 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.EINTR     : InterruptedOrTimeoutError,
         errno.ETIMEDOUT : TimedOut,
         errno.EACCES    : PermissionDeniedError,
+        errno.EINPROGRESS : InProgress,
+        errno.EISCONN   : IsConnected,
         errno.EINVAL    : InvalidArgumentError,
     }
 ELSE:
@@ -453,6 +508,8 @@ ELSE:
         errno.EINTR     : InterruptedOrTimeoutError,
         errno.ETIMEDOUT : TimedOut,
         errno.EACCES    : PermissionDeniedError,
+        errno.EINPROGRESS : InProgress,
+        errno.EISCONN   : IsConnected,
         errno.EINVAL    : InvalidArgumentError,
     }
 
@@ -1352,7 +1409,7 @@ Rados object in state %s." % self.state)
         finally:
             free(_cmd)
 
-    def mgr_command(self, cmd, inbuf, timeout=0):
+    def mgr_command(self, cmd, inbuf, timeout=0, target=None):
         """
         :return: (int ret, string outbuf, string outs)
         """
@@ -1362,8 +1419,11 @@ Rados object in state %s." % self.state)
 
         cmd = cstr_list(cmd, 'cmd')
         inbuf = cstr(inbuf, 'inbuf')
+        target = cstr(target, 'target', opt=True)
 
         cdef:
+            char *_target = opt_str(target)
+
             char **_cmd = to_bytes_array(cmd)
             size_t _cmdlen = len(cmd)
 
@@ -1376,12 +1436,21 @@ Rados object in state %s." % self.state)
             size_t _outs_len
 
         try:
-            with nogil:
-                ret = rados_mgr_command(self.cluster,
-                                        <const char **>_cmd, _cmdlen,
-                                        <const char*>_inbuf, _inbuf_len,
-                                        &_outbuf, &_outbuf_len,
-                                        &_outs, &_outs_len)
+            if target is not None:
+                with nogil:
+                    ret = rados_mgr_command_target(self.cluster,
+		                            <const char*>_target,
+                                            <const char **>_cmd, _cmdlen,
+                                            <const char*>_inbuf, _inbuf_len,
+                                            &_outbuf, &_outbuf_len,
+                                            &_outs, &_outs_len)
+            else:
+                with nogil:
+                    ret = rados_mgr_command(self.cluster,
+                                            <const char **>_cmd, _cmdlen,
+                                            <const char*>_inbuf, _inbuf_len,
+                                            &_outbuf, &_outbuf_len,
+                                            &_outs, &_outs_len)
 
             my_outs = decode_cstr(_outs[:_outs_len])
             my_outbuf = _outbuf[:_outbuf_len]
@@ -3143,6 +3212,43 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         return SnapIterator(self)
 
+    def get_pool_id(self):
+        """
+        Get pool id
+
+        :returns: int - pool id
+        """
+        with nogil:
+            ret = rados_ioctx_get_id(self.io)
+        return ret;
+
+    def get_pool_name(self):
+        """
+        Get pool name
+
+        :returns: str - pool name
+        """
+        cdef:
+            int name_len = 10
+            char *name = NULL
+
+        try:
+            while True:
+                name = <char *>realloc_chk(name, name_len)
+                with nogil:
+                    ret = rados_ioctx_get_pool_name(self.io, name, name_len)
+                if ret > 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, "get pool name error")
+                else:
+                    name_len = name_len * 2
+
+            return decode_cstr(name)
+        finally:
+            free(name)
+
+
     @requires(('snap_name', str_type))
     def create_snap(self, snap_name):
         """
@@ -3385,12 +3491,14 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise Error("Rados(): keys and values must have the same number of items")
 
         keys = cstr_list(keys, 'keys')
+        values = cstr_list(values, 'values')
+        lens = [len(v) for v in values]
         cdef:
             WriteOp _write_op = write_op
             size_t key_num = len(keys)
             char **_keys = to_bytes_array(keys)
             char **_values = to_bytes_array(values)
-            size_t *_lens = to_csize_t_array([len(v) for v in values])
+            size_t *_lens = to_csize_t_array(lens)
 
         try:
             with nogil:
@@ -3846,6 +3954,44 @@ returned %d, but should return zero on success." % (self.name, ret))
                     raise make_ex(ret, "error listing applications")
         finally:
             free(apps)
+
+    def application_metadata_get(self, app_name, key):
+        """
+        Gets application metadata on an OSD pool for the given key
+
+        :param app_name: application name
+        :type app_name: str
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+
+        :raises: :class:`Error`
+        """
+
+        app_name =  cstr(app_name, 'app_name')
+        key = cstr(key, 'key')
+        cdef:
+            char *_app_name = app_name
+            char *_key = key
+            size_t size = 129
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rados_application_metadata_get(self.io, _app_name,
+                                                         _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s for application %s' % (key, _app_name))
+            elif ret != 0:
+                raise make_ex(ret, 'error getting metadata %s for application %s' %
+                              (key, _app_name))
+            return decode_cstr(value)
+        finally:
+            free(value)
 
     def application_metadata_set(self, app_name, key, value):
         """

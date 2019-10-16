@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_KEYSTONE_H
 #define CEPH_RGW_KEYSTONE_H
@@ -11,7 +11,7 @@
 
 #include "rgw_common.h"
 #include "rgw_http_client.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 #include "global/global_init.h"
 
 #include <atomic>
@@ -217,13 +217,12 @@ class TokenCache {
   std::map<std::string, token_entry> tokens;
   std::list<std::string> tokens_lru;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("rgw::keystone::TokenCache");
 
   const size_t max;
 
   explicit TokenCache(const rgw::keystone::Config& config)
     : cct(g_ceph_context),
-      lock("rgw::keystone::TokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
   }
 

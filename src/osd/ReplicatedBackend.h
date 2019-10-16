@@ -149,6 +149,12 @@ public:
     uint32_t op_flags,
     bufferlist *bl) override;
 
+  int objects_readv_sync(
+    const hobject_t &hoid,
+    map<uint64_t, uint64_t>& m,
+    uint32_t op_flags,
+    bufferlist *bl) override;
+
   void objects_read_async(
     const hobject_t &hoid,
     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -333,18 +339,17 @@ private:
     Context *on_commit;
     OpRequestRef op;
     eversion_t v;
-    InProgressOp(
-      ceph_tid_t tid, Context *on_commit,
-      OpRequestRef op, eversion_t v)
-      : RefCountedObject(nullptr, 0),
-        tid(tid), on_commit(on_commit),
-        op(op), v(v) {}
     bool done() const {
       return waiting_for_commit.empty();
     }
+  private:
+    FRIEND_MAKE_REF(InProgressOp);
+    InProgressOp(ceph_tid_t tid, Context *on_commit, OpRequestRef op, eversion_t v)
+      :
+	tid(tid), on_commit(on_commit),
+	op(op), v(v) {}
   };
-  typedef boost::intrusive_ptr<InProgressOp> InProgressOpRef;
-  map<ceph_tid_t, InProgressOpRef> in_progress_ops;
+  map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
 public:
   friend class C_OSD_OnOpCommit;
 
@@ -397,7 +402,7 @@ private:
     std::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
-  void op_commit(InProgressOpRef& op);
+  void op_commit(const ceph::ref_t<InProgressOp>& op);
   void do_repop_reply(OpRequestRef op);
   void do_repop(OpRequestRef op);
 

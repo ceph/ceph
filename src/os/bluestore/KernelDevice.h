@@ -25,9 +25,7 @@
 #include "ceph_aio.h"
 #include "BlockDevice.h"
 
-#ifndef RW_IO_MAX
-#define RW_IO_MAX 0x7FFFF000
-#endif
+#define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
 
 class KernelDevice : public BlockDevice {

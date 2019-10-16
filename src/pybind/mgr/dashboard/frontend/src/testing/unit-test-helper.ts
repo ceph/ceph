@@ -1,14 +1,16 @@
-import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
+import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
+import { CdTableAction } from '../app/shared/models/cd-table-action';
+import { CdTableSelection } from '../app/shared/models/cd-table-selection';
 import { Permission } from '../app/shared/models/permissions';
 import {
   AlertmanagerAlert,
@@ -42,71 +44,74 @@ export function configureTestBed(configuration, useOldMethod?) {
 }
 
 export class PermissionHelper {
-  tableActions: TableActionsComponent;
+  tac: TableActionsComponent;
   permission: Permission;
-  getTableActionComponent: () => TableActionsComponent;
 
-  constructor(permission: Permission, getTableActionComponent: () => TableActionsComponent) {
+  constructor(permission: Permission) {
     this.permission = permission;
-    this.getTableActionComponent = getTableActionComponent;
   }
 
-  setPermissionsAndGetActions(
-    createPerm: number | boolean,
-    updatePerm: number | boolean,
-    deletePerm: number | boolean
-  ): TableActionsComponent {
-    this.permission.create = Boolean(createPerm);
-    this.permission.update = Boolean(updatePerm);
-    this.permission.delete = Boolean(deletePerm);
-    this.tableActions = this.getTableActionComponent();
-    return this.tableActions;
+  setPermissionsAndGetActions(tableActions: CdTableAction[]): any {
+    const result = {};
+    [true, false].forEach((create) => {
+      [true, false].forEach((update) => {
+        [true, false].forEach((deleteP) => {
+          this.permission.create = create;
+          this.permission.update = update;
+          this.permission.delete = deleteP;
+
+          this.tac = new TableActionsComponent();
+          this.tac.selection = new CdTableSelection();
+          this.tac.tableActions = [...tableActions];
+          this.tac.permission = this.permission;
+          this.tac.ngOnInit();
+
+          const perms = [];
+          if (create) {
+            perms.push('create');
+          }
+          if (update) {
+            perms.push('update');
+          }
+          if (deleteP) {
+            perms.push('delete');
+          }
+          const permissionText = perms.join(',');
+
+          result[permissionText !== '' ? permissionText : 'no-permissions'] = {
+            actions: this.tac.tableActions.map((action) => action.name),
+            primary: this.testScenarios()
+          };
+        });
+      });
+    });
+
+    return result;
   }
 
-  // Overwrite if needed
-  createSelection(): object {
-    return {};
+  testScenarios() {
+    const result: any = {};
+    // 'multiple selections'
+    result.multiple = this.testScenario([{}, {}]);
+    // 'select executing item'
+    result.executing = this.testScenario([{ cdExecuting: 'someAction' }]);
+    // 'select non-executing item'
+    result.single = this.testScenario([{}]);
+    // 'no selection'
+    result.no = this.testScenario([]);
+
+    return result;
   }
 
-  testScenarios({
-    fn,
-    empty,
-    single,
-    singleExecuting,
-    multiple
-  }: {
-    fn: () => any;
-    empty: any;
-    single: any;
-    singleExecuting?: any; // uses 'single' if not defined
-    multiple?: any; // uses 'empty' if not defined
-  }) {
-    this.testScenario(
-      // 'multiple selections'
-      [this.createSelection(), this.createSelection()],
-      fn,
-      _.isUndefined(multiple) ? empty : multiple
-    );
-    const executing = this.createSelection();
-    executing['cdExecuting'] = 'someAction';
-    this.testScenario(
-      // 'select executing item'
-      [executing],
-      fn,
-      _.isUndefined(singleExecuting) ? single : singleExecuting
-    );
-    this.testScenario([this.createSelection()], fn, single); // 'select non-executing item'
-    this.testScenario([], fn, empty); // 'no selection'
-  }
-
-  private testScenario(selection: object[], fn: () => any, expected: any) {
+  private testScenario(selection: object[]) {
     this.setSelection(selection);
-    expect(fn()).toBe(expected);
+    const btn = this.tac.getCurrentButton();
+    return btn ? btn.name : '';
   }
 
   setSelection(selection: object[]) {
-    this.tableActions.selection.selected = selection;
-    this.tableActions.selection.update();
+    this.tac.selection.selected = selection;
+    this.tac.selection.update();
   }
 }
 
@@ -180,10 +185,34 @@ export class FormHelper {
   }
 }
 
+/**
+ * Use this to mock 'ModalService.show' to make the embedded component with it's fixture usable
+ * in tests. The function gives back all needed parts including the modal reference.
+ *
+ * Please make sure to call this function *inside* your mock and return the reference at the end.
+ */
+export function modalServiceShow(componentClass: Type<any>, modalConfig) {
+  const ref = new BsModalRef();
+  const fixture = TestBed.createComponent(componentClass);
+  let component = fixture.componentInstance;
+  if (modalConfig.initialState) {
+    component = Object.assign(component, modalConfig.initialState);
+  }
+  fixture.detectChanges();
+  ref.content = component;
+  return { ref, fixture, component };
+}
+
 export class FixtureHelper {
   fixture: ComponentFixture<any>;
 
-  constructor(fixture: ComponentFixture<any>) {
+  constructor(fixture?: ComponentFixture<any>) {
+    if (fixture) {
+      this.updateFixture(fixture);
+    }
+  }
+
+  updateFixture(fixture: ComponentFixture<any>) {
     this.fixture = fixture;
   }
 
@@ -200,7 +229,7 @@ export class FixtureHelper {
    * Expect a specific element to be visible or not.
    */
   expectElementVisible(css: string, visibility: boolean) {
-    expect(Boolean(this.getElementByCss(css))).toBe(visibility);
+    expect(visibility).toBe(Boolean(this.getElementByCss(css)));
   }
 
   expectFormFieldToBe(css: string, value: string) {
@@ -313,3 +342,13 @@ const i18nProviders = [
 ];
 
 export { i18nProviders };
+
+export function expectItemTasks(item: any, executing: string, percentage?: number) {
+  if (executing) {
+    executing = executing + '...';
+    if (percentage) {
+      executing = `${executing} ${percentage}%`;
+    }
+  }
+  expect(item.cdExecuting).toBe(executing);
+}

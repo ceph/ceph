@@ -336,7 +336,7 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
 
   uint64_t snap_id;
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
     snap_id = m_image_ctx.snap_id;
   }
 
@@ -807,7 +807,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_refresh_parent() {
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
 
     ParentImageInfo parent_md;
     MigrationInfo migration_info;
@@ -870,7 +870,7 @@ void RefreshRequest<I>::send_v2_init_exclusive_lock() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_v2_init_exclusive_lock>(this);
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   m_exclusive_lock->init(m_features, ctx);
 }
 
@@ -902,7 +902,7 @@ void RefreshRequest<I>::send_v2_open_journal() {
      !m_image_ctx.exclusive_lock->is_lock_owner());
   bool journal_disabled_by_policy;
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
     journal_disabled_by_policy = (
       !journal_disabled &&
       m_image_ctx.get_journal_policy()->journal_disabled());
@@ -954,7 +954,7 @@ template <typename I>
 void RefreshRequest<I>::send_v2_block_writes() {
   bool disabled_journaling = false;
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
     disabled_journaling = ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
                            (m_features & RBD_FEATURE_JOURNALING) == 0 &&
                            m_image_ctx.journal != nullptr);
@@ -974,7 +974,7 @@ void RefreshRequest<I>::send_v2_block_writes() {
   Context *ctx = create_context_callback<
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_block_writes>(this);
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
   m_image_ctx.io_work_queue->block_writes(ctx);
 }
 
@@ -1135,7 +1135,7 @@ Context *RefreshRequest<I>::handle_v2_shut_down_exclusive_lock(int *result) {
   }
 
   {
-    RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    std::unique_lock owner_locker{m_image_ctx.owner_lock};
     ceph_assert(m_image_ctx.exclusive_lock == nullptr);
   }
 
@@ -1230,7 +1230,7 @@ Context *RefreshRequest<I>::send_flush_aio() {
     CephContext *cct = m_image_ctx.cct;
     ldout(cct, 10) << this << " " << __func__ << dendl;
 
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    std::shared_lock owner_locker{m_image_ctx.owner_lock};
     auto ctx = create_context_callback<
       RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
     auto aio_comp = io::AioCompletion::create_and_start(
@@ -1280,8 +1280,7 @@ void RefreshRequest<I>::apply() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
+  std::scoped_lock locker{m_image_ctx.owner_lock, m_image_ctx.image_lock};
 
   m_image_ctx.size = m_size;
   m_image_ctx.lockers = m_lockers;
@@ -1297,7 +1296,7 @@ void RefreshRequest<I>::apply() {
     m_image_ctx.op_features = 0;
     m_image_ctx.operations_disabled = false;
     m_image_ctx.object_prefix = std::move(m_object_prefix);
-    m_image_ctx.init_layout();
+    m_image_ctx.init_layout(m_image_ctx.md_ctx.get_id());
   } else {
     // HEAD revision doesn't have a defined overlap so it's only
     // applicable to snapshots
@@ -1387,8 +1386,10 @@ void RefreshRequest<I>::apply() {
   if (m_refresh_parent != nullptr) {
     m_refresh_parent->apply();
   }
-  m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
-                                                      m_image_ctx.snaps);
+  if (m_image_ctx.data_ctx.is_valid()) {
+    m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
+                                                        m_image_ctx.snaps);
+  }
 
   // handle dynamically enabled / disabled features
   if (m_image_ctx.exclusive_lock != nullptr &&

@@ -7,7 +7,8 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
+#include "common/containers.h"
 #include "journal/Future.h"
 #include "journal/FutureImpl.h"
 #include "journal/JournalMetadata.h"
@@ -21,8 +22,8 @@ namespace journal {
 
 class JournalRecorder {
 public:
-  JournalRecorder(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-                  const JournalMetadataPtr &journal_metadata,
+  JournalRecorder(librados::IoCtx &ioctx, std::string_view object_oid_prefix,
+                  ceph::ref_t<JournalMetadata> journal_metadata,
                   uint64_t max_in_flight_appends);
   ~JournalRecorder();
 
@@ -34,10 +35,10 @@ public:
   Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush(Context *on_safe);
 
-  ObjectRecorderPtr get_object(uint8_t splay_offset);
+  ceph::ref_t<ObjectRecorder> get_object(uint8_t splay_offset);
 
 private:
-  typedef std::map<uint8_t, ObjectRecorderPtr> ObjectRecorderPtrs;
+  typedef std::map<uint8_t, ceph::ref_t<ObjectRecorder>> ObjectRecorderPtrs;
 
   struct Listener : public JournalMetadataListener {
     JournalRecorder *journal_recorder;
@@ -77,10 +78,10 @@ private:
   };
 
   librados::IoCtx m_ioctx;
-  CephContext *m_cct;
+  CephContext *m_cct = nullptr;
   std::string m_object_oid_prefix;
 
-  JournalMetadataPtr m_journal_metadata;
+  ceph::ref_t<JournalMetadata> m_journal_metadata;
 
   uint32_t m_flush_interval = 0;
   uint64_t m_flush_bytes = 0;
@@ -90,15 +91,15 @@ private:
   Listener m_listener;
   ObjectHandler m_object_handler;
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("JournalerRecorder::m_lock");
 
   uint32_t m_in_flight_advance_sets = 0;
   uint32_t m_in_flight_object_closes = 0;
   uint64_t m_current_set;
   ObjectRecorderPtrs m_object_ptrs;
-  std::vector<std::shared_ptr<Mutex>> m_object_locks;
+  ceph::containers::tiny_vector<ceph::mutex> m_object_locks;
 
-  FutureImplPtr m_prev_future;
+  ceph::ref_t<FutureImpl> m_prev_future;
 
   Context *m_on_object_set_advanced = nullptr;
 
@@ -110,9 +111,9 @@ private:
 
   void close_and_advance_object_set(uint64_t object_set);
 
-  ObjectRecorderPtr create_object_recorder(uint64_t object_number,
-                                           std::shared_ptr<Mutex> lock);
-  void create_next_object_recorder(ObjectRecorderPtr object_recorder);
+  ceph::ref_t<ObjectRecorder> create_object_recorder(uint64_t object_number,
+                                           ceph::mutex* lock);
+  void create_next_object_recorder(ceph::ref_t<ObjectRecorder> object_recorder);
 
   void handle_update();
 
@@ -121,13 +122,13 @@ private:
 
   void lock_object_recorders() {
     for (auto& lock : m_object_locks) {
-      lock->Lock();
+      lock.lock();
     }
   }
 
   void unlock_object_recorders() {
     for (auto& lock : m_object_locks) {
-      lock->Unlock();
+      lock.unlock();
     }
   }
 };

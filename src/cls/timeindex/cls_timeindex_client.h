@@ -83,6 +83,9 @@ void cls_timeindex_trim(
   const std::string& from_marker = std::string(),
   const std::string& to_marker = std::string());
 
+// these overloads which call io_ctx.operate() should not be called in the rgw.
+// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
+#ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_timeindex_trim(
   librados::IoCtx& io_ctx,
   const std::string& oid,
@@ -90,4 +93,6 @@ int cls_timeindex_trim(
   const utime_t& to_time,
   const std::string& from_marker = std::string(),
   const std::string& to_marker = std::string());
+#endif
+
 #endif

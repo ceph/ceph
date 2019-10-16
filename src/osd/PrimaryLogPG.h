@@ -34,6 +34,7 @@
 
 class CopyFromCallback;
 class PromoteCallback;
+struct RefCountCallback;
 
 class PrimaryLogPG;
 class PGLSFilter;
@@ -256,6 +257,17 @@ public:
     ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
+
+  friend struct RefCountCallback;
+  struct ManifestOp {
+    RefCountCallback *cb;
+    ceph_tid_t objecter_tid;
+
+    ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
+      : cb(cb), objecter_tid(tid) {}
+  };
+  typedef std::shared_ptr<ManifestOp> ManifestOpRef;
+  map<hobject_t, ManifestOpRef> manifest_ops;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() override {
@@ -898,6 +910,15 @@ protected:
 	    p.second,
 	    p.second.begin(),
 	    p.second.end());
+	} else if (is_laggy()) {
+          for (auto& op : p.second) {
+            op->mark_delayed("waiting for readable");
+          }
+	  waiting_for_readable.splice(
+	    waiting_for_readable.begin(),
+	    p.second,
+	    p.second.begin(),
+	    p.second.end());
 	} else {
 	  requeue_ops(p.second);
 	}
@@ -1000,14 +1021,13 @@ protected:
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v);
-  /// true if we can send an ack for v
-  bool already_ack(eversion_t v);
 
   // projected object info
   SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
   map<hobject_t, SnapSetContext*> snapset_contexts;
-  Mutex snapset_contexts_lock;
+  ceph::mutex snapset_contexts_lock =
+    ceph::make_mutex("PrimaryLogPG::snapset_contexts_lock");
 
   // debug order that client ops are applied
   map<hobject_t, map<client_t, ceph_tid_t>> debug_op_order;
@@ -1053,7 +1073,7 @@ protected:
     _register_snapset_context(ssc);
   }
   void _register_snapset_context(SnapSetContext *ssc) {
-    ceph_assert(snapset_contexts_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(snapset_contexts_lock));
     if (!ssc->registered) {
       ceph_assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
@@ -1141,7 +1161,7 @@ protected:
 				  PGBackend::RecoveryHandle *h,
 				  bool *work_started);
 
-  void finish_degraded_object(const hobject_t& oid);
+  void finish_degraded_object(const hobject_t oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef& map) override ;
@@ -1161,9 +1181,8 @@ protected:
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
-  void finish_ctx(OpContext *ctx, int log_op_type);
+  void finish_ctx(OpContext *ctx, int log_op_type, int result=0);
   void reply_ctx(OpContext *ctx, int err);
-  void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 
@@ -1409,8 +1428,10 @@ protected:
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
-  bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
-  int get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter **pfilter);
+  bool pgls_filter(const PGLSFilter& filter, const hobject_t& sobj);
+
+  std::pair<int, std::unique_ptr<const PGLSFilter>> get_pgls_filter(
+    bufferlist::const_iterator& iter);
 
   map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
@@ -1453,8 +1474,9 @@ protected:
 			     uint64_t last_offset);
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 			     uint64_t offset, uint64_t last_offset, epoch_t lpr);
+  void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
   void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
-                         SnapContext snapc, bool get, Context *cb, uint64_t offset);
+                         SnapContext snapc, bool get, RefCountCallback *cb, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
@@ -1469,13 +1491,11 @@ public:
 	       spg_t p);
   ~PrimaryLogPG() override {}
 
-  int do_command(
-    cmdmap_t cmdmap,
-    ostream& ss,
-    bufferlist& idata,
-    bufferlist& odata,
-    ConnectionRef conn,
-    ceph_tid_t tid) override;
+  void do_command(
+    const string_view& prefix,
+    const cmdmap_t& cmdmap,
+    const bufferlist& idata,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) override;
 
   void clear_cache();
   int get_cache_obj_count() {
@@ -1486,7 +1506,8 @@ public:
     ThreadPool::TPHandle &handle) override;
   void do_op(OpRequestRef& op);
   void record_write_error(OpRequestRef op, const hobject_t &soid,
-			  MOSDOpReply *orig_reply, int r);
+			  MOSDOpReply *orig_reply, int r,
+			  OpContext *ctx_for_op_returns=nullptr);
   void do_pg_op(OpRequestRef op);
   void do_scan(
     OpRequestRef op,
@@ -1510,7 +1531,7 @@ public:
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
-  int do_scrub_ls(MOSDOp *op, OSDOp *osd_op);
+  int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
   hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
 
@@ -1659,10 +1680,11 @@ private:
 	}
       };
       auto *pg = context< SnapTrimmer >().pg;
-      if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
+      float osd_snap_trim_sleep = pg->osd->osd->get_osd_snap_trim_sleep();
+      if (osd_snap_trim_sleep > 0) {
 	std::lock_guard l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
-	  pg->cct->_conf->osd_snap_trim_sleep,
+	  osd_snap_trim_sleep,
 	  new OnTimer{pg, pg->get_osdmap_epoch()});
       } else {
 	post_event(SnapTrimTimerReady());
@@ -1847,6 +1869,10 @@ public:
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
 
+  bool check_laggy(OpRequestRef& op);
+  bool check_laggy_requeue(OpRequestRef& op);
+  void recheck_readable() override;
+
   bool is_backfill_target(pg_shard_t osd) const {
     return recovery_state.is_backfill_target(osd);
   }
@@ -1879,8 +1905,7 @@ public:
 
   void mark_all_unfound_lost(
     int what,
-    ConnectionRef con,
-    ceph_tid_t tid);
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
   eversion_t pick_newest_available(const hobject_t& oid);
 
   void do_update_log_missing(

@@ -76,15 +76,14 @@ public:
 
 class SafeTimerSingleton : public SafeTimer {
 public:
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("librbd::Journal::SafeTimerSingleton::lock");
 
   explicit SafeTimerSingleton(CephContext *cct)
-      : SafeTimer(cct, lock, true),
-        lock("librbd::Journal::SafeTimerSingleton::lock") {
+      : SafeTimer(cct, lock, true) {
     init();
   }
   ~SafeTimerSingleton() {
-    Mutex::Locker locker(lock);
+    std::lock_guard locker{lock};
     shutdown();
   }
 };
@@ -105,11 +104,11 @@ public:
       name(image_name),
       image_watcher(NULL),
       journal(NULL),
-      owner_lock(util::unique_lock_name("librbd::ImageCtx::owner_lock", this)),
-      image_lock(util::unique_lock_name("librbd::ImageCtx::image_lock", this)),
-      timestamp_lock(util::unique_lock_name("librbd::ImageCtx::timestamp_lock", this)),
-      async_ops_lock(util::unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
-      copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
+      owner_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::ImageCtx::owner_lock", this))),
+      image_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::ImageCtx::image_lock", this))),
+      timestamp_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::ImageCtx::timestamp_lock", this))),
+      async_ops_lock(ceph::make_mutex(util::unique_lock_name("librbd::ImageCtx::async_ops_lock", this))),
+      copyup_list_lock(ceph::make_mutex(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this))),
       extra_read_flags(0),
       old_format(false),
       order(0), size(0), features(0),
@@ -169,7 +168,9 @@ public:
     delete[] format_string;
 
     md_ctx.aio_flush();
-    data_ctx.aio_flush();
+    if (data_ctx.is_valid()) {
+      data_ctx.aio_flush();
+    }
     io_work_queue->drain();
 
     delete io_object_dispatcher;
@@ -188,7 +189,7 @@ public:
     asok_hook = new LibrbdAdminSocketHook(this);
 
     string pname = string("librbd-") + id + string("-") +
-      data_ctx.get_pool_name() + string("-") + name;
+      md_ctx.get_pool_name() + string("-") + name;
     if (!snap_name.empty()) {
       pname += "-";
       pname += snap_name;
@@ -209,7 +210,7 @@ public:
     asok_hook = nullptr;
   }
 
-  void ImageCtx::init_layout()
+  void ImageCtx::init_layout(int64_t pool_id)
   {
     if (stripe_unit == 0 || stripe_count == 0) {
       stripe_unit = 1ull << order;
@@ -226,7 +227,7 @@ public:
     layout.stripe_unit = stripe_unit;
     layout.stripe_count = stripe_count;
     layout.object_size = 1ull << order;
-    layout.pool_id = data_ctx.get_id();  // FIXME: pool id overflow?
+    layout.pool_id = pool_id;  // FIXME: pool id overflow?
 
     delete[] format_string;
     size_t len = object_prefix.length() + 16;
@@ -319,14 +320,16 @@ public:
   }
 
   int ImageCtx::snap_set(uint64_t in_snap_id) {
-    ceph_assert(image_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(image_lock));
     auto it = snap_info.find(in_snap_id);
     if (in_snap_id != CEPH_NOSNAP && it != snap_info.end()) {
       snap_id = in_snap_id;
       snap_namespace = it->second.snap_namespace;
       snap_name = it->second.name;
       snap_exists = true;
-      data_ctx.snap_set_read(snap_id);
+      if (data_ctx.is_valid()) {
+        data_ctx.snap_set_read(snap_id);
+      }
       return 0;
     }
     return -ENOENT;
@@ -334,18 +337,20 @@ public:
 
   void ImageCtx::snap_unset()
   {
-    ceph_assert(image_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(image_lock));
     snap_id = CEPH_NOSNAP;
     snap_namespace = {};
     snap_name = "";
     snap_exists = true;
-    data_ctx.snap_set_read(snap_id);
+    if (data_ctx.is_valid()) {
+      data_ctx.snap_set_read(snap_id);
+    }
   }
 
   snap_t ImageCtx::get_snap_id(const cls::rbd::SnapshotNamespace& in_snap_namespace,
                                const string& in_snap_name) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     auto it = snap_ids.find({in_snap_namespace, in_snap_name});
     if (it != snap_ids.end()) {
       return it->second;
@@ -355,7 +360,7 @@ public:
 
   const SnapInfo* ImageCtx::get_snap_info(snap_t in_snap_id) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     map<snap_t, SnapInfo>::const_iterator it =
       snap_info.find(in_snap_id);
     if (it != snap_info.end())
@@ -366,7 +371,7 @@ public:
   int ImageCtx::get_snap_name(snap_t in_snap_id,
 			      string *out_snap_name) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *out_snap_name = info->name;
@@ -378,7 +383,7 @@ public:
   int ImageCtx::get_snap_namespace(snap_t in_snap_id,
 				   cls::rbd::SnapshotNamespace *out_snap_namespace) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *out_snap_namespace = info->snap_namespace;
@@ -400,7 +405,7 @@ public:
 
   uint64_t ImageCtx::get_current_size() const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     return size;
   }
 
@@ -445,20 +450,20 @@ public:
 
   void ImageCtx::set_access_timestamp(utime_t at)
   {
-    ceph_assert(timestamp_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(timestamp_lock));
     access_timestamp = at;
   }
 
   void ImageCtx::set_modify_timestamp(utime_t mt)
   {
-    ceph_assert(timestamp_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(timestamp_lock));
     modify_timestamp = mt;
   }
 
   int ImageCtx::is_snap_protected(snap_t in_snap_id,
 				  bool *is_protected) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_protected =
@@ -471,7 +476,7 @@ public:
   int ImageCtx::is_snap_unprotected(snap_t in_snap_id,
 				    bool *is_unprotected) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_unprotected =
@@ -488,7 +493,7 @@ public:
                           uint8_t protection_status, uint64_t flags,
                           utime_t timestamp)
   {
-    ceph_assert(image_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(image_lock));
     snaps.push_back(id);
     SnapInfo info(in_snap_name, in_snap_namespace,
 		  in_size, parent, protection_status, flags, timestamp);
@@ -500,7 +505,7 @@ public:
 			 string in_snap_name,
 			 snap_t id)
   {
-    ceph_assert(image_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(image_lock));
     snaps.erase(std::remove(snaps.begin(), snaps.end(), id), snaps.end());
     snap_info.erase(id);
     snap_ids.erase({in_snap_namespace, in_snap_name});
@@ -508,7 +513,7 @@ public:
 
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     if (in_snap_id == CEPH_NOSNAP) {
       if (!resize_reqs.empty() &&
           resize_reqs.front()->shrinking()) {
@@ -525,40 +530,40 @@ public:
   }
 
   uint64_t ImageCtx::get_object_count(snap_t in_snap_id) const {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     uint64_t image_size = get_image_size(in_snap_id);
     return Striper::get_num_objects(layout, image_size);
   }
 
   bool ImageCtx::test_features(uint64_t features) const
   {
-    RWLock::RLocker l(image_lock);
+    std::shared_lock l{image_lock};
     return test_features(features, image_lock);
   }
 
   bool ImageCtx::test_features(uint64_t in_features,
-                               const RWLock &in_image_lock) const
+                               const ceph::shared_mutex &in_image_lock) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     return ((features & in_features) == in_features);
   }
 
   bool ImageCtx::test_op_features(uint64_t in_op_features) const
   {
-    RWLock::RLocker image_locker(image_lock);
+    std::shared_lock l{image_lock};
     return test_op_features(in_op_features, image_lock);
   }
 
   bool ImageCtx::test_op_features(uint64_t in_op_features,
-                                  const RWLock &in_image_lock) const
+                                  const ceph::shared_mutex &in_image_lock) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     return ((op_features & in_op_features) == in_op_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     if (_snap_id == CEPH_NOSNAP) {
       *_flags = flags;
       return 0;
@@ -574,15 +579,16 @@ public:
   int ImageCtx::test_flags(librados::snap_t in_snap_id,
                            uint64_t flags, bool *flags_set) const
   {
-    RWLock::RLocker l(image_lock);
+    std::shared_lock l{image_lock};
     return test_flags(in_snap_id, flags, image_lock, flags_set);
   }
 
   int ImageCtx::test_flags(librados::snap_t in_snap_id,
-                           uint64_t flags, const RWLock &in_image_lock,
+                           uint64_t flags,
+                           const ceph::shared_mutex &in_image_lock,
                            bool *flags_set) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     uint64_t snap_flags;
     int r = get_flags(in_snap_id, &snap_flags);
     if (r < 0) {
@@ -594,7 +600,7 @@ public:
 
   int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)
   {
-    ceph_assert(image_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(image_lock));
     uint64_t *_flags;
     if (in_snap_id == CEPH_NOSNAP) {
       _flags = &flags;
@@ -616,7 +622,7 @@ public:
 
   const ParentImageInfo* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     if (in_snap_id == CEPH_NOSNAP)
       return &parent_md;
     const SnapInfo *info = get_snap_info(in_snap_id);
@@ -651,7 +657,7 @@ public:
 
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     const auto info = get_parent_info(in_snap_id);
     if (info) {
       *overlap = info->overlap;
@@ -695,7 +701,7 @@ public:
 
   void ImageCtx::cancel_async_requests(Context *on_finish) {
     {
-      Mutex::Locker async_ops_locker(async_ops_lock);
+      std::lock_guard async_ops_locker{async_ops_lock};
       if (!async_requests.empty()) {
         ldout(cct, 10) << "canceling async requests: count="
                        << async_requests.size() << dendl;
@@ -823,8 +829,8 @@ public:
 
   void ImageCtx::set_image_name(const std::string &image_name) {
     // update the name so rename can be invoked repeatedly
-    RWLock::RLocker owner_locker(owner_lock);
-    RWLock::WLocker image_locker(image_lock);
+    std::shared_lock owner_locker{owner_lock};
+    std::unique_lock image_locker{image_lock};
     name = image_name;
     if (old_format) {
       header_oid = util::old_header_name(image_name);
@@ -842,26 +848,26 @@ public:
   }
 
   exclusive_lock::Policy *ImageCtx::get_exclusive_lock_policy() const {
-    ceph_assert(owner_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(owner_lock));
     ceph_assert(exclusive_lock_policy != nullptr);
     return exclusive_lock_policy;
   }
 
   void ImageCtx::set_exclusive_lock_policy(exclusive_lock::Policy *policy) {
-    ceph_assert(owner_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(owner_lock));
     ceph_assert(policy != nullptr);
     delete exclusive_lock_policy;
     exclusive_lock_policy = policy;
   }
 
   journal::Policy *ImageCtx::get_journal_policy() const {
-    ceph_assert(image_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_lock));
     ceph_assert(journal_policy != nullptr);
     return journal_policy;
   }
 
   void ImageCtx::set_journal_policy(journal::Policy *policy) {
-    ceph_assert(image_lock.is_wlocked());
+    ceph_assert(ceph_mutex_is_wlocked(image_lock));
     ceph_assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
@@ -878,7 +884,7 @@ public:
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
-                                    Mutex **timer_lock) {
+                                    ceph::mutex **timer_lock) {
     auto safe_timer_singleton =
       &cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
 	"librbd::journal::safe_timer", false, cct);

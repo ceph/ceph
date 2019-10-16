@@ -19,15 +19,17 @@
 
 class MMDSOpenInoReply : public Message {
 public:
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
   mds_rank_t hint;
   int32_t error;
 
 protected:
-  MMDSOpenInoReply() : Message{MSG_MDS_OPENINOREPLY}, error(0) {}
+  MMDSOpenInoReply() : Message{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    Message{MSG_MDS_OPENINOREPLY}, ino(i), hint(h), error(e) {
+    Message{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, ino(i), hint(h), error(e) {
     header.tid = t;
   }
 

@@ -13,6 +13,7 @@ from ..rest_client import RequestException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
+from ..tools import json_str_to_object
 
 
 @ApiController('/rgw', Scope.RGW)
@@ -96,11 +97,26 @@ class RgwRESTController(RESTController):
         try:
             instance = RgwClient.admin_instance()
             result = instance.proxy(method, path, params, None)
-            if json_response and result != '':
-                result = json.loads(result.decode('utf-8'))
+            if json_response:
+                result = json_str_to_object(result)
             return result
         except (DashboardException, RequestException) as e:
             raise DashboardException(e, http_status_code=500, component='rgw')
+
+
+@ApiController('/rgw/site', Scope.RGW)
+class RgwSite(RgwRESTController):
+
+    def list(self, query=None):
+        if query == 'placement-targets':
+            instance = RgwClient.admin_instance()
+            result = instance.get_placement_targets()
+        else:
+            # @TODO: (it'll be required for multisite workflows):
+            # by default, retrieve cluster realms/zonegroups map.
+            raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
+
+        return result
 
 
 @ApiController('/rgw/bucket', Scope.RGW)
@@ -121,26 +137,79 @@ class RgwBucket(RgwRESTController):
                 if bucket['tenant'] else bucket['bucket']
         return bucket
 
+    def _get_versioning(self, owner, bucket_name):
+        rgw_client = RgwClient.instance(owner)
+        return rgw_client.get_bucket_versioning(bucket_name)
+
+    def _set_versioning(self, owner, bucket_name, versioning_state):
+        rgw_client = RgwClient.instance(owner)
+        return rgw_client.set_bucket_versioning(bucket_name, versioning_state)
+
+    @staticmethod
+    def strip_tenant_from_bucket_name(bucket_name):
+        # type (str) => str
+        """
+        >>> RgwBucket.strip_tenant_from_bucket_name('tenant/bucket-name')
+        'bucket-name'
+        >>> RgwBucket.strip_tenant_from_bucket_name('bucket-name')
+        'bucket-name'
+        """
+        return bucket_name[bucket_name.find('/') + 1:]
+
+    @staticmethod
+    def get_s3_bucket_name(bucket_name, tenant=None):
+        # type (str, str) => str
+        """
+        >>> RgwBucket.get_s3_bucket_name('bucket-name', 'tenant')
+        'tenant:bucket-name'
+        >>> RgwBucket.get_s3_bucket_name('tenant/bucket-name', 'tenant')
+        'tenant:bucket-name'
+        >>> RgwBucket.get_s3_bucket_name('bucket-name')
+        'bucket-name'
+        """
+        bucket_name = RgwBucket.strip_tenant_from_bucket_name(bucket_name)
+        if tenant:
+            bucket_name = '{}:{}'.format(tenant, bucket_name)
+        return bucket_name
+
     def list(self):
         return self.proxy('GET', 'bucket')
 
     def get(self, bucket):
         result = self.proxy('GET', 'bucket', {'bucket': bucket})
+
+        result['versioning'] =\
+            self._get_versioning(result['owner'],
+                                 RgwBucket.get_s3_bucket_name(result['bucket'], result['tenant']))
+
         return self._append_bid(result)
 
-    def create(self, bucket, uid):
+    def create(self, bucket, uid, zonegroup=None, placement_target=None):
         try:
             rgw_client = RgwClient.instance(uid)
-            return rgw_client.create_bucket(bucket)
+            return rgw_client.create_bucket(bucket, zonegroup, placement_target)
         except RequestException as e:
             raise DashboardException(e, http_status_code=500, component='rgw')
 
-    def set(self, bucket, bucket_id, uid):
+    def set(self, bucket, bucket_id, uid, versioning_state=None):
+        # When linking a non-tenant-user owned bucket to a tenanted user, we
+        # need to prefix bucket name with '/'. e.g. photos -> /photos
+        if '$' in uid and '/' not in bucket:
+            bucket = '/{}'.format(bucket)
+
+        # Link bucket to new user:
         result = self.proxy('PUT', 'bucket', {
             'bucket': bucket,
             'bucket-id': bucket_id,
             'uid': uid
         }, json_response=False)
+
+        if versioning_state:
+            uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
+            self._set_versioning(uid,
+                                 RgwBucket.get_s3_bucket_name(bucket, uid_tenant),
+                                 versioning_state)
+
         return self._append_bid(result)
 
     def delete(self, bucket, purge_objects='true'):

@@ -64,7 +64,7 @@ class Notify {
 
   OSDService *osd;
   CancelableContext *cb;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("Notify::lock");
 
   /// (gid,cookie) -> reply_bl for everyone who acked the notify
   std::multimap<std::pair<uint64_t,uint64_t>, ceph::buffer::list> notify_replies;
@@ -270,11 +270,11 @@ public:
  * Lives in the Session object of an OSD connection
  */
 class WatchConState {
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("WatchConState");
   std::set<WatchRef> watches;
 public:
   CephContext* cct;
-  explicit WatchConState(CephContext* cct) : lock("WatchConState"), cct(cct) {}
+  explicit WatchConState(CephContext* cct) : cct(cct) {}
 
   /// Add a watch
   void addWatch(

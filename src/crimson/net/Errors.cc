@@ -47,6 +47,10 @@ const std::error_category& net_category()
           return "invalid argument";
         case error::address_in_use:
           return "address in use";
+        case error::broken_pipe:
+          return "broken pipe";
+        case error::protocol_aborted:
+          return "protocol aborted";
         default:
           return "unknown";
       }
@@ -67,6 +71,8 @@ const std::error_category& net_category()
           return std::errc::invalid_argument;
         case error::address_in_use:
           return std::errc::address_in_use;
+        case error::broken_pipe:
+          return std::errc::broken_pipe;
         default:
           return std::error_condition(ev, *this);
       }
@@ -92,6 +98,9 @@ const std::error_category& net_category()
         case error::address_in_use:
           return cond == std::errc::address_in_use
               || cond == std::error_condition(EADDRINUSE, std::system_category());
+        case error::broken_pipe:
+          return cond == std::errc::broken_pipe
+              || cond == std::error_condition(EPIPE, std::system_category());
         default:
           return false;
       }
@@ -117,6 +126,9 @@ const std::error_category& net_category()
         case error::address_in_use:
           return code == std::errc::address_in_use
               || code == std::error_code(EADDRINUSE, std::system_category());
+        case error::broken_pipe:
+          return code == std::errc::broken_pipe
+              || code == std::error_code(EPIPE, std::system_category());
         default:
           return false;
       }

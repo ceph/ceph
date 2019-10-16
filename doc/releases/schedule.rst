@@ -10,9 +10,12 @@ Current
 Timeline
 --------
 
-.. ceph_timeline:: releases.yml development nautilus mimic luminous kraken jewel infernalis hammer giant firefly emperor dumpling
+.. ceph_timeline:: releases.yml development nautilus mimic luminous kraken jewel infernalis hammer giant firefly emperor
 
 .. _Nautilus: ../nautilus
+.. _14.2.4: ../nautilus#v14-2-4-nautilus
+.. _14.2.3: ../nautilus#v14-2-3-nautilus
+.. _14.2.2: ../nautilus#v14-2-2-nautilus
 .. _14.2.1: ../nautilus#v14-2-1-nautilus
 .. _14.2.0: ../nautilus#v14-2-0-nautilus
 

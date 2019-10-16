@@ -26,7 +26,6 @@
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "global/global_init.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

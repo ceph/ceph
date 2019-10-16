@@ -89,8 +89,12 @@ struct C_AsyncCallback : public Context {
   C_AsyncCallback(WQ *op_work_queue, Context *on_finish)
     : op_work_queue(op_work_queue), on_finish(on_finish) {
   }
+  ~C_AsyncCallback() override {
+    delete on_finish;
+  }
   void finish(int r) override {
     op_work_queue->queue(on_finish, r);
+    on_finish = nullptr;
   }
 };
 
@@ -170,39 +174,6 @@ Context *create_async_context_callback(WQ *work_queue, Context *on_finish) {
 inline ImageCtx *get_image_ctx(ImageCtx *image_ctx) {
   return image_ctx;
 }
-
-/// helper for tracking in-flight async ops when coordinating
-/// a shut down of the invoking class instance
-class AsyncOpTracker {
-public:
-  void start_op() {
-    m_refs++;
-  }
-
-  void finish_op() {
-    if (--m_refs == 0 && m_on_finish != nullptr) {
-      Context *on_finish = nullptr;
-      std::swap(on_finish, m_on_finish);
-      on_finish->complete(0);
-    }
-  }
-
-  template <typename I>
-  void wait(I &image_ctx, Context *on_finish) {
-    ceph_assert(m_on_finish == nullptr);
-
-    on_finish = create_async_context_callback(image_ctx, on_finish);
-    if (m_refs == 0) {
-      on_finish->complete(0);
-      return;
-    }
-    m_on_finish = on_finish;
-  }
-
-private:
-  std::atomic<uint64_t> m_refs = { 0 };
-  Context *m_on_finish = nullptr;
-};
 
 uint64_t get_rbd_default_features(CephContext* cct);
 

@@ -2,8 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "include/int_types.h"
 
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 
 #include <iostream>
@@ -67,37 +66,36 @@ enum TestOpType {
   TEST_OP_SET_REDIRECT,
   TEST_OP_UNSET_REDIRECT,
   TEST_OP_CHUNK_READ,
-  TEST_OP_TIER_PROMOTE
+  TEST_OP_TIER_PROMOTE,
+  TEST_OP_TIER_FLUSH
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
   TestWatchContext(const TestWatchContext&);
 public:
-  Cond cond;
-  uint64_t handle;
-  bool waiting;
-  Mutex lock;
-  TestWatchContext() : handle(0), waiting(false),
-		       lock("watch lock") {}
+  ceph::condition_variable cond;
+  uint64_t handle = 0;
+  bool waiting = false;
+  ceph::mutex lock = ceph::make_mutex("watch lock");
+  TestWatchContext() = default;
   void handle_notify(uint64_t notify_id, uint64_t cookie,
 		     uint64_t notifier_id,
 		     bufferlist &bl) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     waiting = false;
-    cond.SignalAll();
+    cond.notify_all();
   }
   void handle_error(uint64_t cookie, int err) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     cout << "watch handle_error " << err << std::endl;
   }
   void start() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     waiting = true;
   }
   void wait() {
-    Mutex::Locker l(lock);
-    while (waiting)
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return !waiting; });
   }
   uint64_t &get_handle() {
     return handle;
@@ -162,8 +160,8 @@ public:
 
 class RadosTestContext {
 public:
-  Mutex state_lock;
-  Cond wait_cond;
+  ceph::mutex state_lock = ceph::make_mutex("Context Lock");
+  ceph::condition_variable wait_cond;
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
@@ -198,6 +196,7 @@ public:
   librados::IoCtx low_tier_io_ctx;
   int snapname_num;
   map<string,string > redirect_objs;
+  bool enable_dedup;
 
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
@@ -209,8 +208,8 @@ public:
 		   bool pool_snaps,
 		   bool write_fadvise_dontneed,
 		   const string &low_tier_pool_name,
+		   bool enable_dedup,
 		   const char *id = 0) :
-    state_lock("Context Lock"),
     pool_obj_cont(),
     current_snap(0),
     pool_name(pool_name),
@@ -227,7 +226,8 @@ public:
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
     low_tier_pool_name(low_tier_pool_name),
-    snapname_num(0)
+    snapname_num(0),
+    enable_dedup(enable_dedup)
   {
   }
 
@@ -266,6 +266,17 @@ public:
       rados.shutdown();
       return r;
     }
+    if (enable_dedup) {
+      r = rados.mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+	"\", \"var\": \"fingerprint_algorithm\", \"val\": \"" + "sha256" + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
+    }
+
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
     stringstream hostpid;
@@ -287,7 +298,7 @@ public:
   {
     ceph_assert(initialized);
     list<TestOp*> inflight;
-    state_lock.Lock();
+    std::unique_lock state_locker{state_lock};
 
     TestOp *next = gen->next(*this);
     TestOp *waiting = NULL;
@@ -300,11 +311,11 @@ public:
       if (next) {
 	inflight.push_back(next);
       }
-      state_lock.Unlock();
+      state_lock.unlock();
       if (next) {
 	(*inflight.rbegin())->begin();
       }
-      state_lock.Lock();
+      state_lock.lock();
       while (1) {
 	for (list<TestOp*>::iterator i = inflight.begin();
 	     i != inflight.end();) {
@@ -319,7 +330,7 @@ public:
 	
 	if (inflight.size() >= (unsigned) max_in_flight || (!next && !inflight.empty())) {
 	  cout << " waiting on " << inflight.size() << std::endl;
-	  wait();
+	  wait_cond.wait(state_locker);
 	} else {
 	  break;
 	}
@@ -331,17 +342,11 @@ public:
 	next = gen->next(*this);
       }
     }
-    state_lock.Unlock();
-  }
-
-  void wait()
-  {
-    wait_cond.Wait(state_lock);
   }
 
   void kick()
   {
-    wait_cond.Signal();
+    wait_cond.notify_all();
   }
 
   TestWatchContext *get_watch_context(const string &oid) {
@@ -579,7 +584,7 @@ public:
     ContDesc cont;
     set<string> to_remove;
     {
-      Mutex::Locker l(context->state_lock);
+      std::lock_guard l{context->state_lock};
       ObjectDesc obj;
       if (!context->find_object(oid, &obj)) {
 	context->kick();
@@ -636,7 +641,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     done = true;
     context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
@@ -672,7 +677,7 @@ public:
   {
     ContDesc cont;
     {
-      Mutex::Locker l(context->state_lock);
+      std::lock_guard l{context->state_lock};
       cont = ContDesc(context->seq_num, context->current_snap,
 		      context->seq_num, "");
       context->oid_in_use.insert(oid);
@@ -711,7 +716,7 @@ public:
     }
 
     {
-      Mutex::Locker l(context->state_lock);
+      std::lock_guard l{context->state_lock};
       context->update_object_header(oid, header);
       context->update_object_attrs(oid, omap);
     }
@@ -726,7 +731,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     int r;
     if ((r = comp->get_return_value())) {
       cerr << "err " << r << std::endl;
@@ -780,7 +785,7 @@ public:
 		
   void _begin() override
   {
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     done = 0;
     stringstream acc;
     acc << context->prefix << "OID: " << oid << " snap " << context->current_snap << std::endl;
@@ -888,13 +893,12 @@ public:
       &read_op,
       librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
       0);
-    context->state_lock.Unlock();
   }
 
   void _finish(CallbackInfo *info) override
   {
     ceph_assert(info);
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     uint64_t tid = info->id;
 
     cout << num << ":  finishing write tid " << tid << " to " << context->prefix + oid << std::endl;
@@ -948,7 +952,6 @@ public:
       context->kick();
       done = true;
     }
-    context->state_lock.Unlock();
   }
 
   bool finished() override
@@ -986,7 +989,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     done = 0;
     stringstream acc;
     acc << context->prefix << "OID: " << oid << " snap " << context->current_snap << std::endl;
@@ -1065,13 +1068,12 @@ public:
       &read_op,
       librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
       0);
-    context->state_lock.Unlock();
   }
 
   void _finish(CallbackInfo *info) override
   {
     ceph_assert(info);
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     uint64_t tid = info->id;
 
     cout << num << ":  finishing writesame tid " << tid << " to " << context->prefix + oid << std::endl;
@@ -1125,7 +1127,6 @@ public:
       context->kick();
       done = true;
     }
-    context->state_lock.Unlock();
   }
 
   bool finished() override
@@ -1152,10 +1153,9 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    std::unique_lock state_locker{context->state_lock};
     if (context->get_watch_context(oid)) {
       context->kick();
-      context->state_lock.Unlock();
       return;
     }
 
@@ -1170,7 +1170,7 @@ public:
     context->remove_object(oid);
 
     interval_set<uint64_t> ranges;
-    context->state_lock.Unlock();
+    state_locker.unlock();
 
     int r = 0;
     if (rand() % 2) {
@@ -1186,11 +1186,10 @@ public:
       ceph_abort();
     }
 
-    context->state_lock.Lock();
+    state_locker.lock();
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
-    context->state_lock.Unlock();
   }
 
   string getType() override
@@ -1275,7 +1274,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    std::unique_lock state_locker{context->state_lock};
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
       in_use = context->snaps_in_use.lookup_or_create(snap, snap);
@@ -1297,7 +1296,7 @@ public:
       std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
 
     TestWatchContext *ctx = context->get_watch_context(oid);
-    context->state_lock.Unlock();
+    state_locker.unlock();
     if (ctx) {
       ceph_assert(old_value.exists);
       TestAlarm alarm;
@@ -1314,7 +1313,7 @@ public:
       std::cerr << num << ":  notified, waiting" << std::endl;
       ctx->wait();
     }
-    context->state_lock.Lock();
+    state_locker.lock();
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
@@ -1359,12 +1358,11 @@ public:
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
     }
-    context->state_lock.Unlock();
   }
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::unique_lock state_locker{context->state_lock};
     ceph_assert(!done);
     ceph_assert(waiting_on > 0);
     if (--waiting_on) {
@@ -1577,12 +1575,10 @@ public:
       ceph_assert(!context->io_ctx.selfmanaged_snap_create(&snap));
     }
 
-    context->state_lock.Lock();
+    std::unique_lock state_locker{context->state_lock};
     context->add_snap(snap);
 
-    if (context->pool_snaps) {
-      context->state_lock.Unlock();
-    } else {
+    if (!context->pool_snaps) {
       vector<uint64_t> snapset(context->snaps.size());
 
       int j = 0;
@@ -1592,7 +1588,7 @@ public:
 	snapset[j] = i->second;
       }
 
-      context->state_lock.Unlock();
+      state_locker.unlock();
 
       int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
       if (r) {
@@ -1621,7 +1617,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    std::unique_lock state_locker{context->state_lock};
     uint64_t snap = context->snaps[to_remove];
     context->remove_snap(to_remove);
 
@@ -1647,7 +1643,6 @@ public:
 	ceph_abort();
       }
     }
-    context->state_lock.Unlock();
   }
 
   string getType() override
@@ -1669,23 +1664,22 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    std::unique_lock state_locker{context->state_lock};
     ObjectDesc contents;
     context->find_object(oid, &contents);
     if (contents.deleted()) {
       context->kick();
-      context->state_lock.Unlock();
       return;
     }
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
     TestWatchContext *ctx = context->get_watch_context(oid);
-    context->state_lock.Unlock();
+    state_locker.unlock();
     int r;
     if (!ctx) {
       {
-	Mutex::Locker l(context->state_lock);
+	std::lock_guard l{context->state_lock};
 	ctx = context->watch(oid);
       }
 
@@ -1695,7 +1689,7 @@ public:
     } else {
       r = context->io_ctx.unwatch2(ctx->get_handle());
       {
-	Mutex::Locker l(context->state_lock);
+	std::lock_guard l{context->state_lock};
 	context->unwatch(oid);
       }
     }
@@ -1706,7 +1700,7 @@ public:
     }
 
     {
-      Mutex::Locker l(context->state_lock);
+      std::lock_guard l{context->state_lock};
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
     }
@@ -1742,16 +1736,16 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    context->state_lock.lock();
     if (context->get_watch_context(oid)) {
       context->kick();
-      context->state_lock.Unlock();
+      context->state_lock.unlock();
       return;
     }
 
     if (context->snaps.empty()) {
       context->kick();
-      context->state_lock.Unlock();
+      context->state_lock.unlock();
       done = true;
       return;
     }
@@ -1775,7 +1769,7 @@ public:
 
     outstanding -= (!existed_before) + (!existed_after);
 
-    context->state_lock.Unlock();
+    context->state_lock.unlock();
 
     bufferlist bl, bl2;
     zero_write_op1.append(bl);
@@ -1821,7 +1815,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     uint64_t tid = info->id;
     cout << num << ":  finishing rollback tid " << tid
 	 << " to " << context->prefix + oid << std::endl;
@@ -1882,7 +1876,7 @@ public:
   {
     ContDesc cont;
     {
-      Mutex::Locker l(context->state_lock);
+      std::lock_guard l{context->state_lock};
       cont = ContDesc(context->seq_num, context->current_snap,
 		      context->seq_num, "");
       context->oid_in_use.insert(oid);
@@ -1926,7 +1920,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
 
     // note that the read can (and atm will) come back before the
     // write reply, but will reflect the update and the versions will
@@ -2044,7 +2038,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    context->state_lock.lock();
     std::cout << num << ": chunk read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     for (uint32_t i = 0; i < 2; i++) {
@@ -2056,7 +2050,7 @@ public:
     if (old_value.chunk_info.size() == 0) {
       std::cout << ":  no chunks" << std::endl;
       context->kick();
-      context->state_lock.Unlock();
+      context->state_lock.unlock();
       done = true;
       return;
     }
@@ -2090,7 +2084,7 @@ public:
 	      << " tgt_oid " << tgt_oid << std::endl;
 
     TestWatchContext *ctx = context->get_watch_context(oid);
-    context->state_lock.Unlock();
+    context->state_lock.unlock();
     if (ctx) {
       ceph_assert(old_value.exists);
       TestAlarm alarm;
@@ -2107,7 +2101,7 @@ public:
       std::cerr << num << ":  notified, waiting" << std::endl;
       ctx->wait();
     }
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
 
     _do_read(op, offset, length, 0);
 
@@ -2124,12 +2118,11 @@ public:
 					flags, NULL));
 
     waiting_on++;
-    context->state_lock.Unlock();
   }
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     ceph_assert(!done);
     ceph_assert(waiting_on > 0);
     if (--waiting_on) {
@@ -2238,7 +2231,7 @@ public:
 
   void _begin() override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     context->oid_in_use.insert(oid_src);
     context->oid_not_in_use.erase(oid_src);
 
@@ -2262,7 +2255,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
 
     if (info->id == 0) {
       ceph_assert(comp->is_complete());
@@ -2305,6 +2298,7 @@ public:
   uint64_t offset;
   uint32_t length;
   uint64_t tgt_offset;
+  bool enable_with_reference;
   SetChunkOp(int n,
 	     RadosTestContext *context,
 	     const string &oid,
@@ -2313,17 +2307,18 @@ public:
 	     const string &oid_tgt,
 	     const string &tgt_pool_name,
 	     uint64_t tgt_offset,
-	     TestOpStat *stat = 0)
+	     TestOpStat *stat = 0,
+	     bool enable_with_reference = false)
     : TestOp(n, context, stat),
       oid(oid), oid_tgt(oid_tgt), tgt_pool_name(tgt_pool_name),
       comp(NULL), done(0), 
       r(0), offset(offset), length(length), 
-      tgt_offset(tgt_offset)
+      tgt_offset(tgt_offset), enable_with_reference(enable_with_reference)
   {}
 
   void _begin() override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
@@ -2334,8 +2329,13 @@ public:
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    op.set_chunk(offset, length, context->low_tier_io_ctx, 
-		 context->prefix+oid_tgt, tgt_offset);
+    if (enable_with_reference) {
+      op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		   context->prefix+oid_tgt, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    } else {
+      op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		   context->prefix+oid_tgt, tgt_offset);
+    }
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2348,7 +2348,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
 
     if (info->id == 0) {
       ceph_assert(comp->is_complete());
@@ -2430,7 +2430,7 @@ public:
 
   void _begin() override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
     context->oid_redirect_in_use.insert(oid_tgt);
@@ -2523,7 +2523,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
 
     if (info->id == 0) {
       ceph_assert(comp->is_complete());
@@ -2575,10 +2575,9 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    std::unique_lock state_locker{context->state_lock};
     if (context->get_watch_context(oid)) {
       context->kick();
-      context->state_lock.Unlock();
       return;
     }
 
@@ -2592,7 +2591,7 @@ public:
 
     context->remove_object(oid);
 
-    context->state_lock.Unlock();
+    state_locker.unlock();
 
     comp = context->rados.aio_create_completion();
     op.remove();
@@ -2605,8 +2604,7 @@ public:
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
       ceph_abort();
     }
-
-    context->state_lock.Lock();
+    state_locker.lock();
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     if(!context->redirect_objs[oid].empty()) {
@@ -2615,7 +2613,6 @@ public:
       context->update_object_redirect_target(oid, string());
     }
     context->kick();
-    context->state_lock.Unlock();
   }
 
   string getType() override
@@ -2642,7 +2639,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    context->state_lock.lock();
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
@@ -2652,7 +2649,7 @@ public:
 					       new TestOp::CallbackInfo(0));
     completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
 						      &write_callback);
-    context->state_lock.Unlock();
+    context->state_lock.unlock();
 
     op.tier_promote();
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
@@ -2662,7 +2659,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    context->state_lock.Lock();
+    std::lock_guard l{context->state_lock};
     ceph_assert(!done);
     ceph_assert(completion->is_complete());
 
@@ -2681,7 +2678,6 @@ public:
     context->oid_not_in_use.insert(oid);
     context->kick();
     done = true;
-    context->state_lock.Unlock();
   }
 
   bool finished() override
@@ -2692,6 +2688,74 @@ public:
   string getType() override
   {
     return "TierPromoteOp";
+  }
+};
+
+class TierFlushOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+  std::shared_ptr<int> in_use;
+
+  TierFlushOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin() override
+  {
+    context->state_lock.lock();
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+						      &write_callback);
+    context->state_lock.unlock();
+
+    op.tier_flush();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op);
+    ceph_assert(!r);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    context->state_lock.lock();
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
+
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      // sucess
+    } else {
+      ceph_abort_msg("shouldn't happen");
+    }
+    context->update_object_version(oid, completion->get_version64());
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+    context->state_lock.unlock();
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "TierFlushOp";
   }
 };
 
@@ -2723,7 +2787,7 @@ public:
   }
 
   void _finish(CallbackInfo *info) override {
-    Mutex::Locker l(context->state_lock);
+    std::lock_guard l{context->state_lock};
     if (!comp2) {
       if (ls.empty()) {
 	cerr << num << ": no hitsets" << std::endl;
@@ -2787,7 +2851,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    context->state_lock.lock();
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -2797,7 +2861,7 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
     context->update_object_undirty(oid);
-    context->state_lock.Unlock();
+    context->state_lock.unlock();
 
     op.undirty();
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
@@ -2807,7 +2871,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     ceph_assert(!done);
     ceph_assert(completion->is_complete());
     context->oid_in_use.erase(oid);
@@ -2815,7 +2879,6 @@ public:
     context->update_object_version(oid, completion->get_version64());
     context->kick();
     done = true;
-    context->state_lock.Unlock();
   }
 
   bool finished() override
@@ -2851,7 +2914,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    context->state_lock.lock();
 
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
@@ -2870,7 +2933,7 @@ public:
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
-    context->state_lock.Unlock();
+    context->state_lock.unlock();
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
@@ -2888,7 +2951,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     ceph_assert(!done);
     ceph_assert(completion->is_complete());
     context->oid_in_use.erase(oid);
@@ -2908,7 +2971,6 @@ public:
     }
     context->kick();
     done = true;
-    context->state_lock.Unlock();
   }
 
   bool finished() override
@@ -2949,7 +3011,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    context->state_lock.lock();
 
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
@@ -2977,7 +3039,7 @@ public:
 						      &write_callback);
     context->oid_flushing.insert(oid);
     context->oid_not_flushing.erase(oid);
-    context->state_lock.Unlock();
+    context->state_lock.unlock();
 
     unsigned flags = librados::OPERATION_IGNORE_CACHE;
     if (blocking) {
@@ -2997,7 +3059,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     ceph_assert(!done);
     ceph_assert(completion->is_complete());
     context->oid_flushing.erase(oid);
@@ -3017,7 +3079,6 @@ public:
     }
     context->kick();
     done = true;
-    context->state_lock.Unlock();
   }
 
   bool finished() override
@@ -3049,7 +3110,7 @@ public:
 
   void _begin() override
   {
-    context->state_lock.Lock();
+    context->state_lock.lock();
 
     int snap;
     if (!(rand() % 4) && !context->snaps.empty()) {
@@ -3069,7 +3130,7 @@ public:
 					       new TestOp::CallbackInfo(0));
     completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
 						      &write_callback);
-    context->state_lock.Unlock();
+    context->state_lock.unlock();
 
     op.cache_evict();
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
@@ -3084,7 +3145,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    context->state_lock.Lock();
+    std::lock_guard state_locker{context->state_lock};
     ceph_assert(!done);
     ceph_assert(completion->is_complete());
 
@@ -3103,7 +3164,6 @@ public:
     }
     context->kick();
     done = true;
-    context->state_lock.Unlock();
   }
 
   bool finished() override

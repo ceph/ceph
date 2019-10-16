@@ -13,9 +13,9 @@ import tempfile
 import threading
 import time
 from uuid import uuid4
-from OpenSSL import crypto, SSL
-from mgr_module import MgrModule, MgrStandbyModule, Option
-from mgr_util import get_default_addr
+from OpenSSL import crypto
+from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
+from mgr_util import get_default_addr, ServerConfigException, verify_tls_files
 
 try:
     import cherrypy
@@ -83,7 +83,10 @@ from .settings import options_command_list, options_schema_list, \
                       handle_option_command
 
 from .plugins import PLUGIN_MANAGER
-from .plugins import feature_toggles  # noqa # pylint: disable=unused-import
+from .plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+
+
+PLUGIN_MANAGER.hook.init()
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -94,10 +97,6 @@ def os_exit_noop(*args):
 
 # pylint: disable=W0212
 os._exit = os_exit_noop
-
-
-class ServerConfigException(Exception):
-    pass
 
 
 class CherryPyConfig(object):
@@ -119,6 +118,11 @@ class CherryPyConfig(object):
     @property
     def url_prefix(self):
         return self._url_prefix
+
+    @staticmethod
+    def update_cherrypy_config(config):
+        PLUGIN_MANAGER.hook.configure_cherrypy(config=config)
+        cherrypy.config.update(config)
 
     # pylint: disable=too-many-branches
     def _configure(self):
@@ -145,10 +149,10 @@ class CherryPyConfig(object):
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
-        cherrypy.tools.plugin_hooks = cherrypy.Tool(
+        cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
             lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
-            priority=10)
+            priority=1)
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -170,7 +174,7 @@ class CherryPyConfig(object):
             ],
             'tools.json_in.on': True,
             'tools.json_in.force': False,
-            'tools.plugin_hooks.on': True,
+            'tools.plugin_hooks_filter_request.on': True,
         }
 
         if ssl:
@@ -193,49 +197,13 @@ class CherryPyConfig(object):
             else:
                 pkey_fname = self.get_localized_module_option('key_file')
 
-            if not cert_fname or not pkey_fname:
-                raise ServerConfigException('no certificate configured')
-            if not os.path.isfile(cert_fname):
-                raise ServerConfigException('certificate %s does not exist' % cert_fname)
-            if not os.path.isfile(pkey_fname):
-                raise ServerConfigException('private key %s does not exist' % pkey_fname)
-
-            # Do some validations to the private key and certificate:
-            # - Check the type and format
-            # - Check the certificate expiration date
-            # - Check the consistency of the private key
-            # - Check that the private key and certificate match up
-            try:
-                with open(cert_fname) as f:
-                    x509 = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
-                    if x509.has_expired():
-                        self.log.warning(
-                            'Certificate {} has been expired'.format(cert_fname))
-            except (ValueError, crypto.Error) as e:
-                raise ServerConfigException(
-                    'Invalid certificate {}: {}'.format(cert_fname, str(e)))
-            try:
-                with open(pkey_fname) as f:
-                    pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
-                    pkey.check()
-            except (ValueError, crypto.Error) as e:
-                raise ServerConfigException(
-                    'Invalid private key {}: {}'.format(pkey_fname, str(e)))
-            try:
-                context = SSL.Context(SSL.TLSv1_METHOD)
-                context.use_certificate_file(cert_fname, crypto.FILETYPE_PEM)
-                context.use_privatekey_file(pkey_fname, crypto.FILETYPE_PEM)
-                context.check_privatekey()
-            except crypto.Error as e:
-                self.log.warning(
-                    'Private key {} and certificate {} do not match up: {}'.format(
-                        pkey_fname, cert_fname, str(e)))
+            verify_tls_files(cert_fname, pkey_fname)
 
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname
             config['server.ssl_private_key'] = pkey_fname
 
-        cherrypy.config.update(config)
+        self.update_cherrypy_config(config)
 
         self._url_prefix = prepare_url_prefix(self.get_module_option('url_prefix',
                                                                      default=''))
@@ -312,7 +280,11 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='username', type='str', default=''),
         Option(name='key_file', type='str', default=''),
         Option(name='crt_file', type='str', default=''),
-        Option(name='ssl', type='bool', default=True)
+        Option(name='ssl', type='bool', default=True),
+        Option(name='standby_behaviour', type='str', default='redirect',
+               enum_allowed=['redirect', 'error']),
+        Option(name='standby_error_status_code', type='int', default=500,
+               min=400, max=599)
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
@@ -363,17 +335,12 @@ class Module(MgrModule, CherryPyConfig):
 
         mapper, parent_urls = generate_routes(self.url_prefix)
 
-        config = {
-            self.url_prefix or '/': {
-                'tools.staticdir.on': True,
-                'tools.staticdir.dir': self.get_frontend_path(),
-                'tools.staticdir.index': 'index.html'
-            }
-        }
+        config = {}
         for purl in parent_urls:
             config[purl] = {
                 'request.dispatch': mapper
             }
+
         cherrypy.tree.mount(None, config=config)
 
         PLUGIN_MANAGER.hook.setup()
@@ -404,6 +371,30 @@ class Module(MgrModule, CherryPyConfig):
         CherryPyConfig.shutdown(self)
         logger.info('Stopping engine...')
         self.shutdown_event.set()
+
+    @CLIWriteCommand("dashboard set-ssl-certificate",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_ssl_certificate(self, mgr_id=None, inbuf=None):
+        if inbuf is None:
+            return -errno.EINVAL, '',\
+                   'Please specify the certificate file with "-i" option'
+        if mgr_id is not None:
+            self.set_store('{}/crt'.format(mgr_id), inbuf)
+        else:
+            self.set_store('crt', inbuf)
+        return 0, 'SSL certificate updated', ''
+
+    @CLIWriteCommand("dashboard set-ssl-certificate-key",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_ssl_certificate_key(self, mgr_id=None, inbuf=None):
+        if inbuf is None:
+            return -errno.EINVAL, '',\
+                   'Please specify the certificate key file with "-i" option'
+        if mgr_id is not None:
+            self.set_store('{}/key'.format(mgr_id), inbuf)
+        else:
+            self.set_store('key', inbuf)
+        return 0, 'SSL certificate key updated', ''
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
@@ -485,29 +476,33 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
 
         class Root(object):
             @cherrypy.expose
-            def index(self):
-                active_uri = module.get_active_uri()
-                if active_uri:
-                    module.log.info("Redirecting to active '%s'", active_uri)
-                    raise cherrypy.HTTPRedirect(active_uri)
+            def default(self, *args, **kwargs):
+                if module.get_module_option('standby_behaviour', 'redirect') == 'redirect':
+                    active_uri = module.get_active_uri()
+                    if active_uri:
+                        module.log.info("Redirecting to active '%s'", active_uri)
+                        raise cherrypy.HTTPRedirect(active_uri)
+                    else:
+                        template = """
+                    <html>
+                        <!-- Note: this is only displayed when the standby
+                             does not know an active URI to redirect to, otherwise
+                             a simple redirect is returned instead -->
+                        <head>
+                            <title>Ceph</title>
+                            <meta http-equiv="refresh" content="{delay}">
+                        </head>
+                        <body>
+                            No active ceph-mgr instance is currently running
+                            the dashboard. A failover may be in progress.
+                            Retrying in {delay} seconds...
+                        </body>
+                    </html>
+                        """
+                        return template.format(delay=5)
                 else:
-                    template = """
-                <html>
-                    <!-- Note: this is only displayed when the standby
-                         does not know an active URI to redirect to, otherwise
-                         a simple redirect is returned instead -->
-                    <head>
-                        <title>Ceph</title>
-                        <meta http-equiv="refresh" content="{delay}">
-                    </head>
-                    <body>
-                        No active ceph-mgr instance is currently running
-                        the dashboard. A failover may be in progress.
-                        Retrying in {delay} seconds...
-                    </body>
-                </html>
-                    """
-                    return template.format(delay=5)
+                    status = module.get_module_option('standby_error_status_code', 500)
+                    raise cherrypy.HTTPError(status, message="Keep on looking")
 
         cherrypy.tree.mount(Root(), "{}/".format(self.url_prefix), {})
         self.log.info("Starting engine...")

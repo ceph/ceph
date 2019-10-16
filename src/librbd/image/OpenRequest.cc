@@ -476,13 +476,19 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
     *result = util::create_ioctx(m_image_ctx->md_ctx, "data pool", data_pool_id,
                                  {}, &m_image_ctx->data_ctx);
     if (*result < 0) {
-      send_close_image(*result);
-      return nullptr;
+      if (*result != -ENOENT) {
+        send_close_image(*result);
+        return nullptr;
+      }
+      m_image_ctx->data_ctx.close();
+    } else {
+      m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
     }
-    m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
+  } else {
+    data_pool_id = m_image_ctx->md_ctx.get_id();
   }
 
-  m_image_ctx->init_layout();
+  m_image_ctx->init_layout(data_pool_id);
   send_refresh();
   return nullptr;
 }
@@ -638,7 +644,7 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   uint64_t snap_id = CEPH_NOSNAP;
   std::swap(m_image_ctx->open_snap_id, snap_id);
   if (snap_id == CEPH_NOSNAP) {
-    RWLock::RLocker image_locker(m_image_ctx->image_lock);
+    std::shared_lock image_locker{m_image_ctx->image_lock};
     snap_id = m_image_ctx->get_snap_id(m_image_ctx->snap_namespace,
                                        m_image_ctx->snap_name);
   }

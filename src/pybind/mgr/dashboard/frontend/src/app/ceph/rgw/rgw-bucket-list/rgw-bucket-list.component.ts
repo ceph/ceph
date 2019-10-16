@@ -26,7 +26,7 @@ const BASE_URL = 'rgw/bucket';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwBucketListComponent {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
   permission: Permission;
@@ -100,6 +100,7 @@ export class RgwBucketListComponent {
         itemDescription: this.selection.hasSingleSelection
           ? this.i18n('bucket')
           : this.i18n('buckets'),
+        itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
         submitActionObservable: () => {
           return new Observable((observer: Subscriber<any>) => {
             // Delete all selected data table rows.

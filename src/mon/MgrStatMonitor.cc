@@ -34,6 +34,7 @@ void MgrStatMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   service_map.epoch = 1;
+  service_map.modified = ceph_clock_now();
   pending_service_map_bl.clear();
   encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
@@ -153,7 +154,7 @@ void MgrStatMonitor::tick()
 
 bool MgrStatMonitor::preprocess_query(MonOpRequestRef op)
 {
-  auto m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
   case CEPH_MSG_STATFS:
     return preprocess_statfs(op);
@@ -170,7 +171,7 @@ bool MgrStatMonitor::preprocess_query(MonOpRequestRef op)
 
 bool MgrStatMonitor::prepare_update(MonOpRequestRef op)
 {
-  auto m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
   case MSG_MON_MGR_REPORT:
     return prepare_report(op);
@@ -189,7 +190,7 @@ bool MgrStatMonitor::preprocess_report(MonOpRequestRef op)
 
 bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
 {
-  auto m = static_cast<MMonMgrReport*>(op->get_req());
+  auto m = op->get_req<MMonMgrReport>();
   bufferlist bl = m->get_data();
   auto p = bl.cbegin();
   decode(pending_digest, p);
@@ -230,7 +231,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
 bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
-  auto m = static_cast<MGetPoolStats*>(op->get_req());
+  auto m = op->get_req<MGetPoolStats>();
   auto session = op->get_session();
   if (!session)
     return true;
@@ -263,7 +264,7 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
-  auto statfs = static_cast<MStatfs*>(op->get_req());
+  auto statfs = op->get_req<MStatfs>();
   auto session = op->get_session();
 
   if (!session)

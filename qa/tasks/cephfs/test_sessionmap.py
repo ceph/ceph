@@ -6,6 +6,7 @@ import logging
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class TestSessionMap(CephFSTestCase):
         table_json = json.loads(self.fs.table_tool(["0", "show", "session"]))
         log.info("SessionMap: {0}".format(json.dumps(table_json, indent=2)))
         self.assertEqual(table_json['0']['result'], 0)
-        self.assertEqual(len(table_json['0']['data']['Sessions']), 2)
+        self.assertEqual(len(table_json['0']['data']['sessions']), 2)
 
         # Now, induce a "force_open_sessions" event by exporting a dir
         self.mount_a.run_shell(["mkdir", "bravo"])
@@ -146,28 +147,7 @@ class TestSessionMap(CephFSTestCase):
         table_json = json.loads(self.fs.table_tool(["0", "show", "session"]))
         log.info("SessionMap: {0}".format(json.dumps(table_json, indent=2)))
         self.assertEqual(table_json['0']['result'], 0)
-        self.assertEqual(len(table_json['0']['data']['Sessions']), 0)
-
-    def _sudo_write_file(self, remote, path, data):
-        """
-        Write data to a remote file as super user
-
-        :param remote: Remote site.
-        :param path: Path on the remote being written to.
-        :param data: Data to be written.
-
-        Both perms and owner are passed directly to chmod.
-        """
-        remote.run(
-            args=[
-                'sudo',
-                'python',
-                '-c',
-                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                path,
-            ],
-            stdin=data,
-        )
+        self.assertEqual(len(table_json['0']['data']['sessions']), 0)
 
     def _configure_auth(self, mount, id_name, mds_caps, osd_caps=None, mon_caps=None):
         """
@@ -188,7 +168,7 @@ class TestSessionMap(CephFSTestCase):
             "mon", mon_caps
         )
         mount.client_id = id_name
-        self._sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
+        sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def test_session_reject(self):

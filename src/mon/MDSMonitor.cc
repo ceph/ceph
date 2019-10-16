@@ -218,7 +218,8 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       health_check_t *check = &new_checks.get_or_add(
 	mds_metric_name(metric.type),
 	metric.sev,
-	mds_metric_summary(metric.type));
+	mds_metric_summary(metric.type),
+	1);
       ostringstream ss;
       ss << "mds" << info.name << "(mds." << rank << "): " << metric.message;
       bool first = true;
@@ -277,7 +278,7 @@ version_t MDSMonitor::get_trim_to() const
 bool MDSMonitor::preprocess_query(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source()
 	   << " " << m->get_orig_source_addrs() << dendl;
 
@@ -318,7 +319,7 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
 bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
-  MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
+  auto m = op->get_req<MMDSBeacon>();
   MDSMap::DaemonState state = m->get_state();
   mds_gid_t gid = m->get_global_id();
   version_t seq = m->get_seq();
@@ -471,7 +472,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 bool MDSMonitor::preprocess_offload_targets(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
-  MMDSLoadTargets *m = static_cast<MMDSLoadTargets*>(op->get_req());
+  auto m = op->get_req<MMDSLoadTargets>();
   dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
 
   const auto &fsmap = get_fsmap();
@@ -501,7 +502,7 @@ bool MDSMonitor::preprocess_offload_targets(MonOpRequestRef op)
 bool MDSMonitor::prepare_update(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   dout(7) << "prepare_update " << *m << dendl;
 
   switch (m->get_type()) {
@@ -531,7 +532,7 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
-  MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
+  auto m = op->get_req<MMDSBeacon>();
   // -- this is an update --
   dout(12) << "prepare_beacon " << *m << " from " << m->get_orig_source()
 	   << " " << m->get_orig_source_addrs() << dendl;
@@ -639,7 +640,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
        * know which FS it was part of. Nor does this matter. Sending an empty
        * MDSMap is sufficient for getting the MDS to respawn.
        */
-      wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
+      wait_for_finished_proposal(op, new LambdaContext([op, this](int r){
         if (r >= 0) {
           const auto& fsmap = get_fsmap();
           MDSMap null_map;
@@ -777,7 +778,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   dout(5) << "prepare_beacon pending map now:" << dendl;
   print_map(pending);
   
-  wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
+  wait_for_finished_proposal(op, new LambdaContext([op, this](int r){
     if (r >= 0)
       _updated(op);   // success
     else if (r == -ECANCELED) {
@@ -795,7 +796,7 @@ bool MDSMonitor::prepare_offload_targets(MonOpRequestRef op)
   auto &pending = get_pending_fsmap_writeable();
 
   op->mark_mdsmon_event(__func__);
-  MMDSLoadTargets *m = static_cast<MMDSLoadTargets*>(op->get_req());
+  auto m = op->get_req<MMDSLoadTargets>();
   mds_gid_t gid = m->global_id;
   if (pending.gid_has_rank(gid)) {
     dout(10) << "prepare_offload_targets " << gid << " " << m->targets << dendl;
@@ -817,7 +818,7 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 {
   const auto &fsmap = get_fsmap();
   op->mark_mdsmon_event(__func__);
-  MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
+  auto m = op->get_req<MMDSBeacon>();
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
   mon->clog->debug() << m->get_orig_source() << " "
 		     << m->get_orig_source_addrs() << " "
@@ -860,7 +861,7 @@ void MDSMonitor::dump_info(Formatter *f)
 bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   int r = -1;
   bufferlist rdata;
   stringstream ss, ds;
@@ -1229,7 +1230,7 @@ int MDSMonitor::fail_mds(FSMap &fsmap, std::ostream &ss,
 bool MDSMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   int r = -EINVAL;
   stringstream ss;
   bufferlist rdata;

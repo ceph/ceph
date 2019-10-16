@@ -12,7 +12,7 @@
  *
  */
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
@@ -115,8 +115,10 @@ TEST(AdminSocket, SendTooLongRequest) {
 }
 
 class MyTest : public AdminSocketHook {
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& result) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -129,7 +131,7 @@ class MyTest : public AdminSocketHook {
       resultstr += *it;
     }
     result.append(resultstr);
-    return true;
+    return 0;
   }
 };
 
@@ -140,7 +142,7 @@ TEST(AdminSocket, RegisterCommand) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", my_test_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", my_test_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -148,8 +150,10 @@ TEST(AdminSocket, RegisterCommand) {
 }
 
 class MyTest2 : public AdminSocketHook {
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& result) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -162,7 +166,8 @@ class MyTest2 : public AdminSocketHook {
       resultstr += *it;
     }
     result.append(resultstr);
-    return true;
+    ss << "error stream";
+    return 0;
   }
 };
 
@@ -174,8 +179,8 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test name=args,type=CephString,n=N", my_test_asok.get(), ""));
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", "test command name=args,type=CephString,n=N", my_test2_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test name=args,type=CephString,n=N", my_test_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test command name=args,type=CephString,n=N", my_test2_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -197,16 +202,18 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
 
 class BlockingHook : public AdminSocketHook {
 public:
-  Mutex _lock;
-  Cond _cond;
+  ceph::mutex _lock = ceph::make_mutex("BlockingHook::_lock");
+  ceph::condition_variable _cond;
 
-  BlockingHook() : _lock("BlockingHook::_lock") {}
+  BlockingHook() = default;
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& result) override {
-    Mutex::Locker l(_lock);
-    _cond.Wait(_lock);
-    return true;
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& result) override {
+    std::unique_lock l{_lock};
+    _cond.wait(l);
+    return 0;
   }
 };
 
@@ -248,15 +255,15 @@ TEST(AdminSocketClient, Ping) {
   {
     AdminSocketTest asoct(asokc.get());
     BlockingHook *blocking = new BlockingHook();
-    ASSERT_EQ(0, asoct.m_asokc->register_command("0", "0", blocking, ""));
+    ASSERT_EQ(0, asoct.m_asokc->register_command("0", blocking, ""));
     ASSERT_TRUE(asoct.init(path));
     bool ok;
     std::string result = client.ping(&ok);
     EXPECT_NE(std::string::npos, result.find("Resource temporarily unavailable"));
     ASSERT_FALSE(ok);
     {
-      Mutex::Locker l(blocking->_lock);
-      blocking->_cond.Signal();
+      std::lock_guard l{blocking->_lock};
+      blocking->_cond.notify_all();
     }
     ASSERT_TRUE(asoct.shutdown());
     delete blocking;

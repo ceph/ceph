@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { listLocales } from 'ngx-bootstrap/chronos';
 import { BsLocaleService } from 'ngx-bootstrap/datepicker';
 
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { LanguageSelectorComponent } from './language-selector.component';
 
@@ -14,14 +15,14 @@ describe('LanguageSelectorComponent', () => {
   configureTestBed({
     declarations: [LanguageSelectorComponent],
     providers: [BsLocaleService],
-    imports: [FormsModule]
+    imports: [FormsModule, HttpClientTestingModule]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(LanguageSelectorComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    spyOn(window.location, 'reload').and.callFake(() => component.ngOnInit());
+    spyOn(component, 'reloadWindow').and.callFake(() => component.ngOnInit());
   });
 
   it('should create', () => {
@@ -35,8 +36,8 @@ describe('LanguageSelectorComponent', () => {
 
   const expectLanguageChange = (lang) => {
     component.changeLanguage(lang);
-    expect(component.selectedLanguage).toBe(lang);
-    expect(listLocales().includes(lang.slice(0, 2))).toBe(true);
+    const cookie = document.cookie.split(';').filter((item) => item.includes(`cd-lang=${lang}`));
+    expect(cookie.length).toBe(1);
   };
 
   it('should change to cs', () => {

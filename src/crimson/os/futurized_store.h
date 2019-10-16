@@ -17,12 +17,13 @@
 
 namespace ceph::os {
 
-class Collection;
+class FuturizedCollection;
 class Transaction;
 
 class FuturizedStore {
 
 public:
+  // TODO: replace with the ceph::errorator concept
   template <class ConcreteExceptionT>
   class Exception : public std::logic_error {
   public:
@@ -49,6 +50,9 @@ public:
   struct EnoentException : public Exception<EnoentException> {
     using Exception<EnoentException>::Exception;
   };
+  struct EnodataException : public Exception<EnodataException> {
+    using Exception<EnodataException>::Exception;
+  };
   static std::unique_ptr<FuturizedStore> create(const std::string& type,
                                                 const std::string& data);
   FuturizedStore() = default;
@@ -64,7 +68,7 @@ public:
   virtual seastar::future<> mkfs(uuid_d new_osd_fsid) = 0;
   virtual store_statfs_t stat() const = 0;
 
-  using CollectionRef = boost::intrusive_ptr<Collection>;
+  using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
   virtual seastar::future<ceph::bufferlist> read(CollectionRef c,
 				   const ghobject_t& oid,
 				   uint64_t offset,
@@ -72,7 +76,7 @@ public:
 				   uint32_t op_flags = 0) = 0;
   virtual seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
 					    const ghobject_t& oid,
-					    std::string_view name) = 0;
+					    std::string_view name) const = 0;
 
   using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
   virtual seastar::future<attrs_t> get_attrs(CollectionRef c,
@@ -87,24 +91,25 @@ public:
                                          CollectionRef c,
                                          const ghobject_t& start,
                                          const ghobject_t& end,
-                                         uint64_t limit) = 0;
+                                         uint64_t limit) const = 0;
   virtual seastar::future<bool, omap_values_t> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
     const std::optional<std::string> &start ///< [in] start, empty for begin
     ) = 0; ///< @return <done, values> values.empty() iff done
 
-  virtual CollectionRef create_new_collection(const coll_t& cid) = 0;
-  virtual CollectionRef open_collection(const coll_t& cid) = 0;
-  virtual std::vector<coll_t> list_collections() = 0;
+  virtual seastar::future<CollectionRef> create_new_collection(const coll_t& cid) = 0;
+  virtual seastar::future<CollectionRef> open_collection(const coll_t& cid) = 0;
+  virtual seastar::future<std::vector<coll_t>> list_collections() = 0;
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
 				   Transaction&& txn) = 0;
 
-  virtual void write_meta(const std::string& key,
-		  const std::string& value) = 0;
-  virtual int read_meta(const std::string& key, std::string* value) = 0;
+  virtual seastar::future<> write_meta(const std::string& key,
+				       const std::string& value) = 0;
+  virtual seastar::future<int, std::string> read_meta(const std::string& key) = 0;
   virtual uuid_d get_fsid() const  = 0;
+  virtual unsigned get_max_attr_name_length() const = 0;
 };
 
 }

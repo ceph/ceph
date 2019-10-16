@@ -36,8 +36,9 @@
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
-#include "tools/rbd_mirror/ServiceDaemon.h"
+#include "tools/rbd_mirror/MirrorStatusUpdater.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/Types.h"
 
 #include "test/librados/test_cxx.h"
@@ -56,12 +57,12 @@ public:
   struct C_WatchCtx : public librados::WatchCtx2 {
     TestImageReplayer *test;
     std::string oid;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("C_WatchCtx::lock");
+    ceph::condition_variable cond;
     bool notified;
 
     C_WatchCtx(TestImageReplayer *test, const std::string &oid)
-      : test(test), oid(oid), lock("C_WatchCtx::lock"), notified(false) {
+      : test(test), oid(oid), notified(false) {
     }
 
     void handle_notify(uint64_t notify_id, uint64_t cookie,
@@ -69,9 +70,9 @@ public:
       bufferlist bl;
       test->m_remote_ioctx.notify_ack(oid, notify_id, cookie, bl);
 
-      Mutex::Locker locker(lock);
+      std::lock_guard locker{lock};
       notified = true;
-      cond.Signal();
+      cond.notify_all();
     }
 
     void handle_error(uint64_t cookie, int err) override {
@@ -117,16 +118,24 @@ public:
     m_remote_image_id = get_image_id(m_remote_ioctx, m_image_name);
     m_global_image_id = get_global_image_id(m_remote_ioctx, m_remote_image_id);
 
-    m_threads.reset(new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
-      m_local_ioctx.cct())));
+    auto cct = reinterpret_cast<CephContext*>(m_local_ioctx.cct());
+    m_threads.reset(new rbd::mirror::Threads<>(cct));
 
-    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
-                                                            m_local_cluster,
-                                                            m_threads.get()));
+    m_image_sync_throttler.reset(new rbd::mirror::Throttler<>(
+        cct, "rbd_mirror_concurrent_image_syncs"));
 
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
-        m_local_ioctx, m_threads->work_queue, nullptr);
+        m_local_ioctx, m_threads->work_queue, nullptr,
+        m_image_sync_throttler.get());
     m_instance_watcher->handle_acquire_leader();
+
+    EXPECT_EQ(0, m_local_ioctx.create(RBD_MIRRORING, false));
+
+    m_local_status_updater = rbd::mirror::MirrorStatusUpdater<>::create(
+      m_local_ioctx, m_threads.get(), "");
+    C_SaferCond status_updater_ctx;
+    m_local_status_updater->init(&status_updater_ctx);
+    EXPECT_EQ(0, status_updater_ctx.wait());
   }
 
   ~TestImageReplayer() override
@@ -138,17 +147,22 @@ public:
     delete m_replayer;
     delete m_instance_watcher;
 
+    C_SaferCond status_updater_ctx;
+    m_local_status_updater->shut_down(&status_updater_ctx);
+    EXPECT_EQ(0, status_updater_ctx.wait());
+    delete m_local_status_updater;
+
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
   }
 
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
-    m_replayer = new ImageReplayerT(
-        m_threads.get(), m_instance_watcher, nullptr,
-        rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
-        m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
-    m_replayer->add_peer("peer uuid", m_remote_ioctx);
+    m_replayer = new ImageReplayerT(m_local_ioctx, m_local_mirror_uuid,
+                                    m_global_image_id, m_threads.get(),
+                                    m_instance_watcher, m_local_status_updater,
+                                    nullptr);
+    m_replayer->add_peer("peer uuid", m_remote_ioctx, nullptr);
   }
 
   void start()
@@ -284,10 +298,11 @@ public:
       return false;
     }
 
-    Mutex::Locker locker(m_watch_ctx->lock);
+    std::unique_lock locker{m_watch_ctx->lock};
     while (!m_watch_ctx->notified) {
-      if (m_watch_ctx->cond.WaitInterval(m_watch_ctx->lock,
-					 utime_t(seconds, 0)) != 0) {
+      if (m_watch_ctx->cond.wait_for(locker,
+				     std::chrono::seconds(seconds)) ==
+	  std::cv_status::timeout) {
         return false;
       }
     }
@@ -378,9 +393,10 @@ public:
 
   std::shared_ptr<librados::Rados> m_local_cluster;
   std::unique_ptr<rbd::mirror::Threads<>> m_threads;
-  std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
+  std::unique_ptr<rbd::mirror::Throttler<>> m_image_sync_throttler;
   librados::Rados m_remote_cluster;
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
+  rbd::mirror::MirrorStatusUpdater<> *m_local_status_updater;
   std::string m_local_mirror_uuid = "local mirror uuid";
   std::string m_remote_mirror_uuid = "remote mirror uuid";
   std::string m_local_pool_name, m_remote_pool_name;
@@ -805,7 +821,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
   // race failed op shut down with new ops
   open_remote_image(&ictx);
   for (uint64_t i = 0; i < 10; ++i) {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
     C_SaferCond request_lock;
     ictx->exclusive_lock->acquire_lock(&request_lock);
     ASSERT_EQ(0, request_lock.wait());
@@ -859,7 +875,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
   // race failed op shut down with new tag flush
   open_remote_image(&ictx);
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
     C_SaferCond request_lock;
     ictx->exclusive_lock->acquire_lock(&request_lock);
     ASSERT_EQ(0, request_lock.wait());

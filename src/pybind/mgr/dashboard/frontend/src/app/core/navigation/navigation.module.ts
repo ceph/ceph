@@ -17,7 +17,6 @@ import { DashboardHelpComponent } from './dashboard-help/dashboard-help.componen
 import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
-import { TaskManagerComponent } from './task-manager/task-manager.component';
 
 @NgModule({
   entryComponents: [AboutComponent],
@@ -37,7 +36,6 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
     BreadcrumbsComponent,
     NavigationComponent,
     NotificationsComponent,
-    TaskManagerComponent,
     DashboardHelpComponent,
     AdministrationComponent,
     IdentityComponent

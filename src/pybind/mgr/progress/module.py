@@ -3,11 +3,12 @@ import os
 import threading
 import datetime
 import uuid
+import time
 
 import json
 
 
-ENCODING_VERSION = 1
+ENCODING_VERSION = 2
 
 # keep a global reference to the module so we can use it from Event methods
 _module = None
@@ -23,19 +24,22 @@ class Event(object):
     objects (osds, pools) this relates to.
     """
 
-    def __init__(self, message, refs):
+    def __init__(self, message, refs, started_at=None):
         self._message = message
         self._refs = refs
-
-        self.started_at = datetime.datetime.utcnow()
-
+        self.started_at = started_at if started_at else time.time()
         self.id = None
+        self.update_duration_event()
+        self._time_remaining_str = "(time remaining: N/A)"
 
     def _refresh(self):
         global _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
                                                                 self.progress))
-        _module.update_progress_event(self.id, self._message, self.progress)
+        self.update_duration_event()
+        self.update_time_remaining()
+        _module.update_progress_event(
+            self.id, self.twoline_progress(6), self.progress)
 
     @property
     def message(self):
@@ -49,8 +53,20 @@ class Event(object):
     def progress(self):
         raise NotImplementedError()
 
+    @property
+    def duration_str(self):
+        return self._duration_str
+
+    @property
+    def failed(self):
+        return False
+
+    @property
+    def failure_message(self):
+        return None
+
     def summary(self):
-        return "{0} {1}".format(self.progress, self.message)
+        return "{0} {1} {2}".format(self.progress, self.message, self.duration_str)
 
     def _progress_str(self, width):
         inner_width = width - 2
@@ -62,24 +78,52 @@ class Event(object):
 
         return out
 
-    def twoline_progress(self):
+    def twoline_progress(self, indent=4):
         """
         e.g.
 
-        - Eating my delicious strudel
-            [===============..............]
+        - Eating my delicious strudel (since: 00h 00m 30s)
+            [===============..............] (time remaining: 00h 03m 57s)
 
         """
-        return "{0}\n    {1}".format(
-            self._message, self._progress_str(30))
+        return "{0} {1}\n{2}{3} {4}".format(self._message,
+                                            self._duration_str,
+                                            " " * indent,
+                                            self._progress_str(30),
+                                            self._time_remaining_str)
 
     def to_json(self):
         return {
             "id": self.id,
             "message": self.message,
-            "refs": self._refs
+            "duration": self.duration_str,
+            "refs": self._refs,
+            "progress": self.progress,
+            "started_at": self.started_at,
+            "time_remaining": self.estimated_time_remaining()
         }
 
+    def update_duration_event(self):
+        # Update duration of event in seconds/minutes/hours
+
+        duration = time.time() - self.started_at
+        self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
+
+
+    def estimated_time_remaining(self):
+        elapsed = time.time() - self.started_at
+        progress = self.progress
+        if progress == 0.0:
+            return None
+        return int(elapsed * (1 - progress) / progress)
+
+    def update_time_remaining(self):
+        time_remaining = self.estimated_time_remaining()
+        if time_remaining:
+            self._time_remaining_str = time.strftime(
+                "(time remaining: %Hh %Mm %Ss)", time.gmtime(time_remaining))
+        else:
+            self._time_remaining_str = "(time remaining: N/A)"
 
 class GhostEvent(Event):
     """
@@ -87,13 +131,42 @@ class GhostEvent(Event):
     after the event is complete.
     """
 
-    def __init__(self, my_id, message, refs):
-        super(GhostEvent, self).__init__(message, refs)
+    def __init__(self, my_id, message, refs, started_at, finished_at=None,
+                 failed=False, failure_message=None):
+        super(GhostEvent, self).__init__(message, refs, started_at)
+        self.finished_at = finished_at if finished_at else time.time()
         self.id = my_id
+
+        if failed:
+            self._failed = True
+            self._failure_message = failure_message
+        else:
+            self._failed = False
 
     @property
     def progress(self):
         return 1.0
+
+    @property
+    def failed(self):
+        return self._failed
+
+    @property
+    def failure_message(self):
+        return self._failure_message if self._failed else None
+
+    def to_json(self):
+        d = {
+            "id": self.id,
+            "message": self.message,
+            "refs": self._refs,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at
+        }
+        if self._failed:
+            d["failed"] = True
+            d["failure_message"] = self._failure_message
+        return d
 
 
 class RemoteEvent(Event):
@@ -107,15 +180,34 @@ class RemoteEvent(Event):
         super(RemoteEvent, self).__init__(message, refs)
         self.id = my_id
         self._progress = 0.0
+        self._failed = False
         self._refresh()
 
     def set_progress(self, progress):
         self._progress = progress
         self._refresh()
 
+    def set_failed(self, message):
+        self._progress = 1.0
+        self._failed = True
+        self._failure_message = message
+        self._refresh()
+
+    def set_message(self, message):
+        self._message = message
+        self._refresh()
+
     @property
     def progress(self):
         return self._progress
+
+    @property
+    def failed(self):
+        return self._failed
+
+    @property
+    def failure_message(self):
+        return self._failure_message if self._failed else None
 
 
 class PgRecoveryEvent(Event):
@@ -126,12 +218,12 @@ class PgRecoveryEvent(Event):
     Always call update() immediately after construction.
     """
 
-    def __init__(self, message, refs, which_pgs, evacuate_osds, start_epoch):
+    def __init__(self, message, refs, which_pgs, which_osds, start_epoch):
         super(PgRecoveryEvent, self).__init__(message, refs)
 
         self._pgs = which_pgs
 
-        self._evacuate_osds = evacuate_osds
+        self._which_osds = which_osds
 
         self._original_pg_count = len(self._pgs)
 
@@ -139,15 +231,15 @@ class PgRecoveryEvent(Event):
 
         self._progress = 0.0
 
-        # self._start_epoch = _module.get_osdmap().get_epoch() 
+        # self._start_epoch = _module.get_osdmap().get_epoch()
         self._start_epoch = start_epoch
 
         self.id = str(uuid.uuid4())
         self._refresh()
 
     @property
-    def evacuating_osds(self):
-        return self. _evacuate_osds
+    def which_osds(self):
+        return self. _which_osds
 
     def pg_update(self, pg_dump, log):
         # FIXME: O(pg_num) in python
@@ -214,6 +306,7 @@ class PgRecoveryEvent(Event):
                         # exceed the contents of the PG (moment in time), we
                         # must clamp this
                         ratio = min(ratio, 1.0)
+                        ratio = max(ratio, 0.0)
 
                     else:
                         # Dataless PGs (e.g. containing only OMAPs) count
@@ -225,11 +318,9 @@ class PgRecoveryEvent(Event):
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count
-        self._refresh()
 
-        log.info("Updated progress to {0} ({1})".format(
-            self._progress, self._message
-        ))
+        self._refresh()
+        log.info("Updated progress to %s", self.summary())
 
     @property
     def progress(self):
@@ -307,7 +398,7 @@ class Module(MgrModule):
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def _osd_in_out(self, old_map, old_dump, new_map, osd_id, marked):
-        # A function that will create or complete an event when an 
+        # A function that will create or complete an event when an
         # OSD is marked in or out according to the affected PGs
         affected_pgs = []
         unmoved_pgs = []
@@ -320,16 +411,15 @@ class Module(MgrModule):
                 # data from the json dump
                 old_up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
                 old_osds = set(old_up_acting['acting'])
-
                 new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
                 new_osds = set(new_up_acting['acting'])
-                
+
                 # Check the osd_id being in the acting set for both old
                 # and new maps to cover both out and in cases
                 was_on_out_or_in_osd = osd_id in old_osds or osd_id in new_osds
                 if not was_on_out_or_in_osd:
                     continue
-                
+
                 self.log.debug("pool_id, ps = {0}, {1}".format(
                     pool_id, ps
                 ))
@@ -348,7 +438,7 @@ class Module(MgrModule):
                 self.log.debug(
                     "new_up_acting: {0}".format(json.dumps(new_up_acting,
                                                            indent=2)))
-                
+
                 if was_on_out_or_in_osd and is_relocated:
                     # This PG is now in motion, track its progress
                     affected_pgs.append(PgId(pool_id, ps))
@@ -365,12 +455,13 @@ class Module(MgrModule):
         self.log.warn("{0} PGs affected by osd.{1} being marked {2}".format(
             len(affected_pgs), osd_id, marked))
 
-           
-        # In the case of the osd coming back in, we might need to cancel 
+
+        # In the case of the osd coming back in, we might need to cancel
         # previous recovery event for that osd
         if marked == "in":
-            for ev_id, ev in self._events.items():
-                if isinstance(ev, PgRecoveryEvent) and osd_id in ev.evacuating_osds:
+            for ev_id in list(self._events):
+                ev = self._events[ev_id]
+                if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
                     self.log.info("osd.{0} came back in, cancelling event".format(
                         osd_id
                     ))
@@ -381,12 +472,12 @@ class Module(MgrModule):
                     "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
                     refs=[("osd", osd_id)],
                     which_pgs=affected_pgs,
-                    evacuate_osds=[osd_id],
-                    start_epoch=self.get_osdmap().get_epoch() 
+                    which_osds=[osd_id],
+                    start_epoch=self.get_osdmap().get_epoch()
                     )
             ev.pg_update(self.get("pg_dump"), self.log)
             self._events[ev.id] = ev
-                 
+
     def _osdmap_changed(self, old_osdmap, new_osdmap):
         old_dump = old_osdmap.dump()
         new_dump = new_osdmap.dump()
@@ -422,7 +513,8 @@ class Module(MgrModule):
             self._osdmap_changed(old_osdmap, self._latest_osdmap)
         elif notify_type == "pg_summary":
             data = self.get("pg_dump")
-            for ev_id, ev in self._events.items():
+            for ev_id in list(self._events):
+                ev = self._events[ev_id]
                 if isinstance(ev, PgRecoveryEvent):
                     ev.pg_update(data, self.log)
                     self.maybe_complete(ev)
@@ -455,8 +547,18 @@ class Module(MgrModule):
             raise RuntimeError("Cannot decode version {0}".format(
                                decoded['compat_version']))
 
+        if decoded['compat_version'] < ENCODING_VERSION:
+            # we need to add the "started_at" and "finished_at" attributes to the events
+            for ev in decoded['events']:
+                ev['started_at'] = None
+                ev['finished_at'] = None
+
         for ev in decoded['events']:
-            self._completed_events.append(GhostEvent(ev['id'], ev['message'], ev['refs']))
+            self._completed_events.append(GhostEvent(ev['id'], ev['message'],
+                                                     ev['refs'], ev['started_at'],
+                                                     ev['finished_at'],
+                                                     ev.get('failed', False),
+                                                     ev.get('failure_message')))
 
         self._prune_completed_events()
 
@@ -511,17 +613,18 @@ class Module(MgrModule):
                 ev_progress, ev_msg))
 
         ev.set_progress(ev_progress)
-        ev._refresh()
+        ev.set_message(ev_msg)
 
     def _complete(self, ev):
-        duration = (datetime.datetime.utcnow() - ev.started_at)
+        duration = (time.time() - ev.started_at)
         self.log.info("Completed event {0} ({1}) in {2} seconds".format(
-            ev.id, ev.message, duration.seconds
+            ev.id, ev.message, int(round(duration))
         ))
         self.complete_progress_event(ev.id)
 
         self._completed_events.append(
-            GhostEvent(ev.id, ev.message, ev.refs))
+            GhostEvent(ev.id, ev.message, ev.refs, ev.started_at,
+                       failed=ev.failed, failure_message=ev.failure_message))
         del self._events[ev.id]
         self._prune_completed_events()
         self._dirty = True
@@ -540,6 +643,21 @@ class Module(MgrModule):
             self.log.warn("complete: ev {0} does not exist".format(ev_id))
             pass
 
+    def fail(self, ev_id, message):
+        """
+        For calling from other mgr modules to mark an event as failed (and
+        complete)
+        """
+        try:
+            ev = self._events[ev_id]
+            ev.set_failed(message)
+            self.log.info("fail: finished ev {0} ({1}): {2}".format(ev_id,
+                                                                    ev.message,
+                                                                    message))
+            self._complete(ev)
+        except KeyError:
+            self.log.warn("fail: ev {0} does not exist".format(ev_id))
+
     def _handle_ls(self):
         if len(self._events) or len(self._completed_events):
             out = ""
@@ -553,7 +671,8 @@ class Module(MgrModule):
                 # TODO: limit number of completed events to show
                 out += "\n"
                 for ev in self._completed_events:
-                    out += "[Complete]: {0}\n".format(ev.twoline_progress())
+                    out += "[{0}]: {1}\n".format("Complete" if not ev.failed else "Failed",
+                                                 ev.twoline_progress())
 
             return 0, out, ""
         else:

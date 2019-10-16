@@ -28,7 +28,7 @@ template <typename I>
 DisableRequest<I>::DisableRequest(I *image_ctx, bool force, bool remove,
                                   Context *on_finish)
   : m_image_ctx(image_ctx), m_force(force), m_remove(remove),
-    m_on_finish(on_finish), m_lock("mirror::DisableRequest::m_lock") {
+    m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -239,7 +239,7 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
     return m_on_finish;
   }
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   ceph_assert(m_current_ops.empty());
 
@@ -306,14 +306,14 @@ void DisableRequest<I>::send_remove_snap(const std::string &client_id,
   ldout(cct, 10) << this << " " << __func__ << ": client_id=" << client_id
                  << ", snap_name=" << snap_name << dendl;
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   m_current_ops[client_id]++;
 
   Context *ctx = create_context_callback(
     &DisableRequest<I>::handle_remove_snap, client_id);
 
-  ctx = new FunctionContext([this, snap_namespace, snap_name, ctx](int r) {
+  ctx = new LambdaContext([this, snap_namespace, snap_name, ctx](int r) {
       m_image_ctx->operations->snap_remove(snap_namespace,
                                            snap_name.c_str(),
                                            ctx);
@@ -328,7 +328,7 @@ Context *DisableRequest<I>::handle_remove_snap(int *result,
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   ceph_assert(m_current_ops[client_id] > 0);
   m_current_ops[client_id]--;
@@ -353,7 +353,7 @@ void DisableRequest<I>::send_unregister_client(
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(m_current_ops[client_id] == 0);
 
   Context *ctx = create_context_callback(
@@ -381,7 +381,7 @@ Context *DisableRequest<I>::handle_unregister_client(
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_current_ops[client_id] == 0);
   m_current_ops.erase(client_id);
 
@@ -477,7 +477,7 @@ Context *DisableRequest<I>::create_context_callback(
   Context*(DisableRequest<I>::*handle)(int*, const std::string &client_id),
   const std::string &client_id) {
 
-  return new FunctionContext([this, handle, client_id](int r) {
+  return new LambdaContext([this, handle, client_id](int r) {
       Context *on_finish = (this->*handle)(&r, client_id);
       if (on_finish != nullptr) {
         on_finish->complete(r);

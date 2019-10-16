@@ -184,6 +184,9 @@ class CephFSMount(object):
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
                   omit_sudo=True):
+        if isinstance(args, str):
+            args = args.split()
+
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
         return self.client_remote.run(args=args, stdout=StringIO(),
                                       stderr=StringIO(), wait=wait,
@@ -246,6 +249,22 @@ class CephFSMount(object):
         self.wait_for_visible(basename)
 
         return rproc
+
+    def wait_for_dir_empty(self, dirname, timeout=30):
+        i = 0
+        dirpath = os.path.join(self.mountpoint, dirname)
+        while i < timeout:
+            nr_entries = int(self.getfattr(dirpath, "ceph.dir.entries"))
+            if nr_entries == 0:
+                log.debug("Directory {0} seen empty from {1} after {2}s ".format(
+                    dirname, self.client_id, i))
+                return
+            else:
+                time.sleep(1)
+                i += 1
+
+        raise RuntimeError("Timed out after {0}s waiting for {1} to become empty from {2}".format(
+            i, dirname, self.client_id))
 
     def wait_for_visible(self, basename="background_file", timeout=30):
         i = 0
@@ -516,6 +535,14 @@ class CephFSMount(object):
         self._kill_background(p)
         self.background_procs.remove(p)
 
+    def send_signal(self, signal):
+        signal = signal.lower()
+        if signal.lower() not in ['sigstop', 'sigcont', 'sigterm', 'sigkill']:
+            raise NotImplementedError
+
+        self.client_remote.run(args=['sudo', 'kill', '-{0}'.format(signal),
+                                self.client_pid], omit_sudo=False)
+
     def get_global_id(self):
         raise NotImplementedError()
 
@@ -528,7 +555,10 @@ class CephFSMount(object):
     def get_osd_epoch(self):
         raise NotImplementedError()
 
-    def stat(self, fs_path, wait=True):
+    def lstat(self, fs_path, follow_symlinks=False, wait=True):
+        return self.stat(fs_path, follow_symlinks=False, wait=True)
+
+    def stat(self, fs_path, follow_symlinks=True, wait=True):
         """
         stat a file, and return the result as a dictionary like this:
         {
@@ -547,6 +577,10 @@ class CephFSMount(object):
         Raises exception on absent file.
         """
         abs_path = os.path.join(self.mountpoint, fs_path)
+        if follow_symlinks:
+            stat_call = "os.stat('" + abs_path + "')"
+        else:
+            stat_call = "os.lstat('" + abs_path + "')"
 
         pyscript = dedent("""
             import os
@@ -555,7 +589,7 @@ class CephFSMount(object):
             import sys
 
             try:
-                s = os.stat("{path}")
+                s = {stat_call}
             except OSError as e:
                 sys.exit(e.errno)
 
@@ -563,7 +597,7 @@ class CephFSMount(object):
             print json.dumps(
                 dict([(a, getattr(s, a)) for a in attrs]),
                 indent=2)
-            """).format(path=abs_path)
+            """).format(stat_call=stat_call)
         proc = self._run_python(pyscript)
         if wait:
             proc.wait()

@@ -87,6 +87,12 @@ export class TaskMessageService {
       this.i18n('Deleting'),
       this.i18n('delete'),
       this.i18n('Deleted')
+    ),
+    add: new TaskMessageOperation(this.i18n('Adding'), this.i18n('add'), this.i18n('Added')),
+    remove: new TaskMessageOperation(
+      this.i18n('Removing'),
+      this.i18n('remove'),
+      this.i18n('Removed')
     )
   };
 
@@ -125,6 +131,11 @@ export class TaskMessageService {
   };
 
   messages = {
+    // Host tasks
+    'host/add': this.newTaskMessage(this.commonOperations.add, (metadata) => this.host(metadata)),
+    'host/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.host(metadata)
+    ),
     // Pool tasks
     'pool/create': this.newTaskMessage(
       this.commonOperations.create,
@@ -348,6 +359,12 @@ export class TaskMessageService {
     return new TaskMessage(this.i18n, operation, involves, errors);
   }
 
+  host(metadata) {
+    return this.i18n(`host '{{hostname}}'`, {
+      hostname: metadata.hostname
+    });
+  }
+
   pool(metadata) {
     return this.i18n(`pool '{{pool_name}}'`, {
       pool_name: metadata.pool_name
@@ -369,6 +386,18 @@ export class TaskMessageService {
   }
 
   _getTaskTitle(task: Task) {
+    if (task.name && task.name.startsWith('progress/')) {
+      // we don't fill the failure string because, at least for now, all
+      // progress module tasks will be considered successful
+      return this.newTaskMessage(
+        new TaskMessageOperation(
+          task.name.replace('progress/', ''),
+          '',
+          task.name.replace('progress/', '')
+        ),
+        (_metadata) => ''
+      );
+    }
     return this.messages[task.name] || this.defaultMessage;
   }
 

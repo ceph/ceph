@@ -28,12 +28,12 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   providers: [TaskListService]
 })
 export class NfsListComponent implements OnInit, OnDestroy {
-  @ViewChild('nfsState')
+  @ViewChild('nfsState', { static: false })
   nfsState: TemplateRef<any>;
-  @ViewChild('nfsFsal')
+  @ViewChild('nfsFsal', { static: true })
   nfsFsal: TemplateRef<any>;
 
-  @ViewChild('table')
+  @ViewChild('table', { static: true })
   table: TableComponent;
 
   columns: CdTableColumn[];
@@ -101,10 +101,15 @@ export class NfsListComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Export'),
+        name: this.i18n('Path'),
         prop: 'path',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
+      },
+      {
+        name: this.i18n('Pseudo'),
+        prop: 'pseudo',
+        flexGrow: 2
       },
       {
         name: this.i18n('Cluster'),
@@ -137,7 +142,7 @@ export class NfsListComponent implements OnInit, OnDestroy {
           .value();
 
         this.isDefaultCluster = clusters.length === 1 && clusters[0] === '_default_';
-        this.columns[1].isHidden = this.isDefaultCluster;
+        this.columns[2].isHidden = this.isDefaultCluster;
         if (this.table) {
           this.table.updateColumns();
         }
@@ -201,7 +206,8 @@ export class NfsListComponent implements OnInit, OnDestroy {
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
-        itemDescription: this.i18n('NFS'),
+        itemDescription: this.i18n('NFS export'),
+        itemNames: [`${cluster_id}:${export_id}`],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('nfs/delete', {

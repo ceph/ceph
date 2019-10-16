@@ -64,7 +64,7 @@ The admin socket, among other things, allows you to:
 Display Freespace
 -----------------
 
-Filesystem issues may arise. To display your filesystem's free space, execute
+Filesystem issues may arise. To display your file system's free space, execute
 ``df``. ::
 
 	df -h
@@ -301,8 +301,8 @@ journals, operating systems, monitors, other OSDs and non-Ceph processes.
 
 Ceph acknowledges writes *after* journaling, so fast SSDs are an
 attractive option to accelerate the response time--particularly when
-using the ``XFS`` or ``ext4`` filesystems.  By contrast, the ``btrfs``
-filesystem can write and journal simultaneously.  (Note, however, that
+using the ``XFS`` or ``ext4`` file systems.  By contrast, the ``btrfs``
+file system can write and journal simultaneously.  (Note, however, that
 we recommend against using ``btrfs`` for production deployments.)
 
 .. note:: Partitioning a drive does not change its total throughput or
@@ -379,8 +379,8 @@ Filesystem Issues
 
 Currently, we recommend deploying clusters with XFS.
 
-We recommend against using btrfs or ext4.  The btrfs filesystem has
-many attractive features, but bugs in the filesystem may lead to
+We recommend against using btrfs or ext4.  The btrfs file system has
+many attractive features, but bugs in the file system may lead to
 performance issues and spurious ENOSPC errors.  We do not recommend
 ext4 because xattr size limitations break our support for long object
 names (needed for RGW).

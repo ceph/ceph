@@ -19,6 +19,10 @@
 #include "ProtocolV2.h"
 #include "SocketMessenger.h"
 
+#ifdef UNIT_TESTS_BUILT
+#include "Interceptor.h"
+#endif
+
 using namespace ceph::net;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
@@ -32,6 +36,12 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
   } else {
     protocol = std::make_unique<ProtocolV1>(dispatcher, *this, messenger);
   }
+#ifdef UNIT_TESTS_BUILT
+  if (messenger.interceptor) {
+    interceptor = messenger.interceptor;
+    interceptor->register_conn(*this);
+  }
+#endif
 }
 
 SocketConnection::~SocketConnection() {}
@@ -41,11 +51,23 @@ SocketConnection::get_messenger() const {
   return &messenger;
 }
 
-seastar::future<bool> SocketConnection::is_connected()
+bool SocketConnection::is_connected() const
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-      return protocol->is_connected();
-    });
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_connected();
+}
+
+#ifdef UNIT_TESTS_BUILT
+bool SocketConnection::is_closed() const
+{
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_closed();
+}
+
+#endif
+bool SocketConnection::peer_wins() const
+{
+  return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
 seastar::future<> SocketConnection::send(MessageRef msg)
@@ -66,19 +88,8 @@ seastar::future<> SocketConnection::keepalive()
 
 seastar::future<> SocketConnection::close()
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-      return protocol->close();
-    });
-}
-
-void SocketConnection::requeue_sent()
-{
-  out_seq -= sent.size();
-  while (!sent.empty()) {
-    auto m = sent.front();
-    sent.pop_front();
-    out_q.push_back(std::move(m));
-  }
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->close();
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)
@@ -121,12 +132,12 @@ seastar::shard_id SocketConnection::shard_id() const {
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
     if (side == side_t::none) {
-      out << " >> " << peer_addr;
+      out << " >> " << get_peer_name() << " " << peer_addr;
     } else if (side == side_t::acceptor) {
-      out << " >> " << peer_addr
-          << "@" << socket_port;
+      out << " >> " << get_peer_name() << " " << peer_addr
+          << "@" << ephemeral_port;
     } else { // side == side_t::connector
-      out << "@" << socket_port
-          << " >> " << peer_addr;
+      out << "@" << ephemeral_port
+          << " >> " << get_peer_name() << " " << peer_addr;
     }
 }

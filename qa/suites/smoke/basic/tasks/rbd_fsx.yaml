@@ -11,11 +11,13 @@ overrides:
       - \(OBJECT_
       - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
+      - \(OSD_SLOW_PING_TIME
     conf:
       client:
         rbd cache: true
       global:
         ms inject socket failures: 5000
+        mon client directed command retry: 5
 tasks:
 - install: null
 - ceph:

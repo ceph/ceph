@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_SYNC_H
 #define CEPH_RGW_SYNC_H
@@ -13,9 +13,13 @@
 #include "rgw_http_client.h"
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "rgw_sync_trace.h"
+#include "rgw_mdlog.h"
 
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+} }
 
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
@@ -70,14 +74,14 @@ class RGWRESTConn;
 class RGWSyncTraceManager;
 
 class RGWSyncErrorLogger {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
 
   vector<string> oids;
   int num_shards;
 
   std::atomic<int64_t> counter = { 0 };
 public:
-  RGWSyncErrorLogger(RGWRados *_store, const string &oid_prefix, int _num_shards);
+  RGWSyncErrorLogger(rgw::sal::RGWRadosStore *_store, const string &oid_prefix, int _num_shards);
   RGWCoroutine *log_error_cr(const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message);
 
   static string get_shard_oid(const string& oid_prefix, int shard_id);
@@ -132,7 +136,7 @@ public:
 class RGWBackoffControlCR : public RGWCoroutine
 {
   RGWCoroutine *cr;
-  Mutex lock;
+  ceph::mutex lock;
 
   RGWSyncBackoff backoff;
   bool reset_backoff;
@@ -144,7 +148,7 @@ protected:
     return &reset_backoff;
   }
 
-  Mutex& cr_lock() {
+  ceph::mutex& cr_lock() {
     return lock;
   }
 
@@ -153,8 +157,11 @@ protected:
   }
 
 public:
-  RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error) : RGWCoroutine(_cct), cr(NULL), lock("RGWBackoffControlCR::lock:" + stringify(this)),
-                                                                reset_backoff(false), exit_on_error(_exit_on_error) {
+  RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error)
+    : RGWCoroutine(_cct),
+      cr(nullptr),
+      lock(ceph::make_mutex("RGWBackoffControlCR::lock:" + stringify(this))),
+      reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
   ~RGWBackoffControlCR() override {
@@ -172,7 +179,7 @@ public:
 struct RGWMetaSyncEnv {
   const DoutPrefixProvider *dpp;
   CephContext *cct{nullptr};
-  RGWRados *store{nullptr};
+  rgw::sal::RGWRadosStore *store{nullptr};
   RGWRESTConn *conn{nullptr};
   RGWAsyncRadosProcessor *async_rados{nullptr};
   RGWHTTPManager *http_manager{nullptr};
@@ -181,7 +188,7 @@ struct RGWMetaSyncEnv {
 
   RGWMetaSyncEnv() {}
 
-  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RGWRadosStore *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer);
 
@@ -191,7 +198,7 @@ struct RGWMetaSyncEnv {
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWRESTConn *conn;
   RGWAsyncRadosProcessor *async_rados;
 
@@ -214,10 +221,10 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWSyncTraceNodeRef tn;
 
 public:
-  RGWRemoteMetaLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+  RGWRemoteMetaLog(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *_store,
                    RGWAsyncRadosProcessor *async_rados,
                    RGWMetaSyncStatusManager *_sm)
-    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+    : RGWCoroutinesManager(_store->ctx(), _store->getRados()->get_cr_registry()),
       dpp(dpp), store(_store), conn(NULL), async_rados(async_rados),
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm) {}
@@ -242,7 +249,7 @@ public:
 };
 
 class RGWMetaSyncStatusManager : public DoutPrefixProvider {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   librados::IoCtx ioctx;
 
   RGWRemoteMetaLog master_log;
@@ -263,14 +270,14 @@ class RGWMetaSyncStatusManager : public DoutPrefixProvider {
     }
   };
 
-  RWLock ts_to_shard_lock;
+  ceph::shared_mutex ts_to_shard_lock = ceph::make_shared_mutex("ts_to_shard_lock");
   map<utime_shard, int> ts_to_shard;
   vector<string> clone_markers;
 
 public:
-  RGWMetaSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
-    : store(_store), master_log(this, store, async_rados, this),
-      ts_to_shard_lock("ts_to_shard_lock") {}
+  RGWMetaSyncStatusManager(rgw::sal::RGWRadosStore *_store, RGWAsyncRadosProcessor *async_rados)
+    : store(_store), master_log(this, store, async_rados, this)
+  {}
   int init();
 
   int read_sync_status(rgw_meta_sync_status *sync_status) {

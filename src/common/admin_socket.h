@@ -22,10 +22,12 @@
 #include <thread>
 
 #include "include/buffer.h"
+#include "common/ref.h"
 #include "common/cmdparse.h"
 
 class AdminSocket;
 class CephContext;
+class MCommand;
 
 using namespace std::literals;
 
@@ -33,8 +35,27 @@ inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
 class AdminSocketHook {
 public:
-  virtual bool call(std::string_view command, const cmdmap_t& cmdmap,
-		    std::string_view format, ceph::buffer::list& out) = 0;
+  // NOTE: the sync handler doesn't take an input buffer currently because
+  // no users need it yet.
+  virtual int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out) = 0;
+
+  virtual void call_async(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist& inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) {
+    // by default, call the synchronous handler and then finish
+    bufferlist out;
+    std::ostringstream errss;
+    int r = call(command, cmdmap, f, errss, out);
+    on_finish(r, errss.str(), out);
+  }
   virtual ~AdminSocketHook() {}
 };
 
@@ -68,22 +89,9 @@ public:
    *
    * @return 0 for success, -EEXIST if command already registered.
    */
-  int register_command(std::string_view command,
-		       std::string_view cmddesc,
+  int register_command(std::string_view cmddesc,
 		       AdminSocketHook *hook,
 		       std::string_view help);
-
-  /**
-   * unregister an admin socket command.
-   *
-   * If a command is currently in progress, this will block until it
-   * is done.  For that reason, you must not hold any locks required
-   * by your hook while you call this.
-   *
-   * @param command command string
-   * @return 0 on succest, -ENOENT if command dne.
-   */
-  int unregister_command(std::string_view command);
 
   /*
    * unregister all commands belong to hook.
@@ -95,26 +103,41 @@ public:
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
 
+  /// execute (async)
+  void execute_command(
+    const std::vector<std::string>& cmd,
+    const bufferlist& inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_fin);
+
+  /// execute (blocking)
+  int execute_command(
+    const std::vector<std::string>& cmd,
+    const bufferlist& inbl,
+    std::ostream& errss,
+    bufferlist *outbl);
+
+  void queue_tell_command(ref_t<MCommand> m);
+
 private:
 
   void shutdown();
+  void wakeup();
 
-  std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr);
-  std::string destroy_shutdown_pipe();
+  std::string create_wakeup_pipe(int *pipe_rd, int *pipe_wr);
+  std::string destroy_wakeup_pipe();
   std::string bind_and_listen(const std::string &sock_path, int *fd);
 
   std::thread th;
   void entry() noexcept;
-  bool do_accept();
-  bool validate(const std::string& command,
-		const cmdmap_t& cmdmap,
-		ceph::buffer::list& out) const;
+  void do_accept();
+  void do_tell_queue();
 
   CephContext *m_cct;
   std::string m_path;
   int m_sock_fd = -1;
-  int m_shutdown_rd_fd = -1;
-  int m_shutdown_wr_fd = -1;
+  int m_wakeup_rd_fd = -1;
+  int m_wakeup_wr_fd = -1;
+  bool m_shutdown = false;
 
   bool in_hook = false;
   std::condition_variable in_hook_cond;
@@ -122,6 +145,9 @@ private:
   std::unique_ptr<AdminSocketHook> version_hook;
   std::unique_ptr<AdminSocketHook> help_hook;
   std::unique_ptr<AdminSocketHook> getdescs_hook;
+
+  std::mutex tell_lock;
+  std::list<ref_t<MCommand>> tell_queue;
 
   struct hook_info {
     AdminSocketHook* hook;
@@ -133,7 +159,7 @@ private:
       : hook(hook), desc(desc), help(help) {}
   };
 
-  std::map<std::string, hook_info, std::less<>> hooks;
+  std::multimap<std::string, hook_info, std::less<>> hooks;
 
   friend class AdminSocketTest;
   friend class HelpHook;

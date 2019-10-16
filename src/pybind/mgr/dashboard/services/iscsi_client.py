@@ -11,7 +11,7 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 
-from .iscsi_config import IscsiGatewaysConfig
+from .iscsi_config import IscsiGatewaysConfig  # pylint: disable=cyclic-import
 from .. import logger
 from ..settings import Settings
 from ..rest_client import RestClient
@@ -209,10 +209,22 @@ class IscsiClient(RestClient):
         })
 
     @RestClient.api_put('/api/targetauth/{target_iqn}')
-    def update_targetauth(self, target_iqn, action, request=None):
-        logger.debug("iSCSI[%s] Updating targetauth: %s/%s", self.gateway_name, target_iqn, action)
+    def update_targetacl(self, target_iqn, action, request=None):
+        logger.debug("iSCSI[%s] Updating targetacl: %s/%s", self.gateway_name, target_iqn, action)
         return request({
             'action': action
+        })
+
+    @RestClient.api_put('/api/targetauth/{target_iqn}')
+    def update_targetauth(self, target_iqn, user, password, mutual_user, mutual_password,
+                          request=None):
+        logger.debug("iSCSI[%s] Updating targetauth: %s/%s/%s/%s/%s", self.gateway_name,
+                     target_iqn, user, password, mutual_user, mutual_password)
+        return request({
+            'username': user,
+            'password': password,
+            'mutual_username': mutual_user,
+            'mutual_password': mutual_password
         })
 
     @RestClient.api_get('/api/targetinfo/{target_iqn}')

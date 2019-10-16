@@ -211,6 +211,14 @@ COMMAND_WITH_FLAG("injectargs " \
 COMMAND("status", "show cluster status", "mon", "r")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r")
+COMMAND("health mute "\
+	"name=code,type=CephString " \
+	"name=ttl,type=CephString,req=false " \
+	"name=sticky,type=CephBool,req=false",
+	"mute health alert", "mon", "w")
+COMMAND("health unmute "\
+	"name=code,type=CephString,req=false",
+	"unmute existing health alert mute(s)", "mon", "w")
 COMMAND("time-sync-status", "show time sync status", "mon", "r")
 COMMAND("df name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster free space stats", "mon", "r")
@@ -416,7 +424,8 @@ COMMAND("fs set " \
         "|standby_count_wanted|session_timeout|session_autoclose" \
         "|allow_standby_replay|down|joinable|min_compat_client " \
 	"name=val,type=CephString "					\
-	"name=yes_i_really_mean_it,type=CephBool,req=false",			\
+	"name=yes_i_really_mean_it,type=CephBool,req=false "		\
+	"name=yes_i_really_really_mean_it,type=CephBool,req=false",	\
 	"set fs parameter <var> to <val>", "mds", "rw")
 COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
         "name=val,type=CephString " \
@@ -494,6 +503,10 @@ COMMAND("osd stat", "print summary of OSD map", "osd", "r")
 COMMAND("osd dump " \
 	"name=epoch,type=CephInt,range=0,req=false",
 	"print summary of OSD map", "osd", "r")
+COMMAND("osd info " \
+	"name=id,type=CephOsdName,req=false",
+	"print osd's {id} information (instead of all osds from map)",
+	"osd", "r")
 COMMAND("osd tree " \
 	"name=epoch,type=CephInt,range=0,req=false " \
 	"name=states,type=CephChoices,strings=up|down|in|out|destroyed,n=N,req=false", \
@@ -813,7 +826,8 @@ COMMAND("osd require-osd-release "\
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
 COMMAND("osd down " \
-	"type=CephString,name=ids,n=N", \
+	"name=ids,type=CephString,n=N "
+	"name=definitely_dead,type=CephBool,req=false",	\
 	"set osd(s) <id> [<id>...] down, " \
         "or use <any|all> to set all osds down", \
         "osd", "rw")
@@ -1004,13 +1018,13 @@ COMMAND("osd pool ls " \
 	"list pools", "osd", "r")
 COMMAND("osd pool create " \
 	"name=pool,type=CephPoolname " \
-	"name=pg_num,type=CephInt,range=0 " \
+	"name=pg_num,type=CephInt,range=0,req=false " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
 	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] " \
 	"name=rule,type=CephString,req=false " \
-        "name=expected_num_objects,type=CephInt,req=false " \
-        "name=size,type=CephInt,req=false " \
+        "name=expected_num_objects,type=CephInt,range=0,req=false " \
+        "name=size,type=CephInt,range=0,req=false " \
 	"name=pg_num_min,type=CephInt,range=0,req=false " \
 	"name=target_size_bytes,type=CephInt,range=0,req=false " \
 	"name=target_size_ratio,type=CephFloat,range=0|1,req=false",\
