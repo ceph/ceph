@@ -138,8 +138,9 @@ class CephFSTestCase(CephTestCase):
                 self.mds_cluster.mon_manager.raw_cluster_cmd_result(
                     'auth', 'caps', "client.{0}".format(client_id),
                     'mds', 'allow',
-                    'mon', 'allow r',
-                    'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+                    'mon', 'allow rw',
+                    'mgr', 'allow r',
+                    'osd', 'allow rwx')
 
             # wait for mds restart to complete...
             self.fs.wait_for_daemons()
