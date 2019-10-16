@@ -1,4 +1,14 @@
+import sys
+
 from setuptools import setup, find_packages
+
+
+if sys.version_info >= (3,0):
+    mypy = ['mypy', 'pytest-mypy']
+    pytest = 'pytest >=2.1.3'
+else:
+    mypy = []
+    pytest = 'pytest >=2.1.3,<5'
 
 
 with open("README.rst", "r") as fh:
@@ -20,10 +30,11 @@ setup(
     install_requires=(
         'six',
     ),
+    setup_requires=['pytest-runner'],
     tests_require=[
-        'pytest >=2.1.3',
+        pytest,
         'tox',
-    ],
+    ] + mypy,
     classifiers = [
         'Intended Audience :: Developer',
         'Operating System :: POSIX :: Linux',
