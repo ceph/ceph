@@ -302,6 +302,7 @@ int OutputDataSocket::dump_data(int fd)
       ret = safe_write(fd, delim.c_str(), delim.length());
     }
     if (ret < 0) {
+      Mutex::Locker lock(m_lock);
       for (; iter != l.end(); ++iter) {
         bufferlist& bl = *iter;
 	data.push_back(bl);
