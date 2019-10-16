@@ -299,17 +299,16 @@ static boost::optional<PublicAccessConfiguration>
 get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 {
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
-      aiter != attrs.end())
-    {
-      bufferlist::const_iterator iter{&aiter->second};
-      PublicAccessConfiguration access_conf;
-      try {
-        access_conf.decode(iter);
-      } catch (const buffer::error& e) {
-        return boost::none;
-      }
-      return access_conf;
+      aiter != attrs.end()) {
+    bufferlist::const_iterator iter{&aiter->second};
+    PublicAccessConfiguration access_conf;
+    try {
+      access_conf.decode(iter);
+    } catch (const buffer::error& e) {
+      return boost::none;
     }
+    return access_conf;
+  }
   return boost::none;
 }
 
