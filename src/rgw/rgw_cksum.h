@@ -86,6 +86,7 @@ namespace rgw { namespace cksum {
   public:
     virtual void Restart() = 0;
     virtual void Update (const unsigned char *input, size_t length) = 0;
+    virtual void Update(const ceph::buffer::list& bl) = 0;
     virtual void Final (unsigned char *digest) = 0;
     virtual ~Digest() {}
   };
@@ -98,6 +99,11 @@ namespace rgw { namespace cksum {
     void Restart() override { d.Restart(); }
     void Update(const unsigned char* data, uint64_t len) override {
       d.Update(data, len);
+    }
+    void Update(const ceph::buffer::list& bl) {
+      for (auto& p : bl.buffers()) {
+	d.Update((const unsigned char *)p.c_str(), p.length());
+      }
     }
     void Final(unsigned char* digest) override {
       d.Final(digest);

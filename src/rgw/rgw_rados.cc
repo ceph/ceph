@@ -4921,12 +4921,11 @@ static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset,
   unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   MD5 hash;
-  hash.Update((const unsigned char *)manifest_bl.c_str(), manifest_bl.length());
-
+  ceph::crypto::update<MD5>(hash, manifest_bl);
   map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
   if (iter != attrset.end()) {
     bufferlist& bl = iter->second;
-    hash.Update((const unsigned char *)bl.c_str(), bl.length());
+    ceph::crypto::update<MD5>(hash, bl);
   }
 
   hash.Final(md5);

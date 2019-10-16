@@ -3910,15 +3910,14 @@ void RGWPutObj::execute()
       break;
     }
 
-    /* XXX likely this forces a rebuild of data--should implement a
-     * segmented Digest::Update */
+    /* use segmented Digest::Update */
     if (need_calc_md5) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      ceph::crypto::update<MD5>(hash, data);
     }
 
     /* XXX at least here data is already-rebuilt */
     if (digest) {
-      (*digest).Update((const unsigned char *)data.c_str(), data.length());
+      (*digest).Update(data);
     }
 
     /* update torrrent */
