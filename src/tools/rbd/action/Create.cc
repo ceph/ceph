@@ -151,6 +151,9 @@ int write_data(librbd::Image &image, librbd::ImageOptions &opts,
       }
       ++i;
       off += tpw.chunk_size;
+      if(off > image_size) {
+        off = image_size;
+      }
       pc.update_progress(off, image_size);
     }
   }
