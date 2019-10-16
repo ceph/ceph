@@ -2133,6 +2133,18 @@ int RGWPostObj_ObjStore_S3::get_params()
     env.add_var("Content-Type", content_type);
   }
 
+  std::string storage_class;
+  part_str(parts, "x-amz-storage-class", &storage_class);
+
+  if (! storage_class.empty()) {
+    s->dest_placement.storage_class = storage_class;
+    if (!store->svc()->zone->get_zone_params().valid_placement(s->dest_placement)) {
+      ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
+      err_msg = "The storage class you specified is not valid";
+      return -EINVAL;
+    }
+  }
+
   map<string, struct post_form_part, ltstr_nocase>::iterator piter =
     parts.upper_bound(RGW_AMZ_META_PREFIX);
   for (; piter != parts.end(); ++piter) {
