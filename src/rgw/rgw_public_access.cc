@@ -8,7 +8,6 @@ void PublicAccessConfiguration::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("IgnorePublicAcls", IgnorePublicAcls, obj);
   RGWXMLDecoder::decode_xml("BlockPublicPolicy", BlockPublicPolicy, obj);
   RGWXMLDecoder::decode_xml("RestrictPublicBuckets", RestrictPublicBuckets, obj);
-  //  RGWXMLDecoder::decode_xml("BlockPublicAccessConfiguration", this, obj);
 }
 
 void PublicAccessConfiguration::dump_xml(Formatter *f) const {
@@ -18,10 +17,10 @@ void PublicAccessConfiguration::dump_xml(Formatter *f) const {
   // manually encode here
   auto bool_val = [](bool b) -> auto { return b ? "true": "false"; };
 
-  f->dump_string("BlockPublicAcls", bool_val(BlockPublicAcls));
-  f->dump_string("IgnorePublicAcls", bool_val(IgnorePublicAcls));
-  f->dump_string("BlockPublicPolicy", bool_val(BlockPublicPolicy));
-  f->dump_string("RestrictPublicBuckets", bool_val(RestrictPublicBuckets));
+  f->dump_bool("BlockPublicAcls", BlockPublicAcls);
+  f->dump_bool("IgnorePublicAcls", IgnorePublicAcls);
+  f->dump_bool("BlockPublicPolicy", BlockPublicPolicy);
+  f->dump_bool("RestrictPublicBuckets", RestrictPublicBuckets);
 }
 
 
