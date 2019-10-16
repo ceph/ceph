@@ -31,9 +31,6 @@ fi
 # when using wheel packages
 pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install --upgrade 'pip >= 6.1'
 
-# workaround of https://github.com/pypa/setuptools/issues/1042
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install --upgrade "setuptools < 36"
-
 if pip --help | grep -q disable-pip-version-check; then
     DISABLE_PIP_VERSION_CHECK=--disable-pip-version-check
 else
@@ -46,5 +43,8 @@ fi
 
 pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=1.9'
 if test -f requirements.txt ; then
+    if ! test -f wheelhouse/md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
+        NO_INDEX=''
+    fi
     pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse -r requirements.txt
 fi

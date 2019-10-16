@@ -19,6 +19,8 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
+ARCH=$(uname -m)
+
 function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
@@ -51,18 +53,49 @@ EOF
 	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
 	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
 
-    $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    if [ -f /usr/bin/g++-${old} ]; then
+      $SUDO update-alternatives \
+  	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+  	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    fi
 
     $SUDO update-alternatives --auto gcc
 
     # cmake uses the latter by default
-    $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
-    $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/${ARCH}-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
 }
 
-if [ x`uname`x = xFreeBSDx ]; then
+function version_lt {
+    test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
+}
+
+function ensure_decent_gcc_on_rh {
+    local old=$(gcc -dumpversion)
+    local expected=5.1
+    local dts_ver=$1
+    if version_lt $old $expected; then
+	if test -t 1; then
+	    # interactive shell
+	    cat <<EOF
+Your GCC is too old. Please run following command to add DTS to your environment:
+
+scl enable devtoolset-7 bash
+
+Or add following line to the end of ~/.bashrc to add it permanently:
+
+source scl_source enable devtoolset-7
+
+see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+EOF
+	else
+	    # non-interactive shell
+	    source /opt/rh/devtoolset-$dts_ver/enable
+	fi
+    fi
+}
+
+if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
         devel/git \
@@ -114,7 +147,7 @@ if [ x`uname`x = xFreeBSDx ]; then
     exit
 else
     source /etc/os-release
-    case $ID in
+    case "$ID" in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
@@ -135,11 +168,11 @@ else
 
 	backports=""
 	control="debian/control"
-        case $(lsb_release -sc) in
-            squeeze|wheezy)
+        case "$VERSION" in
+            *squeeze*|*wheezy*)
 		control="/tmp/control.$$"
 		grep -v babeltrace debian/control > $control
-                backports="-t $(lsb_release -sc)-backports"
+                backports="-t $codename-backports"
                 ;;
         esac
 
@@ -152,42 +185,69 @@ else
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         yumdnf="yum"
-        builddepcmd="yum-builddep -y"
+        builddepcmd="yum-builddep -y --setopt=*.skip_if_unavailable=true"
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
             yumdnf="dnf"
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
-        $SUDO $yumdnf install -y redhat-lsb-core
-        case $(lsb_release -si) in
-            Fedora)
+	if [ "$ID" = "centos" -a "$ARCH" = "aarch64" ]; then
+	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
+	    $SUDO yum-config-manager --disable centos-sclo-rh || true
+	    $SUDO yum remove centos-release-scl || true
+	fi
+
+        case "$ID" in
+            fedora)
                 if test $yumdnf = yum; then
                     $SUDO $yumdnf install -y yum-utils
                 fi
                 ;;
-            CentOS|RedHatEnterpriseServer|VirtuozzoLinux)
+            centos|rhel|ol|virtuozzo)
+                MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO yum install -y yum-utils
-                MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
-                if test $(lsb_release -si) = RedHatEnterpriseServer ; then
-                    $SUDO yum install subscription-manager
-                    $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
+                if test $ID = rhel ; then
+                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
-                $SUDO yum install --nogpgcheck -y epel-release
+                rpm --quiet --query epel-release || \
+		    $SUDO yum -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
+                if test $ID = centos -a $MAJOR_VERSION = 7 ; then
+		    $SUDO $yumdnf install -y python36-devel
+		    case "$ARCH" in
+			x86_64)
+			    $SUDO yum -y install centos-release-scl
+			    dts_ver=7
+			    ;;
+			aarch64)
+			    $SUDO yum -y install centos-release-scl-rh
+			    $SUDO yum-config-manager --disable centos-sclo-rh
+			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
+			    dts_ver=7
+			    ;;
+		    esac
+                elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
+                    dts_ver=7
+                fi
                 ;;
         esac
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
+	if [ -n "$dts_ver" ]; then
+            ensure_decent_gcc_on_rh $dts_ver
+	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
-        $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
+        zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
+        $SUDO $zypp_install systemd-rpm-macros
         munge_ceph_spec_in $DIR/ceph.spec
-        $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     alpine)
         # for now we need the testing repo for leveldb
@@ -214,8 +274,7 @@ function populate_wheelhouse() {
 
     # although pip comes with virtualenv, having a recent version
     # of pip matters when it comes to using wheel packages
-    # workaround of https://github.com/pypa/setuptools/issues/1042
-    pip --timeout 300 $install 'setuptools >= 0.8,< 36' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
     if test $# != 0 ; then
         pip --timeout 300 $install $@ || return 1
     fi
@@ -231,6 +290,9 @@ function activate_virtualenv() {
         # because CentOS 7 has a buggy old version (v1.10.1)
         # https://github.com/pypa/virtualenv/issues/463
         virtualenv ${env_dir}_tmp
+        # install setuptools before upgrading virtualenv, as the latter needs
+        # a recent setuptools for setup commands like `extras_require`.
+        ${env_dir}_tmp/bin/pip install --upgrade setuptools
         ${env_dir}_tmp/bin/pip install --upgrade virtualenv
         ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
         rm -rf ${env_dir}_tmp
@@ -259,6 +321,12 @@ find . -name tox.ini | while read ini ; do
     (
         cd $(dirname $ini)
         require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
+        md5=wheelhouse/md5
+        if test "$require"; then
+            if ! test -f $md5 || ! md5sum -c $md5 ; then
+                rm -rf wheelhouse
+            fi
+        fi
         if test "$require" && ! test -d wheelhouse ; then
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
@@ -266,6 +334,7 @@ find . -name tox.ini | while read ini ; do
                 populate_wheelhouse "wheel -w $wip_wheelhouse" $require || exit 1
             done
             mv $wip_wheelhouse wheelhouse
+            md5sum *requirements.txt > $md5
         fi
     )
 done

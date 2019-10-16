@@ -47,6 +47,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_pkgversion: %global python3_pkgversion 3}
+%{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
 # unify libexec for all targets
 %global _libexecdir %{_exec_prefix}/lib
@@ -193,9 +194,9 @@ BuildRequires:	python-sphinx
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
 %if 0%{?rhel}
-BuildRequires:	python34-devel
-BuildRequires:	python34-setuptools
-BuildRequires:	python34-Cython
+BuildRequires:	python%{python3_pkgversion}-devel
+BuildRequires:	python%{python3_pkgversion}-setuptools
+BuildRequires:	python%{python3_version_nodots}-Cython
 %else
 BuildRequires:	python3-devel
 BuildRequires:	python3-setuptools

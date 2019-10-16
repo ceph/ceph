@@ -89,7 +89,7 @@ function run() {
     fi
 
     if test -f ./install-deps.sh ; then
-	$DRY_RUN ./install-deps.sh || return 1
+	$DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
 
