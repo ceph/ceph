@@ -1,17 +1,15 @@
 #include "rgw_public_access.h"
 #include "rgw_xml.h"
 
-namespace rgw::IAM {
-
-void PublicAccessConfiguration::decode_xml(XMLObj *obj) {
+void PublicAccessBlockConfiguration::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("BlockPublicAcls", BlockPublicAcls, obj);
   RGWXMLDecoder::decode_xml("IgnorePublicAcls", IgnorePublicAcls, obj);
   RGWXMLDecoder::decode_xml("BlockPublicPolicy", BlockPublicPolicy, obj);
   RGWXMLDecoder::decode_xml("RestrictPublicBuckets", RestrictPublicBuckets, obj);
 }
 
-void PublicAccessConfiguration::dump_xml(Formatter *f) const {
-  Formatter::ObjectSection os(*f, "BlockPublicAccessConfiguration");
+void PublicAccessBlockConfiguration::dump_xml(Formatter *f) const {
+  Formatter::ObjectSection os(*f, "BlockPublicAccessBlockConfiguration");
   // AWS spec mentions the values to be ALL CAPs, but clients will not
   // understand this or a mixed case like it is supposed to, hence the need to
   // manually encode here
@@ -24,7 +22,7 @@ void PublicAccessConfiguration::dump_xml(Formatter *f) const {
 }
 
 
-ostream& operator<< (ostream& os, const PublicAccessConfiguration& access_conf)
+ostream& operator<< (ostream& os, const PublicAccessBlockConfiguration& access_conf)
 {
     os << std::boolalpha
        << "BlockPublicAcls: " << access_conf.block_public_acls() << std::endl
@@ -35,4 +33,3 @@ ostream& operator<< (ostream& os, const PublicAccessConfiguration& access_conf)
     return os;
 }
 
-} // namespace rgw::IAM

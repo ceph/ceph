@@ -86,7 +86,6 @@ using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
 using rgw::IAM::Policy;
-using rgw::IAM::PublicAccessConfiguration;
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
@@ -295,13 +294,13 @@ static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
   }
 }
 
-static boost::optional<PublicAccessConfiguration>
+static boost::optional<PublicAccessBlockConfiguration>
 get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 {
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
       aiter != attrs.end()) {
     bufferlist::const_iterator iter{&aiter->second};
-    PublicAccessConfiguration access_conf;
+    PublicAccessBlockConfiguration access_conf;
     try {
       access_conf.decode(iter);
     } catch (const buffer::error& e) {
