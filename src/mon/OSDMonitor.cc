@@ -2280,15 +2280,22 @@ public:
     MonOpRequestRef op)
     : C_MonOp(op), osdmon(osdmon) {}
 
-  void _finish(int) override {
-    MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
-    osdmon->mon->send_reply(
-      op,
-      new MOSDMarkMeDown(
-	m->fsid,
-	m->get_target(),
-	m->get_epoch(),
-	false));   // ACK itself does not request an ack
+  void _finish(int r) override {
+    if (r == 0) {
+      MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
+      osdmon->mon->send_reply(
+        op,
+        new MOSDMarkMeDown(
+          m->fsid,
+          m->get_target(),
+          m->get_epoch(),
+          false));   // ACK itself does not request an ack
+    } else if (r == -EAGAIN) {
+        osdmon->dispatch(op);
+    } else {
+        lgeneric_derr(osdmon->cct) << "C_AckMarkedDown: unknown result" << r << dendl;
+        ceph_abort();
+    }
   }
   ~C_AckMarkedDown() override {
   }
