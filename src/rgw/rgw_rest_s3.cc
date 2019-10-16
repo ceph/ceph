@@ -4177,7 +4177,7 @@ void RGWGetBucketPolicyStatus_ObjStore_S3::send_response()
   // mentions TRUE and FALSE, but boto/aws official clients seem to want lower
   // case which is returned by AWS as well; so let's be bug to bug compatible
   // with the API
-  s->formatter->dump_string("IsPublic", isPublic ? "true" : "false");
+  s->formatter->dump_bool("IsPublic", isPublic);
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 
