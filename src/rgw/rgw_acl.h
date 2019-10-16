@@ -465,7 +465,7 @@ public:
   }
 
   virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) { return false; }
-  bool IsPublic() const;
+  bool is_public() const;
 };
 WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
 

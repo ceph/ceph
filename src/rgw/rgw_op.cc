@@ -5539,7 +5539,7 @@ void RGWPutACLs::execute()
 
   if (s->bucket_access_conf &&
       s->bucket_access_conf->block_public_acls() &&
-      new_policy.IsPublic()) {
+      new_policy.is_public()) {
     op_ret = -EACCES;
     return;
   }
@@ -7696,7 +7696,7 @@ void RGWPutBucketPolicy::execute()
     auto attrs = s->bucket_attrs;
     if (s->bucket_access_conf &&
         s->bucket_access_conf->block_public_policy() &&
-        rgw::IAM::IsPublic(p)) {
+        rgw::IAM::is_public(p)) {
       op_ret = -EACCES;
       return;
     }
@@ -8113,7 +8113,7 @@ int RGWGetBucketPolicyStatus::verify_permission()
 
 void RGWGetBucketPolicyStatus::execute()
 {
-  isPublic = (s->iam_policy && rgw::IAM::IsPublic(*s->iam_policy)) || s->bucket_acl->IsPublic();
+  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl->is_public();
 }
 
 int RGWPutBucketPublicAccessBlock::verify_permission()
