@@ -17,7 +17,7 @@ function(add_npm_command)
     COMMENT ${NC_COMMENT})
 endfunction(add_npm_command)
 
-if(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
+if(WITH_MGR_DASHBOARD_FRONTEND)
 
 if(WITH_SYSTEM_NPM)
   set(mgr-dashboard-nodeenv-dir )
@@ -121,7 +121,7 @@ add_custom_target(mgr-dashboard-frontend-build
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend)
 
 add_dependencies(tests mgr-dashboard-frontend-build)
-endif(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
+endif(WITH_MGR_DASHBOARD_FRONTEND)
 
 if(WITH_TESTS)
   include(AddCephTest)
