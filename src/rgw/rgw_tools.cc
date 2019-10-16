@@ -65,7 +65,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
     if (mostly_omap) {
       // set pg_autoscale_bias
       bufferlist inbl;
-      float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
+      float bias = g_conf()->rgw_rados_pool_autoscale_bias;
       int r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
 	pool.name + "\", \"var\": \"pg_autoscale_bias\", \"val\": \"" +
@@ -76,7 +76,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 		 << pool.name << dendl;
       }
       // set pg_num_min
-      int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
+      int min = g_conf()->rgw_rados_pool_pg_num_min;
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
 	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
@@ -87,7 +87,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 		 << pool.name << dendl;
       }
       // set recovery_priority
-      int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
+      int p = g_conf()->rgw_rados_pool_recovery_priority;
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
 	pool.name + "\", \"var\": \"recovery_priority\": \"" +

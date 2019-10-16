@@ -1449,7 +1449,7 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     found = (rgw_get_user_info_by_uid(user_ctl, user_id, user_info, &op_state.objv) >= 0);
     op_state.found_by_uid = found;
   }
-  if (store->ctx()->_conf.get_val<bool>("rgw_user_unique_email")) {
+  if (store->ctx()->_conf->rgw_user_unique_email) {
     if (!user_email.empty() && !found) {
       found = (rgw_get_user_info_by_email(user_ctl, user_email, user_info, &op_state.objv) >= 0);
       op_state.found_by_email = found;

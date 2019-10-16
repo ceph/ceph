@@ -1263,6 +1263,8 @@ OPTION(rados_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabl
 OPTION(rgw_max_attr_name_len, OPT_SIZE)
 OPTION(rgw_max_attr_size, OPT_SIZE)
 OPTION(rgw_max_attrs_num_in_req, OPT_U64)
+OPTION(rgw_max_notify_retries, OPT_U64) //number of attempts to notify peers before giving up.
+OPTION(rgw_max_listing_results, OPT_U64 ) //upper bound on results in listing operations, ListBucket max-keys. 
 
 OPTION(rgw_max_chunk_size, OPT_INT)
 OPTION(rgw_put_obj_min_window_size, OPT_INT)
@@ -1445,6 +1447,7 @@ OPTION(rgw_exit_timeout_secs, OPT_INT) // how many seconds to wait for process t
 OPTION(rgw_get_obj_window_size, OPT_INT) // window size in bytes for single get obj request
 OPTION(rgw_get_obj_max_req_size, OPT_INT) // max length of a single get obj rados op
 OPTION(rgw_relaxed_s3_bucket_names, OPT_BOOL) // enable relaxed bucket name rules for US region buckets
+OPTION(rgw_relaxed_region_enforcement, OPT_BOOL) // disable region constraint enforcement.
 OPTION(rgw_defer_to_bucket_acls, OPT_STR) // if the user has bucket perms)
 OPTION(rgw_list_buckets_max_chunk, OPT_INT) // max buckets to retrieve in a single op when listing user buckets
 OPTION(rgw_md_log_max_shards, OPT_INT) // max shards for metadata log
@@ -1459,7 +1462,8 @@ OPTION(rgw_obj_tombstone_cache_size, OPT_INT) // how many objects in tombstone c
 OPTION(rgw_data_log_window, OPT_INT) // data log entries window (in seconds)
 OPTION(rgw_data_log_changes_size, OPT_INT) // number of in-memory entries to hold for data changes log
 OPTION(rgw_data_log_num_shards, OPT_INT) // number of objects to keep data changes log on
-OPTION(rgw_data_log_obj_prefix, OPT_STR) //
+OPTION(rgw_data_log_obj_prefix, OPT_STR) 
+OPTION(rgw_data_notify_interval_msec, OPT_INT) // data changes notification interval to followers
 
 OPTION(rgw_bucket_quota_ttl, OPT_INT) // time for cached bucket stats to be cached within rgw instance
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE) // threshold from which we don't rely on cached info for quota decisions
@@ -1498,6 +1502,9 @@ OPTION(rgw_md_notify_interval_msec, OPT_INT) // metadata changes notification in
 OPTION(rgw_run_sync_thread, OPT_BOOL) // whether radosgw (not radosgw-admin) spawns the sync thread
 OPTION(rgw_sync_lease_period, OPT_INT) // time in second for lease that rgw takes on a specific log (or log shard)
 OPTION(rgw_sync_log_trim_interval, OPT_INT) // time in seconds between attempts to trim sync logs
+OPTION(rgw_sync_log_trim_max_buckets, OPT_INT) //minimum number of cold buckets to trim per interval
+OPTION(rgw_sync_log_trim_min_cold_buckets, OPT_INT) //minimum number of cold buckets to trim per interval
+OPTION(rgw_sync_log_trim_concurrent_buckets, OPT_INT) //maximum number of buckets to trim in parallel
 
 OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE) // range [0, 1]
@@ -1551,6 +1558,15 @@ OPTION(rgw_swift_custom_header, OPT_STR) // option to enable swift custom header
 
 OPTION(rgw_swift_need_stats, OPT_BOOL) // option to enable stats on bucket listing for swift
 
+/* resharding tunables */	
+OPTION(rgw_reshard_num_logs, OPT_INT)	
+OPTION(rgw_reshard_batch_size, OPT_U64) // number of reshard entries to batch together before sending the operations to the CLS back-end. 
+OPTION(rgw_dynamic_resharding, OPT_BOOL)	
+OPTION(rgw_max_objs_per_shard, OPT_U64)	
+OPTION(rgw_reshard_thread_interval, OPT_U32) // maximum time between rounds of reshard thread processing
+OPTION(rgw_reshard_max_aio, OPT_U64) // maximum number of outstanding asynchronous I/O operations to allow at a time during resharding. 
+OPTION(rgw_reshard_bucket_lock_duration, OPT_U64) //number of seconds the timeout on the reshard locks.
+
 OPTION(rgw_acl_grants_max_num, OPT_INT) // According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html), An ACL can have up to 100 grants.
 OPTION(rgw_cors_rules_max_num, OPT_INT) // According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html), An cors can have up to 100 rules.
 OPTION(rgw_delete_multi_obj_max_num, OPT_INT) // According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html), Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000 objects in a single HTTP request.
@@ -1564,3 +1580,16 @@ OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web t
 OPTION(rgw_sts_client_id, OPT_STR) // Client Id
 OPTION(rgw_sts_client_secret, OPT_STR) // Client Secret
 OPTION(debug_allow_any_pool_priority, OPT_BOOL)
+OPTION(rgw_gc_max_deferred_entries_size, OPT_U64) // GC deferred entries size in queue head
+OPTION(rgw_gc_max_queue_size, OPT_U64) // GC max queue size
+OPTION(rgw_gc_max_deferred, OPT_U64) // GC max number of deferred entries
+
+OPTION(rgw_rados_pool_autoscale_bias, OPT_DOUBLE) // pg_autoscale_bias value for RGW metadata pools.
+OPTION(rgw_rados_pool_pg_num_min, OPT_U64) // pg_num_min value for RGW metadata pools.
+OPTION(rgw_rados_pool_recovery_priority, OPT_U64) // recovery_priority value for RGW metadata pools.
+
+OPTION(rgw_user_unique_email, OPT_BOOL) //require local RGW users to have unique email addresses
+
+OPTION(rgw_inject_notify_timeout_probability, OPT_DOUBLE) //likelihood of ignoring a notify
+
+
