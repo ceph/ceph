@@ -18,15 +18,13 @@
 
 class XMLObj;
 
-namespace rgw::IAM {
-
-class PublicAccessConfiguration {
+class PublicAccessBlockConfiguration {
   bool BlockPublicAcls;
   bool IgnorePublicAcls;
   bool BlockPublicPolicy;
   bool RestrictPublicBuckets;
  public:
- PublicAccessConfiguration():
+ PublicAccessBlockConfiguration():
    BlockPublicAcls(false), IgnorePublicAcls(false),
   BlockPublicPolicy(false), RestrictPublicBuckets(false)
     {}
@@ -65,6 +63,5 @@ class PublicAccessConfiguration {
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(PublicAccessConfiguration)
-ostream& operator<< (ostream& os, const PublicAccessConfiguration& access_conf);
-} // namespace rgw::IAM
+WRITE_CLASS_ENCODER(PublicAccessBlockConfiguration)
+ostream& operator<< (ostream& os, const PublicAccessBlockConfiguration& access_conf);

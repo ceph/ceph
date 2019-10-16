@@ -2400,7 +2400,7 @@ public:
 class RGWPutBucketPublicAccessBlock : public RGWOp {
 protected:
   bufferlist data;
-  rgw::IAM::PublicAccessConfiguration access_conf;
+  PublicAccessBlockConfiguration access_conf;
 public:
   int verify_permission() override;
   const char* name() const override { return "put_bucket_public_access_block";}
@@ -2413,7 +2413,7 @@ public:
 
 class RGWGetBucketPublicAccessBlock : public RGWOp {
 protected:
-  rgw::IAM::PublicAccessConfiguration access_conf;
+  PublicAccessBlockConfiguration access_conf;
 public:
   int verify_permission() override;
   const char* name() const override { return "get_bucket_public_access_block";}
@@ -2426,7 +2426,7 @@ public:
 
 class RGWDeleteBucketPublicAccessBlock : public RGWOp {
 protected:
-  rgw::IAM::PublicAccessConfiguration access_conf;
+  PublicAccessBlockConfiguration access_conf;
 public:
   int verify_permission() override;
   const char* name() const override { return "delete_bucket_public_access_block";}
