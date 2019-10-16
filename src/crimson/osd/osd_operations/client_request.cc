@@ -76,7 +76,7 @@ seastar::future<> ClientRequest::start()
 	    return with_blocking_future(
 	      handle.enter(pp(pg).wait_for_active));
 	  }).then([this, &pg]() mutable {
-	    return pg.wait_for_active();
+	    return with_blocking_future(pg.wait_for_active_blocker.wait());
 	  }).then([this, &pg]() mutable {
 	    if (m->finish_decode()) {
 	      m->clear_payload();

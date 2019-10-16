@@ -110,7 +110,8 @@ PG::PG(
 	osdmap->get_pool_name(pgid.pool())),
       osdmap,
       this,
-      this)
+      this),
+    wait_for_active_blocker(this)
 {
   peering_state.set_backend_predicates(
     new ReadablePredicate(pg_whoami),
@@ -200,8 +201,7 @@ void PG::on_activate(interval_set<snapid_t>)
 
 void PG::on_activate_complete()
 {
-  active_promise.set_value();
-  active_promise = {};
+  wait_for_active_blocker.on_active();
 
   if (peering_state.needs_recovery()) {
     shard_services.start_operation<LocalPeeringEvent>(
@@ -402,13 +402,23 @@ std::ostream& operator<<(std::ostream& os, const PG& pg)
   return os;
 }
 
-seastar::future<> PG::wait_for_active()
+void PG::WaitForActiveBlocker::dump_detail(Formatter *f) const
 {
-  logger().debug("wait_for_active: {}", peering_state.get_pg_state_string());
-  if (peering_state.is_active()) {
-    return seastar::now();
+  f->dump_stream("pgid") << pg->pgid;
+}
+
+void PG::WaitForActiveBlocker::on_active()
+{
+  p.set_value();
+  p = {};
+}
+
+blocking_future<> PG::WaitForActiveBlocker::wait()
+{
+  if (pg->peering_state.is_active()) {
+    return make_blocking_future(seastar::now());
   } else {
-    return active_promise.get_shared_future();
+    return make_blocking_future(p.get_shared_future());
   }
 }
 
