@@ -49,7 +49,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
    * will be able to close/open sockets a zillion of times */
   if (reuse_addr) {
     int on = 1;
-    if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
+    if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (SOCKOPT_VAL_TYPE)&on, sizeof(on)) == -1) {
       r = errno;
       lderr(cct) << __func__ << " setsockopt SO_REUSEADDR failed: "
                  << strerror(r) << dendl;
@@ -99,14 +99,14 @@ int NetHandler::set_socket_options(int sd, bool nodelay, int size)
   // disable Nagle algorithm?
   if (nodelay) {
     int flag = 1;
-    r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+    r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (SOCKOPT_VAL_TYPE)&flag, sizeof(flag));
     if (r < 0) {
       r = errno;
       ldout(cct, 0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
     }
   }
   if (size) {
-    r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
+    r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (SOCKOPT_VAL_TYPE)&size, sizeof(size));
     if (r < 0)  {
       r = errno;
       ldout(cct, 0) << "couldn't set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
@@ -116,7 +116,7 @@ int NetHandler::set_socket_options(int sd, bool nodelay, int size)
   // block ESIGPIPE
 #ifdef CEPH_USE_SO_NOSIGPIPE
   int val = 1;
-  r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
+  r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (SOCKOPT_VAL_TYPE)&val, sizeof(val));
   if (r) {
     r = errno;
     ldout(cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
@@ -136,10 +136,10 @@ void NetHandler::set_priority(int sd, int prio, int domain)
   int iptos = IPTOS_CLASS_CS6;
   switch (domain) {
   case AF_INET:
-    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, (SOCKOPT_VAL_TYPE)&iptos, sizeof(iptos));
     break;
   case AF_INET6:
-    r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+    r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, (SOCKOPT_VAL_TYPE)&iptos, sizeof(iptos));
     break;
   default:
     lderr(cct) << "couldn't set ToS of unknown family (" << domain << ")"
@@ -156,7 +156,7 @@ void NetHandler::set_priority(int sd, int prio, int domain)
   // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
   // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
   // We need to call setsockopt(SO_PRIORITY) after it.
-  r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+  r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, (SOCKOPT_VAL_TYPE)&prio, sizeof(prio));
   if (r < 0) {
     r = errno;
     ldout(cct, 0) << __func__ << " couldn't set SO_PRIORITY to " << prio
