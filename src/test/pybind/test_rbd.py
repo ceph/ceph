@@ -408,6 +408,20 @@ def test_config_list():
     for option in rbd.config_list(ioctx):
         eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
+def test_pool_config_set_and_get_and_remove():
+    rbd = RBD()
+
+    for option in rbd.config_list(ioctx):
+        eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+    rbd.config_set(ioctx, "rbd_request_timed_out_seconds", "100")
+    new_value = rbd.config_get(ioctx, "rbd_request_timed_out_seconds")
+    eq(new_value, "100")
+    rbd.config_remove(ioctx, "rbd_request_timed_out_seconds")
+
+    for option in rbd.config_list(ioctx):
+        eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
 def test_namespaces():
     rbd = RBD()
 
