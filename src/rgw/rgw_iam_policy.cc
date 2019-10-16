@@ -1458,7 +1458,7 @@ struct IsPublicStatement
 };
 
 
-bool IsPublic(const Policy& p)
+bool is_public(const Policy& p)
 {
   return std::any_of(p.statements.begin(), p.statements.end(), IsPublicStatement());
 }

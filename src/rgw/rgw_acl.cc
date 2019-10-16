@@ -188,7 +188,7 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
 }
 
 
-bool RGWAccessControlPolicy::IsPublic() const
+bool RGWAccessControlPolicy::is_public() const
 {
 
   static constexpr auto public_groups = {ACL_GROUP_ALL_USERS,
