@@ -10,6 +10,89 @@
 #define dout_subsys ceph_subsys_rgw
 
 
+void rgw_sync_bucket_entity::add_zones(const std::vector<string>& new_zones) {
+  for (auto& z : new_zones) {
+    if (z == "*") {
+      all_zones = true;
+      zones.reset();
+      return;
+    }
+
+    if (!zones) {
+      zones.emplace();
+    }
+
+    zones->insert(z);
+  }
+}
+
+void rgw_sync_bucket_entity::remove_zones(const std::vector<string>& rm_zones) {
+  all_zones = false;
+
+  if (!zones) {
+    return;
+  }
+
+  for (auto& z : rm_zones) {
+    zones->erase(z);
+  }
+}
+
+static void set_bucket_field(std::optional<string> source, string *field) {
+  if (!source) {
+    return;
+  }
+  if (source == "*") {
+    field->clear();
+    return;
+  }
+  *field = *source;
+}
+
+void rgw_sync_bucket_entity::set_bucket(std::optional<string> tenant,
+                std::optional<string> bucket_name,
+                std::optional<string> bucket_id)
+{
+  if ((!bucket) && (tenant || bucket_name || bucket_id)) {
+    bucket.emplace();
+  }
+
+  set_bucket_field(tenant, &bucket->tenant);
+  set_bucket_field(bucket_name, &bucket->name);
+  set_bucket_field(bucket_id, &bucket->bucket_id);
+
+  if (bucket->tenant.empty() &&
+      bucket->name.empty() &&
+      bucket->bucket_id.empty()) {
+    bucket.reset();
+  }
+}
+
+void rgw_sync_bucket_entity::remove_bucket(std::optional<string> tenant,
+                                           std::optional<string> bucket_name,
+                                           std::optional<string> bucket_id)
+{
+  if (!bucket) {
+    return;
+  }
+
+  if (tenant) {
+    bucket->tenant.clear();
+  }
+  if (bucket_name) {
+    bucket->name.clear();
+  }
+  if (bucket_id) {
+    bucket->bucket_id.clear();
+  }
+
+  if (bucket->tenant.empty() &&
+      bucket->name.empty() &&
+      bucket->bucket_id.empty()) {
+    bucket.reset();
+  }
+}
+
 bool rgw_sync_data_flow_group::find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group)
 {
   if (!symmetrical) {
@@ -112,6 +195,36 @@ void rgw_sync_data_flow_group::remove_directional(const string& source_zone, con
     if (source_zone == rule.source_zone &&
         dest_zone == rule.dest_zone) {
       directional->erase(iter);
+      return;
+    }
+  }
+}
+
+bool rgw_sync_policy_group::find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipe **pipe)
+{
+  for (auto& p : pipes) {
+    if (pipe_id == p.id) {
+      *pipe = &p;
+      return true;
+    }
+  }
+
+  if (!create) {
+    return false;
+  }
+
+  auto& p = pipes.emplace_back();
+  *pipe = &p;
+  p.id = pipe_id;
+
+  return true;
+}
+
+void rgw_sync_policy_group::remove_pipe(const string& pipe_id)
+{
+  for (auto iter = pipes.begin(); iter != pipes.end(); ++iter) {
+    if (pipe_id == iter->id) {
+      pipes.erase(iter);
       return;
     }
   }

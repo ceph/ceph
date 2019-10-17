@@ -231,6 +231,8 @@ public:
   std::optional<rgw_bucket> bucket; /* define specific bucket */
   std::optional<std::set<string> > zones; /* define specific zones, if not set then all zones */
 
+  bool all_zones{false};
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(bucket, bl);
@@ -262,9 +264,22 @@ public:
             match_str(bucket->bucket_id, b->bucket_id));
   }
 
+  void add_zones(const std::vector<string>& new_zones);
+  void remove_zones(const std::vector<string>& rm_zones);
+  void set_bucket(std::optional<string> tenant,
+                  std::optional<string> bucket_name,
+                  std::optional<string> bucket_id);
+  void remove_bucket(std::optional<string> tenant,
+                     std::optional<string> bucket_name,
+                     std::optional<string> bucket_id);
+
   bool match_zone(const string& zone) const {
+    if (all_zones) {
+      return  true;
+    }
+
     if (!zones) { /* all zones */
-      return true;
+      return false;
     }
 
     return (zones->find(zone) != zones->end());
@@ -273,7 +288,6 @@ public:
   rgw_bucket get_bucket() const {
     return bucket.value_or(rgw_bucket());
   }
-    
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
 
@@ -288,11 +302,13 @@ private:
   }
 
 public:
+  string id;
   rgw_sync_bucket_entity source;
   rgw_sync_bucket_entity dest;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
+    encode(id, bl);
     encode(source, bl);
     encode(dest, bl);
     ENCODE_FINISH(bl);
@@ -300,6 +316,7 @@ public:
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
+    decode(id, bl);
     decode(source, bl);
     decode(dest, bl);
     DECODE_FINISH(bl);
@@ -419,6 +436,9 @@ struct rgw_sync_policy_group {
 
     return true;
   }
+
+  bool find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipe **pipe);
+  void remove_pipe(const string& pipe_id);
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_group)
 

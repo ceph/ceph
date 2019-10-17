@@ -650,10 +650,13 @@ enum class OPT {
   SYNC_ERROR_LIST,
   SYNC_ERROR_TRIM,
   SYNC_GROUP_CREATE,
+  SYNC_GROUP_MODIFY,
   SYNC_GROUP_GET,
   SYNC_GROUP_REMOVE,
-  SYNC_GROUP_FLOW_ADD,
+  SYNC_GROUP_FLOW_CREATE,
   SYNC_GROUP_FLOW_REMOVE,
+  SYNC_GROUP_PIPE_CREATE,
+  SYNC_GROUP_PIPE_REMOVE,
   SYNC_POLICY_GET,
   BILOG_LIST,
   BILOG_TRIM,
@@ -850,10 +853,13 @@ static SimpleCmd::Commands all_cmds = {
   { "sync error trim", OPT::SYNC_ERROR_TRIM },
   { "sync policy get", OPT::SYNC_POLICY_GET },
   { "sync group create", OPT::SYNC_GROUP_CREATE },
+  { "sync group modify", OPT::SYNC_GROUP_MODIFY },
   { "sync group get", OPT::SYNC_GROUP_GET },
   { "sync group remove", OPT::SYNC_GROUP_REMOVE },
-  { "sync group flow add", OPT::SYNC_GROUP_FLOW_ADD },
+  { "sync group flow create", OPT::SYNC_GROUP_FLOW_CREATE },
   { "sync group flow remove", OPT::SYNC_GROUP_FLOW_REMOVE },
+  { "sync group pipe create", OPT::SYNC_GROUP_PIPE_CREATE },
+  { "sync group pipe remove", OPT::SYNC_GROUP_PIPE_REMOVE },
   { "bilog list", OPT::BILOG_LIST },
   { "bilog trim", OPT::BILOG_TRIM },
   { "bilog status", OPT::BILOG_STATUS },
@@ -2835,6 +2841,18 @@ int main(int argc, const char **argv)
   std::optional<string> opt_flow_id;
   std::optional<string> opt_source_zone;
   std::optional<string> opt_dest_zone;
+  std::optional<vector<string> > opt_source_zones;
+  std::optional<vector<string> > opt_dest_zones;
+  std::optional<string> opt_pipe_id;
+  std::optional<string> opt_tenant;
+  std::optional<string> opt_bucket;
+  std::optional<string> opt_bucket_id;
+  std::optional<string> opt_source_tenant;
+  std::optional<string> opt_source_bucket;
+  std::optional<string> opt_source_bucket_id;
+  std::optional<string> opt_dest_tenant;
+  std::optional<string> opt_dest_bucket;
+  std::optional<string> opt_dest_bucket_id;
 
   rgw::notify::EventTypeList event_types;
 
@@ -2853,6 +2871,7 @@ int main(int argc, const char **argv)
       new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
+      opt_tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
@@ -2866,6 +2885,7 @@ int main(int argc, const char **argv)
       display_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
       bucket_name = val;
+      opt_bucket = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       pool_name = val;
       pool = rgw_pool(pool_name);
@@ -2991,6 +3011,7 @@ int main(int argc, const char **argv)
       set_temp_url_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
+      opt_bucket_id = val;
       if (bucket_id.empty()) {
         cerr << "bad bucket-id" << std::endl;
         exit(1);
@@ -3199,8 +3220,30 @@ int main(int argc, const char **argv)
       vector<string> v;
       get_str_vec(val, v);
       opt_zones = std::move(v);
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-zones", (char*)NULL)) {
+      vector<string> v;
+      get_str_vec(val, v);
+      opt_source_zones = std::move(v);
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-zones", (char*)NULL)) {
+      vector<string> v;
+      get_str_vec(val, v);
+      opt_dest_zones = std::move(v);
     } else if (ceph_argparse_witharg(args, i, &val, "--flow-id", (char*)NULL)) {
       opt_flow_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--pipe-id", (char*)NULL)) {
+      opt_pipe_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-tenant", (char*)NULL)) {
+      opt_source_tenant = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-bucket", (char*)NULL)) {
+      opt_source_bucket = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-bucket-id", (char*)NULL)) {
+      opt_source_bucket_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-tenant", (char*)NULL)) {
+      opt_dest_tenant = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-bucket", (char*)NULL)) {
+      opt_dest_bucket = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-bucket-id", (char*)NULL)) {
+      opt_dest_bucket_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -7630,7 +7673,8 @@ next:
     }
   }
 
-  if (opt_cmd == OPT::SYNC_GROUP_CREATE) {
+  if (opt_cmd == OPT::SYNC_GROUP_CREATE ||
+      opt_cmd == OPT::SYNC_GROUP_MODIFY) {
     CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
     CHECK_TRUE(require_opt(opt_status, "ERROR: --status is not specified (options: forbidden, enabled, activated)"), EINVAL);
 
@@ -7639,6 +7683,14 @@ next:
     if (ret < 0) {
       cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+
+    if (opt_cmd == OPT::SYNC_GROUP_MODIFY) {
+      auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
+      if (iter != zonegroup.sync_policy.groups.end()) {
+        cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+        return ENOENT;
+      }
     }
 
     auto& group = zonegroup.sync_policy.groups[*opt_group_id];
@@ -7714,7 +7766,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT::SYNC_GROUP_FLOW_ADD) {
+  if (opt_cmd == OPT::SYNC_GROUP_FLOW_CREATE) {
     CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
     CHECK_TRUE(require_opt(opt_flow_id, "ERROR: --flow-id not specified"), EINVAL);
     CHECK_TRUE(require_opt(opt_flow_type,
@@ -7797,6 +7849,110 @@ next:
       group.data_flow.remove_directional(*opt_source_zone, *opt_dest_zone);
     }
     
+    ret = zonegroup.update();
+    if (ret < 0) {
+      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    show_result(zonegroup.sync_policy, formatter, cout);
+  }
+
+  if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
+    CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
+    CHECK_TRUE(require_opt(opt_pipe_id, "ERROR: --pipe-id not specified"), EINVAL);
+    CHECK_TRUE(require_non_empty_opt(opt_source_zones, "ERROR: --source-zones not provided or is empty; should be list of zones or '*'"), EINVAL);
+    CHECK_TRUE(require_non_empty_opt(opt_dest_zones, "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'"), EINVAL);
+
+
+    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
+    if (iter == zonegroup.sync_policy.groups.end()) {
+      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      return ENOENT;
+    }
+
+    auto& group = iter->second;
+
+    rgw_sync_bucket_pipe *pipe;
+
+    group.find_pipe(*opt_pipe_id, true, &pipe);
+
+    pipe->source.add_zones(*opt_source_zones);
+    pipe->source.set_bucket(opt_source_tenant,
+                            opt_source_bucket,
+                            opt_source_bucket_id);
+    pipe->dest.add_zones(*opt_dest_zones);
+    pipe->dest.set_bucket(opt_dest_tenant,
+                            opt_dest_bucket,
+                            opt_dest_bucket_id);
+
+    ret = zonegroup.update();
+    if (ret < 0) {
+      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    show_result(zonegroup.sync_policy, formatter, cout);
+  }
+
+  if (opt_cmd == OPT::SYNC_GROUP_PIPE_REMOVE) {
+    CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
+    CHECK_TRUE(require_opt(opt_pipe_id, "ERROR: --pipe-id not specified"), EINVAL);
+
+    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
+    if (iter == zonegroup.sync_policy.groups.end()) {
+      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      return ENOENT;
+    }
+
+    auto& group = iter->second;
+
+    rgw_sync_bucket_pipe *pipe;
+
+    if (!group.find_pipe(*opt_pipe_id, false, &pipe)) {
+      cerr << "ERROR: could not find pipe '" << *opt_pipe_id << "'" << std::endl;
+      return ENOENT;
+    }
+
+    if (opt_source_zones) {
+      pipe->source.remove_zones(*opt_source_zones);
+    }
+
+    pipe->source.remove_bucket(opt_source_tenant,
+                               opt_source_bucket,
+                               opt_source_bucket_id);
+    if (opt_dest_zones) {
+      pipe->dest.remove_zones(*opt_dest_zones);
+    }
+    pipe->dest.remove_bucket(opt_dest_tenant,
+                             opt_dest_bucket,
+                             opt_dest_bucket_id);
+
+    if (!(opt_source_zones ||
+          opt_source_tenant ||
+          opt_source_bucket ||
+          opt_source_bucket_id ||
+          opt_dest_zones ||
+          opt_dest_tenant ||
+          opt_dest_bucket ||
+          opt_dest_bucket_id)) {
+      group.remove_pipe(*opt_pipe_id);
+    }
+
     ret = zonegroup.update();
     if (ret < 0) {
       cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
