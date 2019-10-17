@@ -799,41 +799,8 @@ def pull_directory_tarball(remote, remotedir, localfile):
 
 
 def get_wwn_id_map(remote, devs):
-    """
-    Extract ww_id_map information from ls output on the associated devs.
-
-    Sample dev information:    /dev/sdb: /dev/disk/by-id/wwn-0xf00bad
-
-    :returns: map of devices to device id links
-    """
-    stdout = None
-    try:
-        stdout = remote.sh('ls -l /dev/disk/by-id/wwn-*')
-    except Exception:
-        log.info('Failed to get wwn devices! Using /dev/sd* devices...')
-        return dict((d, d) for d in devs)
-
-    devmap = {}
-
-    # lines will be:
-    # lrwxrwxrwx 1 root root  9 Jan 22 14:58
-    # /dev/disk/by-id/wwn-0x50014ee002ddecaf -> ../../sdb
-    for line in stdout.splitlines():
-        comps = line.split(' ')
-        # comps[-1] should be:
-        # ../../sdb
-        rdev = comps[-1]
-        # translate to /dev/sdb
-        dev = '/dev/{d}'.format(d=rdev.split('/')[-1])
-
-        # comps[-3] should be:
-        # /dev/disk/by-id/wwn-0x50014ee002ddecaf
-        iddev = comps[-3]
-
-        if dev in devs:
-            devmap[dev] = iddev
-
-    return devmap
+    log.warn("Entering get_wwn_id_map, a deprecated function that will be removed")
+    return dict((d, d) for d in devs)
 
 
 def get_scratch_devices(remote):
