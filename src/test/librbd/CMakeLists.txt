@@ -82,6 +82,7 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotUnprotectRequest.cc
   operation/test_mock_TrimRequest.cc
   trash/test_mock_MoveRequest.cc
+  trash/test_mock_RemoveRequest.cc
   watcher/test_mock_RewatchRequest.cc
   )
 add_executable(unittest_librbd

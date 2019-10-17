@@ -21,9 +21,9 @@ set(rbd_mirror_internal
   ServiceDaemon.cc
   Threads.cc
   types.cc
-  image_deleter/RemoveRequest.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc
+  image_deleter/TrashRemoveRequest.cc
   image_deleter/TrashWatcher.cc
   image_map/LoadRequest.cc
   image_map/Policy.cc

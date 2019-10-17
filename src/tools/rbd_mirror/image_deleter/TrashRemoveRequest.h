@@ -1,11 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_RBD_MIRROR_IMAGE_DELETER_REMOVE_REQUEST_H
-#define CEPH_RBD_MIRROR_IMAGE_DELETER_REMOVE_REQUEST_H
+#ifndef CEPH_RBD_MIRROR_IMAGE_DELETER_TRASH_REMOVE_REQUEST_H
+#define CEPH_RBD_MIRROR_IMAGE_DELETER_TRASH_REMOVE_REQUEST_H
 
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <string>
@@ -20,19 +21,20 @@ namespace mirror {
 namespace image_deleter {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class RemoveRequest {
+class TrashRemoveRequest {
 public:
-  static RemoveRequest* create(librados::IoCtx &io_ctx,
-                               const std::string &image_id,
-                               ErrorResult *error_result,
-                               ContextWQ *op_work_queue, Context *on_finish) {
-    return new RemoveRequest(io_ctx, image_id, error_result, op_work_queue,
-                             on_finish);
+  static TrashRemoveRequest* create(librados::IoCtx &io_ctx,
+                                    const std::string &image_id,
+                                    ErrorResult *error_result,
+                                    ContextWQ *op_work_queue,
+                                    Context *on_finish) {
+    return new TrashRemoveRequest(io_ctx, image_id, error_result, op_work_queue,
+                                  on_finish);
   }
 
-  RemoveRequest(librados::IoCtx &io_ctx, const std::string &image_id,
-                ErrorResult *error_result, ContextWQ *op_work_queue,
-                Context *on_finish)
+  TrashRemoveRequest(librados::IoCtx &io_ctx, const std::string &image_id,
+                     ErrorResult *error_result, ContextWQ *op_work_queue,
+                     Context *on_finish)
     : m_io_ctx(io_ctx), m_image_id(image_id), m_error_result(error_result),
       m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
   }
@@ -46,13 +48,19 @@ private:
    * <start>
    *    |
    *    v
+   * GET_TRASH_IMAGE_SPEC
+   *    |
+   *    v
    * GET_SNAP_CONTEXT
    *    |
    *    v
    * PURGE_SNAPSHOTS
    *    |
    *    v
-   * REMOVE_IMAGE
+   * TRASH_REMOVE
+   *    |
+   *    v
+   * NOTIFY_TRASH_REMOVE
    *    |
    *    v
    * <finish>
@@ -67,8 +75,12 @@ private:
   Context *m_on_finish;
 
   ceph::bufferlist m_out_bl;
+  cls::rbd::TrashImageSpec m_trash_image_spec;
   bool m_has_snapshots = false;
   librbd::NoOpProgressContext m_progress_ctx;
+
+  void get_trash_image_spec();
+  void handle_get_trash_image_spec(int r);
 
   void get_snap_context();
   void handle_get_snap_context(int r);
@@ -79,6 +91,9 @@ private:
   void remove_image();
   void handle_remove_image(int r);
 
+  void notify_trash_removed();
+  void handle_notify_trash_removed(int r);
+
   void finish(int r);
 
 };
@@ -87,6 +102,6 @@ private:
 } // namespace mirror
 } // namespace rbd
 
-extern template class rbd::mirror::image_deleter::RemoveRequest<librbd::ImageCtx>;
+extern template class rbd::mirror::image_deleter::TrashRemoveRequest<librbd::ImageCtx>;
 
-#endif // CEPH_RBD_MIRROR_IMAGE_DELETER_REMOVE_REQUEST_H
+#endif // CEPH_RBD_MIRROR_IMAGE_DELETER_TRASH_REMOVE_REQUEST_H
