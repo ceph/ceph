@@ -228,8 +228,10 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
   string err;
   auto id = strict_strtol(shard.data(), 10, &err);
   if (!err.empty()) {
-    ldout(cct, 0) << "ERROR: failed to parse bucket shard '"
-        << instance.data() << "': " << err << dendl;
+    if (cct) {
+      ldout(cct, 0) << "ERROR: failed to parse bucket shard '"
+          << instance.data() << "': " << err << dendl;
+    }
     return -EINVAL;
   }
 
