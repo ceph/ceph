@@ -95,6 +95,8 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down twice does not wipe old_max_mds.
         """
 
+        self.mount_a.umount_wait()
+
         self.grow(2)
         self.fs.set_down()
         self.wait_for_health("MDS_ALL_DOWN", 30)
@@ -108,6 +110,8 @@ class TestClusterResize(CephFSTestCase):
         That a health error is generated when FS has no active MDS and cleared
         when actives come back online.
         """
+
+        self.mount_a.umount_wait()
 
         self.fs.set_down()
         self.wait_for_health("MDS_ALL_DOWN", 30)
