@@ -225,10 +225,15 @@ void PostAcquireRequest<I>::handle_open_object_map(int r) {
 
   if (r < 0) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(r) << dendl;
-
-    r = 0;
     delete m_object_map;
     m_object_map = nullptr;
+
+    if (r != -EFBIG) {
+      save_result(r);
+      revert();
+      finish();
+      return;
+    }
   }
 
   send_open_journal();
@@ -256,8 +261,10 @@ void PostAcquireRequest<I>::handle_close_object_map(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  // object map should never result in an error
-  assert(r == 0);
+  if (r < 0) {
+    lderr(cct) << "failed to close object map: " << cpp_strerror(r) << dendl;
+  }
+
   revert();
   finish();
 }

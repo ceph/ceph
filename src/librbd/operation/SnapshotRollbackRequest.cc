@@ -189,7 +189,15 @@ Context *SnapshotRollbackRequest<I>::handle_rollback_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to roll back object "
+               << "map: " << cpp_strerror(*result) << dendl;
+
+    ceph_assert(m_object_map == nullptr);
+    apply();
+    return this->create_context_finisher(*result);
+  }
+
   send_rollback_objects();
   return nullptr;
 }
@@ -269,7 +277,16 @@ Context *SnapshotRollbackRequest<I>::handle_refresh_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to open object map: "
+               << cpp_strerror(*result) << dendl;
+    delete m_object_map;
+    m_object_map = nullptr;
+    apply();
+
+    return this->create_context_finisher(*result);
+  }
+
   return send_invalidate_cache();
 }
 

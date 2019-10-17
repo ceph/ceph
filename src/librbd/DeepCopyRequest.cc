@@ -226,7 +226,13 @@ template <typename I>
 void DeepCopyRequest<I>::handle_copy_object_map(int r) {
   ldout(m_cct, 20) << dendl;
 
-  assert(r == 0);
+  if (r < 0) {
+    lderr(m_cct) << "failed to roll back object map: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+
   send_refresh_object_map();
 }
 
@@ -260,9 +266,18 @@ template <typename I>
 void DeepCopyRequest<I>::handle_refresh_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  if (r < 0) {
+    lderr(m_cct) << "failed to open object map: " << cpp_strerror(r)
+                 << dendl;
+    delete m_object_map;
+
+    finish(r);
+    return;
+  }
+
   {
     RWLock::WLocker snap_locker(m_dst_image_ctx->snap_lock);
+    RWLock::WLocker object_map_locker(m_dst_image_ctx->object_map_lock);
     std::swap(m_dst_image_ctx->object_map, m_object_map);
   }
   delete m_object_map;

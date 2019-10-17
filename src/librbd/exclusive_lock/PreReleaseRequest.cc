@@ -271,10 +271,11 @@ void PreReleaseRequest<I>::handle_close_object_map(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  // object map shouldn't return errors
-  assert(r == 0);
-  delete m_object_map;
+  if (r < 0) {
+    lderr(cct) << "failed to close object map: " << cpp_strerror(r) << dendl;
+  }
 
+  delete m_object_map;
   send_unlock();
 }
 
