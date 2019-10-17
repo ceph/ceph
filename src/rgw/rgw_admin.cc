@@ -652,6 +652,7 @@ enum class OPT {
   SYNC_GROUP_CREATE,
   SYNC_GROUP_REMOVE,
   SYNC_GROUP_FLOW_ADD,
+  SYNC_GROUP_FLOW_REMOVE,
   SYNC_POLICY_GET,
   BILOG_LIST,
   BILOG_TRIM,
@@ -850,6 +851,7 @@ static SimpleCmd::Commands all_cmds = {
   { "sync group create", OPT::SYNC_GROUP_CREATE },
   { "sync group remove", OPT::SYNC_GROUP_REMOVE },
   { "sync group flow add", OPT::SYNC_GROUP_FLOW_ADD },
+  { "sync group flow remove", OPT::SYNC_GROUP_FLOW_REMOVE },
   { "bilog list", OPT::BILOG_LIST },
   { "bilog trim", OPT::BILOG_TRIM },
   { "bilog status", OPT::BILOG_STATUS },
@@ -2589,6 +2591,61 @@ static bool symmetrical_flow_opt(const string& opt)
 static bool directional_flow_opt(const string& opt)
 {
   return (opt == "directional" || opt == "direction");
+}
+
+template <class T>
+static bool require_opt(std::optional<T> opt, const string& err_msg)
+{
+  if (!opt) {
+    cerr << err_msg << std::endl;
+    return false;
+  }
+  return true;
+}
+
+template <class T>
+static bool require_opt(std::optional<T> opt, bool extra_check, const string& err_msg)
+{
+  if (!opt || !extra_check) {
+    cerr << err_msg << std::endl;
+    return false;
+  }
+  return true;
+}
+
+template <class T>
+static bool require_non_empty_opt(std::optional<T> opt, const string& err_msg)
+{
+  if (!opt || opt->empty()) {
+    cerr << err_msg << std::endl;
+    return false;
+  }
+  return true;
+}
+
+template <class T>
+static bool require_non_empty_opt(std::optional<T> opt, bool extra_check, const string& err_msg)
+{
+  if (!opt || opt->empty() || !extra_check) {
+    cerr << err_msg << std::endl;
+    return false;
+  }
+  return true;
+}
+
+#define CHECK_TRUE(x, err) \
+  do { \
+    if (!x) return err; \
+  } while (0)
+
+template <class T>
+static void show_result(T& obj,
+                        Formatter *formatter,
+                        ostream& os)
+{
+  encode_json("obj", obj, formatter);
+
+  formatter->flush(cout);
 }
 
 int main(int argc, const char **argv)
@@ -7571,14 +7628,8 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_CREATE) {
-    if (!opt_group_id) {
-      cerr << "ERROR: --group-id is not specified" << std::endl;
-      return EINVAL;
-    }
-    if (!opt_status) {
-      cerr << "ERROR: --status is not specified (options: forbidden, enabled, activated)" << std::endl;
-      return EINVAL;
-    }
+    CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
+    CHECK_TRUE(require_opt(opt_status, "ERROR: --status is not specified (options: forbidden, enabled, activated)"), EINVAL);
 
     RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
     ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
@@ -7607,15 +7658,12 @@ next:
       Formatter::ObjectSection os(*formatter, "result");
       encode_json("sync_policy", zonegroup.sync_policy, formatter);
     }
-
+   
     formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_REMOVE) {
-    if (!opt_group_id) {
-      cerr << "ERROR: --group-id not specified" << std::endl;
-      return EINVAL;
-    }
+    CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
 
     RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
     ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
@@ -7641,22 +7689,12 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_ADD) {
-    if (!opt_group_id) {
-      cerr << "ERROR: --group-id not specified" << std::endl;
-      return EINVAL;
-    }
-
-    if (!opt_flow_id) {
-      cerr << "ERROR: --flow-id not specified" << std::endl;
-      return EINVAL;
-    }
-
-    if (!opt_flow_type ||
-        (!symmetrical_flow_opt(*opt_flow_type) &&
-         !directional_flow_opt(*opt_flow_type))) {
-      cerr << "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)" << std::endl;
-      return EINVAL;
-    }
+    CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
+    CHECK_TRUE(require_opt(opt_flow_id, "ERROR: --flow-id not specified"), EINVAL);
+    CHECK_TRUE(require_opt(opt_flow_type,
+                           (symmetrical_flow_opt(*opt_flow_type) ||
+                            directional_flow_opt(*opt_flow_type)),
+                           "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)"), EINVAL);
 
     RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
     ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
@@ -7674,10 +7712,7 @@ next:
     auto& group = iter->second;
 
     if (symmetrical_flow_opt(*opt_flow_type)) {
-      if (!opt_zones || opt_zones->empty()) {
-        cerr << "ERROR: --zones not provided for symmetrical flow, or is empty" << std::endl;
-        return EINVAL;
-      }
+      CHECK_TRUE(require_non_empty_opt(opt_zones, "ERROR: --zones not provided for symmetrical flow, or is empty"), EINVAL);
 
       rgw_sync_symmetric_group *flow_group;
 
@@ -7687,18 +7722,53 @@ next:
         flow_group->zones.insert(z);
       }
     } else { /* directional */
-      if (!opt_source_zone || opt_source_zone->empty()) {
-        cerr << "ERROR: --source-zone not provided for directional flow rule, or is empty" << std::endl;
-        return EINVAL;
-      }
-      if (!opt_dest_zone || opt_dest_zone->empty()) {
-        cerr << "ERROR: --dest-zone not provided for directional flow rule, or is empty" << std::endl;
-        return EINVAL;
-      }
+      CHECK_TRUE(require_non_empty_opt(opt_source_zone, "ERROR: --source-zone not provided for directional flow rule, or is empty"), EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_dest_zone, "ERROR: --dest-zone not provided for directional flow rule, or is empty"), EINVAL);
 
       rgw_sync_directional_rule *flow_rule;
 
       group.data_flow.find_directional(*opt_source_zone, *opt_dest_zone, true, &flow_rule);
+    }
+
+    ret = zonegroup.update();
+    if (ret < 0) {
+      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    show_result(zonegroup.sync_policy, formatter, cout);
+  }
+
+  if (opt_cmd == OPT::SYNC_GROUP_FLOW_REMOVE) {
+    CHECK_TRUE(require_opt(opt_group_id, "ERROR: --group-id not specified"), EINVAL);
+    CHECK_TRUE(require_opt(opt_flow_id, "ERROR: --flow-id not specified"), EINVAL);
+    CHECK_TRUE(require_opt(opt_flow_type,
+                           (symmetrical_flow_opt(*opt_flow_type) ||
+                            directional_flow_opt(*opt_flow_type)),
+                           "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)"), EINVAL);
+
+    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
+    if (iter == zonegroup.sync_policy.groups.end()) {
+      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      return ENOENT;
+    }
+
+    auto& group = iter->second;
+
+    if (symmetrical_flow_opt(*opt_flow_type)) {
+      group.data_flow.remove_symmetrical(*opt_flow_id, opt_zones);
+    } else { /* directional */
+      CHECK_TRUE(require_non_empty_opt(opt_source_zone, "ERROR: --source-zone not provided for directional flow rule, or is empty"), EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_dest_zone, "ERROR: --dest-zone not provided for directional flow rule, or is empty"), EINVAL);
+
+      group.data_flow.remove_directional(*opt_source_zone, *opt_dest_zone);
     }
     
     ret = zonegroup.update();
@@ -7707,12 +7777,7 @@ next:
       return -ret;
     }
 
-    {
-      Formatter::ObjectSection os(*formatter, "result");
-      encode_json("sync_policy", zonegroup.sync_policy, formatter);
-    }
-
-    formatter->flush(cout);
+    show_result(zonegroup.sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_POLICY_GET) {
@@ -7723,12 +7788,7 @@ next:
       return -ret;
     }
 
-    {
-      Formatter::ObjectSection os(*formatter, "result");
-      encode_json("sync_policy", zonegroup.sync_policy, formatter);
-    }
-
-    formatter->flush(cout);
+    show_result(zonegroup.sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::BILOG_TRIM) {
