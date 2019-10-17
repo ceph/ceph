@@ -844,22 +844,24 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
 void rgw_sync_directional_rule::dump(Formatter *f) const
 {
   encode_json("source_zone", source_zone, f);
-  encode_json("target_zone", target_zone, f);
+  encode_json("dest_zone", dest_zone, f);
 }
 
 void rgw_sync_directional_rule::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("source_zone", source_zone, obj);
-  JSONDecoder::decode_json("target_zone", target_zone, obj);
+  JSONDecoder::decode_json("dest_zone", dest_zone, obj);
 }
 
 void rgw_sync_symmetric_group::dump(Formatter *f) const
 {
+  encode_json("id", id, f);
   encode_json("zones", zones, f);
 }
 
 void rgw_sync_symmetric_group::decode_json(JSONObj *obj)
 {
+  JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("zones", zones, obj);
 }
 
@@ -878,13 +880,13 @@ void rgw_sync_bucket_entity::decode_json(JSONObj *obj)
 void rgw_sync_bucket_pipe::dump(Formatter *f) const
 {
   encode_json("source", source, f);
-  encode_json("target", target, f);
+  encode_json("dest", dest, f);
 }
 
 void rgw_sync_bucket_pipe::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("source", source, obj);
-  JSONDecoder::decode_json("target", target, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
 }
 
 void rgw_sync_data_flow_group::dump(Formatter *f) const
