@@ -1493,9 +1493,6 @@ protected:
   bool old_peering_evt(PGPeeringEventRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
   }
-  static bool have_same_or_newer_map(epoch_t cur_epoch, epoch_t e) {
-    return e <= cur_epoch;
-  }
   bool have_same_or_newer_map(epoch_t e) {
     return e <= get_osdmap_epoch();
   }
