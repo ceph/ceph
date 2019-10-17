@@ -357,13 +357,12 @@ static int map_image(struct krbd_ctx *ctx, const krbd_spec& spec,
   string buf;
   int r;
 
-  r = build_map_buf(ctx->cct, spec, options, &buf);
-  if (r < 0)
-    return r;
-
   /*
    * Modprobe rbd kernel module.  If it supports single-major device
    * number allocation scheme, make sure it's turned on.
+   *
+   * Do this before calling build_map_buf() - it wants "ceph" key type
+   * registered.
    */
   if (access("/sys/bus/rbd", F_OK) != 0) {
     const char *module_options = NULL;
@@ -380,6 +379,10 @@ static int map_image(struct krbd_ctx *ctx, const krbd_spec& spec,
        */
     }
   }
+
+  r = build_map_buf(ctx->cct, spec, options, &buf);
+  if (r < 0)
+    return r;
 
   return do_map(ctx->udev, spec, buf, pname);
 }
