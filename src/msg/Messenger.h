@@ -506,14 +506,6 @@ public:
     Message *m, const entity_addrvec_t& addrs) {
     return send_to(m, CEPH_ENTITY_TYPE_MDS, addrs);
   }
-  int send_to_osd(
-    Message *m, const entity_addrvec_t& addrs) {
-    return send_to(m, CEPH_ENTITY_TYPE_OSD, addrs);
-  }
-  int send_to_mgr(
-    Message *m, const entity_addrvec_t& addrs) {
-    return send_to(m, CEPH_ENTITY_TYPE_MGR, addrs);
-  }
 
   /**
    * @} // Messaging

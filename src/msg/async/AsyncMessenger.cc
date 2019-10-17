@@ -939,10 +939,9 @@ bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   return false;
 }
 
-int AsyncMessenger::reap_dead()
+void AsyncMessenger::reap_dead()
 {
   ldout(cct, 1) << __func__ << " start" << dendl;
-  int num = 0;
 
   std::lock_guard l1{lock};
 
@@ -955,10 +954,7 @@ int AsyncMessenger::reap_dead()
         conns.erase(conns_it);
       accepting_conns.erase(c);
       anon_conns.erase(c);
-      ++num;
     }
     deleted_conns.clear();
   }
-
-  return num;
 }

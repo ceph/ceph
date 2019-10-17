@@ -423,7 +423,7 @@ public:
    *
    * See "deleted_conns"
    */
-  int reap_dead();
+  void reap_dead();
 
   /**
    * @} // AsyncMessenger Internals
