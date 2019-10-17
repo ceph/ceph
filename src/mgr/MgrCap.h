@@ -104,7 +104,7 @@ struct MgrCapGrant {
   // needed by expand_profile() (via is_match()) and cached here.
   mutable std::list<MgrCapGrant> profile_grants;
 
-  void expand_profile() const;
+  void expand_profile(std::ostream *err=nullptr) const;
 
   MgrCapGrant() : allow(0) {}
   MgrCapGrant(std::string&& service,

@@ -131,7 +131,7 @@ void MgrCapGrant::parse_network() {
                                   &network_prefix);
 }
 
-void MgrCapGrant::expand_profile() const {
+void MgrCapGrant::expand_profile(std::ostream *err) const {
   // only generate this list once
   if (!profile_grants.empty()) {
     return;
@@ -160,6 +160,12 @@ void MgrCapGrant::expand_profile() const {
     for (auto& [key, constraint] : arguments) {
       if (key == "pool" || key == "namespace") {
         filtered_arguments[key] = std::move(constraint);
+      } else {
+        if (err != nullptr) {
+          *err << "profile '" << profile << "' does not recognize key '" << key
+               << "'";
+        }
+        return;
       }
     }
 
@@ -173,6 +179,10 @@ void MgrCapGrant::expand_profile() const {
     profile_grants.push_back({{}, "rbd_support", {}, {},
                               std::move(filtered_arguments), perms});
     return;
+  }
+
+  if (err != nullptr) {
+    *err << "unrecognized profile '" << profile << "'";
   }
 }
 
@@ -218,7 +228,7 @@ mgr_rwxa_t MgrCapGrant::get_allowed(
     const std::string& m, const std::string& c,
     const std::map<std::string, std::string>& args) const {
   if (!profile.empty()) {
-    expand_profile();
+    expand_profile(nullptr);
     mgr_rwxa_t a;
     for (auto& grant : profile_grants) {
       a = a | grant.get_allowed(cct, name, s, m, c, args);
@@ -523,8 +533,22 @@ bool MgrCap::parse(const std::string& str, ostream *err) {
   bool r = qi::parse(iter, end, exp, *this);
   if (r && iter == end) {
     text = str;
+
+    std::stringstream profile_err;
     for (auto& g : grants) {
       g.parse_network();
+
+      if (!g.profile.empty()) {
+        g.expand_profile(&profile_err);
+      }
+    }
+
+    if (!profile_err.str().empty()) {
+      if (err != nullptr) {
+        *err << "mgr capability parse failed during profile evaluation: "
+             << profile_err.str();
+      }
+      return false;
     }
     return true;
   }
