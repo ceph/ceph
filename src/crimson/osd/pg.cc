@@ -439,22 +439,21 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
   return backend->get_object_state(oid).safe_then([this, m](auto os) mutable {
-    return seastar::do_with(OpsExecuter{std::move(os), *this/* as const& */, m},
-                         [this, m] (auto& ox) {
-      return crimson::do_for_each(m->ops, [this, &ox](OSDOp& osd_op) {
-        logger().debug("will be handling op {}", ceph_osd_op_name(osd_op.op.op));
-        return ox.execute_osd_op(osd_op);
-      }).safe_then([this, m, &ox] {
-        logger().debug("all operations have been executed successfully");
-        return std::move(ox).submit_changes([this, m] (auto&& txn, auto&& os) -> osd_op_errorator::future<> {
-          // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
-	  if (txn.empty()) {
-            logger().debug("txn is empty, bypassing mutate");
-	    return osd_op_errorator::now();
-	  } else {
-	    return submit_transaction(std::move(os), std::move(txn), *m);
-	  }
-        });
+    auto ox =
+      std::make_unique<OpsExecuter>(std::move(os), *this/* as const& */, m);
+    return crimson::do_for_each(m->ops, [this, ox = ox.get()](OSDOp& osd_op) {
+      logger().debug("will be handling op {}", ceph_osd_op_name(osd_op.op.op));
+      return ox->execute_osd_op(osd_op);
+    }).safe_then([this, m, ox = std::move(ox)] {
+      logger().debug("all operations have been executed successfully");
+      return std::move(*ox).submit_changes([this, m] (auto&& txn, auto&& os) -> osd_op_errorator::future<> {
+        // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
+        if (txn.empty()) {
+          logger().debug("txn is empty, bypassing mutate");
+          return osd_op_errorator::now();
+        } else {
+          return submit_transaction(std::move(os), std::move(txn), *m);
+        }
       });
     });
   }).safe_then([m,this] {
@@ -489,13 +488,11 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 
 seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
 {
-  return seastar::do_with(OpsExecuter{*this/* as const& */, m},
-                          [this, m] (auto& ox) {
-    return seastar::do_for_each(m->ops, [this, &ox](OSDOp& osd_op) {
-      logger().debug("will be handling pg op {}", ceph_osd_op_name(osd_op.op.op));
-      return ox.execute_pg_op(osd_op);
-    });
-  }).then([m, this] {
+  auto ox = std::make_unique<OpsExecuter>(*this/* as const& */, m);
+  return seastar::do_for_each(m->ops, [this, ox = ox.get()](OSDOp& osd_op) {
+    logger().debug("will be handling pg op {}", ceph_osd_op_name(osd_op.op.op));
+    return ox->execute_pg_op(osd_op);
+  }).then([m, this, ox = std::move(ox)] {
     auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
                                            CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
                                            false);
