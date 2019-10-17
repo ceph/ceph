@@ -438,8 +438,8 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
   return backend->get_object_state(oid).safe_then([this, m](auto os) mutable {
-    return crimson::do_with(OpsExecuter{std::move(os), *this/* as const& */, m},
-                            [this, m] (auto& ox) {
+    return seastar::do_with(OpsExecuter{std::move(os), *this/* as const& */, m},
+                         [this, m] (auto& ox) {
       return crimson::do_for_each(m->ops, [this, &ox](OSDOp& osd_op) {
         logger().debug("will be handling op {}", ceph_osd_op_name(osd_op.op.op));
         return ox.execute_osd_op(osd_op);
