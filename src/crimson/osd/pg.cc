@@ -435,6 +435,7 @@ seastar::future<> PG::submit_transaction(boost::local_shared_ptr<ObjectState>&& 
 
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 {
+  using osd_op_errorator = OpsExecuter::osd_op_errorator;
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
   return backend->get_object_state(oid).safe_then([this, m](auto os) mutable {
@@ -445,11 +446,11 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
         return ox.execute_osd_op(osd_op);
       }).safe_then([this, m, &ox] {
         logger().debug("all operations have been executed successfully");
-        return std::move(ox).submit_changes([this, m] (auto&& txn, auto&& os) {
+        return std::move(ox).submit_changes([this, m] (auto&& txn, auto&& os) -> osd_op_errorator::future<> {
           // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
 	  if (txn.empty()) {
             logger().debug("txn is empty, bypassing mutate");
-	    return seastar::now();
+	    return osd_op_errorator::now();
 	  } else {
 	    return submit_transaction(std::move(os), std::move(txn), *m);
 	  }
