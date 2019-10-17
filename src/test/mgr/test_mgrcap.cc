@@ -33,9 +33,9 @@ const char *parse_good[] = {
   "\tallow\nrwx\t",
   "allow service=foo x",
   "allow service=\"froo\" x",
-  "allow profile osd",
-  "allow profile osd-bootstrap",
-  "allow profile \"mds-bootstrap\", allow *",
+  "allow profile read-only",
+  "allow profile read-write",
+  "allow profile \"rbd-read-only\", allow *",
   "allow command \"a b c\"",
   "allow command abc",
   "allow command abc with arg=foo",
@@ -63,16 +63,16 @@ const char *parse_good[] = {
   "allow command \"foo bar\" with arg=\"baz\"",
   "allow command \"foo bar\" with arg=\"baz.xx\"",
   "allow command \"foo bar\" with arg = \"baz.xx\"",
-  "profile osd",
+  "profile crash",
   "profile rbd pool=ABC namespace=NS",
-  "profile \"mds-bootstrap\", profile foo",
+  "profile \"rbd-read-only\", profile crash",
   "allow * network 1.2.3.4/24",
   "allow * network ::1/128",
   "allow * network [aa:bb::1]/128",
   "allow service=foo x network 1.2.3.4/16",
   "allow command abc network 1.2.3.4/8",
-  "profile osd network 1.2.3.4/32",
-  "allow profile mon network 1.2.3.4/32",
+  "profile crash network 1.2.3.4/32",
+  "allow profile crash network 1.2.3.4/32",
   0
 };
 
@@ -93,10 +93,8 @@ const char *parse_identity[] = {
   "allow r",
   "allow rwx",
   "allow service foo x",
-  "profile osd",
-  "profile osd-bootstrap",
-  "profile mds-bootstrap, allow *",
-  "profile \"foo bar\", allow *",
+  "profile crash",
+  "profile rbd-read-only, allow *",
   "profile rbd namespace=NS pool=ABC",
   "allow command abc",
   "allow command \"a b c\"",
@@ -266,6 +264,9 @@ TEST(MgrCap, Module) {
 TEST(MgrCap, Profile) {
   MgrCap cap;
   ASSERT_FALSE(cap.is_allow_all());
+
+  ASSERT_FALSE(cap.parse("profile unknown"));
+  ASSERT_FALSE(cap.parse("profile rbd invalid-key=value"));
 
   ASSERT_TRUE(cap.parse("profile rbd", nullptr));
   ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "abc", "", {}, true, false,
