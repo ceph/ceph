@@ -40,6 +40,7 @@
 #include "events/ESession.h"
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
+#include "events/EPurged.h"
 
 #include "include/stringify.h"
 #include "include/filepath.h"
@@ -340,15 +341,20 @@ class C_MDS_session_finish : public ServerLogContext {
   version_t cmapv;
   interval_set<inodeno_t> inos;
   version_t inotablev;
+  interval_set<inodeno_t> purge_inos;
+  LogSegment *ls = nullptr;
   Context *fin;
 public:
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv, Context *fin_ = NULL) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv,
+		       interval_set<inodeno_t> _purge_inos, LogSegment *_ls, Context *fin_ = NULL) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), purge_inos(std::move(_purge_inos)), ls(_ls), fin(fin_){}
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
+    server->_session_logged(session, state_seq, open, cmapv, inos, inotablev, purge_inos, ls);
     if (fin) {
       fin->complete(r);
     }
@@ -747,11 +753,23 @@ void Server::finish_flush_session(Session *session, version_t seq)
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
-			     interval_set<inodeno_t>& inos, version_t piv)
+			     const interval_set<inodeno_t>& inos, version_t piv,
+			     const interval_set<inodeno_t>& purge_inos, LogSegment *ls)
 {
-  dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
-	   << " " << pv << dendl;
-
+  dout(10) << "_session_logged " << session->info.inst
+	   << " state_seq " << state_seq
+	   << " " << (open ? "open":"close")
+	   << " " << pv
+	   << " purge_inos : " << purge_inos << dendl;
+  
+  if (NULL != ls) {
+    dout(10)  << "_session_logged seq : " << ls->seq << dendl;
+    if (purge_inos.size()){
+      ls->purge_inodes.insert(purge_inos);
+      mdcache->purge_inodes(purge_inos, ls);
+    }
+  }
+  
   if (piv) {
     ceph_assert(session->is_closing() || session->is_killing() ||
 	   session->is_opening()); // re-open closing session
@@ -1160,7 +1178,7 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
  * XXX bump in the interface here, not using an MDSContext here
  * because all the callers right now happen to use a SaferCond
  */
-void Server::kill_session(Session *session, Context *on_safe)
+void Server::kill_session(Session *session, Context *on_safe, bool need_purge_inos)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
@@ -1169,7 +1187,7 @@ void Server::kill_session(Session *session, Context *on_safe)
        session->is_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
-    journal_close_session(session, Session::STATE_KILLING, on_safe);
+    journal_close_session(session, Session::STATE_KILLING, on_safe, need_purge_inos);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
     if (session->is_closing() ||
@@ -1227,8 +1245,13 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
   return victims.size();
 }
 
-void Server::journal_close_session(Session *session, int state, Context *on_safe)
+void Server::journal_close_session(Session *session, int state, Context *on_safe, bool need_purge_inos)
 {
+  dout(10) << __func__ << " : "
+	   << "("<< need_purge_inos << ")"
+	   << session->info.inst
+	   << "(" << session->info.prealloc_inos.size() << "|" << session->pending_prealloc_inos.size() << ")" << dendl;
+
   uint64_t sseq = mds->sessionmap.set_state(session, state);
   version_t pv = mds->sessionmap.mark_projected(session);
   version_t piv = 0;
@@ -1236,16 +1259,28 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   // release alloc and pending-alloc inos for this session
   // and wipe out session state, in case the session close aborts for some reason
   interval_set<inodeno_t> both;
-  both.insert(session->info.prealloc_inos);
   both.insert(session->pending_prealloc_inos);
+  if (!need_purge_inos)
+    both.insert(session->info.prealloc_inos);
   if (both.size()) {
     mds->inotable->project_release_ids(both);
     piv = mds->inotable->get_projected_version();
   } else
     piv = 0;
-
-  mdlog->start_submit_entry(new ESession(session->info.inst, false, pv, both, piv),
-			    new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe));
+  
+  if(need_purge_inos && session->info.prealloc_inos.size()) {
+    dout(10) << "start purge indoes " << session->info.prealloc_inos << dendl;
+    LogSegment* ls = mdlog->get_current_segment();
+    LogEvent* e = new ESession(session->info.inst, false, pv, both, piv, session->info.prealloc_inos);
+    MDSLogContextBase* c = new C_MDS_session_finish(this, session, sseq, false, pv, both, piv,
+						    session->info.prealloc_inos, ls, on_safe);
+    mdlog->start_submit_entry(e, c);
+  } else {
+    interval_set<inodeno_t> empty;
+    LogEvent* e = new ESession(session->info.inst, false, pv, both, piv, empty);
+    MDSLogContextBase* c = new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe);
+    mdlog->start_submit_entry(e, c);
+  }
   mdlog->flush();
 
   // clean up requests, too
@@ -1593,7 +1628,7 @@ void Server::reconnect_tick()
       mds->evict_client(session->get_client().v, false, true, ss,
 			gather.new_sub());
     } else {
-      kill_session(session, NULL);
+      kill_session(session, NULL, true);
     }
 
     failed_reconnects++;
@@ -4353,7 +4388,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   if (cap && (cmode & CEPH_FILE_MODE_WR)) {
     in->inode.client_ranges[client].range.first = 0;
-    in->inode.client_ranges[client].range.last = in->inode.get_layout_size_increment();
+    in->inode.client_ranges[client].range.last = in->inode.layout.stripe_unit;
     in->inode.client_ranges[client].follows = follows;
     cap->mark_clientwriteable();
   }
@@ -5951,7 +5986,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
       dout(15) << " setting a client_range too, since this is a regular file" << dendl;
       newi->inode.client_ranges[client].range.first = 0;
-      newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
+      newi->inode.client_ranges[client].range.last = newi->inode.layout.stripe_unit;
       newi->inode.client_ranges[client].follows = follows;
       cap->mark_clientwriteable();
     }

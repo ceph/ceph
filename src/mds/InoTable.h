@@ -32,8 +32,8 @@ class InoTable : public MDSTable {
   void project_alloc_ids(interval_set<inodeno_t>& inos, int want);
   void apply_alloc_ids(interval_set<inodeno_t>& inos);
 
-  void project_release_ids(interval_set<inodeno_t>& inos);
-  void apply_release_ids(interval_set<inodeno_t>& inos);
+  void project_release_ids(const interval_set<inodeno_t>& inos);
+  void apply_release_ids(const interval_set<inodeno_t>& inos);
 
   void replay_alloc_id(inodeno_t ino);
   void replay_alloc_ids(interval_set<inodeno_t>& inos);
