@@ -37,6 +37,24 @@ class OSDOp;
 
 namespace crimson::osd {
 class OpsExecuter {
+  using call_errorator = crimson::errorator<
+    crimson::stateful_ec,
+    crimson::ct_error::enoent,
+    crimson::ct_error::invarg,
+    crimson::ct_error::permission_denied,
+    crimson::ct_error::operation_not_supported,
+    crimson::ct_error::input_output_error>;
+  using read_errorator = PGBackend::read_errorator;
+  using get_attr_errorator = PGBackend::get_attr_errorator;
+
+public:
+  using osd_op_errorator = crimson::compound_errorator_t<
+    call_errorator,
+    read_errorator,
+    get_attr_errorator,
+    PGBackend::stat_errorator>;
+
+private:
   // an operation can be divided into two stages: main and effect-exposing
   // one. The former is performed immediately on call to `do_osd_op()` while
   // the later on `submit_changes()` – after successfully processing main
@@ -44,7 +62,7 @@ class OpsExecuter {
   // scheduled effect-exposing stages will be executed.
   // when operation requires this division, `with_effect()` should be used.
   struct effect_t {
-    virtual seastar::future<> execute() = 0;
+    virtual osd_op_errorator::future<> execute() = 0;
     virtual ~effect_t() = default;
   };
 
@@ -65,13 +83,6 @@ class OpsExecuter {
   template <class Context, class MainFunc, class EffectFunc>
   auto with_effect(Context&& ctx, MainFunc&& main_func, EffectFunc&& effect_func);
 
-  using call_errorator = crimson::errorator<
-    crimson::stateful_ec,
-    crimson::ct_error::enoent,
-    crimson::ct_error::invarg,
-    crimson::ct_error::permission_denied,
-    crimson::ct_error::operation_not_supported,
-    crimson::ct_error::input_output_error>;
   call_errorator::future<> do_op_call(class OSDOp& osd_op);
 
   template <class Func>
@@ -104,9 +115,6 @@ class OpsExecuter {
     return crimson::ct_error::operation_not_supported::make();
   }
 
-  using read_errorator = PGBackend::read_errorator;
-  using get_attr_errorator = PGBackend::get_attr_errorator;
-
 public:
   OpsExecuter(PGBackend::cached_os_t os, PG& pg, Ref<MOSDOp> msg)
     : os(std::move(os)),
@@ -118,16 +126,11 @@ public:
     : OpsExecuter{PGBackend::cached_os_t{}, pg, std::move(msg)}
   {}
 
-  using osd_op_errorator = crimson::compound_errorator_t<
-    call_errorator,
-    read_errorator,
-    get_attr_errorator,
-    PGBackend::stat_errorator>;
   osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
   seastar::future<> execute_pg_op(class OSDOp& osd_op);
 
   template <typename Func>
-  seastar::future<> submit_changes(Func&& f) &&;
+  osd_op_errorator::future<> submit_changes(Func&& f) &&;
 
   const auto& get_message() const {
     return *msg;
@@ -152,7 +155,7 @@ auto OpsExecuter::with_effect(
 
     task_t(Context&& ctx, EffectFunc&& effect_func)
        : ctx(std::move(ctx)), effect_func(std::move(effect_func)) {}
-    seastar::future<> execute() final {
+    osd_op_errorator::future<> execute() final {
       return std::move(effect_func)(std::move(ctx));
     }
   };
@@ -164,18 +167,16 @@ auto OpsExecuter::with_effect(
 }
 
 template <typename Func>
-seastar::future<> OpsExecuter::submit_changes(Func&& f) && {
-  return std::forward<Func>(f)(std::move(txn), std::move(os)).then(
-    // NOTE: this lambda could be scheduled conditionally (if_then?)
-    [this] {
-      return seastar::do_until(
-        [this] { return op_effects.empty(); },
-        [this] {
-          auto fut = op_effects.front()->execute();
-          op_effects.pop_front();
-          return fut;
-        });
+OpsExecuter::osd_op_errorator::future<> OpsExecuter::submit_changes(Func&& f) && {
+  if (__builtin_expect(op_effects.empty(), true)) {
+    return std::forward<Func>(f)(std::move(txn), std::move(os));
+  }
+  return std::forward<Func>(f)(std::move(txn), std::move(os)).safe_then([this] {
+    // let's do the cleaning of `op_effects` in destructor
+    return crimson::do_for_each(op_effects, [] (auto& op_effect) {
+      return op_effect->execute();
     });
+  });
 }
 
 } // namespace crimson::osd
