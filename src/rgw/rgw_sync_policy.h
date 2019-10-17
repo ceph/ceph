@@ -360,7 +360,9 @@ struct rgw_sync_data_flow_group {
   }
 
   bool find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group);
+  void remove_symmetrical(const string& flow_id, std::optional<std::vector<string> > zones);
   bool find_directional(const string& source_zone, const string& dest_zone, bool create, rgw_sync_directional_rule **flow_group);
+  void remove_directional(const string& source_zone, const string& dest_zone);
 };
 WRITE_CLASS_ENCODER(rgw_sync_data_flow_group)
 
