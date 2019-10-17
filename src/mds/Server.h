@@ -106,6 +106,7 @@ private:
   feature_bitset_t required_client_features;
 
   double cap_revoke_eviction_timeout = 0;
+  uint64_t max_snaps_per_dir = 100;
 
   friend class MDSContinuation;
   friend class ServerContext;
