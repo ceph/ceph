@@ -126,9 +126,9 @@ protected:
 private:
   using cached_ss_t = boost::local_shared_ptr<SnapSet>;
   SharedLRU<hobject_t, SnapSet> ss_cache;
-  seastar::future<cached_ss_t> _load_ss(const hobject_t& oid);
+  get_os_errorator::future<cached_ss_t> _load_ss(const hobject_t& oid);
   SharedLRU<hobject_t, ObjectState> os_cache;
-  seastar::future<cached_os_t> _load_os(const hobject_t& oid);
+  get_os_errorator::future<cached_os_t> _load_os(const hobject_t& oid);
   virtual ll_read_errorator::future<ceph::bufferlist> _read(
     const hobject_t& hoid,
     size_t offset,
