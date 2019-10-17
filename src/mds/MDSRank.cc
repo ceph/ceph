@@ -1985,6 +1985,7 @@ void MDSRank::recovery_done(int oldstate)
     return;
 
   mdcache->start_recovered_truncates();
+  mdcache->start_purge_inodes();
   mdcache->do_file_recover();
 
   // tell connected clients
