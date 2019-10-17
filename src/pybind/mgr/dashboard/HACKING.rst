@@ -1175,16 +1175,18 @@ How to access the manager module instance from a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We provide the manager module instance as a global variable that can be
-imported in any module. We also provide a logger instance in the same way.
+imported in any module.
 
 Example:
 
 .. code-block:: python
 
+  import logging
   import cherrypy
-  from .. import logger, mgr
+  from .. import mgr
   from ..tools import ApiController, RESTController
 
+  logger = logging.getLogger(__name__)
 
   @ApiController('servers')
   class Servers(RESTController):
@@ -2024,7 +2026,7 @@ facilitates the basic tasks (Options, Commands, and common Mixins). The previous
 plugin could be rewritten like this:
 
 .. code-block:: python
-  
+
   from . import PLUGIN_MANAGER as PM
   from . import interfaces as I
   from .plugin import SimplePlugin as SP
