@@ -788,7 +788,6 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     }
   }
 
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
@@ -900,7 +899,6 @@ void RGWListBucket_ObjStore_S3::send_response()
 
   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
   RGWListBucket_ObjStore_S3::send_common_response();
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
@@ -953,7 +951,6 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
     s->formatter->dump_string("NextVersionIdContinuationToken", next_marker.instance);
   }
 
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
@@ -1054,7 +1051,6 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
 
   RGWListBucket_ObjStore_S3::send_common_response();
-  bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
