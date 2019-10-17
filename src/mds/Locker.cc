@@ -2956,7 +2956,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 
       // client flushes and releases caps at the same time. make sure MDCache::cow_inode()
       // properly setup CInode::client_need_snapflush
-      if ((m->get_dirty() & ~cap->issued()) && !need_snapflush)
+      if (!need_snapflush && (m->get_dirty() & ~cap->issued()) &&
+	  (m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))
 	cap->mark_needsnapflush();
     }
 
