@@ -187,3 +187,19 @@ class RbdMirroringTest(DashboardTestCase):
         site_name = self._get('/api/block/mirroring/site_name')
         self.assertStatus(200)
         self.assertEqual(expected_site_name, site_name)
+
+    def test_bootstrap(self):
+        self.update_pool('rbd', 'image')
+        token_data = self._task_post('/api/block/mirroring/pool/rbd/bootstrap/token', {})
+        self.assertStatus(200)
+
+        import_data = {
+            'token': token_data['token'],
+            'direction': 'invalid'}
+        self._task_post('/api/block/mirroring/pool/rbd/bootstrap/peer', import_data)
+        self.assertStatus(400)
+
+        # cannot import "youself" as peer
+        import_data['direction'] = 'rx'
+        self._task_post('/api/block/mirroring/pool/rbd/bootstrap/peer', import_data)
+        self.assertStatus(400)

@@ -9,7 +9,8 @@ except ImportError:
 from . import ControllerTestCase
 from .. import mgr
 from ..controllers.summary import Summary
-from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringSummary
+from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringSummary, \
+    RbdMirroringPoolBootstrap
 from ..services import progress
 
 
@@ -76,6 +77,50 @@ class RbdMirroringControllerTest(ControllerTestCase):
         self.assertJsonBody(result)
         mock_rbd_instance.mirror_site_name_set.assert_called_with(
             mock.ANY, result['site_name'])
+
+
+class RbdMirroringPoolBootstrapControllerTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        # pylint: disable=protected-access
+        RbdMirroringPoolBootstrap._cp_config['tools.authenticate.on'] = False
+        # pylint: enable=protected-access
+
+        cls.setup_controllers([RbdMirroringPoolBootstrap])
+
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
+    def test_token(self, mock_rbd):
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_peer_bootstrap_create.return_value = "1234"
+
+        self._post('/api/block/mirroring/pool/abc/bootstrap/token')
+        self.assertStatus(200)
+        self.assertJsonBody({"token": "1234"})
+        mgr.rados.open_ioctx.assert_called_with("abc")
+
+        mock_rbd_instance.mirror_peer_bootstrap_create.assert_called()
+
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
+    def test_peer(self, mock_rbd_module):
+        mock_rbd_instance = mock_rbd_module.RBD.return_value
+
+        values = {
+            "direction": "invalid",
+            "token": "1234"
+        }
+        self._post('/api/block/mirroring/pool/abc/bootstrap/peer', values)
+        self.assertStatus(500)
+        mgr.rados.open_ioctx.assert_called_with("abc")
+
+        values["direction"] = "rx"
+        self._post('/api/block/mirroring/pool/abc/bootstrap/peer', values)
+        self.assertStatus(200)
+        self.assertJsonBody({})
+        mgr.rados.open_ioctx.assert_called_with("abc")
+
+        mock_rbd_instance.mirror_peer_bootstrap_import.assert_called_with(
+            mock.ANY, mock_rbd_module.RBD_MIRROR_PEER_DIRECTION_RX, '1234')
 
 
 class RbdMirroringSummaryControllerTest(ControllerTestCase):
