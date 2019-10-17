@@ -9,7 +9,7 @@ except ImportError:
 from . import ControllerTestCase
 from .. import mgr
 from ..controllers.summary import Summary
-from ..controllers.rbd_mirroring import RbdMirroringSummary
+from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringSummary
 from ..services import progress
 
 
@@ -45,6 +45,37 @@ mock_osd_map = {
         'application_metadata': {'rbd'}
     }]
 }
+
+
+class RbdMirroringControllerTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        # pylint: disable=protected-access
+        RbdMirroring._cp_config['tools.authenticate.on'] = False
+        # pylint: enable=protected-access
+
+        cls.setup_controllers([RbdMirroring])
+
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
+    def test_site_name(self, mock_rbd):
+        result = {'site_name': 'fsid'}
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_site_name_get.return_value = \
+            result['site_name']
+
+        self._get('/api/block/mirroring/site_name')
+        self.assertStatus(200)
+        self.assertJsonBody(result)
+
+        result['site_name'] = 'site-a'
+        mock_rbd_instance.mirror_site_name_get.return_value = \
+            result['site_name']
+        self._put('/api/block/mirroring/site_name', result)
+        self.assertStatus(200)
+        self.assertJsonBody(result)
+        mock_rbd_instance.mirror_site_name_set.assert_called_with(
+            mock.ANY, result['site_name'])
 
 
 class RbdMirroringSummaryControllerTest(ControllerTestCase):

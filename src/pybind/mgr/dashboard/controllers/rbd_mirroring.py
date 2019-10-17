@@ -12,7 +12,7 @@ import cherrypy
 import rbd
 
 from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
-    RESTController
+    UpdatePermission, RESTController
 from .rbd import _rbd_call
 
 from .. import mgr
@@ -327,6 +327,26 @@ def _reset_view_cache():
     get_daemons_and_pools.reset()
     _get_pool_datum.reset()
     _get_content_data.reset()
+
+
+@ApiController('/block/mirroring', Scope.RBD_MIRRORING)
+class RbdMirroring(BaseController):
+
+    @Endpoint(method='GET', path='site_name')
+    @handle_rbd_mirror_error()
+    @ReadPermission
+    def get(self):
+        return self._get_site_name()
+
+    @Endpoint(method='PUT', path='site_name')
+    @handle_rbd_mirror_error()
+    @UpdatePermission
+    def set(self, site_name):
+        rbd.RBD().mirror_site_name_set(mgr.rados, site_name)
+        return self._get_site_name()
+
+    def _get_site_name(self):
+        return {'site_name': rbd.RBD().mirror_site_name_get(mgr.rados)}
 
 
 @ApiController('/block/mirroring/summary', Scope.RBD_MIRRORING)
