@@ -357,17 +357,7 @@ void StrayManager::advance_delayed()
       continue;
     }
 
-    const bool purging = eval_stray(dn);
-    if (!purging) {
-      derr << "Dentry " << *dn << " was purgeable but no longer is!" << dendl;
-      /*
-       * This can happen if a stray is purgeable, but has gained an extra
-       * reference by virtue of having its backtrace updated.
-       * FIXME perhaps we could simplify this further by
-       * avoiding writing the backtrace of purge-ready strays, so
-       * that this code could be more rigid?
-       */
-    }
+    eval_stray(dn);
   }
   logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
 }

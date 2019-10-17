@@ -2614,6 +2614,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     dout(7) << " not doing assim on " << *dir << dendl;
   }
 
+  MDSGatherBuilder gather(g_ceph_context);
+
   if (!finished.empty())
     mds->queue_waiters(finished);
 
@@ -2640,9 +2642,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	CDir *bound = cache->get_dirfrag(dirfrag_t(p->first, *q));
 	if (!bound) {
 	  dout(7) << "  opening bounding dirfrag " << *q << " on " << *in << dendl;
-	  cache->open_remote_dirfrag(in, *q,
-	      new C_MDS_RetryMessage(mds, m));
-	  return;
+	  cache->open_remote_dirfrag(in, *q, gather.new_sub());
+	  continue;
 	}
 
 	if (!bound->state_test(CDir::STATE_IMPORTBOUND)) {
@@ -2654,6 +2655,12 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	}
 	import_bounds.insert(bound);
       }
+    }
+
+    if (gather.has_subs()) {
+      gather.set_finisher(new C_MDS_RetryMessage(mds, m));
+      gather.activate();
+      return;
     }
 
     dout(7) << " all ready, noting auth and freezing import region" << dendl;
