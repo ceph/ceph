@@ -535,7 +535,7 @@ void KvStoreBench::print_time_data() {
 int KvStoreBench::teuthology_tests() {
   int err = 0;
   if (max_ops_in_flight > 1) {
-    test_teuthology_aio(&KvStoreBench::rand_distr, probs);
+    err = test_teuthology_aio(&KvStoreBench::rand_distr, probs);
   } else {
     err = test_teuthology_sync(&KvStoreBench::rand_distr, probs);
   }
