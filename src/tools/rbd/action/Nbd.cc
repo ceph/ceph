@@ -80,15 +80,48 @@ static int call_nbd_cmd(const po::variables_map &vm,
   return 0;
 }
 
+int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string image_name;
+  std::string snap_name;
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
+    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  spec->append(pool_name);
+  spec->append("/");
+  spec->append(image_name);
+  if (!snap_name.empty()) {
+    spec->append("@");
+    spec->append(snap_name);
+  }
+
+  return 0;
+}
+
 void get_show_arguments(po::options_description *positional,
-                        po::options_description *options)
-{ }
+                        po::options_description *options) {
+  at::add_format_options(options);
+}
 
 int execute_show(const po::variables_map &vm)
 {
   std::vector<const char*> args;
 
   args.push_back("list-mapped");
+
+  if (vm.count("format")) {
+    args.push_back("--format");
+    args.push_back(vm["format"].as<at::Format>().value.c_str());
+  }
+  if (vm["pretty-format"].as<bool>()) {
+    args.push_back("--pretty-format");
+  }
 
   return call_nbd_cmd(vm, args);
 }
@@ -103,33 +136,19 @@ void get_map_arguments(po::options_description *positional,
     ("exclusive", po::bool_switch(), "forbid writes by other clients")
     ("device", po::value<std::string>(), "specify nbd device")
     ("nbds_max", po::value<std::string>(), "override module param nbds_max")
-    ("max_part", po::value<std::string>(), "override module param max_part");
+    ("max_part", po::value<std::string>(), "override module param max_part")
+    ("timeout", po::value<std::string>(), "set nbd request timeout (seconds)");
 }
 
 int execute_map(const po::variables_map &vm)
 {
-  size_t arg_index = 0;
-  std::string pool_name;
-  std::string image_name;
-  std::string snap_name;
-  int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE);
-  if (r < 0) {
-    return r;
-  }
-
   std::vector<const char*> args;
 
   args.push_back("map");
   std::string img;
-  img.append(pool_name);
-  img.append("/");
-  img.append(image_name);
-  if (!snap_name.empty()) {
-    img.append("@");
-    img.append(snap_name);
+  int r = get_image_or_snap_spec(vm, &img);
+  if (r < 0) {
+    return r;
   }
   args.push_back(img.c_str());
 
@@ -151,6 +170,10 @@ int execute_map(const po::variables_map &vm)
     args.push_back("--max_part");
     args.push_back(vm["max_part"].as<std::string>().c_str());
   }
+  if (vm.count("timeout")) {
+    args.push_back("--timeout");
+    args.push_back(vm["timeout"].as<std::string>().c_str());
+  }
 
   return call_nbd_cmd(vm, args);
 }
@@ -159,7 +182,12 @@ void get_unmap_arguments(po::options_description *positional,
                    po::options_description *options)
 {
   positional->add_options()
-    ("device-spec", "specify nbd device");
+    ("image-or-snap-or-device-spec",
+     "image, snapshot, or device specification\n"
+     "[<pool-name>/]<image-name>[@<snapshot-name>] or <device-path>");
+  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
 }
 
 int execute_unmap(const po::variables_map &vm)
@@ -169,15 +197,25 @@ int execute_unmap(const po::variables_map &vm)
     device_name.clear();
   }
 
+  std::string image_name;
   if (device_name.empty()) {
-    std::cerr << "rbd: nbd unmap requires device path" << std::endl;
+    int r = get_image_or_snap_spec(vm, &image_name);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (device_name.empty() && image_name.empty()) {
+    std::cerr << "rbd: unmap requires either image name or device path"
+              << std::endl;
     return -EINVAL;
   }
 
   std::vector<const char*> args;
 
   args.push_back("unmap");
-  args.push_back(device_name.c_str());
+  args.push_back(device_name.empty() ? image_name.c_str() :
+                 device_name.c_str());
 
   return call_nbd_cmd(vm, args);
 }

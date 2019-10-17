@@ -64,6 +64,7 @@ function cleanup()
 	    sleep $s
 	    rbd -p ${POOL} status ${IMAGE} | grep 'Watchers: none' && break
 	done
+	rbd -p ${POOL} snap purge ${IMAGE}
 	rbd -p ${POOL} remove ${IMAGE}
     fi
 }
@@ -71,6 +72,27 @@ function cleanup()
 function expect_false()
 {
   if "$@"; then return 1; else return 0; fi
+}
+
+function get_pid()
+{
+    PID=$(rbd-nbd --format xml list-mapped | $XMLSTARLET sel -t -v \
+      "//devices/device[pool='${POOL}'][image='${IMAGE}'][device='${DEV}']/id")
+    test -n "${PID}"
+    ps -p ${PID} -o cmd | grep rbd-nbd
+}
+
+unmap_device()
+{
+    local unmap_dev=$1
+    local list_dev=$2
+    _sudo rbd-nbd unmap ${unmap_dev}
+
+    for s in 0.5 1 2 4 8 16 32; do
+	sleep ${s}
+        rbd-nbd list-mapped | expect_false grep "${list_dev} $" && return 0
+    done
+    return 1
 }
 
 #
@@ -89,26 +111,24 @@ fi
 expect_false _sudo rbd-nbd map INVALIDIMAGE
 expect_false _sudo rbd-nbd --device INVALIDDEV map ${IMAGE}
 
+# list format test
+expect_false rbd-nbd --format INVALID list-mapped
+rbd-nbd --format json --pretty-format list-mapped
+rbd-nbd --format xml list-mapped
+
 # map test using the first unused device
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
-PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
-    '$2 == pool && $3 == img && $5 == dev {print $1}')
-test -n "${PID}"
-ps -p ${PID} -o cmd | grep rbd-nbd
+get_pid
 # map test specifying the device
 expect_false _sudo rbd-nbd --device ${DEV} map ${POOL}/${IMAGE}
 dev1=${DEV}
-_sudo rbd-nbd unmap ${DEV}
-rbd-nbd list-mapped | expect_false grep "${DEV} $"
+unmap_device ${DEV} ${DEV}
 DEV=
 # XXX: race possible when the device is reused by other process
 DEV=`_sudo rbd-nbd --device ${dev1} map ${POOL}/${IMAGE}`
 [ "${DEV}" = "${dev1}" ]
 rbd-nbd list-mapped | grep "${IMAGE}"
-PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
-    '$2 == pool && $3 == img && $5 == dev {print $1}')
-test -n "${PID}"
-ps -p ${PID} -o cmd | grep rbd-nbd
+get_pid
 
 # read test
 [ "`dd if=${DATA} bs=1M | md5sum`" = "`_sudo dd if=${DEV} bs=1M | md5sum`" ]
@@ -160,30 +180,39 @@ _sudo rbd-nbd unmap ${DEV}
 
 # exclusive option test
 DEV=`_sudo rbd-nbd map --exclusive ${POOL}/${IMAGE}`
-PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
-    '$2 == pool && $3 == img && $5 == dev {print $1}')
-test -n "${PID}"
-ps -p ${PID} -o cmd | grep rbd-nbd
+get_pid
 
 _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 expect_false timeout 10 \
 	rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 _sudo rbd-nbd unmap ${DEV}
+DEV=
+rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
+
+# unmap by image name test
+DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
+get_pid
+_sudo rbd-nbd unmap "${IMAGE}"
+rbd-nbd list-mapped | expect_false grep "${DEV} $"
+DEV=
+ps -p ${PID} -o cmd | expect_false grep rbd-nbd
+
+# map/unmap snap test
+rbd snap create ${POOL}/${IMAGE}@snap
+DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}@snap`
+get_pid
+unmap_device "${IMAGE}@snap" ${DEV}
+DEV=
+ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 
 # auto unmap test
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
-PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
-    '$2 == pool && $3 == img && $5 == dev {print $1}')
-test -n "${PID}"
-ps -p ${PID} -o cmd | grep rbd-nbd
+get_pid
 _sudo kill ${PID}
 for i in `seq 10`; do
   rbd-nbd list-mapped | expect_false grep "^${PID} *${POOL} *${IMAGE}" && break
   sleep 1
 done
 rbd-nbd list-mapped | expect_false grep "^${PID} *${POOL} *${IMAGE}"
-
-DEV=
-rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 echo OK

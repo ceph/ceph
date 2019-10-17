@@ -1024,14 +1024,19 @@ Skip test on FreeBSD as it generates different output there.
     --verbose            be verbose
   
   rbd help nbd list
-  usage: rbd nbd list 
+  usage: rbd nbd list [--format <format>] [--pretty-format] 
   
   List the nbd devices already used.
+  
+  Optional arguments
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help nbd map
   usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
                      [--read-only] [--exclusive] [--device <device>] 
                      [--nbds_max <nbds_max>] [--max_part <max_part>] 
+                     [--timeout <timeout>] 
                      <image-or-snap-spec> 
   
   Map image to a nbd device.
@@ -1049,15 +1054,23 @@ Skip test on FreeBSD as it generates different output there.
     --device arg          specify nbd device
     --nbds_max arg        override module param nbds_max
     --max_part arg        override module param max_part
+    --timeout arg         set nbd request timeout (seconds)
   
   rbd help nbd unmap
-  usage: rbd nbd unmap 
-                       <device-spec> 
+  usage: rbd nbd unmap [--pool <pool>] [--image <image>] [--snap <snap>] 
+                       <image-or-snap-or-device-spec> 
   
   Unmap a nbd device.
   
   Positional arguments
-    <device-spec>        specify nbd device
+    <image-or-snap-or-device-spec>  image, snapshot, or device specification
+                                    [<pool-name>/]<image-name>[@<snapshot-name>]
+                                    or <device-path>
+  
+  Optional arguments
+    -p [ --pool ] arg               pool name
+    --image arg                     image name
+    --snap arg                      snapshot name
   
   rbd help object-map check
   usage: rbd object-map check [--pool <pool>] [--image <image>] [--snap <snap>] 
