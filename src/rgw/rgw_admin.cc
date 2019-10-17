@@ -651,6 +651,7 @@ enum class OPT {
   SYNC_ERROR_TRIM,
   SYNC_GROUP_CREATE,
   SYNC_GROUP_REMOVE,
+  SYNC_GROUP_FLOW_ADD,
   SYNC_POLICY_GET,
   BILOG_LIST,
   BILOG_TRIM,
@@ -848,6 +849,7 @@ static SimpleCmd::Commands all_cmds = {
   { "sync policy get", OPT::SYNC_POLICY_GET },
   { "sync group create", OPT::SYNC_GROUP_CREATE },
   { "sync group remove", OPT::SYNC_GROUP_REMOVE },
+  { "sync group flow add", OPT::SYNC_GROUP_FLOW_ADD },
   { "bilog list", OPT::BILOG_LIST },
   { "bilog trim", OPT::BILOG_TRIM },
   { "bilog status", OPT::BILOG_STATUS },
@@ -2579,6 +2581,16 @@ const string& get_tier_type(rgw::sal::RGWRadosStore *store) {
   return store->svc()->zone->get_zone().tier_type;
 }
 
+static bool symmetrical_flow_opt(const string& opt)
+{
+  return (opt == "symmetrical" || opt == "symmetric");
+}
+
+static bool directional_flow_opt(const string& opt)
+{
+  return (opt == "directional" || opt == "direction");
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -2757,8 +2769,13 @@ int main(int argc, const char **argv)
   string sub_push_endpoint;
   string event_id;
 
-  std::optional<string> group_id;
+  std::optional<string> opt_group_id;
   std::optional<string> opt_status;
+  std::optional<string> opt_flow_type;
+  std::optional<vector<string> > opt_zones;
+  std::optional<string> opt_flow_id;
+  std::optional<string> opt_source_zone;
+  std::optional<string> opt_dest_zone;
 
   rgw::notify::EventTypeList event_types;
 
@@ -3042,6 +3059,9 @@ int main(int argc, const char **argv)
       sync_from_all_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
       source_zone_name = val;
+      opt_source_zone = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-zone", (char*)NULL)) {
+      opt_dest_zone = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tier-type", (char*)NULL)) {
       tier_type = val;
       tier_type_specified = true;
@@ -3111,9 +3131,17 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--event-type", "--event-types", (char*)NULL)) {
       rgw::notify::from_string_list(val, event_types);
     } else if (ceph_argparse_witharg(args, i, &val, "--group-id", (char*)NULL)) {
-      group_id = val;
+      opt_group_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--status", (char*)NULL)) {
       opt_status = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--flow-type", (char*)NULL)) {
+      opt_flow_type = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--zones", (char*)NULL)) {
+      vector<string> v;
+      get_str_vec(val, v);
+      opt_zones = std::move(v);
+    } else if (ceph_argparse_witharg(args, i, &val, "--flow-id", (char*)NULL)) {
+      opt_flow_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -7543,7 +7571,7 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_CREATE) {
-    if (!group_id) {
+    if (!opt_group_id) {
       cerr << "ERROR: --group-id is not specified" << std::endl;
       return EINVAL;
     }
@@ -7559,8 +7587,8 @@ next:
       return -ret;
     }
 
-    auto& group = zonegroup.sync_policy.groups[*group_id];
-    group.id = *group_id;
+    auto& group = zonegroup.sync_policy.groups[*opt_group_id];
+    group.id = *opt_group_id;
 
     if (opt_status) {
       if (!group.set_status(*opt_status)) {
@@ -7584,7 +7612,7 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_REMOVE) {
-    if (!group_id) {
+    if (!opt_group_id) {
       cerr << "ERROR: --group-id not specified" << std::endl;
       return EINVAL;
     }
@@ -7596,8 +7624,83 @@ next:
       return -ret;
     }
 
-    zonegroup.sync_policy.groups.erase(*group_id);
+    zonegroup.sync_policy.groups.erase(*opt_group_id);
 
+    ret = zonegroup.update();
+    if (ret < 0) {
+      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    {
+      Formatter::ObjectSection os(*formatter, "result");
+      encode_json("sync_policy", zonegroup.sync_policy, formatter);
+    }
+
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::SYNC_GROUP_FLOW_ADD) {
+    if (!opt_group_id) {
+      cerr << "ERROR: --group-id not specified" << std::endl;
+      return EINVAL;
+    }
+
+    if (!opt_flow_id) {
+      cerr << "ERROR: --flow-id not specified" << std::endl;
+      return EINVAL;
+    }
+
+    if (!opt_flow_type ||
+        (!symmetrical_flow_opt(*opt_flow_type) &&
+         !directional_flow_opt(*opt_flow_type))) {
+      cerr << "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)" << std::endl;
+      return EINVAL;
+    }
+
+    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
+    if (iter == zonegroup.sync_policy.groups.end()) {
+      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      return ENOENT;
+    }
+
+    auto& group = iter->second;
+
+    if (symmetrical_flow_opt(*opt_flow_type)) {
+      if (!opt_zones || opt_zones->empty()) {
+        cerr << "ERROR: --zones not provided for symmetrical flow, or is empty" << std::endl;
+        return EINVAL;
+      }
+
+      rgw_sync_symmetric_group *flow_group;
+
+      group.data_flow.find_symmetrical(*opt_flow_id, true, &flow_group);
+
+      for (auto& z : *opt_zones) {
+        flow_group->zones.insert(z);
+      }
+    } else { /* directional */
+      if (!opt_source_zone || opt_source_zone->empty()) {
+        cerr << "ERROR: --source-zone not provided for directional flow rule, or is empty" << std::endl;
+        return EINVAL;
+      }
+      if (!opt_dest_zone || opt_dest_zone->empty()) {
+        cerr << "ERROR: --dest-zone not provided for directional flow rule, or is empty" << std::endl;
+        return EINVAL;
+      }
+
+      rgw_sync_directional_rule *flow_rule;
+
+      group.data_flow.find_directional(*opt_source_zone, *opt_dest_zone, true, &flow_rule);
+    }
+    
     ret = zonegroup.update();
     if (ret < 0) {
       cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;

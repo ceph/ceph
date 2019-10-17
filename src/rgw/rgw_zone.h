@@ -740,7 +740,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params();
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -753,11 +753,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     encode(hostnames_s3website, bl);
     RGWSystemMetaObj::encode(bl);
     encode(realm_id, bl);
+    encode(sync_policy, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -777,6 +778,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
       decode(realm_id, bl);
     } else {
       id = name;
+    }
+    if (struct_v >= 5) {
+      decode(sync_policy, bl);
     }
     DECODE_FINISH(bl);
   }

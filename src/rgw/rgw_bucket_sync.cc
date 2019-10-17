@@ -10,6 +10,62 @@
 #define dout_subsys ceph_subsys_rgw
 
 
+bool rgw_sync_data_flow_group::find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group)
+{
+  if (!symmetrical) {
+    if (!create) {
+      return false;
+    }
+    symmetrical.emplace();
+  }
+
+  for (auto& group : *symmetrical) {
+    if (flow_id == group.id) {
+      *flow_group = &group;
+      return true;
+    }
+  }
+
+  if (!create) {
+    return false;
+  }
+
+  auto& group = symmetrical->emplace_back();
+  *flow_group = &group;
+  (*flow_group)->id = flow_id;
+  return true;
+}
+
+bool rgw_sync_data_flow_group::find_directional(const string& source_zone, const string& dest_zone, bool create, rgw_sync_directional_rule **flow_group)
+{
+  if (!directional) {
+    if (!create) {
+      return false;
+    }
+    directional.emplace();
+  }
+
+  for (auto& rule : *directional) {
+    if (source_zone == rule.source_zone &&
+        dest_zone == rule.dest_zone) {
+      *flow_group = &rule;
+      return true;
+    }
+  }
+
+  if (!create) {
+    return false;
+  }
+
+  auto& rule = directional->emplace_back();
+  *flow_group = &rule;
+
+  rule.source_zone = source_zone;
+  rule.dest_zone = dest_zone;
+
+  return true;
+}
+
 static std::vector<rgw_sync_bucket_pipe> filter_relevant_pipes(const std::vector<rgw_sync_bucket_pipe>& pipes,
                                                                const string& source_zone,
                                                                const string& dest_zone)
@@ -141,25 +197,21 @@ struct group_pipe_map {
 
     status = group.status;
 
-    auto& pipes = group.pipes;
-
     std::vector<rgw_sync_bucket_pipe> zone_pipes;
 
     /* only look at pipes that touch the specific zone and bucket */
-    if (pipes) {
-      for (auto& pipe : *pipes) {
-        if (pipe.contains_zone(zone) &&
-            pipe.contains_bucket(bucket)) {
-          zone_pipes.push_back(pipe);
-        }
+    for (auto& pipe : group.pipes) {
+      if (pipe.contains_zone(zone) &&
+          pipe.contains_bucket(bucket)) {
+        zone_pipes.push_back(pipe);
       }
     }
 
-    if (!group.data_flow) {
+    if (group.data_flow.empty()) {
       return;
     }
 
-    auto& flow = *group.data_flow;
+    auto& flow = group.data_flow;
 
     /* symmetrical */
     if (flow.symmetrical) {
@@ -388,8 +440,8 @@ public:
                                                              false); /* just check that it's not disabled */
                           });
 
-      if (group.pipes) {
-        for (auto& pipe : *group.pipes) {
+      if (!group.pipes.empty()) {
+        for (auto& pipe : group.pipes) {
           if (!pipe.contains_bucket(bucket)) {
             continue;
           }

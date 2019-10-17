@@ -174,16 +174,19 @@ WRITE_CLASS_ENCODER(rgw_sync_policy_info)
 #endif
 
 struct rgw_sync_symmetric_group {
+  string id;
   std::set<string> zones;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
+    encode(id, bl);
     encode(zones, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
+    decode(id, bl);
     decode(zones, bl);
     DECODE_FINISH(bl);
   }
@@ -350,6 +353,14 @@ struct rgw_sync_data_flow_group {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  bool empty() const {
+    return ((!symmetrical || symmetrical->empty()) &&
+            (!directional || directional->empty()));
+  }
+
+  bool find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group);
+  bool find_directional(const string& source_zone, const string& dest_zone, bool create, rgw_sync_directional_rule **flow_group);
 };
 WRITE_CLASS_ENCODER(rgw_sync_data_flow_group)
 
@@ -357,9 +368,9 @@ WRITE_CLASS_ENCODER(rgw_sync_data_flow_group)
 struct rgw_sync_policy_group {
   string id;
 
-  std::optional<rgw_sync_data_flow_group> data_flow; /* override data flow, howver, will not be able to
+  rgw_sync_data_flow_group data_flow; /* override data flow, howver, will not be able to
                                                         add new flows that don't exist at higher level */
-  std::optional<std::vector<rgw_sync_bucket_pipe> > pipes; /* if not defined then applies to all
+  std::vector<rgw_sync_bucket_pipe> pipes; /* if not defined then applies to all
                                                               buckets (DR sync) */
 
   enum Status {
