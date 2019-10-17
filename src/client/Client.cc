@@ -5065,6 +5065,7 @@ void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
 void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
 {
   int ref = in->get_num_ref();
+  ldout(cct, 5) << __func__ << " in " << *in <<dendl;
 
   if (in->dir && !in->dir->dentries.empty()) {
     for (auto p = in->dir->dentries.begin();
@@ -5093,14 +5094,16 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
     --ref;
   }
 
-  if (ref > 0 && in->ll_ref > 0 && sched_inval) {
+  if (ref > 0) {
     auto q = in->dentries.begin();
     while (q != in->dentries.end()) {
       Dentry *dn = *q;
       ++q;
-      // FIXME: we play lots of unlink/link tricks when handling MDS replies,
-      //        so in->dentries doesn't always reflect the state of kernel's dcache.
-      _schedule_invalidate_dentry_callback(dn, true);
+      if( in->ll_ref > 0 && sched_inval) {
+        // FIXME: we play lots of unlink/link tricks when handling MDS replies,
+        //        so in->dentries doesn't always reflect the state of kernel's dcache.
+        _schedule_invalidate_dentry_callback(dn, true);
+      }
       unlink(dn, true, true);
     }
   }
