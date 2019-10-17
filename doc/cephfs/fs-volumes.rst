@@ -133,6 +133,12 @@ The removal of a subvolume fails if it has snapshots, or is non-existent.
 Using the '--force' flag allows the command to succeed even if the subvolume is
 non-existent.
 
+Resize a subvolume using::
+
+    $ ceph fs subvolume resize <vol_name> <subvol_name> <new_size> [--group_name <subvol_group_name>] [--no_shrink]
+
+The command resizes the subvolume quota using the size specified by 'new_size'.
+'--no_shrink' flag prevents the subvolume to shrink below the current used size of the subvolume.
 
 Fetch the absolute path of a subvolume using::
 
