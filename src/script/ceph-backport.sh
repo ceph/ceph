@@ -177,9 +177,7 @@ function cherry_pick_phase {
         if git cherry-pick -x "pr-$original_pr~$i" ; then
             true
         else
-            if [ "$VERBOSE" ] ; then
-                git status
-            fi
+            [ "$VERBOSE" ] && git status
             error "Cherry pick failed"
             info "Next, manually fix conflicts and complete the current cherry-pick"
             if [ "$i" -gt "0" ] >/dev/null 2>&1 ; then
@@ -356,25 +354,32 @@ function log {
     prefix="${this_script}: "
     verbose_only=
     case $level in
+        bare)
+            prefix=
+            ;;
+        debug)
+            prefix="${prefix}DEBUG: "
+            verbose_only="yes"
+            ;;
         err*)
             prefix="${prefix}ERROR: "
             ;;
         info)
             :
             ;;
-        bare)
-            prefix=
-            ;;
         overwrite)
             trailing_newline=
             prefix=
             ;;
+        verbose)
+            verbose_only="yes"
+            ;;
+        verbose_en)
+            verbose_only="yes"
+            trailing_newline=
+            ;;
         warn|warning)
             prefix="${prefix}WARNING: "
-            ;;
-        debug|verbose)
-            prefix="${prefix}DEBUG: "
-            verbose_only="1"
             ;;
     esac
     if [ "$verbose_only" -a -z "$VERBOSE" ] ; then
@@ -399,10 +404,7 @@ function milestone_number_from_remote_api {
         echo "$mn"
     else
         error "Could not determine milestone number of ->$milestone<-"
-        if [ "$VERBOSE" ] ; then
-            info "GitHub API said:"
-            log bare "$remote_api_output"
-        fi
+        verbose_en "GitHub API said:\n${remote_api_output}\n"
         info "Valid values are $(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
         info "(This probably means the Release field of ${redmine_url} is populated with"
         info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
@@ -674,6 +676,10 @@ EOM
 
 function verbose {
     log verbose "$@"
+}
+
+function verbose_en {
+    log verbose_en "$@"
 }
 
 function vet_pr_milestone {
