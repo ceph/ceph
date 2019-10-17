@@ -178,3 +178,12 @@ class RbdMirroringTest(DashboardTestCase):
 
         self.update_pool('rbd', 'disabled')
         self.assertStatus(200)
+
+    def test_site_name(self):
+        expected_site_name = {'site_name': 'site-a'}
+        self._task_put('/api/block/mirroring/site_name', expected_site_name)
+        self.assertStatus(200)
+
+        site_name = self._get('/api/block/mirroring/site_name')
+        self.assertStatus(200)
+        self.assertEqual(expected_site_name, site_name)
