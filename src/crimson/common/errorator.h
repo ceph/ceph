@@ -43,19 +43,6 @@ inline auto do_for_each(Container& c, AsyncAction action) {
   return ::crimson::do_for_each(std::begin(c), std::end(c), std::move(action));
 }
 
-template<typename T, typename F>
-static inline auto do_with(T&& rvalue, F&& f) {
-  using FuncReturn = decltype(std::move(f)(rvalue));
-  using Errorator = typename FuncReturn::errorator_type;
-  using Futurator = typename Errorator::template futurize<FuncReturn>;
-  return typename Futurator::type {
-    seastar::do_with(std::move(rvalue),
-      [f = std::move(f)] (T& moved_rvalue) mutable {
-        return Errorator::plainify(std::move(f)(moved_rvalue));
-      })
-  };
-}
-
 // define the interface between error types and errorator
 template <class ConcreteErrorT>
 class error_t {
@@ -368,6 +355,10 @@ private:
 
   public:
     using errorator_type = ::crimson::errorator<AllowedErrors...>;
+    using promise_type = seastar::promise<ValuesT...>;
+
+    using base_t::available;
+    using base_t::failed;
 
     [[gnu::always_inline]]
     _future(base_t&& base)
@@ -543,11 +534,6 @@ private:
                                               Iterator end,
                                               AsyncAction action);
 
-    // for the sake of `plainify()` let any errorator convert errorated
-    // future into plain one.
-    template <class...>
-    friend class errorator;
-
     template <class...>
     friend class ::seastar::future;
   };
@@ -632,15 +618,6 @@ public:
   };
 
 private:
-  template <class... Args>
-  static decltype(auto) plainify(seastar::future<Args...>&& fut) {
-    return std::forward<seastar::future<Args...>>(fut);
-  }
-  template <class Arg>
-  static decltype(auto) plainify(Arg&& arg) {
-    return std::forward<typename Arg::base_t>(arg);
-  }
-
   template <class T, class = std::void_t<T>>
   class futurize {
     using vanilla_futurize = seastar::futurize<T>;
@@ -706,9 +683,6 @@ private:
   // we were exploiting before.
   template <class...>
   friend class errorator;
-
-  template<typename T, typename F>
-  friend inline auto do_with(T&&, F&&);
 }; // class errorator, generic template
 
 // no errors? errorator<>::future is plain seastar::future then!
@@ -824,5 +798,13 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
     return ::seastar::make_exception_future<Values...>(std::forward<Arg>(arg));
   }
 };
+
+namespace internal {
+template <template <class...> class Container,
+          class... Values>
+struct continuation_base_from_future<Container<::crimson::errorated_future_marker<Values...>>> {
+  using type = continuation_base<Values...>;
+};
+}
 
 } // namespace seastar
