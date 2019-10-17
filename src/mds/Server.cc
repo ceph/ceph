@@ -234,6 +234,7 @@ Server::Server(MDSRank *m) :
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
+  max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -1132,6 +1133,11 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   }
   if (changed.count("mds_recall_max_decay_rate")) {
     recall_throttle = DecayCounter(g_conf().get_val<double>("mds_recall_max_decay_rate"));
+  }
+  if (changed.count("mds_max_snaps_per_dir")) {
+    max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
+    dout(20) << __func__ << " max snapshots per directory changed to "
+            << max_snaps_per_dir << dendl;
   }
 }
 
@@ -9777,6 +9783,14 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
+
+  // check if we can create any more snapshots
+  // we don't allow any more if we are already at or beyond the limit
+  if (diri->snaprealm &&
+      diri->snaprealm->get_snaps().size() >= max_snaps_per_dir) {
+    respond_to_request(mdr, -EMLINK);
+    return;
+  }
 
   // make sure name is unique
   if (diri->snaprealm &&
