@@ -8,18 +8,39 @@
 
 namespace crimson {
 
-template<class Container, class AsyncAction>
-static inline auto do_for_each(Container& c, AsyncAction action) {
-  using ActionItem = typename Container::value_type;
-  using ActionReturn = std::invoke_result_t<AsyncAction, ActionItem&>;
-  using Errorator = typename ActionReturn::errorator_type;
-  using Futurator = typename Errorator::template futurize<ActionReturn>;
-  return typename Futurator::type {
-    seastar::do_for_each(std::begin(c), std::end(c),
-      [action = std::move(action)] (auto& item) -> seastar::future<> {
-        return Errorator::plainify(action(item));
-      })
-  };
+template<typename Iterator, typename AsyncAction>
+inline auto do_for_each(Iterator begin, Iterator end, AsyncAction action) {
+  using futurator = \
+    ::seastar::futurize<std::result_of_t<AsyncAction(decltype(*begin))>>;
+
+  if (begin == end) {
+    return futurator::type::errorator_type::template make_ready_future<>();
+  }
+  while (true) {
+    auto f = futurator::apply(action, *begin);
+    ++begin;
+    if (begin == end) {
+      return f;
+    }
+    if (!f.available() || seastar::need_preempt()) {
+      return std::move(f)._then(
+        [ action = std::move(action),
+          begin = std::move(begin),
+          end = std::move(end)
+        ] () mutable {
+          return ::crimson::do_for_each(std::move(begin),
+                                        std::move(end),
+                                        std::move(action));
+      });
+    }
+    if (f.failed()) {
+      return f;
+    }
+  }
+}
+template<typename Container, typename AsyncAction>
+inline auto do_for_each(Container& c, AsyncAction action) {
+  return ::crimson::do_for_each(std::begin(c), std::end(c), std::move(action));
 }
 
 template<typename T, typename F>
@@ -463,8 +484,17 @@ struct errorator {
     template <class Func>
     void then(Func&&) = delete;
 
-
   private:
+    // for ::crimson::do_for_each
+    template <class Func>
+    auto _then(Func&& func) {
+      return base_t::then(std::forward<Func>(func));
+    }
+    template<typename Iterator, typename AsyncAction>
+    friend inline auto ::crimson::do_for_each(Iterator begin,
+                                              Iterator end,
+                                              AsyncAction action);
+
     // for the sake of `plainify()` let any errorator convert errorated
     // future into plain one.
     template <class...>
@@ -641,9 +671,6 @@ private:
   //  * conversion to `std::exception_ptr` in `future::future(ErrorT&&)`.
   template <class... ValueT>
   friend class future;
-
-  template<class Container, class AsyncAction>
-  friend inline auto ::crimson::do_for_each(Container&, AsyncAction);
 
   template<typename T, typename F>
   friend inline auto do_with(T&&, F&&);
