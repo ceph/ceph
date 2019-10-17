@@ -68,7 +68,7 @@ PGBackend::get_object_state(const hobject_t& oid)
     return _load_os(oid);
   } else {
     // we want a snap
-    return get_os_errorator::errorize{_load_ss(oid)}.then(
+    return _load_ss(oid).safe_then(
       [oid,this](cached_ss_t ss) -> get_os_errorator::future<cached_os_t> {
         // head?
         if (oid.snap > ss->seq) {
@@ -83,7 +83,7 @@ PGBackend::get_object_state(const hobject_t& oid)
           // clone
           auto soid = oid;
           soid.snap = *clone;
-          return get_os_errorator::errorize{_load_ss(soid)}.then(
+          return _load_ss(soid).safe_then(
             [soid,this](cached_ss_t ss) -> get_os_errorator::future<cached_os_t> {
               auto clone_snap = ss->clone_snaps.find(soid.snap);
               assert(clone_snap != end(ss->clone_snaps));
@@ -107,17 +107,17 @@ PGBackend::get_object_state(const hobject_t& oid)
   }
 }
 
-seastar::future<PGBackend::cached_os_t>
+PGBackend::get_os_errorator::future<PGBackend::cached_os_t>
 PGBackend::_load_os(const hobject_t& oid)
 {
   if (auto found = os_cache.find(oid); found) {
-    return seastar::make_ready_future<cached_os_t>(std::move(found));
+    return get_os_errorator::make_ready_future<cached_os_t>(std::move(found));
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
                          OI_ATTR)
   .safe_then(
-    [oid, this] (ceph::bufferptr bp) {
+    [oid, this] (ceph::bufferptr&& bp) {
       // decode existing OI_ATTR's value
       ceph::bufferlist bl;
       bl.push_back(std::move(bp));
@@ -132,17 +132,17 @@ PGBackend::_load_os(const hobject_t& oid)
     }));
 }
 
-seastar::future<PGBackend::cached_ss_t>
+PGBackend::get_os_errorator::future<PGBackend::cached_ss_t>
 PGBackend::_load_ss(const hobject_t& oid)
 {
   if (auto found = ss_cache.find(oid); found) {
-    return seastar::make_ready_future<cached_ss_t>(std::move(found));
+    return get_os_errorator::make_ready_future<cached_ss_t>(std::move(found));
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
                          SS_ATTR)
   .safe_then(
-    [oid, this] (ceph::bufferptr bp) {
+    [oid, this] (ceph::bufferptr&& bp) {
       // decode existing SS_ATTR's value
       ceph::bufferlist bl;
       bl.push_back(std::move(bp));
