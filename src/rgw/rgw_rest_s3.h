@@ -107,6 +107,7 @@ public:
 
 class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
   bool objs_container;
+  bool encode_key {false};
 public:
   RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
