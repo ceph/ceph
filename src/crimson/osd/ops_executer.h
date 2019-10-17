@@ -48,6 +48,12 @@ class OpsExecuter {
   using get_attr_errorator = PGBackend::get_attr_errorator;
 
 public:
+  // because OpsExecuter is pretty heavy-weight object we want to ensure
+  // it's not copied nor even moved by accident. Performance is the sole
+  // reason for prohibiting that.
+  OpsExecuter(OpsExecuter&&) = delete;
+  OpsExecuter(const OpsExecuter&) = delete;
+
   using osd_op_errorator = crimson::compound_errorator_t<
     call_errorator,
     read_errorator,
