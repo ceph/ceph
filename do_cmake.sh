@@ -23,8 +23,6 @@ if [ -r /etc/os-release ]; then
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
           if [ "$MAJOR_VER" -ge "8" ] ; then
               PYBUILD="3.6"
-              ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
-              ARGS+=" -DWITH_RDMA=OFF"
           fi
           ;;
       opensuse*|suse|sles)
