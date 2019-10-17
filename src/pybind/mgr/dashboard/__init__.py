@@ -56,4 +56,4 @@ else:
     sys.modules['ceph_module'] = mock.Mock()
 
     mgr = mock.Mock()
-    mgr.get_frontend_path.side_effect = lambda: "./frontend/dist"
+    mgr.get_frontend_path.side_effect = lambda: os.path.abspath("./frontend/dist")
