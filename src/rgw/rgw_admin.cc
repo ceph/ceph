@@ -650,6 +650,7 @@ enum class OPT {
   SYNC_ERROR_LIST,
   SYNC_ERROR_TRIM,
   SYNC_GROUP_CREATE,
+  SYNC_GROUP_GET,
   SYNC_GROUP_REMOVE,
   SYNC_GROUP_FLOW_ADD,
   SYNC_GROUP_FLOW_REMOVE,
@@ -849,6 +850,7 @@ static SimpleCmd::Commands all_cmds = {
   { "sync error trim", OPT::SYNC_ERROR_TRIM },
   { "sync policy get", OPT::SYNC_POLICY_GET },
   { "sync group create", OPT::SYNC_GROUP_CREATE },
+  { "sync group get", OPT::SYNC_GROUP_GET },
   { "sync group remove", OPT::SYNC_GROUP_REMOVE },
   { "sync group flow add", OPT::SYNC_GROUP_FLOW_ADD },
   { "sync group flow remove", OPT::SYNC_GROUP_FLOW_REMOVE },
@@ -3375,6 +3377,7 @@ int main(int argc, const char **argv)
 			 OPT::MDLOG_LIST,
 			 OPT::MDLOG_STATUS,
 			 OPT::SYNC_ERROR_LIST,
+			 OPT::SYNC_GROUP_GET,
 			 OPT::SYNC_POLICY_GET,
 			 OPT::BILOG_LIST,
 			 OPT::BILOG_STATUS,
@@ -7660,6 +7663,29 @@ next:
     }
    
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::SYNC_GROUP_GET) {
+    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto& groups = zonegroup.sync_policy.groups;
+
+    if (!opt_group_id) {
+      show_result(groups, formatter, cout);
+    } else {
+      auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
+      if (iter == zonegroup.sync_policy.groups.end()) {
+        cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+        return ENOENT;
+      }
+
+      show_result(iter->second, formatter, cout);
+    }
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_REMOVE) {
