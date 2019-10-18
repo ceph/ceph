@@ -2637,6 +2637,95 @@ static void show_result(T& obj,
   formatter->flush(cout);
 }
 
+void init_optional_bucket(std::optional<rgw_bucket>& opt_bucket,
+                          std::optional<string>& opt_tenant,
+                          std::optional<string>& opt_bucket_name,
+                          std::optional<string>& opt_bucket_id)
+{
+  if (opt_tenant || opt_bucket_name || opt_bucket_id) {
+    opt_bucket.emplace();
+    if (opt_tenant) {
+      opt_bucket->tenant = *opt_tenant;
+    }
+    if (opt_bucket_name) {
+      opt_bucket->name = *opt_bucket_name;
+    }
+    if (opt_bucket_id) {
+      opt_bucket->bucket_id = *opt_bucket_id;
+    }
+  }
+}
+
+class SyncPolicyContext
+{
+  RGWZoneGroup zonegroup;
+
+  std::optional<rgw_bucket> bucket;
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> bucket_attrs;
+
+  rgw_sync_policy_info *policy{nullptr};
+
+public:
+  SyncPolicyContext(const string& zonegroup_id,
+                    const string& zonegroup_name,
+                    std::optional<rgw_bucket> _bucket) : zonegroup(zonegroup_id, zonegroup_name),
+                                                         bucket(_bucket) {}
+
+  int init() {
+    int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    if (ret < 0) {
+      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    if (!bucket) {
+      policy = &zonegroup.sync_policy;
+      return 0;
+    }
+
+    ret = init_bucket(bucket->tenant, bucket->name, bucket->bucket_id, bucket_info, *bucket, &bucket_attrs);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    if (!bucket_info.sync_policy) {
+      rgw_sync_policy_info new_policy;
+      bucket_info.set_sync_policy(std::move(new_policy));
+    }
+
+    policy = (rgw_sync_policy_info *)bucket_info.sync_policy.get();
+
+    return 0;
+  }
+
+  int write_policy() {
+    if (!bucket) {
+      int ret = zonegroup.update();
+      if (ret < 0) {
+        cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      return 0;
+    }
+
+    int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
+    if (ret < 0) {
+      cerr << "failed to store bucket info: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    return 0;
+  }
+
+  rgw_sync_policy_info& get_policy() {
+    return *policy;
+  }
+
+};
+
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -2825,14 +2914,17 @@ int main(int argc, const char **argv)
   std::optional<vector<string> > opt_source_zones;
   std::optional<vector<string> > opt_dest_zones;
   std::optional<string> opt_pipe_id;
+  std::optional<rgw_bucket> opt_bucket;
   std::optional<string> opt_tenant;
-  std::optional<string> opt_bucket;
+  std::optional<string> opt_bucket_name;
   std::optional<string> opt_bucket_id;
+  std::optional<rgw_bucket> opt_source_bucket;
   std::optional<string> opt_source_tenant;
-  std::optional<string> opt_source_bucket;
+  std::optional<string> opt_source_bucket_name;
   std::optional<string> opt_source_bucket_id;
+  std::optional<rgw_bucket> opt_dest_bucket;
   std::optional<string> opt_dest_tenant;
-  std::optional<string> opt_dest_bucket;
+  std::optional<string> opt_dest_bucket_name;
   std::optional<string> opt_dest_bucket_id;
 
   rgw::notify::EventTypeList event_types;
@@ -2866,7 +2958,7 @@ int main(int argc, const char **argv)
       display_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
       bucket_name = val;
-      opt_bucket = val;
+      opt_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       pool_name = val;
       pool = rgw_pool(pool_name);
@@ -3216,13 +3308,13 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--source-tenant", (char*)NULL)) {
       opt_source_tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--source-bucket", (char*)NULL)) {
-      opt_source_bucket = val;
+      opt_source_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--source-bucket-id", (char*)NULL)) {
       opt_source_bucket_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-tenant", (char*)NULL)) {
       opt_dest_tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-bucket", (char*)NULL)) {
-      opt_dest_bucket = val;
+      opt_dest_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-bucket-id", (char*)NULL)) {
       opt_dest_bucket_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
@@ -3280,6 +3372,13 @@ int main(int argc, const char **argv)
           break;
       }
     }
+
+    init_optional_bucket(opt_bucket, opt_tenant,
+                         opt_bucket_name, opt_bucket_id);
+    init_optional_bucket(opt_source_bucket, opt_source_tenant,
+                         opt_source_bucket_name, opt_source_bucket_id);
+    init_optional_bucket(opt_dest_bucket, opt_dest_tenant,
+                         opt_dest_bucket_name, opt_dest_bucket_id);
 
     if (tenant.empty()) {
       tenant = user_id.tenant;
@@ -7657,62 +7756,56 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_CREATE ||
       opt_cmd == OPT::SYNC_GROUP_MODIFY) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_status), "ERROR: --status is not specified (options: forbidden, enabled, activated)", EINVAL);
+    CHECK_TRUE(require_opt(opt_status), "ERROR: --status is not specified (options: forbidden, allowed, enabled)", EINVAL);
 
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
     if (opt_cmd == OPT::SYNC_GROUP_MODIFY) {
-      auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
-      if (iter != zonegroup.sync_policy.groups.end()) {
+      auto iter = sync_policy.groups.find(*opt_group_id);
+      if (iter != sync_policy.groups.end()) {
         cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
         return ENOENT;
       }
     }
 
-    auto& group = zonegroup.sync_policy.groups[*opt_group_id];
+    auto& group = sync_policy.groups[*opt_group_id];
     group.id = *opt_group_id;
 
     if (opt_status) {
       if (!group.set_status(*opt_status)) {
-        cerr << "ERROR: unrecognized status (options: forbidden, enabled, activated)" << std::endl;
+        cerr << "ERROR: unrecognized status (options: forbidden, allowed, enabled)" << std::endl;
         return EINVAL;
       }
     }
 
-    ret = zonegroup.update();
+    ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
-      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    {
-      Formatter::ObjectSection os(*formatter, "result");
-      encode_json("sync_policy", zonegroup.sync_policy, formatter);
-    }
-   
-    formatter->flush(cout);
+    show_result(sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_GET) {
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto& groups = zonegroup.sync_policy.groups;
+    auto& groups = sync_policy.groups;
 
     if (!opt_group_id) {
       show_result(groups, formatter, cout);
     } else {
-      auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
-      if (iter == zonegroup.sync_policy.groups.end()) {
+      auto iter = sync_policy.groups.find(*opt_group_id);
+      if (iter == sync_policy.groups.end()) {
         cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
         return ENOENT;
       }
@@ -7724,24 +7817,23 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_REMOVE) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
 
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
-    zonegroup.sync_policy.groups.erase(*opt_group_id);
+    sync_policy.groups.erase(*opt_group_id);
 
-    ret = zonegroup.update();
+    ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
-      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
     {
       Formatter::ObjectSection os(*formatter, "result");
-      encode_json("sync_policy", zonegroup.sync_policy, formatter);
+      encode_json("sync_policy", sync_policy, formatter);
     }
 
     formatter->flush(cout);
@@ -7755,15 +7847,15 @@ next:
                             directional_flow_opt(*opt_flow_type))),
                            "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
 
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
-    if (iter == zonegroup.sync_policy.groups.end()) {
+    auto iter = sync_policy.groups.find(*opt_group_id);
+    if (iter == sync_policy.groups.end()) {
       cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
       return ENOENT;
     }
@@ -7789,13 +7881,12 @@ next:
       group.data_flow.find_directional(*opt_source_zone, *opt_dest_zone, true, &flow_rule);
     }
 
-    ret = zonegroup.update();
+    ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
-      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    show_result(zonegroup.sync_policy, formatter, cout);
+    show_result(sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_REMOVE) {
@@ -7806,15 +7897,15 @@ next:
                             directional_flow_opt(*opt_flow_type))),
                            "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
 
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
-    if (iter == zonegroup.sync_policy.groups.end()) {
+    auto iter = sync_policy.groups.find(*opt_group_id);
+    if (iter == sync_policy.groups.end()) {
       cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
       return ENOENT;
     }
@@ -7830,13 +7921,12 @@ next:
       group.data_flow.remove_directional(*opt_source_zone, *opt_dest_zone);
     }
     
-    ret = zonegroup.update();
+    ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
-      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    show_result(zonegroup.sync_policy, formatter, cout);
+    show_result(sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
@@ -7846,15 +7936,15 @@ next:
     CHECK_TRUE(require_non_empty_opt(opt_dest_zones), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
 
 
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
-    if (iter == zonegroup.sync_policy.groups.end()) {
+    auto iter = sync_policy.groups.find(*opt_group_id);
+    if (iter == sync_policy.groups.end()) {
       cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
       return ENOENT;
     }
@@ -7867,35 +7957,34 @@ next:
 
     pipe->source.add_zones(*opt_source_zones);
     pipe->source.set_bucket(opt_source_tenant,
-                            opt_source_bucket,
+                            opt_source_bucket_name,
                             opt_source_bucket_id);
     pipe->dest.add_zones(*opt_dest_zones);
     pipe->dest.set_bucket(opt_dest_tenant,
-                            opt_dest_bucket,
+                            opt_dest_bucket_name,
                             opt_dest_bucket_id);
 
-    ret = zonegroup.update();
+    ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
-      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    show_result(zonegroup.sync_policy, formatter, cout);
+    show_result(sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_REMOVE) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
     CHECK_TRUE(require_opt(opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
 
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = zonegroup.sync_policy.groups.find(*opt_group_id);
-    if (iter == zonegroup.sync_policy.groups.end()) {
+    auto iter = sync_policy.groups.find(*opt_group_id);
+    if (iter == sync_policy.groups.end()) {
       cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
       return ENOENT;
     }
@@ -7914,13 +8003,13 @@ next:
     }
 
     pipe->source.remove_bucket(opt_source_tenant,
-                               opt_source_bucket,
+                               opt_source_bucket_name,
                                opt_source_bucket_id);
     if (opt_dest_zones) {
       pipe->dest.remove_zones(*opt_dest_zones);
     }
     pipe->dest.remove_bucket(opt_dest_tenant,
-                             opt_dest_bucket,
+                             opt_dest_bucket_name,
                              opt_dest_bucket_id);
 
     if (!(opt_source_zones ||
@@ -7934,24 +8023,23 @@ next:
       group.remove_pipe(*opt_pipe_id);
     }
 
-    ret = zonegroup.update();
+    ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
-      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    show_result(zonegroup.sync_policy, formatter, cout);
+    show_result(sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_POLICY_GET) {
-    RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-    ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+    SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
+    ret = sync_policy_ctx.init();
     if (ret < 0) {
-      cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    auto& sync_policy = sync_policy_ctx.get_policy();
 
-    show_result(zonegroup.sync_policy, formatter, cout);
+    show_result(sync_policy, formatter, cout);
   }
 
   if (opt_cmd == OPT::BILOG_TRIM) {
