@@ -188,8 +188,7 @@ int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
   return 0;
 }
 
-#elif defined(__FreeBSD__)
-
+#else
 int parse_cpu_set_list(const char *s,
 		       size_t *cpu_set_size,
 		       cpu_set_t *cpu_set)

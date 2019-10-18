@@ -139,11 +139,13 @@ class DNSResolver {
     void put_state(res_state s);
 #endif
 
+#ifndef _WIN32
     /* this private function allows to reuse the res_state structure used
      * by other function of this class
      */
     int resolve_ip_addr(CephContext *cct, res_state *res,
         const std::string& hostname, entity_addr_t *addr);
+#endif
 
     std::string srv_protocol_to_str(SRV_Protocol proto) {
       switch (proto) {
