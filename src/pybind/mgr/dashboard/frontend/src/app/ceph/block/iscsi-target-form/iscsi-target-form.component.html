@@ -125,6 +125,8 @@
                        type="text"
                        [value]="image"
                        disabled />
+                <div class="input-group-addon"
+                     *ngIf="api_version >= 1">lun: {{ imagesSettings[image]['lun'] }}</div>
                 <span class="input-group-btn">
                   <button class="btn btn-default"
                           type="button"
@@ -151,9 +153,19 @@
               </span>
             </ng-container>
 
+            <input class="form-control"
+                   type="hidden"
+                   id="disks"
+                   name="disks"
+                   formControlName="disks" />
+
             <span class="help-block"
-                  *ngIf="targetForm.showError('disks', formDir, 'required')"
-                  i18n>At least 1 image is required.</span>
+                  *ngIf="targetForm.showError('disks', formDir, 'dupLunId')"
+                  i18n>Duplicated LUN numbers.</span>
+
+            <span class="help-block"
+                  *ngIf="targetForm.showError('disks', formDir, 'dupWwn')"
+                  i18n>Duplicated WWN.</span>
 
             <div class="row">
               <div class="col-md-12">
@@ -231,7 +243,6 @@
                        id="target_password"
                        name="target_password"
                        formControlName="password" />
-
                 <span class="input-group-btn">
                   <button type="button"
                           class="btn btn-default"
