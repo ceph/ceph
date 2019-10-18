@@ -534,9 +534,9 @@ class Size(object):
         <Size(2.16 GB)>
         >>> s.mb
         <FloatMB(2211.0)>
-        >>> print "Total size: %s" % s.mb
+        >>> print("Total size: %s" % s.mb)
         Total size: 2211.00 MB
-        >>> print "Total size: %s" % s
+        >>> print("Total size: %s" % s)
         Total size: 2.16 GB
     """
 
