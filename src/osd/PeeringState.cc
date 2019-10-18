@@ -4903,6 +4903,7 @@ PeeringState::NotRecovering::NotRecovering(my_context ctx)
 {
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_REPAIR);
   pl->publish_stats_to_osd();
 }
 
