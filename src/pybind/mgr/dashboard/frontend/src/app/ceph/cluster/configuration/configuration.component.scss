@@ -4,6 +4,11 @@
 
 .fa-stack {
   font-size: 0.79rem;
+
+  .fa-stack-1x {
+    margin-left: 8px;
+    margin-top: 5px;
+  }
 }
 
 ::ng-deep datatable-body-cell.wrap {

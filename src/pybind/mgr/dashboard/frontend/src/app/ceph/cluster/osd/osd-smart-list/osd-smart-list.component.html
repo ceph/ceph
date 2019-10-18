@@ -1,6 +1,7 @@
 <ng-container *ngIf="!loading; else isLoading">
   <ng-container *ngIf="incompatible; else isCompatible">
-    <cd-alert-panel type="warning" i18n>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</cd-alert-panel>
+    <cd-alert-panel type="warning"
+                    i18n>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</cd-alert-panel>
   </ng-container>
   <ng-template #isCompatible>
     <tabset *ngFor="let device of data | keyvalue">

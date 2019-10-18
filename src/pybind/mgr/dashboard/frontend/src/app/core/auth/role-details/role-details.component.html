@@ -1,5 +1,6 @@
-<tabset  *ngIf="selection?.hasSingleSelection">
-  <tab heading="Details" i18n-heading>
+<tabset *ngIf="selection?.hasSingleSelection">
+  <tab heading="Details"
+       i18n-heading>
     <cd-table [data]="scopes_permissions"
               [columns]="columns"
               columnMode="flex"

@@ -60,14 +60,13 @@
   </div>
 </ng-template>
 
-<a class="select-menu-edit"
+<a class="select-menu-edit float-left"
    [ngClass]="elemClass"
    [popover]="popTemplate"
    placement="bottom"
    container="body"
    outsideClick="true"
-   *ngIf="options.length > 0"
-   class="float-left">
+   *ngIf="options.length > 0">
   <ng-content></ng-content>
 </a>
 
