@@ -544,7 +544,9 @@ endif()
 
 add_subdirectory(kv)
 add_subdirectory(os)
+if(NOT WIN32)
 add_subdirectory(blk)
+endif()
 
 add_subdirectory(osd)
 

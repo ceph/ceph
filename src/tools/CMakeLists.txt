@@ -16,7 +16,7 @@ else()
 endif()
 install(TARGETS rados DESTINATION bin)
 
-if(WITH_BOOST_CONTEXT)
+if(WITH_BOOST_CONTEXT AND NOT WIN32)
 set(neorados_srcs
   neorados.cc)
 add_executable(neorados ${neorados_srcs})
