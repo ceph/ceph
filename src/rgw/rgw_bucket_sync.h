@@ -19,7 +19,50 @@
 #include "rgw_common.h"
 
 class RGWSI_Zone;
+struct group_pipe_map;
+struct rgw_sync_bucket_pipe;;
+struct rgw_sync_policy_info;
 
+class RGWBucketSyncFlowManager {
+  RGWSI_Zone *zone_svc;
+  std::optional<rgw_bucket> bucket;
+
+  RGWBucketSyncFlowManager *parent{nullptr};
+
+  map<string, group_pipe_map> flow_groups;
+
+  struct pipe_flow {
+    vector<group_pipe_map *> flow_groups;
+    vector<rgw_sync_bucket_pipe> pipe;
+  };
+
+  bool allowed_data_flow(const string& source_zone,
+                         std::optional<rgw_bucket> source_bucket,
+                         const string& dest_zone,
+                         std::optional<rgw_bucket> dest_bucket,
+                         bool check_activated);
+
+  using flow_map_t = map<rgw_bucket, pipe_flow>;
+
+  flow_map_t flow_by_source;
+  flow_map_t flow_by_dest;
+
+  /*
+   * find all the matching flows om a flow map for a specific bucket
+   */
+  flow_map_t::iterator find_bucket_flow(flow_map_t& m, std::optional<rgw_bucket> bucket);
+
+  void update_flow_maps(const rgw_sync_bucket_pipe& pipe,
+                        group_pipe_map *flow_group);
+
+public:
+
+  RGWBucketSyncFlowManager(RGWSI_Zone *_zone_svc,
+                           std::optional<rgw_bucket> _bucket,
+                           RGWBucketSyncFlowManager *_parent);
+
+  void init(const rgw_sync_policy_info& sync_policy);
+};
 
 class RGWBucketSyncPolicyHandler {
   RGWSI_Zone *zone_svc;
