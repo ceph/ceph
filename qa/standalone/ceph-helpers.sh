@@ -490,13 +490,17 @@ function test_run_mon() {
 
     setup $dir || return 1
 
-    run_mon $dir a --mon-initial-members=a || return 1
+    run_mon $dir a --mon-initial-members=a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
     create_rbd_pool || return 1
-    # rbd has not been deleted / created, hence it has pool id 0
+    # rbd has not been deleted / created, hence it has pool id 1
     ceph osd dump | grep "pool 1 'rbd'" || return 1
     kill_daemons $dir || return 1
 
-    run_mon $dir a || return 1
+    run_mon $dir a --osd_pool_default_size=3 || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
     create_rbd_pool || return 1
     # rbd has been deleted / created, hence it does not have pool id 0
     ! ceph osd dump | grep "pool 1 'rbd'" || return 1
@@ -1460,11 +1464,12 @@ function test_wait_for_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
     run_mgr $dir x || return 1
     create_rbd_pool || return 1
     ! TIMEOUT=1 wait_for_clean || return 1
-    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
     wait_for_clean || return 1
     teardown $dir || return 1
 }
@@ -1507,12 +1512,20 @@ function test_wait_for_health_ok() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 --osd_failsafe_full_ratio=.99 --mon_pg_warn_min_per_osd=0 || return 1
+    run_mon $dir a --osd_failsafe_full_ratio=.99 --mon_pg_warn_min_per_osd=0 || return 1
     run_mgr $dir x --mon_pg_warn_min_per_osd=0 || return 1
+    # start osd_pool_default_size OSDs
     run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
     kill_daemons $dir TERM osd || return 1
+    ceph osd down 0 || return 1
+    # expect TOO_FEW_OSDS warning
     ! TIMEOUT=1 wait_for_health_ok || return 1
+    # resurrect all OSDs
     activate_osd $dir 0 || return 1
+    activate_osd $dir 1 || return 1
+    activate_osd $dir 2 || return 1
     wait_for_health_ok || return 1
     teardown $dir || return 1
 }

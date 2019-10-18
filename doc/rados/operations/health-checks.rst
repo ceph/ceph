@@ -408,6 +408,12 @@ Please refer to
 :doc:`placement-groups#Choosing-the-number-of-Placement-Groups` for
 more information.
 
+TOO_FEW_OSDS
+____________
+
+The number of OSDs in the cluster is below the configurable
+threshold of ``osd_pool_default_size``.
+
 SMALLER_PGP_NUM
 _______________
 

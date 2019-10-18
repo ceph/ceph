@@ -1170,6 +1170,11 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable POOL_APP_NOT_ENABLED health check"),
 
+    Option("mon_warn_on_too_few_osds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mgr")
+    .set_description("Issue a health warning if there are fewer OSDs than osd_pool_default_size"),
+
     Option("mon_min_osdmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
     .set_description(""),
