@@ -4343,7 +4343,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description("Preextent rocksdb wal files on mkfs to avoid performance penalty for young stores"),
+    .set_description("Preextent rocksdb wal files on mkfs to avoid performance penalty"),
 
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
