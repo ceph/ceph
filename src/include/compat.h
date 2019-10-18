@@ -219,6 +219,14 @@ typedef long nlink_t;
 
 typedef long long loff_t;
 
+#define CPU_SETSIZE (sizeof(size_t)*8)
+
+typedef union
+{
+  char cpuset[CPU_SETSIZE/8];
+  size_t _align;
+} cpu_set_t;
+
 #define SHUT_RD SD_RECEIVE
 #define SHUT_WR SD_SEND
 #define SHUT_RDWR SD_BOTH
@@ -244,6 +252,18 @@ typedef long long loff_t;
 // with subprocesses unless explicitly requested, we'll define this
 // flag as a no-op.
 #define O_CLOEXEC 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int chown(const char *path, uid_t owner, gid_t group);
+int fchown(int fd, uid_t owner, gid_t group);
+int lchown(const char *path, uid_t owner, gid_t group);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* WIN32 */
 
