@@ -273,13 +273,15 @@ Commands
   (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
   whether the region is known to be zeros or may contain other data.
 
-:command:`du` [-p | --pool *pool-name*] [*image-spec* | *snap-spec*]
+:command:`du` [-p | --pool *pool-name*] [*image-spec* | *snap-spec*] [--merge-snapshots]
   Will calculate the provisioned and actual disk usage of all images and
   associated snapshots within the specified pool.  It can also be used against
   individual images and snapshots.
 
   If the RBD fast-diff feature is not enabled on images, this operation will
   require querying the OSDs for every potential object within the image.
+
+  The --merge-snapshots will merge snapshots used space into their parent images.
 
 :command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Export image to dest path (use - for stdout).
