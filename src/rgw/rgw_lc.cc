@@ -1716,15 +1716,15 @@ bool s3_multipart_abort_header(
     return false;
   } /* catch */
 
-  boost::optional<ceph::real_time> abort_date_tmp;
-  boost::optional<std::string> rule_id_tmp;
+  std::optional<ceph::real_time> abort_date_tmp;
+  std::optional<std::string_view> rule_id_tmp;
   const auto& rule_map = config.get_rule_map();
   for (const auto& ri : rule_map) {
     const auto& rule = ri.second;
-    auto& id = rule.get_id();
-    auto& filter = rule.get_filter();
-    auto& prefix = filter.has_prefix()?filter.get_prefix():rule.get_prefix();
-    auto& mp_expiration = rule.get_mp_expiration();
+    const auto& id = rule.get_id();
+    const auto& filter = rule.get_filter();
+    const auto& prefix = filter.has_prefix()?filter.get_prefix():rule.get_prefix();
+    const auto& mp_expiration = rule.get_mp_expiration();
     if (!rule.is_enabled()) {
       continue;
     }
@@ -1732,11 +1732,10 @@ bool s3_multipart_abort_header(
       continue;
     }
 
-    boost::optional<ceph::real_time> rule_abort_date;
-    const LCExpiration& rule_abort_multipart =mp_expiration;
-    if (rule_abort_multipart.has_days()) {
-      rule_abort_date = boost::optional<ceph::real_time>(
-              mtime + make_timespan(rule_abort_multipart.get_days()*24*60*60));
+    std::optional<ceph::real_time> rule_abort_date;
+    if (mp_expiration.has_days()) {
+      rule_abort_date = std::optional<ceph::real_time>(
+              mtime + make_timespan(mp_expiration.get_days()*24*60*60));
     }
 
     // update earliest abort date
@@ -1744,8 +1743,8 @@ bool s3_multipart_abort_header(
       if ((! abort_date_tmp) ||
           (*abort_date_tmp > *rule_abort_date)) {
         abort_date_tmp =
-                boost::optional<ceph::real_time>(rule_abort_date);
-        rule_id_tmp = boost::optional<std::string>(id);
+                std::optional<ceph::real_time>(rule_abort_date);
+        rule_id_tmp = std::optional<std::string_view>(id);
       }
     }
   }
