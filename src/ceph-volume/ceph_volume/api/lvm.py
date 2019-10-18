@@ -680,8 +680,9 @@ class VolumeGroups(list):
     to filter them via keyword arguments.
     """
 
-    def __init__(self):
-        self._populate()
+    def __init__(self, populate=True):
+        if populate:
+            self._populate()
 
     def _populate(self):
         # get all the vgs in the current system
@@ -733,15 +734,10 @@ class VolumeGroups(list):
         """
         if not any([vg_name, vg_tags]):
             raise TypeError('.filter() requires vg_name or vg_tags (none given)')
-        # first find the filtered volumes with the values in self
-        filtered_groups = self._filter(
-            vg_name=vg_name,
-            vg_tags=vg_tags
-        )
-        # then purge everything
-        self._purge()
-        # and add the filtered items
-        self.extend(filtered_groups)
+
+        filtered_vgs = VolumeGroups(populate=False)
+        filtered_vgs.extend(self._filter(vg_name, vg_tags))
+        return filtered_vgs
 
     def get(self, vg_name=None, vg_tags=None):
         """
