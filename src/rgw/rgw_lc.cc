@@ -857,7 +857,7 @@ public:
 
     auto mtime = get_effective_mtime(oc);
     bool is_expired;
-    if (transition.days <= 0) {
+    if (transition.days < 0) {
       if (transition.date == boost::none) {
         ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": no transition day/date set in rule, skipping" << dendl;
         return false;
