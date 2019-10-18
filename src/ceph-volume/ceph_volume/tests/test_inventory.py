@@ -25,7 +25,8 @@ def device_report_keys(device_info):
                      'sectorsize': '512',
                      'size': 1999844147200.0,
                      'support_discard': '',
-                     'vendor': 'DELL'}
+                     'vendor': 'DELL',
+                     'device_id': 'Vendor-Model-Serial'}
     }
  )
     report = Devices().json_report()[0]
@@ -67,6 +68,7 @@ class TestInventory(object):
         'sys_api',
         'available',
         'lvs',
+        'device_id',
     ]
 
     expected_sys_api_keys = [
