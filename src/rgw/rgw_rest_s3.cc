@@ -3216,8 +3216,13 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
       RGWMPObj& mp = iter->mp;
       s->formatter->open_array_section("Upload");
-      s->formatter->dump_string("Key", mp.get_key());
-      s->formatter->dump_string("UploadId", mp.get_upload_id());
+      if (encode_url) {
+        s->formatter->dump_string("Key", url_encode(mp.get_key(), false));
+        s->formatter->dump_string("UploadId", url_encode(mp.get_upload_id(), false));
+      } else {
+        s->formatter->dump_string("Key", mp.get_key());
+        s->formatter->dump_string("UploadId", mp.get_upload_id());
+      }
       dump_owner(s, s->user->user_id, s->user->display_name, "Initiator");
       dump_owner(s, s->user->user_id, s->user->display_name);
       s->formatter->dump_string("StorageClass", "STANDARD");
@@ -3226,10 +3231,13 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     }
     if (!common_prefixes.empty()) {
       s->formatter->open_array_section("CommonPrefixes");
-      map<string, bool>::iterator pref_iter;
-      for (pref_iter = common_prefixes.begin();
-	   pref_iter != common_prefixes.end(); ++pref_iter) {
-	s->formatter->dump_string("CommonPrefixes.Prefix", pref_iter->first);
+      for (const auto& kv : common_prefixes) {
+        if (encode_url) {
+          s->formatter->dump_string("CommonPrefixes.Prefix",
+                                    url_encode(kv.first, false));
+        } else {
+          s->formatter->dump_string("CommonPrefixes.Prefix", kv.first);
+        }
       }
       s->formatter->close_section();
     }

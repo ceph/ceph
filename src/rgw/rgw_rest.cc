@@ -1599,6 +1599,16 @@ int RGWListBucketMultiparts_ObjStore::get_params()
     return op_ret;
   }
 
+  if (auto encoding_type = s->info.args.get_optional("encoding-type");
+      encoding_type != boost::none) {
+    if (strcasecmp(encoding_type->c_str(), "url") != 0) {
+      op_ret = -EINVAL;
+      ldout(s->cct, 5) << "ERROR: bad encoding type: " << encoding_type << dendl;
+      return op_ret;
+    }
+    encode_url = true;
+  }
+
   string key_marker = s->info.args.get("key-marker");
   string upload_id_marker = s->info.args.get("upload-id-marker");
   if (!key_marker.empty())
