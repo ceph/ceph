@@ -331,9 +331,16 @@ public:
     return (source.match_zone(zone) || dest.match_zone(zone));
   }
 
+  bool match_source(const string& zone, std::optional<rgw_bucket> b) const {
+    return (source.match_zone(zone) && source.match_bucket(b));
+  }
+
+  bool match_dest(const string& zone, std::optional<rgw_bucket> b) const {
+    return (dest.match_zone(zone) && dest.match_bucket(b));
+  }
+
   bool contains_zone_bucket(const string& zone, std::optional<rgw_bucket> b) const {
-    return ((source.match_zone(zone) && source.match_bucket(b)) ||
-            (dest.match_zone(zone) && dest.match_bucket(b)));
+    return (match_source(zone, b) || match_dest(zone, b));
   }
 
   void dump(ceph::Formatter *f) const;
