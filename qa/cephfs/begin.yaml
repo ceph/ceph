@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - "[[:digit:]]{5} sec.*SLOW_OP"
 tasks:
   - install:
       extra_packages:
