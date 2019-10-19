@@ -2331,12 +2331,14 @@ void encode_json(const char *name, const RGWBucketSyncFlowManager::flow_map_t& m
     auto& pflow = entry.second;
 
     encode_json("bucket", rgw_sync_bucket_entity::bucket_key(bucket), f);
+#if 0
     {
       Formatter::ArraySection fg(*f, "flow_groups");
       for (auto& flow_group : pflow.flow_groups) {
         encode_json("entry", *flow_group, f);
       }
     }
+#endif
     encode_json("pipes", pflow.pipe, f);
   }
 }

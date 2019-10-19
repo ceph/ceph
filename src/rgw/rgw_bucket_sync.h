@@ -116,8 +116,7 @@ struct rgw_sync_group_pipe_map {
 class RGWBucketSyncFlowManager {
 public:
   struct pipe_flow {
-    vector<rgw_sync_group_pipe_map *> flow_groups;
-    vector<rgw_sync_bucket_pipe> pipe;
+    std::vector<rgw_sync_bucket_pipe> pipe;
 
     void dump(ceph::Formatter *f) const;
   };
@@ -147,8 +146,7 @@ private:
    */
   flow_map_t::iterator find_bucket_flow(flow_map_t& m, std::optional<rgw_bucket> bucket);
 
-  void update_flow_maps(const rgw_sync_bucket_pipe& pipe,
-                        rgw_sync_group_pipe_map *flow_group);
+  void update_flow_maps(const rgw_sync_bucket_pipe& pipe);
 
 public:
 
