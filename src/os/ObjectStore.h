@@ -152,6 +152,25 @@ public:
   };
   using CollectionHandle = ceph::ref_t<CollectionImpl>;
 
+  struct ObjectImpl : public RefCountedObject {
+    ghobject_t oid;
+    bool exists = true;              ///< true if object logically exists
+
+    const ghobject_t& get_oid() {
+      return oid;
+    }
+    bool get_exists() {
+      return exists;
+    }
+    ObjectImpl(CephContext *cct, const ghobject_t& o, bool exists=true)
+      : RefCountedObject(cct),
+	oid(o),
+	exists(exists) {}
+    ~ObjectImpl() = default;
+    FRIEND_MAKE_REF(ObjectImpl);
+  };
+  using ObjectHandle = ceph::ref_t<ObjectImpl>;
+
 
   /*********************************
    *
@@ -421,6 +440,11 @@ public:
    * @returns true if object exists, false otherwise
    */
   virtual bool exists(CollectionHandle& c, const ghobject_t& oid) = 0;
+
+  virtual ObjectHandle lookup_object(CollectionHandle& c, const ghobject_t& oid) {
+    return ceph::make_ref<ObjectImpl>(c->get_cct(), oid, exists(c, oid));
+  }
+
   /**
    * set_collection_opts -- std::set pool options for a collectioninformation for an object
    *
@@ -671,7 +695,27 @@ public:
   virtual int collection_list(CollectionHandle &c,
 			      const ghobject_t& start, const ghobject_t& end,
 			      int max,
-			      std::vector<ghobject_t> *ls, ghobject_t *next) = 0;
+			      std::vector<ghobject_t> *ls, ghobject_t *next,
+			      int flags) = 0;
+
+  virtual int collection_list_plus(CollectionHandle &c,
+			   const ghobject_t& start, const ghobject_t& end,
+			   int max,
+			   std::vector<ObjectHandle> *ls, ghobject_t *next,
+			   int flags) {
+    vector<ghobject_t> l;
+    int r = collection_list(c, start, end, max, &l, next, flags);
+    if (r < 0) {
+      return r;
+    }
+    for (auto& o : l) {
+      auto h = lookup_object(c, o);
+      if (h) {
+	ls->push_back(std::move(h));
+      }
+    }
+    return 0;
+  }
 
 
   /// OMAP

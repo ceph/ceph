@@ -2743,7 +2743,7 @@ TEST_P(StoreTest, SimpleListTest) {
     while (!next.is_max()) {
       int r = store->collection_list(ch, current, ghobject_t::get_max(),
 				     50,
-				     &objects, &next);
+				     &objects, &next, 0);
       ASSERT_EQ(r, 0);
       ASSERT_TRUE(sorted(objects));
       cout << " got " << objects.size() << " next " << next << std::endl;
@@ -2755,6 +2755,70 @@ TEST_P(StoreTest, SimpleListTest) {
 	  //cout << "got new " << *p << std::endl;
 	}
 	saw.insert(*p);
+      }
+      objects.clear();
+      current = next;
+    }
+    ASSERT_EQ(saw.size(), all.size());
+    ASSERT_EQ(saw, all);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
+      t.remove(cid, *p);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, SimpleListPlusTest) {
+  int r;
+  coll_t cid(spg_t(pg_t(0, 1), shard_id_t(1)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  set<ghobject_t> all;
+  {
+    ObjectStore::Transaction t;
+    for (int i=0; i<200; ++i) {
+      string name("object_");
+      name += stringify(i);
+      ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)),
+		      ghobject_t::NO_GEN, shard_id_t(1));
+      hoid.hobj.pool = 1;
+      all.insert(hoid);
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+    }
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    set<ghobject_t> saw;
+    vector<ObjectHandle> objects;
+    ghobject_t next, current;
+    while (!next.is_max()) {
+      int r = store->collection_list_plus(ch, current, ghobject_t::get_max(),
+				     50,
+				     &objects, &next);
+      ASSERT_EQ(r, 0);
+      ASSERT_TRUE(sorted(objects));
+      cout << " got " << objects.size() << " next " << next << std::endl;
+      for (auto& p : objects) {
+	ASSERT_TRUE(p->get_exists());
+	if (saw.count(p->get_oid())) {
+	  cout << "got DUP " << p->get_oid() << std::endl;
+	} else {
+	  //cout << "got new " << *p << std::endl;
+	}
+	saw.insert(p->get_oid());
       }
       objects.clear();
       current = next;
@@ -2807,7 +2871,7 @@ TEST_P(StoreTest, ListEndTest) {
     vector<ghobject_t> objects;
     ghobject_t next;
     int r = store->collection_list(ch, ghobject_t(), end, 500,
-				   &objects, &next);
+				   &objects, &next, 0);
     ASSERT_EQ(r, 0);
     for (auto &p : objects) {
       ASSERT_NE(p, end);
@@ -2887,7 +2951,7 @@ TEST_P(StoreTest, MultipoolListTest) {
     ghobject_t next, current;
     while (!next.is_max()) {
       int r = store->collection_list(ch, current, ghobject_t::get_max(), 50,
-				     &objects, &next);
+				     &objects, &next, 0);
       ASSERT_EQ(r, 0);
       cout << " got " << objects.size() << " next " << next << std::endl;
       for (vector<ghobject_t>::iterator p = objects.begin(); p != objects.end();
@@ -3553,7 +3617,8 @@ TEST_P(StoreTest, ManyObjectTest) {
 
   set<ghobject_t> listed, listed2;
   vector<ghobject_t> objects;
-  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
+  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX,
+    &objects, nullptr, 0);
   ASSERT_EQ(r, 0);
 
   cerr << "objects.size() is " << objects.size() << std::endl;
@@ -3573,8 +3638,8 @@ TEST_P(StoreTest, ManyObjectTest) {
     ghobject_t::get_max(),
     50,
     &objects,
-    &next
-    );
+    &next,
+    0);
   ASSERT_EQ(r, 0);
   ASSERT_TRUE(objects.empty());
 
@@ -3585,7 +3650,8 @@ TEST_P(StoreTest, ManyObjectTest) {
     r = store->collection_list(ch, start, ghobject_t::get_max(),
 			       50,
 			       &objects,
-			       &next);
+			       &next,
+			       0);
     ASSERT_TRUE(sorted(objects));
     ASSERT_EQ(r, 0);
     listed.insert(objects.begin(), objects.end());
@@ -3810,7 +3876,7 @@ public:
     while (1) {
       vector<ghobject_t> objects;
       int r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-				     10, &objects, 0);
+				     10, &objects, nullptr, 0);
       ceph_assert(r >= 0);
       if (objects.empty())
 	break;
@@ -4418,7 +4484,7 @@ public:
     while (1) {
       //cerr << "scanning..." << std::endl;
       int r = store->collection_list(ch, current, ghobject_t::get_max(), 100,
-				     &objects, &next);
+				     &objects, &next, 0);
       ASSERT_EQ(r, 0);
       ASSERT_TRUE(sorted(objects));
       objects_set.insert(objects.begin(), objects.end());
@@ -4452,7 +4518,7 @@ public:
     }
 
     int r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-				   INT_MAX, &objects, 0);
+				   INT_MAX, &objects, nullptr, 0);
     ASSERT_EQ(r, 0);
     objects_set2.insert(objects.begin(), objects.end());
     ASSERT_EQ(objects_set2.size(), available_objects.size());
@@ -4866,7 +4932,8 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   }
   vector<ghobject_t> objects;
-  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
+  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX,
+    &objects, nullptr, 0);
   ASSERT_EQ(r, 0);
   set<ghobject_t> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
@@ -4876,7 +4943,7 @@ TEST_P(StoreTest, HashCollisionTest) {
   ghobject_t current, next;
   while (1) {
     r = store->collection_list(ch, current, ghobject_t::get_max(), 60,
-			       &objects, &next);
+			       &objects, &next, 0);
     ASSERT_EQ(r, 0);
     ASSERT_TRUE(sorted(objects));
     for (vector<ghobject_t>::iterator i = objects.begin();
@@ -4965,7 +5032,7 @@ TEST_P(StoreTest, ScrubTest) {
 
   vector<ghobject_t> objects;
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			     INT_MAX, &objects, 0);
+			     INT_MAX, &objects, nullptr, 0);
   ASSERT_EQ(r, 0);
   set<ghobject_t> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
@@ -4975,7 +5042,7 @@ TEST_P(StoreTest, ScrubTest) {
   ghobject_t current, next;
   while (1) {
     r = store->collection_list(ch, current, ghobject_t::get_max(), 60,
-			       &objects, &next);
+			       &objects, &next, 0);
     ASSERT_EQ(r, 0);
     ASSERT_TRUE(sorted(objects));
     for (vector<ghobject_t>::iterator i = objects.begin();
@@ -5442,7 +5509,7 @@ void colsplittest(
   // check
   vector<ghobject_t> objects;
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			     INT_MAX, &objects, 0);
+			     INT_MAX, &objects, nullptr, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
   for (vector<ghobject_t>::iterator i = objects.begin();
@@ -5453,7 +5520,7 @@ void colsplittest(
 
   objects.clear();
   r = store->collection_list(tch, ghobject_t(), ghobject_t::get_max(),
-			     INT_MAX, &objects, 0);
+			     INT_MAX, &objects, nullptr, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
   for (vector<ghobject_t>::iterator i = objects.begin();
@@ -5475,7 +5542,7 @@ void colsplittest(
   {
     vector<ghobject_t> objects;
     r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			       INT_MAX, &objects, 0);
+			       INT_MAX, &objects, nullptr, 0);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(objects.size(), num_objects * 2); // both halves
     unsigned size = 0;
@@ -5613,7 +5680,7 @@ void test_merge_skewed(ObjectStore *store,
   {
     vector<ghobject_t> got;
     store->collection_list(cha, ghobject_t(), ghobject_t::get_max(), INT_MAX,
-			   &got, 0);
+			   &got, nullptr, 0);
     set<ghobject_t> gotset;
     for (auto& o : got) {
       ASSERT_TRUE(aobjects.count(o) || bobjects.count(o));
@@ -5922,7 +5989,7 @@ TEST_P(StoreTest, BigRGWObjectName) {
   {
     vector<ghobject_t> objects;
     r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			       INT_MAX, &objects, 0);
+			       INT_MAX, &objects, nullptr, 0);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(objects.size(), 1u);
     ASSERT_EQ(objects[0], oid2);

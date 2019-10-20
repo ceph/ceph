@@ -875,7 +875,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
     while (n > 0) {
       BlueStore::Onode *o = &*p;
-      int refs = o->nref.load();
+      int refs = o->get_nref();
       if (refs > 1) {
         dout(20) << __func__ << "  " << o->oid << " has " << refs
                  << " refs, skipping" << dendl;
@@ -3507,6 +3507,29 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 
 
 // Collection
+#undef dout_prefix
+#define dout_prefix *_dout << "ColListCache" << this
+
+void BlueStore::Collection::ColListCache::invalidate(
+  CephContext* cct,
+  const mempool::bluestore_cache_other::string& object_key)
+{
+  if (oids.size() > next_pos) {
+    mempool::bluestore_cache_other::string key;
+
+    get_object_key(cct, oids[next_pos], &key);
+    if (object_key == key) {
+      next_pos++;
+    } else if (object_key > key) {
+      get_object_key(cct, oids[oids.size() - 1], &key);
+      if (object_key <= key) {
+	ldout(cct, 10) << __func__ << " invalidating" << dendl;
+
+	reset();
+      }
+    }
+  }
+}
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
@@ -3648,7 +3671,6 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 
   bufferlist v;
   int r = -ENOENT;
-  Onode *on;
   if (!is_createop) {
     r = store->db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
     ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
@@ -3660,13 +3682,31 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       return OnodeRef();
 
     // new object, new onode
-    on = new Onode(this, oid, key);
+    o.reset(new Onode(this, oid, key));
+    col_cache.invalidate(store->cct, o->key);
   } else {
     // loaded
     ceph_assert(r >= 0);
-    on = Onode::decode(this, oid, key, v);
+    o.reset(Onode::decode(this, oid, key, v));
   }
-  o.reset(on);
+  return onode_map.add(oid, o);
+}
+
+BlueStore::OnodeRef BlueStore::Collection::get_onode(
+  const ghobject_t& oid,
+  mempool::bluestore_cache_other::string& key,
+  bufferlist& v)
+{
+  ceph_assert (v.length() != 0);
+
+  OnodeRef o = onode_map.lookup(oid);
+  if (o)
+    return o;
+
+  ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
+			<< pretty_binary_string(key) << dendl;
+
+  o.reset(Onode::decode(this, oid, key.c_str(), v));
   return onode_map.add(oid, o);
 }
 
@@ -4624,6 +4664,8 @@ void BlueStore::_init_logger()
     "Average omap iterator next call latency");
   b.add_time_avg(l_bluestore_clist_lat, "clist_lat",
     "Average collection listing latency");
+  b.add_u64_counter(l_bluestore_clist_cache_hit, "bluestore_clist_cache_hit",
+		    "Collection list prefetched entries returned");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -10213,7 +10255,7 @@ int BlueStore::collection_empty(CollectionHandle& ch, bool *empty)
   vector<ghobject_t> ls;
   ghobject_t next;
   int r = collection_list(ch, ghobject_t(), ghobject_t::get_max(), 1,
-			  &ls, &next);
+			  &ls, &next, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   if (r < 0) {
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
          << dendl;
@@ -10235,16 +10277,39 @@ int BlueStore::collection_bits(CollectionHandle& ch)
 
 int BlueStore::collection_list(
   CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
+  vector<ghobject_t> *ls, ghobject_t *pnext, int flags)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   c->flush();
   dout(15) << __func__ << " " << c->cid
-           << " start " << start << " end " << end << " max " << max << dendl;
+           << " start " << start << " end " << end << " max " << max
+	   << " flags " << flags << dendl;
   int r;
   {
     std::shared_lock l(c->lock);
-    r = _collection_list(c, start, end, max, ls, pnext);
+    r = _collection_list(c, start, end, max, ls, nullptr, pnext, flags);
+  }
+
+  dout(10) << __func__ << " " << c->cid
+    << " start " << start << " end " << end << " max " << max
+    << " = " << r << ", ls.size() = " << ls->size()
+    << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
+  return r;
+}
+
+int BlueStore::collection_list_plus(
+  CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
+  vector<ObjectHandle> *ls, ghobject_t *pnext, int flags)
+{
+  Collection *c = static_cast<Collection *>(c_.get());
+  c->flush();
+  dout(15) << __func__ << " " << c->cid
+           << " start " << start << " end " << end << " max " << max
+	   << " flags " << flags << dendl;
+  int r;
+  {
+    std::shared_lock l(c->lock);
+    r = _collection_list(c, start, end, max, nullptr, ls, pnext, flags);
   }
 
   dout(10) << __func__ << " " << c->cid
@@ -10256,7 +10321,9 @@ int BlueStore::collection_list(
 
 int BlueStore::_collection_list(
   Collection *c, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
+  vector<ghobject_t> *ls,
+  vector<ObjectHandle> *lsp,
+  ghobject_t *pnext, int flags)
 {
 
   if (!c->exists)
@@ -10264,6 +10331,8 @@ int BlueStore::_collection_list(
 
   auto start_time = mono_clock::now();
   int r = 0;
+  size_t prefetch = min(max,
+    int(cct->_conf->bluestore_collection_list_min_prefetch));
   ghobject_t static_next;
   KeyValueDB::Iterator it;
   string temp_start_key, temp_end_key;
@@ -10271,6 +10340,9 @@ int BlueStore::_collection_list(
   bool set_next = false;
   string pend;
   bool temp;
+  auto pstart = start;
+  bool has_pstart = false;
+  unsigned n = 0;
 
   if (!pnext)
     pnext = &static_next;
@@ -10287,15 +10359,39 @@ int BlueStore::_collection_list(
     << " to " << pretty_binary_string(end_key)
     << " start " << start << dendl;
   it = db->get_iterator(PREFIX_OBJ);
+
   if (start == ghobject_t() ||
     start.hobj == hobject_t() ||
     start == c->cid.get_min_hobj()) {
+
+    // to make things simpler read from cache
+    // when end isn't specified only.
+    if (end == ghobject_t::get_max()) {
+      int got = c->col_cache.get(max, *ls, &pstart);
+      ceph_assert(got <= max);
+      if (got >= 0) {
+	logger->inc(l_bluestore_clist_cache_hit, got);
+
+	if (max == got) {
+	  *pnext = pstart;
+	  set_next = true;
+	  goto out;
+	}
+	prefetch = cct->_conf->bluestore_collection_list_prefetch;
+	has_pstart = true;
+      }
+    }
+  } else {
+    has_pstart = true;
+  }
+
+  if (!has_pstart)  {
     it->upper_bound(temp_start_key);
     temp = true;
   } else {
     string k;
-    get_object_key(cct, start, &k);
-    if (start.hobj.is_temp()) {
+    get_object_key(cct, pstart, &k);
+    if (pstart.hobj.is_temp()) {
       temp = true;
       ceph_assert(k >= temp_start_key && k < temp_end_key);
     } else {
@@ -10319,7 +10415,17 @@ int BlueStore::_collection_list(
       pend = temp ? temp_end_key : end_key;
     }
   }
-  dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
+  if (prefetch && (flags & CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL) == 0) {
+    prefetch = 0;
+  }
+
+  dout(20) << __func__ << " pend " << pretty_binary_string(pend)
+	   << " prefetching " << prefetch
+           << dendl;
+
+  // we wouldn't get here if there are still valid data in the cache
+  c->col_cache.reset(prefetch);
+
   while (true) {
     if (!it->valid() || it->key() >= pend) {
       if (!it->valid())
@@ -10348,14 +10454,40 @@ int BlueStore::_collection_list(
     ghobject_t oid;
     int r = get_key_object(it->key(), &oid);
     ceph_assert(r == 0);
+
+    OnodeRef o;
+    bufferlist v = it->value();
+    if ((flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) && v.length()) {
+      mempool::bluestore_cache_other::string key(
+	it->key().c_str(), it->key().length());
+      o = c->get_onode(oid, key, v);
+    }
+
     dout(20) << __func__ << " oid " << oid << " end " << end << dendl;
-    if (ls->size() >= (unsigned)max) {
-      dout(20) << __func__ << " reached max " << max << dendl;
-      *pnext = oid;
-      set_next = true;
+    if (n < (unsigned)max) {
+      if (ls) {
+	ls->push_back(oid);
+      } else {
+	assert(o);
+	lsp->push_back(o);
+      }
+      ++n;
+    } else if (prefetch) {
+      c->col_cache.push(oid);
+      --prefetch;
+      if (!set_next) {
+	dout(20) << __func__ << " reached next "<< oid << dendl;
+	*pnext = oid;
+	set_next = true;
+      }
+    } else {
+      if (!set_next) {
+	*pnext = oid;
+	set_next = true;
+      }
+      dout(20) << __func__ << " reached max, oid = "<< oid << dendl;
       break;
     }
-    ls->push_back(oid);
     it->next();
   }
 out:
@@ -10863,6 +10995,7 @@ void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
   o->onode.nid = nid;
   txc->last_nid = nid;
   o->exists = true;
+  return;
 }
 
 uint64_t BlueStore::_assign_blobid(TransContext *txc)
@@ -11564,7 +11697,25 @@ void BlueStore::_kv_sync_thread()
   ceph_assert(!kv_sync_started);
   kv_sync_started = true;
   kv_cond.notify_all();
+
+  auto t0 = mono_clock::now();
+  timespan twait = ceph::make_timespan(0);
+  size_t kv_submitted = 0;
+
   while (true) {
+    auto period = cct->_conf->bluestore_kv_sync_util_logging_s;
+    auto observation_period =
+      ceph::make_timespan(period);
+    auto elapsed = mono_clock::now() - t0;
+    if (period && elapsed >= observation_period) {
+      dout(0) << __func__ << " utilization: idle "
+	      << twait << " of " << elapsed
+	      << ", submitted: " << kv_submitted
+	      <<dendl;
+      t0 = mono_clock::now();
+      twait = ceph::make_timespan(0);
+      kv_submitted = 0;
+    }
     ceph_assert(kv_committing.empty());
     if (kv_queue.empty() &&
 	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
@@ -11572,8 +11723,11 @@ void BlueStore::_kv_sync_thread()
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
+      auto t = mono_clock::now();
       kv_sync_in_progress = false;
       kv_cond.wait(l);
+      twait += mono_clock::now() - t;
+
       dout(20) << __func__ << " wake" << dendl;
     } else {
       deque<TransContext*> kv_submitting;
@@ -11668,6 +11822,7 @@ void BlueStore::_kv_sync_thread()
 	throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_queued_lat);
 	if (txc->state == TransContext::STATE_KV_QUEUED) {
 	  _txc_apply_kv(txc, false);
+	  ++kv_submitted; // FIXME minor: we might want to count ops in transactions
 	  --txc->osr->kv_committing_serially;
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  if (txc->osr->kv_submitted_waiters) {
@@ -12620,6 +12775,7 @@ int BlueStore::_touch(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
   _assign_nid(txc, o);
+
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -13811,6 +13967,7 @@ int BlueStore::_write(TransContext *txc,
     r = -E2BIG;
   } else {
     _assign_nid(txc, o);
+
     r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
     txc->write_onode(o);
   }
@@ -13953,6 +14110,7 @@ int BlueStore::_do_remove(
     );
   }
   txc->t->rmkey(PREFIX_OBJ, o->key.c_str(), o->key.size());
+  c->col_cache.invalidate(cct, o->key);
   txc->note_removed_object(o);
   o->extent_map.clear();
   o->onode = bluestore_onode_t();
@@ -14507,7 +14665,6 @@ int BlueStore::_rename(TransContext *txc,
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key.c_str(), oldo->key.size());
-
   // rewrite shards
   {
     oldo->extent_map.fault_range(db, 0, oldo->onode.size);
@@ -14525,6 +14682,7 @@ int BlueStore::_rename(TransContext *txc,
 
   newo = oldo;
   txc->write_onode(newo);
+  c->col_cache.invalidate(cct, newo->key);
 
   // this adjusts oldo->{oid,key}, and reset oldo to a fresh empty
   // Onode in the old slot
@@ -14535,6 +14693,7 @@ int BlueStore::_rename(TransContext *txc,
   // it from the cache before this txc commits (or else someone may come along
   // and read newo's metadata via the old name).
   txc->note_modified_object(oldo);
+  c->col_cache.invalidate(cct, oldo->key);
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
@@ -14610,7 +14769,8 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     // then check if all of them are marked as non-existent.
     // Bypass the check if (next != ghobject_t::get_max())
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
-                         nonexistent_count + 1, &ls, &next);
+                         nonexistent_count + 1, &ls, nullptr, &next,
+			 CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     if (r >= 0) {
       // If true mean collecton has more objects than nonexistent_count,
       // so bypass check.

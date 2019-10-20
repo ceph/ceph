@@ -135,6 +135,7 @@ enum {
   l_bluestore_omap_lower_bound_lat,
   l_bluestore_omap_next_lat,
   l_bluestore_clist_lat,
+  l_bluestore_clist_cache_hit,
   l_bluestore_last
 };
 
@@ -1051,13 +1052,10 @@ public:
   struct OnodeSpace;
 
   /// an in-memory object
-  struct Onode {
+  struct Onode : public ObjectStore::ObjectImpl {
     MEMPOOL_CLASS_HELPERS();
 
-    std::atomic_int nref;  ///< reference count
     Collection *c;
-
-    ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
     mempool::bluestore_cache_other::string key;
@@ -1065,7 +1063,6 @@ public:
     boost::intrusive::list_member_hook<> lru_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
-    bool exists;              ///< true if object logically exists
 
     ExtentMap extent_map;
 
@@ -1079,30 +1076,24 @@ public:
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_other::string& k)
-      : nref(0),
+      : ObjectImpl(c->get_cct(), o, false),
 	c(c),
-	oid(o),
 	key(k),
-	exists(false),
 	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
-      const string& k)
-      : nref(0),
-      c(c),
-      oid(o),
-      key(k),
-      exists(false),
-      extent_map(this) {
+	  const string& k)
+      : ObjectImpl(c->get_cct(), o, false),
+	c(c),
+	key(k),
+	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
-      const char* k)
-      : nref(0),
-      c(c),
-      oid(o),
-      key(k),
-      exists(false),
-      extent_map(this) {
+	  const char* k)
+      : ObjectImpl(c->get_cct(), o, false),
+	c(c),
+	key(k),
+	extent_map(this) {
     }
 
     static Onode* decode(
@@ -1114,13 +1105,6 @@ public:
     void dump(Formatter* f) const;
 
     void flush();
-    void get() {
-      ++nref;
-    }
-    void put() {
-      if (--nref == 0)
-	delete this;
-    }
 
     const string& get_omap_prefix();
     void get_omap_header(string *out);
@@ -1298,7 +1282,53 @@ public:
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
-    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
+    struct ColListCache {
+      vector<ghobject_t> oids;
+      size_t next_pos = 0;
+
+      void reset(size_t sz = 1) {
+	oids.clear();
+	oids.reserve(sz);
+	next_pos = 0;
+      }
+      void invalidate(CephContext* cct,
+	const mempool::bluestore_cache_other::string& object_key);
+
+      void push(ghobject_t& oid) {
+	oids.push_back(oid);
+      }
+      int get(int max, vector<ghobject_t>& ls, ghobject_t* next_oid) {
+	int res = -1;
+	int avail = (int)oids.size() - next_pos;
+	if (avail > 1) {
+	  avail = res = std::min(avail - 1, max);
+
+	  size_t target_pos = ls.size();
+	  ls.resize(ls.size() + res);
+
+	  auto i = next_pos;
+	  for (; avail > 0; ++i) {
+	    ls[target_pos++].swap(oids[i]);
+	    --avail;
+	  }
+	  *next_oid = oids[i];
+	} else if (avail == 1) {
+	  res = 0; // hit but no data to return
+	  *next_oid = oids[next_pos];
+	}
+	if (res <= 0 && max) {
+	  oids.clear();
+	  next_pos = 0;
+	}
+	return res;
+      }
+    } col_cache;
+
+    OnodeRef get_onode(const ghobject_t& oid, bool create,
+      bool is_createop = false);
+    OnodeRef get_onode(const ghobject_t& oid,
+      mempool::bluestore_cache_other::string& key,
+      bufferlist& v);
 
     // the terminology is confusing here, sorry!
     //
@@ -2380,7 +2410,11 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max,
+    vector<ghobject_t> *ls,
+    vector<ObjectHandle> *lsh,
+    ghobject_t *next,
+    int flags);
 
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
@@ -2697,7 +2731,16 @@ public:
 		      const ghobject_t& start,
 		      const ghobject_t& end,
 		      int max,
-		      vector<ghobject_t> *ls, ghobject_t *next) override;
+		      vector<ghobject_t> *ls,
+		      ghobject_t *next,
+		      int flags) override;
+  int collection_list_plus(CollectionHandle &c,
+		      const ghobject_t& start,
+		      const ghobject_t& end,
+		      int max,
+		      vector<ObjectHandle> *ls,
+		      ghobject_t *next,
+		      int flags) override;
 
   int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid
