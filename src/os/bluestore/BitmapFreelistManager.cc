@@ -386,115 +386,44 @@ void BitmapFreelistManager::_verify_range(KeyValueDB *kvdb,
   unsigned errors = 0;
   uint64_t first_key = offset & key_mask;
   uint64_t last_key = (offset + length - 1) & key_mask;
-  if (first_key == last_key) {
+  uint64_t tmp_offset = offset;
+  do {
+    unsigned s = 0, e = 0;
     string k;
     make_offset_key(first_key, &k);
     bufferlist bl;
     kvdb->get(bitmap_prefix, k, &bl);
-    if (bl.length() > 0) {
+    if (bl.length()) {
       const char *p = bl.c_str();
-      unsigned s = (offset & ~key_mask) / bytes_per_block;
-      unsigned e = ((offset + length - 1) & ~key_mask) / bytes_per_block;
-      for (unsigned i = s; i <= e; ++i) {
-	int has = !!(p[i >> 3] & (1ull << (i & 7)));
-	if (has != val) {
-	  derr << __func__ << " key 0x" << std::hex << first_key << " bit 0x"
-	       << i << " has 0x" << has << " expected 0x" << val
-	       << std::dec << dendl;
-	  ++errors;
-	}
+      s = (tmp_offset & ~key_mask) / bytes_per_block;
+      if (first_key == last_key) {
+          e = ((offset + length - 1) & ~key_mask) / bytes_per_block;
+      } else {
+    	  e = blocks_per_key;
+      }
+      for (unsigned i = s; i < e; ++i) {
+        int has = !!(p[i >> 3] & (1ull << (i & 7)));
+        if (has != val) {
+          derr << __func__ << " key 0x" << std::hex << first_key << " bit 0x"
+      	 << i << " has 0x" << has << " expected 0x" << val << std::dec
+      	 << dendl;
+          ++errors;
+        }
+        tmp_offset += bytes_per_block;
       }
     } else {
       if (val) {
-	derr << __func__ << " key 0x" << std::hex << first_key
-	     << " not present, expected 0x" << val << std::dec << dendl;
-	++errors;
+        derr << __func__ << " key 0x" << std::hex << first_key
+             << " not present, expected 0x" << val << std::dec << dendl;
+        ++errors;
       }
     }
-  } else {
-    // first key
-    {
-      string k;
-      make_offset_key(first_key, &k);
-      bufferlist bl;
-      kvdb->get(bitmap_prefix, k, &bl);
-      if (bl.length()) {
-	const char *p = bl.c_str();
-	unsigned s = (offset & ~key_mask) / bytes_per_block;
-	unsigned e = blocks_per_key;
-	for (unsigned i = s; i < e; ++i) {
-	  int has = !!(p[i >> 3] & (1ull << (i & 7)));
-	  if (has != val) {
-	    derr << __func__ << " key 0x" << std::hex << first_key << " bit 0x"
-		 << i << " has 0x" << has << " expected 0x" << val << std::dec
-		 << dendl;
-	    ++errors;
-	  }
-	}
-      } else {
-	if (val) {
-	  derr << __func__ << " key 0x" << std::hex << first_key
-	       << " not present, expected 0x" << val << std::dec << dendl;
-	  ++errors;
-	}
-      }
-      first_key += bytes_per_key;
-    }
-    // middle keys
-    if (first_key < last_key) {
-      while (first_key < last_key) {
-	string k;
-	make_offset_key(first_key, &k);
-	bufferlist bl;
-	kvdb->get(bitmap_prefix, k, &bl);
-	if (bl.length() > 0) {
-	  const char *p = bl.c_str();
-	  for (unsigned i = 0; i < blocks_per_key; ++i) {
-	    int has = !!(p[i >> 3] & (1ull << (i & 7)));
-	    if (has != val) {
-	      derr << __func__ << " key 0x" << std::hex << first_key << " bit 0x"
-		   << i << " has 0x" << has << " expected 0x" << val
-		   << std::dec << dendl;
-	      ++errors;
-	    }
-	  }
-	} else {
-	  if (val) {
-	    derr << __func__ << " key 0x" << std::hex << first_key
-		 << " not present, expected 0x" << val << std::dec << dendl;
-	    ++errors;
-	  }
-	}
-	first_key += bytes_per_key;
-      }
-    }
-    ceph_assert(first_key == last_key);
-    {
-      string k;
-      make_offset_key(first_key, &k);
-      bufferlist bl;
-      kvdb->get(bitmap_prefix, k, &bl);
-      if (bl.length() > 0) {
-	const char *p = bl.c_str();
-	unsigned e = ((offset + length - 1) & ~key_mask) / bytes_per_block;
-	for (unsigned i = 0; i < e; ++i) {
-	  int has = !!(p[i >> 3] & (1ull << (i & 7)));
-	  if (has != val) {
-	    derr << __func__ << " key 0x" << std::hex << first_key << " bit 0x"
-		 << i << " has 0x" << has << " expected 0x" << val << std::dec
-		 << dendl;
-	    ++errors;
-	  }
-	}
-      } else {
-	if (val) {
-	  derr << __func__ << " key 0x" << std::hex << first_key
-	       << " not present, expected 0x" << val << std::dec << dendl;
-	  ++errors;
-	}
-      }
-    }
-  }
+
+    first_key += bytes_per_key;
+  } while (first_key <= last_key)
+
+  ceph_assert(first_key > last_key);
+
   if (errors) {
     derr << __func__ << " saw " << errors << " errors" << dendl;
     ceph_abort_msg("bitmap freelist errors");
