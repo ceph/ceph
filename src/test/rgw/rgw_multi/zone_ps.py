@@ -141,10 +141,11 @@ def delete_all_s3_topics(conn, region):
 
         topics = client.list_topics()['Topics']
         for topic in topics:
-            print 'topic cleanup, deleting: ' + topic['TopicArn']
+            print('topic cleanup, deleting: ' + topic['TopicArn'])
             assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
     except:
-        print 'failed to do topic cleanup. if there are topics they may need to be manually deleted'
+        print('failed to do topic cleanup. if there are topics '
+              'they may need to be manually deleted')
     
 
 class PSTopicS3:

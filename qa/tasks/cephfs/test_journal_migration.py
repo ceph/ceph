@@ -80,7 +80,7 @@ class TestJournalMigration(CephFSTestCase):
             args=[
                 "python",
                 "-c",
-                "import json; print len(json.load(open('/tmp/journal.json')))"
+                "import json; print(len(json.load(open('/tmp/journal.json'))))"
             ],
             stdout=StringIO())
         event_count = int(p.stdout.getvalue().strip())

@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+from __future__ import print_function
+
 import json
 import subprocess
 import shlex
@@ -41,7 +43,7 @@ def call(cmd):
   else:
     assert False, 'cmd is not a string/unicode nor a list!'
 
-  print 'call: {0}'.format(args)
+  print('call: {0}'.format(args))
   proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   ret = proc.wait()
 
@@ -52,8 +54,8 @@ def expect(cmd, expected_ret):
   try:
     (r, p) = call(cmd)
   except ValueError as e:
-    print >> sys.stderr, \
-             'unable to run {c}: {err}'.format(c=repr(cmd), err=e.message)
+    print('unable to run {c}: {err}'.format(c=repr(cmd), err=e.message),
+          file=sys.stderr)
     return errno.EINVAL
 
   assert r == p.returncode, \
@@ -281,7 +283,7 @@ def test_all():
       if len(cmd_args) > 0:
         (cmd_args_key, cmd_args_val) = cmd_args.split('=')
 
-      print 'generating keyring for {m}/{c}'.format(m=module,c=cmd_cmd)
+      print('generating keyring for {m}/{c}'.format(m=module,c=cmd_cmd))
       # gen keyring
       for (good_or_bad,kind_map) in perms.iteritems():
         for (kind,lst) in kind_map.iteritems():
@@ -304,7 +306,7 @@ def test_all():
                 'ceph auth get-or-create {n} {c}'.format(
                   n=cname,c=run_cap), 0, k)
       # keyring generated
-      print 'testing {m}/{c}'.format(m=module,c=cmd_cmd)
+      print('testing {m}/{c}'.format(m=module,c=cmd_cmd))
 
       # test
       for good_bad in perms.keys():
@@ -354,7 +356,7 @@ def main():
   test_all()
   test_misc()
 
-  print 'OK'
+  print('OK')
 
   return 0
 

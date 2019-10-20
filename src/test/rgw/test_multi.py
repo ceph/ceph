@@ -269,7 +269,7 @@ def init(parse_args):
     num_az_zones = cfg.getint(section, 'num_az_zones')
 
     num_ps_zones = args.num_ps_zones if num_ps_zones_from_conf == 0 else num_ps_zones_from_conf 
-    print 'num_ps_zones = ' + str(num_ps_zones)
+    print('num_ps_zones = ' + str(num_ps_zones))
 
     num_zones = args.num_zones + num_es_zones + num_cloud_zones + num_ps_zones + num_az_zones
 

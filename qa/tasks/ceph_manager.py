@@ -1213,7 +1213,7 @@ class CephManager:
                 """
                 implement log behavior.
                 """
-                print x
+                print(x)
             self.log = tmp
         if self.config is None:
             self.config = dict()
