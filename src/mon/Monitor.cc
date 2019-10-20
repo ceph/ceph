@@ -3608,6 +3608,10 @@ void Monitor::handle_command(MonOpRequestRef op)
 
     paxos->dump_info(f.get());
 
+    FeatureMap fm;
+    get_combined_feature_map(&fm);
+    f->dump_object("features", fm);
+
     f->close_section();
     f->flush(rdata);
 
