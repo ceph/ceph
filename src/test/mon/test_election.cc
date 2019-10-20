@@ -48,6 +48,7 @@ struct Election {
   set<int> disallowed_leaders;
 
   vector< function<void()> > messages;
+  int pending_election_messages;
 
   Election(int c, ElectionLogic::election_strategy es, double tracker_halflife=5);
   ~Election();
@@ -58,7 +59,7 @@ struct Election {
   void defer_to(int from, int to, epoch_t e);
   void claim_victory(int from, int to, epoch_t e, const set<int>& members);
   void accept_victory(int from, int to, epoch_t e);
-  void queue_message(int from, int to, function<void()> m);
+  void queue_election_message(int from, int to, function<void()> m);
 
   // test runner interfaces
   int run_timesteps(int max);
@@ -210,7 +211,8 @@ struct Owner : public ElectionOwner, RankProvider {
 };
 
 Election::Election(int c, ElectionLogic::election_strategy es,
-		   double tracker_halflife) : count(c), election_strategy(es)
+		   double tracker_halflife) : count(c), election_strategy(es),
+  pending_election_messages(0)
 {
   for (int i = 0; i < count; ++i) {
     electors[i] = new Owner(i, election_strategy, tracker_halflife, this);
@@ -226,16 +228,20 @@ Election::~Election()
   }
 }
 
-void Election::queue_message(int from, int to, function<void()> m)
+void Election::queue_election_message(int from, int to, function<void()> m)
 {
   if (!blocked_messages[from].count(to)) {
-    messages.push_back(m);
+    messages.push_back([this,m] {
+	--this->pending_election_messages;
+	m();
+      });
+    ++pending_election_messages;
   }
 }
 void Election::defer_to(int from, int to, epoch_t e)
 {
   Owner *o = electors[to];
-  queue_message(from, to, [o, from, e] {
+  queue_election_message(from, to, [o, from, e] {
     o->receive_ack(from, e);
     });
 }
@@ -243,7 +249,7 @@ void Election::defer_to(int from, int to, epoch_t e)
 void Election::propose_to(int from, int to, epoch_t e)
 {
   Owner *o = electors[to];
-  queue_message(from, to, [o, from, e] {
+  queue_election_message(from, to, [o, from, e] {
       o->receive_propose(from, e);
     });
 }
@@ -251,7 +257,7 @@ void Election::propose_to(int from, int to, epoch_t e)
 void Election::claim_victory(int from, int to, epoch_t e, const set<int>& members)
 {
   Owner *o = electors[to];
-  queue_message(from, to, [o, from, e, members] {
+  queue_election_message(from, to, [o, from, e, members] {
       o->receive_victory_claim(from, e, members);
     });
 }
@@ -259,7 +265,7 @@ void Election::claim_victory(int from, int to, epoch_t e, const set<int>& member
 void Election::accept_victory(int from, int to, epoch_t e)
 {
   Owner *o = electors[to];
-  queue_message(from, to, [o, from, e] {
+  queue_election_message(from, to, [o, from, e] {
       o->receive_victory_ack(from, e);
     });
 }
@@ -269,7 +275,7 @@ int Election::run_timesteps(int max)
   vector< function<void()> > current_m;
   int steps = 0;
   for (; (!max || steps < max) && // we have timesteps left AND ONE OF
-	 (!messages.empty() || // there are messages pending.
+	 (pending_election_messages || // there are messages pending.
 	  !election_stable()); // somebody's not happy and will act in future
        ++steps) {
     current_m.clear();
@@ -304,7 +310,7 @@ bool Election::election_stable()
     if (i.second->timer_steps != -1)
       return false;
   }
-  return true;
+  return (pending_election_messages == 0);
 }
 
 bool Election::check_leader_agreement()
