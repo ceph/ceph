@@ -420,7 +420,7 @@ void BitmapFreelistManager::_verify_range(KeyValueDB *kvdb,
     }
 
     first_key += bytes_per_key;
-  } while (first_key <= last_key)
+  } while (first_key <= last_key);
 
   ceph_assert(first_key > last_key);
 
