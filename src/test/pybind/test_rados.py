@@ -701,6 +701,24 @@ class TestIoctx(object):
 
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_remove(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        self.ioctx.write('foo', b'wrx')
+        eq(self.ioctx.read('foo'), b'wrx')
+        comp = self.ioctx.aio_remove('foo', cb, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(list(self.ioctx.list_objects()), [])
+
     def _take_down_acting_set(self, pool, objectname):
         # find acting_set for pool:objectname and take it down; used to
         # verify that async reads don't complete while acting set is missing
