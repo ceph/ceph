@@ -828,7 +828,7 @@ fi
 #
 
 BACKPORT_COMMON=$HOME/bin/backport_common.sh
-[ -f "$BACKPORT_COMMON" ] && source $HOME/bin/backport_common.sh
+[ -f "$BACKPORT_COMMON" ] && source "$BACKPORT_COMMON"
 setup_ok="1"
 init_github_user
 init_mandatory_vars
