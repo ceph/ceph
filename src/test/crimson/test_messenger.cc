@@ -883,6 +883,7 @@ enum class cmd_t : char {
   suite_connect_me,
   suite_send_me,
   suite_keepalive_me,
+  suite_markdown,
   suite_recv_op
 };
 
@@ -960,7 +961,9 @@ class FailoverSuite : public Dispatcher {
       ceph_abort();
     }
 
-    if (tracked_conn && tracked_conn != conn) {
+    if (tracked_conn &&
+        !tracked_conn->is_closed() &&
+        tracked_conn != conn) {
       logger().error("[{}] {} got accepted, but there's already traced_conn [{}] {}",
                      result->index, *conn, tracked_index, *tracked_conn);
       ceph_abort();
@@ -1047,9 +1050,11 @@ class FailoverSuite : public Dispatcher {
     });
   }
 
-  seastar::future<> send_op() {
+  seastar::future<> send_op(bool expect_reply=true) {
     ceph_assert(tracked_conn);
-    ++pending_peer_receive;
+    if (expect_reply) {
+      ++pending_peer_receive;
+    }
     pg_t pgid;
     object_locator_t oloc;
     hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
@@ -1220,17 +1225,27 @@ class FailoverSuite : public Dispatcher {
  public:
   seastar::future<> connect_peer() {
     logger().info("[Test] connect_peer({})", test_peer_addr);
-    ceph_assert(!tracked_conn);
     return test_msgr.connect(test_peer_addr, entity_name_t::TYPE_OSD
     ).then([this] (auto xconn) {
-      ceph_assert(!tracked_conn);
-
       auto conn = xconn->release();
       auto result = interceptor.find_result(conn);
       ceph_assert(result != nullptr);
 
+      if (tracked_conn) {
+        if (tracked_conn->is_closed()) {
+          ceph_assert(tracked_conn != conn);
+          logger().info("[Test] this is a new session replacing an closed one");
+        } else {
+          ceph_assert(tracked_index == result->index);
+          ceph_assert(tracked_conn == conn);
+          logger().info("[Test] this is not a new session");
+        }
+      } else {
+        logger().info("[Test] this is a new session");
+      }
       tracked_index = result->index;
       tracked_conn = conn;
+
       return flush_pending_send();
     });
   }
@@ -1251,6 +1266,18 @@ class FailoverSuite : public Dispatcher {
     logger().info("[Test] keepalive_peer()");
     ceph_assert(tracked_conn);
     return tracked_conn->keepalive();
+  }
+
+  seastar::future<> try_send_peer() {
+    logger().info("[Test] try_send_peer()");
+    ceph_assert(tracked_conn);
+    return send_op(false);
+  }
+
+  seastar::future<> markdown() {
+    logger().info("[Test] markdown()");
+    ceph_assert(tracked_conn);
+    return tracked_conn->close();
   }
 
   seastar::future<> wait_blocked() {
@@ -1279,6 +1306,11 @@ class FailoverSuite : public Dispatcher {
     return wait_ready(count, 0, true).then([this] {
       return std::reference_wrapper<ConnResults>(interceptor.results);
     });
+  }
+
+  bool is_standby() {
+    ceph_assert(tracked_conn);
+    return !(tracked_conn->is_connected() || tracked_conn->is_closed());
   }
 };
 
@@ -1454,6 +1486,12 @@ class FailoverTest : public Dispatcher {
     return prepare_cmd(cmd_t::suite_send_me);
   }
 
+  seastar::future<> try_peer_send_me() {
+    logger().info("[Test] try_peer_send_me()");
+    ceph_assert(test_suite);
+    return prepare_cmd(cmd_t::suite_send_me);
+  }
+
   seastar::future<> send_bidirectional() {
     ceph_assert(test_suite);
     return test_suite->send_peer().then([this] {
@@ -1465,6 +1503,11 @@ class FailoverTest : public Dispatcher {
     logger().info("[Test] peer_keepalive_me()");
     ceph_assert(test_suite);
     return prepare_cmd(cmd_t::suite_keepalive_me);
+  }
+
+  seastar::future<> markdown_peer() {
+    logger().info("[Test] markdown_peer()");
+    return prepare_cmd(cmd_t::suite_markdown);
   }
 };
 
@@ -1485,7 +1528,9 @@ class FailoverSuitePeer : public Dispatcher {
   }
 
   seastar::future<> ms_handle_accept(ConnectionRef conn) override {
-    ceph_assert(!tracked_conn || tracked_conn == conn);
+    ceph_assert(!tracked_conn ||
+                tracked_conn->is_closed() ||
+                tracked_conn == conn);
     tracked_conn = conn;
     return flush_pending_send();
   }
@@ -1539,11 +1584,22 @@ class FailoverSuitePeer : public Dispatcher {
 
   seastar::future<> connect_peer(entity_addr_t addr) {
     logger().info("[TestPeer] connect_peer({})", addr);
-    ceph_assert(!tracked_conn);
     return peer_msgr.connect(addr, entity_name_t::TYPE_OSD
     ).then([this] (auto xconn) {
-      ceph_assert(!tracked_conn);
-      tracked_conn = xconn->release();
+      auto new_tracked_conn = xconn->release();
+      if (tracked_conn) {
+        if (tracked_conn->is_closed()) {
+          ceph_assert(tracked_conn != new_tracked_conn);
+          logger().info("[TestPeer] this is a new session"
+                        " replacing an closed one");
+        } else {
+          ceph_assert(tracked_conn == new_tracked_conn);
+          logger().info("[TestPeer] this is not a new session");
+        }
+      } else {
+        logger().info("[TestPeer] this is a new session");
+      }
+      tracked_conn = new_tracked_conn;
       return flush_pending_send();
     });
   }
@@ -1563,6 +1619,12 @@ class FailoverSuitePeer : public Dispatcher {
     logger().info("[TestPeer] keepalive_peer()");
     ceph_assert(tracked_conn);
     return tracked_conn->keepalive();
+  }
+
+  seastar::future<> markdown() {
+    logger().info("[TestPeer] markdown()");
+    ceph_assert(tracked_conn);
+    return tracked_conn->close();
   }
 
   static seastar::future<std::unique_ptr<FailoverSuitePeer>>
@@ -1652,6 +1714,9 @@ class FailoverTestPeer : public Dispatcher {
      case cmd_t::suite_keepalive_me:
       ceph_assert(test_suite);
       return test_suite->keepalive_peer();
+     case cmd_t::suite_markdown:
+      ceph_assert(test_suite);
+      return test_suite->markdown();
      default:
       logger().error("TestPeer got unexpected command {} from Test", m_cmd);
       ceph_abort();
@@ -2877,6 +2942,626 @@ test_v2_stale_reaccept(FailoverTest& test) {
 }
 
 seastar::future<>
+test_v2_lossy_client(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_lossy_client",
+      TestInterceptor(),
+      policy_t::lossy_client,
+      policy_t::stateless_server,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return suite.connect_peer();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+    }).then([&suite] {
+      logger().info("-- 1 --");
+      logger().info("[Test] client markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 2 --");
+      logger().info("[Test] server markdown...");
+      return test.markdown_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(1, 0);
+    }).then([&suite] {
+      logger().info("-- 3 --");
+      logger().info("[Test] client reconnect...");
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(1, 0);
+      results[2].assert_state_at(conn_state_t::established);
+      results[2].assert_connect(1, 1, 0, 1);
+      results[2].assert_accept(0, 0, 0, 0);
+      results[2].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_stateless_server(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_stateless_server",
+      TestInterceptor(),
+      policy_t::stateless_server,
+      policy_t::lossy_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 1 --");
+      logger().info("[Test] client markdown...");
+      return test.markdown_peer();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(1, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    }).then([&suite] {
+      logger().info("-- 2 --");
+      logger().info("[Test] server markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(1, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 3 --");
+      logger().info("[Test] client reconnect...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(1, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+      results[2].assert_state_at(conn_state_t::established);
+      results[2].assert_connect(0, 0, 0, 0);
+      results[2].assert_accept(1, 1, 0, 1);
+      results[2].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_lossless_client(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_lossless_client",
+      TestInterceptor(),
+      policy_t::lossless_client,
+      policy_t::stateful_server,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return suite.connect_peer();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+    }).then([&suite] {
+      logger().info("-- 1 --");
+      logger().info("[Test] client markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 2 --");
+      logger().info("[Test] server markdown...");
+      return test.markdown_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(2, 2, 1, 2);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 1);
+    }).then([&suite] {
+      logger().info("-- 3 --");
+      logger().info("[Test] client reconnect...");
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(2, 2, 1, 2);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 1);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_stateful_server(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_stateful_server",
+      TestInterceptor(),
+      policy_t::stateful_server,
+      policy_t::lossless_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 1 --");
+      logger().info("[Test] client markdown...");
+      return test.markdown_peer();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([&suite] {
+      logger().info("-- 2 --");
+      logger().info("[Test] server markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+      results[2].assert_state_at(conn_state_t::established);
+      results[2].assert_connect(0, 0, 0, 0);
+      results[2].assert_accept(1, 1, 1, 1);
+      results[2].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 3 --");
+      logger().info("[Test] client reconnect...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+      results[2].assert_state_at(conn_state_t::established);
+      results[2].assert_connect(0, 0, 0, 0);
+      results[2].assert_accept(1, 1, 1, 1);
+      results[2].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_peer_reuse_connector(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_peer_reuse_connector",
+      TestInterceptor(),
+      policy_t::lossless_peer_reuse,
+      policy_t::lossless_peer_reuse,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return suite.connect_peer();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+    }).then([&suite] {
+      logger().info("-- 1 --");
+      logger().info("[Test] connector markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 2 --");
+      logger().info("[Test] acceptor markdown...");
+      return test.markdown_peer();
+    }).then([] {
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      ceph_assert(suite.is_standby());
+      logger().info("-- 3 --");
+      logger().info("[Test] connector reconnect...");
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.try_send_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(2, 2, 1, 2);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 1);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_peer_reuse_acceptor(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_peer_reuse_acceptor",
+      TestInterceptor(),
+      policy_t::lossless_peer_reuse,
+      policy_t::lossless_peer_reuse,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 1 --");
+      logger().info("[Test] connector markdown...");
+      return test.markdown_peer();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([] {
+      logger().info("-- 2 --");
+      logger().info("[Test] acceptor markdown...");
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 3 --");
+      logger().info("[Test] connector reconnect...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.try_peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 1);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+      results[2].assert_state_at(conn_state_t::established);
+      results[2].assert_connect(0, 0, 0, 0);
+      results[2].assert_accept(1, 1, 1, 1);
+      results[2].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_lossless_peer_connector(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_lossless_peer_connector",
+      TestInterceptor(),
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return suite.connect_peer();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+    }).then([&suite] {
+      logger().info("-- 1 --");
+      logger().info("[Test] connector markdown...");
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(1, 1, 0, 1);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 2 --");
+      logger().info("[Test] acceptor markdown...");
+      return test.markdown_peer();
+    }).then([] {
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      ceph_assert(suite.is_standby());
+      logger().info("-- 3 --");
+      logger().info("[Test] connector reconnect...");
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.try_send_peer();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(1, 1, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(2, 2, 1, 2);
+      results[1].assert_accept(0, 0, 0, 0);
+      results[1].assert_reset(0, 1);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_lossless_peer_acceptor(FailoverTest& test) {
+  return test.run_suite(
+      "test_v2_lossless_peer_acceptor",
+      TestInterceptor(),
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      logger().info("-- 0 --");
+      logger().info("[Test] setup connection...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.send_bidirectional();
+    }).then([&suite] {
+      return suite.wait_results(1);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 1 --");
+      logger().info("[Test] connector markdown...");
+      return test.markdown_peer();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([] {
+      logger().info("-- 2 --");
+      logger().info("[Test] acceptor markdown...");
+      return seastar::sleep(100ms);
+    }).then([&suite] {
+      return suite.markdown();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+    }).then([&test] {
+      logger().info("-- 3 --");
+      logger().info("[Test] connector reconnect...");
+      return test.peer_connect_me();
+    }).then([&test] {
+      return test.try_peer_send_me();
+    }).then([&suite] {
+      return suite.wait_results(3);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 2);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
+      results[2].assert_state_at(conn_state_t::established);
+      results[2].assert_connect(0, 0, 0, 0);
+      results[2].assert_accept(1, 1, 1, 1);
+      results[2].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
 test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
                  entity_addr_t cmd_peer_addr = entity_addr_t()) {
   if (test_addr == entity_addr_t() || cmd_peer_addr == entity_addr_t()) {
@@ -2967,6 +3652,22 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
       return test_v2_stale_establishing(*test);
     }).then([test] {
       return test_v2_stale_reaccept(*test);
+    }).then([test] {
+      return test_v2_lossy_client(*test);
+    }).then([test] {
+      return test_v2_stateless_server(*test);
+    }).then([test] {
+      return test_v2_lossless_client(*test);
+    }).then([test] {
+      return test_v2_stateful_server(*test);
+    }).then([test] {
+      return test_v2_peer_reuse_connector(*test);
+    }).then([test] {
+      return test_v2_peer_reuse_acceptor(*test);
+    }).then([test] {
+      return test_v2_lossless_peer_connector(*test);
+    }).then([test] {
+      return test_v2_lossless_peer_acceptor(*test);
     }).finally([test] {
       return test->shutdown().then([test] {});
     });
