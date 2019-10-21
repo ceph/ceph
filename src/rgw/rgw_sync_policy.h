@@ -219,6 +219,65 @@ struct rgw_sync_directional_rule {
 };
 WRITE_CLASS_ENCODER(rgw_sync_directional_rule)
 
+struct rgw_sync_bucket_entity {
+  string zone; /* define specific zones */
+  rgw_bucket bucket; /* define specific bucket */
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(zone, bl);
+    encode(bucket, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(zone, bl);
+    decode(bucket, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  string bucket_key() const;
+
+  const bool operator<(const rgw_sync_bucket_entity& e) const {
+    if (zone < e.zone) {
+      return true;
+    }
+    if (zone > e.zone) {
+      return false;
+    }
+    return (bucket < e.bucket);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
+
+struct rgw_sync_bucket_pipe {
+public:
+  rgw_sync_bucket_entity source;
+  rgw_sync_bucket_entity dest;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(source, bl);
+    encode(dest, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(source, bl);
+    decode(dest, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_bucket_pipe)
+
 struct rgw_sync_bucket_entities {
 private:
   bool match_str(const string& s1, const string& s2) const { /* empty string is wildcard */
