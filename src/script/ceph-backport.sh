@@ -122,7 +122,9 @@ function check_tracker_status {
 }
 
 function cherry_pick_phase {
+    local number_of_commits=
     local offset=0
+    local singular_or_plural_commit=
     populate_original_issue
     if [ -z "$original_issue" ] ; then
         error "Could not find original issue"
@@ -141,11 +143,10 @@ function cherry_pick_phase {
 
     debug "Counting commits in ${original_pr_url}"
     remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token})
-    number=$(echo ${remote_api_output} | jq .commits)
-    singular_or_plural_commit=
-    if [ "$number" -eq "$number" ] 2>/dev/null ; then
-        # \$number is an integer
-        if [ "$number" -eq "1" ] ; then
+    number_of_commits=$(echo ${remote_api_output} | jq .commits)
+    if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
+        # \$number_of_commits is set, and is an integer
+        if [ "$number_of_commits" -eq "1" ] ; then
             singular_or_plural_commit="commit"
         else
             singular_or_plural_commit="commits"
@@ -154,7 +155,7 @@ function cherry_pick_phase {
         error "Could not determine the number of commits in ${original_pr_url}"
         bail_out_github_api "$remote_api_output"
     fi
-    info "Found $number $singular_or_plural_commit in $original_pr_url"
+    info "Found $number_of_commits $singular_or_plural_commit in $original_pr_url"
 
     debug "Fetching latest commits from $upstream_remote"
     git fetch $upstream_remote
@@ -170,8 +171,8 @@ function cherry_pick_phase {
     debug "Fetching latest commits from ${original_pr_url}"
     git fetch $upstream_remote pull/$original_pr/head:pr-$original_pr
 
-    info "Attempting to cherry pick $number commits from ${original_pr_url} into local branch $local_branch"
-    let offset=$number-1 || true # don't fail on set -e when result is 0
+    info "Attempting to cherry pick $number_of_commits commits from ${original_pr_url} into local branch $local_branch"
+    let offset=${number_of_commits}-1 || true # don't fail on set -e when result is 0
     for ((i=$offset; i>=0; i--)) ; do
         debug "Cherry-picking commit $(git log --oneline --max-count=1 --no-decorate pr-$original_pr~$i)"
         if git cherry-pick -x "pr-$original_pr~$i" ; then
