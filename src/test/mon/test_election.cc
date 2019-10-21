@@ -59,10 +59,15 @@ struct Election {
   void defer_to(int from, int to, epoch_t e);
   void claim_victory(int from, int to, epoch_t e, const set<int>& members);
   void accept_victory(int from, int to, epoch_t e);
+  void queue_stable_message(int from, int to, function<void()> m);
+  void queue_timeout_message(int from, int to, function<void()> m);
+  void queue_stable_or_timeout(int from, int to,
+			       function<void()> m, function<void()> t);
   void queue_election_message(int from, int to, function<void()> m);
 
   // test runner interfaces
   int run_timesteps(int max);
+  void init_pings();
   void start_one(int who);
   void start_all();
   bool election_stable();
@@ -180,6 +185,18 @@ struct Owner : public ElectionOwner, RankProvider {
       }
     }
   }
+  void receive_ping(int rank, bufferlist bl) {
+    map<int,ConnectionReport> crs;
+    bufferlist::const_iterator bi = bl.begin();
+    decode(crs, bi);
+    peer_tracker.report_live_connection(rank, 1);
+    for (auto& i : crs) {
+      peer_tracker.receive_peer_report(i.second);
+    }
+  }
+  void receive_ping_timeout(int rank) {
+    peer_tracker.report_dead_connection(rank, 1);
+  }
   void election_timeout() {
     ldout(g_ceph_context, 2) << "election epoch " << logic.get_epoch()
 	 << " timed out for " << rank
@@ -194,6 +211,31 @@ struct Owner : public ElectionOwner, RankProvider {
 	 << ", acked_me:" << logic.acked_me << dendl;
     reset_election();
   }
+  void send_pings() {
+    bufferlist bl;
+    map<int,ConnectionReport> crs;
+    peer_tracker.generate_report_of_peers(&crs[rank]);
+    for (int i = 0; i < parent->get_paxos_size(); ++i) {
+      if (i == rank) {
+	continue;
+      }
+      const ConnectionReport *view = peer_tracker.get_peer_view(i);
+      if (view != NULL) {
+	crs[i] = *view;
+      }
+    }
+    encode(crs, bl);
+
+    for (int i = 0; i < parent->get_paxos_size(); ++i) {
+      if (i == rank)
+	continue;
+      Owner *o = parent->electors[i];
+      parent->queue_stable_or_timeout(rank, i,
+				      [o, r=rank, bl] { o->receive_ping(r, bl); },
+				      [o, r=rank] { o->receive_ping_timeout(r); }
+				      );
+    }
+  }
   void notify_timestep() {
     assert(timer_steps != 0);
     if (timer_steps > 0) {
@@ -206,6 +248,8 @@ struct Owner : public ElectionOwner, RankProvider {
 	victory_timeout();
       }
     }
+
+    send_pings();
   }
   const char *prefix_name() { return "Owner:         "; }
 };
@@ -228,6 +272,13 @@ Election::~Election()
   }
 }
 
+void Election::queue_stable_message(int from, int to, function<void()> m)
+{
+  if (!blocked_messages[from].count(to)) {
+    messages.push_back(m);
+  }
+}
+
 void Election::queue_election_message(int from, int to, function<void()> m)
 {
   if (!blocked_messages[from].count(to)) {
@@ -238,6 +289,23 @@ void Election::queue_election_message(int from, int to, function<void()> m)
     ++pending_election_messages;
   }
 }
+
+void Election::queue_timeout_message(int from, int to, function<void()> m)
+{
+  ceph_assert(blocked_messages[from].count(to));
+  messages.push_back(m);
+}
+
+void Election::queue_stable_or_timeout(int from, int to,
+				       function<void()> m, function<void()> t)
+{
+  if (blocked_messages[from].count(to)) {
+    queue_timeout_message(from, to, t);
+  } else {
+    queue_stable_message(from, to, m);
+  }
+}
+
 void Election::defer_to(int from, int to, epoch_t e)
 {
   Owner *o = electors[to];
@@ -291,13 +359,21 @@ int Election::run_timesteps(int max)
   return steps;
 }
 
+void Election::init_pings()
+{
+  for (auto e : electors) {
+    e.second->send_pings();
+  }
+}
 void Election::start_one(int who)
 {
+  init_pings();
   assert(who < static_cast<int>(electors.size()));
   electors[who]->logic.start();
 }
 
 void Election::start_all() {
+  init_pings();
   for (auto e : electors) {
     e.second->logic.start();
   }
@@ -406,6 +482,24 @@ void blocked_connection_continues_election(ElectionLogic::election_strategy stra
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
+void blocked_connection_converges_election(ElectionLogic::election_strategy strategy)
+{
+  Election election(5, strategy);
+  election.block_bidirectional_messages(0, 1);
+  election.start_all();
+  int steps = election.run_timesteps(100);
+  ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+  election.unblock_bidirectional_messages(0, 1);
+  steps = election.run_timesteps(100);
+  ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+}
+
 void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
 {
   int MON_COUNT = 5;
@@ -463,5 +557,5 @@ test_disallowed(disallowed_doesnt_win)
 
 test_connectivity(single_startup_election_completes)
 test_connectivity(everybody_starts_completes)
-test_connectivity(blocked_connection_continues_election)
+test_connectivity(blocked_connection_converges_election)
 test_connectivity(disallowed_doesnt_win)
