@@ -20,7 +20,7 @@
 SCRIPT_VERSION="15.0.0.5775"
 full_path="$0"
 this_script=$(basename "$full_path")
-how_to_get_setup_advice="For additional setup advice, run:  ${this_script} --setup-advice"
+how_to_get_setup_advice="For setup advice, run: \"${this_script} --setup-advice | less\""
 
 if [[ $* == *--debug* ]]; then
     set -x
@@ -308,28 +308,16 @@ function info {
     log info "$@"
 }
 
-function init_github_user {
-    debug "Initializing mandatory variables - GitHub user"
-    if [ "$github_user" ] ; then
-        true
-    else
-        warning "github_user variable not set, falling back to \$USER"
-        github_user="$USER"
-        if [ "$github_user" ] ; then
-            true
-        else
-            failed_mandatory_var_check github_user "not set"
-            info "$how_to_get_setup_advice"
-            false
-        fi
-    fi
-}
-
-function init_mandatory_vars {
-    debug "Initializing mandatory variables - endpoints"
+function init_endpoints {
+    verbose "Initializing remote API endpoints"
     redmine_endpoint="${redmine_endpoint:-"https://tracker.ceph.com"}"
     github_endpoint="${github_endpoint:-"https://github.com/ceph/ceph"}"
-    debug "Initializing mandatory variables - GitHub remotes"
+}
+
+function init_remotes {
+    # if github_user is not set, we cannot initialize fork_remote
+    vet_github_user
+    verbose "Initializing GitHub repos (\"remotes\")"
     upstream_remote="${upstream_remote:-$(deduce_remote upstream)}"
     fork_remote="${fork_remote:-$(deduce_remote fork)}"
 }
@@ -488,7 +476,7 @@ function setup_report {
     local fork_remote_display="${fork_remote:-$not_set}"
     local redmine_key_display=""
     local github_token_display=""
-    debug Checking mandatory variables
+    verbose Checking mandatory variables
     if [ "$github_token" ] ; then
         if [ "$(vet_github_token)" ] ; then
             github_token_display="(OK, not shown)"
@@ -716,6 +704,16 @@ function vet_github_token {
     fi
 }
 
+function vet_github_user {
+    if [ "$github_user" ] ; then
+        true
+    else
+        failed_mandatory_var_check github_user "not set"
+        info "$how_to_get_setup_advice"
+        false
+    fi
+}
+
 function vet_pr_milestone {
     local pr_number="$1"
     local pr_title="$2"
@@ -865,8 +863,8 @@ fi
 BACKPORT_COMMON=$HOME/bin/backport_common.sh
 [ -f "$BACKPORT_COMMON" ] && source "$BACKPORT_COMMON"
 setup_ok="1"
-init_github_user
-init_mandatory_vars
+init_endpoints
+init_remotes
 setup_report
 if [ "$setup_ok" ] ; then
     if [ "$SETUP_ONLY" ] ; then
@@ -878,7 +876,6 @@ if [ "$setup_ok" ] ; then
 else
     if [ "$SETUP_ONLY" ] ; then
         log bare "Setup is NOT OK"
-        log bare "(hint) set variables via the environment"
         log bare "$how_to_get_setup_advice"
         false
     else
