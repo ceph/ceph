@@ -1663,45 +1663,6 @@ bool OSDMap::check_pg_upmaps(
     }
     vector<int> raw, up;
     pg_to_raw_upmap(pg, &raw, &up);
-    auto i = pg_upmap.find(pg);
-    if (i != pg_upmap.end() && raw == i->second) {
-      ldout(cct, 10) << " removing redundant pg_upmap "
-                     << i->first << " " << i->second
-                     << dendl;
-      to_cancel->push_back(pg);
-      continue;
-    }
-    auto j = pg_upmap_items.find(pg);
-    if (j != pg_upmap_items.end()) {
-      mempool::osdmap::vector<pair<int,int>> newmap;
-      for (auto& p : j->second) {
-        if (std::find(raw.begin(), raw.end(), p.first) == raw.end()) {
-          // cancel mapping if source osd does not exist anymore
-          continue;
-        }
-        if (p.second != CRUSH_ITEM_NONE && p.second < max_osd &&
-            p.second >= 0 && osd_weight[p.second] == 0) {
-          // cancel mapping if target osd is out
-          continue;
-        }
-        newmap.push_back(p);
-      }
-      if (newmap.empty()) {
-        ldout(cct, 10) << " removing no-op pg_upmap_items "
-                       << j->first << " " << j->second
-                       << dendl;
-        to_cancel->push_back(pg);
-        continue;
-      } else if (newmap != j->second) {
-        ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
-                       << j->first << " " << j->second
-                       << " -> " << newmap
-                       << dendl;
-        to_remap->insert({pg, newmap});
-        any_change = true;
-        continue;
-      }
-    }
     auto crush_rule = get_pg_pool_crush_rule(pg);
     auto r = crush->verify_upmap(cct,
                                  crush_rule,
@@ -1744,6 +1705,47 @@ bool OSDMap::check_pg_upmaps(
         // osd is out/crush-out
         to_cancel->push_back(pg);
         break;
+      }
+    }
+    if (!to_cancel->empty() && to_cancel->back() == pg)
+      continue;
+    // okay, upmap is valid
+    // continue to check if it is still necessary
+    auto i = pg_upmap.find(pg);
+    if (i != pg_upmap.end() && raw == i->second) {
+      ldout(cct, 10) << " removing redundant pg_upmap "
+                     << i->first << " " << i->second
+                     << dendl;
+      to_cancel->push_back(pg);
+      continue;
+    }
+    auto j = pg_upmap_items.find(pg);
+    if (j != pg_upmap_items.end()) {
+      mempool::osdmap::vector<pair<int,int>> newmap;
+      for (auto& p : j->second) {
+        if (std::find(raw.begin(), raw.end(), p.first) == raw.end()) {
+          // cancel mapping if source osd does not exist anymore
+          continue;
+        }
+        if (p.second != CRUSH_ITEM_NONE && p.second < max_osd &&
+            p.second >= 0 && osd_weight[p.second] == 0) {
+          // cancel mapping if target osd is out
+          continue;
+        }
+        newmap.push_back(p);
+      }
+      if (newmap.empty()) {
+        ldout(cct, 10) << " removing no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << dendl;
+        to_cancel->push_back(pg);
+      } else if (newmap != j->second) {
+        ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << " -> " << newmap
+                       << dendl;
+        to_remap->insert({pg, newmap});
+        any_change = true;
       }
     }
   }
