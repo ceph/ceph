@@ -1896,14 +1896,18 @@ class CephManager:
         """
         self.log('Canceling any pending splits or merges...')
         osd_dump = self.get_osd_dump_json()
-        for pool in osd_dump['pools']:
-            if pool['pg_num'] != pool['pg_num_target']:
-                self.log('Setting pool %s (%d) pg_num %d -> %d' %
-                         (pool['pool_name'], pool['pool'],
-                          pool['pg_num_target'],
-                          pool['pg_num']))
-                self.raw_cluster_cmd('osd', 'pool', 'set', pool['pool_name'],
-                                     'pg_num', str(pool['pg_num']))
+        try:
+            for pool in osd_dump['pools']:
+                if pool['pg_num'] != pool['pg_num_target']:
+                    self.log('Setting pool %s (%d) pg_num %d -> %d' %
+                             (pool['pool_name'], pool['pool'],
+                              pool['pg_num_target'],
+                              pool['pg_num']))
+                    self.raw_cluster_cmd('osd', 'pool', 'set', pool['pool_name'],
+                                         'pg_num', str(pool['pg_num']))
+        except KeyError:
+            # we don't support pg_num_target before nautilus
+            pass
 
     def set_pool_pgpnum(self, pool_name, force):
         """
