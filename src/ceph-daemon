@@ -89,6 +89,9 @@ def get_log_dir(fsid):
 def make_data_dir_base(fsid, uid, gid):
     data_dir_base = os.path.join(args.data_dir, fsid)
     makedirs(data_dir_base, uid, gid, DATA_DIR_MODE)
+    makedirs(os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE)
+    makedirs(os.path.join(data_dir_base, 'crash', 'posted'), uid, gid,
+             DATA_DIR_MODE)
     return data_dir_base
 
 def make_data_dir(fsid, daemon_type, daemon_id, uid=None, gid=None):
@@ -210,11 +213,24 @@ def get_config_and_keyring():
             config = f.read()
     return (config, keyring)
 
+def get_config_and_both_keyrings():
+    if args.config_and_keyrings == '-':
+        try:
+            j = injected_stdin
+        except NameError:
+            j = sys.stdin.read()
+    else:
+        with open(args.config_and_keyrings, 'r') as f:
+            j = f.read()
+    d = json.loads(j)
+    (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
+
 def get_container_mounts(fsid, daemon_type, daemon_id):
     mounts = {}
     if fsid:
         log_dir = get_log_dir(fsid)
         mounts[log_dir] = '/var/log/ceph:z'
+        mounts['/var/lib/ceph/%s/crash' % fsid] = '/var/lib/ceph/crash:z'
 
     if daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
@@ -352,10 +368,12 @@ def install_base_units(fsid):
     """
     Set up ceph.target and ceph-$fsid.target units.
     """
+    # global unit
     existed = os.path.exists(args.unit_dir + '/ceph.target')
     with open(args.unit_dir + '/ceph.target.new', 'w') as f:
         f.write('[Unit]\n'
                 'Description=all ceph service\n'
+                '\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target\n')
         os.rename(args.unit_dir + '/ceph.target.new',
@@ -364,12 +382,14 @@ def install_base_units(fsid):
         subprocess.check_output(['systemctl', 'enable', 'ceph.target'])
         subprocess.check_output(['systemctl', 'start', 'ceph.target'])
 
+    # cluster unit
     existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % fsid)
     with open(args.unit_dir + '/ceph-%s.target.new' % fsid, 'w') as f:
         f.write('[Unit]\n'
                 'Description=ceph cluster {fsid}\n'
                 'PartOf=ceph.target\n'
                 'Before=ceph.target\n'
+                '\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target ceph.target\n'.format(
                     fsid=fsid)
@@ -379,6 +399,62 @@ def install_base_units(fsid):
     if not existed:
         subprocess.check_output(['systemctl', 'enable', 'ceph-%s.target' % fsid])
         subprocess.check_output(['systemctl', 'start', 'ceph-%s.target' % fsid])
+
+def deploy_crash(fsid, uid, gid, config, keyring):
+    crash_dir = os.path.join(args.data_dir, fsid, 'crash')
+    makedirs(crash_dir, uid, gid, DATA_DIR_MODE)
+
+    with open(os.path.join(crash_dir, 'keyring'), 'w') as f:
+        os.fchmod(f.fileno(), 0o600)
+        os.fchown(f.fileno(), uid, gid)
+        f.write(keyring)
+    with open(os.path.join(crash_dir, 'config'), 'w') as f:
+        os.fchmod(f.fileno(), 0o600)
+        os.fchown(f.fileno(), uid, gid)
+        f.write(config)
+
+    # ceph-crash unit
+    existed = os.path.exists(args.unit_dir + '/ceph-%s-crash.service' % fsid)
+    mounts = {
+        crash_dir: '/var/lib/ceph/crash:z',
+        os.path.join(crash_dir, 'config'): '/etc/ceph/ceph.conf:z',
+        os.path.join(crash_dir, 'keyring'): '/etc/ceph/ceph.keyring:z',
+    }
+    c = CephContainer(
+        image=args.image,
+        entrypoint='/usr/bin/ceph-crash',
+        args=['-n', 'client.crash.%s' % get_hostname()],
+        volume_mounts=mounts,
+        cname='ceph-%s-crash' % (fsid),
+    )
+    unit_name = 'ceph-%s-crash.service' % fsid
+    with open(os.path.join(args.unit_dir, unit_name + '.new'), 'w') as f:
+        f.write('[Unit]\n'
+                'Description=ceph cluster {fsid} crash dump collector\n'
+                'PartOf=ceph-{fsid}.target\n'
+                'Before=ceph-{fsid}.target\n'
+                '\n'
+                '[Service]\n'
+                'Type=simple\n'
+                'ExecStart={cmd}\n'
+                'ExecStop=-{podman_path} stop ceph-{fsid}-crash\n'
+                'Restart=always\n'
+                'RestartSec=10\n'
+                'StartLimitInterval=10min\n'
+                'StartLimitBurst=10\n'
+                '\n'
+                '[Install]\n'
+                'WantedBy=ceph-{fsid}.target\n'.format(
+                    podman_path=podman_path,
+                    fsid=fsid,
+                    cmd=' '.join(c.run_cmd()))
+        )
+        os.rename(os.path.join(args.unit_dir, unit_name + '.new'),
+                  os.path.join(args.unit_dir, unit_name))
+    if not existed:
+        subprocess.check_output(['systemctl', 'enable', unit_name])
+        subprocess.check_output(['systemctl', 'start', unit_name])
+
 
 def get_unit_file(fsid):
     u = """[Unit]
@@ -514,8 +590,9 @@ def command_version():
 
 def command_bootstrap():
     fsid = args.fsid or make_fsid()
-    mon_id = args.mon_id or get_hostname()
-    mgr_id = args.mgr_id or get_hostname()
+    hostname = get_hostname()
+    mon_id = args.mon_id or hostname
+    mgr_id = args.mgr_id or hostname
     logging.info('Cluster fsid: %s' % fsid)
 
     logging.info('Extracting ceph user uid/gid from container image...')
@@ -538,6 +615,11 @@ def command_bootstrap():
         entrypoint='/usr/bin/ceph-authtool',
         args=['--gen-print-key'],
     ).run().strip()
+    crash_key = CephContainer(
+        image=args.image,
+        entrypoint='/usr/bin/ceph-authtool',
+        args=['--gen-print-key'],
+    ).run().strip()
 
     keyring = ('[mon.]\n'
                '\tkey = %s\n'
@@ -553,7 +635,11 @@ def command_bootstrap():
                '\tcaps mon = allow profile mgr\n'
                '\tcaps mds = allow *\n'
                '\tcaps osd = allow *\n'
-               % (mon_key, admin_key, mgr_id, mgr_key))
+               '[client.crash.%s]\n'
+               '\tkey = %s\n'
+               '\tcaps mon = allow profile crash\n'
+               '\tcaps mgr = allow profile crash\n'
+               % (mon_key, admin_key, mgr_id, mgr_key, hostname, crash_key))
 
     # tmp keyring file
     tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
@@ -632,6 +718,10 @@ def command_bootstrap():
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
+
+    # crash unit
+    deploy_crash(fsid, uid, gid, config,
+                 '[client.crash.%s]\n\tkey = %s\n' % (hostname, crash_key))
 
     # output files
     if args.output_keyring:
@@ -778,7 +868,7 @@ def command_deploy():
     (daemon_type, daemon_id) = args.name.split('.')
     if daemon_type not in ['mon', 'mgr', 'mds', 'osd', 'rgw']:
         raise RuntimeError('daemon type %s not recognized' % daemon_type)
-    (config, keyring) = get_config_and_keyring()
+    (config, keyring, crash_keyring) = get_config_and_both_keyrings()
     if daemon_type == 'mon':
         if args.mon_ip:
             config += '[mon.%s]\n\tpublic_addr = %s\n' % (daemon_id, args.mon_ip)
@@ -791,6 +881,7 @@ def command_deploy():
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                   config, keyring)
+    deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
 ##################################
 
@@ -1019,6 +1110,12 @@ def command_rm_cluster():
         subprocess.check_output(['systemctl', 'disable', unit_name])
     except subprocess.CalledProcessError:
         pass
+    crash_unit_name = 'ceph-%s-crash.service' % args.fsid
+    try:
+        subprocess.check_output(['systemctl', 'stop', crash_unit_name])
+        subprocess.check_output(['systemctl', 'disable', crash_unit_name])
+    except subprocess.CalledProcessError:
+        pass
 
     slice_name = 'system-%s.slice' % (
         ('ceph-%s' % args.fsid).replace('-', '\\x2d'))
@@ -1032,6 +1129,8 @@ def command_rm_cluster():
     # rm units
     subprocess.check_output(['rm', '-f', args.unit_dir +
                              '/ceph-%s@.service' % args.fsid])
+    subprocess.check_output(['rm', '-f', args.unit_dir +
+                             '/ceph-%s-crash.service' % args.fsid])
     subprocess.check_output(['rm', '-f', args.unit_dir +
                              '/ceph-%s.target' % args.fsid])
     subprocess.check_output(['rm', '-rf',
@@ -1269,8 +1368,8 @@ parser_deploy.add_argument(
     '--key',
     help='key for new daemon')
 parser_deploy.add_argument(
-    '--config-and-keyring',
-    help='JSON file with config and key')
+    '--config-and-keyrings',
+    help='JSON file with config and keyrings for the daemon and crash agent')
 parser_deploy.add_argument(
     '--mon-ip',
     help='mon IP')

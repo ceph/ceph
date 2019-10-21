@@ -372,7 +372,6 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 7 ; then
-		    $SUDO $yumdnf install -y python36-devel
 		    case "$ARCH" in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
@@ -398,8 +397,8 @@ else
                 ;;
         esac
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
-        # for python3_pkgversion
-        $SUDO $yumdnf install -y python-srpm-macros
+        # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
+        $SUDO $yumdnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
 	if [ -n "$dts_ver" ]; then

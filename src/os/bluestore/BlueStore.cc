@@ -11190,7 +11190,6 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 {
   ceph_assert(txc->state == TransContext::STATE_KV_QUEUED);
-  txc->state = TransContext::STATE_KV_SUBMITTED;
   {
 #if defined(WITH_LTTNG)
     auto start = mono_clock::now();
@@ -11198,6 +11197,7 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 
     int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
     ceph_assert(r == 0);
+    txc->state = TransContext::STATE_KV_SUBMITTED;
 
 #if defined(WITH_LTTNG)
     if (txc->tracing) {

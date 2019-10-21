@@ -6,5 +6,6 @@ overrides:
         ms inject delay type: osd mds
         ms inject delay probability: .005
         ms inject delay max: 1
+        mon client directed command retry: 5
     log-whitelist:
       - \(OSD_SLOW_PING_TIME

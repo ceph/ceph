@@ -53,6 +53,23 @@ def test_statfs():
     assert(len(stat) == 11)
 
 @with_setup(setup_test)
+def test_statx():
+    stat = cephfs.statx(b'/', libcephfs.CEPH_STATX_MODE, 0)
+    assert('mode' in stat.keys())
+    stat = cephfs.statx(b'/', libcephfs.CEPH_STATX_BTIME, 0)
+    assert('btime' in stat.keys())
+    
+    fd = cephfs.open(b'file-1', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    cephfs.close(fd)
+    cephfs.symlink(b'file-1', b'file-2')
+    stat = cephfs.statx(b'file-2', libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_BTIME, libcephfs.AT_SYMLINK_NOFOLLOW)
+    assert('mode' in stat.keys())
+    assert('btime' in stat.keys())
+    cephfs.unlink(b'file-2')
+    cephfs.unlink(b'file-1')
+
+@with_setup(setup_test)
 def test_syncfs():
     stat = cephfs.sync_fs()
 
@@ -111,6 +128,9 @@ def test_xattr():
     # Pass explicit size, and we'll get the value
     assert_equal(300, len(cephfs.getxattr("/", "user.big", 300)))
 
+    cephfs.removexattr("/", "user.key")
+    # user.key is already removed
+    assert_raises(libcephfs.NoData, cephfs.getxattr, "/", "user.key")
 
 @with_setup(setup_test)
 def test_rename():

@@ -31,7 +31,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
         ]
     pre.extend(cmd)
     log.log(log_level, 'rgwadmin: cmd=%s' % pre)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(client).remotes.keys()
     proc = remote.run(
         args=pre,
         check_status=check_status,

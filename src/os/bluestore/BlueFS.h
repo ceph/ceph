@@ -158,13 +158,13 @@ public:
     std::array<bool, MAX_BDEV> dirty_devs;
 
     FileWriter(FileRef f)
-      : file(f),
+      : file(std::move(f)),
 	buffer_appender(buffer.get_page_aligned_appender(
 			  g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
-      if (f->fnode.ino == 1) {
+      if (file->fnode.ino == 1) {
 	write_hint = WRITE_LIFE_MEDIUM;
       }
     }
@@ -194,20 +194,18 @@ public:
   struct FileReaderBuffer {
     MEMPOOL_CLASS_HELPERS();
 
-    uint64_t bl_off;        ///< prefetch buffer logical offset
+    uint64_t bl_off = 0;    ///< prefetch buffer logical offset
     bufferlist bl;          ///< prefetch buffer
-    uint64_t pos;           ///< current logical offset
+    uint64_t pos = 0;       ///< current logical offset
     uint64_t max_prefetch;  ///< max allowed prefetch
 
     explicit FileReaderBuffer(uint64_t mpf)
-      : bl_off(0),
-	pos(0),
-	max_prefetch(mpf) {}
+      : max_prefetch(mpf) {}
 
-    uint64_t get_buf_end() {
+    uint64_t get_buf_end() const {
       return bl_off + bl.length();
     }
-    uint64_t get_buf_remaining(uint64_t p) {
+    uint64_t get_buf_remaining(uint64_t p) const {
       if (p >= bl_off && p < bl_off + bl.length())
 	return bl_off + bl.length() - p;
       return 0;
@@ -250,7 +248,7 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
-    explicit FileLock(FileRef f) : file(f) {}
+    explicit FileLock(FileRef f) : file(std::move(f)) {}
   };
 
 private:

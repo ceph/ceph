@@ -36,6 +36,7 @@
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
+#include "tools/rbd_mirror/MirrorStatusUpdater.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/Types.h"
@@ -127,6 +128,14 @@ public:
         m_local_ioctx, m_threads->work_queue, nullptr,
         m_image_sync_throttler.get());
     m_instance_watcher->handle_acquire_leader();
+
+    EXPECT_EQ(0, m_local_ioctx.create(RBD_MIRRORING, false));
+
+    m_local_status_updater = rbd::mirror::MirrorStatusUpdater<>::create(
+      m_local_ioctx, m_threads.get(), "");
+    C_SaferCond status_updater_ctx;
+    m_local_status_updater->init(&status_updater_ctx);
+    EXPECT_EQ(0, status_updater_ctx.wait());
   }
 
   ~TestImageReplayer() override
@@ -138,6 +147,11 @@ public:
     delete m_replayer;
     delete m_instance_watcher;
 
+    C_SaferCond status_updater_ctx;
+    m_local_status_updater->shut_down(&status_updater_ctx);
+    EXPECT_EQ(0, status_updater_ctx.wait());
+    delete m_local_status_updater;
+
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
   }
@@ -146,8 +160,9 @@ public:
   void create_replayer() {
     m_replayer = new ImageReplayerT(m_local_ioctx, m_local_mirror_uuid,
                                     m_global_image_id, m_threads.get(),
-                                    m_instance_watcher, nullptr);
-    m_replayer->add_peer("peer uuid", m_remote_ioctx);
+                                    m_instance_watcher, m_local_status_updater,
+                                    nullptr);
+    m_replayer->add_peer("peer uuid", m_remote_ioctx, nullptr);
   }
 
   void start()
@@ -381,6 +396,7 @@ public:
   std::unique_ptr<rbd::mirror::Throttler<>> m_image_sync_throttler;
   librados::Rados m_remote_cluster;
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
+  rbd::mirror::MirrorStatusUpdater<> *m_local_status_updater;
   std::string m_local_mirror_uuid = "local mirror uuid";
   std::string m_remote_mirror_uuid = "remote mirror uuid";
   std::string m_local_pool_name, m_remote_pool_name;
