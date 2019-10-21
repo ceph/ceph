@@ -143,6 +143,11 @@ Options
 
   - ``clean``: client reconnects to the ceph cluster automatically when it detects that it has been blacklisted. During reconnect, client drops dirty data/metadata, invalidates page caches and writable file handles.  After reconnect, file locks become stale because the MDS loses track of them. If an inode contains any stale file locks, read/write on the inode is not allowed until applications release all stale file locks.
 
+
+:command: `mds_namespace=<fs-name>`
+    Specify the non-default file system to be mounted. Not passing this option
+    mounts the default file system.
+
 Mount Secrets
 =============
 If the `secret` and `secretfile` options are not specified on the command-line
@@ -178,6 +183,10 @@ automatically invoked by mount(8) like so::
 
         mount -t ceph monhost:/ /mnt/foo
 
+If you have more than one file system on your Ceph cluster, you can mount the
+non-default FS on your local FS as follows::
+
+    mount -t ceph :/ /mnt/mycephfs2 -o name=fs,mds_namespace=mycephfs2
 
 Availability
 ============
