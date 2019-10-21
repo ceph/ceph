@@ -167,7 +167,7 @@ void ElectionLogic::declare_victory()
   elector->message_victory(new_quorum);
 }
 
-void ElectionLogic::receive_propose(int from, epoch_t mepoch)
+bool ElectionLogic::propose_classic_prefix(int from, epoch_t mepoch)
 {
   if (mepoch > epoch) {
     bump_epoch(mepoch);
@@ -183,26 +183,33 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
     } else {
       ldout(cct, 5) << " ignoring old propose" << dendl;
     }
-    return;
+    return true;
   }
+  return false;
+}
 
+void ElectionLogic::receive_propose(int from, epoch_t mepoch)
+{
   switch (strategy) {
   case CLASSIC:
-    propose_classic_handler(from);
+    propose_classic_handler(from, mepoch);
     break;
   case DISALLOW:
-    propose_disallow_handler(from);
+    propose_disallow_handler(from, mepoch);
     break;
   case CONNECTIVITY:
-    propose_connectivity_handler(from);
+    propose_connectivity_handler(from, mepoch);
     break;
   default:
     ceph_assert(0 == "how did election strategy become an invalid value?");
   }
 }
 
-void ElectionLogic::propose_disallow_handler(int from)
+void ElectionLogic::propose_disallow_handler(int from, epoch_t mepoch)
 {
+  if (propose_classic_prefix(from, mepoch)) {
+    return;
+  }
   const set<int>& disallowed_leaders = elector->get_disallowed_leaders();
   int my_rank = elector->get_my_rank();
   bool me_disallowed = disallowed_leaders.count(my_rank);
@@ -236,8 +243,11 @@ void ElectionLogic::propose_disallow_handler(int from)
   }
 }
 
-void ElectionLogic::propose_classic_handler(int from)
+void ElectionLogic::propose_classic_handler(int from, epoch_t mepoch)
 {
+  if (propose_classic_prefix(from, mepoch)) {
+    return;
+  }
   if (elector->get_my_rank() < from) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
@@ -262,8 +272,25 @@ void ElectionLogic::propose_classic_handler(int from)
   }
 }
 
-void ElectionLogic::propose_connectivity_handler(int from)
+void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch)
 {
+  if (mepoch > epoch) {
+    bump_epoch(mepoch);
+  } else if (mepoch < epoch) {
+    // got an "old" propose,
+    if (epoch % 2 == 0 &&    // in a non-election cycle
+	!elector->is_current_member(from)) {  // from someone outside the quorum
+      // a mon just started up, call a new election so they can rejoin!
+      ldout(cct, 5) << " got propose from old epoch, "
+	      << from << " must have just started" << dendl;
+      // we may be active; make sure we reset things in the monitor appropriately.
+      elector->trigger_new_election();
+    } else {
+      ldout(cct, 5) << " ignoring old propose" << dendl;
+    }
+    return;
+  }
+
   const set<int>& disallowed_leaders = elector->get_disallowed_leaders();
   int my_rank = elector->get_my_rank();
   bool me_disallowed = disallowed_leaders.count(my_rank);
