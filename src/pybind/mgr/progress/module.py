@@ -93,8 +93,8 @@ class Event(object):
     def update_duration_event(self):
         # Update duration of event in seconds/minutes/hours
 
-        duration = (datetime.datetime.utcnow() - self.started_at).seconds
-        self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
+        duration = time.time() - self.started_at
+        self._duration_str = time.strftime("(%Hh %Mm %Ss)", time.gmtime(duration))
 
 class GhostEvent(Event):
     """
