@@ -288,7 +288,10 @@ class Module(MgrModule):
         for key, value in service_map['services'].items():
             report['services'][key] += 1
 
-        report['crashes'] = self.gather_crashinfo()
+        try:
+            report['crashes'] = self.gather_crashinfo()
+        except ImportError:
+            self.log.debug('Not adding crashes as the crash module is not enabled')
 
         return report
 
