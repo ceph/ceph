@@ -260,7 +260,8 @@ function error {
 
 function failed_mandatory_var_check {
     local varname="$1"
-    error "$varname not defined"
+    local error="$2"
+    error "$varname $error"
     setup_ok=""
 }
 
@@ -317,7 +318,7 @@ function init_github_user {
         if [ "$github_user" ] ; then
             true
         else
-            failed_mandatory_var_check github_user
+            failed_mandatory_var_check github_user "not set"
             info "$how_to_get_setup_advice"
             false
         fi
@@ -478,6 +479,7 @@ EOM
 
 function setup_report {
     local not_set="!!! NOT SET !!!"
+    local set_but_not_valid="!!! SET, BUT NOT VALID !!!"
     local redmine_endpoint_display="${redmine_endpoint:-$not_set}"
     local redmine_user_id_display="${redmine_user_id:-$not_set}"
     local github_endpoint_display="${github_endpoint:-$not_set}"
@@ -486,17 +488,26 @@ function setup_report {
     local fork_remote_display="${fork_remote:-$not_set}"
     local redmine_key_display=""
     local github_token_display=""
+    debug Checking mandatory variables
+    if [ "$github_token" ] ; then
+        if [ "$(vet_github_token)" ] ; then
+            github_token_display="(OK, not shown)"
+        else
+            github_token_display="$set_but_not_valid"
+            failed_mandatory_var_check github_token "set, but not valid"
+        fi
+    else
+        github_token_display="$not_set"
+        failed_mandatory_var_check github_token "not set"
+    fi
     [ "$redmine_key" ] && redmine_key_display="(OK, not shown)" || redmine_key_display="$not_set"
-    [ "$github_token" ] && github_token_display="(OK, not shown)" || github_token_display="$not_set"
-    debug Re-checking mandatory variables
-    test "$redmine_key"      || failed_mandatory_var_check redmine_key
-    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id
-    test "$github_user"      || failed_mandatory_var_check github_user
-    test "$github_token"     || failed_mandatory_var_check github_token
-    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote
-    test "$fork_remote"      || failed_mandatory_var_check fork_remote
-    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint
-    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint
+    test "$redmine_key"      || failed_mandatory_var_check redmine_key "not set"
+    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id "not set"
+    test "$github_user"      || failed_mandatory_var_check github_user "not set"
+    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote "not set"
+    test "$fork_remote"      || failed_mandatory_var_check fork_remote "not set"
+    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint "not set"
+    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint "not set"
     if [ "$SETUP_ONLY" ] ; then
         read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
 redmine_endpoint $redmine_endpoint
@@ -680,6 +691,29 @@ function verbose {
 
 function verbose_en {
     log verbose_en "$@"
+}
+
+function vet_github_token {
+    # github_token is set, but we don't know, yet, if the remote API will honor
+    # it. Fortunately, with GitHub it's simple:
+    #
+    # $ curl --silent https://api.github.com/repos/ceph/ceph/pulls/19999?access_token=invalid
+    # {
+    #   "message": "Bad credentials",
+    #   "documentation_url": "https://developer.github.com/v3"
+    # }
+    #
+    local number=
+    local test_pr_id='19999'
+    remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${test_pr_id}?access_token=${github_token})
+    number=$(echo ${remote_api_output} | jq .number)
+    # in invalid case, $number will be equal to "null"
+    # in valid case, it will be "19999"
+    if [ "$number" -eq "$test_pr_id" ] 2>/dev/null ; then
+        echo "valid"
+    else
+        echo ""
+    fi
 }
 
 function vet_pr_milestone {
