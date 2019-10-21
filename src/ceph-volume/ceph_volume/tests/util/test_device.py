@@ -1,6 +1,9 @@
 import pytest
 from ceph_volume.util import device
 from ceph_volume.api import lvm as api
+from sys import version_info as py_version_info
+if py_version_info.major >= 3:
+        from importlib import reload
 
 
 class TestDevice(object):
@@ -191,6 +194,8 @@ class TestDevice(object):
 
     @pytest.mark.parametrize("ceph_type", ["data", "block"])
     def test_used_by_ceph(self, device_info, pvolumes, pvolumes_empty, monkeypatch, ceph_type):
+        reload(device)
+
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes.append(FooPVolume)
         monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
@@ -202,6 +207,8 @@ class TestDevice(object):
         assert disk.used_by_ceph
 
     def test_not_used_by_ceph(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
+        reload(device)
+
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes.append(FooPVolume)
         monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
