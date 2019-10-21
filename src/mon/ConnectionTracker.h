@@ -83,6 +83,14 @@ class ConnectionTracker {
   /**
    * Fill in the report with our liveness and reliability
    * scores for all peers.
+   *
+   * NOTE: This only shares what the *local* node has seen directly;
+   * it does not include the shared data from other peers. Use
+   * get_peer_view to grab those and bundle them up when sharing it.
+   * This interface isn't great and would be better if you got a single
+   * struct for sharing, encode/decode, and import back into another
+   * ConnectionTracker, so look at existing implementations carefully
+   * if you're messing around here.
    */
   void generate_report_of_peers(ConnectionReport *report) const;
   /**
