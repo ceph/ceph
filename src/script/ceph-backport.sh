@@ -787,6 +787,7 @@ if git status >/dev/null 2>&1 ; then
     debug "In a local git clone. Good."
 else
     error "This script must be run from inside a local git clone"
+    info "$how_to_get_setup_advice"
     false
 fi
 
