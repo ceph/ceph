@@ -865,6 +865,22 @@ void rgw_sync_symmetric_group::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("zones", zones, obj);
 }
 
+void rgw_sync_bucket_entity::dump(Formatter *f) const
+{
+  encode_json("zone", zone, f);
+  encode_json("bucket", bucket_key(), f);
+}
+
+void rgw_sync_bucket_entity::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("zone", zone, obj);
+  string s;
+  JSONDecoder::decode_json("bucket", s, obj);
+  int ret = rgw_bucket_parse_bucket_key(nullptr, s, &bucket, nullptr);
+  if (ret < 0) {
+    bucket = rgw_bucket();
+  }
+}
 void rgw_sync_bucket_entities::dump(Formatter *f) const
 {
   encode_json("bucket", rgw_sync_bucket_entities::bucket_key(bucket), f);
@@ -901,6 +917,18 @@ void rgw_sync_bucket_entities::decode_json(JSONObj *obj)
     }
   }
   JSONDecoder::decode_json("zones", zones, obj);
+}
+
+void rgw_sync_bucket_pipe::dump(Formatter *f) const
+{
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
+}
+
+void rgw_sync_bucket_pipe::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
 }
 
 void rgw_sync_bucket_pipes::dump(Formatter *f) const

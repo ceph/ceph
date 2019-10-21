@@ -116,7 +116,7 @@ struct rgw_sync_group_pipe_map {
 class RGWBucketSyncFlowManager {
 public:
   struct pipe_flow {
-    std::vector<rgw_sync_bucket_pipes> pipe;
+    std::vector<rgw_sync_bucket_pipe> pipe;
 
     void dump(ceph::Formatter *f) const;
   };

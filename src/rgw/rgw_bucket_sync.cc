@@ -10,6 +10,11 @@
 #define dout_subsys ceph_subsys_rgw
 
 
+string rgw_sync_bucket_entity::bucket_key() const
+{
+  return rgw_sync_bucket_entities::bucket_key(bucket);
+}
+
 void rgw_sync_bucket_entities::add_zones(const std::vector<string>& new_zones) {
   for (auto& z : new_zones) {
     if (z == "*") {
@@ -548,7 +553,8 @@ RGWBucketSyncFlowManager::flow_map_t::iterator RGWBucketSyncFlowManager::find_bu
   return m.find(rgw_bucket());
 }
 
-
+#warning cleanup
+#if 0
 void RGWBucketSyncFlowManager::update_flow_maps(const rgw_sync_bucket_pipes& pipe) {
   auto source_bucket = pipe.source.get_bucket();
   auto dest_bucket = pipe.dest.get_bucket();
@@ -579,11 +585,12 @@ void RGWBucketSyncFlowManager::update_flow_maps(const rgw_sync_bucket_pipes& pip
   }
 #endif
 }
+#endif
 
 void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
-    rgw_sync_bucket_entities entity;
-    entity.zones = std::set<string>( { zone_name } );
-    entity.bucket =  bucket;
+  rgw_sync_bucket_entity entity;
+  entity.zone = zone_name;
+  entity.bucket = bucket.value_or(rgw_bucket());
 
   for (auto& item : sync_policy.groups) {
     auto& group = item.second;
@@ -605,24 +612,24 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
                         });
 
     for (auto& entry : flow_group_map.sources) {
-      rgw_sync_bucket_pipes pipe;
-      rgw_sync_bucket_entities source;
-      pipe.source.zones = std::set<string>( { entry.first.zone } );
+      rgw_sync_bucket_pipe pipe;
+      rgw_sync_bucket_entity source;
+      pipe.source.zone = entry.first.zone;
       pipe.source.bucket = entry.first.bucket;
       pipe.dest = entity;
 
-      auto& by_source = flow_by_source[pipe.source.get_bucket()];
+      auto& by_source = flow_by_source[pipe.source.bucket];
       by_source.pipe.push_back(pipe);
     }
 
     for (auto& entry : flow_group_map.dests) {
-      rgw_sync_bucket_pipes pipe;
-      rgw_sync_bucket_entities dest;
-      pipe.dest.zones = std::set<string>( { entry.first.zone } );
+      rgw_sync_bucket_pipe pipe;
+      rgw_sync_bucket_entity dest;
+      pipe.dest.zone = entry.first.zone;
       pipe.dest.bucket = entry.first.bucket;
       pipe.source = entity;
 
-      auto& by_dest = flow_by_source[pipe.dest.get_bucket()];
+      auto& by_dest = flow_by_source[pipe.dest.bucket];
       by_dest.pipe.push_back(pipe);
     }
   }
