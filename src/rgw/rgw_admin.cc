@@ -2330,7 +2330,7 @@ void encode_json(const char *name, const RGWBucketSyncFlowManager::flow_map_t& m
     auto& bucket = entry.first;
     auto& pflow = entry.second;
 
-    encode_json("bucket", rgw_sync_bucket_entity::bucket_key(bucket), f);
+    encode_json("buckets", rgw_sync_bucket_entities::bucket_key(bucket), f);
 #if 0
     {
       Formatter::ArraySection fg(*f, "flow_groups");
@@ -8052,7 +8052,7 @@ next:
 
     auto& group = iter->second;
 
-    rgw_sync_bucket_pipe *pipe;
+    rgw_sync_bucket_pipes *pipe;
 
     group.find_pipe(*opt_pipe_id, true, &pipe);
 
@@ -8092,7 +8092,7 @@ next:
 
     auto& group = iter->second;
 
-    rgw_sync_bucket_pipe *pipe;
+    rgw_sync_bucket_pipes *pipe;
 
     if (!group.find_pipe(*opt_pipe_id, false, &pipe)) {
       cerr << "ERROR: could not find pipe '" << *opt_pipe_id << "'" << std::endl;

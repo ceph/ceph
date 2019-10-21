@@ -219,7 +219,7 @@ struct rgw_sync_directional_rule {
 };
 WRITE_CLASS_ENCODER(rgw_sync_directional_rule)
 
-struct rgw_sync_bucket_entity {
+struct rgw_sync_bucket_entities {
 private:
   bool match_str(const string& s1, const string& s2) const { /* empty string is wildcard */
     return (s1.empty() ||
@@ -291,9 +291,9 @@ public:
 
   static string bucket_key(std::optional<rgw_bucket> b);
 };
-WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
+WRITE_CLASS_ENCODER(rgw_sync_bucket_entities)
 
-struct rgw_sync_bucket_pipe {
+struct rgw_sync_bucket_pipes {
 private:
   void symmetrical_copy_if_empty(string& s1, string& s2) const {
     if (s1.empty()) {
@@ -305,8 +305,8 @@ private:
 
 public:
   string id;
-  rgw_sync_bucket_entity source;
-  rgw_sync_bucket_entity dest;
+  rgw_sync_bucket_entities source;
+  rgw_sync_bucket_entities dest;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -358,7 +358,7 @@ public:
     }
   }
 };
-WRITE_CLASS_ENCODER(rgw_sync_bucket_pipe)
+WRITE_CLASS_ENCODER(rgw_sync_bucket_pipes)
 
 /*
  * define data flow between zones. Symmetrical: zones sync from each other.
@@ -403,7 +403,7 @@ struct rgw_sync_policy_group {
 
   rgw_sync_data_flow_group data_flow; /* override data flow, howver, will not be able to
                                                         add new flows that don't exist at higher level */
-  std::vector<rgw_sync_bucket_pipe> pipes; /* if not defined then applies to all
+  std::vector<rgw_sync_bucket_pipes> pipes; /* if not defined then applies to all
                                                               buckets (DR sync) */
 
   enum Status {
@@ -451,7 +451,7 @@ struct rgw_sync_policy_group {
     return true;
   }
 
-  bool find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipe **pipe);
+  bool find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipes **pipe);
   void remove_pipe(const string& pipe_id);
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_group)

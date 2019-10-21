@@ -21,7 +21,7 @@
 
 class RGWSI_Zone;
 struct rgw_sync_group_pipe_map;
-struct rgw_sync_bucket_pipe;
+struct rgw_sync_bucket_pipes;
 struct rgw_sync_policy_info;
 
 struct rgw_sync_group_pipe_map {
@@ -52,7 +52,7 @@ struct rgw_sync_group_pipe_map {
     void dump(ceph::Formatter *f) const;
   };
 
-  using zb_pipe_map_t = std::multimap<zone_bucket, rgw_sync_bucket_pipe>;
+  using zb_pipe_map_t = std::multimap<zone_bucket, rgw_sync_bucket_pipes>;
 
   zb_pipe_map_t sources; /* all the pipes where zone is pulling from */
   zb_pipe_map_t dests; /* all the pipes that pull from zone */
@@ -62,7 +62,7 @@ struct rgw_sync_group_pipe_map {
   template <typename CB1, typename CB2>
   void try_add_to_pipe_map(const string& source_zone,
                            const string& dest_zone,
-                           const std::vector<rgw_sync_bucket_pipe>& pipes,
+                           const std::vector<rgw_sync_bucket_pipes>& pipes,
                            zb_pipe_map_t *pipe_map,
                            CB1 filter_cb,
                            CB2 call_filter_cb);
@@ -70,13 +70,13 @@ struct rgw_sync_group_pipe_map {
   template <typename CB>
   void try_add_source(const string& source_zone,
                   const string& dest_zone,
-                  const std::vector<rgw_sync_bucket_pipe>& pipes,
+                  const std::vector<rgw_sync_bucket_pipes>& pipes,
                   CB filter_cb);
           
   template <typename CB>
   void try_add_dest(const string& source_zone,
                   const string& dest_zone,
-                  const std::vector<rgw_sync_bucket_pipe>& pipes,
+                  const std::vector<rgw_sync_bucket_pipes>& pipes,
                   CB filter_cb);
           
   pair<zb_pipe_map_t::const_iterator, zb_pipe_map_t::const_iterator> find_pipes(const zb_pipe_map_t& m,
@@ -92,7 +92,7 @@ struct rgw_sync_group_pipe_map {
   /*
    * find all relevant pipes in our zone that match {dest_bucket} <- {source_zone, source_bucket}
    */
-  vector<rgw_sync_bucket_pipe> find_source_pipes(const string& source_zone,
+  vector<rgw_sync_bucket_pipes> find_source_pipes(const string& source_zone,
                                                  std::optional<rgw_bucket> source_bucket,
                                                  std::optional<rgw_bucket> dest_bucket);
 
@@ -100,14 +100,14 @@ struct rgw_sync_group_pipe_map {
    * find all relevant pipes in other zones that pull from a specific
    * source bucket in out zone {source_bucket} -> {dest_zone, dest_bucket}
    */
-  vector<rgw_sync_bucket_pipe> find_dest_pipes(std::optional<rgw_bucket> source_bucket,
+  vector<rgw_sync_bucket_pipes> find_dest_pipes(std::optional<rgw_bucket> source_bucket,
                                                  const string& dest_zone,
                                                  std::optional<rgw_bucket> dest_bucket);
 
   /*
    * find all relevant pipes from {source_zone, source_bucket} -> {dest_zone, dest_bucket}
    */
-  vector<rgw_sync_bucket_pipe> find_pipes(const string& source_zone,
+  vector<rgw_sync_bucket_pipes> find_pipes(const string& source_zone,
                                           std::optional<rgw_bucket> source_bucket,
                                           const string& dest_zone,
                                           std::optional<rgw_bucket> dest_bucket);
@@ -116,7 +116,7 @@ struct rgw_sync_group_pipe_map {
 class RGWBucketSyncFlowManager {
 public:
   struct pipe_flow {
-    std::vector<rgw_sync_bucket_pipe> pipe;
+    std::vector<rgw_sync_bucket_pipes> pipe;
 
     void dump(ceph::Formatter *f) const;
   };
@@ -146,7 +146,7 @@ private:
    */
   flow_map_t::iterator find_bucket_flow(flow_map_t& m, std::optional<rgw_bucket> bucket);
 
-  void update_flow_maps(const rgw_sync_bucket_pipe& pipe);
+  void update_flow_maps(const rgw_sync_bucket_pipes& pipe);
 
 public:
 
