@@ -17,7 +17,7 @@
 #
 #
 
-SCRIPT_VERSION="15.0.0.5775"
+SCRIPT_VERSION="15.0.0.6270"
 full_path="$0"
 this_script=$(basename "$full_path")
 how_to_get_setup_advice="For setup advice, run: \"${this_script} --setup-advice | less\""
