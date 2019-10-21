@@ -212,6 +212,8 @@ public:
 			 const char *snapname, RBD::AioCompletion *c);
   int aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
                                const char *snapname, RBD::AioCompletion *c);
+  int features_to_string(uint64_t features, std::string *str_features);
+  int features_from_string(const std::string str_features, uint64_t *features);
 
   int list(IoCtx& io_ctx, std::vector<std::string>& names)
     __attribute__((deprecated));
