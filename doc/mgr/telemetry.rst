@@ -56,10 +56,10 @@ Telemetry can be disabled with::
 Interval
 --------
 
-The module compiles and sends a new report every 72 hours by default.
+The module compiles and sends a new report every 24 hours by default.
 You can adjust this interval with::
 
-  ceph config set mgr mgr/telemetry/interval 24    # report every day
+  ceph config set mgr mgr/telemetry/interval 72    # report every three days
 
 Contact and Description
 -----------------------
