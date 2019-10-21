@@ -617,7 +617,14 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
                    auth_method);
     return -EOPNOTSUPP;
   }
+  auto authorizer_challenge = &auth_meta->authorizer_challenge;
   ceph_assert(active_con);
+  if (!HAVE_FEATURE(active_con->get_conn()->get_features(), CEPHX_V2)) {
+    if (local_conf().get_val<uint64_t>("cephx_service_require_version") >= 2) {
+      return -EACCES;
+    }
+    authorizer_challenge = nullptr;
+  }
   bool was_challenge = (bool)auth_meta->authorizer_challenge;
   EntityName name;
   AuthCapsInfo caps_info;
@@ -632,7 +639,7 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
     &caps_info,
     &auth_meta->session_key,
     &auth_meta->connection_secret,
-    &auth_meta->authorizer_challenge);
+    authorizer_challenge);
   if (is_valid) {
     auth_handler.handle_authentication(name, caps_info);
     return 1;
