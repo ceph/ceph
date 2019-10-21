@@ -382,6 +382,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
 
+  opt.env->SetAllowNonOwnerAccess(false);
+
   // caches
   if (!set_cache_flag) {
     cache_size = g_conf()->rocksdb_cache_size;
@@ -691,7 +693,15 @@ void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std
     }
 }
 
-int64_t RocksDBStore::estimate_prefix_size(const string& prefix)
+bool RocksDBStore::get_property(
+  const std::string &property,
+  uint64_t *out)
+{
+  return db->GetIntProperty(property, out);
+}
+
+int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
+					   const string& key_prefix)
 {
   auto cf = get_cf_handle(prefix);
   uint64_t size = 0;
@@ -699,15 +709,15 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix)
     //rocksdb::DB::INCLUDE_MEMTABLES |  // do not include memtables...
     rocksdb::DB::INCLUDE_FILES;
   if (cf) {
-    string start(1, '\x00');
-    string limit("\xff\xff\xff\xff");
+    string start = key_prefix + string(1, '\x00');
+    string limit = key_prefix + string("\xff\xff\xff\xff");
     rocksdb::Range r(start, limit);
     db->GetApproximateSizes(cf, &r, 1, &size, flags);
   } else {
-    string limit = prefix + "\xff\xff\xff\xff";
-    rocksdb::Range r(prefix, limit);
-    db->GetApproximateSizes(default_cf,
-			    &r, 1, &size, flags);
+    string start = combine_strings(prefix , key_prefix);
+    string limit = combine_strings(prefix , key_prefix + "\xff\xff\xff\xff");
+    rocksdb::Range r(start, limit);
+    db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
   }
   return size;
 }
@@ -944,70 +954,14 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
 {
   auto cf = db->get_cf_handle(prefix);
   if (cf) {
-    if (db->enable_rmrange) {
-      string endprefix("\xff\xff\xff\xff");  // FIXME: this is cheating...
-      if (db->max_items_rmrange) {
-        uint64_t cnt = db->max_items_rmrange;
-        bat.SetSavePoint();
-        auto it = db->get_iterator(prefix);
-        for (it->seek_to_first();
-        it->valid();
-        it->next()) {
-          if (!cnt) {
-            bat.RollbackToSavePoint();
-            bat.DeleteRange(cf, string(), endprefix);
-            return;
-          }
-          bat.Delete(cf, rocksdb::Slice(it->key()));
-          --cnt;
-        }
-        bat.PopSavePoint();
-      } else {
-        bat.DeleteRange(cf, string(), endprefix);
-      }
-    } else {
-      auto it = db->get_iterator(prefix);
-      for (it->seek_to_first();
-	   it->valid();
-	   it->next()) {
-	bat.Delete(cf, rocksdb::Slice(it->key()));
-      }
-    }
+    string endprefix("\xff\xff\xff\xff");  // FIXME: this is cheating...
+    bat.DeleteRange(cf, string(), endprefix);
   } else {
-    if (db->enable_rmrange) {
-      string endprefix = prefix;
-      endprefix.push_back('\x01');
-      if (db->max_items_rmrange) {
-        uint64_t cnt = db->max_items_rmrange;
-        bat.SetSavePoint();
-        auto it = db->get_iterator(prefix);
-        for (it->seek_to_first();
-             it->valid();
-             it->next()) {
-          if (!cnt) {
-            bat.RollbackToSavePoint();
-            bat.DeleteRange(db->default_cf,
-                combine_strings(prefix, string()),
-                combine_strings(endprefix, string()));
-            return;
-          }
-          bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
-          --cnt;
-        }
-        bat.PopSavePoint();
-      } else {
-        bat.DeleteRange(db->default_cf,
-            combine_strings(prefix, string()),
-            combine_strings(endprefix, string()));
-      }
-    } else {
-      auto it = db->get_iterator(prefix);
-      for (it->seek_to_first();
-	   it->valid();
-	   it->next()) {
-	bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
-      }
-    }
+    string endprefix = prefix;
+    endprefix.push_back('\x01');
+    bat.DeleteRange(db->default_cf,
+      combine_strings(prefix, string()),
+      combine_strings(endprefix, string()));
   }
 }
 
@@ -1017,83 +971,12 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
 {
   auto cf = db->get_cf_handle(prefix);
   if (cf) {
-    if (db->enable_rmrange) {
-      if (db->max_items_rmrange) {
-        uint64_t cnt = db->max_items_rmrange;
-        auto it = db->get_iterator(prefix);
-        bat.SetSavePoint();
-        it->lower_bound(start);
-        while (it->valid()) {
-          if (it->key() >= end) {
-            break;
-          }
-          if (!cnt) {
-            bat.RollbackToSavePoint();
-            bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
-            return;
-          }
-          bat.Delete(cf, rocksdb::Slice(it->key()));
-          it->next();
-          --cnt;
-        }
-        bat.PopSavePoint();
-      } else {
-        bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
-      }
-    } else {
-      auto it = db->get_iterator(prefix);
-      it->lower_bound(start);
-      while (it->valid()) {
-	if (it->key() >= end) {
-	  break;
-	}
-	bat.Delete(cf, rocksdb::Slice(it->key()));
-	it->next();
-      }
-    }
+    bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
   } else {
-    if (db->enable_rmrange) {
-      if (db->max_items_rmrange) {
-        uint64_t cnt = db->max_items_rmrange;
-        auto it = db->get_iterator(prefix);
-        bat.SetSavePoint();
-        it->lower_bound(start);
-        while (it->valid()) {
-          if (it->key() >= end) {
-            break;
-          }
-          if (!cnt) {
-            bat.RollbackToSavePoint();
-            bat.DeleteRange(
-                db->default_cf,
-                rocksdb::Slice(combine_strings(prefix, start)),
-                rocksdb::Slice(combine_strings(prefix, end)));
-            return;
-          }
-          bat.Delete(db->default_cf,
-          combine_strings(prefix, it->key()));
-          it->next();
-          --cnt;
-        }
-        bat.PopSavePoint();
-      } else {
-        bat.DeleteRange(
-            db->default_cf,
-            rocksdb::Slice(combine_strings(prefix, start)),
-            rocksdb::Slice(combine_strings(prefix, end)));
-      }
-    } else {
-      auto it = db->get_iterator(prefix);
-      it->lower_bound(start);
-      while (it->valid()) {
-	if (it->key() >= end) {
-	  break;
-	}
-	bat.Delete(db->default_cf,
-		   combine_strings(prefix, it->key()));
-	it->next();
-      }
-    }
+    bat.DeleteRange(
+        db->default_cf,
+        rocksdb::Slice(combine_strings(prefix, start)),
+        rocksdb::Slice(combine_strings(prefix, end)));
   }
 }
 

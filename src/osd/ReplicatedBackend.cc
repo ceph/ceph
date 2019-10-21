@@ -255,6 +255,20 @@ int ReplicatedBackend::objects_read_sync(
   return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
 }
 
+int ReplicatedBackend::objects_readv_sync(
+  const hobject_t &hoid,
+  map<uint64_t, uint64_t>& m,
+  uint32_t op_flags,
+  bufferlist *bl)
+{
+  interval_set<uint64_t> im(m);
+  auto r = store->readv(ch, ghobject_t(hoid), im, *bl, op_flags);
+  if (r >= 0) {
+    im.move_into(m);
+  }
+  return r;
+}
+
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -267,10 +281,10 @@ void ReplicatedBackend::objects_read_async(
 
 class C_OSD_OnOpCommit : public Context {
   ReplicatedBackend *pg;
-  ReplicatedBackend::InProgressOpRef op;
+  ceph::ref_t<ReplicatedBackend::InProgressOp> op;
 public:
-  C_OSD_OnOpCommit(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
-    : pg(pg), op(op) {}
+  C_OSD_OnOpCommit(ReplicatedBackend *pg, ceph::ref_t<ReplicatedBackend::InProgressOp> op)
+    : pg(pg), op(std::move(op)) {}
   void finish(int) override {
     pg->op_commit(op);
   }
@@ -378,6 +392,9 @@ void generate_transaction(
 	case UpdateType::Insert:
 	  t->omap_setkeys(coll, goid, up.second);
 	  break;
+	case UpdateType::RemoveRange:
+	  t->omap_rmkeyrange(coll, goid, up.second);
+	  break;
 	}
       }
 
@@ -462,7 +479,7 @@ void ReplicatedBackend::submit_transaction(
   auto insert_res = in_progress_ops.insert(
     make_pair(
       tid,
-      new InProgressOp(
+      ceph::make_ref<InProgressOp>(
 	tid, on_all_commit,
 	orig_op, at_version)
       )
@@ -512,8 +529,7 @@ void ReplicatedBackend::submit_transaction(
   }
 }
 
-void ReplicatedBackend::op_commit(
-  InProgressOpRef& op)
+void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
 {
   if (op->on_commit == nullptr) {
     // aborted
@@ -540,7 +556,7 @@ void ReplicatedBackend::op_commit(
 void ReplicatedBackend::do_repop_reply(OpRequestRef op)
 {
   static_cast<MOSDRepOpReply*>(op->get_nonconst_req())->finish_decode();
-  const MOSDRepOpReply *r = static_cast<const MOSDRepOpReply *>(op->get_req());
+  auto r = op->get_req<MOSDRepOpReply>();
   ceph_assert(r->get_header().type == MSG_OSD_REPOPREPLY);
 
   op->mark_started();
@@ -552,9 +568,9 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   auto iter = in_progress_ops.find(rep_tid);
   if (iter != in_progress_ops.end()) {
     InProgressOp &ip_op = *iter->second;
-    const MOSDOp *m = NULL;
+    const MOSDOp *m = nullptr;
     if (ip_op.op)
-      m = static_cast<const MOSDOp *>(ip_op.op->get_req());
+      m = ip_op.op->get_req<MOSDOp>();
 
     if (m)
       dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
@@ -741,7 +757,7 @@ int ReplicatedBackend::be_deep_scrub(
 
 void ReplicatedBackend::_do_push(OpRequestRef op)
 {
-  const MOSDPGPush *m = static_cast<const MOSDPGPush *>(op->get_req());
+  auto m = op->get_req<MOSDPGPush>();
   ceph_assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
@@ -808,7 +824,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 
 void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 {
-  const MOSDPGPush *m = static_cast<const MOSDPGPush *>(op->get_req());
+  auto m = op->get_req<MOSDPGPush>();
   ceph_assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
@@ -878,7 +894,7 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
 
 void ReplicatedBackend::do_push_reply(OpRequestRef op)
 {
-  const MOSDPGPushReply *m = static_cast<const MOSDPGPushReply *>(op->get_req());
+  auto m = op->get_req<MOSDPGPushReply>();
   ceph_assert(m->get_type() == MSG_OSD_PG_PUSH_REPLY);
   pg_shard_t from = m->from;
 
@@ -1006,7 +1022,7 @@ void ReplicatedBackend::issue_op(
 void ReplicatedBackend::do_repop(OpRequestRef op)
 {
   static_cast<MOSDRepOp*>(op->get_nonconst_req())->finish_decode();
-  const MOSDRepOp *m = static_cast<const MOSDRepOp *>(op->get_req());
+  auto m = op->get_req<MOSDRepOp>();
   int msg_type = m->get_type();
   ceph_assert(MSG_OSD_REPOP == msg_type);
 
@@ -1110,7 +1126,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   rm->committed = true;
 
   // send commit.
-  const MOSDRepOp *m = static_cast<const MOSDRepOp*>(rm->op->get_req());
+  auto m = rm->op->get_req<MOSDRepOp>();
   ceph_assert(m->get_type() == MSG_OSD_REPOP);
   dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd
@@ -1788,7 +1804,7 @@ bool ReplicatedBackend::handle_pull_response(
     if (attrset.find(SS_ATTR) != attrset.end()) {
       bufferlist ssbv = attrset.at(SS_ATTR);
       SnapSet ss(ssbv);
-      assert(ss.seq  == pi.obc->ssc->snapset.seq);
+      assert(!pi.obc->ssc->exists || ss.seq  == pi.obc->ssc->snapset.seq);
     }
     pi.recovery_info.oi = pi.obc->obs.oi;
     pi.recovery_info = recalc_subsets(
@@ -2082,42 +2098,28 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     out_op->data_included.clear();
   }
 
-  for (interval_set<uint64_t>::iterator p = out_op->data_included.begin();
-       p != out_op->data_included.end();
-       ++p) {
-    bufferlist bit;
-    int r = store->read(ch, ghobject_t(recovery_info.soid),
-		p.get_start(), p.get_len(), bit,
-                cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
-    if (cct->_conf->osd_debug_random_push_read_error &&
+  auto origin_size = out_op->data_included.size();
+  bufferlist bit;
+  int r = store->readv(ch, ghobject_t(recovery_info.soid),
+		       out_op->data_included, bit,
+                       cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
+  if (cct->_conf->osd_debug_random_push_read_error &&
         (rand() % (int)(cct->_conf->osd_debug_random_push_read_error * 100.0)) == 0) {
-      dout(0) << __func__ << ": inject EIO " << recovery_info.soid << dendl;
-      r = -EIO;
-    }
-    if (r < 0) {
-      return r;
-    }
-    if (p.get_len() != bit.length()) {
-      dout(10) << " extent " << p.get_start() << "~" << p.get_len()
-	       << " is actually " << p.get_start() << "~" << bit.length()
-	       << dendl;
-      interval_set<uint64_t>::iterator save = p++;
-      if (bit.length() == 0)
-        out_op->data_included.erase(save);     //Remove this empty interval
-      else
-        save.set_len(bit.length());
-      // Remove any other intervals present
-      while (p != out_op->data_included.end()) {
-        interval_set<uint64_t>::iterator save = p++;
-        out_op->data_included.erase(save);
-      }
-      new_progress.data_complete = true;
-      out_op->data.claim_append(bit);
-      break;
-    }
-    out_op->data.claim_append(bit);
+    dout(0) << __func__ << ": inject EIO " << recovery_info.soid << dendl;
+    r = -EIO;
   }
-  if (progress.first && out_op->data_included.begin().get_start() == 0 &&
+  if (r < 0) {
+    return r;
+  }
+  if (out_op->data_included.size() != origin_size) {
+    dout(10) << __func__ << " some extents get pruned "
+             << out_op->data_included.size() << "/" << origin_size
+             << dendl;
+    new_progress.data_complete = true;
+  }
+  out_op->data.claim_append(bit);
+  if (progress.first && !out_op->data_included.empty() &&
+      out_op->data_included.begin().get_start() == 0 &&
       out_op->data.length() == oi.size && oi.is_data_digest()) {
     uint32_t crc = out_op->data.crc32c(-1);
     if (oi.data_digest != crc) {

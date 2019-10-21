@@ -31,7 +31,9 @@ static int disk_usage_callback(uint64_t offset, size_t len, int exists,
 }
 
 static int compute_image_disk_usage(const std::string& name,
+                                    const std::string& id,
                                     const std::string& snap_name,
+                                    uint64_t snap_id,
                                     const std::string& from_snap_name,
                                     librbd::Image &image, uint64_t size,
                                     bool exact, TextTable& tbl, Formatter *f,
@@ -66,8 +68,10 @@ static int compute_image_disk_usage(const std::string& name,
   if (f) {
     f->open_object_section("image");
     f->dump_string("name", name);
+    f->dump_string("id", id);
     if (!snap_name.empty()) {
       f->dump_string("snapshot", snap_name);
+      f->dump_unsigned("snapshot_id", snap_id);
     }
     f->dump_unsigned("provisioned_size", size);
     f->dump_unsigned("used_size" , *used_size);
@@ -211,9 +215,9 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
 
       if (imgname == nullptr || found_from_snap ||
          (found_from_snap && snapname != nullptr && snap->name == snapname)) {
-        r = compute_image_disk_usage(image_spec.name, snap->name,
-                                     last_snap_name, snap_image, snap->size,
-                                     exact, tbl, f, &used_size);
+        r = compute_image_disk_usage(image_spec.name, image_spec.id, snap->name,
+                                     snap->id, last_snap_name, snap_image,
+                                     snap->size, exact, tbl, f, &used_size);
         if (r < 0) {
           goto out;
         }
@@ -236,8 +240,9 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     }
 
     if (snapname == NULL) {
-      r = compute_image_disk_usage(image_spec.name, "", last_snap_name, image,
-                                   info.size, exact, tbl, f, &used_size);
+      r = compute_image_disk_usage(image_spec.name, image_spec.id, "", CEPH_NOSNAP,
+                                   last_snap_name, image, info.size, exact, tbl,
+                                   f, &used_size);
       if (r < 0) {
         goto out;
       }

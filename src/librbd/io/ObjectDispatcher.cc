@@ -249,17 +249,17 @@ void ObjectDispatcher<I>::shut_down_object_dispatch(
   auto async_op_tracker = object_dispatch_meta.async_op_tracker;
 
   Context* ctx = *on_finish;
-  ctx = new FunctionContext(
+  ctx = new LambdaContext(
     [object_dispatch, async_op_tracker, ctx](int r) {
       delete object_dispatch;
       delete async_op_tracker;
 
       ctx->complete(r);
     });
-  ctx = new FunctionContext([object_dispatch, ctx](int r) {
+  ctx = new LambdaContext([object_dispatch, ctx](int r) {
       object_dispatch->shut_down(ctx);
     });
-  *on_finish = new FunctionContext([async_op_tracker, ctx](int r) {
+  *on_finish = new LambdaContext([async_op_tracker, ctx](int r) {
       async_op_tracker->wait_for_ops(ctx);
     });
 }

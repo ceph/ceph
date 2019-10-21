@@ -6,7 +6,7 @@ Purpose
 -------
 
 If a CephFS journal has become damaged, expert intervention may be required
-to restore the filesystem to a working state.
+to restore the file system to a working state.
 
 The ``cephfs-journal-tool`` utility provides functionality to aid experts in
 examining, modifying, and extracting data from journals.
@@ -14,7 +14,7 @@ examining, modifying, and extracting data from journals.
 .. warning::
 
     This tool is **dangerous** because it directly modifies internal
-    data structures of the filesystem.  Make backups, be careful, and
+    data structures of the file system.  Make backups, be careful, and
     seek expert advice.  If you are unsure, do not run this tool.
 
 Syntax
@@ -133,7 +133,7 @@ Actions:
 
 * ``get`` read the events from the log
 * ``splice`` erase events or regions in the journal
-* ``apply`` extract filesystem metadata from events and attempt to apply it to the metadata store.
+* ``apply`` extract file system metadata from events and attempt to apply it to the metadata store.
 
 Filtering:
 

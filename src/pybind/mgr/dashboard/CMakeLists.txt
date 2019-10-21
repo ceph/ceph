@@ -6,7 +6,7 @@ function(add_npm_command)
   cmake_parse_arguments(NC "${options}" "${single_kw}" "${multi_kw}" ${ARGN})
   string(REPLACE ";" " " command "${NC_COMMAND}")
   if(NC_NODEENV)
-    string(REGEX REPLACE "^(npm .*)$" ". ${mgr-dashboard-nodeenv-dir}/bin/activate && \\1 && deactivate" command ${command})
+    string(REGEX REPLACE "^(.*npm .*)$" ". ${mgr-dashboard-nodeenv-dir}/bin/activate && \\1 && deactivate" command ${command})
   endif()
   string(REPLACE " " ";" command "${command}")
   add_custom_command(
@@ -50,7 +50,7 @@ endif()
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
-  COMMAND npm ci
+  COMMAND NG_CLI_ANALYTICS=false npm ci
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend dependencies are being installed"
@@ -98,12 +98,5 @@ endif(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch6
 
 if(WITH_TESTS)
   include(AddCephTest)
-  if(WITH_PYTHON2)
-    list(APPEND dashboard_tox_envs py27-cov py27-lint py27-check)
-  endif()
-  if(WITH_PYTHON3)
-    list(APPEND dashboard_tox_envs py3-cov py3-lint py3-check)
-  endif()
-  add_tox_test(mgr-dashboard
-    TOX_ENVS ${dashboard_tox_envs})
+  add_tox_test(mgr-dashboard TOX_ENVS lint check)
 endif()

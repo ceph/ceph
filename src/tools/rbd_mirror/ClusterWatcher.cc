@@ -10,6 +10,7 @@
 #include "librbd/internal.h"
 #include "librbd/api/Mirror.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
+#include "json_spirit/json_spirit.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror

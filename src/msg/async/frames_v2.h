@@ -58,12 +58,12 @@ enum class Tag : __u8 {
 struct segment_t {
   // TODO: this will be dropped with support for `allocation policies`.
   // We need them because of the rx_buffers zero-copy optimization.
-  static constexpr __le16 PAGE_SIZE_ALIGNMENT{4096};
+  static constexpr __u16 PAGE_SIZE_ALIGNMENT = 4096;
 
-  static constexpr __le16 DEFAULT_ALIGNMENT = sizeof(void *);
+  static constexpr __u16 DEFAULT_ALIGNMENT = sizeof(void *);
 
-  __le32 length;
-  __le16 alignment;
+  ceph_le32 length;
+  ceph_le16 alignment;
 } __attribute__((packed));
 
 struct SegmentIndex {
@@ -98,11 +98,11 @@ struct preamble_block_t {
   // third to #segments - MAX_NUM_SEGMENTS and so on.
   __u8 num_segments;
 
-  std::array<segment_t, MAX_NUM_SEGMENTS> segments;
+  segment_t segments[MAX_NUM_SEGMENTS];
   __u8 _reserved[2];
 
   // CRC32 for this single preamble block.
-  __le32 crc;
+  ceph_le32 crc;
 } __attribute__((packed));
 static_assert(sizeof(preamble_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<preamble_block_t>::value);
@@ -128,7 +128,7 @@ static_assert(std::is_standard_layout<preamble_block_t>::value);
 // frame abortion facility.
 struct epilogue_plain_block_t {
   __u8 late_flags;
-  std::array<__le32, MAX_NUM_SEGMENTS> crc_values;
+  ceph_le32 crc_values[MAX_NUM_SEGMENTS];
 } __attribute__((packed));
 static_assert(std::is_standard_layout<epilogue_plain_block_t>::value);
 
@@ -177,8 +177,7 @@ private:
   };
   ceph::bufferlist::contiguous_filler preamble_filler;
 
-  __u8 calc_num_segments(
-    const std::array<segment_t, MAX_NUM_SEGMENTS>& segments)
+  __u8 calc_num_segments(const segment_t segments[])
   {
     for (__u8 num = SegmentsNumV; num > 0; num--) {
       if (segments[num-1].length) {
@@ -203,9 +202,9 @@ private:
     // implementation detail: the first bufferlist of Frame::segments carries
     // space for preamble. This glueing isn't a part of the onwire format but
     // just our private detail.
-    main_preamble.segments.front().length =
-        segments.front().length() - FRAME_PREAMBLE_SIZE;
-    main_preamble.segments.front().alignment = alignments.front();
+    main_preamble.segments[0].length =
+        segments[0].length() - FRAME_PREAMBLE_SIZE;
+    main_preamble.segments[0].alignment = alignments[0];
 
     // there is no business in issuing frame without at least one segment
     // filled.

@@ -87,7 +87,7 @@ void StandbyPyModules::start_one(PyModuleRef py_module)
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
-  finisher.queue(new FunctionContext([this, standby_module, name](int) {
+  finisher.queue(new LambdaContext([this, standby_module, name](int) {
     int r = standby_module->load();
     if (r != 0) {
       derr << "Failed to run module in standby mode ('" << name << "')"

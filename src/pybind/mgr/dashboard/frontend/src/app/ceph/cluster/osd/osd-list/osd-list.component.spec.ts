@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import _ = require('lodash');
+import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { EMPTY, of } from 'rxjs';
@@ -27,6 +27,7 @@ import { PerformanceCounterModule } from '../../../performance-counter/performan
 import { OsdDetailsComponent } from '../osd-details/osd-details.component';
 import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
+import { OsdSmartListComponent } from '../osd-smart-list/osd-smart-list.component';
 import { OsdListComponent } from './osd-list.component';
 
 describe('OsdListComponent', () => {
@@ -84,7 +85,12 @@ describe('OsdListComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule
     ],
-    declarations: [OsdListComponent, OsdDetailsComponent, OsdPerformanceHistogramComponent],
+    declarations: [
+      OsdListComponent,
+      OsdDetailsComponent,
+      OsdPerformanceHistogramComponent,
+      OsdSmartListComponent
+    ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
@@ -123,7 +129,8 @@ describe('OsdListComponent', () => {
       stats: {
         stat_bytes_used: n * n,
         stat_bytes: n * n * n
-      }
+      },
+      state: []
     });
 
     const expectAttributeOnEveryOsd = (attr: string) =>
@@ -148,6 +155,15 @@ describe('OsdListComponent', () => {
     it('should have custom attribute "collectedStates"', () => {
       expectAttributeOnEveryOsd('collectedStates');
       expect(component.osds[0].collectedStates).toEqual(['in', 'up']);
+    });
+
+    it('should have "destroyed" state in "collectedStates"', () => {
+      osds[0].state.push('destroyed');
+      osds[0].up = 0;
+      component.getOsdList();
+
+      expectAttributeOnEveryOsd('collectedStates');
+      expect(component.osds[0].collectedStates).toEqual(['in', 'destroyed']);
     });
 
     it('should have custom attribute "stats_history.out_bytes"', () => {

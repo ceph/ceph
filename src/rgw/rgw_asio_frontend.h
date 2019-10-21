@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef RGW_ASIO_FRONTEND_H
 #define RGW_ASIO_FRONTEND_H
@@ -21,7 +21,7 @@ public:
   void join() override;
 
   void pause_for_new_config() override;
-  void unpause_with_new_config(RGWRados *store,
+  void unpause_with_new_config(rgw::sal::RGWRadosStore *store,
                                rgw_auth_registry_ptr_t auth_registry) override;
 };
 

@@ -75,25 +75,42 @@ class SubVolume(object):
 
         self.fs.mkdirs(subvolpath, mode)
 
-        if size is not None:
-            self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
+        try:
+            if size is not None:
+                try:
+                    self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
+                except cephfs.InvalidValue as e:
+                    raise VolumeException(-errno.EINVAL, "Invalid size: '{0}'".format(size))
+            if pool:
+                try:
+                    self.fs.setxattr(subvolpath, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+                except cephfs.InvalidValue:
+                    raise VolumeException(-errno.EINVAL,
+                                          "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
 
-        if pool:
-            self.fs.setxattr(subvolpath, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
-
-        xattr_key = xattr_val = None
-        if namespace_isolated:
-            # enforce security isolation, use separate namespace for this subvolume
-            xattr_key = 'ceph.dir.layout.pool_namespace'
-            xattr_val = spec.fs_namespace
-        elif not pool:
-            # If subvolume's namespace layout is not set, then the subvolume's pool
-            # layout remains unset and will undesirably change with ancestor's
-            # pool layout changes.
-            xattr_key = 'ceph.dir.layout.pool'
-            xattr_val = self._get_ancestor_xattr(subvolpath, "ceph.dir.layout.pool")
-        # TODO: handle error...
-        self.fs.setxattr(subvolpath, xattr_key, xattr_val.encode('utf-8'), 0)
+            xattr_key = xattr_val = None
+            if namespace_isolated:
+                # enforce security isolation, use separate namespace for this subvolume
+                xattr_key = 'ceph.dir.layout.pool_namespace'
+                xattr_val = spec.fs_namespace
+            elif not pool:
+                # If subvolume's namespace layout is not set, then the subvolume's pool
+                # layout remains unset and will undesirably change with ancestor's
+                # pool layout changes.
+                xattr_key = 'ceph.dir.layout.pool'
+                xattr_val = self._get_ancestor_xattr(subvolpath, "ceph.dir.layout.pool")
+            # TODO: handle error...
+            self.fs.setxattr(subvolpath, xattr_key, xattr_val.encode('utf-8'), 0)
+        except Exception as e:
+            try:
+                # cleanup subvol path on best effort basis
+                log.debug("cleaning up subvolume with path: {0}".format(subvolpath))
+                self.fs.rmdir(subvolpath)
+            except Exception:
+                log.debug("failed to clean up subvolume with path: {0}".format(subvolpath))
+                pass
+            finally:
+                raise e
 
     def remove_subvolume(self, spec, force):
         """
@@ -172,14 +189,50 @@ class SubVolume(object):
             raise VolumeException(-e.args[0], e.args[1])
         return path
 
+    def get_dir_entries(self, path):
+        """
+        Get the directory names in a given path
+        :param path: the given path
+        :return: the list of directory names
+        """
+        dirs = []
+        try:
+            with self.fs.opendir(path) as dir_handle:
+                d = self.fs.readdir(dir_handle)
+                while d:
+                    if (d.d_name not in (b".", b"..")) and d.is_dir():
+                        dirs.append(d.d_name)
+                    d = self.fs.readdir(dir_handle)
+        except cephfs.ObjectNotFound:
+            # When the given path is not found, we just return an empty list
+            return []
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+        return dirs
+
     ### group operations
 
     def create_group(self, spec, mode=0o755, pool=None):
         path = spec.group_path
         self.fs.mkdirs(path, mode)
-        if not pool:
-            pool = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
-        self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+        try:
+            if not pool:
+                pool = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
+            try:
+                self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL,
+                                      "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
+        except Exception as e:
+            try:
+                # cleanup group path on best effort basis
+                log.debug("cleaning up subvolumegroup with path: {0}".format(path))
+                self.fs.rmdir(path)
+            except Exception:
+                log.debug("failed to clean up subvolumegroup with path: {0}".format(path))
+                pass
+            finally:
+                raise e
 
     def remove_group(self, spec, force):
         path = spec.group_path

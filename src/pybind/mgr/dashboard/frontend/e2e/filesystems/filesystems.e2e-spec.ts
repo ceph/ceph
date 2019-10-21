@@ -1,23 +1,23 @@
-import { Helper } from '../helper.po';
+import { FilesystemsPageHelper } from './filesystems.po';
 
 describe('Filesystems page', () => {
-  let filesystems: Helper['filesystems'];
+  let filesystems: FilesystemsPageHelper;
 
   beforeAll(() => {
-    filesystems = new Helper().filesystems;
+    filesystems = new FilesystemsPageHelper();
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await FilesystemsPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      filesystems.navigateTo();
+    beforeAll(async () => {
+      await filesystems.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(filesystems.getBreadcrumbText()).toEqual('Filesystems');
+    it('should open and show breadcrumb', async () => {
+      await filesystems.waitTextToBePresent(filesystems.getBreadcrumb(), 'Filesystems');
     });
   });
 });

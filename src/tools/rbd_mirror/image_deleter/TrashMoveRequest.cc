@@ -159,7 +159,7 @@ void TrashMoveRequest<I>::reset_journal() {
     TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_reset_journal>(this);
   auto req = librbd::journal::ResetRequest<I>::create(
     m_io_ctx, m_image_id, librbd::Journal<>::IMAGE_CLIENT_ID,
-    m_mirror_uuid, m_op_work_queue, ctx);
+    librbd::Journal<>::LOCAL_MIRROR_UUID, m_op_work_queue, ctx);
   req->send();
 }
 

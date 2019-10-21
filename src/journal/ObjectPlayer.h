@@ -12,7 +12,6 @@
 #include "journal/Entry.h"
 #include <list>
 #include <string>
-#include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/unordered_map.hpp>
 #include "include/ceph_assert.h"
@@ -20,9 +19,6 @@
 class SafeTimer;
 
 namespace journal {
-
-class ObjectPlayer;
-typedef boost::intrusive_ptr<ObjectPlayer> ObjectPlayerPtr;
 
 class ObjectPlayer : public RefCountedObject {
 public:
@@ -34,11 +30,6 @@ public:
     REFETCH_STATE_REQUIRED,
     REFETCH_STATE_IMMEDIATE
   };
-
-  ObjectPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-               uint64_t object_num, SafeTimer &timer, ceph::mutex &timer_lock,
-               uint8_t order, uint64_t max_fetch_bytes);
-  ~ObjectPlayer() override;
 
   inline const std::string &get_oid() const {
     return m_oid;
@@ -83,11 +74,17 @@ public:
   }
 
 private:
+  FRIEND_MAKE_REF(ObjectPlayer);
+  ObjectPlayer(librados::IoCtx &ioctx, const std::string& object_oid_prefix,
+               uint64_t object_num, SafeTimer &timer, ceph::mutex &timer_lock,
+               uint8_t order, uint64_t max_fetch_bytes);
+  ~ObjectPlayer() override;
+
   typedef std::pair<uint64_t, uint64_t> EntryKey;
   typedef boost::unordered_map<EntryKey, Entries::iterator> EntryKeys;
 
   struct C_Fetch : public Context {
-    ObjectPlayerPtr object_player;
+    ceph::ref_t<ObjectPlayer> object_player;
     Context *on_finish;
     bufferlist read_bl;
     C_Fetch(ObjectPlayer *o, Context *ctx) : object_player(o), on_finish(ctx) {
@@ -95,7 +92,7 @@ private:
     void finish(int r) override;
   };
   struct C_WatchFetch : public Context {
-    ObjectPlayerPtr object_player;
+    ceph::ref_t<ObjectPlayer> object_player;
     C_WatchFetch(ObjectPlayer *o) : object_player(o) {
     }
     void finish(int r) override;
@@ -104,7 +101,7 @@ private:
   librados::IoCtx m_ioctx;
   uint64_t m_object_num;
   std::string m_oid;
-  CephContext *m_cct;
+  CephContext *m_cct = nullptr;
 
   SafeTimer &m_timer;
   ceph::mutex &m_timer_lock;
@@ -112,11 +109,11 @@ private:
   uint8_t m_order;
   uint64_t m_max_fetch_bytes;
 
-  double m_watch_interval;
-  Context *m_watch_task;
+  double m_watch_interval = 0;
+  Context *m_watch_task = nullptr;
 
   mutable ceph::mutex m_lock;
-  bool m_fetch_in_progress;
+  bool m_fetch_in_progress = false;
   bufferlist m_read_bl;
   uint32_t m_read_off = 0;
   uint32_t m_read_bl_off = 0;

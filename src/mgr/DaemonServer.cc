@@ -30,6 +30,8 @@
 #include "messages/MMonMgrReport.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MMgrCommand.h"
+#include "messages/MMgrCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDScrub2.h"
@@ -42,7 +44,14 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
-
+namespace {
+  template <typename Map>
+  bool map_compare(Map const &lhs, Map const &rhs) {
+    return lhs.size() == rhs.size()
+      && std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+                    [] (auto a, auto b) { return a.first == b.first && a.second == b.second; });
+  }
+}
 
 DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
@@ -159,7 +168,7 @@ entity_addrvec_t DaemonServer::get_myaddrs() const
 
 int DaemonServer::ms_handle_authentication(Connection *con)
 {
-  MgrSession *s = new MgrSession(cct);
+  auto s = ceph::make_ref<MgrSession>(cct);
   con->set_priv(s);
   s->inst.addr = con->get_peer_addr();
   s->entity_name = con->peer_name;
@@ -249,6 +258,8 @@ bool DaemonServer::ms_dispatch2(const ref_t<Message>& m)
       return handle_close(ref_cast<MMgrClose>(m));
     case MSG_COMMAND:
       return handle_command(ref_cast<MCommand>(m));
+    case MSG_MGR_COMMAND:
+      return handle_command(ref_cast<MMgrCommand>(m));
     default:
       dout(1) << "Unhandled message type " << m->get_type() << dendl;
       return false;
@@ -320,7 +331,7 @@ void DaemonServer::schedule_tick_locked(double delay_sec)
     return;
 
   tick_event = timer.add_event_after(delay_sec,
-    new FunctionContext([this](int r) {
+    new LambdaContext([this](int r) {
       tick();
   }));
 }
@@ -337,7 +348,7 @@ void DaemonServer::handle_osd_perf_metric_query_updated()
 
   // Send a fresh MMgrConfigure to all clients, so that they can follow
   // the new policy for transmitting stats
-  finisher.queue(new FunctionContext([this](int r) {
+  finisher.queue(new LambdaContext([this](int r) {
         std::lock_guard l(lock);
         for (auto &c : daemon_connections) {
           if (c->peer_is_osd()) {
@@ -352,6 +363,7 @@ void DaemonServer::shutdown()
   dout(10) << "begin" << dendl;
   msgr->shutdown();
   msgr->wait();
+  cluster_state.shutdown();
   dout(10) << "done" << dendl;
 
   std::lock_guard l(lock);
@@ -365,23 +377,10 @@ static DaemonKey key_from_service(
   const std::string& daemon_name)
 {
   if (!service_name.empty()) {
-    return DaemonKey(service_name, daemon_name);
+    return DaemonKey{service_name, daemon_name};
   } else {
-    return DaemonKey(ceph_entity_type_name(peer_type), daemon_name);
+    return DaemonKey{ceph_entity_type_name(peer_type), daemon_name};
   }
-}
-
-static bool key_from_string(
-  const std::string& name,
-  DaemonKey *out)
-{
-  auto p = name.find('.');
-  if (p == std::string::npos) {
-    return false;
-  }
-  out->first = name.substr(0, p);
-  out->second = name.substr(p + 1);
-  return true;
 }
 
 bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
@@ -405,9 +404,6 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
     daemon = std::make_shared<DaemonState>(daemon_state.types);
     daemon->key = key;
     daemon->service_daemon = true;
-    if (m->daemon_metadata.count("hostname")) {
-      daemon->hostname = m->daemon_metadata["hostname"];
-    }
     daemon_state.insert(daemon);
   }
   if (daemon) {
@@ -415,14 +411,15 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
     std::lock_guard l(daemon->lock);
     daemon->perf_counters.clear();
 
+    daemon->service_daemon = m->service_daemon;
     if (m->service_daemon) {
       daemon->set_metadata(m->daemon_metadata);
       daemon->service_status = m->daemon_status;
 
       utime_t now = ceph_clock_now();
-      auto d = pending_service_map.get_daemon(m->service_name,
-					      m->daemon_name);
-      if (d->gid != (uint64_t)m->get_source().num()) {
+      auto [d, added] = pending_service_map.get_daemon(m->service_name,
+						       m->daemon_name);
+      if (added || d->gid != (uint64_t)m->get_source().num()) {
 	dout(10) << "registering " << key << " in pending_service_map" << dendl;
 	d->gid = m->get_source().num();
 	d->addr = m->get_source_addr();
@@ -488,11 +485,11 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 {
   DaemonKey key;
   if (!m->service_name.empty()) {
-    key.first = m->service_name;
+    key.type = m->service_name;
   } else {
-    key.first = ceph_entity_type_name(m->get_connection()->get_peer_type());
+    key.type = ceph_entity_type_name(m->get_connection()->get_peer_type());
   }
-  key.second = m->daemon_name;
+  key.name = m->daemon_name;
 
   dout(10) << "from " << m->get_connection() << " " << key << dendl;
 
@@ -506,105 +503,120 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     return true;
   }
 
-  // Look up the DaemonState
-  DaemonStatePtr daemon;
-  if (daemon_state.exists(key)) {
-    dout(20) << "updating existing DaemonState for " << key << dendl;
-    daemon = daemon_state.get(key);
-  } else {
-    // we don't know the hostname at this stage, reject MMgrReport here.
-    dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
-	    << dendl;
 
-    // issue metadata request in background
-    if (!daemon_state.is_updating(key) && 
-	(key.first == "osd" || key.first == "mds" || key.first == "mon")) {
+  {
+    lock.lock();
 
-      std::ostringstream oss;
-      auto c = new MetadataUpdate(daemon_state, key);
-      if (key.first == "osd") {
-        oss << "{\"prefix\": \"osd metadata\", \"id\": "
-            << key.second<< "}";
+    DaemonStatePtr daemon;
+    // Look up the DaemonState
+    if (daemon_state.exists(key)) {
+      dout(20) << "updating existing DaemonState for " << key << dendl;
+      daemon = daemon_state.get(key);
+    } else {
+      lock.unlock();
 
-      } else if (key.first == "mds") {
-        c->set_default("addr", stringify(m->get_source_addr()));
-        oss << "{\"prefix\": \"mds metadata\", \"who\": \""
-            << key.second << "\"}";
+      // we don't know the hostname at this stage, reject MMgrReport here.
+      dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
+              << dendl;
+      // issue metadata request in background
+      if (!daemon_state.is_updating(key) && 
+          (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
+
+        std::ostringstream oss;
+        auto c = new MetadataUpdate(daemon_state, key);
+        if (key.type == "osd") {
+          oss << "{\"prefix\": \"osd metadata\", \"id\": "
+              << key.name<< "}";
+
+        } else if (key.type == "mds") {
+          c->set_default("addr", stringify(m->get_source_addr()));
+          oss << "{\"prefix\": \"mds metadata\", \"who\": \""
+              << key.name << "\"}";
  
-      } else if (key.first == "mon") {
-        oss << "{\"prefix\": \"mon metadata\", \"id\": \""
-            << key.second << "\"}";
-      } else {
-	ceph_abort();
+        } else if (key.type == "mon") {
+          oss << "{\"prefix\": \"mon metadata\", \"id\": \""
+              << key.name << "\"}";
+        } else {
+          ceph_abort();
+        }
+
+        monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
       }
 
-      monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
-    }
-    
-    {
-      std::lock_guard l(lock);
+      lock.lock();
+
       // kill session
       auto priv = m->get_connection()->get_priv();
       auto session = static_cast<MgrSession*>(priv.get());
       if (!session) {
-	return false;
+        return false;
       }
       m->get_connection()->mark_down();
 
       dout(10) << "unregistering osd." << session->osd_id
-	       << "  session " << session << " con " << m->get_connection() << dendl;
+               << "  session " << session << " con " << m->get_connection() << dendl;
       
       if (osd_cons.find(session->osd_id) != osd_cons.end()) {
-	   osd_cons[session->osd_id].erase(m->get_connection());
-      } 
+        osd_cons[session->osd_id].erase(m->get_connection());
+      }
 
       auto iter = daemon_connections.find(m->get_connection());
       if (iter != daemon_connections.end()) {
-	daemon_connections.erase(iter);
+        daemon_connections.erase(iter);
+      }
+
+      lock.unlock();
+      return false;
+    }
+
+    // Update the DaemonState
+    ceph_assert(daemon != nullptr);
+    {
+      std::lock_guard l(daemon->lock);
+      auto &daemon_counters = daemon->perf_counters;
+      daemon_counters.update(*m.get());
+
+      auto p = m->config_bl.cbegin();
+      if (p != m->config_bl.end()) {
+        decode(daemon->config, p);
+        decode(daemon->ignored_mon_config, p);
+        dout(20) << " got config " << daemon->config
+                 << " ignored " << daemon->ignored_mon_config << dendl;
+      }
+
+      if (daemon->service_daemon) {
+        utime_t now = ceph_clock_now();
+        if (m->daemon_status) {
+          daemon->service_status_stamp = now;
+          daemon->service_status = *m->daemon_status;
+        }
+        if (m->task_status && !map_compare(daemon->task_status, *m->task_status)) {
+          auto [d, added] = pending_service_map.get_daemon(m->service_name,
+							   m->daemon_name);
+	  if (!added) {
+            daemon->task_status = *m->task_status;
+            d->task_status = *m->task_status;
+            pending_service_map_dirty = pending_service_map.epoch;
+	  }
+        }
+        daemon->last_service_beacon = now;
+      } else if (m->daemon_status) {
+        derr << "got status from non-daemon " << key << dendl;
+      }
+      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
+        // only OSD and MON send health_checks to me now
+        daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
+        dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
+                 << dendl;
       }
     }
 
-    return false;
-  }
-
-  // Update the DaemonState
-  ceph_assert(daemon != nullptr);
-  {
-    std::lock_guard l(daemon->lock);
-    auto &daemon_counters = daemon->perf_counters;
-    daemon_counters.update(*m.get());
-
-    auto p = m->config_bl.cbegin();
-    if (p != m->config_bl.end()) {
-      decode(daemon->config, p);
-      decode(daemon->ignored_mon_config, p);
-      dout(20) << " got config " << daemon->config
-	       << " ignored " << daemon->ignored_mon_config << dendl;
-    }
-
-    if (daemon->service_daemon) {
-      utime_t now = ceph_clock_now();
-      if (m->daemon_status) {
-        daemon->service_status = *m->daemon_status;
-        daemon->service_status_stamp = now;
-      }
-      daemon->last_service_beacon = now;
-    } else if (m->daemon_status) {
-      derr << "got status from non-daemon " << key << dendl;
-    }
-    if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
-      // only OSD and MON send health_checks to me now
-      daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
-      dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
-	       << dendl;
-    }
+    lock.unlock();
   }
 
   // if there are any schema updates, notify the python modules
   if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
-    ostringstream oss;
-    oss << key.first << '.' << key.second;
-    py_modules.notify_all("perf_schema_update", oss.str());
+    py_modules.notify_all("perf_schema_update", ceph::to_string(key));
   }
 
   if (m->get_connection()->peer_is_osd()) {
@@ -690,12 +702,22 @@ bool DaemonServer::_allowed_command(
  */
 class CommandContext {
 public:
-  ceph::ref_t<MCommand> m;
+  ceph::ref_t<MCommand> m_tell;
+  ceph::ref_t<MMgrCommand> m_mgr;
+  const std::vector<std::string>& cmd;  ///< ref into m_tell or m_mgr
+  const bufferlist& data;               ///< ref into m_tell or m_mgr
   bufferlist odata;
   cmdmap_t cmdmap;
 
   explicit CommandContext(ceph::ref_t<MCommand> m)
-    : m{std::move(m)} {
+    : m_tell{std::move(m)},
+      cmd(m_tell->cmd),
+      data(m_tell->get_data()) {
+  }
+  explicit CommandContext(ceph::ref_t<MMgrCommand> m)
+    : m_mgr{std::move(m)},
+      cmd(m_mgr->cmd),
+      data(m_mgr->get_data()) {
   }
 
   void reply(int r, const std::stringstream &ss) {
@@ -704,7 +726,8 @@ public:
 
   void reply(int r, const std::string &rs) {
     // Let the connection drop as soon as we've sent our response
-    ConnectionRef con = m->get_connection();
+    ConnectionRef con = m_tell ? m_tell->get_connection()
+      : m_mgr->get_connection();
     if (con) {
       con->mark_disposable();
     }
@@ -715,10 +738,17 @@ public:
       derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
     }
     if (con) {
-      MCommandReply *reply = new MCommandReply(r, rs);
-      reply->set_tid(m->get_tid());
-      reply->set_data(odata);
-      con->send_message(reply);
+      if (m_tell) {
+	MCommandReply *reply = new MCommandReply(r, rs);
+	reply->set_tid(m_tell->get_tid());
+	reply->set_data(odata);
+	con->send_message(reply);
+      } else {
+	MMgrCommandReply *reply = new MMgrCommandReply(r, rs);
+	reply->set_tid(m_mgr->get_tid());
+	reply->set_data(odata);
+	con->send_message(reply);
+      }
     }
   }
 };
@@ -746,9 +776,29 @@ public:
 bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 {
   std::lock_guard l(lock);
+  // a blank fsid in MCommand signals a legacy client sending a "mon-mgr" CLI
+  // command.
+  if (m->fsid != uuid_d()) {
+    cct->get_admin_socket()->queue_tell_command(m);
+    return true;
+  } else {
+    // legacy client; send to CLI processing
+    auto cmdctx = std::make_shared<CommandContext>(m);
+    try {
+      return _handle_command(cmdctx);
+    } catch (const bad_cmd_get& e) {
+      cmdctx->reply(-EINVAL, e.what());
+      return true;
+    }
+  }
+}
+
+bool DaemonServer::handle_command(const ref_t<MMgrCommand>& m)
+{
+  std::lock_guard l(lock);
   auto cmdctx = std::make_shared<CommandContext>(m);
   try {
-    return _handle_command(m, cmdctx);
+    return _handle_command(cmdctx);
   } catch (const bad_cmd_get& e) {
     cmdctx->reply(-EINVAL, e.what());
     return true;
@@ -756,16 +806,22 @@ bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 }
 
 bool DaemonServer::_handle_command(
-  const ref_t<MCommand>& m,
   std::shared_ptr<CommandContext>& cmdctx)
 {
+  MessageRef m;
+  if (cmdctx->m_tell) {
+    m = cmdctx->m_tell;
+  } else {
+    m = cmdctx->m_mgr;
+  }
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<MgrSession*>(priv.get());
   if (!session) {
     return true;
   }
-  if (session->inst.name == entity_name_t())
+  if (session->inst.name == entity_name_t()) {
     session->inst.name = m->get_source();
+  }
 
   std::string format;
   boost::scoped_ptr<Formatter> f;
@@ -773,7 +829,7 @@ bool DaemonServer::_handle_command(
   std::stringstream ss;
   int r = 0;
 
-  if (!cmdmap_from_json(m->cmd, &(cmdctx->cmdmap), ss)) {
+  if (!cmdmap_from_json(cmdctx->cmd, &(cmdctx->cmdmap), ss)) {
     cmdctx->reply(-EINVAL, ss);
     return true;
   }
@@ -837,7 +893,7 @@ bool DaemonServer::_handle_command(
       dout(1) << " access denied" << dendl;
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
-                         << "cmd=" << m->cmd << ":  access denied";
+                         << "cmd=" << cmdctx->cmd << ":  access denied";
       ss << "access denied: does your client key have mgr caps? "
             "See http://docs.ceph.com/docs/master/mgr/administrator/"
             "#client-authentication";
@@ -848,7 +904,7 @@ bool DaemonServer::_handle_command(
   audit_clog->debug()
     << "from='" << session->inst << "' "
     << "entity='" << session->entity_name << "' "
-    << "cmd=" << m->cmd << ": dispatch";
+    << "cmd=" << cmdctx->cmd << ": dispatch";
 
   // ----------------
   // service map commands
@@ -867,11 +923,11 @@ bool DaemonServer::_handle_command(
       f.reset(Formatter::create("json-pretty"));
     // only include state from services that are in the persisted service map
     f->open_object_section("service_status");
-    for (auto& p : pending_service_map.services) {
-      f->open_object_section(p.first.c_str());
-      for (auto& q : p.second.daemons) {
+    for (auto& [type, service] : pending_service_map.services) {
+      f->open_object_section(type.c_str());
+      for (auto& q : service.daemons) {
 	f->open_object_section(q.first.c_str());
-	DaemonKey key(p.first, q.first);
+	DaemonKey key{type, q.first};
 	ceph_assert(daemon_state.exists(key));
 	auto daemon = daemon_state.get(key);
 	std::lock_guard l(daemon->lock);
@@ -1718,13 +1774,13 @@ bool DaemonServer::_handle_command(
 	     prefix == "config show-with-defaults") {
     string who;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
-    int r = 0;
-    auto dot = who.find('.');
-    DaemonKey key;
-    key.first = who.substr(0, dot);
-    key.second = who.substr(dot + 1);
+    auto [key, valid] = DaemonKey::parse(who);
+    if (!valid) {
+      ss << "invalid daemon name: use <type>.<id>";
+      cmdctx->reply(-EINVAL, ss);
+      return true;
+    }
     DaemonStatePtr daemon = daemon_state.get(key);
-    string name;
     if (!daemon) {
       ss << "no config state for daemon " << who;
       cmdctx->reply(-ENOENT, ss);
@@ -1733,6 +1789,8 @@ bool DaemonServer::_handle_command(
 
     std::lock_guard l(daemon->lock);
 
+    int r = 0;
+    string name;
     if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
@@ -1936,8 +1994,7 @@ bool DaemonServer::_handle_command(
   } else if (prefix == "device ls-by-daemon") {
     string who;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
-    DaemonKey k;
-    if (!key_from_string(who, &k)) {
+    if (auto [k, valid] = DaemonKey::parse(who); !valid) {
       ss << who << " is not a valid daemon name";
       r = -EINVAL;
     } else {
@@ -2179,7 +2236,7 @@ bool DaemonServer::_handle_command(
   }
 
   dout(10) << "passing through " << cmdctx->cmdmap.size() << dendl;
-  finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
+  finisher.queue(new LambdaContext([this, cmdctx, handler_name, prefix](int r_) {
     std::stringstream ss;
 
     // Validate that the module is enabled
@@ -2227,7 +2284,7 @@ bool DaemonServer::_handle_command(
     }
 
     std::stringstream ds;
-    bufferlist inbl = cmdctx->m->get_data();
+    bufferlist inbl = cmdctx->data;
     int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, inbl, &ds, &ss);
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
@@ -2243,7 +2300,7 @@ void DaemonServer::_prune_pending_service_map()
   while (p != pending_service_map.services.end()) {
     auto q = p->second.daemons.begin();
     while (q != p->second.daemons.end()) {
-      DaemonKey key(p->first, q->first);
+      DaemonKey key{p->first, q->first};
       if (!daemon_state.exists(key)) {
 	derr << "missing key " << key << dendl;
 	++q;
@@ -2290,7 +2347,7 @@ void DaemonServer::send_report()
     }
   }
 
-  auto m = new MMonMgrReport();
+  auto m = ceph::make_message<MMonMgrReport>();
   py_modules.get_health_checks(&m->health_checks);
   py_modules.get_progress_events(&m->progress_events);
 
@@ -2340,7 +2397,7 @@ void DaemonServer::send_report()
         if (acc == accumulated.end()) {
           auto collector = DaemonHealthMetricCollector::create(metric.get_type());
           if (!collector) {
-            derr << __func__ << " " << key.first << "." << key.second
+            derr << __func__ << " " << key
 		 << " sent me an unknown health metric: "
 		 << std::hex << static_cast<uint8_t>(metric.get_type())
 		 << std::dec << dendl;
@@ -2361,7 +2418,7 @@ void DaemonServer::send_report()
   // TODO? We currently do not notify the PyModules
   // TODO: respect needs_send, so we send the report only if we are asked to do
   //       so, or the state is updated.
-  monc->send_mon_message(m);
+  monc->send_mon_message(std::move(m));
 }
 
 void DaemonServer::adjust_pgs()
@@ -2487,6 +2544,7 @@ void DaemonServer::adjust_pgs()
 		       << " and " << merge_target
 		       << ")" << dendl;
 	      pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
+              continue;
 	    }
 	  } else if (p.get_pg_num_target() > p.get_pg_num()) {
 	    // pg_num increase (split)
@@ -2669,24 +2727,21 @@ void DaemonServer::got_service_map()
     });
 
   // cull missing daemons, populate new ones
-  for (auto& p : pending_service_map.services) {
+  for (auto& [type, service] : pending_service_map.services) {
     std::set<std::string> names;
-    for (auto& q : p.second.daemons) {
+    for (auto& q : service.daemons) {
       names.insert(q.first);
-      DaemonKey key(p.first, q.first);
+      DaemonKey key{type, q.first};
       if (!daemon_state.exists(key)) {
 	auto daemon = std::make_shared<DaemonState>(daemon_state.types);
 	daemon->key = key;
 	daemon->set_metadata(q.second.metadata);
-        if (q.second.metadata.count("hostname")) {
-          daemon->hostname = q.second.metadata["hostname"];
-        }
 	daemon->service_daemon = true;
 	daemon_state.insert(daemon);
 	dout(10) << "added missing " << key << dendl;
       }
     }
-    daemon_state.cull(p.first, names);
+    daemon_state.cull(type, names);
   }
 }
 
@@ -2700,11 +2755,11 @@ void DaemonServer::got_mgr_map()
         auto c = new MetadataUpdate(daemon_state, key);
 	// FIXME remove post-nautilus: include 'id' for luminous mons
         oss << "{\"prefix\": \"mgr metadata\", \"who\": \""
-	    << key.second << "\", \"id\": \"" << key.second << "\"}";
+	    << key.name << "\", \"id\": \"" << key.name << "\"}";
         monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
       };
       if (mgrmap.active_name.size()) {
-	DaemonKey key("mgr", mgrmap.active_name);
+	DaemonKey key{"mgr", mgrmap.active_name};
 	have.insert(mgrmap.active_name);
 	if (!daemon_state.exists(key) && !daemon_state.is_updating(key)) {
 	  md_update(key);
@@ -2712,7 +2767,7 @@ void DaemonServer::got_mgr_map()
 	}
       }
       for (auto& i : mgrmap.standbys) {
-        DaemonKey key("mgr", i.second.name);
+        DaemonKey key{"mgr", i.second.name};
 	have.insert(i.second.name);
 	if (!daemon_state.exists(key) && !daemon_state.is_updating(key)) {
 	  md_update(key);
@@ -2743,7 +2798,7 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
             << daemon_connections.size() << " clients" << dendl;
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
-    finisher.queue(new FunctionContext([this](int r) {
+    finisher.queue(new LambdaContext([this](int r) {
       std::lock_guard l(lock);
       for (auto &c : daemon_connections) {
         _send_configure(c);

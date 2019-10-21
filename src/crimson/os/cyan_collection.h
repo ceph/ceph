@@ -11,6 +11,8 @@
 #include "include/buffer.h"
 #include "osd/osd_types.h"
 
+#include "futurized_collection.h"
+
 namespace ceph::os {
 
 class Object;
@@ -21,15 +23,11 @@ class Object;
  * sequence.  Transactions queued under different collections may run
  * in parallel.
  *
- * ObjectStore users my get collection handles with open_collection() (or,
+ * ObjectStore users may get collection handles with open_collection() (or,
  * for bootstrapping a new collection, create_new_collection()).
  */
-struct Collection : public boost::intrusive_ref_counter<
-  Collection,
-  boost::thread_unsafe_counter>
-{
+struct Collection final : public FuturizedCollection {
   using ObjectRef = boost::intrusive_ptr<Object>;
-  const coll_t cid;
   int bits = 0;
   // always use bufferlist object for testing
   bool use_page_set = false;
@@ -39,21 +37,15 @@ struct Collection : public boost::intrusive_ref_counter<
   bool exists = true;
 
   Collection(const coll_t& c);
-  ~Collection();
+  ~Collection() final;
 
   ObjectRef create_object() const;
   ObjectRef get_object(ghobject_t oid);
   ObjectRef get_or_create_object(ghobject_t oid);
   uint64_t used_bytes() const;
 
-  const coll_t &get_cid() const {
-    return cid;
-  }
-
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
 };
-
-using CollectionRef = boost::intrusive_ptr<Collection>;
 
 }

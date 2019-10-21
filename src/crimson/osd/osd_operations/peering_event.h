@@ -64,6 +64,7 @@ public:
     ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
     Args&&... args) :
     shard_services(shard_services),
+    ctx{ceph_release_t::octopus},
     from(from),
     pgid(pgid),
     evt(std::forward<Args>(args)...)
@@ -80,6 +81,8 @@ protected:
   OSD &osd;
   ceph::net::ConnectionRef conn;
 
+  void on_pg_absent() final;
+  seastar::future<> complete_rctx(Ref<PG> pg) override;
   seastar::future<Ref<PG>> get_pg() final;
 
 public:

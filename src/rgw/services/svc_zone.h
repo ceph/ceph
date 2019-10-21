@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
 
@@ -119,6 +119,7 @@ public:
 
   bool is_meta_master() const;
 
+  bool need_to_sync() const;
   bool need_to_log_data() const;
   bool need_to_log_metadata() const;
   bool can_reshard() const;

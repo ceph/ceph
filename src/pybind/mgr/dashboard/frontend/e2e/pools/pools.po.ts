@@ -1,8 +1,6 @@
-import { $, browser, by, element, ElementFinder, promise, protractor } from 'protractor';
-import { Helper } from '../helper.po';
+import { $, by, element, protractor } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
-const EC = protractor.ExpectedConditions;
 const pages = {
   index: '/#/pool',
   create: '/#/pool/create'
@@ -17,61 +15,71 @@ export class PoolPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.index)
-  exist(name: string, oughtToBePresent = true): promise.Promise<any> {
-    return this.getTableCellByContent(name).then((elem) => {
-      const waitFn = oughtToBePresent ? EC.visibilityOf(elem) : EC.invisibilityOf(elem);
-      return browser.wait(waitFn, Helper.TIMEOUT).catch(() => {
-        const visibility = oughtToBePresent ? 'invisible' : 'visible';
-        const msg = `Pool "${name}" is ${visibility}, but should not be. Waiting for a change timed out`;
-        return promise.Promise.reject(msg);
-      });
-    });
+  async exist(name: string, oughtToBePresent = true) {
+    const tableCell = await this.getTableCellByContent(name);
+    const waitFn = oughtToBePresent ? this.waitVisibility : this.waitInvisibility;
+    try {
+      await waitFn(tableCell);
+    } catch (e) {
+      const visibility = oughtToBePresent ? 'invisible' : 'visible';
+      const msg = `Pool "${name}" is ${visibility}, but should not be. Waiting for a change timed out`;
+      return Promise.reject(msg);
+    }
+    return Promise.resolve();
   }
 
   @PageHelper.restrictTo(pages.create)
-  create(name: string, placement_groups: number): promise.Promise<any> {
+  async create(name: string, placement_groups: number, ...apps: string[]): Promise<any> {
     const nameInput = $('input[name=name]');
-    nameInput.clear();
+    await nameInput.clear();
     if (!this.isPowerOf2(placement_groups)) {
       return Promise.reject(`Placement groups ${placement_groups} are not a power of 2`);
     }
-    return nameInput.sendKeys(name).then(() => {
-      element(by.cssContainingText('select[name=poolType] option', 'replicated'))
-        .click()
-        .then(() => {
-          expect(element(by.css('select[name=poolType] option:checked')).getText()).toBe(
-            ' replicated '
-          );
-          $('input[name=pgNum]')
-            .sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, placement_groups)
-            .then(() => {
-              return element(by.css('cd-submit-button')).click();
-            });
-        });
-    });
+    await nameInput.sendKeys(name);
+    await element(by.cssContainingText('select[name=poolType] option', 'replicated')).click();
+
+    await expect(element(by.css('select[name=poolType] option:checked')).getText()).toBe(
+      ' replicated '
+    );
+    await $('input[name=pgNum]').sendKeys(
+      protractor.Key.CONTROL,
+      'a',
+      protractor.Key.NULL,
+      placement_groups
+    );
+    await this.setApplications(apps);
+    await element(by.css('cd-submit-button')).click();
+
+    return Promise.resolve();
   }
 
-  @PageHelper.restrictTo(pages.index)
-  delete(name: string): promise.Promise<any> {
-    return this.getTableCellByContent(name).then((tableCell: ElementFinder) => {
-      return tableCell.click().then(() => {
-        return $('.table-actions button.dropdown-toggle') // open submenu
-          .click()
-          .then(() => {
-            return $('li.delete a') // click on "delete" menu item
-              .click()
-              .then(() => {
-                const getConfirmationCheckbox = () => $('#confirmation');
-                browser
-                  .wait(() => EC.visibilityOf(getConfirmationCheckbox()), Helper.TIMEOUT)
-                  .then(() => {
-                    this.moveClick(getConfirmationCheckbox()).then(() => {
-                      return element(by.cssContainingText('button', 'Delete Pool')).click(); // Click Delete item
-                    });
-                  });
-              });
-          });
-      });
-    });
+  async edit_pool_pg(name: string, new_pg: number): Promise<void> {
+    if (!this.isPowerOf2(new_pg)) {
+      return Promise.reject(`Placement groups ${new_pg} are not a power of 2`);
+    }
+    const elem = await this.getTableCellByContent(name);
+    await elem.click(); // select pool from the table
+    await element(by.cssContainingText('button', 'Edit')).click(); // click edit button
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit'); // verify we are now on edit page
+    await $('input[name=pgNum]').sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, new_pg);
+    await element(by.css('cd-submit-button')).click();
+    const str = `${new_pg} active+clean`;
+    await this.waitVisibility(this.getTableRow(name), 'Timed out waiting for table row to load');
+    await this.waitTextToBePresent(
+      this.getTableRow(name),
+      str,
+      'Timed out waiting for placement group to be updated'
+    );
+  }
+
+  private async setApplications(apps: string[]) {
+    if (!apps || apps.length === 0) {
+      return;
+    }
+    await element(by.css('.float-left.mr-2.select-menu-edit')).click();
+    await this.waitVisibility(element(by.css('.popover-content.popover-body')));
+    apps.forEach(
+      async (app) => await element(by.cssContainingText('.select-menu-item-content', app)).click()
+    );
   }
 }

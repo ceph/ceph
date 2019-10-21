@@ -10,6 +10,7 @@ overrides:
     - \(CACHE_POOL_NEAR_FULL\)
     - \(POOL_APP_NOT_ENABLED\)
     - \(PG_AVAILABILITY\)
+    - \(PG_DEGRADED\)
     conf:
       client:
         debug ms: 1

@@ -21,7 +21,9 @@ import { ConfigurationFormComponent } from './configuration/configuration-form/c
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
+import { HostFormComponent } from './hosts/host-form/host-form.component';
 import { HostsComponent } from './hosts/hosts.component';
+import { InventoryComponent } from './inventory/inventory.component';
 import { LogsComponent } from './logs/logs.component';
 import { MgrModulesModule } from './mgr-modules/mgr-modules.module';
 import { MonitorComponent } from './monitor/monitor.component';
@@ -33,11 +35,13 @@ import { OsdPgScrubModalComponent } from './osd/osd-pg-scrub-modal/osd-pg-scrub-
 import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
+import { OsdSmartListComponent } from './osd/osd-smart-list/osd-smart-list.component';
 import { AlertListComponent } from './prometheus/alert-list/alert-list.component';
 import { PrometheusTabsComponent } from './prometheus/prometheus-tabs/prometheus-tabs.component';
 import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
 import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
+import { ServicesComponent } from './services/services.component';
 
 @NgModule({
   entryComponents: [
@@ -92,7 +96,11 @@ import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal
     SilenceFormComponent,
     SilenceListComponent,
     PrometheusTabsComponent,
-    SilenceMatcherModalComponent
+    SilenceMatcherModalComponent,
+    ServicesComponent,
+    InventoryComponent,
+    HostFormComponent,
+    OsdSmartListComponent
   ]
 })
 export class ClusterModule {}

@@ -25,15 +25,17 @@ struct MgrSession : public RefCountedObject {
 
   std::set<std::string> declared_types;
 
-  explicit MgrSession(CephContext *cct) : RefCountedObject(cct, 0) {}
-  ~MgrSession() override {}
-
   const entity_addr_t& get_peer_addr() {
     return inst.addr;
   }
+
+private:
+  FRIEND_MAKE_REF(MgrSession);
+  explicit MgrSession(CephContext *cct) : RefCountedObject(cct) {}
+  ~MgrSession() override = default;
 };
 
-typedef boost::intrusive_ptr<MgrSession> MgrSessionRef;
+using MgrSessionRef = ceph::ref_t<MgrSession>;
 
 
 #endif

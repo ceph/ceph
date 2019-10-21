@@ -1003,6 +1003,13 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_OMAPRMKEYS, 0, bl.length(), bl);
   }
 
+  void omap_rm_range(std::string_view key_begin, std::string_view key_end) {
+    bufferlist bl;
+    encode(key_begin, bl);
+    encode(key_end, bl);
+    add_data(CEPH_OSD_OP_OMAPRMKEYRANGE, 0, bl.length(), bl);
+  }
+
   // object classes
   void call(const char *cname, const char *method, ceph::buffer::list &indata) {
     add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
@@ -1246,8 +1253,8 @@ private:
   std::atomic<unsigned> num_in_flight{0};
   std::atomic<int> global_op_flags{0}; // flags which are applied to each IO op
   bool keep_balanced_budget = false;
-  bool honor_osdmap_full = true;
-  bool osdmap_full_try = false;
+  bool honor_pool_full = true;
+  bool pool_full_try = false;
 
   // If this is true, accumulate a set of blacklisted entities
   // to be drained by consume_blacklist_events.
@@ -1609,8 +1616,6 @@ public:
     std::list<librados::ListObjectImpl> list;
 
     ceph::buffer::list filter;
-
-    ceph::buffer::list extra_info;
 
     // The budget associated with this context, once it is set (>= 0),
     // the budget is not get/released on OP basis, instead the budget
@@ -2118,8 +2123,7 @@ private:
   // here or you will have great woe and misery.
 
   template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&... args) const ->
-    decltype(cb(*osdmap, std::forward<Args>(args)...)) {
+  decltype(auto) with_osdmap(Callback&& cb, Args&&... args) {
     shared_lock l(rwlock);
     return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
@@ -2135,11 +2139,11 @@ private:
   void set_balanced_budget() { keep_balanced_budget = true; }
   void unset_balanced_budget() { keep_balanced_budget = false; }
 
-  void set_honor_osdmap_full() { honor_osdmap_full = true; }
-  void unset_honor_osdmap_full() { honor_osdmap_full = false; }
+  void set_honor_pool_full() { honor_pool_full = true; }
+  void unset_honor_pool_full() { honor_pool_full = false; }
 
-  void set_osdmap_full_try() { osdmap_full_try = true; }
-  void unset_osdmap_full_try() { osdmap_full_try = false; }
+  void set_pool_full_try() { pool_full_try = true; }
+  void unset_pool_full_try() { pool_full_try = false; }
 
   void _scan_requests(
     OSDSession *s,
@@ -2317,6 +2321,8 @@ public:
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
     o->reqid = reqid;
     return o;
   }

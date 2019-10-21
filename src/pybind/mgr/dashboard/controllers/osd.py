@@ -7,7 +7,7 @@ from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_send_command_error
 from ..tools import str_to_bool
 try:
-    from typing import Dict, List, Any, Union  # pylint: disable=unused-import
+    from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -63,17 +63,43 @@ class Osd(RESTController):
         }
         return resp if svc_id is None else resp[int(svc_id)]
 
+    @staticmethod
+    def _get_smart_data(svc_id):
+        # type: (str) -> dict
+        """
+        Returns S.M.A.R.T data for the given OSD ID.
+        :type svc_id: Numeric ID of the OSD
+        """
+        devices = CephService.send_command(
+            'mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+        smart_data = {}
+        for dev_id in [d['devid'] for d in devices]:
+            if dev_id not in smart_data:
+                dev_smart_data = mgr.remote('devicehealth', 'do_scrape_daemon', 'osd', svc_id,
+                                            dev_id)
+                for _, dev_data in dev_smart_data.items():
+                    if 'error' in dev_data:
+                        logger.warning('[OSD] Error retrieving smartctl data for device ID %s: %s',
+                                       dev_id, dev_smart_data)
+                smart_data.update(dev_smart_data)
+        return smart_data
+
+    @RESTController.Resource('GET')
+    def get_smart_data(self, svc_id):
+        # type: (str) -> dict
+        return self._get_smart_data(svc_id)
+
     @handle_send_command_error('osd')
     def get(self, svc_id):
         """
         Returns collected data about an OSD.
 
-        :return: Returns the requested data. The `histogram` key man contain a
-                 string with an error that occurred when the OSD is down.
+        :return: Returns the requested data. The `histogram` key may contain a
+                 string with an error that occurred if the OSD is down.
         """
         try:
-            histogram = CephService.send_command('osd', srv_spec=svc_id,
-                                                 prefix='perf histogram dump')
+            histogram = CephService.send_command(
+                'osd', srv_spec=svc_id, prefix='perf histogram dump')
         except SendCommandError as e:
             if 'osd down' in str(e):
                 histogram = str(e)

@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 
 failed=false
-: ${CEPH_ROOT:=$PWD/../../../../}
+SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
+: ${CEPH_ROOT:=$SCRIPTPATH/../../../../}
+
 cd $CEPH_ROOT/src/pybind/mgr/dashboard/frontend
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
 if [ `uname` != "FreeBSD" ]; then
-  .  $CEPH_ROOT/build/src/pybind/mgr/dashboard/node-env/bin/activate
+  .  $CEPH_ROOT/${BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
 fi
 
 # Build
@@ -33,7 +36,7 @@ Some errors might need a manual fix."
 fi
 
 # I18N
-npm run i18n
+npm run i18n:extract
 i18n_lint=`awk '/<source> |<source>$| <\/source>/,/<\/context-group>/ {printf "%-4s ", NR; print}' src/locale/messages.xlf`
 if [[ ! -z $i18n_lint ]]; then
   echo -e "The following source translations in 'messages.xlf' need to be \

@@ -257,15 +257,17 @@ ClassHandler::ClassFilter *ClassHandler::ClassData::register_cxx_filter(
   return &filter;
 }
 
-ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(const char *mname)
+ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(
+    const std::string& mname)
 {
-  map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
-  if (iter == methods_map.end())
-    return NULL;
-  return &(iter->second);
+  if (auto iter = methods_map.find(mname); iter != methods_map.end()) {
+    return &(iter->second);
+  } else {
+    return nullptr;
+  }
 }
 
-int ClassHandler::ClassData::get_method_flags(const char *mname)
+int ClassHandler::ClassData::get_method_flags(const std::string& mname)
 {
   std::lock_guard l(handler->mutex);
   ClassMethod *method = _get_method(mname);
@@ -329,6 +331,15 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
 
 ClassHandler& ClassHandler::get_instance()
 {
+#ifdef WITH_SEASTAR
+  // the context is being used solely for:
+  //   1. random number generation (cls_gen_random_bytes)
+  //   2. accessing the configuration
+  //   3. logging
+  static CephContext cct;
+  static ClassHandler single(&cct);
+#else
   static ClassHandler single(g_ceph_context);
+#endif // WITH_SEASTAR
   return single;
 }

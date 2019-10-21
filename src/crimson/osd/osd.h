@@ -34,6 +34,8 @@
 
 class MOSDMap;
 class MOSDOp;
+class MOSDRepOpReply;
+class MOSDRepOp;
 class OSDMap;
 class OSDMeta;
 class Heartbeat;
@@ -48,7 +50,6 @@ namespace ceph::net {
 
 namespace ceph::os {
   class FuturizedStore;
-  struct Collection;
   class Transaction;
 }
 
@@ -164,8 +165,12 @@ private:
                                    Ref<MOSDMap> m);
   seastar::future<> handle_osd_op(ceph::net::Connection* conn,
 				  Ref<MOSDOp> m);
-  seastar::future<> handle_pg_log(ceph::net::Connection* conn,
-				  Ref<MOSDPGLog> m);
+  seastar::future<> handle_rep_op(ceph::net::Connection* conn,
+				  Ref<MOSDRepOp> m);
+  seastar::future<> handle_rep_op_reply(ceph::net::Connection* conn,
+					Ref<MOSDRepOpReply> m);
+  seastar::future<> handle_peering_op(ceph::net::Connection* conn,
+				      Ref<MOSDPeeringOp> m);
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
@@ -198,7 +203,7 @@ public:
   seastar::future<> shutdown();
 
   seastar::future<> send_beacon();
-  void update_heartbeat_peers();
+  seastar::future<> update_heartbeat_peers();
 
   friend class PGAdvanceMap;
 };

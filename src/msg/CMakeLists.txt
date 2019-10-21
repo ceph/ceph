@@ -3,6 +3,7 @@ set(msg_srcs
   Message.cc
   Messenger.cc
   QueueStrategy.cc
+  Connection.cc
   msg_types.cc)
 
 list(APPEND msg_srcs

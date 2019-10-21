@@ -36,11 +36,8 @@ public:
     bufferlist omap_header;
     map<string,bufferlist> omap;
 
-    typedef boost::intrusive_ptr<Object> Ref;
-    friend void intrusive_ptr_add_ref(Object *o) { o->get(); }
-    friend void intrusive_ptr_release(Object *o) { o->put(); }
+    using Ref = ceph::ref_t<Object>;
 
-    Object() : RefCountedObject(nullptr, 0) {}
     // interface for object data
     virtual size_t get_size() const = 0;
     virtual int read(uint64_t offset, uint64_t len, bufferlist &bl) = 0;
@@ -90,8 +87,10 @@ public:
       }
       f->close_section();
     }
+  protected:
+    Object() = default;
   };
-  typedef Object::Ref ObjectRef;
+  using ObjectRef = Object::Ref;
 
   struct PageSetObject;
   struct Collection : public CollectionImpl {
@@ -110,8 +109,6 @@ public:
       ceph::make_mutex("MemStore::Collection::sequencer_mutex")};
 
     typedef boost::intrusive_ptr<Collection> Ref;
-    friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
-    friend void intrusive_ptr_release(Collection *c) { c->put(); }
 
     ObjectRef create_object() const;
 
@@ -184,8 +181,10 @@ public:
       return true;
     }
 
+  private:
+    FRIEND_MAKE_REF(Collection);
     explicit Collection(CephContext *cct, coll_t c)
-      : CollectionImpl(c),
+      : CollectionImpl(cct, c),
 	cct(cct),
 	use_page_set(cct->_conf->memstore_page_set) {}
   };
@@ -295,7 +294,8 @@ public:
 
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
-  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+		  bool *per_pool_omap) override;
 
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
   int stat(CollectionHandle &c, const ghobject_t& oid,

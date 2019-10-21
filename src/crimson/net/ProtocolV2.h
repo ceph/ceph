@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <seastar/core/sleep.hh>
+
 #include "Protocol.h"
 #include "msg/async/frames_v2.h"
 #include "msg/async/crypto_onwire.h"
@@ -29,7 +31,10 @@ class ProtocolV2 final : public Protocol {
       const std::deque<MessageRef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
-      std::optional<utime_t> keepalive_ack) override;
+      std::optional<utime_t> keepalive_ack,
+      bool require_ack) override;
+
+  void notify_write() override;
 
  private:
   SocketMessenger &messenger;
@@ -37,12 +42,13 @@ class ProtocolV2 final : public Protocol {
   enum class state_t {
     NONE = 0,
     ACCEPTING,
+    SERVER_WAIT,
+    ESTABLISHING,
     CONNECTING,
     READY,
     STANDBY,
-    WAIT,           // ? CLIENT_WAIT
-    SERVER_WAIT,    // ?
-    REPLACING,      // ?
+    WAIT,
+    REPLACING,
     CLOSING
   };
   state_t state = state_t::NONE;
@@ -50,12 +56,13 @@ class ProtocolV2 final : public Protocol {
   static const char *get_state_name(state_t state) {
     const char *const statenames[] = {"NONE",
                                       "ACCEPTING",
+                                      "SERVER_WAIT",
+                                      "ESTABLISHING",
                                       "CONNECTING",
                                       "READY",
                                       "STANDBY",
-                                      "WAIT",           // ? CLIENT_WAIT
-                                      "SERVER_WAIT",    // ?
-                                      "REPLACING",      // ?
+                                      "WAIT",
+                                      "REPLACING",
                                       "CLOSING"};
     return statenames[static_cast<int>(state)];
   }
@@ -70,6 +77,26 @@ class ProtocolV2 final : public Protocol {
   uint64_t global_seq = 0;
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
+
+  seastar::shared_future<> execution_done = seastar::now();
+
+  class Timer {
+    double last_dur_ = 0.0;
+    const SocketConnection& conn;
+    std::optional<seastar::abort_source> as;
+   public:
+    Timer(SocketConnection& conn) : conn(conn) {}
+    double last_dur() const { return last_dur_; }
+    seastar::future<> backoff(double seconds);
+    void cancel() {
+      last_dur_ = 0.0;
+      if (as) {
+        as->request_abort();
+        as = std::nullopt;
+      }
+    }
+  };
+  Timer protocol_timer;
 
  // TODO: Frame related implementations, probably to a separate class.
  private:
@@ -96,10 +123,16 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> write_frame(F &frame, bool flush=true);
 
  private:
-  seastar::future<> fault();
+  void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
   void dispatch_reset();
   void reset_session(bool full);
   seastar::future<entity_type_t, entity_addr_t> banner_exchange();
+
+  enum class next_step_t {
+    ready,
+    wait,
+    none,       // protocol should have been aborted or failed
+  };
 
   // CONNECTING (client)
   seastar::future<> handle_auth_reply();
@@ -109,9 +142,9 @@ class ProtocolV2 final : public Protocol {
   }
   seastar::future<> client_auth(std::vector<uint32_t> &allowed_methods);
 
-  seastar::future<bool> process_wait();
-  seastar::future<bool> client_connect();
-  seastar::future<bool> client_reconnect();
+  seastar::future<next_step_t> process_wait();
+  seastar::future<next_step_t> client_connect();
+  seastar::future<next_step_t> client_reconnect();
   void execute_connecting();
 
   // ACCEPTING (server)
@@ -119,38 +152,57 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> _handle_auth_request(bufferlist& auth_payload, bool more);
   seastar::future<> server_auth();
 
-  seastar::future<bool> send_wait();
+  seastar::future<next_step_t> send_wait();
+  seastar::future<next_step_t> reuse_connection(ProtocolV2* existing_proto,
+                                                bool do_reset=false,
+                                                bool reconnect=false,
+                                                uint64_t conn_seq=0,
+                                                uint64_t msg_seq=0);
 
-  seastar::future<bool> handle_existing_connection(SocketConnectionRef existing);
-  seastar::future<bool> server_connect();
+  seastar::future<next_step_t> handle_existing_connection(SocketConnectionRef existing_conn);
+  seastar::future<next_step_t> server_connect();
 
-  seastar::future<bool> read_reconnect();
-  seastar::future<bool> send_retry(uint64_t connect_seq);
-  seastar::future<bool> send_retry_global(uint64_t global_seq);
-  seastar::future<bool> send_reset(bool full);
-  seastar::future<bool> server_reconnect();
+  seastar::future<next_step_t> read_reconnect();
+  seastar::future<next_step_t> send_retry(uint64_t connect_seq);
+  seastar::future<next_step_t> send_retry_global(uint64_t global_seq);
+  seastar::future<next_step_t> send_reset(bool full);
+  seastar::future<next_step_t> server_reconnect();
 
   void execute_accepting();
 
   // CONNECTING/ACCEPTING
   seastar::future<> finish_auth();
 
-  // ACCEPTING/REPLACING (server)
+  // ESTABLISHING
+  void execute_establishing();
+
+  // ESTABLISHING/REPLACING (server)
   seastar::future<> send_server_ident();
 
   // REPLACING (server)
-  seastar::future<> send_reconnect_ok();
+  void trigger_replacing(bool reconnect,
+                         bool do_reset,
+                         SocketFRef&& new_socket,
+                         AuthConnectionMetaRef&& new_auth_meta,
+                         ceph::crypto::onwire::rxtx_t new_rxtx,
+                         uint64_t new_peer_global_seq,
+                         // !reconnect
+                         uint64_t new_client_cookie,
+                         entity_name_t new_peer_name,
+                         uint64_t new_conn_features,
+                         // reconnect
+                         uint64_t new_connect_seq,
+                         uint64_t new_msg_seq);
 
   // READY
   seastar::future<> read_message(utime_t throttle_stamp);
-  void handle_message_ack(seq_num_t seq);
   void execute_ready();
 
   // STANDBY
   void execute_standby();
 
   // WAIT
-  void execute_wait();
+  void execute_wait(bool max_backoff);
 
   // SERVER_WAIT
   void execute_server_wait();

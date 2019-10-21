@@ -98,7 +98,7 @@ retrim a now empty snap.
 SnapMapper
 ----------
 *SnapMapper* is implemented on top of map_cacher<string, bufferlist>,
-which provides an interface over a backing store such as the filesystem
+which provides an interface over a backing store such as the file system
 with async transactions.  While transactions are incomplete, the map_cacher
 instance buffers unstable keys allowing consistent access without having
 to flush the filestore.  *SnapMapper* provides two mappings:

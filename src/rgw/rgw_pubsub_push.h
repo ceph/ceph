@@ -1,11 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 #pragma once
 
 #include <string>
 #include <memory>
 #include <stdexcept>
 #include "include/buffer_fwd.h"
+#include "common/async/yield_context.h"
 
 // TODO the env should be used as a template parameter to differentiate the source that triggers the pushes
 class RGWDataSyncEnv;
@@ -31,12 +32,16 @@ public:
   static Ptr create(const std::string& endpoint, const std::string& topic, const RGWHTTPArgs& args, CephContext *cct=nullptr);
  
   // this method is used in order to send notification (Ceph specific) and wait for completion 
-  // in async manner via a coroutine
+  // in async manner via a coroutine when invoked in the data sync environment
   virtual RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) = 0;
 
   // this method is used in order to send notification (S3 compliant) and wait for completion 
-  // in async manner via a coroutine
+  // in async manner via a coroutine when invoked in the data sync environment
   virtual RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) = 0;
+
+  // this method is used in order to send notification (S3 compliant) and wait for completion 
+  // in async manner via a coroutine when invoked in the frontend environment
+  virtual int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) = 0;
 
   // present as string
   virtual std::string to_str() const { return ""; }

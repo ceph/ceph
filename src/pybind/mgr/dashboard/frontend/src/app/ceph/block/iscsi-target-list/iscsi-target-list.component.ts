@@ -39,6 +39,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   modalRef: BsModalRef;
   permission: Permission;
   selection = new CdTableSelection();
+  cephIscsiConfigVersion: number;
   settings: any;
   status: string;
   summaryDataSubscription: Subscription;
@@ -120,15 +121,18 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
       this.available = result.available;
 
       if (result.available) {
-        this.taskListService.init(
-          () => this.iscsiService.listTargets(),
-          (resp) => this.prepareResponse(resp),
-          (targets) => (this.targets = targets),
-          () => this.onFetchError(),
-          this.taskFilter,
-          this.itemFilter,
-          this.builders
-        );
+        this.iscsiService.version().subscribe((res: any) => {
+          this.cephIscsiConfigVersion = res['ceph_iscsi_config_version'];
+          this.taskListService.init(
+            () => this.iscsiService.listTargets(),
+            (resp) => this.prepareResponse(resp),
+            (targets) => (this.targets = targets),
+            () => this.onFetchError(),
+            this.taskFilter,
+            this.itemFilter,
+            this.builders
+          );
+        });
 
         this.iscsiService.settings().subscribe((settings: any) => {
           this.settings = settings;
@@ -149,7 +153,8 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   }
 
   getDeleteDisableDesc(): string | undefined {
-    if (this.selection.first() && this.selection.first()['info']['num_sessions']) {
+    const first = this.selection.first();
+    if (first && first['info'] && first['info']['num_sessions']) {
       return this.i18n('Target has active sessions');
     }
   }

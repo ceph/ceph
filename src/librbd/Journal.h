@@ -8,6 +8,7 @@
 #include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/rados/librados_fwd.hpp"
+#include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
 #include "common/WorkQueue.h"
 #include "journal/Future.h"
@@ -253,13 +254,6 @@ private:
     ReplayHandler(Journal *_journal) : journal(_journal) {
     }
 
-    void get() override {
-      // TODO
-    }
-    void put() override {
-      // TODO
-    }
-
     void handle_entries_available() override {
       journal->handle_replay_ready();
     }
@@ -301,7 +295,7 @@ private:
 
   journal::Replay<ImageCtxT> *m_journal_replay;
 
-  util::AsyncOpTracker m_async_journal_op_tracker;
+  AsyncOpTracker m_async_journal_op_tracker;
 
   struct MetadataListener : public ::journal::JournalMetadataListener {
     Journal<ImageCtxT> *journal;
@@ -309,7 +303,7 @@ private:
     MetadataListener(Journal<ImageCtxT> *journal) : journal(journal) { }
 
     void handle_update(::journal::JournalMetadata *) override {
-      FunctionContext *ctx = new FunctionContext([this](int r) {
+      auto ctx = new LambdaContext([this](int r) {
         journal->handle_metadata_updated();
       });
       journal->m_work_queue->queue(ctx, 0);

@@ -113,16 +113,22 @@ class RgwBucketTest(RgwTestCase):
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwBucketTest, cls).setUpClass()
-        # Create a tenanted user.
+        # Create tenanted users.
         cls._radosgw_admin_cmd([
             'user', 'create', '--tenant', 'testx', '--uid', 'teuth-test-user',
             '--display-name', 'tenanted teuth-test-user'
+        ])
+        cls._radosgw_admin_cmd([
+            'user', 'create', '--tenant', 'testx2', '--uid', 'teuth-test-user2',
+            '--display-name', 'tenanted teuth-test-user 2'
         ])
 
     @classmethod
     def tearDownClass(cls):
         cls._radosgw_admin_cmd(
             ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user'])
+        cls._radosgw_admin_cmd(
+            ['user', 'rm', '--tenant', 'testx2', '--uid=teuth-test-user2'])
         super(RgwBucketTest, cls).tearDownClass()
 
     def test_all(self):
@@ -171,13 +177,16 @@ class RgwBucketTest(RgwTestCase):
         }, allow_unknown=True))
         self.assertEqual(data['bucket'], 'teuth-test-bucket')
         self.assertEqual(data['owner'], 'admin')
+        self.assertEqual(data['placement_rule'], 'default-placement')
+        self.assertEqual(data['versioning'], 'Suspended')
 
         # Update the bucket.
         self._put(
             '/api/rgw/bucket/teuth-test-bucket',
             params={
                 'bucket_id': data['id'],
-                'uid': 'teuth-test-user'
+                'uid': 'teuth-test-user',
+                'versioning_state': 'Enabled'
             })
         self.assertStatus(200)
         data = self._get('/api/rgw/bucket/teuth-test-bucket')
@@ -188,6 +197,7 @@ class RgwBucketTest(RgwTestCase):
             'tenant': JLeaf(str)
         }, allow_unknown=True))
         self.assertEqual(data['owner'], 'teuth-test-user')
+        self.assertEqual(data['versioning'], 'Enabled')
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/teuth-test-bucket')
@@ -220,35 +230,69 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(len(data), 1)
         self.assertIn('testx/teuth-test-bucket', data)
 
-        # Get the bucket.
-        data = self._get('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
-        self.assertStatus(200)
-        self.assertSchema(data, JObj(sub_elems={
-            'owner': JLeaf(str),
-            'bucket': JLeaf(str),
-            'tenant': JLeaf(str),
-            'bid': JLeaf(str)
-        }, allow_unknown=True))
-        self.assertEqual(data['owner'], 'testx$teuth-test-user')
-        self.assertEqual(data['bucket'], 'teuth-test-bucket')
-        self.assertEqual(data['tenant'], 'testx')
-        self.assertEqual(data['bid'], 'testx/teuth-test-bucket')
+        def _verify_tenant_bucket(bucket, tenant, uid):
+            full_bucket_name = '{}/{}'.format(tenant, bucket)
+            _data = self._get('/api/rgw/bucket/{}'.format(
+                urllib.quote_plus(full_bucket_name)))
+            self.assertStatus(200)
+            self.assertSchema(_data, JObj(sub_elems={
+                'owner': JLeaf(str),
+                'bucket': JLeaf(str),
+                'tenant': JLeaf(str),
+                'bid': JLeaf(str)
+            }, allow_unknown=True))
+            self.assertEqual(_data['owner'], '{}${}'.format(tenant, uid))
+            self.assertEqual(_data['bucket'], bucket)
+            self.assertEqual(_data['tenant'], tenant)
+            self.assertEqual(_data['bid'], full_bucket_name)
+            return _data
 
-        # Update the bucket.
+        # Get the bucket.
+        data = _verify_tenant_bucket('teuth-test-bucket', 'testx', 'teuth-test-user')
+        self.assertEqual(data['placement_rule'], 'default-placement')
+        self.assertEqual(data['versioning'], 'Suspended')
+
+        # Update bucket: different user with different tenant, enable versioning.
         self._put(
             '/api/rgw/bucket/{}'.format(
                 urllib.quote_plus('testx/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
+                'uid': 'testx2$teuth-test-user2',
+                'versioning_state': 'Enabled'
+            })
+        data = _verify_tenant_bucket('teuth-test-bucket', 'testx2', 'teuth-test-user2')
+        self.assertEqual(data['versioning'], 'Enabled')
+
+        # Change owner to a non-tenanted user
+        self._put(
+            '/api/rgw/bucket/{}'.format(
+                urllib.quote_plus('testx2/teuth-test-bucket')),
+            params={
+                'bucket_id': data['id'],
                 'uid': 'admin'
             })
         self.assertStatus(200)
-        data = self._get('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(200)
         self.assertIn('owner', data)
         self.assertEqual(data['owner'], 'admin')
+        self.assertEqual(data['tenant'], '')
+        self.assertEqual(data['bucket'], 'teuth-test-bucket')
+        self.assertEqual(data['bid'], 'teuth-test-bucket')
+        self.assertEqual(data['versioning'], 'Enabled')
+
+        # Change owner back to tenanted user, suspend versioning.
+        self._put(
+            '/api/rgw/bucket/teuth-test-bucket',
+            params={
+                'bucket_id': data['id'],
+                'uid': 'testx$teuth-test-user',
+                'versioning_state': 'Suspended'
+            })
+        self.assertStatus(200)
+        data = _verify_tenant_bucket('teuth-test-bucket', 'testx', 'teuth-test-user')
+        self.assertEqual(data['versioning'], 'Suspended')
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/{}'.format(

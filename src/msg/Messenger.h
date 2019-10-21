@@ -233,7 +233,7 @@ public:
   }
 
   /**
-   * std::Set the name of the local entity. The name is reported to others and
+   * set the name of the local entity. The name is reported to others and
    * can be changed while the system is running, but doing so at incorrect
    * times may have bad results.
    *
@@ -242,7 +242,7 @@ public:
   void set_myname(const entity_name_t& m) { my_name = m; }
 
   /**
-   * std::Set the unknown address components for this Messenger.
+   * set the unknown address components for this Messenger.
    * This is useful if the Messenger doesn't know its full address just by
    * binding, but another Messenger on the same interface has already learned
    * its full address. This function does not fill in known address elements,
@@ -252,7 +252,7 @@ public:
    */
   virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
   /**
-   * std::Set the address for this Messenger. This is useful if the Messenger
+   * set the address for this Messenger. This is useful if the Messenger
    * binds to a specific address but advertises a different address on the
    * the network.
    *
@@ -282,7 +282,7 @@ public:
    * @{
    */
   /**
-   * std::Set the cluster protocol in use by this daemon.
+   * set the cluster protocol in use by this daemon.
    * This is an init-time function and cannot be called after calling
    * start() or bind().
    *
@@ -290,7 +290,7 @@ public:
    */
   virtual void set_cluster_protocol(int p) = 0;
   /**
-   * std::Set a policy which is applied to all peers who do not have a type-specific
+   * set a policy which is applied to all peers who do not have a type-specific
    * Policy.
    * This is an init-time function and cannot be called after calling
    * start() or bind().
@@ -299,7 +299,7 @@ public:
    */
   virtual void set_default_policy(Policy p) = 0;
   /**
-   * std::Set a policy which is applied to all peers of the given type.
+   * set a policy which is applied to all peers of the given type.
    * This is an init-time function and cannot be called after calling
    * start() or bind().
    *
@@ -308,7 +308,7 @@ public:
    */
   virtual void set_policy(int type, Policy p) = 0;
   /**
-   * std::Set the Policy associated with a type of peer.
+   * set the Policy associated with a type of peer.
    *
    * This can be called either on initial setup, or after connections
    * are already established.  However, the policies for existing
@@ -326,7 +326,7 @@ public:
    */
   virtual Policy get_default_policy() = 0;
   /**
-   * std::Set Throttlers applied to all Messages from the given type of peer
+   * set Throttlers applied to all Messages from the given type of peer
    *
    * This is an init-time function and cannot be called after calling
    * start() or bind().
@@ -339,7 +339,7 @@ public:
    */
   virtual void set_policy_throttlers(int type, Throttle *bytes, Throttle *msgs=NULL) = 0;
   /**
-   * std::Set the default send priority
+   * set the default send priority
    *
    * This is an init-time function and must be called *before* calling
    * start().
@@ -351,7 +351,7 @@ public:
     default_send_priority = p;
   }
   /**
-   * std::Set the priority(SO_PRIORITY) for all packets to be sent on this socket.
+   * set the priority(SO_PRIORITY) for all packets to be sent on this socket.
    *
    * Linux uses this value to order the networking queues: packets with a higher
    * priority may be processed first depending on the selected device queueing
@@ -451,7 +451,7 @@ public:
    * Perform any resource allocation, thread startup, etc
    * that is required before attempting to connect to other
    * Messengers or transmit messages.
-   * Once this function completes, started shall be std::set to true.
+   * Once this function completes, started shall be set to true.
    *
    * @return 0 on success; -errno on failure.
    */
@@ -531,18 +531,19 @@ public:
    * @param dest The entity to get a connection for.
    */
   virtual ConnectionRef connect_to(
-    int type, const entity_addrvec_t& dest) = 0;
-  ConnectionRef connect_to_mon(const entity_addrvec_t& dest) {
-    return connect_to(CEPH_ENTITY_TYPE_MON, dest);
+    int type, const entity_addrvec_t& dest,
+    bool anon=false) = 0;
+  ConnectionRef connect_to_mon(const entity_addrvec_t& dest, bool anon=false) {
+    return connect_to(CEPH_ENTITY_TYPE_MON, dest, anon);
   }
-  ConnectionRef connect_to_mds(const entity_addrvec_t& dest) {
-    return connect_to(CEPH_ENTITY_TYPE_MDS, dest);
+  ConnectionRef connect_to_mds(const entity_addrvec_t& dest, bool anon=false) {
+    return connect_to(CEPH_ENTITY_TYPE_MDS, dest, anon);
   }
-  ConnectionRef connect_to_osd(const entity_addrvec_t& dest) {
-    return connect_to(CEPH_ENTITY_TYPE_OSD, dest);
+  ConnectionRef connect_to_osd(const entity_addrvec_t& dest, bool anon=false) {
+    return connect_to(CEPH_ENTITY_TYPE_OSD, dest, anon);
   }
-  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest) {
-    return connect_to(CEPH_ENTITY_TYPE_MGR, dest);
+  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest, bool anon=false) {
+    return connect_to(CEPH_ENTITY_TYPE_MGR, dest, anon);
   }
 
   /**

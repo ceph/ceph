@@ -74,6 +74,17 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
     leader_checks.clear();
   }
 
+  {
+    bufferlist bl;
+    mon->store->get(service_name, "mutes", bl);
+    if (bl.length()) {
+      auto p = bl.cbegin();
+      decode(mutes, p);
+    } else {
+      mutes.clear();
+    }
+  }
+
   dout(20) << "dump:";
   JSONFormatter jf(true);
   jf.open_object_section("health");
@@ -92,6 +103,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
 void HealthMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
+  pending_mutes = mutes;
 }
 
 void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -106,6 +118,11 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   bufferlist lbl;
   encode(leader_checks, lbl);
   t->put(service_name, "leader", lbl);
+  {
+    bufferlist bl;
+    encode(pending_mutes, bl);
+    t->put(service_name, "mutes", bl);
+  }
 
   health_check_map_t pending_health;
 
@@ -150,7 +167,17 @@ version_t HealthMonitor::get_trim_to() const
 
 bool HealthMonitor::preprocess_query(MonOpRequestRef op)
 {
-  return false;
+  auto m = op->get_req<PaxosServiceMessage>();
+  switch (m->get_type()) {
+  case MSG_MON_COMMAND:
+    return preprocess_command(op);
+  case MSG_MON_HEALTH_CHECKS:
+    return false;
+  default:
+    mon->no_reply(op);
+    derr << "Unhandled message type " << m->get_type() << dendl;
+    return true;
+  }
 }
 
 bool HealthMonitor::prepare_update(MonOpRequestRef op)
@@ -161,14 +188,149 @@ bool HealthMonitor::prepare_update(MonOpRequestRef op)
   switch (m->get_type()) {
   case MSG_MON_HEALTH_CHECKS:
     return prepare_health_checks(op);
+  case MSG_MON_COMMAND:
+    return prepare_command(op);
   default:
+    return false;
+  }
+}
+
+bool HealthMonitor::preprocess_command(MonOpRequestRef op)
+{
+  auto m = op->get_req<MMonCommand>();
+  std::stringstream ss;
+  bufferlist rdata;
+
+  cmdmap_t cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    return true;
+  }
+
+  MonSession *session = op->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", rdata,
+		       get_last_committed());
+    return true;
+  }
+  // more sanity checks
+  try {
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    string prefix;
+    cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  } catch (const bad_cmd_get& e) {
+    mon->reply_command(op, -EINVAL, e.what(), rdata, get_last_committed());
+    return true;
+  }
+  return false;
+}
+
+bool HealthMonitor::prepare_command(MonOpRequestRef op)
+{
+  auto m = op->get_req<MMonCommand>();
+
+  std::stringstream ss;
+  bufferlist rdata;
+
+  cmdmap_t cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    return true;
+  }
+
+  MonSession *session = op->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
+    return true;
+  }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  int r = 0;
+
+  if (prefix == "health mute") {
+    string code;
+    bool sticky = false;
+    if (!cmd_getval(g_ceph_context, cmdmap, "code", code) ||
+	code == "") {
+      r = -EINVAL;
+      ss << "must specify an alert code to mute";
+      goto out;
+    }
+    cmd_getval(g_ceph_context, cmdmap, "sticky", sticky);
+    string ttl_str;
+    utime_t ttl;
+    if (cmd_getval(g_ceph_context, cmdmap, "ttl", ttl_str)) {
+      auto secs = parse_timespan(ttl_str);
+      if (secs == 0s) {
+	r = -EINVAL;
+	ss << "not a valid duration: " << ttl_str;
+	goto out;
+      }
+      ttl = ceph_clock_now();
+      ttl += std::chrono::duration<double>(secs).count();
+    }
+    health_check_map_t all;
+    gather_all_health_checks(&all);
+    string summary;
+    int64_t count = 0;
+    if (!sticky) {
+      auto p = all.checks.find(code);
+      if (p == all.checks.end()) {
+	r = -ENOENT;
+	ss << "health alert " << code << " is not currently raised";
+	goto out;
+      }
+      count = p->second.count;
+      summary = p->second.summary;
+    }
+    auto& m = pending_mutes[code];
+    m.code = code;
+    m.ttl = ttl;
+    m.sticky = sticky;
+    m.summary = summary;
+    m.count = count;
+  } else if (prefix == "health unmute") {
+    string code;
+    if (cmd_getval(g_ceph_context, cmdmap, "code", code)) {
+      pending_mutes.erase(code);
+    } else {
+      pending_mutes.clear();
+    }
+  } else {
+    ss << "Command '" << prefix << "' not implemented!";
+    r = -ENOSYS;
+  }
+
+out:
+  dout(4) << __func__ << " done, r=" << r << dendl;
+  /* Compose response */
+  string rs;
+  getline(ss, rs);
+
+  if (r >= 0) {
+    // success.. delay reply
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
+					      get_last_committed() + 1));
+    return true;
+  } else {
+    // reply immediately
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return false;
   }
 }
 
 bool HealthMonitor::prepare_health_checks(MonOpRequestRef op)
 {
-  MMonHealthChecks *m = static_cast<MMonHealthChecks*>(op->get_req());
+  auto m = op->get_req<MMonHealthChecks>();
   // no need to check if it's changed, the peon has done so
   quorum_checks[m->get_source().num()] = std::move(m->health_checks);
   return true;
@@ -190,9 +352,186 @@ void HealthMonitor::tick()
   if (check_leader_health()) {
     changed = true;
   }
+  if (check_mutes()) {
+    changed = true;
+  }
   if (changed) {
     propose_pending();
   }
+}
+
+bool HealthMonitor::check_mutes()
+{
+  bool changed = true;
+  auto now = ceph_clock_now();
+  health_check_map_t all;
+  gather_all_health_checks(&all);
+  auto p = pending_mutes.begin();
+  while (p != pending_mutes.end()) {
+    if (p->second.ttl != utime_t() &&
+	p->second.ttl <= now) {
+      mon->clog->info() << "Health alert mute " << p->first
+			<< " cleared (passed TTL " << p->second.ttl << ")";
+      p = pending_mutes.erase(p);
+      changed = true;
+      continue;
+    }
+    if (!p->second.sticky) {
+      auto q = all.checks.find(p->first);
+      if (q == all.checks.end()) {
+	mon->clog->info() << "Health alert mute " << p->first
+			  << " cleared (health alert cleared)";
+	p = pending_mutes.erase(p);
+	changed = true;
+	continue;
+      }
+      if (p->second.count) {
+	// count-based mute
+	if (q->second.count > p->second.count) {
+	  mon->clog->info() << "Health alert mute " << p->first
+			    << " cleared (count increased from " << p->second.count
+			    << " to " << q->second.count << ")";
+	  p = pending_mutes.erase(p);
+	  changed = true;
+	  continue;
+	}
+	if (q->second.count < p->second.count) {
+	  // rachet down the mute
+	  dout(10) << __func__ << " mute " << p->first << " count "
+		   << p->second.count << " -> " << q->second.count
+		   << dendl;
+	  p->second.count = q->second.count;
+	  changed = true;
+	}
+      } else {
+	// summary-based mute
+	if (p->second.summary != q->second.summary) {
+	  mon->clog->info() << "Health alert mute " << p->first
+			    << " cleared (summary changed)";
+	  p = pending_mutes.erase(p);
+	  changed = true;
+	  continue;
+	}
+      }
+    }
+    ++p;
+  }
+  return changed;
+}
+
+void HealthMonitor::gather_all_health_checks(health_check_map_t *all)
+{
+  for (auto& svc : mon->paxos_service) {
+    all->merge(svc->get_health_checks());
+  }
+}
+
+health_status_t HealthMonitor::get_health_status(
+  bool want_detail,
+  Formatter *f,
+  std::string *plain,
+  const char *sep1,
+  const char *sep2)
+{
+  health_check_map_t all;
+  gather_all_health_checks(&all);
+  health_status_t r = HEALTH_OK;
+  for (auto& p : all.checks) {
+    if (!mutes.count(p.first)) {
+      if (r > p.second.severity) {
+	r = p.second.severity;
+      }
+    }
+  }
+  if (f) {
+    f->open_object_section("health");
+    f->dump_stream("status") << r;
+    f->open_object_section("checks");
+    for (auto& p : all.checks) {
+      f->open_object_section(p.first.c_str());
+      p.second.dump(f, want_detail);
+      f->dump_bool("muted", mutes.count(p.first));
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("mutes");
+    for (auto& p : mutes) {
+      f->dump_object("mute", p.second);
+    }
+    f->close_section();
+    f->close_section();
+  } else {
+    auto now = ceph_clock_now();
+    // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
+    string summary;
+    for (auto& p : all.checks) {
+      if (!mutes.count(p.first)) {
+	if (!summary.empty()) {
+	  summary += sep2;
+	}
+	summary += p.second.summary;
+      }
+    }
+    *plain = stringify(r);
+    if (summary.size()) {
+      *plain += sep1;
+      *plain += summary;
+    }
+    if (!mutes.empty()) {
+      if (summary.size()) {
+	*plain += sep2;
+      } else {
+	*plain += sep1;
+      }
+      *plain += "(muted:";
+      for (auto& p : mutes) {
+	*plain += " ";
+	*plain += p.first;
+	if (p.second.ttl) {
+	  if (p.second.ttl > now) {
+	    auto left = p.second.ttl;
+	    left -= now;
+	    *plain += "("s + utimespan_str(left) + ")";
+	  } else {
+	    *plain += "(0s)";
+	  }
+	}
+      }
+      *plain += ")";
+    }
+    *plain += "\n";
+    // detail
+    if (want_detail) {
+      for (auto& p : all.checks) {
+	auto q = mutes.find(p.first);
+	if (q != mutes.end()) {
+	  *plain += "(MUTED";
+	  if (q->second.ttl != utime_t()) {
+	    if (q->second.ttl > now) {
+	      auto left = q->second.ttl;
+	      left -= now;
+	      *plain += " ttl ";
+	      *plain += utimespan_str(left);
+	    } else {
+	      *plain += "0s";
+	    }
+	  }
+	  if (q->second.sticky) {
+	    *plain += ", STICKY";
+	  }
+	  *plain += ") ";
+	}
+	*plain += "["s + short_health_string(p.second.severity) + "] " +
+	  p.first + ": " + p.second.summary + "\n";
+	for (auto& d : p.second.detail) {
+	  *plain += "    ";
+	  *plain += d;
+	  *plain += "\n";
+	}
+      }
+    }
+  }
+  return r;
 }
 
 bool HealthMonitor::check_member_health()
@@ -221,14 +560,14 @@ bool HealthMonitor::check_member_health()
   if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_crit) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% very low on available space";
-    auto& d = next.add("MON_DISK_CRIT", HEALTH_ERR, ss.str());
+    auto& d = next.add("MON_DISK_CRIT", HEALTH_ERR, ss.str(), 1);
     ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
   } else if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% low on available space";
-    auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str());
+    auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str(), 1);
     ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
@@ -236,7 +575,7 @@ bool HealthMonitor::check_member_health()
   if (stats.store_stats.bytes_total >= g_conf()->mon_data_size_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% using a lot of disk space";
-    auto& d = next.add("MON_DISK_BIG", HEALTH_WARN, ss.str());
+    auto& d = next.add("MON_DISK_BIG", HEALTH_WARN, ss.str(), 1);
     ss2 << "mon." << mon->name << " is "
 	<< byte_u_t(stats.store_stats.bytes_total)
 	<< " >= mon_data_size_warn ("
@@ -262,7 +601,7 @@ bool HealthMonitor::check_member_health()
         g_conf()->mon_osd_down_out_interval == 0) {
       ostringstream ss, ds;
       ss << "mon%plurals% %names% %hasorhave% mon_osd_down_out_interval set to 0";
-      auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str());
+      auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str(), 1);
       ds << "mon." << mon->name << " has mon_osd_down_out_interval set to 0";
       d.detail.push_back(ds.str());
     }
@@ -320,7 +659,7 @@ bool HealthMonitor::check_leader_health()
       ostringstream ss;
       ss << (max-actual) << "/" << max << " mons down, quorum "
 	 << mon->get_quorum_names();
-      auto& d = next.add("MON_DOWN", HEALTH_WARN, ss.str());
+      auto& d = next.add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
       set<int> q = mon->get_quorum();
       for (int i=0; i<max; i++) {
 	if (q.count(i) == 0) {
@@ -361,7 +700,7 @@ bool HealthMonitor::check_leader_health()
 	if (!warns.empty())
 	  ss << ",";
       }
-      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str());
+      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str(), details.size());
       d.detail.swap(details);
     }
   }
@@ -383,7 +722,8 @@ bool HealthMonitor::check_leader_health()
     if (!details.empty()) {
       ostringstream ss;
       ss << details.size() << " monitors have not enabled msgr2";
-      auto& d = next.add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str());
+      auto& d = next.add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str(),
+			 details.size());
       d.detail.swap(details);
     }
   }

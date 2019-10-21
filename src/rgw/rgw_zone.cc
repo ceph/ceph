@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "common/errno.h"
 
@@ -1340,10 +1340,10 @@ void RGWPeriod::fork()
   realm_epoch++;
 }
 
-static int read_sync_status(RGWRados *store, rgw_meta_sync_status *sync_status)
+static int read_sync_status(rgw::sal::RGWRadosStore *store, rgw_meta_sync_status *sync_status)
 {
   // initialize a sync status manager to read the status
-  RGWMetaSyncStatusManager mgr(store, store->get_async_rados());
+  RGWMetaSyncStatusManager mgr(store, store->svc()->rados->get_async_processor());
   int r = mgr.init();
   if (r < 0) {
     return r;
@@ -1353,7 +1353,7 @@ static int read_sync_status(RGWRados *store, rgw_meta_sync_status *sync_status)
   return r;
 }
 
-int RGWPeriod::update_sync_status(RGWRados *store, /* for now */
+int RGWPeriod::update_sync_status(rgw::sal::RGWRadosStore *store, /* for now */
 				  const RGWPeriod &current_period,
                                   std::ostream& error_stream,
                                   bool force_if_stale)
@@ -1403,7 +1403,7 @@ int RGWPeriod::update_sync_status(RGWRados *store, /* for now */
   return 0;
 }
 
-int RGWPeriod::commit(RGWRados *store,
+int RGWPeriod::commit(rgw::sal::RGWRadosStore *store,
 		      RGWRealm& realm, const RGWPeriod& current_period,
                       std::ostream& error_stream, bool force_if_stale)
 {
@@ -1532,7 +1532,6 @@ int get_zones_pool_set(CephContext* cct,
     }
     if (zone.get_id() != my_zone_id) {
       pool_names.insert(zone.domain_root);
-      pool_names.insert(zone.metadata_heap);
       pool_names.insert(zone.control_pool);
       pool_names.insert(zone.gc_pool);
       pool_names.insert(zone.log_pool);
@@ -1605,9 +1604,6 @@ int RGWZoneParams::fix_pool_names()
   }
 
   domain_root = fix_zone_pool_dup(pools, name, ".rgw.meta:root", domain_root);
-  if (!metadata_heap.name.empty()) {
-    metadata_heap = fix_zone_pool_dup(pools, name, ".rgw.meta:heap", metadata_heap);
-  }
   control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
   gc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:gc", gc_pool);
   lc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:lc", lc_pool);
@@ -1759,7 +1755,7 @@ const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& plac
   if (p == placement_pools.end()) {
     return NONE;
   }
-  const auto& type = p->second.get_compression_type(placement_rule.storage_class);
+  const auto& type = p->second.get_compression_type(placement_rule.get_storage_class());
   return !type.empty() ? type : NONE;
 }
 

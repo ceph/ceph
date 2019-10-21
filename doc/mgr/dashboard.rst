@@ -96,14 +96,14 @@ aspects of your Ceph cluster:
 * **RBD mirroring**: Enable and configure RBD mirroring to a remote Ceph server.
   Lists all active sync daemons and their status, pools and RBD images including
   their synchronization state.
-* **CephFS**: List all active filesystem clients and associated pools,
+* **CephFS**: List all active file system clients and associated pools,
   including their usage statistics.
 * **Object Gateway**: List all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
   owner, quotas). See :ref:`dashboard-enabling-object-gateway` for configuration
   instructions.
-* **NFS**: Manage NFS exports of CephFS filesystems and RGW S3 buckets via NFS
+* **NFS**: Manage NFS exports of CephFS file systems and RGW S3 buckets via NFS
   Ganesha. See :ref:`dashboard-nfs-ganesha-management` for details on how to
   enable this functionality.
 * **Ceph Manager Modules**: Enable and disable all Ceph Manager modules, change
@@ -451,7 +451,7 @@ To configure SSO on Ceph Dashboard, you should use the following command::
 Parameters:
 
 * **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
-* **<idp_metadata>**: URL, file path or content of the IdP metadata XML (e.g., `https://myidp/metadata`)
+* **<idp_metadata>**: URL to remote (`http://`, `https://`) or local (`file://`) path or content of the IdP metadata XML (e.g., `https://myidp/metadata`, `file:///home/myuser/metadata.xml`).
 * **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
 * **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
 * **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
@@ -732,7 +732,7 @@ commands to manage roles are the following:
 
 - *Delete Scope Permission from Role*::
 
-  $ ceph dashboard ac-role-del-perms <rolename> <scopename>
+  $ ceph dashboard ac-role-del-scope-perms <rolename> <scopename>
 
 To associate roles to users, the following CLI commands are available:
 
@@ -908,7 +908,6 @@ The dashboard manages NFS-Ganesha config files stored in RADOS objects on the Ce
 NFS-Ganesha must store part of their configuration in the Ceph cluster.
 
 These configuration files must follow some conventions.
-conventions.
 Each export block must be stored in its own RADOS object named
 ``export-<id>``, where ``<id>`` must match the ``Export_ID`` attribute of the
 export configuration. Then, for each NFS-Ganesha service daemon there should

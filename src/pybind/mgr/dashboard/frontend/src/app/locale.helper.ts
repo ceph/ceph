@@ -103,7 +103,7 @@ const i18nProviders = [
     useFactory: (locale) => {
       locale = locale || 'en-US';
       try {
-        return require(`raw-loader!locale/messages.${locale}.xlf`);
+        return require(`raw-loader!locale/messages.${locale}.xlf`).default;
       } catch (error) {
         return [];
       }

@@ -39,6 +39,7 @@ struct OpRequest : public TrackedOp {
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
+  bool allows_returnvec() const;
   void set_read();
   void set_write();
   void set_cache();
@@ -49,6 +50,7 @@ struct OpRequest : public TrackedOp {
   void set_skip_handle_cache();
   void set_skip_promote();
   void set_force_rwordered();
+  void set_returnvec();
 
   struct ClassInfo {
     ClassInfo(std::string&& class_name, std::string&& method_name,
@@ -110,6 +112,10 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
+
+  template<class T>
+  const T* get_req() const { return static_cast<const T*>(request); }
+
   const Message *get_req() const { return request; }
   Message *get_nonconst_req() { return request; }
 

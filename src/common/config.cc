@@ -1379,7 +1379,7 @@ int md_config_t::_set_val(
     if (new_value != _get_val_nometa(values, opt)) {
       *error_message = string("Configuration option '") + opt.name +
 	"' may not be modified at runtime";
-      return -ENOSYS;
+      return -EPERM;
     }
   }
 

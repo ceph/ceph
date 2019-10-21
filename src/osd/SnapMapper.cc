@@ -701,6 +701,17 @@ int SnapMapper::convert_legacy(
 
   dout(1) << __func__ << " converted " << n << " keys in "
 	  << timespan_str(end - start) << dendl;
-#warning fixme remove old keys
+
+  // remove the old keys
+  {
+    ObjectStore::Transaction t;
+    string end = SnapMapper::LEGACY_MAPPING_PREFIX;
+    ++end[end.size()-1]; // turn _ to whatever comes after _
+    t.omap_rmkeyrange(ch->cid, hoid,
+		      SnapMapper::LEGACY_MAPPING_PREFIX,
+		      end);
+    int r = store->queue_transaction(ch, std::move(t));
+    ceph_assert(r == 0);
+  }
   return 0;
 }

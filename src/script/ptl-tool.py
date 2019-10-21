@@ -291,7 +291,7 @@ def build_branch(args):
                         indications.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
                     except KeyError as e:
                         try:
-                            name = raw_input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
+                            name = input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
                             name = name.strip()
                             if len(name) == 0:
                                 continue

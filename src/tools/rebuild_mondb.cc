@@ -244,13 +244,13 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
     uint32_t crc = -1;
     uint64_t features = 0;
     // add inc maps
-    {
+    auto add_inc_result = [&] {
       const auto oid = OSD::get_inc_osdmap_pobject_name(e);
       bufferlist bl;
       int nread = fs.read(ch, oid, 0, 0, bl);
       if (nread <= 0) {
-        cerr << "missing " << oid << std::endl;
-        return -EINVAL;
+        cout << "missing " << oid << std::endl;
+        return -ENOENT;
       }
       t->put(prefix, e, bl);
 
@@ -277,6 +277,18 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
           // inc.decode() verifies `inc_crc`, so it's been taken care of.
         }
       }
+      return 0;
+    }();
+    switch (add_inc_result) {
+    case -ENOENT:
+      // no worries, we always have full map
+      break;
+    case -EINVAL:
+      return -EINVAL;
+    case 0:
+      break;
+    default:
+      assert(0);
     }
     // add full maps
     {

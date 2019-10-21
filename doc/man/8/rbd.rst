@@ -116,7 +116,7 @@ Parameters
    string. This is useful for situations where an image must
    be open from more than one client at once, like during
    live migration of a virtual machine, or for use underneath
-   a clustered filesystem.
+   a clustered file system.
 
 .. option:: --format format
 

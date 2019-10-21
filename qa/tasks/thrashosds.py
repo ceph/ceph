@@ -200,11 +200,12 @@ def task(ctx, config):
             'true')
 
     log.info('Beginning thrashosds...')
-    thrash_proc = ceph_manager.Thrasher(
+    thrash_proc = ceph_manager.OSDThrasher(
         cluster_manager,
         config,
         logger=log.getChild('thrasher')
         )
+    ctx.ceph[cluster].thrashers.append(thrash_proc)
     try:
         yield
     finally:

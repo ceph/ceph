@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_ACL_SWIFT_H
 #define CEPH_RGW_ACL_SWIFT_H
@@ -13,9 +13,11 @@
 
 #include "rgw_acl.h"
 
+class RGWUserCtl;
+
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
-  int add_grants(RGWRados *store,
+  int add_grants(RGWUserCtl *user_ctl,
                  const std::vector<std::string>& uids,
                  uint32_t perm);
 
@@ -25,7 +27,7 @@ public:
   }
   ~RGWAccessControlPolicy_SWIFT() override = default;
 
-  int create(RGWRados *store,
+  int create(RGWUserCtl *user_ctl,
              const rgw_user& id,
              const std::string& name,
              const char* read_list,
@@ -43,10 +45,10 @@ public:
   }
   ~RGWAccessControlPolicy_SWIFTAcct() override {}
 
-  void add_grants(RGWRados *store,
+  void add_grants(RGWUserCtl *user_ctl,
                   const std::vector<std::string>& uids,
                   uint32_t perm);
-  bool create(RGWRados *store,
+  bool create(RGWUserCtl *user_ctl,
               const rgw_user& id,
               const std::string& name,
               const std::string& acl_str);

@@ -31,7 +31,7 @@ describe('IscsiTargetFormComponent', () => {
     target_default_controls: {
       cmdsn_depth: 128,
       dataout_timeout: 20,
-      immediate_data: 'Yes'
+      immediate_data: true
     },
     required_rbd_features: {
       'backstore:1': 0,
@@ -71,6 +71,10 @@ describe('IscsiTargetFormComponent', () => {
     { name: 'node1', ip_addresses: ['192.168.100.201', '10.0.2.15'] },
     { name: 'node2', ip_addresses: ['192.168.100.202'] }
   ];
+
+  const VERSION = {
+    ceph_iscsi_config_version: 11
+  };
 
   const RBD_LIST = [
     { status: 0, value: [], pool_name: 'ganesha' },
@@ -152,6 +156,7 @@ describe('IscsiTargetFormComponent', () => {
 
     httpTesting.expectOne('ui-api/iscsi/settings').flush(SETTINGS);
     httpTesting.expectOne('ui-api/iscsi/portals').flush(PORTALS);
+    httpTesting.expectOne('ui-api/iscsi/version').flush(VERSION);
     httpTesting.expectOne('api/summary').flush({});
     httpTesting.expectOne('api/block/image').flush(RBD_LIST);
     httpTesting.expectOne('api/iscsi/target').flush(LIST_TARGET);
@@ -183,6 +188,12 @@ describe('IscsiTargetFormComponent', () => {
       groups: [],
       initiators: [],
       acl_enabled: false,
+      auth: {
+        password: '',
+        user: '',
+        mutual_password: '',
+        mutual_user: ''
+      },
       portals: [],
       target_controls: {},
       target_iqn: component.targetForm.value.target_iqn
@@ -386,7 +397,13 @@ describe('IscsiTargetFormComponent', () => {
         ],
         target_controls: {},
         target_iqn: component.target_iqn,
-        acl_enabled: true
+        acl_enabled: true,
+        auth: {
+          password: '',
+          user: '',
+          mutual_password: '',
+          mutual_user: ''
+        }
       });
     });
 
@@ -417,7 +434,13 @@ describe('IscsiTargetFormComponent', () => {
         ],
         target_controls: {},
         target_iqn: component.targetForm.value.target_iqn,
-        acl_enabled: true
+        acl_enabled: true,
+        auth: {
+          password: '',
+          user: '',
+          mutual_password: '',
+          mutual_user: ''
+        }
       });
     });
 
@@ -432,6 +455,12 @@ describe('IscsiTargetFormComponent', () => {
         disks: [{ backstore: 'backstore:1', controls: {}, image: 'disk_2', pool: 'rbd' }],
         groups: [],
         acl_enabled: false,
+        auth: {
+          password: '',
+          user: '',
+          mutual_password: '',
+          mutual_user: ''
+        },
         portals: [
           { host: 'node1', ip: '192.168.100.201' },
           { host: 'node2', ip: '192.168.100.202' }

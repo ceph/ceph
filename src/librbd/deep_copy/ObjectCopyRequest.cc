@@ -50,6 +50,8 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
     m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
     m_snap_map(snap_map), m_dst_object_number(dst_object_number),
     m_flatten(flatten), m_on_finish(on_finish) {
+  ceph_assert(src_image_ctx->data_ctx.is_valid());
+  ceph_assert(dst_image_ctx->data_ctx.is_valid());
   ceph_assert(!m_snap_map.empty());
 
   m_src_async_op = new io::AsyncOperation();
@@ -389,7 +391,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_write_object(r);
       finish_op_ctx->complete(0);
     });
@@ -466,7 +468,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_update_object_map(r);
       finish_op_ctx->complete(0);
     });
@@ -507,7 +509,7 @@ Context *ObjectCopyRequest<I>::start_lock_op(ceph::shared_mutex &owner_lock,
 					     int* r) {
   ceph_assert(ceph_mutex_is_locked(m_dst_image_ctx->owner_lock));
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
-    return new FunctionContext([](int r) {});
+    return new LambdaContext([](int r) {});
   }
   return m_dst_image_ctx->exclusive_lock->start_op(r);
 }

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_REST_STS_H
 #define CEPH_RGW_REST_STS_H
@@ -52,7 +52,7 @@ public:
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::WebIdentityApplier::Factory {
-  RGWRados* const store;
+  RGWCtl* const ctl;
   ImplicitTenants& implicit_tenant_context;
 
   /* The engine. */
@@ -68,16 +68,16 @@ class DefaultStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
                                     const rgw::web_idp::WebTokenClaims& token) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::WebIdentityApplier(cct, store, token));
+    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
+      rgw::auth::WebIdentityApplier(cct, ctl, token));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
   DefaultStrategy(CephContext* const cct,
                   ImplicitTenants& implicit_tenant_context,
-                  RGWRados* const store)
-    : store(store),
+                  RGWCtl* const ctl)
+    : ctl(ctl),
       implicit_tenant_context(implicit_tenant_context),
       web_token_engine(cct,
                         static_cast<rgw::auth::TokenExtractor*>(this),
@@ -158,7 +158,7 @@ public:
 class RGW_Auth_STS {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       RGWRados *store,
+                       rgw::sal::RGWRadosStore *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s);
 };
@@ -178,7 +178,7 @@ public:
       post_body(post_body) {}
   ~RGWHandler_REST_STS() override = default;
 
-  int init(RGWRados *store,
+  int init(rgw::sal::RGWRadosStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp) override;

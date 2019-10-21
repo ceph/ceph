@@ -18,7 +18,7 @@ Ceph Object Storage uses the Ceph Object Gateway daemon (``radosgw``), which is
 an HTTP server for interacting with a Ceph Storage Cluster. Since it
 provides interfaces compatible with OpenStack Swift and Amazon S3, the Ceph
 Object Gateway has its own user management. Ceph Object Gateway can store data
-in the same Ceph Storage Cluster used to store data from Ceph Filesystem clients
+in the same Ceph Storage Cluster used to store data from Ceph File System clients
 or Ceph Block Device clients. The S3 and Swift APIs share a common namespace, so
 you may write data with one API and retrieve it with the other.
 
@@ -52,6 +52,7 @@ you may write data with one API and retrieve it with the other.
    Export over NFS <nfs>
    OpenStack Keystone Integration <keystone>
    OpenStack Barbican Integration <barbican>
+   HashiCorp Vault Integration <vault>
    Open Policy Agent Integration <opa>
    Multi-tenancy <multitenancy>
    Compression <compression>
@@ -61,6 +62,7 @@ you may write data with one API and retrieve it with the other.
    Dynamic bucket index resharding <dynamicresharding>
    Multi factor authentication <mfa>
    Sync Modules <sync-modules>
+   Bucket Notifications <notifications>
    Data Layout in RADOS <layout>
    STS Lite <STSLite>
    Role <role>

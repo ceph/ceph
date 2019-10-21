@@ -25,6 +25,7 @@
 #include "CDir.h"
 
 #include "include/unordered_set.h"
+
 using ceph::unordered_set;
 
 class CDir;
@@ -33,13 +34,34 @@ class CDentry;
 class MDSRank;
 struct MDSlaveUpdate;
 
-typedef uint64_t log_segment_seq_t;
-
 class LogSegment {
  public:
-  const log_segment_seq_t seq;
+  using seq_t = uint64_t;
+
+  LogSegment(uint64_t _seq, loff_t off=-1) :
+    seq(_seq), offset(off), end(off),
+    dirty_dirfrags(member_offset(CDir, item_dirty)),
+    new_dirfrags(member_offset(CDir, item_new)),
+    dirty_inodes(member_offset(CInode, item_dirty)),
+    dirty_dentries(member_offset(CDentry, item_dirty)),
+    open_files(member_offset(CInode, item_open_file)),
+    dirty_parent_inodes(member_offset(CInode, item_dirty_parent)),
+    dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
+    dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
+    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
+  {}
+
+  void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
+
+  void wait_for_expiry(MDSContext *c)
+  {
+    ceph_assert(c != NULL);
+    expiry_waiters.push_back(c);
+  }
+
+  const seq_t seq;
   uint64_t offset, end;
-  int num_events;
+  int num_events = 0;
 
   // dirty items
   elist<CDir*>    dirty_dirfrags, new_dirfrags;
@@ -52,8 +74,8 @@ class LogSegment {
   elist<CInode*>  dirty_dirfrag_nest;
   elist<CInode*>  dirty_dirfrag_dirfragtree;
 
-  elist<MDSlaveUpdate*> slave_updates;
-  
+  elist<MDSlaveUpdate*> slave_updates{0}; // passed to begin() manually
+
   set<CInode*> truncating_inodes;
 
   map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
@@ -67,36 +89,11 @@ class LogSegment {
   std::set<entity_name_t> touched_sessions;
 
   // table version
-  version_t inotablev;
-  version_t sessionmapv;
+  version_t inotablev = 0;
+  version_t sessionmapv = 0;
   map<int,version_t> tablev;
 
-  // try to expire
-  void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
-
   MDSContext::vec expiry_waiters;
-
-  void wait_for_expiry(MDSContext *c)
-  {
-    ceph_assert(c != NULL);
-    expiry_waiters.push_back(c);
-  }
-
-  // cons
-  LogSegment(uint64_t _seq, loff_t off=-1) :
-    seq(_seq), offset(off), end(off), num_events(0),
-    dirty_dirfrags(member_offset(CDir, item_dirty)),
-    new_dirfrags(member_offset(CDir, item_new)),
-    dirty_inodes(member_offset(CInode, item_dirty)),
-    dirty_dentries(member_offset(CDentry, item_dirty)),
-    open_files(member_offset(CInode, item_open_file)),
-    dirty_parent_inodes(member_offset(CInode, item_dirty_parent)),
-    dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
-    dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
-    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree)),
-    slave_updates(0), // passed to begin() manually
-    inotablev(0), sessionmapv(0)
-  { }
 };
 
 #endif

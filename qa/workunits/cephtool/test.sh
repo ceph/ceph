@@ -234,7 +234,7 @@ function test_mon_injectargs()
   ceph tell osd.0 config get mon_lease | grep 6
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
-  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1 >& $TMPFILE || return 1
+  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1  2> $TMPFILE || return 1
   check_response "Error EINVAL: Parse error setting osd_scrub_auto_repair_num_errors to '-1' using injectargs"
 
   expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
@@ -259,7 +259,7 @@ function test_mon_injectargs_SI()
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 1G
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 1000000000
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
-  check_response "'10F': (22) Invalid argument"
+  check_response "(22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
@@ -290,7 +290,7 @@ function test_mon_injectargs_IEC()
   $SUDO ceph daemon mon.a config set mon_data_size_warn 16Gi
   expect_config_value "mon.a" "mon_data_size_warn" 17179869184
   $SUDO ceph daemon mon.a config set mon_data_size_warn 10F > $TMPFILE || true
-  check_response "'10F': (22) Invalid argument"
+  check_response "(22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_data_size_warn 15000000000'
   expect_config_value "mon.a" "mon_data_size_warn" 15000000000
@@ -966,10 +966,10 @@ function test_mon_mds()
   expect_false ceph fs set cephfs max_mds 257
   expect_false ceph fs set cephfs max_mds asdf
   expect_false ceph fs set cephfs inline_data true
-  ceph fs set cephfs inline_data true --yes-i-really-mean-it
-  ceph fs set cephfs inline_data yes --yes-i-really-mean-it
-  ceph fs set cephfs inline_data 1 --yes-i-really-mean-it
-  expect_false ceph fs set cephfs inline_data --yes-i-really-mean-it
+  ceph fs set cephfs inline_data true --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data yes --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data 1 --yes-i-really-really-mean-it
+  expect_false ceph fs set cephfs inline_data --yes-i-really-really-mean-it
   ceph fs set cephfs inline_data false
   ceph fs set cephfs inline_data no
   ceph fs set cephfs inline_data 0
@@ -1477,7 +1477,7 @@ function test_mon_osd()
   done
 
   for f in noup nodown noin noout noscrub nodeep-scrub nobackfill \
-	  norebalance norecover notieragent full
+	  norebalance norecover notieragent
   do
     ceph osd set $f
     ceph osd unset $f
@@ -2737,9 +2737,7 @@ function test_mds_tell_help_command()
 
 function test_mgr_tell()
 {
-  ceph tell mgr help
-  #ceph tell mgr fs status   # see http://tracker.ceph.com/issues/20761
-  ceph tell mgr osd status
+  ceph tell mgr version
 }
 
 function test_per_pool_scrub_status()

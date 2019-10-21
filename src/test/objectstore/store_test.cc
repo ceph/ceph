@@ -1369,7 +1369,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf()->bluestore_block_size);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ( 0u, statfs_pool.allocated);
     ASSERT_EQ( 0u, statfs_pool.data_stored);
@@ -1400,7 +1401,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(0, statfs.data_compressed_allocated);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(5, statfs_pool.data_stored);
     ASSERT_EQ(0x10000, statfs_pool.allocated);
@@ -1409,7 +1411,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(0, statfs_pool.data_compressed_allocated);
 
     // accessing unknown pool
-    r = store->pool_statfs(poolid + 1, &statfs_pool);
+    r = store->pool_statfs(poolid + 1, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0, statfs_pool.data_stored);
     ASSERT_EQ(0, statfs_pool.allocated);
@@ -1444,7 +1446,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005, statfs_pool.data_stored);
     ASSERT_EQ(0x30000, statfs_pool.allocated);
@@ -1476,7 +1479,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005 - 3 - 9, statfs_pool.data_stored);
     ASSERT_EQ(0x30000, statfs_pool.allocated);
@@ -1511,7 +1515,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30001 - 9 + 0x1000, statfs_pool.data_stored);
     ASSERT_EQ(0x40000, statfs_pool.allocated);
@@ -1547,7 +1552,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(0, statfs.data_compressed_allocated);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30000 + 0x1001, statfs_pool.data_stored);
     ASSERT_EQ(0x40000, statfs_pool.allocated);
@@ -1577,7 +1583,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(0u, statfs.data_compressed_allocated);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0u, statfs_pool.allocated);
     ASSERT_EQ(0u, statfs_pool.data_stored);
@@ -1613,7 +1620,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(0x10000, statfs.data_compressed_allocated);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x40000 - 2, statfs_pool.data_stored);
     ASSERT_EQ(0x30000, statfs_pool.allocated);
@@ -1633,7 +1641,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
 
     ObjectStore::Transaction t;
@@ -1651,7 +1660,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(statfs2.data_compressed_allocated, statfs.data_compressed_allocated);
 
     struct store_statfs_t statfs2_pool;
-    r = store->pool_statfs(poolid, &statfs2_pool);
+    r = store->pool_statfs(poolid, &statfs2_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_GT(statfs2_pool.data_stored, statfs_pool.data_stored);
     ASSERT_EQ(statfs2_pool.allocated, statfs_pool.allocated);
@@ -1676,7 +1685,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     {
 
       struct store_statfs_t statfs1_pool;
-      int r = store->pool_statfs(poolid, &statfs1_pool);
+      bool per_pool_omap;
+      int r = store->pool_statfs(poolid, &statfs1_pool, &per_pool_omap);
       ASSERT_EQ(r, 0);
 
       cerr << "Creating second collection " << cid2 << std::endl;
@@ -1693,7 +1703,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
       ASSERT_EQ(r, 0);
 
       struct store_statfs_t statfs2_pool;
-      r = store->pool_statfs(poolid2, &statfs2_pool);
+      r = store->pool_statfs(poolid2, &statfs2_pool, &per_pool_omap);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(5, statfs2_pool.data_stored);
       ASSERT_EQ(0x10000, statfs2_pool.allocated);
@@ -1702,7 +1712,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
       ASSERT_EQ(0, statfs2_pool.data_compressed_allocated);
 
       struct store_statfs_t statfs1_pool_again;
-      r = store->pool_statfs(poolid, &statfs1_pool_again);
+      r = store->pool_statfs(poolid, &statfs1_pool_again, &per_pool_omap);
       ASSERT_EQ(r, 0);
       // adjust 'available' since it has changed
       statfs1_pool_again.available = statfs1_pool.available;
@@ -1732,7 +1742,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     auto ch3 = store->create_new_collection(cid3);
     {
       struct store_statfs_t statfs1_pool;
-      int r = store->pool_statfs(poolid, &statfs1_pool);
+      bool per_pool_omap;
+      int r = store->pool_statfs(poolid, &statfs1_pool, &per_pool_omap);
       ASSERT_EQ(r, 0);
 
       cerr << "Creating third collection " << cid3 << std::endl;
@@ -1749,7 +1760,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
       ASSERT_EQ(r, 0);
 
       struct store_statfs_t statfs3_pool;
-      r = store->pool_statfs(poolid3, &statfs3_pool);
+      r = store->pool_statfs(poolid3, &statfs3_pool, &per_pool_omap);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(5, statfs3_pool.data_stored);
       ASSERT_EQ(0x10000, statfs3_pool.allocated);
@@ -1758,7 +1769,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
       ASSERT_EQ(0, statfs3_pool.data_compressed_allocated);
 
       struct store_statfs_t statfs1_pool_again;
-      r = store->pool_statfs(poolid, &statfs1_pool_again);
+      r = store->pool_statfs(poolid, &statfs1_pool_again, &per_pool_omap);
       ASSERT_EQ(r, 0);
       // adjust 'available' since it has changed
       statfs1_pool_again.available = statfs1_pool.available;
@@ -1780,7 +1791,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
       ASSERT_EQ(r, 0);
 
       struct store_statfs_t statfs3_pool_again;
-      r = store->pool_statfs(poolid3, &statfs3_pool_again);
+      r = store->pool_statfs(poolid3, &statfs3_pool_again, &per_pool_omap);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(statfs3_pool_again, statfs3_pool);
 
@@ -1820,7 +1831,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs.data_compressed_allocated);
 
     struct store_statfs_t statfs_pool;
-    r = store->pool_statfs(poolid, &statfs_pool);
+    bool per_pool_omap;
+    r = store->pool_statfs(poolid, &statfs_pool, &per_pool_omap);
     ASSERT_EQ(r, 0);
     ASSERT_EQ( 0u, statfs_pool.allocated);
     ASSERT_EQ( 0u, statfs_pool.data_stored);
@@ -7305,7 +7317,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   SetVal(g_conf(), "bluestore_max_blob_size", 
     stringify(2 * offs_base).c_str());
   SetVal(g_conf(), "bluestore_extent_map_shard_max_size", "12000");
-  SetVal(g_conf(), "bluestore_no_per_pool_stats_tolerance", "enforce");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_stats", "false");
 
   StartDeferred(0x10000);
 
@@ -7379,7 +7391,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   bstore->inject_statfs("bluestore_statfs", statfs);
   bstore->umount();
 
-  ASSERT_EQ(bstore->fsck(false), 1);
+  ASSERT_EQ(bstore->fsck(false), 2);
   ASSERT_EQ(bstore->repair(false), 0);
   ASSERT_EQ(bstore->fsck(false), 0);
   ASSERT_EQ(bstore->mount(), 0);
@@ -7445,18 +7457,138 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     ASSERT_EQ(bstore->fsck(false), 0);
   }
 
-  // enable per-pool stats collection hence causing fsck to fail
-  cerr << "per-pool statfs" << std::endl;
-  SetVal(g_conf(), "bluestore_no_per_pool_stats_tolerance", "until_fsck");
-  g_ceph_context->_conf.apply_changes(nullptr);
-
-  ASSERT_EQ(bstore->fsck(false), 2);
-  ASSERT_EQ(bstore->repair(false), 0);
-  ASSERT_EQ(bstore->fsck(false), 0);
-
   cerr << "Completing" << std::endl;
   bstore->mount();
 
+}
+
+TEST_P(StoreTest, BluestoreRepairGlobalStats)
+{
+  if (string(GetParam()) != "bluestore")
+    return;
+  const size_t offs_base = 65536 / 2;
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  // start with global stats
+  bstore->inject_global_statfs({});
+  bstore->umount();
+  SetVal(g_conf(), "bluestore_fsck_quick_fix_on_mount", "false");
+  bstore->mount();
+
+  // fill the store with some data
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_dup = make_object("Object 1(dup)", pool);
+  ghobject_t hoid2 = make_object("Object 2", pool);
+  ghobject_t hoid_cloned = hoid2;
+  hoid_cloned.hobj.snap = 1;
+  ghobject_t hoid3 = make_object("Object 3", pool);
+  ghobject_t hoid3_cloned = hoid3;
+  hoid3_cloned.hobj.snap = 1;
+  bufferlist bl;
+  bl.append("1234512345");
+  int r;
+  const size_t repeats = 16;
+  {
+    auto ch = store->create_new_collection(cid);
+    cerr << "create collection + write" << std::endl;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    for( auto i = 0ul; i < repeats; ++i ) {
+      t.write(cid, hoid, i * offs_base, bl.length(), bl);
+      t.write(cid, hoid_dup, i * offs_base, bl.length(), bl);
+    }
+    for( auto i = 0ul; i < repeats; ++i ) {
+      t.write(cid, hoid2, i * offs_base, bl.length(), bl);
+    }
+    t.clone(cid, hoid2, hoid_cloned);
+
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  bstore->umount();
+
+  // enable per-pool stats collection hence causing fsck to fail
+  cerr << "per-pool statfs" << std::endl;
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_stats", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  ASSERT_EQ(bstore->fsck(false), 1);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  bstore->mount();
+}
+
+TEST_P(StoreTest, BluestoreRepairGlobalStatsFixOnMount)
+{
+  if (string(GetParam()) != "bluestore")
+    return;
+  const size_t offs_base = 65536 / 2;
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  // start with global stats
+  bstore->inject_global_statfs({});
+  bstore->umount();
+  SetVal(g_conf(), "bluestore_fsck_quick_fix_on_mount", "false");
+  bstore->mount();
+
+  // fill the store with some data
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_dup = make_object("Object 1(dup)", pool);
+  ghobject_t hoid2 = make_object("Object 2", pool);
+  ghobject_t hoid_cloned = hoid2;
+  hoid_cloned.hobj.snap = 1;
+  ghobject_t hoid3 = make_object("Object 3", pool);
+  ghobject_t hoid3_cloned = hoid3;
+  hoid3_cloned.hobj.snap = 1;
+  bufferlist bl;
+  bl.append("1234512345");
+  int r;
+  const size_t repeats = 16;
+  {
+    auto ch = store->create_new_collection(cid);
+    cerr << "create collection + write" << std::endl;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    for( auto i = 0ul; i < repeats; ++i ) {
+      t.write(cid, hoid, i * offs_base, bl.length(), bl);
+      t.write(cid, hoid_dup, i * offs_base, bl.length(), bl);
+    }
+    for( auto i = 0ul; i < repeats; ++i ) {
+      t.write(cid, hoid2, i * offs_base, bl.length(), bl);
+    }
+    t.clone(cid, hoid2, hoid_cloned);
+
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  bstore->umount();
+
+  // enable per-pool stats collection hence causing fsck to fail
+  cerr << "per-pool statfs" << std::endl;
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_stats", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  ASSERT_EQ(bstore->fsck(false), 1);
+
+  SetVal(g_conf(), "bluestore_fsck_quick_fix_on_mount", "true");
+  bstore->mount();
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  bstore->mount();
 }
 
 TEST_P(StoreTest, BluestoreStatistics) {

@@ -12,7 +12,7 @@ three types of daemons:
 - :term:`Ceph Manager` (``ceph-mgr``)
 - :term:`Ceph OSD Daemon` (``ceph-osd``)
 
-Ceph Storage Clusters that support the :term:`Ceph Filesystem` run at
+Ceph Storage Clusters that support the :term:`Ceph File System` run at
 least one :term:`Ceph Metadata Server` (``ceph-mds``). Clusters that
 support :term:`Ceph Object Storage` run Ceph Gateway daemons
 (``radosgw``).
@@ -149,7 +149,7 @@ These sections include:
 ``client``
 
 :Description: Settings under ``client`` affect all Ceph Clients
-              (e.g., mounted Ceph Filesystems, mounted Ceph Block Devices,
+              (e.g., mounted Ceph File Systems, mounted Ceph Block Devices,
               etc.) as well as Rados Gateway (RGW) daemons.
 
 :Example: ``objecter_inflight_ops = 512``

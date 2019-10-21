@@ -32,19 +32,19 @@ class TestDevice(object):
         disk = device.Device("vg/lv")
         assert disk.is_lv
 
-    def test_vgs_is_empty(self, device_info, pvolumes, monkeypatch):
+    def test_vgs_is_empty(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         BarPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", pv_tags={})
         pvolumes.append(BarPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
         lsblk = {"TYPE": "disk"}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/nvme0n1")
         assert disk.vgs == []
 
-    def test_vgs_is_not_empty(self, device_info, pvolumes, monkeypatch):
+    def test_vgs_is_not_empty(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         BarPVolume = api.PVolume(vg_name='foo', lv_uuid='111', pv_name='/dev/nvme0n1', pv_uuid="0000", pv_tags={})
         pvolumes.append(BarPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
         lsblk = {"TYPE": "disk"}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/nvme0n1")
@@ -179,10 +179,10 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member is False
 
-    def test_pv_api(self, device_info, pvolumes, monkeypatch):
+    def test_pv_api(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes.append(FooPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part"}
         device_info(devices=data, lsblk=lsblk)
@@ -190,10 +190,10 @@ class TestDevice(object):
         assert disk.pvs_api
 
     @pytest.mark.parametrize("ceph_type", ["data", "block"])
-    def test_used_by_ceph(self, device_info, pvolumes, monkeypatch, ceph_type):
+    def test_used_by_ceph(self, device_info, pvolumes, pvolumes_empty, monkeypatch, ceph_type):
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes.append(FooPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part"}
         lv_data = {"lv_path": "vg/lv", "vg_name": "vg", "lv_uuid": "0000", "tags": {"ceph.osd_id": 0, "ceph.type": ceph_type}}
@@ -201,10 +201,10 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.used_by_ceph
 
-    def test_not_used_by_ceph(self, device_info, pvolumes, monkeypatch):
+    def test_not_used_by_ceph(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes.append(FooPVolume)
-        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        monkeypatch.setattr(api, 'PVolumes', lambda populate=True: pvolumes if populate else pvolumes_empty)
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part"}
         lv_data = {"lv_path": "vg/lv", "vg_name": "vg", "lv_uuid": "0000", "tags": {"ceph.osd_id": 0, "ceph.type": "journal"}}
@@ -248,7 +248,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_encrypted_luks1(self, device_info, pvolumes, monkeypatch):
+    def test_mapper_is_encrypted_luks1(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         status = {'type': 'LUKS1'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
@@ -257,7 +257,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_encrypted_luks2(self, device_info, pvolumes, monkeypatch):
+    def test_mapper_is_encrypted_luks2(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         status = {'type': 'LUKS2'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
@@ -266,7 +266,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_encrypted_plain(self, device_info, pvolumes, monkeypatch):
+    def test_mapper_is_encrypted_plain(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         status = {'type': 'PLAIN'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
@@ -275,7 +275,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_not_encrypted_plain(self, device_info, pvolumes, monkeypatch):
+    def test_mapper_is_not_encrypted_plain(self, device_info, pvolumes, pvolumes_empty, monkeypatch):
         monkeypatch.setattr(device, 'encryption_status', lambda x: {})
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}

@@ -150,12 +150,11 @@ static seastar::future<> run(
         const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                                     pgid.pool(), oloc.nspace);
         static spg_t spgid(pgid);
-        MOSDOp *rep = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
+        auto rep = make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
         bufferlist data(msg_data);
         rep->write(0, msg_len, data);
         rep->set_tid(m->get_tid());
-        MessageRef msg = {rep, false};
-        return c->send(msg);
+        return c->send(std::move(rep));
       }
 
       seastar::future<> init(bool v1_crc_enabled, const entity_addr_t& addr) {
@@ -573,11 +572,9 @@ static seastar::future<> run(
           const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                                       pgid.pool(), oloc.nspace);
           static spg_t spgid(pgid);
-          MOSDOp *m = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
+          auto m = make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
           bufferlist data(msg_data);
           m->write(0, msg_len, data);
-          MessageRef msg = {m, false};
-
           // use tid as the identity of each round
           m->set_tid(sent_count);
 
@@ -588,7 +585,7 @@ static seastar::future<> run(
             time_msgs_sent[index] = mono_clock::now();
           }
 
-          return conn->send(msg);
+          return conn->send(std::move(m));
         });
       }
 
@@ -604,7 +601,8 @@ static seastar::future<> run(
         ceph_assert(seastar::engine().cpu_id() == sid);
         ceph_assert(sent_count == 0);
         conn_stats.start_time = mono_clock::now();
-        seastar::do_until(
+        // forwarded to stopped_send_promise
+        (void) seastar::do_until(
           [this] { return stop_send; },
           [this, conn] {
             sent_count += 1;

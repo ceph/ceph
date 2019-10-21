@@ -203,11 +203,11 @@ void Paxos::collect(version_t oldpn)
   collect_timeout_event = mon->timer.add_event_after(
     g_conf()->mon_accept_timeout_factor *
     g_conf()->mon_lease,
-    new C_MonContext(mon, [this](int r) {
+    new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	collect_timeout();
-    }));
+    }});
 }
 
 
@@ -217,7 +217,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
   
   op->mark_paxos_event("handle_collect");
 
-  MMonPaxos *collect = static_cast<MMonPaxos*>(op->get_req());
+  auto collect = op->get_req<MMonPaxos>();
   dout(10) << "handle_collect " << *collect << dendl;
 
   ceph_assert(mon->is_peon()); // mon epoch filter should catch strays
@@ -461,7 +461,7 @@ void Paxos::_sanity_check_store()
 void Paxos::handle_last(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_last");
-  MMonPaxos *last = static_cast<MMonPaxos*>(op->get_req());
+  auto last = op->get_req<MMonPaxos>();
   bool need_refresh = false;
   int from = last->get_source().num();
 
@@ -694,18 +694,18 @@ void Paxos::begin(bufferlist& v)
   // set timeout event
   accept_timeout_event = mon->timer.add_event_after(
     g_conf()->mon_accept_timeout_factor * g_conf()->mon_lease,
-    new C_MonContext(mon, [this](int r) {
+    new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	accept_timeout();
-      }));
+      }});
 }
 
 // peon
 void Paxos::handle_begin(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_begin");
-  MMonPaxos *begin = static_cast<MMonPaxos*>(op->get_req());
+  auto begin = op->get_req<MMonPaxos>();
   dout(10) << "handle_begin " << *begin << dendl;
 
   // can we accept this?
@@ -765,7 +765,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
 void Paxos::handle_accept(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_accept");
-  MMonPaxos *accept = static_cast<MMonPaxos*>(op->get_req());
+  auto accept = op->get_req<MMonPaxos>();
   dout(10) << "handle_accept " << *accept << dendl;
   int from = accept->get_source().num();
 
@@ -947,7 +947,7 @@ void Paxos::commit_finish()
 void Paxos::handle_commit(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_commit");
-  MMonPaxos *commit = static_cast<MMonPaxos*>(op->get_req());
+  auto commit = op->get_req<MMonPaxos>();
   dout(10) << "handle_commit on " << commit->last_committed << dendl;
 
   logger->inc(l_paxos_commit);
@@ -995,11 +995,11 @@ void Paxos::extend_lease()
   if (!lease_ack_timeout_event) {
     lease_ack_timeout_event = mon->timer.add_event_after(
       g_conf()->mon_lease_ack_timeout_factor * g_conf()->mon_lease,
-      new C_MonContext(mon, [this](int r) {
+      new C_MonContext{mon, [this](int r) {
 	  if (r == -ECANCELED)
 	    return;
 	  lease_ack_timeout();
-	}));
+	}});
   }
 
   // set renew event
@@ -1008,11 +1008,11 @@ void Paxos::extend_lease()
   at += ceph::make_timespan(g_conf()->mon_lease_renew_interval_factor *
 			    g_conf()->mon_lease);
   lease_renew_event = mon->timer.add_event_at(
-    at, new C_MonContext(mon, [this](int r) {
+    at, new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	lease_renew_timeout();
-    }));
+    }});
 }
 
 void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
@@ -1095,7 +1095,7 @@ void Paxos::finish_round()
 void Paxos::handle_lease(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_lease");
-  MMonPaxos *lease = static_cast<MMonPaxos*>(op->get_req());
+  auto lease = op->get_req<MMonPaxos>();
   // sanity
   if (!mon->is_peon() ||
       last_committed != lease->last_committed) {
@@ -1145,7 +1145,7 @@ void Paxos::handle_lease(MonOpRequestRef op)
 void Paxos::handle_lease_ack(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_lease_ack");
-  MMonPaxos *ack = static_cast<MMonPaxos*>(op->get_req());
+  auto ack = op->get_req<MMonPaxos>();
   int from = ack->get_source().num();
 
   if (!lease_ack_timeout_event) {
@@ -1198,11 +1198,11 @@ void Paxos::reset_lease_timeout()
     mon->timer.cancel_event(lease_timeout_event);
   lease_timeout_event = mon->timer.add_event_after(
     g_conf()->mon_lease_ack_timeout_factor * g_conf()->mon_lease,
-    new C_MonContext(mon, [this](int r) {
+    new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	lease_timeout();
-      }));
+      }});
 }
 
 void Paxos::lease_timeout()
@@ -1418,53 +1418,49 @@ void Paxos::dispatch(MonOpRequestRef op)
 {
   ceph_assert(op->is_type_paxos());
   op->mark_paxos_event("dispatch");
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+
+  if (op->get_req()->get_type() != MSG_MON_PAXOS) {
+    dout(0) << "Got unexpected message type " << op->get_req()->get_type()
+	    << " in Paxos::dispatch, aborting!" << dendl;
+    ceph_abort();
+  }
+  
+  auto *req = op->get_req<MMonPaxos>();
+
   // election in progress?
   if (!mon->is_leader() && !mon->is_peon()) {
-    dout(5) << "election in progress, dropping " << *m << dendl;
+    dout(5) << "election in progress, dropping " << *req << dendl;
     return;    
   }
 
   // check sanity
   ceph_assert(mon->is_leader() || 
-	 (mon->is_peon() && m->get_source().num() == mon->get_leader()));
-  
-  switch (m->get_type()) {
+	      (mon->is_peon() && req->get_source().num() == mon->get_leader()));  
 
-  case MSG_MON_PAXOS:
-    {
-      MMonPaxos *pm = reinterpret_cast<MMonPaxos*>(m);
-
-      // NOTE: these ops are defined in messages/MMonPaxos.h
-      switch (pm->op) {
-	// learner
-      case MMonPaxos::OP_COLLECT:
-	handle_collect(op);
-	break;
-      case MMonPaxos::OP_LAST:
-	handle_last(op);
-	break;
-      case MMonPaxos::OP_BEGIN:
-	handle_begin(op);
-	break;
-      case MMonPaxos::OP_ACCEPT:
-	handle_accept(op);
-	break;		
-      case MMonPaxos::OP_COMMIT:
-	handle_commit(op);
-	break;
-      case MMonPaxos::OP_LEASE:
-	handle_lease(op);
-	break;
-      case MMonPaxos::OP_LEASE_ACK:
-	handle_lease_ack(op);
-	break;
-      default:
-	ceph_abort();
-      }
-    }
+  // NOTE: these ops are defined in messages/MMonPaxos.h
+  switch (req->op) {
+    // learner
+  case MMonPaxos::OP_COLLECT:
+    handle_collect(op);
     break;
-    
+  case MMonPaxos::OP_LAST:
+    handle_last(op);
+    break;
+  case MMonPaxos::OP_BEGIN:
+    handle_begin(op);
+    break;
+  case MMonPaxos::OP_ACCEPT:
+    handle_accept(op);
+    break;		
+  case MMonPaxos::OP_COMMIT:
+    handle_commit(op);
+    break;
+  case MMonPaxos::OP_LEASE:
+    handle_lease(op);
+    break;
+  case MMonPaxos::OP_LEASE_ACK:
+    handle_lease_ack(op);
+    break;
   default:
     ceph_abort();
   }

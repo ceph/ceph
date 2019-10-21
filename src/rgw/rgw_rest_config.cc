@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -30,7 +30,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 void RGWOp_ZoneGroupMap_Get::execute() {
-  http_ret = zonegroup_map.read(g_ceph_context, store->svc.sysobj);
+  http_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj);
   if (http_ret < 0) {
     dout(5) << "failed to read zone_group map" << dendl;
   }
@@ -58,7 +58,7 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
 }
 
 void RGWOp_ZoneConfig_Get::send_response() {
-  const RGWZoneParams& zone_params = store->svc.zone->get_zone_params();
+  const RGWZoneParams& zone_params = store->svc()->zone->get_zone_params();
 
   set_req_state_err(s, http_ret);
   dump_errno(s);

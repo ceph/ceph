@@ -9,27 +9,34 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "crimson/os/futurized_store.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
+#include "crimson/osd/acked_peers.h"
 #include "crimson/common/shared_lru.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
 struct hobject_t;
+class MOSDRepOpReply;
+
+namespace ceph::osd {
+  class ShardServices;
+}
 
 class PGBackend
 {
 protected:
-  using CollectionRef = boost::intrusive_ptr<ceph::os::Collection>;
+  using CollectionRef = ceph::os::CollectionRef;
   using ec_profile_t = std::map<std::string, std::string>;
 
 public:
   PGBackend(shard_id_t shard, CollectionRef coll, ceph::os::FuturizedStore* store);
   virtual ~PGBackend() = default;
-  static std::unique_ptr<PGBackend> create(const spg_t pgid,
+  static std::unique_ptr<PGBackend> create(pg_t pgid,
+					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
 					   ceph::os::CollectionRef coll,
-					   ceph::os::FuturizedStore* store,
+					   ceph::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
@@ -40,6 +47,14 @@ public:
 				   size_t truncate_size,
 				   uint32_t truncate_seq,
 				   uint32_t flags);
+  seastar::future<> stat(
+    const ObjectState& os,
+    OSDOp& osd_op);
+
+  seastar::future<> create(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   seastar::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -51,13 +66,44 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
-  seastar::future<> mutate_object(
+  seastar::future<ceph::osd::acked_peers_t> mutate_object(
+    std::set<pg_shard_t> pg_shards,
     cached_os_t&& os,
     ceph::os::Transaction&& txn,
-    const MOSDOp& m);
+    const MOSDOp& m,
+    epoch_t min_epoch,
+    epoch_t map_epoch,
+    eversion_t ver);
   seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
     const hobject_t& start,
-    uint64_t limit);
+    uint64_t limit) const;
+  seastar::future<> setxattr(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
+  seastar::future<> getxattr(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<ceph::bufferptr> getxattr(
+    const hobject_t& soid,
+    std::string_view key) const;
+
+  // OMAP
+  seastar::future<> omap_get_keys(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<> omap_get_vals(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<> omap_get_vals_by_keys(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<> omap_set_vals(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
+
+  virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 
 protected:
   const shard_id_t shard;
@@ -75,4 +121,11 @@ private:
 					    size_t length,
 					    uint32_t flags) = 0;
   bool maybe_create_new_object(ObjectState& os, ceph::os::Transaction& txn);
+  virtual seastar::future<ceph::osd::acked_peers_t>
+  _submit_transaction(std::set<pg_shard_t>&& pg_shards,
+		      const hobject_t& hoid,
+		      ceph::os::Transaction&& txn,
+		      osd_reqid_t req_id,
+		      epoch_t min_epoch, epoch_t max_epoch,
+		      eversion_t ver) = 0;
 };

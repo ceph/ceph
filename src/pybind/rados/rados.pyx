@@ -176,6 +176,12 @@ cdef extern from "rados/librados.h" nogil:
                           const char *inbuf, size_t inbuflen,
                           char **outbuf, size_t *outbuflen,
                           char **outs, size_t *outslen)
+    int rados_mgr_command_target(rados_t cluster,
+                          const char *name,
+			  const char **cmd, size_t cmdlen,
+                          const char *inbuf, size_t inbuflen,
+                          char **outbuf, size_t *outbuflen,
+                          char **outs, size_t *outslen)
     int rados_mon_command_target(rados_t cluster, const char *name, const char **cmd, size_t cmdlen,
                                  const char *inbuf, size_t inbuflen,
                                  char **outbuf, size_t *outbuflen,
@@ -232,6 +238,8 @@ cdef extern from "rados/librados.h" nogil:
     void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap)
     int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t * snaps, int maxlen)
     int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t * t)
+    uint64_t rados_ioctx_get_id(rados_ioctx_t io)
+    int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf, unsigned maxlen)
 
     int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
                                             rados_snap_t *snapid)
@@ -1401,7 +1409,7 @@ Rados object in state %s." % self.state)
         finally:
             free(_cmd)
 
-    def mgr_command(self, cmd, inbuf, timeout=0):
+    def mgr_command(self, cmd, inbuf, timeout=0, target=None):
         """
         :return: (int ret, string outbuf, string outs)
         """
@@ -1411,8 +1419,11 @@ Rados object in state %s." % self.state)
 
         cmd = cstr_list(cmd, 'cmd')
         inbuf = cstr(inbuf, 'inbuf')
+        target = cstr(target, 'target', opt=True)
 
         cdef:
+            char *_target = opt_str(target)
+
             char **_cmd = to_bytes_array(cmd)
             size_t _cmdlen = len(cmd)
 
@@ -1425,12 +1436,21 @@ Rados object in state %s." % self.state)
             size_t _outs_len
 
         try:
-            with nogil:
-                ret = rados_mgr_command(self.cluster,
-                                        <const char **>_cmd, _cmdlen,
-                                        <const char*>_inbuf, _inbuf_len,
-                                        &_outbuf, &_outbuf_len,
-                                        &_outs, &_outs_len)
+            if target is not None:
+                with nogil:
+                    ret = rados_mgr_command_target(self.cluster,
+		                            <const char*>_target,
+                                            <const char **>_cmd, _cmdlen,
+                                            <const char*>_inbuf, _inbuf_len,
+                                            &_outbuf, &_outbuf_len,
+                                            &_outs, &_outs_len)
+            else:
+                with nogil:
+                    ret = rados_mgr_command(self.cluster,
+                                            <const char **>_cmd, _cmdlen,
+                                            <const char*>_inbuf, _inbuf_len,
+                                            &_outbuf, &_outbuf_len,
+                                            &_outs, &_outs_len)
 
             my_outs = decode_cstr(_outs[:_outs_len])
             my_outbuf = _outbuf[:_outbuf_len]
@@ -3192,6 +3212,43 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         return SnapIterator(self)
 
+    def get_pool_id(self):
+        """
+        Get pool id
+
+        :returns: int - pool id
+        """
+        with nogil:
+            ret = rados_ioctx_get_id(self.io)
+        return ret;
+
+    def get_pool_name(self):
+        """
+        Get pool name
+
+        :returns: str - pool name
+        """
+        cdef:
+            int name_len = 10
+            char *name = NULL
+
+        try:
+            while True:
+                name = <char *>realloc_chk(name, name_len)
+                with nogil:
+                    ret = rados_ioctx_get_pool_name(self.io, name, name_len)
+                if ret > 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, "get pool name error")
+                else:
+                    name_len = name_len * 2
+
+            return decode_cstr(name)
+        finally:
+            free(name)
+
+
     @requires(('snap_name', str_type))
     def create_snap(self, snap_name):
         """
@@ -3897,6 +3954,44 @@ returned %d, but should return zero on success." % (self.name, ret))
                     raise make_ex(ret, "error listing applications")
         finally:
             free(apps)
+
+    def application_metadata_get(self, app_name, key):
+        """
+        Gets application metadata on an OSD pool for the given key
+
+        :param app_name: application name
+        :type app_name: str
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+
+        :raises: :class:`Error`
+        """
+
+        app_name =  cstr(app_name, 'app_name')
+        key = cstr(key, 'key')
+        cdef:
+            char *_app_name = app_name
+            char *_key = key
+            size_t size = 129
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rados_application_metadata_get(self.io, _app_name,
+                                                         _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s for application %s' % (key, _app_name))
+            elif ret != 0:
+                raise make_ex(ret, 'error getting metadata %s for application %s' %
+                              (key, _app_name))
+            return decode_cstr(value)
+        finally:
+            free(value)
 
     def application_metadata_set(self, app_name, key, value):
         """

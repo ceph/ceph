@@ -17,12 +17,13 @@
 #include <seastar/core/sharded.hh>
 
 #include "msg/Policy.h"
-#include "Connection.h"
-#include "Socket.h"
+#include "crimson/net/Connection.h"
+#include "crimson/net/Socket.h"
 #include "crimson/thread/Throttle.h"
 
 namespace ceph::net {
 
+class Dispatcher;
 class Protocol;
 class SocketMessenger;
 class SocketConnection;
@@ -47,10 +48,6 @@ class SocketConnection : public Connection {
   }
 
   ceph::net::Policy<ceph::thread::Throttle> policy;
-  uint64_t features;
-  void set_features(uint64_t new_features) {
-    features = new_features;
-  }
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
@@ -63,12 +60,9 @@ class SocketConnection : public Connection {
 
   // messages to be resent after connection gets reset
   std::deque<MessageRef> out_q;
+  std::deque<MessageRef> pending_q;
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
-
-  // which of the peer_addrs we're connecting to (as client)
-  // or should reconnect to (as peer)
-  entity_addr_t target_addr;
 
  public:
   SocketConnection(SocketMessenger& messenger,
@@ -78,7 +72,15 @@ class SocketConnection : public Connection {
 
   Messenger* get_messenger() const override;
 
-  seastar::future<bool> is_connected() override;
+  bool is_connected() const override;
+
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed() const override;
+
+  bool peer_wins() const override;
+#else
+  bool peer_wins() const;
+#endif
 
   seastar::future<> send(MessageRef msg) override;
 
@@ -90,7 +92,6 @@ class SocketConnection : public Connection {
 
   void print(ostream& out) const override;
 
- public:
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
   void start_connect(const entity_addr_t& peer_addr,
@@ -100,23 +101,12 @@ class SocketConnection : public Connection {
   void start_accept(SocketFRef&& socket,
                     const entity_addr_t& peer_addr);
 
-  seq_num_t rx_seq_num() const {
-    return in_seq;
-  }
-
   bool is_server_side() const {
     return policy.server;
   }
 
   bool is_lossy() const {
     return policy.lossy;
-  }
-
-  /// move all messages in the sent list back into the queue
-  void requeue_sent();
-
-  std::tuple<seq_num_t, std::deque<MessageRef>> get_out_queue() {
-    return {out_seq, std::move(out_q)};
   }
 
   friend class Protocol;

@@ -1,11 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <iostream>
 #include <sstream>
 #include <string>
 
 #include "rgw_basic_types.h"
+#include "rgw_xml.h"
 #include "common/ceph_json.h"
 
 using std::string;
@@ -13,14 +14,17 @@ using std::stringstream;
 
 void decode_json_obj(rgw_user& val, JSONObj *obj)
 {
-  string s = obj->get_data();
-  val.from_str(s);
+  val.from_str(obj->get_data());
 }
 
 void encode_json(const char *name, const rgw_user& val, Formatter *f)
 {
-  string s = val.to_str();
-  f->dump_string(name, s);
+  f->dump_string(name, val.to_str());
+}
+
+void encode_xml(const char *name, const rgw_user& val, Formatter *f)
+{
+  encode_xml(name, val.to_str(), f);
 }
 
 namespace rgw {

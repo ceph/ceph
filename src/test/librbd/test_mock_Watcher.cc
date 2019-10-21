@@ -76,7 +76,7 @@ public:
           }
 
           c->get();
-          mock_image_ctx.image_ctx->op_work_queue->queue(new FunctionContext([mock_rados_client, action, c](int r) {
+          mock_image_ctx.image_ctx->op_work_queue->queue(new LambdaContext([mock_rados_client, action, c](int r) {
               if (action) {
                 action();
               }
@@ -97,7 +97,7 @@ public:
       .WillOnce(DoAll(Invoke([this, &mock_image_ctx, mock_rados_client, r, action](
               uint64_t handle, librados::AioCompletionImpl *c) {
           c->get();
-          mock_image_ctx.image_ctx->op_work_queue->queue(new FunctionContext([mock_rados_client, action, c](int r) {
+          mock_image_ctx.image_ctx->op_work_queue->queue(new LambdaContext([mock_rados_client, action, c](int r) {
               if (action) {
                 action();
               }

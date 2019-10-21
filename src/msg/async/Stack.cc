@@ -34,9 +34,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
 
-std::function<void ()> NetworkStack::add_thread(unsigned i)
+std::function<void ()> NetworkStack::add_thread(unsigned worker_id)
 {
-  Worker *w = workers[i];
+  Worker *w = workers[worker_id];
   return [this, w]() {
       char tp_name[16];
       sprintf(tp_name, "msgr-worker-%u", w->id);
@@ -82,17 +82,17 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string 
   return nullptr;
 }
 
-Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned i)
+Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned worker_id)
 {
   if (type == "posix")
-    return new PosixWorker(c, i);
+    return new PosixWorker(c, worker_id);
 #ifdef HAVE_RDMA
   else if (type == "rdma")
-    return new RDMAWorker(c, i);
+    return new RDMAWorker(c, worker_id);
 #endif
 #ifdef HAVE_DPDK
   else if (type == "dpdk")
-    return new DPDKWorker(c, i);
+    return new DPDKWorker(c, worker_id);
 #endif
 
   lderr(c) << __func__ << " ms_async_transport_type " << type <<
@@ -115,9 +115,9 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
     num_workers = EventCenter::MAX_EVENTCENTER;
   }
 
-  for (unsigned i = 0; i < num_workers; ++i) {
-    Worker *w = create_worker(cct, type, i);
-    w->center.init(InitEventNumber, i, type);
+  for (unsigned worker_id = 0; worker_id < num_workers; ++worker_id) {
+    Worker *w = create_worker(cct, type, worker_id);
+    w->center.init(InitEventNumber, worker_id, type);
     workers.push_back(w);
   }
 }

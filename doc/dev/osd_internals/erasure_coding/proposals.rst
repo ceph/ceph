@@ -19,7 +19,7 @@ to their respective shards.
 
 The choice of whether to use a read-modify-write or a
 parity-delta-write is complex policy issue that is TBD in the details
-and is likely to be heavily dependant on the computational costs
+and is likely to be heavily dependent on the computational costs
 associated with a parity-delta vs. a regular parity-generation
 operation. However, it is believed that the parity-delta scheme is
 likely to be the preferred choice, when available.

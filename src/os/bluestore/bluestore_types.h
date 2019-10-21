@@ -33,7 +33,7 @@ namespace ceph {
 /// label for block device
 struct bluestore_bdev_label_t {
   uuid_d osd_uuid;     ///< osd uuid
-  uint64_t size;       ///< device size
+  uint64_t size = 0;   ///< device size
   utime_t btime;       ///< birth time
   string description;  ///< device description
 
@@ -257,6 +257,8 @@ struct bluestore_blob_use_tracker_t {
   bluestore_blob_use_tracker_t()
     : au_size(0), num_au(0), bytes_per_au(nullptr) {
   }
+  bluestore_blob_use_tracker_t(const bluestore_blob_use_tracker_t& tracker);
+  bluestore_blob_use_tracker_t& operator=(const bluestore_blob_use_tracker_t& rhs);
   ~bluestore_blob_use_tracker_t() {
     clear();
   }
@@ -756,11 +758,11 @@ public:
     case 1:
       return reinterpret_cast<const uint8_t*>(p)[i];
     case 2:
-      return reinterpret_cast<const __le16*>(p)[i];
+      return reinterpret_cast<const ceph_le16*>(p)[i];
     case 4:
-      return reinterpret_cast<const __le32*>(p)[i];
+      return reinterpret_cast<const ceph_le32*>(p)[i];
     case 8:
-      return reinterpret_cast<const __le64*>(p)[i];
+      return reinterpret_cast<const ceph_le64*>(p)[i];
     default:
       ceph_abort_msg("unrecognized csum word size");
     }
@@ -913,12 +915,19 @@ struct bluestore_onode_t {
   enum {
     FLAG_OMAP = 1,       ///< object may have omap data
     FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix
+    FLAG_PERPOOL_OMAP = 4, ///< omap data is in per-pool prefix; per-pool keys
   };
 
   string get_flags_string() const {
     string s;
     if (flags & FLAG_OMAP) {
       s = "omap";
+    }
+    if (flags & FLAG_PGMETA_OMAP) {
+      s += "+pgmeta_omap";
+    }
+    if (flags & FLAG_PERPOOL_OMAP) {
+      s += "+perpool_omap";
     }
     return s;
   }
@@ -941,9 +950,15 @@ struct bluestore_onode_t {
   bool is_pgmeta_omap() const {
     return has_flag(FLAG_PGMETA_OMAP);
   }
+  bool is_perpool_omap() const {
+    return has_flag(FLAG_PERPOOL_OMAP);
+  }
 
-  void set_omap_flag() {
-    set_flag(FLAG_OMAP);
+  void set_omap_flags() {
+    set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
+  }
+  void set_omap_flags_pgmeta() {
+    set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
   }
 
   void clear_omap_flag() {

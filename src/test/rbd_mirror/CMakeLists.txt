@@ -21,15 +21,16 @@ add_executable(unittest_rbd_mirror
   test_mock_ImageMap.cc
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
-  test_mock_ImageSyncThrottler.cc
   test_mock_InstanceReplayer.cc
   test_mock_InstanceWatcher.cc
   test_mock_LeaderWatcher.cc
+  test_mock_NamespaceReplayer.cc
   test_mock_PoolReplayer.cc
   test_mock_PoolWatcher.cc
-  image_deleter/test_mock_RemoveRequest.cc
+  test_mock_Throttler.cc
   image_deleter/test_mock_SnapshotPurgeRequest.cc
   image_deleter/test_mock_TrashMoveRequest.cc
+  image_deleter/test_mock_TrashRemoveRequest.cc
   image_deleter/test_mock_TrashWatcher.cc
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc

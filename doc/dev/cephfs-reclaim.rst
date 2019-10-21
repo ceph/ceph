@@ -97,7 +97,7 @@ immediately.
 	ceph_set_uuid(cmount, nodeid);
 
 	/*
-	 * Now mount up the filesystem and do normal open/lock operations to
+	 * Now mount up the file system and do normal open/lock operations to
 	 * satisfy reclaim requests.
 	 */
 	ceph_mount(cmount, rootpath);

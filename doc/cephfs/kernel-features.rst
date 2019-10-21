@@ -1,13 +1,20 @@
 
-Supported Features of Kernel Driver
+Supported Features of the Kernel Driver
 ========================================
+The kernel driver is developed separately from the core ceph code, and as
+such it sometimes differs from the FUSE driver in feature implementation.
+The following details the implementation status of various CephFS features
+in the kernel driver.
 
 Inline data
 -----------
-Inline data was introduced by the Firefly release. Linux kernel clients >= 3.19
-can read inline data, can convert existing inline data to RADOS objects when
-file data is modified. At present, Linux kernel clients do not store file data
-as inline data.
+Inline data was introduced by the Firefly release. This feature is being
+deprecated in mainline CephFS, and may be removed from a future kernel
+release.
+
+Linux kernel clients >= 3.19 can read inline data and convert existing
+inline data to RADOS objects when file data is modified. At present,
+Linux kernel clients do not store file data as inline data.
 
 See `Experimental Features`_ for more information.
 
@@ -19,8 +26,8 @@ quota. At present, no Linux kernel client support the old format quota.
 
 See `Quotas`_ for more information.
 
-Multiple filesystems within a Ceph cluster
-------------------------------------------
+Multiple file systems within a Ceph cluster
+-------------------------------------------
 The feature was introduced by the Jewel release. Linux kernel clients >= 4.7
 can support it.
 

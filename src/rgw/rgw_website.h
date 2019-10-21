@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -182,10 +182,14 @@ struct RGWBucketWebsiteConf
   std::string subdir_marker;
   std::string listing_css_doc;
   bool listing_enabled;
+  bool is_redirect_all;
+  bool is_set_index_doc;
   RGWBWRoutingRules routing_rules;
 
   RGWBucketWebsiteConf()
     : listing_enabled(false) {
+    is_redirect_all = false;
+    is_set_index_doc = false;
   }
 
   void encode(bufferlist& bl) const {
@@ -222,7 +226,7 @@ struct RGWBucketWebsiteConf
                        const int http_error_code,
                        RGWBWRoutingRule *redirect);
 
-  void get_effective_key(const std::string& key,
+  bool get_effective_key(const std::string& key,
                          std::string *effective_key, bool is_file) const;
 
   const std::string& get_index_doc() const {

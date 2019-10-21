@@ -3,10 +3,13 @@
 # pylint: disable=too-many-branches, too-many-locals, too-many-statements
 from __future__ import absolute_import
 
+from string import punctuation, ascii_lowercase, digits, ascii_uppercase
+
 import errno
 import json
 import threading
 import time
+import re
 
 import bcrypt
 
@@ -32,6 +35,64 @@ def password_hash(password, salt_password=None):
 
 
 _P = Permission  # short alias
+
+
+class PasswordCheck(object):
+    def __init__(self, password, username, old_password=None):
+        self.password = password
+        self.username = username
+        self.old_password = old_password
+        self.forbidden_words = ['osd', 'host', 'dashboard', 'pool',
+                                'block', 'nfs', 'ceph', 'monitors',
+                                'gateway', 'logs', 'crush', 'maps']
+        self.complexity_credits = 0
+
+    @staticmethod
+    def _check_if_contains_word(password, word):
+        return re.compile('(?:{0})'.format(word),
+                          flags=re.IGNORECASE).search(password)
+
+    def check_password_characters(self):
+        digit_credit = 1
+        small_letter_credit = 1
+        big_letter_credit = 2
+        special_character_credit = 3
+        other_character_credit = 5
+        for _ in self.password:
+            if _ in ascii_uppercase:
+                self.complexity_credits += big_letter_credit
+            elif _ in ascii_lowercase:
+                self.complexity_credits += small_letter_credit
+            elif _ in digits:
+                self.complexity_credits += digit_credit
+            elif _ in punctuation:
+                self.complexity_credits += special_character_credit
+            else:
+                self.complexity_credits += other_character_credit
+        return self.complexity_credits
+
+    def check_if_as_the_old_password(self):
+        return self.old_password and self.password == self.old_password
+
+    def check_if_contains_username(self):
+        return self._check_if_contains_word(self.password, self.username)
+
+    def check_if_contains_forbidden_words(self):
+        return self._check_if_contains_word(self.password,
+                                            '|'.join(self.forbidden_words))
+
+    def check_if_sequential_characters(self):
+        for _ in range(1, len(self.password)-1):
+            if ord(self.password[_-1])+1 == ord(self.password[_])\
+               == ord(self.password[_+1])-1:
+                return True
+        return False
+
+    def check_if_repetetive_characters(self):
+        for _ in range(1, len(self.password)-1):
+            if self.password[_-1] == self.password[_] == self.password[_+1]:
+                return True
+        return False
 
 
 class Role(object):
@@ -112,6 +173,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
     Scope.POOL: [_P.READ],
     Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -119,6 +181,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
 RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -131,6 +194,7 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
     Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -138,12 +202,14 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
 POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
     Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 # Pool manager role provides all permissions for CephFS related scopes
 CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
@@ -151,6 +217,7 @@ GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -168,7 +235,7 @@ SYSTEM_ROLES = {
 
 class User(object):
     def __init__(self, username, password, name=None, email=None, roles=None,
-                 lastUpdate=None, enabled=True):
+                 last_update=None, enabled=True):
         self.username = username
         self.password = password
         self.name = name
@@ -177,14 +244,14 @@ class User(object):
             self.roles = set()
         else:
             self.roles = roles
-        if lastUpdate is None:
-            self.refreshLastUpdate()
+        if last_update is None:
+            self.refresh_last_update()
         else:
-            self.lastUpdate = lastUpdate
+            self.last_update = last_update
         self._enabled = enabled
 
-    def refreshLastUpdate(self):
-        self.lastUpdate = int(time.time())
+    def refresh_last_update(self):
+        self.last_update = int(time.time())
 
     @property
     def enabled(self):
@@ -193,14 +260,14 @@ class User(object):
     @enabled.setter
     def enabled(self, value):
         self._enabled = value
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def set_password(self, password):
         self.set_password_hash(password_hash(password))
 
     def set_password_hash(self, hashed_password):
         self.password = hashed_password
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def compare_password(self, password):
         """
@@ -215,18 +282,18 @@ class User(object):
 
     def set_roles(self, roles):
         self.roles = set(roles)
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def add_roles(self, roles):
         self.roles = self.roles.union(set(roles))
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def del_roles(self, roles):
         for role in roles:
             if role not in self.roles:
                 raise RoleNotInUser(role.name, self.username)
         self.roles.difference_update(set(roles))
-        self.refreshLastUpdate()
+        self.refresh_last_update()
 
     def authorize(self, scope, permissions):
         for role in self.roles:
@@ -253,7 +320,7 @@ class User(object):
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
             'email': self.email,
-            'lastUpdate': self.lastUpdate,
+            'lastUpdate': self.last_update,
             'enabled': self.enabled
         }
 
@@ -261,7 +328,7 @@ class User(object):
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'])
+                    u_dict['lastUpdate'], u_dict['enabled'])
 
 
 class AccessControlDB(object):
@@ -328,7 +395,7 @@ class AccessControlDB(object):
                 return
             for _, user in self.users.items():
                 if role in user.roles:
-                    user.refreshLastUpdate()
+                    user.refresh_last_update()
 
     def save(self):
         with self.lock:

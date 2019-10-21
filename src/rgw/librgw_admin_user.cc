@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * create rgw admin user
@@ -114,8 +114,6 @@ namespace rgw {
     init_timer.cancel_all_events();
     init_timer.shutdown();
     mutex.unlock();
-
-    rgw_user_init(store);
 
     init_async_signal_handler();
     register_async_signal_handler(SIGUSR1, handle_sigterm);

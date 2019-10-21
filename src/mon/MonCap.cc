@@ -19,6 +19,7 @@
 #include <boost/spirit/include/phoenix.hpp>
 #include <boost/fusion/adapted/struct/adapt_struct.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "MonCap.h"
 #include "include/stringify.h"
@@ -217,6 +218,9 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("config", MON_CAP_R | MON_CAP_W));
+    // ssh orchestrator provisions new daemon keys
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));
+    profile_grants.push_back(MonCapGrant("auth rm"));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {
@@ -297,7 +301,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
-  if (profile == "rbd" || profile == "rbd-mirror") {
+  if (boost::starts_with(profile, "rbd")) {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
@@ -314,6 +318,14 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
                                 "rbd/mirror/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
+  } else if (profile == "rbd-mirror-peer") {
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_REGEX,
+                                "rbd/mirror/[^/]+");
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
+
+    constraint = StringConstraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                  "rbd/mirror/peer/");
+    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
   }
 
   if (profile == "role-definer") {

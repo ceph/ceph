@@ -584,6 +584,15 @@ class MgrModule(ceph_module.BaseMgrModule):
     def version(self):
         return self._version
 
+    @property
+    def release_name(self):
+        """
+        Get the release name of the Ceph version, e.g. 'nautilus' or 'octopus'.
+        :return: Returns the release name of the Ceph version in lower case.
+        :rtype: str
+        """
+        return self._ceph_get_release_name()
+
     def get_context(self):
         """
         :return: a Python capsule containing a C++ CephContext pointer
@@ -896,6 +905,7 @@ class MgrModule(ceph_module.BaseMgrModule):
              'CHECK_FOO': {
                'severity': 'warning',           # or 'error'
                'summary': 'summary string',
+               'count': 4,                      # quantify badness
                'detail': [ 'list', 'of', 'detail', 'strings' ],
               },
              'CHECK_BAR': {
@@ -1208,8 +1218,10 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         return self._ceph_have_mon_connection()
 
-    def update_progress_event(self, evid, desc, progress, duration):
-        return self._ceph_update_progress_event(str(evid), str(desc+" "+duration), float(progress))
+    def update_progress_event(self, evid, desc, progress):
+        return self._ceph_update_progress_event(str(evid),
+                                                str(desc),
+                                                float(progress))
 
     def complete_progress_event(self, evid):
         return self._ceph_complete_progress_event(str(evid))

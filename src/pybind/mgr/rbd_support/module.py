@@ -161,7 +161,7 @@ class PerfHandler:
                     self.process_raw_osd_perf_counters()
                     self.refresh_condition.notify()
 
-                    stats_period = int(self.module.get_ceph_option("mgr_stats_period"))
+                    stats_period = self.module.get_ceph_option("mgr_stats_period")
                     self.query_condition.wait(stats_period)
 
                 self.log.debug("PerfHandler: tick")
@@ -673,9 +673,16 @@ class TaskHandler:
                 with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                     self.load_task_queue(ioctx, pool_name)
 
-                    for namespace in rbd.RBD().namespace_list(ioctx):
+                    try:
+                        namespaces = rbd.RBD().namespace_list(ioctx)
+                    except rbd.OperationNotSupported:
+                        self.log.debug("Namespaces not supported")
+                        continue
+
+                    for namespace in namespaces:
                         ioctx.set_namespace(namespace)
                         self.load_task_queue(ioctx, pool_name)
+
             except rados.ObjectNotFound:
                 # pool DNE
                 pass
@@ -1075,7 +1082,7 @@ class TaskHandler:
         except (rbd.InvalidArgument, rbd.ImageNotFound):
             return None
 
-    def validate_image_migrating(self, migration_status):
+    def validate_image_migrating(self, image_spec, migration_status):
         if not migration_status:
             raise rbd.InvalidArgument("Image {} is not migrating".format(
                 self.format_image_spec(image_spec)), errno=errno.EINVAL)
@@ -1105,7 +1112,7 @@ class TaskHandler:
             if task:
                 return 0, task.to_json(), ''
 
-            self.validate_image_migrating(status)
+            self.validate_image_migrating(image_spec, status)
             if status['state'] not in [rbd.RBD_IMAGE_MIGRATION_STATE_PREPARED,
                                        rbd.RBD_IMAGE_MIGRATION_STATE_EXECUTING]:
                 raise rbd.InvalidArgument("Image {} is not in ready state".format(
@@ -1141,7 +1148,7 @@ class TaskHandler:
             if task:
                 return 0, task.to_json(), ''
 
-            self.validate_image_migrating(status)
+            self.validate_image_migrating(image_spec, status)
             if status['state'] != rbd.RBD_IMAGE_MIGRATION_STATE_EXECUTED:
                 raise rbd.InvalidArgument("Image {} has not completed migration".format(
                     self.format_image_spec(image_spec)), errno=errno.EINVAL)
@@ -1169,7 +1176,7 @@ class TaskHandler:
             if task:
                 return 0, task.to_json(), ''
 
-            self.validate_image_migrating(status)
+            self.validate_image_migrating(image_spec, status)
             return 0, self.add_task(ioctx,
                                     "Aborting image migration for {}".format(
                                         self.format_image_spec(image_spec)),

@@ -8,7 +8,7 @@
 
 #include "osd_operation.h"
 #include "msg/MessageRef.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
 #include "crimson/osd/osdmap_service.h"
 
@@ -132,7 +132,7 @@ public:
 			  bool forced = false);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
-  void send_pg_temp();
+  seastar::future<> send_pg_temp();
 
   // Shard-local OSDMap
 private:
@@ -157,6 +157,7 @@ public:
     return ceph::mono_clock::now() - startup_time;
   }
   HeartbeatStampsRef get_hb_stamps(int peer);
+  std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 };
 
 

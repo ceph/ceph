@@ -5,10 +5,10 @@ export class CrushMapPageHelper extends PageHelper {
   pages = { index: '/#/crush-map' };
 
   getPageTitle() {
-    return $('.card-header').getText();
+    return $('cd-crushmap .card-header').getText();
   }
 
   getCrushNode(idx) {
-    return $$('.node-name.ng-star-inserted').get(idx);
+    return $$('.node-name.type-osd').get(idx);
   }
 }

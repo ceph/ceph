@@ -116,6 +116,7 @@ class MDSTableClient;
 class Messenger;
 class Objecter;
 class MonClient;
+class MgrClient;
 class Finisher;
 class ScrubStack;
 class C_MDS_Send_Command_Reply;
@@ -229,6 +230,10 @@ class MDSRank {
     bool is_cluster_degraded() const { return cluster_degraded; }
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
+    bool is_cache_trimmable() const {
+      return is_clientreplay() || is_active() || is_stopping();
+    }
+
     void handle_write_error(int err);
 
     void update_mlogger();
@@ -332,6 +337,7 @@ class MDSRank {
         std::unique_ptr<MDSMap> & mdsmap_,
         Messenger *msgr,
         MonClient *monc_,
+        MgrClient *mgrc,
         Context *respawn_hook_,
         Context *suicide_hook_);
 
@@ -498,6 +504,7 @@ class MDSRank {
   protected:
     Messenger    *messenger;
     MonClient    *monc;
+    MgrClient    *mgrc;
 
     Context *respawn_hook;
     Context *suicide_hook;
@@ -570,6 +577,13 @@ class MDSRank {
 private:
     mono_time starttime = mono_clock::zero();
 
+    // "task" string that gets displayed in ceph status
+    inline static const std::string SCRUB_STATUS_KEY = "scrub status";
+
+    void get_task_status(std::map<std::string, std::string> *status);
+    void schedule_update_timer_task();
+    void send_task_status();
+
 protected:
   Context *create_async_exec_context(C_ExecAndReply *ctx);
 };
@@ -613,13 +627,13 @@ public:
   void init();
   void tick();
   void shutdown();
-  bool handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
-                           Formatter *f, std::ostream& ss);
+  int handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
+			  Formatter *f, std::ostream& ss);
   void handle_mds_map(const cref_t<MMDSMap> &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
 
-  const char** get_tracked_conf_keys() const final;
+  const char** get_tracked_conf_keys() const override final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
   bool handle_command(
@@ -646,6 +660,7 @@ public:
       std::unique_ptr<MDSMap> &mdsmap_,
       Messenger *msgr,
       MonClient *monc_,
+      MgrClient *mgrc,
       Context *respawn_hook_,
       Context *suicide_hook_);
 };

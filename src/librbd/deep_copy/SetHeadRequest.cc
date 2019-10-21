@@ -65,7 +65,7 @@ void SetHeadRequest<I>::send_set_size() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_set_size(r);
       finish_op_ctx->complete(0);
     });
@@ -122,7 +122,7 @@ void SetHeadRequest<I>::send_detach_parent() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_detach_parent(r);
       finish_op_ctx->complete(0);
     });
@@ -171,7 +171,7 @@ void SetHeadRequest<I>::send_attach_parent() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_attach_parent(r);
       finish_op_ctx->complete(0);
     });
@@ -204,7 +204,7 @@ template <typename I>
 Context *SetHeadRequest<I>::start_lock_op(int* r) {
   std::shared_lock owner_locker{m_image_ctx->owner_lock};
   if (m_image_ctx->exclusive_lock == nullptr) {
-    return new FunctionContext([](int r) {});
+    return new LambdaContext([](int r) {});
   }
   return m_image_ctx->exclusive_lock->start_op(r);
 }

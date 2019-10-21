@@ -36,6 +36,15 @@ SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
 
 template <typename I>
 void SnapshotCreateRequest<I>::send_op() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  if (!image_ctx.data_ctx.is_valid()) {
+    lderr(cct) << "missing data pool" << dendl;
+    this->async_complete(-ENODEV);
+    return;
+  }
+
   send_suspend_requests();
 }
 

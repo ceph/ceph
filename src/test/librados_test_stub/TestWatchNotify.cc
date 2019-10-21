@@ -42,7 +42,7 @@ struct TestWatchNotify::ObjectHandler : public TestCluster::ObjectHandler {
     auto _pool_id = pool_id;
     auto _nspace = nspace;
     auto _oid = oid;
-    auto ctx = new FunctionContext([_test_watch_notify, _pool_id, _nspace, _oid](int r) {
+    auto ctx = new LambdaContext([_test_watch_notify, _pool_id, _nspace, _oid](int r) {
         _test_watch_notify->handle_object_removed(_pool_id, _nspace, _oid);
       });
     test_rados_client->get_aio_finisher()->queue(ctx);
@@ -107,7 +107,7 @@ void TestWatchNotify::aio_watch(TestRadosClient *rados_client, int64_t pool_id,
                                 librados::WatchCtx *watch_ctx,
                                 librados::WatchCtx2 *watch_ctx2,
                                 Context *on_finish) {
-  auto ctx = new FunctionContext([=](int) {
+  auto ctx = new LambdaContext([=](int) {
       execute_watch(rados_client, pool_id, nspace, o, gid, handle, watch_ctx,
                     watch_ctx2, on_finish);
     });
@@ -123,7 +123,7 @@ int TestWatchNotify::unwatch(TestRadosClient *rados_client,
 
 void TestWatchNotify::aio_unwatch(TestRadosClient *rados_client,
                                   uint64_t handle, Context *on_finish) {
-  auto ctx = new FunctionContext([this, rados_client, handle, on_finish](int) {
+  auto ctx = new LambdaContext([this, rados_client, handle, on_finish](int) {
       execute_unwatch(rados_client, handle, on_finish);
     });
   rados_client->get_aio_finisher()->queue(ctx);
@@ -134,7 +134,7 @@ void TestWatchNotify::aio_notify(TestRadosClient *rados_client, int64_t pool_id,
                                  const std::string& oid, const bufferlist& bl,
                                  uint64_t timeout_ms, bufferlist *pbl,
                                  Context *on_notify) {
-  auto ctx = new FunctionContext([=](int) {
+  auto ctx = new LambdaContext([=](int) {
       execute_notify(rados_client, pool_id, nspace, oid, bl, pbl, on_notify);
     });
   rados_client->get_aio_finisher()->queue(ctx);
@@ -293,7 +293,7 @@ void TestWatchNotify::execute_notify(TestRadosClient *rados_client,
 
     m_async_op_tracker.start_op();
     uint64_t notifier_id = rados_client->get_instance_id();
-    watch_handle.rados_client->get_aio_finisher()->queue(new FunctionContext(
+    watch_handle.rados_client->get_aio_finisher()->queue(new LambdaContext(
       [this, pool_id, nspace, oid, bl, notify_id, watch_handle, notifier_id](int r) {
         bufferlist notify_bl;
         notify_bl.append(bl);
@@ -438,7 +438,7 @@ void TestWatchNotify::handle_object_removed(int64_t pool_id,
     auto handle = watch_handle.handle;
     auto watch_ctx2 = watch_handle.watch_ctx2;
     if (watch_ctx2 != nullptr) {
-      auto ctx = new FunctionContext([handle, watch_ctx2](int) {
+      auto ctx = new LambdaContext([handle, watch_ctx2](int) {
           watch_ctx2->handle_error(handle, -ENOTCONN);
         });
       watch_handle.rados_client->get_aio_finisher()->queue(ctx);

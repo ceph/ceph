@@ -19,6 +19,9 @@
 
 class MExportDirNotifyAck : public Message {
 private:
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
+
   dirfrag_t dirfrag;
   pair<__s32,__s32> new_auth;
 
@@ -27,9 +30,10 @@ private:
   pair<__s32,__s32> get_new_auth() const { return new_auth; }
   
 protected:
-  MExportDirNotifyAck() {}
+  MExportDirNotifyAck() :
+    Message{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirNotifyAck(dirfrag_t df, uint64_t tid, pair<__s32,__s32> na) :
-    Message{MSG_MDS_EXPORTDIRNOTIFYACK}, dirfrag(df), new_auth(na) {
+    Message{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), new_auth(na) {
     set_tid(tid);
   }
   ~MExportDirNotifyAck() override {}

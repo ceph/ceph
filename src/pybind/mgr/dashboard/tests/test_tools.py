@@ -5,7 +5,10 @@ import unittest
 
 import cherrypy
 from cherrypy.lib.sessions import RamSession
-from mock import patch
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
 
 from . import ControllerTestCase
 from ..services.exception import handle_rados_error
@@ -110,7 +113,7 @@ class RESTControllerTest(ControllerTestCase):
     def test_not_implemented(self):
         self._put("/foo")
         self.assertStatus(404)
-        body = self.jsonBody()
+        body = self.json_body()
         self.assertIsInstance(body, dict)
         assert body['detail'] == "The path '/foo' was not found."
         assert '404' in body['status']

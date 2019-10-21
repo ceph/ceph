@@ -29,6 +29,7 @@
 #include "PyModuleRegistry.h"
 
 #include "ActivePyModules.h"
+#include "DaemonKey.h"
 #include "DaemonServer.h"
 
 #define dout_context g_ceph_context
@@ -63,23 +64,19 @@ void ActivePyModules::dump_server(const std::string &hostname,
   f->open_array_section("services");
   std::string ceph_version;
 
-  for (const auto &i : dmc) {
-    std::lock_guard l(i.second->lock);
-    const auto &key = i.first;
-    const std::string &str_type = key.first;
-    const std::string &svc_name = key.second;
-
+  for (const auto &[key, state] : dmc) {
+    std::lock_guard l(state->lock);
     // TODO: pick the highest version, and make sure that
     // somewhere else (during health reporting?) we are
     // indicating to the user if we see mixed versions
-    auto ver_iter = i.second->metadata.find("ceph_version");
-    if (ver_iter != i.second->metadata.end()) {
-      ceph_version = i.second->metadata.at("ceph_version");
+    auto ver_iter = state->metadata.find("ceph_version");
+    if (ver_iter != state->metadata.end()) {
+      ceph_version = state->metadata.at("ceph_version");
     }
 
     f->open_object_section("service");
-    f->dump_string("type", str_type);
-    f->dump_string("id", svc_name);
+    f->dump_string("type", key.type);
+    f->dump_string("id", key.name);
     f->close_section();
   }
   f->close_section();
@@ -130,7 +127,7 @@ PyObject *ActivePyModules::get_metadata_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
+  auto metadata = daemon_state.get(DaemonKey{svc_type, svc_id});
   if (metadata == nullptr) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
@@ -150,7 +147,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
+  auto metadata = daemon_state.get(DaemonKey{svc_type, svc_id});
   if (metadata == nullptr) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
@@ -243,12 +240,12 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     auto dmc = daemon_state.get_by_service("osd");
     PyEval_RestoreThread(tstate);
 
-    for (const auto &i : dmc) {
-      std::lock_guard l(i.second->lock);
-      f.open_object_section(i.first.second.c_str());
-      f.dump_string("hostname", i.second->hostname);
-      for (const auto &j : i.second->metadata) {
-        f.dump_string(j.first.c_str(), j.second);
+    for (const auto &[key, state] : dmc) {
+      std::lock_guard l(state->lock);
+      f.open_object_section(key.name.c_str());
+      f.dump_string("hostname", state->hostname);
+      for (const auto &[name, val] : state->metadata) {
+        f.dump_string(name.c_str(), val);
       }
       f.close_section();
     }
@@ -411,7 +408,7 @@ void ActivePyModules::start_one(PyModuleRef py_module)
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
-  finisher.queue(new FunctionContext([this, active_module, name](int) {
+  finisher.queue(new LambdaContext([this, active_module, name](int) {
     int r = active_module->load(this);
     if (r != 0) {
       derr << "Failed to run module in active mode ('" << name << "')"
@@ -467,7 +464,7 @@ void ActivePyModules::notify_all(const std::string &notify_type,
     auto module = i.second.get();
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
-    finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
+    finisher.queue(new LambdaContext([module, notify_type, notify_id](int r){
       module->notify(notify_type, notify_id);
     }));
   }
@@ -486,7 +483,7 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
     // Note intentional use of non-reference lambda binding on
     // log_entry: we take a copy because caller's instance is
     // probably ephemeral.
-    finisher.queue(new FunctionContext([module, log_entry](int r){
+    finisher.queue(new LambdaContext([module, log_entry](int r){
       module->notify_clog(log_entry);
     }));
   }
@@ -681,7 +678,7 @@ PyObject* ActivePyModules::with_perf_counters(
   PyFormatter f;
   f.open_array_section(path.c_str());
 
-  auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
   if (metadata) {
     std::lock_guard l2(metadata->lock);
     if (metadata->perf_counters.instances.count(path)) {
@@ -775,7 +772,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
   } else if (svc_id.empty()) {
     daemons = daemon_state.get_by_service(svc_type);
   } else {
-    auto key = DaemonKey(svc_type, svc_id);
+    auto key = DaemonKey{svc_type, svc_id};
     // so that the below can be a loop in all cases
     auto got = daemon_state.get(key);
     if (got != nullptr) {
@@ -785,13 +782,8 @@ PyObject* ActivePyModules::get_perf_schema_python(
 
   PyFormatter f;
   if (!daemons.empty()) {
-    for (auto statepair : daemons) {
-      auto key = statepair.first;
-      auto state = statepair.second;
-
-      std::ostringstream daemon_name;
-      daemon_name << key.first << "." << key.second;
-      f.open_object_section(daemon_name.str().c_str());
+    for (auto& [key, state] : daemons) {
+      f.open_object_section(ceph::to_string(key).c_str());
 
       std::lock_guard l(state->lock);
       for (auto ctr_inst_iter : state->perf_counters.instances) {
@@ -981,7 +973,7 @@ void ActivePyModules::config_notify()
     auto module = i.second.get();
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
-    finisher.queue(new FunctionContext([module](int r){
+    finisher.queue(new LambdaContext([module](int r){
 					 module->config_notify();
 				       }));
   }

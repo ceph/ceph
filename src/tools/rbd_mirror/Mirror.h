@@ -46,7 +46,7 @@ public:
   void run();
   void handle_signal(int signum);
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
   void start();
   void stop();
   void restart();

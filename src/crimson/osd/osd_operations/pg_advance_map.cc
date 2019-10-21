@@ -19,10 +19,6 @@ namespace {
 namespace ceph::osd {
 
 PGAdvanceMap::PGAdvanceMap(
-  OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to)
-  : osd(osd), pg(pg), from(from), to(to), do_init(false) {}
-
-PGAdvanceMap::PGAdvanceMap(
   OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
   : osd(osd), pg(pg), from(from), to(to),
@@ -79,7 +75,7 @@ seastar::future<> PGAdvanceMap::start()
 	  handle.exit();
 	  if (do_init) {
 	    osd.pg_map.pg_created(pg->get_pgid(), pg);
-	    logger().info("{} new pg {}", __func__, *pg);
+	    logger().info("PGAdvanceMap::start new pg {}", *pg);
 	  }
 	  return seastar::when_all_succeed(
 	    pg->get_need_up_thru() ? osd._send_alive() : seastar::now(),

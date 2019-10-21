@@ -62,8 +62,6 @@ template <typename I>
 struct ReplayHandler : public ::journal::ReplayHandler {
   ImageReplayer<I> *replayer;
   ReplayHandler(ImageReplayer<I> *replayer) : replayer(replayer) {}
-  void get() override {}
-  void put() override {}
 
   void handle_entries_available() override {
     replayer->handle_replay_ready();
@@ -87,7 +85,7 @@ public:
     : desc(desc), replayer(replayer) {
   }
   virtual ~ImageReplayerAdminSocketCommand() {}
-  virtual bool call(Formatter *f, stringstream *ss) = 0;
+  virtual int call(Formatter *f) = 0;
 
   std::string desc;
   ImageReplayer<I> *replayer;
@@ -101,9 +99,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
-    this->replayer->print_status(f, ss);
-    return true;
+  int call(Formatter *f) override {
+    this->replayer->print_status(f);
+    return 0;
   }
 };
 
@@ -114,9 +112,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->start(nullptr, true);
-    return true;
+    return 0;
   }
 };
 
@@ -127,9 +125,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->stop(nullptr, true);
-    return true;
+    return 0;
   }
 };
 
@@ -140,9 +138,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->restart();
-    return true;
+    return 0;
   }
 };
 
@@ -153,9 +151,9 @@ public:
     : ImageReplayerAdminSocketCommand<I>(desc, replayer) {
   }
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     this->replayer->flush();
-    return true;
+    return 0;
   }
 };
 
@@ -179,7 +177,7 @@ public:
 
   int register_commands() {
     for (auto &it : commands) {
-      int r = admin_socket->register_command(it.first, it.first, this,
+      int r = admin_socket->register_command(it.first, this,
                                              it.second->desc);
       if (r < 0) {
         return r;
@@ -190,25 +188,20 @@ public:
   }
 
   ~ImageReplayerAdminSocketHook() override {
+    admin_socket->unregister_commands(this);
     for (auto &it : commands) {
-      if (it.second->registered) {
-        admin_socket->unregister_command(it.first);
-      }
       delete it.second;
     }
     commands.clear();
   }
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     auto i = commands.find(command);
     ceph_assert(i != commands.end());
-    Formatter *f = Formatter::create(format);
-    stringstream ss;
-    bool r = i->second->call(f, &ss);
-    delete f;
-    out.append(ss);
-    return r;
+    return i->second->call(f);
   }
 
 private:
@@ -250,7 +243,7 @@ void ImageReplayer<I>::BootstrapProgressContext::update_progress(
 template <typename I>
 void ImageReplayer<I>::RemoteJournalerListener::handle_update(
   ::journal::JournalMetadata *) {
-  FunctionContext *ctx = new FunctionContext([this](int r) {
+  auto ctx = new LambdaContext([this](int r) {
       replayer->handle_remote_journal_metadata_updated();
     });
   replayer->m_threads->work_queue->queue(ctx, 0);
@@ -258,19 +251,17 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 
 template <typename I>
 ImageReplayer<I>::ImageReplayer(
-    Threads<I> *threads, InstanceWatcher<I> *instance_watcher,
-    journal::CacheManagerHandler *cache_manager_handler, RadosRef local,
-    const std::string &local_mirror_uuid, int64_t local_pool_id,
-    const std::string &global_image_id) :
-  m_threads(threads),
+    librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+    const std::string &global_image_id, Threads<I> *threads,
+    InstanceWatcher<I> *instance_watcher,
+    journal::CacheManagerHandler *cache_manager_handler) :
+  m_local_io_ctx(local_io_ctx), m_local_mirror_uuid(local_mirror_uuid),
+  m_global_image_id(global_image_id), m_threads(threads),
   m_instance_watcher(instance_watcher),
   m_cache_manager_handler(cache_manager_handler),
-  m_local(local),
-  m_local_mirror_uuid(local_mirror_uuid),
-  m_local_pool_id(local_pool_id),
-  m_global_image_id(global_image_id), m_local_image_name(global_image_id),
-  m_lock(ceph::make_mutex("rbd::mirror::ImageReplayer " + stringify(local_pool_id) + " " +
-    global_image_id)),
+  m_local_image_name(global_image_id),
+  m_lock(ceph::make_mutex("rbd::mirror::ImageReplayer " +
+      stringify(local_io_ctx.get_id()) + " " + global_image_id)),
   m_progress_cxt(this),
   m_journal_listener(new JournalListener(this)),
   m_remote_listener(this)
@@ -279,15 +270,7 @@ ImageReplayer<I>::ImageReplayer(
   // name.  When the image name becomes known on start the asok commands will be
   // re-registered using "remote_pool_name/remote_image_name" name.
 
-  std::string pool_name;
-  int r = m_local->pool_reverse_lookup(m_local_pool_id, &pool_name);
-  if (r < 0) {
-    derr << "error resolving local pool " << m_local_pool_id
-	 << ": " << cpp_strerror(r) << dendl;
-    pool_name = stringify(m_local_pool_id);
-  }
-
-  m_name = pool_name + "/" + m_global_image_id;
+  m_name = admin_socket_hook_name(global_image_id);
   register_admin_socket_hook();
 }
 
@@ -380,17 +363,6 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
     return;
   }
 
-  m_local_ioctx.reset(new librados::IoCtx{});
-  r = m_local->ioctx_create2(m_local_pool_id, *m_local_ioctx);
-  if (r < 0) {
-    m_local_ioctx.reset();
-
-    derr << "error opening ioctx for local pool " << m_local_pool_id
-         << ": " << cpp_strerror(r) << dendl;
-    on_start_fail(r, "error opening local pool");
-    return;
-  }
-
   prepare_local_image();
 }
 
@@ -402,7 +374,7 @@ void ImageReplayer<I>::prepare_local_image() {
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_local_image>(this);
   auto req = PrepareLocalImageRequest<I>::create(
-    *m_local_ioctx, m_global_image_id, &m_local_image_id, &m_local_image_name,
+    m_local_io_ctx, m_global_image_id, &m_local_image_id, &m_local_image_name,
     &m_local_image_tag_owner, m_threads->work_queue, ctx);
   req->send();
 }
@@ -437,7 +409,7 @@ void ImageReplayer<I>::prepare_remote_image() {
   ceph_assert(!m_peers.empty());
   m_remote_image = {*m_peers.begin()};
 
-  auto cct = static_cast<CephContext *>(m_local->cct());
+  auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
   journal::Settings journal_settings;
   journal_settings.commit_interval = cct->_conf.get_val<double>(
     "rbd_mirror_journal_commit_age");
@@ -508,7 +480,7 @@ void ImageReplayer<I>::bootstrap() {
     auto ctx = create_context_callback<
       ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
     request = BootstrapRequest<I>::create(
-      m_threads, *m_local_ioctx, m_remote_image.io_ctx, m_instance_watcher,
+      m_threads, m_local_io_ctx, m_remote_image.io_ctx, m_instance_watcher,
       &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
       m_global_image_id, m_local_mirror_uuid, m_remote_image.mirror_uuid,
       m_remote_journaler, &m_client_state, &m_client_meta, ctx,
@@ -662,12 +634,14 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   reschedule_update_status_task(30);
 
   if (on_replay_interrupted()) {
-    on_finish->complete(r);
+    if (on_finish != nullptr) {
+      on_finish->complete(r);
+    }
     return;
   }
 
   {
-    CephContext *cct = static_cast<CephContext *>(m_local->cct());
+    CephContext *cct = static_cast<CephContext *>(m_local_io_ctx.cct());
     double poll_seconds = cct->_conf.get_val<double>(
       "rbd_mirror_journal_poll_age");
 
@@ -689,7 +663,7 @@ template <typename I>
 void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
 {
   dout(10) << "r=" << r << dendl;
-  Context *ctx = new FunctionContext([this, r, desc](int _r) {
+  Context *ctx = new LambdaContext([this, r, desc](int _r) {
       {
 	std::lock_guard locker{m_lock};
         ceph_assert(m_state == STATE_STARTING);
@@ -702,9 +676,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
       }
 
       set_state_description(r, desc);
-      if (m_local_ioctx) {
-        update_mirror_image_status(false, boost::none);
-      }
+      update_mirror_image_status(false, boost::none);
       reschedule_update_status_task(-1);
       shut_down(r);
     });
@@ -843,7 +815,7 @@ void ImageReplayer<I>::handle_replay_ready()
 template <typename I>
 void ImageReplayer<I>::restart(Context *on_finish)
 {
-  FunctionContext *ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, on_finish](int r) {
       if (r < 0) {
 	// Try start anyway.
@@ -875,7 +847,7 @@ void ImageReplayer<I>::flush_local_replay(Context* on_flush)
   }
 
   dout(15) << dendl;
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, on_flush](int r) {
       handle_flush_local_replay(on_flush, r);
     });
@@ -907,7 +879,7 @@ void ImageReplayer<I>::flush_commit_position(Context* on_flush)
   }
 
   dout(15) << dendl;
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, on_flush](int r) {
       handle_flush_commit_position(on_flush, r);
     });
@@ -943,21 +915,16 @@ bool ImageReplayer<I>::on_replay_interrupted()
 }
 
 template <typename I>
-void ImageReplayer<I>::print_status(Formatter *f, stringstream *ss)
+void ImageReplayer<I>::print_status(Formatter *f)
 {
   dout(10) << dendl;
 
   std::lock_guard l{m_lock};
 
-  if (f) {
-    f->open_object_section("image_replayer");
-    f->dump_string("name", m_name);
-    f->dump_string("state", to_string(m_state));
-    f->close_section();
-    f->flush(*ss);
-  } else {
-    *ss << m_name << ": state: " << to_string(m_state);
-  }
+  f->open_object_section("image_replayer");
+  f->dump_string("name", m_name);
+  f->dump_string("state", to_string(m_state));
+  f->close_section();
 }
 
 template <typename I>
@@ -999,7 +966,7 @@ void ImageReplayer<I>::replay_flush() {
   // replayer to handle the new tag epoch
   Context *ctx = create_context_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_replay_flush>(this);
-  ctx = new FunctionContext([this, ctx](int r) {
+  ctx = new LambdaContext([this, ctx](int r) {
       m_local_image_ctx->journal->stop_external_replay();
       m_local_replay = nullptr;
 
@@ -1157,7 +1124,7 @@ void ImageReplayer<I>::preprocess_entry() {
 
   std::lock_guard timer_locker{m_threads->timer_lock};
   ceph_assert(m_delayed_preprocess_task == nullptr);
-  m_delayed_preprocess_task = new FunctionContext(
+  m_delayed_preprocess_task = new LambdaContext(
     [this](int r) {
       ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
       m_delayed_preprocess_task = nullptr;
@@ -1268,7 +1235,7 @@ void ImageReplayer<I>::handle_process_entry_safe(const ReplayEntry &replay_entry
     g_perf_counters->tinc(l_rbd_mirror_replay_latency, latency);
   }
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, bytes, latency](int r) {
       std::lock_guard locker{m_lock};
       if (m_perf_counters) {
@@ -1344,18 +1311,18 @@ template <typename I>
 void ImageReplayer<I>::queue_mirror_image_status_update(const OptionalState &state) {
   dout(15) << dendl;
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, state](int r) {
       send_mirror_status_update(state);
     });
 
   // ensure pending IO is flushed and the commit position is updated
   // prior to updating the mirror status
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
+  auto ctx2 = new LambdaContext(
+    [this, ctx=std::move(ctx)](int r) {
       flush_local_replay(ctx);
     });
-  m_threads->work_queue->queue(ctx, 0);
+  m_threads->work_queue->queue(ctx2, 0);
 }
 
 template <typename I>
@@ -1410,7 +1377,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   case STATE_REPLAY_FLUSHING:
     status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING;
     {
-      Context *on_req_finish = new FunctionContext(
+      Context *on_req_finish = new LambdaContext(
         [this](int r) {
           dout(15) << "replay status ready: r=" << r << dendl;
           if (r >= 0) {
@@ -1474,10 +1441,9 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_set(&op, m_global_image_id, status);
 
-  ceph_assert(m_local_ioctx);
   librados::AioCompletion *aio_comp = create_rados_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_mirror_status_update>(this);
-  int r = m_local_ioctx->aio_operate(RBD_MIRRORING, aio_comp, &op);
+  int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
   ceph_assert(r == 0);
   aio_comp->release();
 }
@@ -1531,7 +1497,7 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
 
     if (new_interval >= 0 && is_running_() &&
         start_mirror_image_status_update(true, false)) {
-      m_update_status_task = new FunctionContext(
+      m_update_status_task = new LambdaContext(
         [this](int r) {
           ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
           m_update_status_task = nullptr;
@@ -1581,7 +1547,7 @@ void ImageReplayer<I>::shut_down(int r) {
     if (m_in_flight_status_updates > 0) {
       if (m_on_update_status_finish == nullptr) {
         dout(15) << "waiting for in-flight status update" << dendl;
-        m_on_update_status_finish = new FunctionContext(
+        m_on_update_status_finish = new LambdaContext(
           [this, r](int _r) {
             shut_down(r);
           });
@@ -1595,22 +1561,20 @@ void ImageReplayer<I>::shut_down(int r) {
   // case the remote cluster is unreachable
 
   // chain the shut down sequence (reverse order)
-  Context *ctx = new FunctionContext(
+  Context *ctx = new LambdaContext(
     [this, r](int _r) {
-      if (m_local_ioctx) {
-        update_mirror_image_status(true, STATE_STOPPED);
-      }
+      update_mirror_image_status(true, STATE_STOPPED);
       handle_shut_down(r);
     });
 
   // close the remote journal
   if (m_remote_journaler != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
         delete m_remote_journaler;
         m_remote_journaler = nullptr;
         ctx->complete(0);
       });
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
 	m_remote_journaler->remove_listener(&m_remote_listener);
         m_remote_journaler->shut_down(ctx);
       });
@@ -1618,20 +1582,20 @@ void ImageReplayer<I>::shut_down(int r) {
 
   // stop the replay of remote journal events
   if (m_replay_handler != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
         delete m_replay_handler;
         m_replay_handler = nullptr;
 
         m_event_replay_tracker.wait_for_ops(ctx);
       });
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
         m_remote_journaler->stop_replay(ctx);
       });
   }
 
   // close the local image (release exclusive lock)
   if (m_local_image_ctx) {
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
       CloseImageRequest<I> *request = CloseImageRequest<I>::create(
         &m_local_image_ctx, ctx);
       request->send();
@@ -1640,12 +1604,12 @@ void ImageReplayer<I>::shut_down(int r) {
 
   // shut down event replay into the local image
   if (m_local_journal != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
         m_local_journal = nullptr;
         ctx->complete(0);
       });
     if (m_local_replay != nullptr) {
-      ctx = new FunctionContext([this, ctx](int r) {
+      ctx = new LambdaContext([this, ctx](int r) {
           m_local_journal->stop_external_replay();
           m_local_replay = nullptr;
 
@@ -1654,7 +1618,7 @@ void ImageReplayer<I>::shut_down(int r) {
           ctx->complete(0);
         });
     }
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
         // blocks if listener notification is in-progress
         m_local_journal->remove_listener(m_journal_listener);
         ctx->complete(0);
@@ -1662,7 +1626,7 @@ void ImageReplayer<I>::shut_down(int r) {
   }
 
   // wait for all local in-flight replay events to complete
-  ctx = new FunctionContext([this, ctx](int r) {
+  ctx = new LambdaContext([this, ctx](int r) {
       if (r < 0) {
         derr << "error shutting down journal replay: " << cpp_strerror(r)
              << dendl;
@@ -1673,7 +1637,7 @@ void ImageReplayer<I>::shut_down(int r) {
 
   // flush any local in-flight replay events
   if (m_local_replay != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
+    ctx = new LambdaContext([this, ctx](int r) {
         m_local_replay->shut_down(true, ctx);
       });
   }
@@ -1696,7 +1660,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     if (m_in_flight_status_updates > 0) {
       if (m_on_update_status_finish == nullptr) {
         dout(15) << "waiting for in-flight status update" << dendl;
-        m_on_update_status_finish = new FunctionContext(
+        m_on_update_status_finish = new LambdaContext(
           [this, r](int _r) {
             handle_shut_down(r);
           });
@@ -1728,10 +1692,10 @@ void ImageReplayer<I>::handle_shut_down(int r) {
 
   if (delete_requested || resync_requested) {
     dout(5) << "moving image to trash" << dendl;
-    auto ctx = new FunctionContext([this, r](int) {
+    auto ctx = new LambdaContext([this, r](int) {
       handle_shut_down(r);
     });
-    ImageDeleter<I>::trash_move(*m_local_ioctx, m_global_image_id,
+    ImageDeleter<I>::trash_move(m_local_io_ctx, m_global_image_id,
                                 resync_requested, m_threads->work_queue, ctx);
     return;
   }
@@ -1832,7 +1796,7 @@ void ImageReplayer<I>::register_admin_socket_hook() {
     if (r == 0) {
       m_asok_hook = asok_hook;
 
-      CephContext *cct = static_cast<CephContext *>(m_local->cct());
+      CephContext *cct = static_cast<CephContext *>(m_local_io_ctx.cct());
       auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_perf_stats_prio");
       PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_" + m_name,
                               l_rbd_mirror_first, l_rbd_mirror_last);
@@ -1873,7 +1837,8 @@ template <typename I>
 void ImageReplayer<I>::reregister_admin_socket_hook() {
   {
     std::lock_guard locker{m_lock};
-    auto name = m_local_ioctx->get_pool_name() + "/" + m_local_image_name;
+
+    auto name = admin_socket_hook_name(m_local_image_name);
     if (m_asok_hook != nullptr && m_name == name) {
       return;
     }
@@ -1881,6 +1846,17 @@ void ImageReplayer<I>::reregister_admin_socket_hook() {
   }
   unregister_admin_socket_hook();
   register_admin_socket_hook();
+}
+
+template <typename I>
+std::string ImageReplayer<I>::admin_socket_hook_name(
+    const std::string &image_name) const {
+  std::string name = m_local_io_ctx.get_namespace();
+  if (!name.empty()) {
+    name += "/";
+  }
+
+  return m_local_io_ctx.get_pool_name() + "/" + name + image_name;
 }
 
 template <typename I>

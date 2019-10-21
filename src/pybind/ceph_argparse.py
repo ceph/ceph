@@ -694,9 +694,9 @@ class argdesc(object):
         else:
             s = '{0}({1})'.format(self.name, str(self.instance))
             if self.N:
-                s += ' [' + str(self.instance) + '...]'
+                s += '...'
         if not self.req:
-            s = '{' + s + '}'
+            s = '[' + s + ']'
         return s
 
     def helpstr(self):
@@ -704,17 +704,29 @@ class argdesc(object):
         like str(), but omit parameter names (except for CephString,
         which really needs them)
         """
-        if self.t == CephString:
-            chunk = '<{0}>'.format(self.name)
-        elif self.t == CephBool:
+        if self.t == CephBool:
             chunk = "--{0}".format(self.name.replace("_", "-"))
-        else:
+        elif self.t == CephPrefix or self.t == CephChoices:
             chunk = str(self.instance)
+        elif self.t == CephOsdName:
+            # it just so happens all CephOsdName commands are named 'id' anyway,
+            # so <id|osd.id> is perfect.
+            chunk = '<id|osd.id>'
+        elif self.t == CephName:
+            # CephName commands similarly only have one arg of the
+            # type, so <type.id> is good.
+            chunk = '<type.id>'
+        elif self.t == CephInt:
+            chunk = '<{0}:int>'.format(self.name)
+        elif self.t == CephFloat:
+            chunk = '<{0}:float>'.format(self.name)
+        else:
+            chunk = '<{0}>'.format(self.name)
         s = chunk
         if self.N:
-            s += ' [' + chunk + '...]'
+            s += '...'
         if not self.req:
-            s = '{' + s + '}'
+            s = '[' + s + ']'
         return s
 
     def complete(self, s):
@@ -1097,7 +1109,7 @@ def validate(args, signature, flags=0, partial=False):
         raise ArgumentError("unused arguments: " + str(myargs))
 
     if flags & Flag.MGR:
-        d['target'] = ('mgr','')
+        d['target'] = ('mon-mgr','')
 
     if flags & Flag.POLL:
         d['poll'] = True
@@ -1366,6 +1378,16 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
+            name = ''     # non-None empty string means "current active mgr"
+            if len(target) > 1 and target[1] is not None:
+                name = target[1]
+            if verbose:
+                print('submit {0} to {1} name {2}'.format(cmd, target[0], name),
+                      file=sys.stderr)
+            ret, outbuf, outs = run_in_thread(
+                cluster.mgr_command, cmd, inbuf, timeout=timeout, target=name)
+
+        elif target[0] == 'mon-mgr':
             if verbose:
                 print('submit {0} to {1}'.format(cmd, target[0]),
                       file=sys.stderr)

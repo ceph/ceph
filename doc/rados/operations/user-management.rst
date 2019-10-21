@@ -81,11 +81,11 @@ type. So ``client.user1`` can be entered simply as ``user1``. If you specify
 wherever possible.
 
 .. note:: A Ceph Storage Cluster user is not the same as a Ceph Object Storage
-   user or a Ceph Filesystem user. The Ceph Object Gateway uses a Ceph Storage
+   user or a Ceph File System user. The Ceph Object Gateway uses a Ceph Storage
    Cluster user to communicate between the gateway daemon and the storage
    cluster, but the gateway has its own user management functionality for end
-   users. The Ceph Filesystem uses POSIX semantics. The user space associated
-   with the Ceph Filesystem is not the same as a Ceph Storage Cluster user.
+   users. The Ceph File System uses POSIX semantics. The user space associated
+   with the Ceph File System is not the same as a Ceph Storage Cluster user.
 
 
 

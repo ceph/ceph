@@ -167,27 +167,28 @@ A preselection of pg_num
 
 When creating a new pool with::
 
-        ceph osd pool create {pool-name} pg_num
+        ceph osd pool create {pool-name} [pg_num]
 
-it is mandatory to choose the value of ``pg_num`` because it cannot (currently) be
-calculated automatically. Here are a few values commonly used:
+it is optional to choose the value of ``pg_num``.  If you do not
+specify ``pg_num``, the cluster can (by default) automatically tune it
+for you based on how much data is stored in the pool (see above, :ref:`pg-autoscaler`).
 
-- Less than 5 OSDs set ``pg_num`` to 128
+Alternatively, ``pg_num`` can be explicitly provided.  However,
+whether you specify a ``pg_num`` value or not does not affect whether
+the value is automatically tuned by the cluster after the fact.  To
+enable or disable auto-tuning,::
 
-- Between 5 and 10 OSDs set ``pg_num`` to 512
+  ceph osd pool set {pool-name} pg_autoscaler_mode (on|off|warn)
 
-- Between 10 and 50 OSDs set ``pg_num`` to 1024
+The "rule of thumb" for PGs per OSD has traditionally be 100.  With
+the additional of the balancer (which is also enabled by default), a
+value of more like 50 PGs per OSD is probably reasonable.  The
+challenge (which the autoscaler normally does for you), is to:
 
-- If you have more than 50 OSDs, you need to understand the tradeoffs
-  and how to calculate the ``pg_num`` value by yourself
-
-- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool
-
-As the number of OSDs increases, choosing the right value for pg_num
-becomes more important because it has a significant influence on the
-behavior of the cluster as well as the durability of the data when
-something goes wrong (i.e. the probability that a catastrophic event
-leads to data loss).
+- have the PGs per pool proportional to the data in the pool, and
+- end up with 50-100 PGs per OSDs, after the replication or
+  erasuring-coding fan-out of each PG across OSDs is taken into
+  consideration
 
 How are Placement Groups used ?
 ===============================

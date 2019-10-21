@@ -9,7 +9,7 @@
 #include "librbd/ManagedLock.h"
 #include "librbd/Utils.h"
 #include "InstanceReplayer.h"
-#include "ImageSyncThrottler.h"
+#include "Throttler.h"
 #include "common/Cond.h"
 
 #define dout_context g_ceph_context
@@ -59,7 +59,7 @@ struct C_RemoveInstanceRequest : public Context {
 
   C_RemoveInstanceRequest(librados::IoCtx &io_ctx, ContextWQ *work_queue,
                           const std::string &instance_id, Context *on_finish)
-    : instance_watcher(io_ctx, work_queue, nullptr, instance_id),
+    : instance_watcher(io_ctx, work_queue, nullptr, nullptr, instance_id),
       on_finish(on_finish) {
   }
 
@@ -312,8 +312,10 @@ void InstanceWatcher<I>::remove_instance(librados::IoCtx &io_ctx,
 template <typename I>
 InstanceWatcher<I> *InstanceWatcher<I>::create(
     librados::IoCtx &io_ctx, ContextWQ *work_queue,
-    InstanceReplayer<I> *instance_replayer) {
+    InstanceReplayer<I> *instance_replayer,
+    Throttler<I> *image_sync_throttler) {
   return new InstanceWatcher<I>(io_ctx, work_queue, instance_replayer,
+                                image_sync_throttler,
                                 stringify(io_ctx.get_instance_id()));
 }
 
@@ -321,9 +323,11 @@ template <typename I>
 InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
                                     ContextWQ *work_queue,
                                     InstanceReplayer<I> *instance_replayer,
+                                    Throttler<I> *image_sync_throttler,
                                     const std::string &instance_id)
   : Watcher(io_ctx, work_queue, RBD_MIRROR_INSTANCE_PREFIX + instance_id),
-    m_instance_replayer(instance_replayer), m_instance_id(instance_id),
+    m_instance_replayer(instance_replayer),
+    m_image_sync_throttler(image_sync_throttler), m_instance_id(instance_id),
     m_lock(ceph::make_mutex(
       unique_lock_name("rbd::mirror::InstanceWatcher::m_lock", this))),
     m_instance_lock(librbd::ManagedLock<I>::create(
@@ -338,7 +342,6 @@ InstanceWatcher<I>::~InstanceWatcher() {
   ceph_assert(m_notify_op_tracker.empty());
   ceph_assert(m_suspended_ops.empty());
   ceph_assert(m_inflight_sync_reqs.empty());
-  ceph_assert(m_image_sync_throttler == nullptr);
   m_instance_lock->destroy();
 }
 
@@ -510,12 +513,12 @@ void InstanceWatcher<I>::notify_sync_start(const std::string &instance_id,
   bufferlist bl;
   encode(NotifyMessage{SyncStartPayload{request_id, sync_id}}, bl);
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, sync_id] (int r) {
       dout(10) << "finish: sync_id=" << sync_id << ", r=" << r << dendl;
       std::lock_guard locker{m_lock};
-      if (r != -ESTALE && m_image_sync_throttler != nullptr) {
-        m_image_sync_throttler->finish_op(sync_id);
+      if (r != -ESTALE && is_leader()) {
+        m_image_sync_throttler->finish_op(m_ioctx.get_namespace(), sync_id);
       }
     });
   auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
@@ -582,23 +585,10 @@ void InstanceWatcher<I>::handle_notify_sync_complete(C_SyncRequest *sync_ctx,
 }
 
 template <typename I>
-void InstanceWatcher<I>::print_sync_status(Formatter *f, stringstream *ss) {
-  dout(10) << dendl;
-
-  std::lock_guard locker{m_lock};
-  if (m_image_sync_throttler != nullptr) {
-    m_image_sync_throttler->print_status(f, ss);
-  }
-}
-
-template <typename I>
 void InstanceWatcher<I>::handle_acquire_leader() {
   dout(10) << dendl;
 
   std::lock_guard locker{m_lock};
-
-  ceph_assert(m_image_sync_throttler == nullptr);
-  m_image_sync_throttler = ImageSyncThrottler<I>::create(m_cct);
 
   m_leader_instance_id = m_instance_id;
   unsuspend_notify_requests();
@@ -610,13 +600,9 @@ void InstanceWatcher<I>::handle_release_leader() {
 
   std::lock_guard locker{m_lock};
 
-  ceph_assert(m_image_sync_throttler != nullptr);
-
   m_leader_instance_id.clear();
 
-  m_image_sync_throttler->drain(-ESTALE);
-  m_image_sync_throttler->destroy();
-  m_image_sync_throttler = nullptr;
+  m_image_sync_throttler->drain(m_ioctx.get_namespace(), -ESTALE);
 }
 
 template <typename I>
@@ -1054,7 +1040,7 @@ Context *InstanceWatcher<I>::prepare_request(const std::string &instance_id,
     m_requests.erase(it);
   } else {
     ctx = create_async_context_callback(
-        m_work_queue, new FunctionContext(
+        m_work_queue, new LambdaContext(
             [this, instance_id, request_id] (int r) {
               complete_request(instance_id, request_id, r);
             }));
@@ -1112,7 +1098,7 @@ void InstanceWatcher<I>::handle_image_acquire(
     const std::string &global_image_id, Context *on_finish) {
   dout(10) << "global_image_id=" << global_image_id << dendl;
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
       [this, global_image_id, on_finish] (int r) {
         m_instance_replayer->acquire_image(this, global_image_id, on_finish);
         m_notify_op_tracker.finish_op();
@@ -1127,7 +1113,7 @@ void InstanceWatcher<I>::handle_image_release(
     const std::string &global_image_id, Context *on_finish) {
   dout(10) << "global_image_id=" << global_image_id << dendl;
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
       [this, global_image_id, on_finish] (int r) {
         m_instance_replayer->release_image(global_image_id, on_finish);
         m_notify_op_tracker.finish_op();
@@ -1144,7 +1130,7 @@ void InstanceWatcher<I>::handle_peer_image_removed(
   dout(10) << "global_image_id=" << global_image_id << ", "
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
       [this, peer_mirror_uuid, global_image_id, on_finish] (int r) {
         m_instance_replayer->remove_peer_image(global_image_id,
                                                peer_mirror_uuid, on_finish);
@@ -1163,14 +1149,14 @@ void InstanceWatcher<I>::handle_sync_request(const std::string &instance_id,
 
   std::lock_guard locker{m_lock};
 
-  if (m_image_sync_throttler == nullptr) {
+  if (!is_leader()) {
     dout(10) << "sync request for non-leader" << dendl;
     m_work_queue->queue(on_finish, -ESTALE);
     return;
   }
 
   Context *on_start = create_async_context_callback(
-    m_work_queue, new FunctionContext(
+    m_work_queue, new LambdaContext(
       [this, instance_id, sync_id, on_finish] (int r) {
         dout(10) << "handle_sync_request: finish: instance_id=" << instance_id
                  << ", sync_id=" << sync_id << ", r=" << r << dendl;
@@ -1182,7 +1168,7 @@ void InstanceWatcher<I>::handle_sync_request(const std::string &instance_id,
         }
         on_finish->complete(r);
       }));
-  m_image_sync_throttler->start_op(sync_id, on_start);
+  m_image_sync_throttler->start_op(m_ioctx.get_namespace(), sync_id, on_start);
 }
 
 template <typename I>

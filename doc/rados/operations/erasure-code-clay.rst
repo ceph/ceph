@@ -44,7 +44,7 @@ An example configuration that can be used to observe reduced bandwidth usage::
              plugin=clay \
              k=4 m=2 d=5 \
              crush-failure-domain=host
-        $ ceph osd pool create claypool 12 12 erasure CLAYprofile
+        $ ceph osd pool create claypool erasure CLAYprofile
 
 
 Creating a clay profile
@@ -120,7 +120,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the CRUSH rule. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.
@@ -228,7 +228,7 @@ can recover from the failure of any ``m`` OSDs.
 	+=================+================+=================+==================================+
 	| (k=10, m=4)     | 7 * S, 0.6 (d=7)                 | 3.25 * S, 0.4 (d=13)             |
 	+-----------------+----------------------------------+----------------------------------+
-	| (k=16, m=4)     | 4 * S, 0.5 (d=5)                 | 4.75 * S, 0.25 (d=19)            |
+	| (k=16, m=4)     | 4 * S, 0.5625 (d=4)              | 4.75 * S, 0.25 (d=19)            |
 	+-----------------+----------------------------------+----------------------------------+
 
 

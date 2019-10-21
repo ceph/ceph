@@ -1,6 +1,10 @@
 from setuptools import setup, find_packages
 
 
+with open("README.rst", "r") as fh:
+    long_description = fh.read()
+
+
 setup(
     name='ceph',
     version='1.0.0',
@@ -8,6 +12,7 @@ setup(
     author='',
     author_email='dev@ceph.io',
     description='Ceph common library',
+    long_description=long_description,
     license='LGPLv2+',
     keywords='ceph',
     url="https://github.com/ceph/ceph",

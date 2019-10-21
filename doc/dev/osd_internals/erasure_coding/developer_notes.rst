@@ -174,7 +174,7 @@ key=value pairs stored in an `erasure code profile`_.
  plugin=jerasure
  technique=reed_sol_van
  crush-failure-domain=osd
- $ ceph osd pool create ecpool 12 12 erasure myprofile
+ $ ceph osd pool create ecpool erasure myprofile
 
 The *plugin* is dynamically loaded from *directory*  and expected to
 implement the *int __erasure_code_init(char *plugin_name, char *directory)* function 
@@ -207,9 +207,9 @@ set in the erasure code profile, before the pool was created.
   ceph osd erasure-code-profile set myprofile \
      directory=<dir>         \ # mandatory
      plugin=jerasure         \ # mandatory
-     m=10                    \ # optional and plugin dependant
-     k=3                     \ # optional and plugin dependant
-     technique=reed_sol_van  \ # optional and plugin dependant
+     m=10                    \ # optional and plugin dependent
+     k=3                     \ # optional and plugin dependent
+     technique=reed_sol_van  \ # optional and plugin dependent
 
 Notes
 -----

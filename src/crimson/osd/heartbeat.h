@@ -67,7 +67,7 @@ private:
   /// @return peers not needed in this epoch
   seastar::future<osds_t> remove_down_peers();
   /// add enough reporters for fast failure detection
-  void add_reporter_peers(int whoami);
+  seastar::future<> add_reporter_peers(int whoami);
 
   seastar::future<> start_messenger(ceph::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);

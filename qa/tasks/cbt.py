@@ -179,13 +179,20 @@ class CBT(Task):
         branch = self.config.get('branch', 'master')
         branch = self.config.get('force-branch', branch)
         sha1 = self.config.get('sha1')
-        self.first_mon.run(
-            args=[
-                'git', 'clone', '-b', branch, repo,
-                '{tdir}/cbt'.format(tdir=testdir)
-            ]
-        )
-        if sha1:
+        if sha1 is None:
+            self.first_mon.run(
+                args=[
+                    'git', 'clone', '--depth', '1', '-b', branch, repo,
+                    '{tdir}/cbt'.format(tdir=testdir)
+                ]
+            )
+        else:
+            self.first_mon.run(
+                args=[
+                    'git', 'clone', '-b', branch, repo,
+                    '{tdir}/cbt'.format(tdir=testdir)
+                ]
+            )
             self.first_mon.run(
                 args=[
                     'cd', os.path.join(testdir, 'cbt'), run.Raw('&&'),
