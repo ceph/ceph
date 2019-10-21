@@ -306,16 +306,32 @@ def get_config_and_keyring():
     return (config, keyring)
 
 def get_config_and_both_keyrings():
-    if args.config_and_keyrings == '-':
-        try:
-            j = injected_stdin
-        except NameError:
-            j = sys.stdin.read()
+    if args.config_and_keyrings:
+        if args.config_and_keyrings == '-':
+            try:
+                j = injected_stdin
+            except NameError:
+                j = sys.stdin.read()
+        else:
+            with open(args.config_and_keyrings, 'r') as f:
+                j = f.read()
+        d = json.loads(j)
+        (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
     else:
-        with open(args.config_and_keyrings, 'r') as f:
-            j = f.read()
-    d = json.loads(j)
-    (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
+        if args.key:
+            keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
+        elif args.keyring:
+            with open(args.keyring, 'r') as f:
+                keyring = f.read()
+        else:
+            raise RuntimeError('no keyring')
+        crash_keyring = None
+        if args.crash_keyring:
+            with open(args.crash_keyring, 'r') as f:
+                crash_keyring = f.read()
+        with open(args.config, 'r') as f:
+            config = f.read()
+        return (config, keyring, crash_keyring)
 
 def get_container_mounts(fsid, daemon_type, daemon_id):
     mounts = {}
@@ -1044,7 +1060,8 @@ def command_deploy():
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                   config, keyring)
-    deploy_crash(args.fsid, uid, gid, config, crash_keyring)
+    if crash_keyring:
+        deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
 ##################################
 
@@ -1532,6 +1549,9 @@ parser_deploy.add_argument(
 parser_deploy.add_argument(
     '--keyring',
     help='keyring for new daemon')
+parser_deploy.add_argument(
+    '--crash-keyring',
+    help='crash keyring for crash agent daemon')
 parser_deploy.add_argument(
     '--key',
     help='key for new daemon')
