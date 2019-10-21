@@ -29,7 +29,7 @@ def download_ceph_deploy(ctx, config):
     obtained from `python_version`, if specified.
     """
     # use mon.a for ceph_admin
-    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
+    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.keys()
 
     try:
         py_ver = str(config['python_version'])
@@ -222,7 +222,7 @@ def build_ceph_cluster(ctx, config):
     # puts it.  Remember this here, because subsequently IDs will change from those in
     # the test config to those that ceph-deploy invents.
 
-    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.iterkeys()
+    (ceph_admin,) = ctx.cluster.only('mon.a').remotes.keys()
 
     def execute_ceph_deploy(cmd):
         """Remotely execute a ceph_deploy command"""
@@ -266,7 +266,7 @@ def build_ceph_cluster(ctx, config):
     def ceph_volume_osd_create(ctx, config):
         osds = ctx.cluster.only(teuthology.is_type('osd'))
         no_of_osds = 0
-        for remote in osds.remotes.iterkeys():
+        for remote in osds.remotes.keys():
             # all devs should be lvm
             osd_create_cmd = './ceph-deploy osd create --debug ' + remote.shortname + ' '
             # default is bluestore so we just need config item for filestore
@@ -387,7 +387,7 @@ def build_ceph_cluster(ctx, config):
 
         # install admin key on mons (ceph-create-keys doesn't do this any more)
         mons = ctx.cluster.only(teuthology.is_type('mon'))
-        for remote in mons.remotes.iterkeys():
+        for remote in mons.remotes.keys():
             execute_ceph_deploy('./ceph-deploy admin ' + remote.shortname)
 
         # create osd's
@@ -563,7 +563,7 @@ def build_ceph_cluster(ctx, config):
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
             os.makedirs(path)
-            for remote in ctx.cluster.remotes.iterkeys():
+            for remote in ctx.cluster.remotes.keys():
                 sub = os.path.join(path, remote.shortname)
                 os.makedirs(sub)
                 teuthology.pull_directory(remote, '/var/log/ceph',
@@ -786,7 +786,7 @@ def upgrade(ctx, config):
         ceph_branch = '--dev={branch}'.format(branch=dev_branch)
     # get the node used for initial deployment which is mon.a
     mon_a = mapped_role.get('mon.a')
-    (ceph_admin,) = ctx.cluster.only(mon_a).remotes.iterkeys()
+    (ceph_admin,) = ctx.cluster.only(mon_a).remotes.keys()
     testdir = teuthology.get_testdir(ctx)
     cmd = './ceph-deploy install ' + ceph_branch
     for role in roles:

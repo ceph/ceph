@@ -20,7 +20,8 @@ namespace api {
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Mirror {
   typedef std::map<std::string, std::string> Attributes;
-  typedef std::map<std::string, mirror_image_status_t> IdToMirrorImageStatus;
+  typedef std::map<std::string, mirror_image_global_status_t>
+    IdToMirrorImageGlobalStatus;
   typedef std::map<mirror_image_status_state_t, int> MirrorImageStatusStates;
 
   static int site_name_get(librados::Rados& rados, std::string* name);
@@ -34,26 +35,33 @@ struct Mirror {
                                    rbd_mirror_peer_direction_t direction,
                                    const std::string& token);
 
-  static int peer_add(librados::IoCtx& io_ctx, std::string *uuid,
-                      const std::string &cluster_name,
-                      const std::string &client_name);
-  static int peer_remove(librados::IoCtx& io_ctx, const std::string &uuid);
-  static int peer_list(librados::IoCtx& io_ctx,
-                       std::vector<mirror_peer_t> *peers);
-  static int peer_set_client(librados::IoCtx& io_ctx, const std::string &uuid,
-                             const std::string &client_name);
-  static int peer_set_cluster(librados::IoCtx& io_ctx, const std::string &uuid,
-                              const std::string &cluster_name);
-  static int peer_get_attributes(librados::IoCtx& io_ctx,
-                                 const std::string &uuid,
-                                 Attributes* attributes);
-  static int peer_set_attributes(librados::IoCtx& io_ctx,
-                                 const std::string &uuid,
-                                 const Attributes& attributes);
+  static int peer_site_add(librados::IoCtx& io_ctx, std::string *uuid,
+                           mirror_peer_direction_t direction,
+                           const std::string &site_name,
+                           const std::string &client_name);
+  static int peer_site_remove(librados::IoCtx& io_ctx, const std::string &uuid);
+  static int peer_site_list(librados::IoCtx& io_ctx,
+                            std::vector<mirror_peer_site_t> *peers);
+  static int peer_site_set_client(librados::IoCtx& io_ctx,
+                                  const std::string &uuid,
+                                  const std::string &client_name);
+  static int peer_site_set_name(librados::IoCtx& io_ctx,
+                                const std::string &uuid,
+                                const std::string &site_name);
+  static int peer_site_set_direction(librados::IoCtx& io_ctx,
+                                     const std::string &uuid,
+                                     mirror_peer_direction_t direction);
+  static int peer_site_get_attributes(librados::IoCtx& io_ctx,
+                                      const std::string &uuid,
+                                      Attributes* attributes);
+  static int peer_site_set_attributes(librados::IoCtx& io_ctx,
+                                      const std::string &uuid,
+                                      const Attributes& attributes);
 
-  static int image_status_list(librados::IoCtx& io_ctx,
-                               const std::string &start_id, size_t max,
-                               IdToMirrorImageStatus *images);
+  static int image_global_status_list(librados::IoCtx& io_ctx,
+                                      const std::string &start_id, size_t max,
+                                      IdToMirrorImageGlobalStatus *images);
+
   static int image_status_summary(librados::IoCtx& io_ctx,
                                   MirrorImageStatusStates *states);
   static int image_instance_id_list(librados::IoCtx& io_ctx,
@@ -73,9 +81,11 @@ struct Mirror {
   static void image_get_info(ImageCtxT *ictx,
                              mirror_image_info_t *mirror_image_info,
                              Context *on_finish);
-  static int image_get_status(ImageCtxT *ictx, mirror_image_status_t *status);
-  static void image_get_status(ImageCtxT *ictx, mirror_image_status_t *status,
-                               Context *on_finish);
+  static int image_get_global_status(ImageCtxT *ictx,
+                                     mirror_image_global_status_t *status);
+  static void image_get_global_status(ImageCtxT *ictx,
+                                      mirror_image_global_status_t *status,
+                                      Context *on_finish);
   static int image_get_instance_id(ImageCtxT *ictx, std::string *instance_id);
 };
 

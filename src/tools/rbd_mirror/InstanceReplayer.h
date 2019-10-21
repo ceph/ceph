@@ -21,6 +21,7 @@ namespace mirror {
 
 template <typename> class ImageReplayer;
 template <typename> class InstanceWatcher;
+template <typename> class MirrorStatusUpdater;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
@@ -30,9 +31,11 @@ public:
   static InstanceReplayer* create(
       librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
       Threads<ImageCtxT> *threads, ServiceDaemon<ImageCtxT> *service_daemon,
+      MirrorStatusUpdater<ImageCtxT>* local_status_updater,
       journal::CacheManagerHandler *cache_manager_handler) {
     return new InstanceReplayer(local_io_ctx, local_mirror_uuid, threads,
-                                service_daemon, cache_manager_handler);
+                                service_daemon, local_status_updater,
+                                cache_manager_handler);
   }
   void destroy() {
     delete this;
@@ -42,6 +45,7 @@ public:
                    const std::string &local_mirror_uuid,
                    Threads<ImageCtxT> *threads,
                    ServiceDaemon<ImageCtxT> *service_daemon,
+                   MirrorStatusUpdater<ImageCtxT>* local_status_updater,
                    journal::CacheManagerHandler *cache_manager_handler);
   ~InstanceReplayer();
 
@@ -51,7 +55,8 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  void add_peer(std::string peer_uuid, librados::IoCtx io_ctx);
+  void add_peer(std::string peer_uuid, librados::IoCtx io_ctx,
+                MirrorStatusUpdater<ImageCtxT>* remote_status_updater);
 
   void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
                      const std::string &global_image_id, Context *on_finish);
@@ -85,10 +90,13 @@ private:
    * @endverbatim
    */
 
+  typedef std::set<Peer<ImageCtxT>> Peers;
+
   librados::IoCtx &m_local_io_ctx;
   std::string m_local_mirror_uuid;
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
+  MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
 
   ceph::mutex m_lock;

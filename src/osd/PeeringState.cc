@@ -2623,25 +2623,29 @@ void PeeringState::share_pg_info()
 
   // share new pg_info_t with replicas
   ceph_assert(!acting_recovery_backfill.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
-       ++i) {
-    if (*i == pg_whoami) continue;
-    auto pg_shard = *i;
-    auto peer = peer_info.find(pg_shard);
-    if (peer != peer_info.end()) {
+  for (auto pg_shard : acting_recovery_backfill) {
+    if (pg_shard == pg_whoami) continue;
+    if (auto peer = peer_info.find(pg_shard); peer != peer_info.end()) {
       peer->second.last_epoch_started = info.last_epoch_started;
       peer->second.last_interval_started = info.last_interval_started;
       peer->second.history.merge(info.history);
     }
-    MOSDPGInfo *m = new MOSDPGInfo(get_osdmap_epoch());
-    m->pg_list.emplace_back(
-      pg_notify_t(
-	pg_shard.shard, pg_whoami.shard,
-	get_osdmap_epoch(),
-	get_osdmap_epoch(),
-	info,
-	past_intervals));
+    Message* m = nullptr;
+    if (last_require_osd_release >= ceph_release_t::octopus) {
+      m = new MOSDPGInfo2{spg_t{info.pgid.pgid, pg_shard.shard},
+			  info,
+			  get_osdmap_epoch(),
+			  get_osdmap_epoch(),
+			  get_lease(), {}};
+    } else {
+      m = new MOSDPGInfo{get_osdmap_epoch(),
+			 {pg_notify_t{pg_shard.shard,
+				      pg_whoami.shard,
+				      get_osdmap_epoch(),
+				      get_osdmap_epoch(),
+				      info,
+				      past_intervals}}};
+    }
     pl->send_cluster_message(pg_shard.osd, m, get_osdmap_epoch());
   }
 }

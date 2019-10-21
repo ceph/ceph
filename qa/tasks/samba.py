@@ -26,7 +26,7 @@ def get_sambas(ctx, roles):
         PREFIX = 'samba.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
         yield (id_, remote)
 
 

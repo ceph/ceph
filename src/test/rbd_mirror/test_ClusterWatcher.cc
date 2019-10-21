@@ -77,11 +77,10 @@ public:
                                                    RBD_MIRROR_MODE_POOL));
 
       std::string gen_uuid;
-      ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx,
-                                                   uuid != nullptr ? uuid :
-                                                                     &gen_uuid,
-					           peer.cluster_name,
-					           peer.client_name));
+      ASSERT_EQ(0, librbd::api::Mirror<>::peer_site_add(
+                     ioctx, uuid != nullptr ? uuid : &gen_uuid,
+                     RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                     peer.cluster_name, peer.client_name));
       m_pool_peers[pool_id].insert(peer);
     }
     if (name != nullptr) {
@@ -250,4 +249,17 @@ TEST_F(TestClusterWatcher, ConfigKey) {
   set_peer_config_key(pool_name, site2);
 
   check_peers();
+}
+
+TEST_F(TestClusterWatcher, SiteName) {
+  REQUIRE(!is_librados_test_stub(*m_cluster));
+
+  std::string site_name;
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.mirror_site_name_get(*m_cluster, &site_name));
+
+  m_cluster_watcher->refresh_pools();
+
+  std::lock_guard l{m_lock};
+  ASSERT_EQ(site_name, m_cluster_watcher->get_site_name());
 }

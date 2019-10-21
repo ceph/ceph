@@ -56,7 +56,7 @@ def task(ctx, config):
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
 
         if config.get('ec_pool', False):
             profile = config.get('erasure_code_profile', {})

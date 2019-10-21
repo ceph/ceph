@@ -89,8 +89,12 @@ struct C_AsyncCallback : public Context {
   C_AsyncCallback(WQ *op_work_queue, Context *on_finish)
     : op_work_queue(op_work_queue), on_finish(on_finish) {
   }
+  ~C_AsyncCallback() override {
+    delete on_finish;
+  }
   void finish(int r) override {
     op_work_queue->queue(on_finish, r);
+    on_finish = nullptr;
   }
 };
 

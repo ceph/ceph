@@ -124,7 +124,7 @@ def _run_tests(ctx, client, tests):
     """
     testdir = teuthology.get_testdir(ctx)
     log.debug('Running admin socket tests on %s', client)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(client).remotes.keys()
     socket_path = '/var/run/ceph/ceph-{name}.asok'.format(name=client)
     overrides = ctx.config.get('overrides', {}).get('admin_socket', {})
 

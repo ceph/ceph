@@ -238,18 +238,21 @@ Usage:
 * name - name of the alias being looked up, added, or replaced
 * value - what the alias will be resolved to (if adding or replacing) this can contain spaces and does not need to be quoted
 
-pyscript
---------
+run_pyscript
+------------
 
 Runs a python script file inside the console
 
 Usage: 
     
-    pyscript <script_path> [script_arguments]
+    run_pyscript <script_path> [script_arguments]
 
 * Console commands can be executed inside this script with cmd ("your command")
-  However, you cannot run nested "py" or "pyscript" commands from within this script
-  Paths or arguments that contain spaces must be enclosed in quotes
+  However, you cannot run nested "py" or "pyscript" commands from within this
+  script. Paths or arguments that contain spaces must be enclosed in quotes
+
+.. note:: This command is available as ``pyscript`` for cmd2 versions 0.9.13
+   or less.
 
 py
 --
@@ -328,18 +331,21 @@ Usage:
 
 * file_path - path to a file to open in editor
 
-load
-----
+run_script
+----------
 
 Runs commands in script file that is encoded as either ASCII or UTF-8 text.
+Each command in the script should be separated by a newline.
 
 Usage:  
     
-    load <file_path>
+    run_script <file_path>
+
 
 * file_path - a file path pointing to a script
 
-* Script should contain one command per line, just like command would betyped in console.
+.. note:: This command is available as ``load`` for cmd2 versions 0.9.13
+   or less.
 
 shell
 -----
