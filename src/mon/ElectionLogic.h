@@ -336,6 +336,12 @@ private:
    */
   void bump_epoch(epoch_t e);
   /**
+   * If the incoming proposal is newer, bump our own epoch; if
+   * it comes from an out-of-quorum peer, trigger a new eleciton.
+   * @returns true if you should drop this proposal, false otherwise.
+   */
+  bool propose_classic_prefix(int from, epoch_t mepoch);
+  /**
    * Handle a proposal from another rank using the classic strategy.
    * We will take one of the following actions:
    *
@@ -344,13 +350,13 @@ private:
    *  @li Defer to it because it outranks us and the node we previously
    *	  acked, if any
    */
-  void propose_classic_handler(int from);
+  void propose_classic_handler(int from, epoch_t mepoch);
   /**
    * Handle a proposal from another rank using our disallow strategy.
    * This is the same as the classic strategy except we also disallow
    * certain ranks from becoming the leader.
    */
-  void propose_disallow_handler(int from);
+  void propose_disallow_handler(int from, epoch_t mepoch);
   /**
    * Handle a proposal from another rank using the connectivity strategy.
    * We will choose to defer or not based on the ordered criteria:
@@ -359,7 +365,7 @@ private:
    * @li Whether the other monitor or ourself has the most connectivity to peers
    * @li Whether the other monitor or ourself has the lower rank
    */
-  void propose_connectivity_handler(int from);
+  void propose_connectivity_handler(int from, epoch_t mepoch);
   /**
    * Defer the current election to some other monitor.
    *
