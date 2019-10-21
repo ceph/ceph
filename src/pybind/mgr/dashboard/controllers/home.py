@@ -105,6 +105,8 @@ class HomeController(BaseController):
             cherrypy.response.headers['Vary'] = "{}, Accept-Language"
         else:
             cherrypy.response.headers['Vary'] = "Accept-Language"
+
+        cherrypy.response.headers['Cache-control'] = "no-cache"
         return serve_file(full_path)
 
 
