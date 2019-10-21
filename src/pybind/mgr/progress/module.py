@@ -107,7 +107,7 @@ class Event(object):
         # Update duration of event in seconds/minutes/hours
 
         duration = time.time() - self.started_at
-        self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
+        self._duration_str = time.strftime("(%Hh %Mm %Ss)", time.gmtime(duration))
 
 
     def estimated_time_remaining(self):
