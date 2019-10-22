@@ -1,0 +1,6 @@
+tasks:
+- clock:
+- install:
+    install_ceph_packages: false
+    extra_system_packages: [salt, salt-master, salt-minion, salt-api]
+- salt:

@@ -1,0 +1,4 @@
+overrides:
+        deepsea:
+                alternative_defaults:
+                        upgrade_init: zypper-dup
