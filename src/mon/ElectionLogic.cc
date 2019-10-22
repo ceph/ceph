@@ -155,6 +155,7 @@ void ElectionLogic::declare_victory()
 {
   ldout(cct, 5) << "I win! acked_me=" << acked_me << dendl;
   last_election_winner = elector->get_my_rank();
+  last_voted_for = last_election_winner;
   leader_acked = -1;
   electing_me = false;
 
@@ -285,6 +286,25 @@ double ElectionLogic::connectivity_election_score(int rank)
 
 void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch)
 {
+  if ((epoch % 2 == 0) &&
+      last_election_winner != elector->get_my_rank() &&
+      !elector->is_current_member(from)) {
+    // To prevent election flapping, peons ignore proposals from out-of-quorum
+    // peers unless their vote would change from the last election
+    int best_scorer = 0;
+    double best_score = 0;
+    for (unsigned i = 0; i < elector->paxos_size(); ++i) {
+      double score = connectivity_election_score(i);
+      if (score > best_score) {
+	best_scorer = i;
+	best_score = score;
+      }
+    }
+    if (best_scorer == last_voted_for) {
+      // drop this message; it won't change our vote so we defer to leader
+      return;
+    }
+  }
   if (mepoch > epoch) {
     bump_epoch(mepoch);
   } else if (mepoch < epoch) {
@@ -402,6 +422,7 @@ bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
   ceph_assert(victory_makes_sense(from));
 
   last_election_winner = from;
+  last_voted_for = leader_acked;
   leader_acked = -1;
 
   // i should have seen this election if i'm getting the victory.
