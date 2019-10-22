@@ -139,6 +139,7 @@ export class TaskMessageService {
   };
 
   rbd_mirroring = {
+    site_name: () => this.i18n('mirroring site name'),
     pool: (metadata) =>
       this.i18n(`mirror mode for pool '{{id}}'`, {
         id: `${metadata.pool_name}`
@@ -327,6 +328,11 @@ export class TaskMessageService {
       }
     ),
     // RBD mirroring tasks
+    'rbd/mirroring/site_name/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      this.rbd_mirroring.site_name,
+      () => ({})
+    ),
     'rbd/mirroring/pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool,

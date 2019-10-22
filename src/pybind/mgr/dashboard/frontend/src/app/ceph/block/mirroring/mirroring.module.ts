@@ -15,6 +15,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { SharedModule } from '../../../shared/shared.module';
 
 import { DaemonListComponent } from './daemon-list/daemon-list.component';
+import { EditSiteNameModalComponent } from './edit-site-name-modal/edit-site-name-modal.component';
 import { ImageListComponent } from './image-list/image-list.component';
 import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
 import { OverviewComponent } from './overview/overview.component';
@@ -23,7 +24,12 @@ import { PoolEditPeerModalComponent } from './pool-edit-peer-modal/pool-edit-pee
 import { PoolListComponent } from './pool-list/pool-list.component';
 
 @NgModule({
-  entryComponents: [OverviewComponent, PoolEditModeModalComponent, PoolEditPeerModalComponent],
+  entryComponents: [
+    EditSiteNameModalComponent,
+    OverviewComponent,
+    PoolEditModeModalComponent,
+    PoolEditPeerModalComponent
+  ],
   imports: [
     CommonModule,
     TabsModule.forRoot(),
@@ -41,6 +47,7 @@ import { PoolListComponent } from './pool-list/pool-list.component';
   ],
   declarations: [
     DaemonListComponent,
+    EditSiteNameModalComponent,
     ImageListComponent,
     OverviewComponent,
     PoolEditModeModalComponent,

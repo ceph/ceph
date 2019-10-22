@@ -252,6 +252,10 @@ describe('TaskManagerMessageService', () => {
         peerMsg = `mirror peer for pool '${metadata.pool_name}'`;
         finishedTask.metadata = metadata;
       });
+      it('tests rbd/mirroring/site_name/edit messages', () => {
+        finishedTask.name = 'rbd/mirroring/site_name/edit';
+        testUpdate('mirroring site name');
+      });
       it('tests rbd/mirroring/pool/edit messages', () => {
         finishedTask.name = 'rbd/mirroring/pool/edit';
         testUpdate(modeMsg);
