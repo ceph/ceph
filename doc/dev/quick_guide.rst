@@ -15,6 +15,15 @@ the result behaves as expected.
 
        $ ./run-make-check.sh
 
+Optionally if you want to work on a specific component of Ceph,
+install the dependencies and build Ceph in debug mode with required cmake flags.
+
+Example:
+
+.. code::
+
+    $ ./install-deps.sh
+    $ ./do_cmake.sh -DWITH_MANPAGE=OFF -DWITH_BABELTRACE=OFF -DWITH_MGR_DASHBOARD_FRONTEND=OFF
 
 Running a development deployment
 --------------------------------
