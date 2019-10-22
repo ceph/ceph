@@ -209,6 +209,17 @@ class TestRados(object):
         eq(set(['a' * 500]), self.list_non_default_pools())
         self.rados.delete_pool('a' * 500)
 
+    def test_list_pools2(self):
+        self.rados.create_pool('foo')
+        self.rados.create_pool('baz')
+        self.rados.create_pool('bar')
+        pools = self.rados.list_pools2()
+        for pool in pools:
+            eq(pool['id'], self.rados.pool_lookup(pool['name']))
+        self.rados.delete_pool('bar')
+        self.rados.delete_pool('baz')
+        self.rados.delete_pool('foo')
+
     def test_get_pool_base_tier(self):
         self.rados.create_pool('foo')
         try:
