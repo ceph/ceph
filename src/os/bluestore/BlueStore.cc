@@ -13220,7 +13220,7 @@ int BlueStore::_do_alloc_write(
       // do an approximate (fast) estimation for resulting blob size
       // that doesn't take header overhead  into account
       uint64_t result_len = p2roundup(compressed_len, min_alloc_size);
-      if (r == 0 && result_len <= want_len && result_len < wi.blob_length) {
+      if (r == 0 && result_len <= want_len && result_len <= wi.blob_length) {
 	bluestore_compression_header_t chdr;
 	chdr.type = c->get_type();
 	chdr.length = t.length();
@@ -13229,7 +13229,7 @@ int BlueStore::_do_alloc_write(
 
 	compressed_len = wi.compressed_bl.length();
 	result_len = p2roundup(compressed_len, min_alloc_size);
-	if (result_len <= want_len && result_len < wi.blob_length) {
+	if (result_len <= want_len && result_len <= wi.blob_length) {
 	  // Cool. We compressed at least as much as we were hoping to.
 	  // pad out to min_alloc_size
 	  wi.compressed_bl.append_zero(result_len - compressed_len);
