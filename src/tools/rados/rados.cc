@@ -863,7 +863,7 @@ int LoadGen::bootstrap(const char *pool)
       }
     }
 
-    librados::AioCompletion *c = rados->aio_create_completion(NULL, NULL, NULL);
+    librados::AioCompletion *c = rados->aio_create_completion(nullptr, nullptr);
     completions.push_back(c);
     // generate object
     ret = io_ctx.aio_write(info.name, c, bl, buf_len, info.len - buf_len);
@@ -890,7 +890,7 @@ int LoadGen::bootstrap(const char *pool)
 
 void LoadGen::run_op(LoadGenOp *op)
 {
-  op->completion = rados->aio_create_completion(op, _load_gen_cb, NULL);
+  op->completion = rados->aio_create_completion(op, _load_gen_cb);
 
   switch (op->type) {
   case OP_READ:
@@ -1053,7 +1053,7 @@ protected:
     completions = NULL;
   }
   int create_completion(int slot, void (*cb)(void *, void*), void *arg) override {
-    completions[slot] = rados.aio_create_completion((void *) arg, 0, cb);
+    completions[slot] = rados.aio_create_completion((void *) arg, cb);
 
     if (!completions[slot])
       return -EINVAL;
@@ -1115,11 +1115,11 @@ protected:
   }
 
   bool completion_is_done(int slot) override {
-    return completions[slot]->is_safe();
+    return completions[slot]->is_complete();
   }
 
   int completion_wait(int slot) override {
-    return completions[slot]->wait_for_safe_and_cb();
+    return completions[slot]->wait_for_complete_and_cb();
   }
   int completion_ret(int slot) override {
     return completions[slot]->get_return_value();
@@ -1330,7 +1330,7 @@ static int do_cache_flush(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_CACHE |
 		     librados::OPERATION_IGNORE_OVERLAY,
 		     NULL);
-  completion->wait_for_safe();
+  completion->wait_for_complete();
   int r = completion->get_return_value();
   completion->release();
   return r;
@@ -1347,7 +1347,7 @@ static int do_cache_try_flush(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_OVERLAY |
 		     librados::OPERATION_SKIPRWLOCKS,
 		     NULL);
-  completion->wait_for_safe();
+  completion->wait_for_complete();
   int r = completion->get_return_value();
   completion->release();
   return r;
@@ -1364,7 +1364,7 @@ static int do_cache_evict(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_OVERLAY |
 		     librados::OPERATION_SKIPRWLOCKS,
 		     NULL);
-  completion->wait_for_safe();
+  completion->wait_for_complete();
   int r = completion->get_return_value();
   completion->release();
   return r;
@@ -1789,7 +1789,7 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     auto completion = librados::Rados::aio_create_completion();
     ret = do_get_inconsistent(rados, pg, start, max_item_num, completion,
 			      &items, &interval);
-    completion->wait_for_safe();
+    completion->wait_for_complete();
     ret = completion->get_return_value();
     completion->release();
     if (ret < 0) {
