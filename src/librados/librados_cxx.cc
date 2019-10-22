@@ -1014,7 +1014,7 @@ int librados::AioCompletion::AioCompletion::wait_for_complete()
 int librados::AioCompletion::AioCompletion::wait_for_safe()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
-  return c->wait_for_safe();
+  return c->wait_for_complete();
 }
 
 bool librados::AioCompletion::AioCompletion::is_complete()

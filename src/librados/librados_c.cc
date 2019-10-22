@@ -2266,7 +2266,7 @@ LIBRADOS_C_API_BASE_DEFAULT(rados_aio_wait_for_complete);
 extern "C" int _rados_aio_wait_for_safe(rados_completion_t c)
 {
   tracepoint(librados, rados_aio_wait_for_safe_enter, c);
-  int retval = ((librados::AioCompletionImpl*)c)->wait_for_safe();
+  int retval = ((librados::AioCompletionImpl*)c)->wait_for_complete();
   tracepoint(librados, rados_aio_wait_for_safe_exit, retval);
   return retval;
 }
