@@ -15,12 +15,13 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_test
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, prefix_name())
-static ostream& _prefix(std::ostream *_dout, const char *prefix) {
-  return *_dout << prefix;
+#define dout_prefix _prefix(_dout, prefix_name(), timestep_count())
+static ostream& _prefix(std::ostream *_dout, const char *prefix, int timesteps) {
+  return *_dout << prefix << timesteps << " ";
 }
 
 const char* prefix_name() { return "test_election: "; }
+int timestep_count() { return -1; }
 
 int main(int argc, char **argv) {
   vector<const char*> args(argv, argv+argc);
@@ -49,7 +50,11 @@ struct Election {
 
   vector< function<void()> > messages;
   int pending_election_messages;
-
+  int timesteps_run = 0;
+  int last_quorum_change = 0;
+  int last_quorum_formed = -1;
+  set<int> last_quorum_reported;
+  
   Election(int c, ElectionLogic::election_strategy es, double tracker_halflife=5);
   ~Election();
   // ElectionOwner interfaces
@@ -59,6 +64,7 @@ struct Election {
   void defer_to(int from, int to, epoch_t e);
   void claim_victory(int from, int to, epoch_t e, const set<int>& members);
   void accept_victory(int from, int to, epoch_t e);
+  void report_quorum(const set<int>& quorum);
   void queue_stable_message(int from, int to, function<void()> m);
   void queue_timeout_message(int from, int to, function<void()> m);
   void queue_stable_or_timeout(int from, int to,
@@ -71,6 +77,7 @@ struct Election {
   void start_one(int who);
   void start_all();
   bool election_stable();
+  bool quorum_stable(int timesteps_stable);
   bool check_leader_agreement();
   bool check_epoch_agreement();
   void block_messages(int from, int to);
@@ -79,6 +86,7 @@ struct Election {
   void unblock_bidirectional_messages(int a, int b);
   void add_disallowed_leader(int disallowed) { disallowed_leaders.insert(disallowed); }
   const char* prefix_name() { return "Election:      "; }
+  int timestep_count() { return timesteps_run; }
 };
 struct Owner : public ElectionOwner, RankProvider {
   Election *parent;
@@ -180,9 +188,7 @@ struct Owner : public ElectionOwner, RankProvider {
     ++victory_accepters;
     if (victory_accepters == static_cast<int>(quorum.size())) {
       cancel_timer();
-      for (int i : quorum) {
-	parent->electors[i]->ever_joined = true;
-      }
+      parent->report_quorum(quorum);
     }
   }
   void receive_ping(int rank, bufferlist bl) {
@@ -252,11 +258,12 @@ struct Owner : public ElectionOwner, RankProvider {
     send_pings();
   }
   const char *prefix_name() { return "Owner:         "; }
+  int timestep_count() { return parent->timesteps_run; }
 };
 
 Election::Election(int c, ElectionLogic::election_strategy es,
 		   double tracker_halflife) : count(c), election_strategy(es),
-  pending_election_messages(0)
+  pending_election_messages(0), timesteps_run(0), last_quorum_change(0), last_quorum_formed(-1)
 {
   for (int i = 0; i < count; ++i) {
     electors[i] = new Owner(i, election_strategy, tracker_halflife, this);
@@ -281,6 +288,10 @@ void Election::queue_stable_message(int from, int to, function<void()> m)
 
 void Election::queue_election_message(int from, int to, function<void()> m)
 {
+  if (last_quorum_reported.count(from)) {
+    last_quorum_change = timesteps_run;
+    last_quorum_reported.clear();
+  }
   if (!blocked_messages[from].count(to)) {
     messages.push_back([this,m] {
 	--this->pending_election_messages;
@@ -338,6 +349,15 @@ void Election::accept_victory(int from, int to, epoch_t e)
     });
 }
 
+void Election::report_quorum(const set<int>& quorum)
+{
+  for (int i : quorum) {
+    electors[i]->ever_joined = true;
+  }
+  last_quorum_formed = last_quorum_change = timesteps_run;
+  last_quorum_reported = quorum;
+}
+
 int Election::run_timesteps(int max)
 {
   vector< function<void()> > current_m;
@@ -348,6 +368,7 @@ int Election::run_timesteps(int max)
        ++steps) {
     current_m.clear();
     current_m.swap(messages);
+    ++timesteps_run;
     for (auto& m : current_m) {
       m();
     }
@@ -383,10 +404,33 @@ bool Election::election_stable()
 {
   // see if anybody has a timer running
   for (auto i : electors) {
-    if (i.second->timer_steps != -1)
+    if (i.second->timer_steps != -1) {
+      ldout(g_ceph_context, 30) << "rank " << i.first << " has timer value " << i.second->timer_steps << dendl;
       return false;
+    }
   }
   return (pending_election_messages == 0);
+}
+
+bool Election::quorum_stable(int timesteps_stable)
+{
+  ldout(g_ceph_context, 1) << "quorum_stable? last formed:" << last_quorum_formed
+			    << ", last changed " << last_quorum_change
+			    << ", last reported members " << last_quorum_reported << dendl;
+  if (last_quorum_reported.empty()) {
+    return false;
+  }
+  if (last_quorum_formed < last_quorum_change) {
+    return false;
+  }
+  for (auto i : last_quorum_reported) {
+    if (electors[i]->timer_steps != -1) {
+      return false;
+    }
+  }
+  if (timesteps_run - timesteps_stable > last_quorum_change)
+    return true;
+  return election_stable();
 }
 
 bool Election::check_leader_agreement()
@@ -449,6 +493,7 @@ void single_startup_election_completes(ElectionLogic::election_strategy strategy
     int steps = election.run_timesteps(0);
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
+    ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
     ASSERT_TRUE(election.check_leader_agreement());
     ASSERT_TRUE(election.check_epoch_agreement());
   }
@@ -461,6 +506,7 @@ void everybody_starts_completes(ElectionLogic::election_strategy strategy)
   int steps = election.run_timesteps(0);
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
   ASSERT_TRUE(election.check_leader_agreement());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
@@ -474,10 +520,12 @@ void blocked_connection_continues_election(ElectionLogic::election_strategy stra
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   // This is a failure mode!
   ASSERT_FALSE(election.election_stable());
+  ASSERT_FALSE(election.quorum_stable(6)); // double the timer_steps we use
   election.unblock_bidirectional_messages(0, 1);
   steps = election.run_timesteps(100);
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
   ASSERT_TRUE(election.check_leader_agreement());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
@@ -512,6 +560,7 @@ void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
     int steps = election.run_timesteps(0);
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
+    ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
     ASSERT_TRUE(election.check_leader_agreement());
     ASSERT_TRUE(election.check_epoch_agreement());
     int leader = election.electors[0]->logic.get_election_winner();
@@ -528,6 +577,7 @@ void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
     int steps = election.run_timesteps(0);
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
+    ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
     ASSERT_TRUE(election.check_leader_agreement());
     ASSERT_TRUE(election.check_epoch_agreement());
     int leader = election.electors[0]->logic.get_election_winner();
@@ -566,6 +616,7 @@ void converges_after_flapping(ElectionLogic::election_strategy strategy)
   unblock_cons();
   election.run_timesteps(100);
   ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.quorum_stable(6)); // double the timer_steps we use
   ASSERT_TRUE(election.check_leader_agreement());
   ASSERT_TRUE(election.check_epoch_agreement());
 }
