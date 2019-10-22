@@ -537,6 +537,39 @@ void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
   }
 }
 
+void converges_after_flapping(ElectionLogic::election_strategy strategy)
+{
+  Election election(5, strategy);
+  auto block_cons = [&] {
+    auto& e = election;
+  // leave 4 connected to both sides so it will trigger but not trivially win
+    e.block_bidirectional_messages(0, 2);
+    e.block_bidirectional_messages(0, 3);
+    e.block_bidirectional_messages(1, 2);
+    e.block_bidirectional_messages(1, 3);
+  };
+  auto unblock_cons = [&] {
+    auto& e = election;
+    e.unblock_bidirectional_messages(0, 2);
+    e.unblock_bidirectional_messages(0, 3);
+    e.unblock_bidirectional_messages(1, 2);
+    e.unblock_bidirectional_messages(1, 3);
+  };
+  block_cons();
+  election.start_all();
+  for (int i = 0; i < 5; ++i) {
+    election.run_timesteps(5);
+    unblock_cons();
+    election.run_timesteps(5);
+    block_cons();
+  }
+  unblock_cons();
+  election.run_timesteps(100);
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+}
+
 // TODO: Write a test that disallowing and disconnecting 0 is otherwise stable?
 
 #define test_classic(utest) TEST(classic, utest) { utest(ElectionLogic::CLASSIC); }
@@ -549,13 +582,16 @@ void disallowed_doesnt_win(ElectionLogic::election_strategy strategy)
 test_classic(single_startup_election_completes)
 test_classic(everybody_starts_completes)
 test_classic(blocked_connection_continues_election)
+test_classic(converges_after_flapping)
 
 test_disallowed(single_startup_election_completes)
 test_disallowed(everybody_starts_completes)
 test_disallowed(blocked_connection_continues_election)
+test_disallowed(converges_after_flapping)
 test_disallowed(disallowed_doesnt_win)
 
 test_connectivity(single_startup_election_completes)
 test_connectivity(everybody_starts_completes)
 test_connectivity(blocked_connection_converges_election)
+test_connectivity(converges_after_flapping)
 test_connectivity(disallowed_doesnt_win)
