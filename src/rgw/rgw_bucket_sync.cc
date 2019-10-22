@@ -310,15 +310,19 @@ std::vector<rgw_sync_bucket_pipe> rgw_sync_bucket_pipes::expand() const
 }
 
 
-static std::vector<rgw_sync_bucket_pipes> filter_relevant_pipes(const std::vector<rgw_sync_bucket_pipes>& pipes,
+static std::vector<rgw_sync_bucket_pipe> filter_relevant_pipes(const std::vector<rgw_sync_bucket_pipes>& pipes,
                                                                const string& source_zone,
                                                                const string& dest_zone)
 {
-  std::vector<rgw_sync_bucket_pipes> relevant_pipes;
-  for (auto& pipe : pipes) {
-    if (pipe.source.match_zone(source_zone) &&
-        pipe.dest.match_zone(dest_zone)) {
-      relevant_pipes.push_back(pipe);
+  std::vector<rgw_sync_bucket_pipe> relevant_pipes;
+  for (auto& p : pipes) {
+    if (p.source.match_zone(source_zone) &&
+        p.dest.match_zone(dest_zone)) {
+      for (auto pipe : p.expand()) {
+        pipe.source.apply_zone(source_zone);
+        pipe.dest.apply_zone(dest_zone);
+        relevant_pipes.push_back(pipe);
+      }
     }
   }
 
@@ -372,14 +376,12 @@ void rgw_sync_group_pipe_map::try_add_to_pipe_map(const string& source_zone,
   }
   auto relevant_pipes = filter_relevant_pipes(pipes, source_zone, dest_zone);
 
-  for (auto& pipes : relevant_pipes) {
-    for (auto& pipe : pipes.expand()) {
-      rgw_sync_bucket_entity zb;
-      if (!call_filter_cb(pipe, &zb)) {
-        continue;
-      }
-      pipe_map->insert(make_pair(zb, pipe));
+  for (auto& pipe : relevant_pipes) {
+    rgw_sync_bucket_entity zb;
+    if (!call_filter_cb(pipe, &zb)) {
+      continue;
     }
+    pipe_map->insert(make_pair(zb, pipe));
   }
 }
           
@@ -550,16 +552,6 @@ vector<rgw_sync_bucket_pipe> rgw_sync_group_pipe_map::find_pipes(const string& s
 
 void RGWBucketSyncFlowManager::pipe_flow::dump(ceph::Formatter *f) const
 {
-#warning cleanup
-#if 0
-  {
-    Formatter::ArraySection os(*f, "flow_groups");
-    for (auto& g : flow_groups) {
-      encode_json("group", *g, f);
-    }
-  }
-#endif
-
   encode_json("pipes", pipes, f);
 }
 
@@ -586,7 +578,7 @@ bool RGWBucketSyncFlowManager::allowed_data_flow(const string& source_zone,
         case rgw_sync_policy_group::Status::ENABLED:
           found = true;
           found_activated = true;
-          /* fall through */
+          break;
         case rgw_sync_policy_group::Status::ALLOWED:
           found = true;
           break;
@@ -617,40 +609,6 @@ RGWBucketSyncFlowManager::flow_map_t::iterator RGWBucketSyncFlowManager::find_bu
 
   return m.find(rgw_bucket());
 }
-
-#warning cleanup
-#if 0
-void RGWBucketSyncFlowManager::update_flow_maps(const rgw_sync_bucket_pipes& pipe) {
-  auto source_bucket = pipe.source.get_bucket();
-  auto dest_bucket = pipe.dest.get_bucket();
-
-  if (pipe.match_dest(zone_name, bucket)) { /* we're the dest */
-    auto& by_source = flow_by_source[source_bucket];
-    by_source.pipe.push_back(pipe);
-  }
-
-  if (pipe.match_source(zone_name, bucket)) { /* we're the source */
-    auto& by_dest = flow_by_dest[dest_bucket];
-    by_dest.pipe.push_back(pipe);
-  }
-
-#if 0
-  if (!bucket ||
-      *bucket != source_bucket) {
-    auto& by_source = flow_by_source[source_bucket];
-    by_source.flow_groups.push_back(flow_group);
-    by_source.pipe.push_back(pipe);
-  }
-
-  if (!bucket ||
-      *bucket != dest_bucket) {
-    auto& by_dest = flow_by_dest[dest_bucket];
-    by_dest.flow_groups.push_back(flow_group);
-    by_dest.pipe.push_back(pipe);
-  }
-#endif
-}
-#endif
 
 void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
   for (auto& item : sync_policy.groups) {
@@ -690,22 +648,27 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
   for (auto& item : flow_groups) {
     auto& flow_group_map = item.second;
     for (auto& entry : flow_group_map.sources) {
-      rgw_sync_bucket_pipe pipe;
-      rgw_sync_bucket_entity source;
-      pipe.source = entry.first;
+      rgw_sync_bucket_pipe pipe = entry.second;
+      if (!pipe.dest.match_bucket(effective_bucket)) {
+        continue;
+      }
+
       pipe.source.apply_bucket(effective_bucket);
-      pipe.dest = entity;
+      pipe.dest.apply_bucket(effective_bucket);
 
       auto& by_source = (*flow_by_source)[pipe.source.get_bucket()];
       by_source.pipes.insert(pipe);
     }
 
     for (auto& entry : flow_group_map.dests) {
-      rgw_sync_bucket_pipe pipe;
-      rgw_sync_bucket_entity dest;
-      pipe.dest = entry.first;
+      rgw_sync_bucket_pipe pipe = entry.second;
+
+      if (!pipe.source.match_bucket(effective_bucket)) {
+        continue;
+      }
+
+      pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
-      pipe.source = entity;
 
       auto& by_dest = (*flow_by_dest)[pipe.dest.get_bucket()];
       by_dest.pipes.insert(pipe);
