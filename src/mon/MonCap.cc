@@ -224,6 +224,8 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     // ssh orchestrator provisions new daemon keys
     profile_grants.push_back(MonCapGrant("auth get-or-create"));
     profile_grants.push_back(MonCapGrant("auth rm"));
+    // tell commands (this is a bit of a kludge)
+    profile_grants.push_back(MonCapGrant("smart"));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {

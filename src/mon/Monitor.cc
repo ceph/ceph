@@ -3161,7 +3161,27 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
     return;
   }
   if (!session->caps.is_allow_all()) {
-    reply_tell_command(op, -EPERM, "insufficient caps");
+    // see if command is whitelisted
+    cmdmap_t cmdmap;
+    stringstream ss;
+    if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+      reply_command(op, -EINVAL, ss.str(), 0);
+    }
+    map<string,string> param_str_map;
+    _generate_command_map(cmdmap, param_str_map);
+    string prefix;
+    if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+      reply_command(op, -EINVAL, "no prefix", 0);
+    }
+    if (!session->caps.is_capable(
+	  g_ceph_context,
+	  CEPH_ENTITY_TYPE_MON,
+	  session->entity_name,
+	  "mon", prefix, param_str_map,
+	  true, true, true,
+	  session->get_peer_socket_addr())) {
+      reply_tell_command(op, -EPERM, "insufficient caps");
+    }
   }
   // pass it to asok
   cct->get_admin_socket()->queue_tell_command(m);
