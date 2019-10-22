@@ -1,3 +1,4 @@
+etc/bash_completion.d/radosgw-admin
 etc/init.d/ceph
 lib/systemd/system/ceph-crash.service
 usr/bin/ceph-crash
@@ -11,6 +12,7 @@ usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/ceph-kvstore-tool
+usr/bin/radosgw-admin
 usr/lib/ceph/ceph_common.sh
 usr/lib/ceph/erasure-code/*
 usr/lib/rados-classes/*
@@ -25,3 +27,4 @@ usr/share/man/man8/crushtool.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8
 usr/share/man/man8/ceph-kvstore-tool.8
+usr/share/man/man8/radosgw-admin.8
