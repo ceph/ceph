@@ -316,7 +316,7 @@ def get_config_and_both_keyrings():
             with open(args.config_and_keyrings, 'r') as f:
                 j = f.read()
         d = json.loads(j)
-        (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
+        return (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
     else:
         if args.key:
             keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
