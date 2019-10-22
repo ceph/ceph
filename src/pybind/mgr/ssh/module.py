@@ -757,3 +757,28 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             results.append(result)
 
         return SSHWriteCompletion(results)
+
+    def add_mds(self, spec):
+        if len(spec.placement.nodes) < spec.count:
+            raise RuntimeError("must specify at least %d hosts" % spec.count)
+        n=0
+        results = []
+        for host in spec.placement.nodes:
+            mds_id = spec.name + '-%d' % n
+            self.log.debug('placing mds.%s on host %s' % (mds_id, host))
+            results.append(
+                self._worker_pool.apply_async(self._create_mds, (mds_id, host))
+            )
+            n += 1
+        return SSHWriteCompletion(results)
+
+    def _create_mds(self, mds_id, host):
+        # get mgr. key
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'mds.' + mds_id,
+            'caps': ['mon', 'allow profile mds',
+                     'osd', 'allow rwx',
+                     'mds', 'allow'],
+        })
+        return self._create_daemon('mds', mds_id, host, keyring)
