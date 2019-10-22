@@ -6,7 +6,7 @@ from .strategies import Strategy
 from .strategies import MixedStrategy
 from ceph_volume.devices.lvm.create import Create
 from ceph_volume.devices.lvm.prepare import Prepare
-from ceph_volume.util import templates
+from ceph_volume.util import templates, system
 from ceph_volume.exceptions import SizeAllocationError
 
 
@@ -144,12 +144,12 @@ class SingleType(Strategy):
             device_vg = device_vgs[data_path]
             data_lv_extents = device_vg.sizing(size=data_lv_size)['extents']
             journal_lv_extents = device_vg.sizing(size=self.journal_size.gb.as_int())['extents']
+            data_uuid = system.generate_uuid()
             data_lv = lvm.create_lv(
-                'osd-data', device_vg.name, extents=data_lv_extents, uuid_name=True
-            )
+                'osd-data', data_uuid, vg=device_vg.name, extents=data_lv_extents)
+            journal_uuid = system.generate_uuid()
             journal_lv = lvm.create_lv(
-                'osd-journal', device_vg.name, extents=journal_lv_extents, uuid_name=True
-            )
+                'osd-journal', journal_uuid, vg=device_vg.name, extents=journal_lv_extents)
 
             command = ['--filestore', '--data']
             command.append('%s/%s' % (device_vg.name, data_lv.name))
@@ -367,12 +367,12 @@ class MixedType(MixedStrategy):
             data_path = osd['data']['path']
             data_vg = data_vgs[data_path]
             data_lv_extents = data_vg.sizing(parts=1)['extents']
+            data_uuid = system.generate_uuid()
             data_lv = lvm.create_lv(
-                'osd-data', data_vg.name, extents=data_lv_extents, uuid_name=True
-            )
+                'osd-data', data_uuid, vg=data_vg.name, extents=data_lv_extents)
+            journal_uuid = system.generate_uuid()
             journal_lv = lvm.create_lv(
-                'osd-journal', journal_vg.name, size=journal_size, uuid_name=True
-            )
+                'osd-journal', journal_uuid, vg=journal_vg.name, size=journal_size)
 
             command = ['--filestore', '--data']
             command.append('%s/%s' % (data_vg.name, data_lv.name))
