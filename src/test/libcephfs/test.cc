@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/stat.h"
@@ -21,7 +22,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <sys/xattr.h>
 #include <sys/uio.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -30,6 +30,7 @@
 
 #ifdef __linux__
 #include <limits.h>
+#include <sys/xattr.h>
 #endif
 
 #include <map>

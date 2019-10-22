@@ -99,6 +99,9 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 #ifndef EKEYREJECTED
 #define EKEYREJECTED 129
 #endif
+#ifndef XATTR_CREATE
+#define XATTR_CREATE 1
+#endif
 
 #ifndef HOST_NAME_MAX
 #ifdef MAXHOSTNAMELEN 
