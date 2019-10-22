@@ -519,8 +519,6 @@ public:
 		   bool *truncated);
   int trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
-  int trim_entries(const real_time& start_time, const real_time& end_time,
-                   const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
   int lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
     return store->lock_exclusive(store->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
