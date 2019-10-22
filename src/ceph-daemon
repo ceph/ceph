@@ -31,9 +31,11 @@ You can invoke ceph-daemon in two ways:
 
 import argparse
 import configparser
+import fcntl
 import json
 import logging
 import os
+import select
 import socket
 import subprocess
 import sys
@@ -51,9 +53,95 @@ try:
 except ImportError:
     pass
 
-logging.basicConfig(level=logging.INFO)
-
 podman_path = None
+
+##################################
+# Popen wrappers, lifted from ceph-volume
+
+def call(command, desc, verbose=False, **kw):
+    """
+    Wrap subprocess.Popen to
+
+    - log stdout/stderr to a logger,
+    - decode utf-8
+    - cleanly return out, err, returncode
+
+    If verbose=True, log at info (instead of debug) level.
+
+    :param verbose_on_failure: On a non-zero exit status, it will forcefully set
+                               logging ON for the terminal
+    """
+    verbose_on_failure = kw.pop('verbose_on_failure', True)
+
+    logger.debug("Running command: %s" % ' '.join(command))
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        close_fds=True,
+        **kw
+    )
+    # get current p.stdout flags, add O_NONBLOCK
+    stdout_flags = fcntl.fcntl(process.stdout, fcntl.F_GETFL)
+    stderr_flags = fcntl.fcntl(process.stderr, fcntl.F_GETFL)
+    fcntl.fcntl(process.stdout, fcntl.F_SETFL, stdout_flags | os.O_NONBLOCK)
+    fcntl.fcntl(process.stderr, fcntl.F_SETFL, stderr_flags | os.O_NONBLOCK)
+
+    out = ''
+    err = ''
+    reads = None
+    stop = False
+    while not stop:
+        if reads and process.poll() is not None:
+            # we want to stop, but first read off anything remaining
+            # on stdout/stderr
+            stop = True
+        else:
+            reads, _, _ = select.select(
+                [process.stdout.fileno(), process.stderr.fileno()],
+                [], []
+            )
+        for fd in reads:
+            try:
+                message = os.read(fd, 1024)
+                if not isinstance(message, str):
+                    message = message.decode('utf-8')
+                if fd == process.stdout.fileno():
+                    out += message
+                    for line in message.splitlines():
+                        if verbose:
+                            logger.info(desc + ':stdout ' + line)
+                        else:
+                            logger.debug(desc + ':stdout ' + line)
+                elif fd == process.stderr.fileno():
+                    err += message
+                    for line in message.splitlines():
+                        if verbose:
+                            logger.info(desc + ':stderr ' + line)
+                        else:
+                            logger.debug(desc + ':stderr ' + line)
+                else:
+                    assert False
+            except (IOError, OSError):
+                pass
+
+    returncode = process.wait()
+
+    if returncode != 0 and verbose_on_failure and not verbose:
+        # dump stdout + stderr
+        logger.info('Non-zero exit code %d from %s' % (returncode, ' '.join(command)))
+        for line in out.splitlines():
+            logger.info(desc + ':stdout ' + line)
+        for line in err.splitlines():
+            logger.info(desc + ':stderr ' + line)
+
+    return out, err, returncode
+
+def call_throws(command, **kwargs):
+    out, err, ret = call(command, command[0], **kwargs)
+    if ret:
+        raise RuntimeError('Failed command: %s' % ' '.join(command))
+    return out, err, ret
 
 ##################################
 
@@ -120,16 +208,20 @@ def get_unit_name(fsid, daemon_type, daemon_id):
 
 def check_unit(unit_name):
     try:
-        out = subprocess.check_output(['systemctl', 'is-enabled', unit_name])
-        enabled = out.decode('utf-8').strip() == 'enabled'
+        out, err, code = call(['systemctl', 'is-enabled', unit_name], 'systemctl')
+        if code:
+            raise RuntimeError('exited with %d' % code)
+        enabled = out.strip() == 'enabled'
     except Exception as e:
-        logging.warning('unable to run systemctl' % e)
+        logger.warning('unable to run systemctl' % e)
         enabled = False
     try:
-        out = subprocess.check_output(['systemctl', 'is-active', unit_name])
-        active = out.decode('utf-8').strip() == 'active'
+        out, err, code = call(['systemctl', 'is-active', unit_name], 'systemctl')
+        if code:
+            raise RuntimeError('exited with %d' % code)
+        active = out.strip() == 'active'
     except Exception as e:
-        logging.warning('unable to run systemctl: %s' % e)
+        logger.warning('unable to run systemctl: %s' % e)
         active = False
     return (enabled, active)
 
@@ -140,7 +232,7 @@ def get_legacy_config_fsid(cluster):
         if 'global' in config and 'fsid' in config['global']:
             return config['global']['fsid']
     except Exception as e:
-        logging.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
+        logger.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
         return None
     return None
 
@@ -214,16 +306,32 @@ def get_config_and_keyring():
     return (config, keyring)
 
 def get_config_and_both_keyrings():
-    if args.config_and_keyrings == '-':
-        try:
-            j = injected_stdin
-        except NameError:
-            j = sys.stdin.read()
+    if args.config_and_keyrings:
+        if args.config_and_keyrings == '-':
+            try:
+                j = injected_stdin
+            except NameError:
+                j = sys.stdin.read()
+        else:
+            with open(args.config_and_keyrings, 'r') as f:
+                j = f.read()
+        d = json.loads(j)
+        (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
     else:
-        with open(args.config_and_keyrings, 'r') as f:
-            j = f.read()
-    d = json.loads(j)
-    (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
+        if args.key:
+            keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
+        elif args.keyring:
+            with open(args.keyring, 'r') as f:
+                keyring = f.read()
+        else:
+            raise RuntimeError('no keyring')
+        crash_keyring = None
+        if args.crash_keyring:
+            with open(args.crash_keyring, 'r') as f:
+                crash_keyring = f.read()
+        with open(args.config, 'r') as f:
+            config = f.read()
+        return (config, keyring, crash_keyring)
 
 def get_container_mounts(fsid, daemon_type, daemon_id):
     mounts = {}
@@ -356,13 +464,13 @@ def deploy_daemon_units(fsid, daemon_type, daemon_id, c,
         f.write(unit)
         os.rename(args.unit_dir + '/' + unit_file + '.new',
                   args.unit_dir + '/' + unit_file)
-    subprocess.check_output(['systemctl', 'daemon-reload'])
+    call_throws(['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(fsid, daemon_type, daemon_id)
     if enable:
-        subprocess.check_output(['systemctl', 'enable', unit_name])
+        call_throws(['systemctl', 'enable', unit_name])
     if start:
-        subprocess.check_output(['systemctl', 'start', unit_name])
+        call_throws(['systemctl', 'start', unit_name])
 
 def install_base_units(fsid):
     """
@@ -379,8 +487,8 @@ def install_base_units(fsid):
         os.rename(args.unit_dir + '/ceph.target.new',
                   args.unit_dir + '/ceph.target')
     if not existed:
-        subprocess.check_output(['systemctl', 'enable', 'ceph.target'])
-        subprocess.check_output(['systemctl', 'start', 'ceph.target'])
+        call_throws(['systemctl', 'enable', 'ceph.target'])
+        call_throws(['systemctl', 'start', 'ceph.target'])
 
     # cluster unit
     existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % fsid)
@@ -397,8 +505,8 @@ def install_base_units(fsid):
         os.rename(args.unit_dir + '/ceph-%s.target.new' % fsid,
                   args.unit_dir + '/ceph-%s.target' % fsid)
     if not existed:
-        subprocess.check_output(['systemctl', 'enable', 'ceph-%s.target' % fsid])
-        subprocess.check_output(['systemctl', 'start', 'ceph-%s.target' % fsid])
+        call_throws(['systemctl', 'enable', 'ceph-%s.target' % fsid])
+        call_throws(['systemctl', 'start', 'ceph-%s.target' % fsid])
 
 def deploy_crash(fsid, uid, gid, config, keyring):
     crash_dir = os.path.join(args.data_dir, fsid, 'crash')
@@ -497,7 +605,7 @@ WantedBy=ceph-{fsid}.target
 def gen_ssh_key(fsid):
     tmp_dir = tempfile.TemporaryDirectory()
     path = tmp_dir.name + '/key'
-    subprocess.check_output([
+    call_throws([
         'ssh-keygen',
         '-C', 'ceph-%s' % fsid,
         '-N', '',
@@ -562,6 +670,7 @@ class CephContainer:
             '-it',
             '--net=host',
             '--privileged',
+            '--env', 'LANG=C',
         ] + self.podman_args + envs + vols + [
             '--entrypoint', '/bin/bash',
             self.image
@@ -576,14 +685,16 @@ class CephContainer:
         ] + cmd
 
     def run(self):
-        logging.debug(self.run_cmd())
-        return subprocess.check_output(self.run_cmd()).decode('utf-8')
+        logger.debug(self.run_cmd())
+        out, _, _ = call(self.run_cmd(), self.entrypoint)
+        return out
+
 
 ##################################
 
 def command_version():
     out = CephContainer(args.image, 'ceph', ['--version']).run()
-    print(out.decode('utf-8'), end='')
+    print(out, end='')
     return 0
 
 ##################################
@@ -595,11 +706,35 @@ def command_bootstrap():
     mgr_id = args.mgr_id or hostname
     logging.info('Cluster fsid: %s' % fsid)
 
-    logging.info('Extracting ceph user uid/gid from container image...')
+    # config
+    cp = configparser.ConfigParser()
+    if args.config:
+        cp.read(args.config)
+    if args.mon_ip:
+        addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
+        mon_ip = args.mon_ip
+    elif args.mon_addrv:
+        addr_arg = args.mon_addrv
+        mon_ip = args.mon_addrv.split(':')[1]
+    else:
+        raise RuntimeError('must specify --mon-ip or --mon-addrv')
+    cp['global']['fsid'] = fsid;
+    cp['global']['mon host'] = addr_arg
+    with StringIO() as f:
+        cp.write(f)
+        config = f.getvalue()
+
+    if not args.skip_ping_check:
+        logger.info('Verifying we can ping mon IP %s...' % mon_ip)
+        _, _, ret = call(['timeout', '5', 'ping', mon_ip, '-c', '1'], 'ping')
+        if ret:
+            raise RuntimeError('Failed to ping %s' % mon_ip)
+
+    logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid()
 
     # create some initial keys
-    logging.info('Creating initial keys...')
+    logger.info('Creating initial keys...')
     mon_key = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/ceph-authtool',
@@ -648,24 +783,8 @@ def command_bootstrap():
     tmp_keyring.write(keyring)
     tmp_keyring.flush()
 
-    # config
-    cp = configparser.ConfigParser()
-    if args.config:
-        cp.read(args.config)
-    if args.mon_ip:
-        addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
-    elif args.mon_addrv:
-        addr_arg = args.mon_addrv
-    else:
-        raise RuntimeError('must specify --mon-ip or --mon-addrv')
-    cp['global']['fsid'] = fsid;
-    cp['global']['mon host'] = addr_arg
-    with StringIO() as f:
-        cp.write(f)
-        config = f.getvalue()
-
     # create initial monmap, tmp monmap file
-    logging.info('Creating initial monmap...')
+    logger.info('Creating initial monmap...')
     tmp_monmap = tempfile.NamedTemporaryFile(mode='w')
     os.fchmod(tmp_monmap.fileno(), 0o644)
     out = CephContainer(
@@ -683,7 +802,7 @@ def command_bootstrap():
     ).run()
 
     # create mon
-    logging.info('Creating mon...')
+    logger.info('Creating mon...')
     create_daemon_dirs(fsid, 'mon', mon_id, uid, gid)
     mon_dir = get_data_dir(fsid, 'mon', mon_id)
     log_dir = get_log_dir(fsid)
@@ -713,8 +832,66 @@ def command_bootstrap():
     mon_c = get_container(fsid, 'mon', mon_id)
     deploy_daemon_units(fsid, 'mon', mon_id, mon_c)
 
+    logger.info('Waiting for mon to start...')
+    while True:
+        c = CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=[
+                '-n', 'mon.',
+                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                'status'],
+            volume_mounts={
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+            },
+        )
+        out, err, ret = call(c.run_cmd(), c.entrypoint)
+        if ret == 0:
+            break
+        logger.info('mon is still not available yet, waiting...')
+        time.sleep(1)
+
+    # assimilate and minimize config
+    if not args.no_minimize_config:
+        logger.info('Assimilating anything we can from ceph.conf...')
+        out = CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=['-n', 'mon.',
+                  '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                  '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                  'config', 'assimilate-conf',
+                  '-i', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
+            volume_mounts={
+                log_dir: '/var/log/ceph:z',
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id},
+        ).run()
+        logger.info('Generating new minimal ceph.conf...')
+        out = CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=['-n', 'mon.',
+                  '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
+                  '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
+                  'config', 'generate-minimal-conf',
+                '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
+            volume_mounts={
+                log_dir: '/var/log/ceph:z',
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id},
+        ).run()
+        # re-read our minimized config
+        with open(mon_dir + '/config', 'r') as f:
+            config = f.read()
+        logger.info('Restarting the monitor...')
+        call_throws([
+            'systemctl',
+            'restart',
+            get_unit_name(fsid, 'mon', mon_id)
+        ])
+
     # create mgr
-    logging.info('Creating mgr...')
+    logger.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
@@ -729,13 +906,13 @@ def command_bootstrap():
             os.fchmod(f.fileno(), 0o600)
             f.write('[client.admin]\n'
                     '\tkey = ' + admin_key + '\n')
-        logging.info('Wrote keyring to %s' % args.output_keyring)
+        logger.info('Wrote keyring to %s' % args.output_keyring)
     if args.output_config:
         with open(args.output_config, 'w') as f:
             f.write(config)
-        logging.info('Wrote config to %s' % args.output_config)
+        logger.info('Wrote config to %s' % args.output_config)
 
-    logging.info('Waiting for mgr to start...')
+    logger.info('Waiting for mgr to start...')
     while True:
         out = CephContainer(
             image=args.image,
@@ -752,12 +929,12 @@ def command_bootstrap():
         j = json.loads(out)
         if j.get('mgrmap', {}).get('available', False):
             break
-        logging.info('mgr is still not available yet, waiting...')
+        logger.info('mgr is still not available yet, waiting...')
         time.sleep(1)
 
     # ssh
     if not args.skip_ssh:
-        logging.info('Generating ssh key...')
+        logger.info('Generating ssh key...')
         (ssh_key, ssh_pub) = gen_ssh_key(fsid)
 
         tmp_key = tempfile.NamedTemporaryFile(mode='w')
@@ -774,7 +951,7 @@ def command_bootstrap():
         if args.output_pub_ssh_key:
             with open(args.output_put_ssh_key, 'w') as f:
                 f.write(ssh_pub)
-            logging.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
+            logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
         CephContainer(
             image=args.image,
@@ -809,12 +986,12 @@ def command_bootstrap():
             },
         ).run()
 
-        logging.info('Adding key to root@localhost\'s authorized_keys...')
+        logger.info('Adding key to root@localhost\'s authorized_keys...')
         with open('/root/.ssh/authorized_keys', 'a') as f:
             os.fchmod(f.fileno(), 0o600)  # just in case we created it
             f.write(ssh_pub + '\n')
 
-        logging.info('Enabling ssh module...')
+        logger.info('Enabling ssh module...')
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -829,7 +1006,7 @@ def command_bootstrap():
                 tmp_pub.name: '/tmp/pub:z',
             },
         ).run()
-        logging.info('Setting orchestrator backend to ssh...')
+        logger.info('Setting orchestrator backend to ssh...')
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -845,7 +1022,7 @@ def command_bootstrap():
             },
         ).run()
         host = get_hostname()
-        logging.info('Adding host %s...' % host)
+        logger.info('Adding host %s...' % host)
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
@@ -860,6 +1037,8 @@ def command_bootstrap():
                 tmp_pub.name: '/tmp/pub:z',
             },
         ).run()
+
+    logger.info('Bootstrap complete.')
     return 0
 
 ##################################
@@ -881,7 +1060,8 @@ def command_deploy():
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                   config, keyring)
-    deploy_crash(args.fsid, uid, gid, config, crash_keyring)
+    if crash_keyring:
+        deploy_crash(args.fsid, uid, gid, config, crash_keyring)
 
 ##################################
 
@@ -969,14 +1149,14 @@ def command_ceph_volume():
         podman_args=['--privileged'],
         volume_mounts=mounts,
     )
-    subprocess.call(c.run_cmd())
+    call_throws(c.run_cmd(), verbose=True)
 
 ##################################
 
 def command_unit():
     (daemon_type, daemon_id) = args.name.split('.')
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
-    subprocess.call([
+    call_throws([
         'systemctl',
         args.command,
         unit_name])
@@ -1043,40 +1223,40 @@ def command_adopt():
         (enabled, active) = check_unit(unit_name)
 
         if active:
-            logging.info('Stopping old systemd unit %s...' % unit_name)
-            subprocess.check_output(['systemctl', 'stop', unit_name])
+            logger.info('Stopping old systemd unit %s...' % unit_name)
+            call_throws(['systemctl', 'stop', unit_name])
         if enabled:
-            logging.info('Disabling old systemd unit %s...' % unit_name)
-            subprocess.check_output(['systemctl', 'disable', unit_name])
+            logger.info('Disabling old systemd unit %s...' % unit_name)
+            call_throws(['systemctl', 'disable', unit_name])
 
-        logging.info('Moving data...')
+        logger.info('Moving data...')
         make_data_dir_base(fsid, uid, gid)
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
-        subprocess.check_output([
+        call_throws([
             'mv',
             '/var/lib/ceph/%s/%s-%s' % (daemon_type, args.cluster, daemon_id),
             data_dir])
-        subprocess.check_output([
+        call_throws([
             'cp',
             '/etc/ceph/%s.conf' % args.cluster,
             os.path.join(data_dir, 'config')])
         os.chmod(data_dir, DATA_DIR_MODE)
         os.chown(data_dir, uid, gid)
 
-        logging.info('Moving logs...')
+        logger.info('Moving logs...')
         log_dir = make_log_dir(fsid, uid=uid, gid=gid)
         try:
-            subprocess.check_output(
+            call_throws(
                 ['mv',
                  '/var/log/ceph/%s-%s.%s.log*' % (args.cluster,
                                                   daemon_type, daemon_id),
                  os.path.join(log_dir)],
                 shell=True)
         except Exception as e:
-            logging.warning('unable to move log file: %s' % e)
+            logger.warning('unable to move log file: %s' % e)
             pass
 
-        logging.info('Creating new units...')
+        logger.info('Creating new units...')
         c = get_container(fsid, daemon_type, daemon_id)
         deploy_daemon_units(fsid, daemon_type, daemon_id, c,
                             enable=True,  # unconditionally enable the new unit
@@ -1092,10 +1272,10 @@ def command_rm_daemon():
         raise RuntimeError('must pass --force to proceed: '
                            'this command may destroy precious data!')
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
-    subprocess.check_output(['systemctl', 'stop', unit_name])
-    subprocess.check_output(['systemctl', 'disable', unit_name])
+    call_throws(['systemctl', 'stop', unit_name])
+    call_throws(['systemctl', 'disable', unit_name])
     data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
-    subprocess.check_output(['rm', '-rf', data_dir])
+    call_throws(['rm', '-rf', data_dir])
 
 ##################################
 
@@ -1104,42 +1284,35 @@ def command_rm_cluster():
         raise RuntimeError('must pass --force to proceed: '
                            'this command may destroy precious data!')
 
-    unit_name = 'ceph-%s.target' % args.fsid
-    try:
-        subprocess.check_output(['systemctl', 'stop', unit_name])
-        subprocess.check_output(['systemctl', 'disable', unit_name])
-    except subprocess.CalledProcessError:
-        pass
-    crash_unit_name = 'ceph-%s-crash.service' % args.fsid
-    try:
-        subprocess.check_output(['systemctl', 'stop', crash_unit_name])
-        subprocess.check_output(['systemctl', 'disable', crash_unit_name])
-    except subprocess.CalledProcessError:
-        pass
+    # ignore errors here
+    for unit_name in ['ceph-%s.target' % args.fsid,
+                      'ceph-%s-crash.service' % args.fsid]:
+        call(['systemctl', 'stop', unit_name], 'systemctl',
+             verbose_on_failure=False)
+        call(['systemctl', 'disable', unit_name], 'systemctl',
+             verbose_on_failure=False)
 
-    slice_name = 'system-%s.slice' % (
-        ('ceph-%s' % args.fsid).replace('-', '\\x2d'))
-    try:
-        subprocess.check_output(['systemctl', 'stop', slice_name])
-    except subprocess.CalledProcessError:
-        pass
+    slice_name = 'system-%s.slice' % (('ceph-%s' % args.fsid).replace('-',
+                                                                      '\\x2d'))
+    call(['systemctl', 'stop', slice_name], 'systemctl',
+         verbose_on_failure=False)
 
     # FIXME: stop + disable individual daemon units, too?
 
     # rm units
-    subprocess.check_output(['rm', '-f', args.unit_dir +
+    call_throws(['rm', '-f', args.unit_dir +
                              '/ceph-%s@.service' % args.fsid])
-    subprocess.check_output(['rm', '-f', args.unit_dir +
-                             '/ceph-%s-crash.service' % args.fsid])
-    subprocess.check_output(['rm', '-f', args.unit_dir +
+    call_throws(['rm', '-f', args.unit_dir +
+                             '/ceph-%s-crash@.service' % args.fsid])
+    call_throws(['rm', '-f', args.unit_dir +
                              '/ceph-%s.target' % args.fsid])
-    subprocess.check_output(['rm', '-rf',
+    call_throws(['rm', '-rf',
                   args.unit_dir + '/ceph-%s.target.wants' % args.fsid])
     # rm data
-    subprocess.check_output(['rm', '-rf', args.data_dir + '/' + args.fsid])
+    call_throws(['rm', '-rf', args.data_dir + '/' + args.fsid])
     # rm logs
-    subprocess.check_output(['rm', '-rf', args.log_dir + '/' + args.fsid])
-    subprocess.check_output(['rm', '-rf', args.log_dir +
+    call_throws(['rm', '-rf', args.log_dir + '/' + args.fsid])
+    call_throws(['rm', '-rf', args.log_dir +
                              '/*.wants/ceph-%s@*' % args.fsid])
 
 
@@ -1168,6 +1341,10 @@ parser.add_argument(
     '--unit-dir',
     default=UNIT_DIR,
     help='base directory for systemd units')
+parser.add_argument(
+    '--debug', '-d',
+    action='store_true',
+    help='Show debug-level log messages')
 subparsers = parser.add_subparsers(help='sub-command')
 
 parser_version = subparsers.add_parser(
@@ -1346,6 +1523,14 @@ parser_bootstrap.add_argument(
     '--skip-ssh',
     action='store_true',
     help='skip setup of ssh key on local host')
+parser_bootstrap.add_argument(
+    '--no-minimize-config',
+    action='store_true',
+    help='do not assimilate and minimize the config file')
+parser_bootstrap.add_argument(
+    '--skip-ping-check',
+    action='store_true',
+    help='do not verify that mon IP is pingable')
 
 parser_deploy = subparsers.add_parser(
     'deploy', help='deploy a daemon')
@@ -1364,6 +1549,9 @@ parser_deploy.add_argument(
 parser_deploy.add_argument(
     '--keyring',
     help='keyring for new daemon')
+parser_deploy.add_argument(
+    '--crash-keyring',
+    help='crash keyring for crash agent daemon')
 parser_deploy.add_argument(
     '--key',
     help='key for new daemon')
@@ -1388,6 +1576,12 @@ except NameError:
 
 args = parser.parse_args(av)
 
+if args.debug:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('ceph-daemon')
+
 # podman or docker?
 if args.docker:
     podman_path = find_program('docker')
@@ -1397,7 +1591,7 @@ else:
             podman_path = find_program(i)
             break
         except Exception as e:
-            logging.debug('could not locate %s: %s' % (i, e))
+            logger.debug('could not locate %s: %s' % (i, e))
     if not podman_path:
         raise RuntimeError('unable to locate any of %s' % PODMAN_PREFERENCE)
 
