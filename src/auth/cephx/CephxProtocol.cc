@@ -149,50 +149,59 @@ bool CephXTicketHandler::verify_service_ticket_reply(
   CryptoKey& secret,
   bufferlist::const_iterator& indata)
 {
-  __u8 service_ticket_v;
-  decode(service_ticket_v, indata);
+  try {
+    __u8 service_ticket_v;
+    decode(service_ticket_v, indata);
 
-  CephXServiceTicket msg_a;
-  std::string error;
-  if (decode_decrypt(cct, msg_a, secret, indata, error)) {
-    ldout(cct, 0) << "verify_service_ticket_reply: failed decode_decrypt, error is: " << error << dendl;
-    return false;
-  }
-  
-  __u8 ticket_enc;
-  decode(ticket_enc, indata);
-
-  bufferlist service_ticket_bl;
-  if (ticket_enc) {
-    ldout(cct, 10) << " got encrypted ticket" << dendl;
+    CephXServiceTicket msg_a;
     std::string error;
-    if (decode_decrypt(cct, service_ticket_bl, session_key, indata, error)) {
-      ldout(cct, 10) << "verify_service_ticket_reply: decode_decrypt failed "
-	    << "with " << error << dendl;
+    if (decode_decrypt(cct, msg_a, secret, indata, error)) {
+      ldout(cct, 0) << __func__ << " failed decode_decrypt, error is: " << error
+		    << dendl;
       return false;
     }
-  } else {
-    decode(service_ticket_bl, indata);
-  }
-  auto iter = service_ticket_bl.cbegin();
-  decode(ticket, iter);
-  ldout(cct, 10) << " ticket.secret_id=" <<  ticket.secret_id << dendl;
-
-  ldout(cct, 10) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
-	   << " secret_id " << ticket.secret_id
-	   << " session_key " << msg_a.session_key
-           << " validity=" << msg_a.validity << dendl;
-  session_key = msg_a.session_key;
-  if (!msg_a.validity.is_zero()) {
-    expires = ceph_clock_now();
-    expires += msg_a.validity;
-    renew_after = expires;
-    renew_after -= ((double)msg_a.validity.sec() / 4);
-    ldout(cct, 10) << "ticket expires=" << expires << " renew_after=" << renew_after << dendl;
-  }
   
-  have_key_flag = true;
-  return true;
+    __u8 ticket_enc;
+    decode(ticket_enc, indata);
+
+    bufferlist service_ticket_bl;
+    if (ticket_enc) {
+      ldout(cct, 10) << __func__ << " got encrypted ticket" << dendl;
+      std::string error;
+      if (decode_decrypt(cct, service_ticket_bl, session_key, indata, error)) {
+	ldout(cct, 10) << __func__ << " decode_decrypt failed "
+		       << "with " << error << dendl;
+	return false;
+      }
+    } else {
+      decode(service_ticket_bl, indata);
+    }
+    auto iter = service_ticket_bl.cbegin();
+    decode(ticket, iter);
+    ldout(cct, 10) << __func__ << " ticket.secret_id=" <<  ticket.secret_id
+		   << dendl;
+
+    ldout(cct, 10) << __func__ << " service "
+		   << ceph_entity_type_name(service_id)
+		   << " secret_id " << ticket.secret_id
+		   << " session_key " << msg_a.session_key
+		   << " validity=" << msg_a.validity << dendl;
+    session_key = msg_a.session_key;
+    if (!msg_a.validity.is_zero()) {
+      expires = ceph_clock_now();
+      expires += msg_a.validity;
+      renew_after = expires;
+      renew_after -= ((double)msg_a.validity.sec() / 4);
+      ldout(cct, 10) << __func__ << " ticket expires=" << expires
+		     << " renew_after=" << renew_after << dendl;
+    }
+
+    have_key_flag = true;
+    return true;
+  } catch (buffer::error& e) {
+    ldout(cct, 1) << __func__ << " decode error: " << e.what() << dendl;
+    return false;
+  }
 }
 
 bool CephXTicketHandler::have_key()
@@ -269,15 +278,24 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 						     bufferlist::const_iterator& indata)
 {
   __u8 service_ticket_reply_v;
-  decode(service_ticket_reply_v, indata);
-
   uint32_t num;
-  decode(num, indata);
+  try {
+    decode(service_ticket_reply_v, indata);
+    decode(num, indata);
+  } catch (buffer::error& e) {
+    ldout(cct, 10) << __func__ << " failed to decode ticket v or count: "
+		   << e.what() << dendl;
+  }
   ldout(cct, 10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
 
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
-    decode(type, indata);
+    try {
+      decode(type, indata);
+    } catch (buffer::error& e) {
+      ldout(cct, 10) << __func__ << " failed to decode ticket type: " << e.what()
+		     << dendl;
+    }
     ldout(cct, 10) << "got key for service_id " << ceph_entity_type_name(type) << dendl;
     CephXTicketHandler& handler = get_handler(type);
     if (!handler.verify_service_ticket_reply(secret, indata)) {
