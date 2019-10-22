@@ -1476,7 +1476,9 @@ inline namespace v14_2_0 {
    // -- aio --
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
-						callback_t cb_safe);
+						callback_t cb_safe)
+      __attribute__ ((deprecated));
+    static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
     
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
