@@ -367,6 +367,11 @@ private:
    */
   void propose_connectivity_handler(int from, epoch_t mepoch);
   /**
+   * Helper function for connectivity handler. Combines the disallowed list
+   * with ConnectionTracker scores.
+   */
+  double connectivity_election_score(int rank);
+  /**
    * Defer the current election to some other monitor.
    *
    * This means that we will ack some other monitor and drop out from the run
