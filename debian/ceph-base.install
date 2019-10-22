@@ -2,6 +2,7 @@ etc/init.d/ceph
 lib/systemd/system/ceph-crash.service
 usr/bin/ceph-crash
 usr/bin/ceph-debugpack
+usr/bin/ceph-dencoder
 usr/bin/ceph-run
 usr/bin/cephfs-data-scan
 usr/bin/cephfs-journal-tool
@@ -17,6 +18,7 @@ usr/sbin/ceph-create-keys
 usr/share/doc/ceph/sample.ceph.conf
 usr/share/man/man8/ceph-create-keys.8
 usr/share/man/man8/ceph-debugpack.8
+usr/share/man/man8/ceph-dencoder.8
 usr/share/man/man8/ceph-deploy.8
 usr/share/man/man8/ceph-run.8
 usr/share/man/man8/crushtool.8
