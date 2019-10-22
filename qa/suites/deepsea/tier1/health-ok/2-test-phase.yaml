@@ -1,0 +1,8 @@
+tasks:
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.validation:
+        - deepsea.toolbox:
+                assert_bluestore:
+                        osd.0:

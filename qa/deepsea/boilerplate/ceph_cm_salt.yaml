@@ -1,0 +1,2 @@
+ceph_cm: salt
+ceph_cm_ansible: false

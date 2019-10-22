@@ -1,0 +1,18 @@
+overrides:
+  deepsea:
+    storage_profile:
+        ceph:
+          storage:
+            osds:
+              /dev/vdb:
+                format: bluestore
+                wal_size: 1G
+                wal: /dev/vde
+              /dev/vdc:
+                format: bluestore
+                wal: /dev/vde
+                wal_size: 2G
+              /dev/vdd:
+                format: bluestore
+                wal: /dev/vde
+                wal_size: 3G
