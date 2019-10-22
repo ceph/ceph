@@ -68,7 +68,7 @@ def task(ctx, config):
             )
 
     with parallel() as p:
-        for role, tests in config.iteritems():
+        for role, tests in config.items():
             (remote,) = ctx.cluster.only(role).remotes.keys()
             p.spawn(_run_tests, testdir, remote, role, tests)
 

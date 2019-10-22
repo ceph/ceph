@@ -89,7 +89,7 @@ class S3tests_java(Task):
     def begin(self):
         super(S3tests_java, self).begin()
         log.debug('S3 Tests Java: BEGIN')
-        for (host, roles) in self.ctx.cluster.remotes.iteritems():
+        for (host, roles) in self.ctx.cluster.remotes.items():
             log.debug(
                 'S3 Tests Java: Cluster config is: {cfg}'.format(cfg=roles))
             log.debug('S3 Tests Java: Host is: {host}'.format(host=host))

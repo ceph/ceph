@@ -52,7 +52,7 @@ or
         client_config = config['all']
     clients = ctx.cluster.only(teuthology.is_type('client'))
     rbd_test_dir = teuthology.get_testdir(ctx) + "/rbd_fio_test"
-    for remote,role in clients.remotes.iteritems():
+    for remote,role in clients.remotes.items():
         if 'client_config' in locals():
            with parallel() as p:
                p.spawn(run_fio, remote, client_config, rbd_test_dir)
