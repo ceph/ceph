@@ -356,8 +356,12 @@ class RbdMirroringSummary(BaseController):
     @handle_rbd_mirror_error()
     @ReadPermission
     def __call__(self):
+        site_name = rbd.RBD().mirror_site_name_get(mgr.rados)
+
         status, content_data = _get_content_data()
-        return {'status': status, 'content_data': content_data}
+        return {'site_name': site_name,
+                'status': status,
+                'content_data': content_data}
 
 
 @ApiController('/block/mirroring/pool', Scope.RBD_MIRRORING)
