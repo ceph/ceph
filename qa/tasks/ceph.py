@@ -605,16 +605,17 @@ def cluster(ctx, config):
     osds = ctx.cluster.only(teuthology.is_type('osd', cluster_name))
     for remote, roles_for_host in osds.remotes.iteritems():
         devs = teuthology.get_scratch_devices(remote)
-        roles_to_devs = {}
-        if config.get('fs'):
-            log.info('fs option selected, checking for "scratch" (osd) devs')
-            log.info('found "scratch" (osd) devs: {}'.format(devs))
-            roles_to_devs = assign_devs(
-                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
-            )
-            devs_to_clean[remote] = []
+        roles_to_devs = assign_devs(
+            teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
+        )
+        devs_to_clean[remote] = []
         log.info('osd dev map: {}'.format(roles_to_devs))
+        assert roles_to_devs, \
+            "remote {} has osd roles, but no osd devices were specified!".format(remote.hostname)
         remote_to_roles_to_devs[remote] = roles_to_devs
+    log.info("remote_to_roles_to_devs: {}".format(remote_to_roles_to_devs))
+    for osd_role, dev_name in remote_to_roles_to_devs.items():
+        assert dev_name, "{} has no associated device!".format(osd_role)
 
     log.info('Generating config...')
     remotes_and_roles = ctx.cluster.remotes.items()
