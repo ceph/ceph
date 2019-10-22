@@ -12,9 +12,6 @@ usr/bin/ceph-conf
 usr/bin/ceph-dencoder
 usr/bin/ceph-rbdnamer
 usr/bin/ceph-syn
-usr/bin/cephfs-data-scan
-usr/bin/cephfs-journal-tool
-usr/bin/cephfs-table-tool
 usr/bin/rados
 usr/bin/radosgw-admin
 usr/bin/rbd

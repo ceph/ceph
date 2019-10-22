@@ -3,6 +3,9 @@ lib/systemd/system/ceph-crash.service
 usr/bin/ceph-crash
 usr/bin/ceph-debugpack
 usr/bin/ceph-run
+usr/bin/cephfs-data-scan
+usr/bin/cephfs-journal-tool
+usr/bin/cephfs-table-tool
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
