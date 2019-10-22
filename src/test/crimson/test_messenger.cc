@@ -23,6 +23,8 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 
+#include "test_cmds.h"
+
 namespace bpo = boost::program_options;
 
 namespace {
@@ -594,6 +596,8 @@ using crimson::net::Interceptor;
 using crimson::net::Messenger;
 using crimson::net::SocketPolicy;
 using crimson::net::tag_bp_t;
+using ceph::net::test::cmd_t;
+using ceph::net::test::policy_t;
 
 struct counter_t { unsigned counter = 0; };
 
@@ -873,28 +877,6 @@ struct TestInterceptor : public Interceptor {
                   result->index, conn, bp, breakpoints_counter[bp].counter);
     return bp_action_t::CONTINUE;
   }
-};
-
-enum class cmd_t : char {
-  none = '\0',
-  shutdown,
-  suite_start,
-  suite_stop,
-  suite_connect_me,
-  suite_send_me,
-  suite_keepalive_me,
-  suite_markdown,
-  suite_recv_op
-};
-
-enum class policy_t : char {
-  none = '\0',
-  stateful_server,
-  stateless_server,
-  lossless_peer,
-  lossless_peer_reuse,
-  lossy_client,
-  lossless_client
 };
 
 SocketPolicy to_socket_policy(policy_t policy) {
