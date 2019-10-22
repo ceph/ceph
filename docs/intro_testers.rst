@@ -17,10 +17,10 @@ Terminology
 ===========
 
 In the abstract, each set of tests is defined by a `suite`. All of our suites
-live in the `ceph-qa-suite repository
-<https://github.com/ceph/ceph-qa-suite/>`__, in the `suites` subdirectory. Each
-subdirectory in `suites` is a suite; they may also have "sub-suites" which may
-aid in scheduling, for example, tests for a specific feature.
+live in the `ceph` git repository in the `qa/suites/ directory
+<https://github.com/ceph/ceph/tree/master/qa/suites/>`__ .
+Each subdirectory in `suites` is a suite; they may also have "sub-suites" which
+may aid in scheduling, for example, tests for a specific feature.
 
 In concrete terms, a `run` is what is created by assembling the contents of a
 `suite` into a number of `jobs`. A `job` is created by assembling a number of
@@ -31,10 +31,11 @@ Each `job` definition contains a list of `tasks` to execute, along with
 `roles`. `Roles` tell `teuthology` how many nodes to use for each `job` along
 with what functions each node will perform.
 
-To go into more depth regarding suite design, see `ceph-qa-suite`'s `README`.
+To go into more depth regarding suite design, see the `README
+<https://github.com/ceph/ceph/blob/master/qa/README>`__.
 
 One example of this is the `smoke
-<https://github.com/ceph/ceph-qa-suite/tree/master/suites/smoke>`__ suite.
+<https://github.com/ceph/ceph/tree/master/qa/suites/smoke>`__ suite.
 
 
 Scheduling
