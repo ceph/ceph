@@ -1890,7 +1890,8 @@ CEPH_RADOS_API int rados_aio_wait_for_complete(rados_completion_t c);
  * @param c operation to wait for
  * @returns 0
  */
-CEPH_RADOS_API int rados_aio_wait_for_safe(rados_completion_t c);
+CEPH_RADOS_API int rados_aio_wait_for_safe(rados_completion_t c)
+  __attribute__((deprecated));
 
 /**
  * Has an asynchronous operation completed?
@@ -1936,7 +1937,8 @@ CEPH_RADOS_API int rados_aio_wait_for_complete_and_cb(rados_completion_t c);
  * @param c operation to wait for
  * @returns 0
  */
-CEPH_RADOS_API int rados_aio_wait_for_safe_and_cb(rados_completion_t c);
+CEPH_RADOS_API int rados_aio_wait_for_safe_and_cb(rados_completion_t c)
+  __attribute__((deprecated));
 
 /**
  * Has an asynchronous operation and callback completed
