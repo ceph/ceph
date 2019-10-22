@@ -2561,6 +2561,11 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
 	mono_clock::now() - quorum_since).count());
   }
 
+  f->open_object_section("features");
+  f->dump_stream("quorum_con") << quorum_con_features;
+  quorum_mon_features.dump(f, "quorum_mon");
+  f->close_section();
+
   f->open_object_section("monmap");
   monmap->dump(f);
   f->close_section(); // monmap
