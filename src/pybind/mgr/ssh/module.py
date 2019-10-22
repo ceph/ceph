@@ -451,6 +451,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
+            self.log.debug('args: %s' % final_args)
+            self.log.debug('stdin: %s' % stdin)
 
             script = 'injected_argv = ' + json.dumps(final_args) + '\n'
             if stdin:
@@ -523,13 +525,11 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             'prefix': 'auth get',
             'entity': 'client.bootstrap-osd',
         })
-        self.log.debug('keyring %s' % keyring)
 
         # generate config
         ret, config, err = self.mon_command({
             "prefix": "config generate-minimal-conf",
         })
-        self.log.debug('config %s' % config)
 
         j = json.dumps({
             'config': config,
@@ -576,7 +576,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     'prefix': 'auth get',
                     'entity': 'osd.%s' % str(osd_id),
                 })
-                self.log.debug('keyring %s' % keyring)
                 self._create_daemon(
                     'osd', str(osd_id), host, keyring,
                     extra_args=[
@@ -621,7 +620,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             ret, config, err = self.mon_command({
                 "prefix": "config generate-minimal-conf",
             })
-            self.log.debug('config %s' % config)
 
             ret, crash_keyring, err = self.mon_command({
                 'prefix': 'auth get-or-create',
@@ -666,7 +664,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             'prefix': 'auth get',
             'entity': 'mon.',
         })
-        self.log.debug('mon keyring %s' % keyring)
 
         return self._create_daemon('mon', host, host, keyring,
                                    extra_args=['--mon-network', network])
@@ -725,7 +722,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
-        self.log.debug('keyring %s' % keyring)
 
         return self._create_daemon('mgr', host, host, keyring)
 
