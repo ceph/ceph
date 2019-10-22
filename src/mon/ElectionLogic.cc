@@ -272,6 +272,17 @@ void ElectionLogic::propose_classic_handler(int from, epoch_t mepoch)
   }
 }
 
+double ElectionLogic::connectivity_election_score(int rank)
+{
+  if (elector->get_disallowed_leaders().count(rank)) {
+    return 0;
+  }
+  double score;
+  int liveness;
+  peer_tracker->get_total_connection_score(rank, &score, &liveness);
+  return score;
+}
+
 void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch)
 {
   if (mepoch > epoch) {
@@ -291,42 +302,33 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch)
     return;
   }
 
-  const set<int>& disallowed_leaders = elector->get_disallowed_leaders();
   int my_rank = elector->get_my_rank();
-  bool me_disallowed = disallowed_leaders.count(my_rank);
-  bool from_disallowed = disallowed_leaders.count(from);
-  double my_score, from_score, leader_score = 0;
-  int my_liveness, from_liveness, leader_liveness = 0;
-  peer_tracker->get_total_connection_score(my_rank, &my_score, &my_liveness);
-  peer_tracker->get_total_connection_score(from, &from_score, &from_liveness);
+  double my_score = connectivity_election_score(my_rank);
+  double from_score = connectivity_election_score(from);
+  double leader_score = 0;
   if (leader_acked >= 0) {
-    peer_tracker->get_total_connection_score(leader_acked, &leader_score, &leader_liveness);
+    leader_score = connectivity_election_score(leader_acked);
   }
 
-  ldout(cct, 10) << "propose from rank=" << from << ",disallowed="
-		 << from_disallowed << ",score=" << from_score
-		 << "; my score=" << my_score << ",disallowed=" << me_disallowed
+  ldout(cct, 10) << "propose from rank=" << from << ",score=" << from_score
+		 << "; my score=" << my_score
 		 << "; currently acked " << leader_acked
 		 << ",score=" << leader_score << dendl;
 
-
-  bool my_win = !me_disallowed && // I am allowed to lead
-    (from_disallowed || // either they're disallowed or
-     ((my_rank < from && (my_score >= from_score)) || // we have same scores and my rank is lower
-      my_score > from_score)); // my score is higher
+  bool my_win = (my_score > 0) && // My score is non-zero; I am allowed to lead
+    ((my_rank < from && my_score >= from_score) || // We have same scores and I have lower rank, or
+     (my_score > from_score)); // my score is higher
   
-  bool their_win = !from_disallowed && // they are allowed to lead
-    (me_disallowed || // either I'm disallowed or
-     ((from < my_rank && (from_score >= my_score)) || // they have lower rank and same scores
-      (from_score > my_score))) && // or they score more connectivity points than me
-    // and they are a better choice than our previously-acked choice
-    ((from < leader_acked && leader_score <= from_score) ||
-     (leader_score <= from_score));
+  bool their_win = (from_score > 0) && // Their score is non-zero; they're allowed to lead, AND
+    ((from < my_rank && from_score >= my_score) || // Either they have lower rank and same score, or
+     (from_score > my_score)) && // their score is higher, AND
+    ((from <= leader_acked && from_score >= leader_score) || // same conditions compared to leader, or IS leader
+     (from_score > leader_score));
 
   if (my_win) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
-      ceph_assert(leader_score >= from_score || from_disallowed);  // and they still win, of course
+      ceph_assert(leader_score >= from_score);  // and they still win, of course
       ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
@@ -380,14 +382,11 @@ bool ElectionLogic::victory_makes_sense(int from)
     break;
   case CONNECTIVITY:
     double my_score, leader_score;
-    int my_liveness, leader_liveness;
-    peer_tracker->get_total_connection_score(elector->get_my_rank(),
-					     &my_score, &my_liveness);
-    peer_tracker->get_total_connection_score(from,
-					     &leader_score, &leader_liveness);
+    my_score = connectivity_election_score(elector->get_my_rank());
+    leader_score = connectivity_election_score(from);
     ldout(cct, 5) << "victory from " << from << " makes sense? lscore:"
-		  << leader_score << ",llive:" << leader_liveness
-		  << "; my score:" << my_score << ",liveness:" << my_liveness << dendl;
+		  << leader_score
+		  << "; my score:" << my_score << dendl;
 
     // TODO: this probably isn't safe because we may be behind on score states?
     makes_sense = (leader_score >= my_score);
