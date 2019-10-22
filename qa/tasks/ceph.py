@@ -604,19 +604,17 @@ def cluster(ctx, config):
         if config.get('fs'):
             log.info('fs option selected, checking for scratch devs')
             log.info('found devs: %s' % (str(devs),))
-            devs_id_map = teuthology.get_wwn_id_map(remote, devs)
-            iddevs = list(devs_id_map.values())
             roles_to_devs = assign_devs(
-                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), iddevs
+                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
             )
-            if len(roles_to_devs) < len(iddevs):
-                iddevs = iddevs[len(roles_to_devs):]
+            if len(roles_to_devs) < len(devs):
+                devs = devs[len(roles_to_devs):]
             devs_to_clean[remote] = []
 
         if config.get('block_journal'):
             log.info('block journal enabled')
             roles_to_journals = assign_devs(
-                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), iddevs
+                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
             )
             log.info('journal map: %s', roles_to_journals)
 
