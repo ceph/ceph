@@ -115,7 +115,7 @@ def task(ctx, config):
     log.info("timeout={}".format(timeout))
     log.info("cleanup={}".format(cleanup))
     with parallel() as p:
-        for role, tests in clients.iteritems():
+        for role, tests in clients.items():
             if role != "all":
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'),
@@ -387,7 +387,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     run.Raw('CEPH_ROOT={dir}'.format(dir=clonedir)),
                 ]
                 if env is not None:
-                    for var, val in env.iteritems():
+                    for var, val in env.items():
                         quoted_val = pipes.quote(val)
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))

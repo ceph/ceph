@@ -68,7 +68,7 @@ def task(ctx, config):
     teuthology.replace_all_with_clients(ctx.cluster, config)
 
     with parallel() as ptask:
-        for client, tests in config.iteritems():
+        for client, tests in config.items():
             ptask.spawn(_run_tests, ctx, client, tests)
 
 
@@ -145,7 +145,7 @@ def _run_tests(ctx, client, tests):
                 ],
             )
 
-        for command, config in tests.iteritems():
+        for command, config in tests.items():
             if config is None:
                 config = {}
             teuthology.deep_merge(config, overrides)
