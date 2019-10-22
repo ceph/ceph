@@ -3258,6 +3258,18 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
+  // compat kludge for legacy clients trying to tell commands that are new
+  if (!HAVE_FEATURE(m->get_connection()->get_features(), SERVER_OCTOPUS) &&
+      (prefix == "injectargs" ||
+       prefix == "smart" ||
+       prefix == "mon_status" ||
+       prefix == "sync_force" ||
+       prefix == "heap")) {
+    dout(5) << __func__ << " passing command to tell/asok" << dendl;
+    cct->get_admin_socket()->queue_tell_command(m);
+    return;
+  }
+
   string module;
   string err;
 
