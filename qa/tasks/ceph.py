@@ -600,13 +600,13 @@ def cluster(ctx, config):
         devs = teuthology.get_scratch_devices(remote)
         roles_to_devs = {}
         if config.get('fs'):
-            log.info('fs option selected, checking for scratch devs')
-            log.info('found devs: %s' % (str(devs),))
+            log.info('fs option selected, checking for "scratch" (osd) devs')
+            log.info('found "scratch" (osd) devs: {}'.format(devs))
             roles_to_devs = assign_devs(
                 teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
             )
             devs_to_clean[remote] = []
-        log.info('dev map: %s' % (str(roles_to_devs),))
+        log.info('osd dev map: {}'.format(roles_to_devs))
         remote_to_roles_to_devs[remote] = roles_to_devs
 
     log.info('Generating config...')
@@ -827,8 +827,8 @@ def cluster(ctx, config):
                     '-p',
                     mnt_point,
                 ])
-            log.info(str(roles_to_devs))
-            log.info(role)
+            log.info('roles_to_devs: {}'.format(roles_to_devs))
+            log.info('role: {}'.format(role))
             if roles_to_devs.get(role):
                 dev = roles_to_devs[role]
                 fs = config.get('fs')
