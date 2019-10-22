@@ -13,6 +13,7 @@ overrides:
         ms dump corrupt message level: 0
         ms bind msgr2: false
         bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
       mds:
         debug ms: 1
         debug mds: 20
