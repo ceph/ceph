@@ -480,7 +480,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   } else if (ec == boost::asio::error::operation_aborted) {
     return;
   } else if (ec) {
-    throw ec;
+    ldout(ctx(), 1) << "accept failed: " << ec.message() << dendl;
+    return;
   }
   auto socket = std::move(l.socket);
   tcp::no_delay options(l.use_nodelay);
