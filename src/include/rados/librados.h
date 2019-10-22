@@ -280,6 +280,15 @@ typedef void *rados_xattrs_iter_t;
 typedef void *rados_omap_iter_t;
 
 /**
+ * @typedef struct rados_pool_info_t
+ * pool id and pool name.
+ */
+typedef struct {
+  int64_t id;
+  char *name;
+} rados_pool_info_t;
+
+/**
  * @struct rados_pool_stat_t
  * Usage information for a pool.
  */
@@ -698,6 +707,37 @@ CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
  */
 CEPH_RADOS_API int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
+/**
+ * List pools
+ *
+ * Gets a list of pool id and names as NULL-terminated strings.
+ *
+ * If len is too short to fit all the pool name entries we need, we will fill
+ * as much as we can.
+ *
+ * Buf may be null to determine the buffer size needed to list all pools.
+ *
+ * @param cluster cluster handle
+ * @param pools output buffer
+ * @param len output buffer length
+ * @returns length of the buffer we would need to list all pools
+ */
+CEPH_RADOS_API int rados_pool_list2(rados_t cluster, rados_pool_info_t *pools, size_t len);
+
+/**
+ * cleanup a pool menory space
+ *
+ * @param pool output buffer
+ */
+CEPH_RADOS_API void rados_pool_info_cleanup(rados_pool_info_t *pool);
+
+/**
+ * cleanup a list pool menory space
+ *
+ * @param pools output buffer
+ * @param len output buffer length
+ */
+CEPH_RADOS_API void rados_pool_info_list_cleanup(rados_pool_info_t *pools, size_t len);
 /**
  * List inconsistent placement groups of the given pool
  *

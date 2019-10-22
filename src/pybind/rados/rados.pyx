@@ -101,6 +101,10 @@ cdef extern from "rados/librados.h" nogil:
     ctypedef void (*rados_log_callback2_t)(void *arg, const char *line, const char *channel, const char *who, const char *name,
                                           uint64_t sec, uint64_t nsec, uint64_t seq, const char *level, const char *msg)
 
+    ctypedef struct rados_pool_info_t:
+        int64_t id
+        char *name
+
 
     cdef struct rados_cluster_stat_t:
         uint64_t kb
@@ -144,6 +148,8 @@ cdef extern from "rados/librados.h" nogil:
     int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name, uint8_t crush_rule_num)
     int rados_pool_get_base_tier(rados_t cluster, int64_t pool, int64_t *base_tier)
     int rados_pool_list(rados_t cluster, char *buf, size_t len)
+    void rados_pool_info_list_cleanup(rados_pool_info_t *pools, size_t len)
+    int rados_pool_list2(rados_t cluster, rados_pool_info_t *pools, size_t len)
     int rados_pool_delete(rados_t cluster, const char *pool_name)
     int rados_inconsistent_pg_list(rados_t cluster, int64_t pool, char *buf, size_t len)
 
@@ -529,6 +535,9 @@ cdef make_ex(ret, msg):
         return errno_to_exception[ret](msg, errno=ret)
     else:
         return OSError(msg, errno=ret)
+
+cdef rados_t convert_cluster(object cluster) except? NULL:
+    return <rados_t>cluster
 
 
 # helper to specify an optional argument, where in addition to `cls`, `None`
@@ -1213,6 +1222,18 @@ Rados object in state %s." % self.state)
         finally:
             free(c_names)
 
+    def list_pools2(self):
+        """
+        Iterate over the pools.
+
+        :returns: :class:`PoolIterator`
+
+        """
+        cdef object cluster1
+        cluster1 = <object>self.cluster
+
+        return PoolIterator(cluster1)
+
     def get_fsid(self):
         """
         Get the fsid of the cluster as a hexadecimal string.
@@ -1622,6 +1643,50 @@ Rados object in state %s." % self.state)
             ret = rados_service_update_status(self.cluster, _status)
         if ret != 0:
             raise make_ex(ret, "error calling service_daemon_update()")
+
+cdef class PoolIterator(object):
+    """
+    Iterator over pools
+
+    Yields a dictionary containing information about the pools
+
+    Keys are:
+
+    * ``id`` (str) - pool id
+
+    * ``name`` (str) - pool name
+    """
+    cdef rados_t cluster
+    cdef size_t size
+    cdef rados_pool_info_t *pools
+
+    def __cinit__(self, cluster):
+        self.cluster = convert_cluster(cluster)
+        self.size = 512
+        self.pools = NULL
+        while True:
+            self.pools = <rados_pool_info_t *>realloc_chk(self.pools, sizeof(rados_pool_info_t) * self.size)
+            with nogil:
+                ret = rados_pool_list2(self.cluster, self.pools, self.size)
+            if ret > <int>self.size:
+                self.size *= 2
+            elif ret >= 0:
+                break
+            else:
+                raise make_ex(ret, 'error listing pools.')
+        self.size = ret
+
+    def __iter__(self):
+        for i in range(self.size):
+            yield {
+                'id'   : self.pools[i].id,
+                'name' : decode_cstr(self.pools[i].name)
+                }
+
+    def __dealloc__(self):
+        if self.pools:
+            rados_pool_info_list_cleanup(self.pools, self.size)
+            free(self.pools)
 
 
 cdef class OmapIterator(object):

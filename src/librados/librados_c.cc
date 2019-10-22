@@ -598,6 +598,20 @@ extern "C" int _rados_application_metadata_list(rados_ioctx_t io,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_application_metadata_list);
 
+extern "C" void _rados_pool_info_cleanup(rados_pool_info_t *pool)
+{
+  free(pool->name);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_pool_info_cleanup);
+
+extern "C" void _rados_pool_info_list_cleanup(rados_pool_info_t *pool, size_t len)
+{
+   for (int i = 0; i < len; ++i) {
+     rados_pool_info_cleanup(&pool[i]);
+   }
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_pool_info_list_cleanup);
+
 extern "C" int _rados_pool_list(rados_t cluster, char *buf, size_t len)
 {
   tracepoint(librados, rados_pool_list_enter, cluster, len);
@@ -643,6 +657,38 @@ extern "C" int _rados_pool_list(rados_t cluster, char *buf, size_t len)
   return retval;
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_pool_list);
+
+extern "C" int _rados_pool_list2(rados_t cluster, rados_pool_info_t *pools, size_t len)
+{
+  tracepoint(librados, rados_pool_list_enter, cluster, len);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  memset(pools, 0, sizeof(*pools) * len);
+  std::list<std::pair<int64_t, std::string> > pools_val;
+  int r = client->pool_list(pools_val);
+  if (r < 0) {
+    tracepoint(librados, rados_pool_list_exit, r);
+    return r;
+  }
+
+  size_t expected_len = pools_val.size();
+  if (len < expected_len) {
+    len = expected_len;
+    tracepoint(librados, rados_pool_list_exit, r);
+    return len;
+  }
+  len = expected_len;
+  int i = 0;
+  for (auto &pool : pools_val) {
+     int pool_len = pool.second.length();
+     pools[i].id = pool.first;
+     pools[i].name = strdup(pool.second.c_str());
+     i++;
+  }
+
+  tracepoint(librados, rados_pool_list_exit, len);
+  return len;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_pool_list2);
 
 extern "C" int _rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
 					   char *buf, size_t len)
