@@ -155,6 +155,18 @@ void MgrCapGrant::expand_profile(std::ostream *err) const {
     return;
   }
 
+  if (profile == "osd") {
+    // this is a documented profile (so we need to accept it as valid), but it
+    // currently doesn't do anything
+    return;
+  }
+
+  if (profile == "mds") {
+    // this is a documented profile (so we need to accept it as valid), but it
+    // currently doesn't do anything
+    return;
+  }
+
   if (profile == "rbd" || profile == "rbd-read-only") {
     Arguments filtered_arguments;
     for (auto& [key, constraint] : arguments) {
