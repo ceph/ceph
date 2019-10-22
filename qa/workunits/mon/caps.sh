@@ -54,8 +54,8 @@ export CEPH_ARGS='--rados-mon-op-timeout=300'
 expect "ceph -k $tmp.foo.keyring --user foo pg dump" $ETIMEDOUT
 export CEPH_ARGS=''
 
-expect "ceph -k $tmp.foo.keyring --user foo quorum_status" 13
 ceph auth del client.foo
+expect "ceph -k $tmp.foo.keyring --user foo quorum_status" 13
 
 c="'allow command service with prefix=list, allow command quorum_status'"
 expect "ceph auth get-or-create client.bar mon $c > $tmp.bar.keyring" 0
@@ -70,8 +70,8 @@ export CEPH_ARGS='--rados-mon-op-timeout=300'
 expect "ceph -k $tmp.bar.keyring --user bar pg dump" $ETIMEDOUT
 export CEPH_ARGS=''
 
-expect "ceph -k $tmp.bar.keyring --user bar quorum_status" 13
 ceph auth del client.bar
+expect "ceph -k $tmp.bar.keyring --user bar quorum_status" 13
 
 rm $tmp.bazar.keyring $tmp.foo.keyring $tmp.bar.keyring
 
