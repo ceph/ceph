@@ -220,11 +220,25 @@ struct rgw_sync_directional_rule {
 WRITE_CLASS_ENCODER(rgw_sync_directional_rule)
 
 struct rgw_sync_bucket_entity {
-  string zone; /* define specific zones */
-  rgw_bucket bucket; /* define specific bucket */
+  std::optional<string> zone; /* define specific zones */
+  std::optional<rgw_bucket> bucket; /* define specific bucket */
+
+  static bool match_str(const string& s1, const string& s2) { /* empty string is wildcard */
+    return (s1.empty() ||
+            s2.empty() ||
+            s1 == s2);
+  }
+
+  bool all_zones{false};
+
+  rgw_sync_bucket_entity() {}
+  rgw_sync_bucket_entity(const string& _zone,
+                         std::optional<rgw_bucket> _bucket) : zone(_zone),
+                                                              bucket(_bucket.value_or(rgw_bucket())) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
+    encode(all_zones, bl);
     encode(zone, bl);
     encode(bucket, bl);
     ENCODE_FINISH(bl);
@@ -232,6 +246,7 @@ struct rgw_sync_bucket_entity {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
+    decode(all_zones, bl);
     decode(zone, bl);
     decode(bucket, bl);
     DECODE_FINISH(bl);
@@ -240,17 +255,55 @@ struct rgw_sync_bucket_entity {
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 
+  rgw_bucket get_bucket() const {
+    return bucket.value_or(rgw_bucket());
+  }
+
   string bucket_key() const;
 
-  const bool operator<(const rgw_sync_bucket_entity& e) const {
-    if (zone < e.zone) {
+  bool match_zone(const string& z) const {
+    if (all_zones) {
       return true;
     }
-    if (zone > e.zone) {
+    if (!zone) {
       return false;
+    }
+
+    return (*zone == z);
+  }
+
+  void apply_zone(const string& z) {
+    all_zones = false;
+    zone = z;
+  }
+
+  bool match_bucket(std::optional<rgw_bucket> b) const {
+    if (!b) {
+      return true;
+    }
+
+    if (!bucket) {
+      return true;
+    }
+
+    return (match_str(bucket->tenant, b->tenant) &&
+            match_str(bucket->name, b->name) &&
+            match_str(bucket->bucket_id, b->bucket_id));
+  }
+
+  const bool operator<(const rgw_sync_bucket_entity& e) const {
+    if (all_zones != e.all_zones) {
+      if (zone < e.zone) {
+        return true;
+      }
+      if (zone > e.zone) {
+        return false;
+      }
     }
     return (bucket < e.bucket);
   }
+
+  void apply_bucket(std::optional<rgw_bucket> _b);
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
 
@@ -273,6 +326,16 @@ public:
     DECODE_FINISH(bl);
   }
 
+  const bool operator<(const rgw_sync_bucket_pipe& p) const {
+    if (source < p.source) {
+      return true;
+    }
+    if (p.source < source) {
+      return false;
+    }
+    return (dest < p.dest);
+  }
+
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
@@ -291,6 +354,7 @@ public:
   std::optional<std::set<string> > zones; /* define specific zones, if not set then all zones */
 
   bool all_zones{false};
+
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -343,6 +407,8 @@ public:
 
     return (zones->find(zone) != zones->end());
   }
+
+  std::vector<rgw_sync_bucket_entity> expand() const;
 
   rgw_bucket get_bucket() const {
     return bucket.value_or(rgw_bucket());
@@ -405,17 +471,7 @@ public:
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  void get_bucket_pair(rgw_bucket *source_bucket,
-                       rgw_bucket *dest_bucket) const {
-    *source_bucket = source.get_bucket();
-    *dest_bucket = dest.get_bucket();
-
-    symmetrical_copy_if_empty(source_bucket->tenant, dest_bucket->tenant);
-    symmetrical_copy_if_empty(source_bucket->name, dest_bucket->name);
-    if (source_bucket->name == dest_bucket->name) { /* doesn't make sense to copy bucket id if not same bucket name */
-      symmetrical_copy_if_empty(source_bucket->bucket_id, dest_bucket->bucket_id);
-    }
-  }
+  std::vector<rgw_sync_bucket_pipe> expand() const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_pipes)
 

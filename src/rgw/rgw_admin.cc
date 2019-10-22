@@ -2330,8 +2330,8 @@ void encode_json(const char *name, const RGWBucketSyncFlowManager::flow_map_t& m
     auto& bucket = entry.first;
     auto& pflow = entry.second;
 
-    encode_json("buckets", rgw_sync_bucket_entities::bucket_key(bucket), f);
 #if 0
+    encode_json("buckets", rgw_sync_bucket_entities::bucket_key(bucket), f);
     {
       Formatter::ArraySection fg(*f, "flow_groups");
       for (auto& flow_group : pflow.flow_groups) {
@@ -2339,7 +2339,9 @@ void encode_json(const char *name, const RGWBucketSyncFlowManager::flow_map_t& m
       }
     }
 #endif
-    encode_json("pipes", pflow.pipe, f);
+    for (auto& pipe : pflow.pipes) {
+      encode_json("pipe", pipe, f);
+    }
   }
 }
 
@@ -2359,28 +2361,43 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
 
   std::optional<RGWBucketSyncFlowManager> bucket_flow;
 
-  if (opt_bucket) {
+  std::optional<rgw_bucket> eff_bucket = opt_bucket;
+
+  if (eff_bucket) {
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
 
-    int ret = init_bucket(*opt_bucket, bucket_info, bucket);
-    if (ret < 0) {
+    int ret = init_bucket(*eff_bucket, bucket_info, bucket);
+    if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: init_bucket failed: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
 
-    if (ret >= 0 &&
-        bucket_info.sync_policy) {
-      bucket_flow.emplace(zone_name, opt_bucket, &zone_flow);
+    rgw_sync_policy_info default_policy;
+    rgw_sync_policy_info *policy;
 
-      bucket_flow->init(*bucket_info.sync_policy);
+
+    if (ret == -ENOENT) {
+      cerr << "WARNING: bucket not found, simulating result" << std::endl;
+      bucket = *eff_bucket;
+    } else {
+      eff_bucket = bucket_info.bucket;
+    }
+
+    if (bucket_info.sync_policy) {
+      policy = (rgw_sync_policy_info *)bucket_info.sync_policy.get();
+      bucket_flow.emplace(zone_name, bucket, &zone_flow);
+
+      bucket_flow->init(*policy);
 
       flow_mgr = &(*bucket_flow);
     }
   }
 
-  auto& sources = flow_mgr->get_sources();
-  auto& dests = flow_mgr->get_dests();
+  RGWBucketSyncFlowManager::flow_map_t sources;
+  RGWBucketSyncFlowManager::flow_map_t dests;
+
+  flow_mgr->reflect(eff_bucket, &sources, &dests);
 
   {
     Formatter::ObjectSection os(*formatter, "result");

@@ -875,10 +875,14 @@ void rgw_sync_bucket_entity::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("zone", zone, obj);
   string s;
-  JSONDecoder::decode_json("bucket", s, obj);
-  int ret = rgw_bucket_parse_bucket_key(nullptr, s, &bucket, nullptr);
-  if (ret < 0) {
-    bucket = rgw_bucket();
+  if (JSONDecoder::decode_json("bucket", s, obj)) {
+    rgw_bucket b;
+    int ret = rgw_bucket_parse_bucket_key(nullptr, s, &b, nullptr);
+    if (ret >= 0) {
+      bucket = b;
+    } else {
+      bucket.reset();
+    }
   }
 }
 void rgw_sync_bucket_entities::dump(Formatter *f) const
