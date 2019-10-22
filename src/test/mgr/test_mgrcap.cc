@@ -64,6 +64,8 @@ const char *parse_good[] = {
   "allow command \"foo bar\" with arg=\"baz.xx\"",
   "allow command \"foo bar\" with arg = \"baz.xx\"",
   "profile crash",
+  "profile osd",
+  "profile mds",
   "profile rbd pool=ABC namespace=NS",
   "profile \"rbd-read-only\", profile crash",
   "allow * network 1.2.3.4/24",
