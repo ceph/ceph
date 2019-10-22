@@ -153,9 +153,15 @@ class ElectionLogic {
    */
   int last_election_winner = -1;
   /**
+   * Only used in the connectivity handler.
+   * The rank we voted for in the last election we voted in.
+   */
+  int last_voted_for = -1;
+  /**
    * Indicates who we have acked
    */
   int leader_acked;
+  
 public:
   enum election_strategy {
     CLASSIC = 1, // the original rank-based one
@@ -193,7 +199,7 @@ public:
 
   ElectionLogic(ElectionOwner *e, election_strategy es, ConnectionTracker *t,
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
-				  last_election_winner(-1),
+				  last_election_winner(-1), last_voted_for(-1),
 				  leader_acked(-1),
 				  strategy(es),
 				  participating(true),
