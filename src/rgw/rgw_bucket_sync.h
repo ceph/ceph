@@ -30,29 +30,7 @@ struct rgw_sync_group_pipe_map {
 
   rgw_sync_policy_group::Status status{rgw_sync_policy_group::Status::FORBIDDEN};
 
-  struct zone_bucket {
-    string zone; /* zone name */
-    rgw_bucket bucket; /* bucket, if empty then wildcard */
-
-    zone_bucket() {}
-    zone_bucket(const string& _zone,
-                std::optional<rgw_bucket> _bucket) : zone(_zone),
-                                                     bucket(_bucket.value_or(rgw_bucket())) {}
-
-
-    bool operator<(const zone_bucket& zb) const {
-      if (zone < zb.zone) {
-        return true;
-      }
-      if (zone > zb.zone) {
-        return false;
-      }
-      return (bucket < zb.bucket);
-    }
-    void dump(ceph::Formatter *f) const;
-  };
-
-  using zb_pipe_map_t = std::multimap<zone_bucket, rgw_sync_bucket_pipes>;
+  using zb_pipe_map_t = std::multimap<rgw_sync_bucket_entity, rgw_sync_bucket_pipe>;
 
   zb_pipe_map_t sources; /* all the pipes where zone is pulling from */
   zb_pipe_map_t dests; /* all the pipes that pull from zone */
@@ -69,9 +47,9 @@ struct rgw_sync_group_pipe_map {
           
   template <typename CB>
   void try_add_source(const string& source_zone,
-                  const string& dest_zone,
-                  const std::vector<rgw_sync_bucket_pipes>& pipes,
-                  CB filter_cb);
+                      const string& dest_zone,
+                      const std::vector<rgw_sync_bucket_pipes>& pipes,
+                      CB filter_cb);
           
   template <typename CB>
   void try_add_dest(const string& source_zone,
@@ -81,7 +59,7 @@ struct rgw_sync_group_pipe_map {
           
   pair<zb_pipe_map_t::const_iterator, zb_pipe_map_t::const_iterator> find_pipes(const zb_pipe_map_t& m,
                                                                                 const string& zone,
-                                                                                std::optional<rgw_bucket> b);
+                                                                                std::optional<rgw_bucket> b) const;
 
   template <typename CB>
   void init(const string& _zone,
@@ -92,31 +70,31 @@ struct rgw_sync_group_pipe_map {
   /*
    * find all relevant pipes in our zone that match {dest_bucket} <- {source_zone, source_bucket}
    */
-  vector<rgw_sync_bucket_pipes> find_source_pipes(const string& source_zone,
+  vector<rgw_sync_bucket_pipe> find_source_pipes(const string& source_zone,
                                                  std::optional<rgw_bucket> source_bucket,
-                                                 std::optional<rgw_bucket> dest_bucket);
+                                                 std::optional<rgw_bucket> dest_bucket) const;
 
   /*
    * find all relevant pipes in other zones that pull from a specific
    * source bucket in out zone {source_bucket} -> {dest_zone, dest_bucket}
    */
-  vector<rgw_sync_bucket_pipes> find_dest_pipes(std::optional<rgw_bucket> source_bucket,
-                                                 const string& dest_zone,
-                                                 std::optional<rgw_bucket> dest_bucket);
+  vector<rgw_sync_bucket_pipe> find_dest_pipes(std::optional<rgw_bucket> source_bucket,
+                                               const string& dest_zone,
+                                               std::optional<rgw_bucket> dest_bucket) const;
 
   /*
    * find all relevant pipes from {source_zone, source_bucket} -> {dest_zone, dest_bucket}
    */
-  vector<rgw_sync_bucket_pipes> find_pipes(const string& source_zone,
+  vector<rgw_sync_bucket_pipe> find_pipes(const string& source_zone,
                                           std::optional<rgw_bucket> source_bucket,
                                           const string& dest_zone,
-                                          std::optional<rgw_bucket> dest_bucket);
+                                          std::optional<rgw_bucket> dest_bucket) const;
 };
 
 class RGWBucketSyncFlowManager {
 public:
   struct pipe_flow {
-    std::vector<rgw_sync_bucket_pipe> pipe;
+    std::set<rgw_sync_bucket_pipe> pipes;
 
     void dump(ceph::Formatter *f) const;
   };
@@ -136,10 +114,7 @@ private:
                          std::optional<rgw_bucket> source_bucket,
                          const string& dest_zone,
                          std::optional<rgw_bucket> dest_bucket,
-                         bool check_activated);
-
-  flow_map_t flow_by_source;
-  flow_map_t flow_by_dest;
+                         bool check_activated) const;
 
   /*
    * find all the matching flows om a flow map for a specific bucket
@@ -155,13 +130,10 @@ public:
                            RGWBucketSyncFlowManager *_parent);
 
   void init(const rgw_sync_policy_info& sync_policy);
+  void reflect(std::optional<rgw_bucket> effective_bucket,
+               flow_map_t *flow_by_source,
+               flow_map_t *flow_by_dest);
 
-  const flow_map_t& get_sources() {
-    return flow_by_source;
-  }
-  const flow_map_t& get_dests() {
-    return flow_by_dest;
-  }
 };
 
 class RGWBucketSyncPolicyHandler {
