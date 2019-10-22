@@ -1265,11 +1265,19 @@ struct rgw_bucket {
   rgw_bucket& operator=(const rgw_bucket&) = default;
 
   bool operator<(const rgw_bucket& b) const {
-    if (tenant == b.tenant) {
-      return name < b.name;
-    } else {
-      return tenant < b.tenant;
+    if (name < b.name) {
+      return true;
+    } else if (name > b.name) {
+      return false;
     }
+
+    if (bucket_id < b.bucket_id) {
+      return true;
+    } else if (bucket_id > b.bucket_id) {
+      return false;
+    }
+
+    return (tenant < b.tenant);
   }
 
   bool operator==(const rgw_bucket& b) const {
@@ -1284,7 +1292,7 @@ struct rgw_bucket {
 WRITE_CLASS_ENCODER(rgw_bucket)
 
 inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
-  out << b.tenant << ":" << b.name << "[" << b.marker << "])";
+  out << b.tenant << ":" << b.name << "[" << b.bucket_id << "])";
   return out;
 }
 
