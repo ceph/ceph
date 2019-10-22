@@ -595,12 +595,10 @@ def cluster(ctx, config):
 
     devs_to_clean = {}
     remote_to_roles_to_devs = {}
-    remote_to_roles_to_journals = {}
     osds = ctx.cluster.only(teuthology.is_type('osd', cluster_name))
     for remote, roles_for_host in osds.remotes.items():
         devs = teuthology.get_scratch_devices(remote)
         roles_to_devs = {}
-        roles_to_journals = {}
         if config.get('fs'):
             log.info('fs option selected, checking for scratch devs')
             log.info('found devs: %s' % (str(devs),))
@@ -610,7 +608,6 @@ def cluster(ctx, config):
             devs_to_clean[remote] = []
         log.info('dev map: %s' % (str(roles_to_devs),))
         remote_to_roles_to_devs[remote] = roles_to_devs
-        remote_to_roles_to_journals[remote] = roles_to_journals
 
     log.info('Generating config...')
     remotes_and_roles = ctx.cluster.remotes.items()
@@ -625,12 +622,6 @@ def cluster(ctx, config):
     conf = skeleton_config(
         ctx, roles=roles, ips=ips, mons=mons, cluster=cluster_name,
     )
-    for remote, roles_to_journals in remote_to_roles_to_journals.items():
-        for role, journal in roles_to_journals.items():
-            name = teuthology.ceph_role(role)
-            if name not in conf:
-                conf[name] = {}
-            conf[name]['osd journal'] = journal
     for section, keys in config['conf'].items():
         for key, value in keys.items():
             log.info("[%s] %s = %s" % (section, key, value))
@@ -814,20 +805,16 @@ def cluster(ctx, config):
         ctx.disk_config = argparse.Namespace()
     if not hasattr(ctx.disk_config, 'remote_to_roles_to_dev'):
         ctx.disk_config.remote_to_roles_to_dev = {}
-    if not hasattr(ctx.disk_config, 'remote_to_roles_to_journals'):
-        ctx.disk_config.remote_to_roles_to_journals = {}
     if not hasattr(ctx.disk_config, 'remote_to_roles_to_dev_mount_options'):
         ctx.disk_config.remote_to_roles_to_dev_mount_options = {}
     if not hasattr(ctx.disk_config, 'remote_to_roles_to_dev_fstype'):
         ctx.disk_config.remote_to_roles_to_dev_fstype = {}
 
     teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_dev, remote_to_roles_to_devs)
-    teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_journals, remote_to_roles_to_journals)
 
     log.info("ctx.disk_config.remote_to_roles_to_dev: {r}".format(r=str(ctx.disk_config.remote_to_roles_to_dev)))
     for remote, roles_for_host in osds.remotes.items():
         roles_to_devs = remote_to_roles_to_devs[remote]
-        roles_to_journals = remote_to_roles_to_journals[remote]
 
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
@@ -841,7 +828,6 @@ def cluster(ctx, config):
                     mnt_point,
                 ])
             log.info(str(roles_to_devs))
-            log.info(str(roles_to_journals))
             log.info(role)
             if roles_to_devs.get(role):
                 dev = roles_to_devs[role]
