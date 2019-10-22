@@ -1,0 +1,47 @@
+<cd-modal [modalRef]="modalRef">
+  <ng-container i18n
+                class="modal-title">Edit site name</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="editSiteNameForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="editSiteNameForm"
+          novalidate>
+      <div class="modal-body">
+        <p>
+          <ng-container i18n>Edit the site name and click&nbsp;
+          <kbd>Update</kbd>.</ng-container>
+        </p>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="siteName">
+            <span i18n>Site Name</span>
+            <span class="required"></span>
+          </label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="Name..."
+                 i18n-placeholder
+                 id="siteName"
+                 name="siteName"
+                 formControlName="siteName"
+                 autofocus>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button i18n
+                            [form]="editSiteNameForm"
+                            (submitAction)="update()">Update</cd-submit-button>
+          <cd-back-button [back]="modalRef.hide"
+                          name="Cancel"
+                          i18n-name>
+          </cd-back-button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
