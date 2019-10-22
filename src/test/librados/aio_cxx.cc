@@ -108,7 +108,7 @@ TEST(LibRadosAio, PoolQuotaPP) {
     ASSERT_EQ(0, ioctx.aio_operate(
 	"foo" + stringify(n), completion, &op,
 	librados::OPERATION_FULL_TRY));
-    completion->wait_for_safe();
+    completion->wait_for_complete();
     int r = completion->get_return_value();
     completion->release();
     if (r == -EDQUOT)
@@ -190,7 +190,7 @@ TEST(LibRadosAio, WaitForSafePP) {
   ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo",
 			       my_completion, bl1, sizeof(buf), 0));
   TestAlarm alarm;
-  ASSERT_EQ(0, my_completion->wait_for_safe());
+  ASSERT_EQ(0, my_completion->wait_for_complete());
   ASSERT_EQ(0, my_completion->get_return_value());
   delete my_completion;
 }
@@ -256,7 +256,6 @@ TEST(LibRadosAio, RoundTripPP2) {
 			      my_completion2, &bl2, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    ASSERT_EQ(0, my_completion2->wait_for_safe());
     ASSERT_EQ(0, my_completion2->wait_for_complete());
   }
   ASSERT_EQ((int)sizeof(buf), my_completion2->get_return_value());
@@ -736,7 +735,6 @@ TEST(LibRadosAio, FlushAsyncPP) {
   {
       TestAlarm alarm;
       ASSERT_EQ(0, flush_completion->wait_for_complete());
-      ASSERT_EQ(0, flush_completion->wait_for_safe());
   }
   ASSERT_EQ(1, my_completion->is_complete());
   ASSERT_EQ(1, my_completion->is_safe());
@@ -1490,7 +1488,7 @@ TEST(LibRadosAioEC, WaitForSafePP) {
   ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo",
 			       my_completion, bl1, sizeof(buf), 0));
   TestAlarm alarm;
-  ASSERT_EQ(0, my_completion->wait_for_safe());
+  ASSERT_EQ(0, my_completion->wait_for_complete());
   ASSERT_EQ(0, my_completion->get_return_value());
   delete my_completion;
 }
@@ -1556,7 +1554,6 @@ TEST(LibRadosAioEC, RoundTripPP2) {
 			      my_completion2, &bl2, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    ASSERT_EQ(0, my_completion2->wait_for_safe());
     ASSERT_EQ(0, my_completion2->wait_for_complete());
   }
   ASSERT_EQ((int)sizeof(buf), my_completion2->get_return_value());
@@ -1943,7 +1940,6 @@ TEST(LibRadosAioEC, FlushAsyncPP) {
   {
       TestAlarm alarm;
       ASSERT_EQ(0, flush_completion->wait_for_complete());
-      ASSERT_EQ(0, flush_completion->wait_for_safe());
   }
   ASSERT_EQ(1, my_completion->is_complete());
   ASSERT_EQ(1, my_completion->is_safe());

@@ -2446,7 +2446,7 @@ public:
       op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
       context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &op,
 					   librados::OPERATION_ORDER_READS_WRITES);
-      comp->wait_for_safe();
+      comp->wait_for_complete();
       if ((r = comp->get_return_value())) {
 	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
 	     << r << std::endl;
@@ -2462,7 +2462,7 @@ public:
       context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				  librados::OPERATION_ORDER_READS_WRITES |
 				  librados::OPERATION_IGNORE_REDIRECT);
-      comp->wait_for_safe();
+      comp->wait_for_complete();
       if ((r = comp->get_return_value())) {
 	if (!(r == -ENOENT && !present)) {
 	  cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
@@ -2481,7 +2481,7 @@ public:
      			  librados::OPERATION_ORDER_READS_WRITES |
      			  librados::OPERATION_IGNORE_REDIRECT,
      			  NULL);
-    comp->wait_for_safe();
+    comp->wait_for_complete();
     if ((r = comp->get_return_value()) && !src_value.deleted()) {
       cerr << "Error: oid " << oid << " stat returned error code "
 	   << r << std::endl;
@@ -2496,7 +2496,7 @@ public:
      			  librados::OPERATION_ORDER_READS_WRITES |
      			  librados::OPERATION_IGNORE_REDIRECT,
      			  NULL);
-    comp->wait_for_safe();
+    comp->wait_for_complete();
     if ((r = comp->get_return_value())) {
       cerr << "Error: oid " << oid_tgt << " stat returned error code "
 	   << r << std::endl;
@@ -2598,7 +2598,7 @@ public:
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				librados::OPERATION_ORDER_READS_WRITES |
 				librados::OPERATION_IGNORE_REDIRECT);
-    comp->wait_for_safe();
+    comp->wait_for_complete();
     int r = comp->get_return_value();
     if (r && !(r == -ENOENT && !present)) {
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;

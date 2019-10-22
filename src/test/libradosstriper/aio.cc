@@ -99,7 +99,7 @@ TEST_F(StriperTestPP, WaitForSafePP) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, striper.aio_write("WaitForSafePP", my_completion, bl1, sizeof(buf), 0));
   TestAlarm alarm;
-  my_completion->wait_for_safe();
+  my_completion->wait_for_complete();
   sem_wait(test_data.m_sem);
   sem_wait(test_data.m_sem);
   my_completion->release();
@@ -156,7 +156,7 @@ TEST_F(StriperTest, RoundTrip2) {
   ASSERT_EQ(0, rados_striper_aio_read(striper, "RoundTrip2", my_completion2, buf2, sizeof(buf2), 0));
   {
     TestAlarm alarm;
-    rados_aio_wait_for_safe(my_completion2);
+    rados_aio_wait_for_complete(my_completion2);
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   sem_wait(test_data.m_sem);
@@ -214,7 +214,7 @@ TEST_F(StriperTestPP, RoundTripPP2) {
   ASSERT_EQ(0, striper.aio_read("RoundTripPP2", my_completion2, &bl2, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    my_completion2->wait_for_safe();
+    my_completion2->wait_for_complete();
   }
   ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
   sem_wait(test_data.m_sem);
