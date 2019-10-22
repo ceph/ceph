@@ -2798,6 +2798,15 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
   return new AioCompletion(c);
 }
 
+librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
+								callback_t cb_complete)
+{
+  AioCompletionImpl *c;
+  int r = rados_aio_create_completion(cb_arg, cb_complete, (void**)&c);
+  ceph_assert(r == 0);
+  return new AioCompletion(c);
+}
+
 librados::ObjectOperation::ObjectOperation() : impl(new ObjectOperationImpl) {}
 
 librados::ObjectOperation::ObjectOperation(ObjectOperation&& rhs)
