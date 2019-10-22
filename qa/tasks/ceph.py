@@ -614,27 +614,7 @@ def cluster(ctx, config):
             roles_to_devs = assign_devs(
                 teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
             )
-            if len(roles_to_devs) < len(devs):
-                devs = devs[len(roles_to_devs):]
             devs_to_clean[remote] = []
-
-        if config.get('block_journal'):
-            log.info('block journal enabled')
-            roles_to_journals = assign_devs(
-                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
-            )
-            log.info('journal map: %s', roles_to_journals)
-
-        if config.get('tmpfs_journal'):
-            log.info('tmpfs journal enabled')
-            roles_to_journals = {}
-            remote.run(args=['sudo', 'mount', '-t', 'tmpfs', 'tmpfs', '/mnt'])
-            for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
-                tmpfs = '/mnt/' + role
-                roles_to_journals[role] = tmpfs
-                remote.run(args=['truncate', '-s', '1500M', tmpfs])
-            log.info('journal map: %s', roles_to_journals)
-
         log.info('dev map: %s' % (str(roles_to_devs),))
         remote_to_roles_to_devs[remote] = roles_to_devs
         remote_to_roles_to_journals[remote] = roles_to_journals
@@ -664,9 +644,6 @@ def cluster(ctx, config):
             if section not in conf:
                 conf[section] = {}
             conf[section][key] = value
-
-    if config.get('tmpfs_journal'):
-        conf['journal dio'] = False
 
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
@@ -1184,14 +1161,6 @@ def cluster(ctx, config):
                         'ps', 'auxf',
                     ])
                     raise e
-
-        if config.get('tmpfs_journal'):
-            log.info('tmpfs journal enabled - unmounting tmpfs at /mnt')
-            for remote, roles_for_host in osds.remotes.iteritems():
-                remote.run(
-                    args=['sudo', 'umount', '-f', '/mnt'],
-                    check_status=False,
-                )
 
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
@@ -1885,8 +1854,6 @@ def task(ctx, config):
             fs=config.get('fs', 'xfs'),
             mkfs_options=config.get('mkfs_options', None),
             mount_options=config.get('mount_options', None),
-            block_journal=config.get('block_journal', None),
-            tmpfs_journal=config.get('tmpfs_journal', None),
             skip_mgr_daemons=config.get('skip_mgr_daemons', False),
             log_whitelist=config.get('log-whitelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
