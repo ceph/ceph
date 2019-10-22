@@ -316,7 +316,7 @@ def get_config_and_both_keyrings():
             with open(args.config_and_keyrings, 'r') as f:
                 j = f.read()
         d = json.loads(j)
-        (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
+        return (d.get('config'), d.get('keyring'), d.get('crash_keyring'))
     else:
         if args.key:
             keyring = '[%s]\n\tkey = %s\n' % (args.name, args.key)
@@ -1288,6 +1288,8 @@ def command_rm_cluster():
     for unit_name in ['ceph-%s.target' % args.fsid,
                       'ceph-%s-crash.service' % args.fsid]:
         call(['systemctl', 'stop', unit_name], 'systemctl',
+             verbose_on_failure=False)
+        call(['systemctl', 'reset-failed', unit_name], 'systemctl',
              verbose_on_failure=False)
         call(['systemctl', 'disable', unit_name], 'systemctl',
              verbose_on_failure=False)
