@@ -263,9 +263,9 @@ static int testrados(void)
 	rados_aio_create_completion(0, 0, 0, &b);
 	rados_aio_write(io_ctx, "a", a, buf, 100, 0);
 	rados_aio_write(io_ctx, "../b/bb_bb_bb\\foo\\bar", b, buf, 100, 0);
-	rados_aio_wait_for_safe(a);
+	rados_aio_wait_for_complete(a);
 	printf("a safe\n");
-	rados_aio_wait_for_safe(b);
+	rados_aio_wait_for_complete(b);
 	printf("b safe\n");
 	rados_aio_release(a);
 	rados_aio_release(b);
