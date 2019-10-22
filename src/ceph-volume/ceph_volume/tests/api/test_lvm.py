@@ -561,46 +561,72 @@ class TestCreateLV(object):
     def setup(self):
         self.foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
 
-    def test_uses_size(self, monkeypatch, capture):
-        monkeypatch.setattr(process, 'run', capture)
-        monkeypatch.setattr(process, 'call', capture)
-        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
-        expected = ['lvcreate', '--yes', '-L', '5G', '-n', 'foo', 'foo_group']
-        assert capture.calls[0]['args'][0] == expected
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_lv')
+    def test_uses_size(self, m_get_lv, m_call, m_run, monkeypatch):
+        m_get_lv.return_value = self.foo_volume
+        api.create_lv('foo', 0, vg='foo_group', size='5G', tags={'ceph.type': 'data'})
+        expected = ['lvcreate', '--yes', '-L', '5G', '-n', 'foo-0', 'foo_group']
+        m_run.assert_called_with(expected)
 
-    def test_with_pv(self, monkeypatch, capture):
-        monkeypatch.setattr(process, 'run', capture)
-        monkeypatch.setattr(process, 'call', capture)
-        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'}, pv='/path')
-        expected = ['lvcreate', '--yes', '-L', '5G', '-n', 'foo', 'foo_group', '/path']
-        assert capture.calls[0]['args'][0] == expected
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_lv')
+    def test_uses_extents(self, m_get_lv, m_call, m_run, monkeypatch):
+        m_get_lv.return_value = self.foo_volume
+        api.create_lv('foo', 0, vg='foo_group', extents='50', tags={'ceph.type': 'data'})
+        expected = ['lvcreate', '--yes', '-l', '50', '-n', 'foo-0', 'foo_group']
+        m_run.assert_called_with(expected)
 
-    def test_calls_to_set_type_tag(self, monkeypatch, capture):
-        monkeypatch.setattr(process, 'run', capture)
-        monkeypatch.setattr(process, 'call', capture)
-        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
-        ceph_tag = ['lvchange', '--addtag', 'ceph.type=data', '/path']
-        assert capture.calls[1]['args'][0] == ceph_tag
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_lv')
+    def test_uses_all(self, m_get_lv, m_call, m_run, monkeypatch):
+        m_get_lv.return_value = self.foo_volume
+        api.create_lv('foo', 0, vg='foo_group', tags={'ceph.type': 'data'})
+        expected = ['lvcreate', '--yes', '-l', '100%FREE', '-n', 'foo-0', 'foo_group']
+        m_run.assert_called_with(expected)
 
-    def test_calls_to_set_data_tag(self, monkeypatch, capture):
-        monkeypatch.setattr(process, 'run', capture)
-        monkeypatch.setattr(process, 'call', capture)
-        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
-        data_tag = ['lvchange', '--addtag', 'ceph.data_device=/path', '/path']
-        assert capture.calls[2]['args'][0] == data_tag
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.Volume.set_tags')
+    @patch('ceph_volume.api.lvm.get_lv')
+    def test_calls_to_set_tags_default(self, m_get_lv, m_set_tags, m_call, m_run, monkeypatch):
+        m_get_lv.return_value = self.foo_volume
+        api.create_lv('foo', 0, vg='foo_group', size='5G')
+        tags = {
+            "ceph.osd_id": "null",
+            "ceph.type": "null",
+            "ceph.cluster_fsid": "null",
+            "ceph.osd_fsid": "null",
+        }
+        m_set_tags.assert_called_with(tags)
 
-    def test_uses_uuid(self, monkeypatch, capture):
-        monkeypatch.setattr(process, 'run', capture)
-        monkeypatch.setattr(process, 'call', capture)
-        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
-        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'}, uuid_name=True)
-        result = capture.calls[0]['args'][0][5]
-        assert result.startswith('foo-')
-        assert len(result) == 40
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.Volume.set_tags')
+    @patch('ceph_volume.api.lvm.get_lv')
+    def test_calls_to_set_tags_arg(self, m_get_lv, m_set_tags, m_call, m_run, monkeypatch):
+        m_get_lv.return_value = self.foo_volume
+        api.create_lv('foo', 0, vg='foo_group', size='5G', tags={'ceph.type': 'data'})
+        tags = {
+            "ceph.type": "data",
+            "ceph.data_device": "/path"
+        }
+        m_set_tags.assert_called_with(tags)
+
+    @patch('ceph_volume.api.lvm.process.run')
+    @patch('ceph_volume.api.lvm.process.call')
+    @patch('ceph_volume.api.lvm.get_device_vgs')
+    @patch('ceph_volume.api.lvm.create_vg')
+    @patch('ceph_volume.api.lvm.get_lv')
+    def test_create_vg(self, m_get_lv, m_create_vg, m_get_device_vgs, m_call,
+                       m_run, monkeypatch):
+        m_get_lv.return_value = self.foo_volume
+        m_get_device_vgs.return_value = []
+        api.create_lv('foo', 0, device='dev/foo', size='5G', tags={'ceph.type': 'data'})
+        m_create_vg.assert_called_with('dev/foo', name_prefix='ceph')
 
 
 class TestTags(object):
