@@ -3,8 +3,10 @@ import { Injectable, NgZone } from '@angular/core';
 
 import { BehaviorSubject, Subscription } from 'rxjs';
 
+import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { ApiModule } from './api.module';
 
+@cdEncode
 @Injectable({
   providedIn: ApiModule
 })
@@ -58,6 +60,32 @@ export class RbdMirroringService {
 
   updatePool(poolName, request) {
     return this.http.put(`api/block/mirroring/pool/${poolName}`, request, { observe: 'response' });
+  }
+
+  getSiteName() {
+    return this.http.get(`api/block/mirroring/site_name`);
+  }
+
+  setSiteName(@cdEncodeNot siteName) {
+    return this.http.put(
+      `api/block/mirroring/site_name`,
+      { site_name: siteName },
+      { observe: 'response' }
+    );
+  }
+
+  createBootstrapToken(poolName) {
+    return this.http.post(`api/block/mirroring/pool/${poolName}/bootstrap/token`, {});
+  }
+
+  importBootstrapToken(poolName, @cdEncodeNot direction, @cdEncodeNot token) {
+    const request = {
+      direction: direction,
+      token: token
+    };
+    return this.http.post(`api/block/mirroring/pool/${poolName}/bootstrap/peer`, request, {
+      observe: 'response'
+    });
   }
 
   getPeer(poolName, peerUUID) {
