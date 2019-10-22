@@ -89,6 +89,7 @@ set(librgw_common_srcs
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
   rgw_sync_module_pubsub.cc
+  rgw_sync_policy.cc
   rgw_pubsub_push.cc
   rgw_notify.cc
   rgw_notify_event_type.cc
