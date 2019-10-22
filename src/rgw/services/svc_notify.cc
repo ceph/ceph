@@ -111,7 +111,7 @@ public:
     if (!register_completion) {
       return -EINVAL;
     }
-    register_completion->wait_for_safe();
+    register_completion->wait_for_complete();
     int r = register_completion->get_return_value();
     register_completion->release();
     register_completion = nullptr;

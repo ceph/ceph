@@ -72,7 +72,7 @@ class BucketReshardShard {
     librados::AioCompletion *c = aio_completions.front();
     aio_completions.pop_front();
 
-    c->wait_for_safe();
+    c->wait_for_complete();
 
     int ret = c->get_return_value();
     c->release();
