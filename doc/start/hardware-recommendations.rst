@@ -106,7 +106,7 @@ dedicated drive for the operating system and software, and one drive for each
 Ceph OSD Daemon you run on the host. Most "slow OSD" issues arise due to running
 an operating system, multiple OSDs, and/or multiple journals on the same drive.
 Since the cost of troubleshooting performance issues on a small cluster likely
-exceeds the cost of the extra disk drives, you can accelerate your cluster
+exceeds the cost of the extra disk drives, you can optimize your cluster
 design planning by avoiding the temptation to overtax the OSD storage drives.
 
 You may run multiple Ceph OSD Daemons per hard disk drive, but this will likely
@@ -209,7 +209,7 @@ multiple OSDs per host.
 Networks
 ========
 
-We recommend that each host have at least two 1Gbps network interface
+We recommend that each host has at least two 1Gbps network interface
 controllers (NICs). Since most commodity hard disk drives have a throughput of
 approximately 100MB/second, your NICs should be able to handle the traffic for
 the OSD disks on your host. We recommend a minimum of two NICs to account for a
