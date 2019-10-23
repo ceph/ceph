@@ -1109,14 +1109,6 @@ def command_enter():
 
 ##################################
 
-def command_exec():
-    (daemon_type, daemon_id) = args.name.split('.')
-    c = get_container(args.fsid, daemon_type, daemon_id,
-                      privileged=args.privileged)
-    return subprocess.call(c.exec_cmd(args.command))
-
-##################################
-
 def command_ceph_volume():
     make_log_dir(args.fsid)
 
@@ -1461,25 +1453,6 @@ parser_enter.add_argument(
 parser_enter.add_argument(
     'command', nargs='*',
     default=['bash'],
-    help='command')
-
-parser_exec = subparsers.add_parser(
-    'exec', help='run command inside a running daemon container')
-parser_exec.set_defaults(func=command_exec)
-parser_exec.add_argument(
-    '--fsid',
-    required=True,
-    help='cluster FSID')
-parser_exec.add_argument(
-    '--name', '-n',
-    required=True,
-    help='daemon name (type.id)')
-parser_exec.add_argument(
-    '--privileged',
-    action='store_true',
-    help='use a privileged container')
-parser_exec.add_argument(
-    'command', nargs='+',
     help='command')
 
 parser_ceph_volume = subparsers.add_parser(
