@@ -25,6 +25,7 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
   : cct(cct), connected(0), error(0), infiniband(ib),
     dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
     is_server(false), con_handler(new C_handle_connection(this)),
+    con_init_handler(new C_handle_connection_init(this)),
     active(false), pending(false)
 {
   qp = infiniband->create_queue_pair(
@@ -172,7 +173,14 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   ldout(cct, 20) << __func__ << " nonblock:" << opts.nonblock << ", nodelay:"
                  << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << dendl;
   NetHandler net(cct);
-  tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
+
+  // we construct a socket to transport ib sync message
+  // but we shouldn't block in tcp connecting
+  if (opts.nonblock) {
+    tcp_fd = net.nonblock_connect(peer_addr, opts.connect_bind_addr);
+  } else {
+    tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
+  }
 
   if (tcp_fd < 0) {
     return -errno;
@@ -187,12 +195,39 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
   net.set_priority(tcp_fd, opts.priority, peer_addr.get_family());
-  my_msg.peer_qpn = 0;
-  r = infiniband->send_msg(cct, tcp_fd, my_msg);
-  if (r < 0)
-    return r;
 
+  r = 0;
+  if (opts.nonblock) {
+    worker->center.create_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE , con_init_handler);
+  } else {
+    r = handle_connection_init(false);
+  }
+  return r;
+}
+
+int RDMAConnectedSocketImpl::handle_connection_init(bool need_set_fault) {
+  ldout(cct, 20) << __func__ << " start " << dendl;
+  // delete read event
+  worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
+  if (1 == connected) {
+    ldout(cct, 1) << __func__ << " warnning: logic failed " << dendl;
+    if (need_set_fault) {
+      fault();
+    }
+    return -1;
+  }
+  // send handshake msg to server
+  my_msg.peer_qpn = 0;
+  int r = infiniband->send_msg(cct, tcp_fd, my_msg);
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " send handshake msg failed." << r << dendl;
+    if (need_set_fault) {
+      fault();
+    }
+    return r;
+  }
   worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+  ldout(cct, 20) << __func__ << " finish " << dendl;
   return 0;
 }
 
@@ -604,10 +639,15 @@ void RDMAConnectedSocketImpl::cleanup() {
   if (con_handler && tcp_fd >= 0) {
     (static_cast<C_handle_connection*>(con_handler))->close();
     worker->center.submit_to(worker->center.get_id(), [this]() {
-      worker->center.delete_file_event(tcp_fd, EVENT_READABLE);
+      worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
     }, false);
     delete con_handler;
     con_handler = nullptr;
+  }
+  if (con_init_handler) {
+    (static_cast<C_handle_connection_init*>(con_init_handler))->close();
+    delete con_init_handler;
+    con_init_handler = nullptr;
   }
 }
 

@@ -188,6 +188,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   std::vector<ibv_wc> wc;
   bool is_server;
   EventCallbackRef con_handler;
+  EventCallbackRef con_init_handler;
   int tcp_fd = -1;
   bool active;// qp is active ?
   bool pending;
@@ -217,6 +218,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   int activate();
   void fin();
   void handle_connection();
+  int handle_connection_init(bool need_set_fault = true);
   void cleanup();
   void set_accept_fd(int sd);
   int try_connect(const entity_addr_t&, const SocketOptions &opt);
@@ -235,6 +237,20 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
       active = false;
     }
   };
+  class C_handle_connection_init : public EventCallback {
+    RDMAConnectedSocketImpl *csi;
+    bool active;
+   public:
+    C_handle_connection_init(RDMAConnectedSocketImpl *w) : csi(w), active(true) {}
+    void do_request(uint64_t fd) {
+      if (active)
+        csi->handle_connection_init();
+    }
+    void close() {
+      active = false;
+    }
+  };
+
 };
 
 class RDMAServerSocketImpl : public ServerSocketImpl {
