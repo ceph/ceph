@@ -18,9 +18,11 @@
 #include "futurized_store.h"
 
 namespace ceph::os {
-
-class Collection;
 class Transaction;
+}
+
+namespace crimson::os {
+class Collection;
 
 class CyanStore final : public FuturizedStore {
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
@@ -76,7 +78,7 @@ public:
   seastar::future<std::vector<coll_t>> list_collections() final;
 
   seastar::future<> do_transaction(CollectionRef ch,
-				   Transaction&& txn) final;
+				   ceph::os::Transaction&& txn) final;
 
   seastar::future<> write_meta(const std::string& key,
 		  const std::string& value) final;

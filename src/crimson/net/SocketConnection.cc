@@ -23,7 +23,7 @@
 #include "Interceptor.h"
 #endif
 
-using namespace ceph::net;
+using namespace crimson::net;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    Dispatcher& dispatcher,
@@ -46,7 +46,7 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
 
 SocketConnection::~SocketConnection() {}
 
-ceph::net::Messenger*
+crimson::net::Messenger*
 SocketConnection::get_messenger() const {
   return &messenger;
 }

@@ -7,7 +7,7 @@
 #include "include/msgr.h"
 #include <chrono>
 
-namespace ceph::net {
+namespace crimson::net {
 
 using namespace std::literals::chrono_literals;
 

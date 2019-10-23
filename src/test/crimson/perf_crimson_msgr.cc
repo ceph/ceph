@@ -29,7 +29,7 @@ template<typename Message>
 using Ref = boost::intrusive_ptr<Message>;
 
 seastar::logger& logger() {
-  return ceph::get_logger(ceph_subsys_ms);
+  return crimson::get_logger(ceph_subsys_ms);
 }
 
 enum class perf_mode_t {
@@ -115,10 +115,10 @@ static seastar::future<> run(
 {
   struct test_state {
     struct Server final
-        : public ceph::net::Dispatcher,
+        : public crimson::net::Dispatcher,
           public seastar::peering_sharded_service<Server> {
-      ceph::net::Messenger *msgr = nullptr;
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::net::Messenger *msgr = nullptr;
+      crimson::auth::DummyAuthClientServer dummy_auth;
       const seastar::shard_id sid;
       const seastar::shard_id msgr_sid;
       std::string lname;
@@ -140,7 +140,7 @@ static seastar::future<> run(
       seastar::future<> stop() {
         return seastar::make_ready_future<>();
       }
-      seastar::future<> ms_dispatch(ceph::net::Connection* c,
+      seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
@@ -160,13 +160,13 @@ static seastar::future<> run(
       seastar::future<> init(bool v1_crc_enabled, const entity_addr_t& addr) {
         return container().invoke_on(msgr_sid, [v1_crc_enabled, addr] (auto& server) {
           // server msgr is always with nonce 0
-          auto&& fut = ceph::net::Messenger::create(entity_name_t::OSD(server.sid), server.lname, 0, server.sid);
+          auto&& fut = crimson::net::Messenger::create(entity_name_t::OSD(server.sid), server.lname, 0, server.sid);
           return fut.then(
-            [&server, addr, v1_crc_enabled](ceph::net::Messenger *messenger) {
+            [&server, addr, v1_crc_enabled](crimson::net::Messenger *messenger) {
               return server.container().invoke_on_all(
                 [messenger, v1_crc_enabled](auto& server) {
                   server.msgr = messenger->get_local_shard();
-                  server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
+                  server.msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
                   server.msgr->set_auth_client(&server.dummy_auth);
                   server.msgr->set_auth_server(&server.dummy_auth);
                   if (v1_crc_enabled) {
@@ -191,7 +191,7 @@ static seastar::future<> run(
     };
 
     struct Client final
-        : public ceph::net::Dispatcher,
+        : public crimson::net::Dispatcher,
           public seastar::peering_sharded_service<Client> {
 
       struct ConnStats {
@@ -250,16 +250,16 @@ static seastar::future<> run(
       std::string lname;
 
       const unsigned jobs;
-      ceph::net::Messenger *msgr = nullptr;
+      crimson::net::Messenger *msgr = nullptr;
       const unsigned msg_len;
       bufferlist msg_data;
       const unsigned nr_depth;
       seastar::semaphore depth;
       std::vector<mono_time> time_msgs_sent;
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::auth::DummyAuthClientServer dummy_auth;
 
       unsigned sent_count = 0u;
-      ceph::net::ConnectionRef active_conn = nullptr;
+      crimson::net::ConnectionRef active_conn = nullptr;
 
       bool stop_send = false;
       seastar::promise<> stopped_send_promise;
@@ -287,11 +287,11 @@ static seastar::future<> run(
       seastar::future<> stop() {
         return seastar::now();
       }
-      seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override {
+      seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) override {
         conn_stats.connected_time = mono_clock::now();
         return seastar::now();
       }
-      seastar::future<> ms_dispatch(ceph::net::Connection* c,
+      seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
         // server replies with MOSDOp to generate server-side write workload
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
@@ -323,10 +323,10 @@ static seastar::future<> run(
       seastar::future<> init(bool v1_crc_enabled) {
         return container().invoke_on_all([v1_crc_enabled] (auto& client) {
           if (client.is_active()) {
-            return ceph::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid, client.sid)
-            .then([&client, v1_crc_enabled] (ceph::net::Messenger *messenger) {
+            return crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid, client.sid)
+            .then([&client, v1_crc_enabled] (crimson::net::Messenger *messenger) {
               client.msgr = messenger;
-              client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
+              client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
               client.msgr->set_require_authorizer(false);
               client.msgr->set_auth_client(&client.dummy_auth);
               client.msgr->set_auth_server(&client.dummy_auth);
@@ -564,7 +564,7 @@ static seastar::future<> run(
       }
 
      private:
-      seastar::future<> send_msg(ceph::net::Connection* conn) {
+      seastar::future<> send_msg(crimson::net::Connection* conn) {
         ceph_assert(seastar::engine().cpu_id() == sid);
         return depth.wait(1).then([this, conn] {
           const static pg_t pgid;
@@ -597,7 +597,7 @@ static seastar::future<> run(
         return stopped_send_promise.get_future();
       }
 
-      void do_dispatch_messages(ceph::net::Connection* conn) {
+      void do_dispatch_messages(crimson::net::Connection* conn) {
         ceph_assert(seastar::engine().cpu_id() == sid);
         ceph_assert(sent_count == 0);
         conn_stats.start_time = mono_clock::now();
@@ -638,9 +638,9 @@ static seastar::future<> run(
   };
 
   return seastar::when_all_succeed(
-      ceph::net::create_sharded<test_state::Server>(server_conf.core, server_conf.block_size),
-      ceph::net::create_sharded<test_state::Client>(client_conf.jobs,
-                                                    client_conf.block_size, client_conf.depth))
+      crimson::net::create_sharded<test_state::Server>(server_conf.core, server_conf.block_size),
+      crimson::net::create_sharded<test_state::Client>(client_conf.jobs,
+						       client_conf.block_size, client_conf.depth))
     .then([=](test_state::Server *server,
               test_state::Client *client) {
       if (mode == perf_mode_t::both) {

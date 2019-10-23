@@ -6,7 +6,7 @@
 #include <seastar/core/reactor.hh>
 #include <sys/eventfd.h>
 
-namespace ceph::thread {
+namespace crimson::thread {
 
 /// a synchronization primitive can be used to block a seastar thread, until
 /// another thread notifies it.
@@ -33,4 +33,4 @@ public:
   }
 };
 
-} // namespace ceph::thread
+} // namespace crimson::thread

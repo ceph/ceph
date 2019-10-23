@@ -16,14 +16,16 @@
 #include "osd/osd_types.h"
 
 namespace ceph::os {
-
-class FuturizedCollection;
 class Transaction;
+}
+
+namespace crimson::os {
+class FuturizedCollection;
 
 class FuturizedStore {
 
 public:
-  // TODO: replace with the ceph::errorator concept
+  // TODO: replace with the crimson::errorator concept
   template <class ConcreteExceptionT>
   class Exception : public std::logic_error {
   public:
@@ -103,7 +105,7 @@ public:
   virtual seastar::future<std::vector<coll_t>> list_collections() = 0;
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
-				   Transaction&& txn) = 0;
+					   ceph::os::Transaction&& txn) = 0;
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;

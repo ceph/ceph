@@ -75,8 +75,8 @@ public:
   }
   CryptoRandom* random() const;
   PerfCountersCollectionImpl* get_perfcounters_collection();
-  ceph::common::ConfigProxy& _conf;
-  ceph::common::PerfCountersCollection& _perf_counters_collection;
+  crimson::common::ConfigProxy& _conf;
+  crimson::common::PerfCountersCollection& _perf_counters_collection;
   CephContext* get();
   void put();
 private:

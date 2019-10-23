@@ -6,7 +6,7 @@
 
 #include "include/ceph_assert.h"
 
-namespace ceph::thread {
+namespace crimson::thread {
 
 ThreadPool::ThreadPool(size_t n_threads,
                        size_t queue_sz,
@@ -46,7 +46,7 @@ void ThreadPool::loop()
     {
       std::unique_lock lock{mutex};
       cond.wait_for(lock,
-                    ceph::net::conf.threadpool_empty_queue_max_wait,
+                    crimson::net::conf.threadpool_empty_queue_max_wait,
                     [this, &work_item] {
         return pending.pop(work_item) || is_stopping();
       });
@@ -73,4 +73,4 @@ seastar::future<> ThreadPool::stop()
   });
 }
 
-} // namespace ceph::thread
+} // namespace crimson::thread

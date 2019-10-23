@@ -14,13 +14,13 @@
 
 #include "Errors.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 const std::error_category& net_category()
 {
   struct category : public std::error_category {
     const char* name() const noexcept override {
-      return "ceph::net";
+      return "crimson::net";
     }
 
     std::string message(int ev) const override {
@@ -138,4 +138,4 @@ const std::error_category& net_category()
   return instance;
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

@@ -12,31 +12,34 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
 #include "crimson/common/shared_lru.h"
-#include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
 struct hobject_t;
 class MOSDRepOpReply;
 
-namespace ceph::osd {
+namespace ceph::os {
+  class Transaction;
+}
+
+namespace crimson::osd {
   class ShardServices;
 }
 
 class PGBackend
 {
 protected:
-  using CollectionRef = ceph::os::CollectionRef;
+  using CollectionRef = crimson::os::CollectionRef;
   using ec_profile_t = std::map<std::string, std::string>;
 
 public:
-  PGBackend(shard_id_t shard, CollectionRef coll, ceph::os::FuturizedStore* store);
+  PGBackend(shard_id_t shard, CollectionRef coll, crimson::os::FuturizedStore* store);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
-					   ceph::os::CollectionRef coll,
-					   ceph::osd::ShardServices& shard_services,
+					   crimson::os::CollectionRef coll,
+					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
@@ -66,7 +69,7 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
-  seastar::future<ceph::osd::acked_peers_t> mutate_object(
+  seastar::future<crimson::osd::acked_peers_t> mutate_object(
     std::set<pg_shard_t> pg_shards,
     cached_os_t&& os,
     ceph::os::Transaction&& txn,
@@ -108,7 +111,7 @@ public:
 protected:
   const shard_id_t shard;
   CollectionRef coll;
-  ceph::os::FuturizedStore* store;
+  crimson::os::FuturizedStore* store;
 
 private:
   using cached_ss_t = boost::local_shared_ptr<SnapSet>;
@@ -121,7 +124,7 @@ private:
 					    size_t length,
 					    uint32_t flags) = 0;
   bool maybe_create_new_object(ObjectState& os, ceph::os::Transaction& txn);
-  virtual seastar::future<ceph::osd::acked_peers_t>
+  virtual seastar::future<crimson::osd::acked_peers_t>
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
 		      const hobject_t& hoid,
 		      ceph::os::Transaction&& txn,

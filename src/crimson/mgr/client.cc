@@ -10,23 +10,16 @@
 namespace {
   seastar::logger& logger()
   {
-    return ceph::get_logger(ceph_subsys_mgrc);
-  }
-  template<typename Message, typename... Args>
-  Ref<Message> make_message(Args&&... args)
-  {
-    // Message inherits from RefCountedObject, whose nref is 1 when it is
-    // constructed, so we pass "add_ref = false" to intrusive_ptr's ctor
-    return {new Message{std::forward<Args>(args)...}, false};
+    return crimson::get_logger(ceph_subsys_mgrc);
   }
 }
 
-using ceph::common::local_conf;
+using crimson::common::local_conf;
 
-namespace ceph::mgr
+namespace crimson::mgr
 {
 
-Client::Client(ceph::net::Messenger& msgr,
+Client::Client(crimson::net::Messenger& msgr,
                  WithStats& with_stats)
   : msgr{msgr},
     with_stats{with_stats},
@@ -49,7 +42,7 @@ seastar::future<> Client::stop()
   });
 }
 
-seastar::future<> Client::ms_dispatch(ceph::net::Connection* conn,
+seastar::future<> Client::ms_dispatch(crimson::net::Connection* conn,
                                       MessageRef m)
 {
   switch(m->get_type()) {
@@ -62,7 +55,7 @@ seastar::future<> Client::ms_dispatch(ceph::net::Connection* conn,
   }
 }
 
-seastar::future<> Client::ms_handle_reset(ceph::net::ConnectionRef c)
+seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 {
   if (conn == c) {
     return reconnect();
@@ -83,14 +76,14 @@ seastar::future<> Client::reconnect()
       [this](auto xconn) {
         conn = xconn->release();
         // ask for the mgrconfigure message
-        auto m = make_message<MMgrOpen>();
+        auto m = ceph::make_message<MMgrOpen>();
         m->daemon_name = local_conf()->name.get_id();
         return conn->send(std::move(m));
       });
   });
 }
 
-seastar::future<> Client::handle_mgr_map(ceph::net::Connection*,
+seastar::future<> Client::handle_mgr_map(crimson::net::Connection*,
                                          Ref<MMgrMap> m)
 {
   mgrmap = m->get_map();
@@ -104,7 +97,7 @@ seastar::future<> Client::handle_mgr_map(ceph::net::Connection*,
   }
 }
 
-seastar::future<> Client::handle_mgr_conf(ceph::net::Connection* conn,
+seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
                                           Ref<MMgrConfigure> m)
 {
   logger().info("{} {}", __func__, *m);
