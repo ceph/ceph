@@ -21,13 +21,33 @@ data cluster (e.g., OpenStack, CloudStack, etc).
 CPU
 ===
 
+Monitors and managers (ceph-mon and ceph-mgr)
+---------------------------------------------
+
+Monitors simply maintain a master copy of the cluster map, so they are
+not CPU intensive.
+
+
+Metadata servers (ceph-mds)
+---------------------------
+
 Ceph metadata servers dynamically redistribute their load, which is CPU
 intensive. So your metadata servers should have significant processing power
-(e.g., quad core or better CPUs). Ceph OSDs run the :term:`RADOS` service, calculate
-data placement with :term:`CRUSH`, replicate data, and maintain their own copy of the
-cluster map. Therefore, OSDs should have a reasonable amount of processing power
-(e.g., dual core processors). Monitors simply maintain a master copy of the
-cluster map, so they are not CPU intensive. You must also consider whether the
+(e.g., quad core or better CPUs).
+
+OSDs (ceph-osd)
+---------------
+
+Ceph OSDs run the :term:`RADOS` service, calculate data placement with
+:term:`CRUSH`, replicate data, and maintain their own copy of the
+cluster map. Therefore, OSDs should have a reasonable amount of processing
+power (e.g., dual core processors). If you are using flash-based
+storage (either SSD or NVMe), high CPU frequency will be required to get
+the most out of the hardware. The higher the CPU frequency is, the lower
+the read/write latency.
+
+
+You must also consider whether the
 host machine will run CPU-intensive processes in addition to Ceph daemons. For
 example, if your hosts will run computing VMs (e.g., OpenStack Nova), you will
 need to ensure that these other processes leave sufficient processing power for
