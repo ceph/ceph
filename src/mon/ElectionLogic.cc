@@ -86,6 +86,14 @@ void ElectionLogic::declare_standalone_victory()
   bump_epoch(epoch+1);
 }
 
+void ElectionLogic::clear_live_election_state()
+{
+  leader_acked = -1;
+  electing_me = false;
+  delete stable_peer_tracker;
+  stable_peer_tracker = new ConnectionTracker(*peer_tracker);
+}
+
 void ElectionLogic::start()
 {
   if (!participating) {
@@ -103,9 +111,9 @@ void ElectionLogic::start()
   } else {
     elector->validate_store();
   }
-  electing_me = true;
   acked_me.insert(elector->get_my_rank());
-  leader_acked = -1;
+  clear_live_election_state();
+  electing_me = true;
 
   elector->propose_to_peers(epoch);
   elector->_start();
@@ -156,8 +164,7 @@ void ElectionLogic::declare_victory()
   ldout(cct, 5) << "I win! acked_me=" << acked_me << dendl;
   last_election_winner = elector->get_my_rank();
   last_voted_for = last_election_winner;
-  leader_acked = -1;
-  electing_me = false;
+  clear_live_election_state();
 
   set<int> new_quorum;
   new_quorum.swap(acked_me);
@@ -280,7 +287,11 @@ double ElectionLogic::connectivity_election_score(int rank)
   }
   double score;
   int liveness;
-  peer_tracker->get_total_connection_score(rank, &score, &liveness);
+  if (stable_peer_tracker) {
+    stable_peer_tracker->get_total_connection_score(rank, &score, &liveness);
+  } else {
+    peer_tracker->get_total_connection_score(rank, &score, &liveness);
+  }
   return score;
 }
 
@@ -408,7 +419,6 @@ bool ElectionLogic::victory_makes_sense(int from)
 		  << leader_score
 		  << "; my score:" << my_score << dendl;
 
-    // TODO: this probably isn't safe because we may be behind on score states?
     makes_sense = (leader_score >= my_score);
     break;
   default:
@@ -423,7 +433,7 @@ bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
 
   last_election_winner = from;
   last_voted_for = leader_acked;
-  leader_acked = -1;
+  clear_live_election_state();
 
   // i should have seen this election if i'm getting the victory.
   if (from_epoch != epoch + 1) { 
