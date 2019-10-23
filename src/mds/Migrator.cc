@@ -2127,10 +2127,9 @@ void Migrator::export_reverse(CDir *dir, export_state_t& stat)
     bool need_issue = false;
     for (auto& p : in->get_client_caps()) {
       Capability *cap = p.second;
-      if (cap->is_stale()) {
-	mds->locker->revoke_stale_caps(cap);
-      } else {
+      if (!cap->is_stale()) {
 	need_issue = true;
+	break;
       }
     }
     if (need_issue &&

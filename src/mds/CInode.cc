@@ -219,7 +219,7 @@ ostream& operator<<(ostream& out, const CInode& in)
       if (it->second->issued() != it->second->pending())
 	out << "/" << ccap_string(it->second->issued());
       out << "/" << ccap_string(it->second->wanted())
-	  << "@" << it->second->get_last_sent();
+	  << "@" << it->second->get_last_seq();
     }
     out << "}";
     if (in.get_loner() >= 0 || in.get_wanted_loner() >= 0) {
@@ -3006,15 +3006,11 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
     if (parent)
       parent->dir->adjust_num_inodes_with_caps(1);
   }
-  
-  Capability *cap = new Capability(this, ++mdcache->last_cap_id, client);
+
+  Capability *cap = new Capability(this, session, ++mdcache->last_cap_id);
   assert(client_caps.count(client) == 0);
   client_caps[client] = cap;
 
-  session->add_cap(cap);
-  if (session->is_stale())
-    cap->mark_stale();
-  
   cap->client_follows = first-1;
   
   containing_realm->add_cap(client, cap);
@@ -3489,24 +3485,24 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(session, file_i);
       issue = (cap->wanted() | likes) & allowed;
-      cap->issue_norevoke(issue);
+      cap->issue_norevoke(issue, true);
       issue = cap->pending();
       dout(10) << "encode_inodestat issuing " << ccap_string(issue)
 	       << " seq " << cap->get_last_seq() << dendl;
     } else if (cap && cap->is_new() && !dir_realm) {
       // alway issue new caps to client, otherwise the caps get lost
-      assert(cap->is_stale());
-      issue = cap->pending() | CEPH_CAP_PIN;
-      cap->issue_norevoke(issue);
+      ceph_assert(cap->is_stale());
+      ceph_assert(!cap->pending());
+      issue = CEPH_CAP_PIN;
+      cap->issue_norevoke(issue, true);
       dout(10) << "encode_inodestat issuing " << ccap_string(issue)
 	       << " seq " << cap->get_last_seq()
-	       << "(stale|new caps)" << dendl;
+	       << "(stale&new caps)" << dendl;
     }
 
     if (issue) {
       cap->set_last_issue();
       cap->set_last_issue_stamp(ceph_clock_now());
-      cap->clear_new();
       ecap.caps = issue;
       ecap.wanted = cap->wanted();
       ecap.cap_id = cap->get_cap_id();
@@ -4528,7 +4524,7 @@ void CInode::dump(Formatter *f, int flags) const
       f->dump_string("pending", ccap_string(cap->pending()));
       f->dump_string("issued", ccap_string(cap->issued()));
       f->dump_string("wanted", ccap_string(cap->wanted()));
-      f->dump_int("last_sent", cap->get_last_sent());
+      f->dump_int("last_sent", cap->get_last_seq());
       f->close_section();
     }
     f->close_section();

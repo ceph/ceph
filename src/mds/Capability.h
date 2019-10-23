@@ -61,6 +61,7 @@
  */
 
 class CInode;
+class Session;
 
 namespace ceph {
   class Formatter;
@@ -109,42 +110,37 @@ public:
     static void generate_test_instances(list<revoke_info*>& ls);
   };
 
-
-  const static unsigned STATE_STALE		= (1<<0);
+  const static unsigned STATE_NOTABLE		= (1<<0);
   const static unsigned STATE_NEW		= (1<<1);
   const static unsigned STATE_IMPORTING		= (1<<2);
   const static unsigned STATE_NEEDSNAPFLUSH	= (1<<3);
+  const static unsigned STATE_CLIENTWRITEABLE	= (1<<4);
 
-
-  Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) :
-    client_follows(0), client_xattr_version(0),
-    client_inline_version(0),
-    last_rbytes(0), last_rsize(0),
-    item_session_caps(this), item_snaprealm_caps(this),
-    item_revoking_caps(this), item_client_revoking_caps(this),
-    inode(i), client(c),
-    cap_id(id),
-    _wanted(0), num_revoke_warnings(0),
-    _pending(0), _issued(0),
-    last_sent(0),
-    last_issue(0),
-    mseq(0),
-    suppress(0), state(0) {
-  }
+  Capability(CInode *i=nullptr, Session *s=nullptr, uint64_t id=0);
   Capability(const Capability& other) = delete;
 
   const Capability& operator=(const Capability& other) = delete;
 
-  int pending() { return _pending; }
-  int issued() { return _issued; }
-  bool is_null() { return !_pending && _revokes.empty(); }
+  int pending() const {
+    return _pending;
+  }
+  int issued() const {
+    return _issued;
+  }
+  int revoking() const {
+    return _issued & ~_pending;
+  }
+  ceph_seq_t issue(unsigned c, bool reval=false) {
+    if (reval)
+      revalidate();
 
-  ceph_seq_t issue(unsigned c) {
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
       _revokes.emplace_back(_pending, last_sent, last_issue);
       _pending = c;
       _issued |= c;
+      if (!is_notable())
+	mark_notable();
     } else if (~_pending & c) {
       // adding bits only.  remove obsolete revocations?
       _pending |= c;
@@ -158,23 +154,22 @@ public:
       assert(_pending == c);
     }
     //last_issue = 
-    ++last_sent;
+    inc_last_seq();
     return last_sent;
   }
-  ceph_seq_t issue_norevoke(unsigned c) {
+  ceph_seq_t issue_norevoke(unsigned c, bool reval=false) {
+    if (reval)
+      revalidate();
+
     _pending |= c;
     _issued |= c;
-    //check_rdcaps_list();
-    ++last_sent;
+    clear_new();
+
+    inc_last_seq();
     return last_sent;
   }
-  void _calc_issued() {
-    _issued = _pending;
-    for (const auto &r : _revokes) {
-      _issued |= r.before;
-    }
-  }
   void confirm_receipt(ceph_seq_t seq, unsigned caps) {
+    bool was_revoking = (_issued & ~_pending);
     if (seq == last_sent) {
       _revokes.clear();
       _issued = caps;
@@ -187,16 +182,17 @@ public:
       if (!_revokes.empty()) {
 	if (_revokes.front().seq == seq)
 	  _revokes.begin()->before = caps;
-	_calc_issued();
+	calc_issued();
       } else {
 	// seq < last_sent
 	_issued = caps | _pending;
       }
     }
 
-    if (_issued == _pending) {
+    if (was_revoking && _issued == _pending) {
       item_revoking_caps.remove_myself();
       item_client_revoking_caps.remove_myself();
+      maybe_clear_notable();
     }
     //check_rdcaps_list();
   }
@@ -209,19 +205,20 @@ public:
       changed = true;
     }
     if (changed) {
-      _calc_issued();
-      if (_issued == _pending) {
+      bool was_revoking = (_issued & ~_pending);
+      calc_issued();
+      if (was_revoking && _issued == _pending) {
 	item_revoking_caps.remove_myself();
 	item_client_revoking_caps.remove_myself();
+	maybe_clear_notable();
       }
     }
   }
   ceph_seq_t get_mseq() { return mseq; }
   void inc_mseq() { mseq++; }
 
-  ceph_seq_t get_last_sent() { return last_sent; }
-  utime_t get_last_issue_stamp() { return last_issue_stamp; }
-  utime_t get_last_revoke_stamp() { return last_revoke_stamp; }
+  utime_t get_last_issue_stamp() const { return last_issue_stamp; }
+  utime_t get_last_revoke_stamp() const { return last_revoke_stamp; }
 
   void set_last_issue() { last_issue = last_sent; }
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
@@ -239,10 +236,14 @@ public:
   void inc_suppress() { suppress++; }
   void dec_suppress() { suppress--; }
 
-  bool is_stale() { return state & STATE_STALE; }
-  void mark_stale() { state |= STATE_STALE; }
-  void clear_stale() { state &= ~STATE_STALE; }
-  bool is_new() { return state & STATE_NEW; }
+  static bool is_wanted_notable(int wanted) {
+    return wanted & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD);
+  }
+  bool is_notable() const { return state & STATE_NOTABLE; }
+
+  bool is_stale() const;
+  bool is_valid() const;
+  bool is_new() const { return state & STATE_NEW; }
   void mark_new() { state |= STATE_NEW; }
   void clear_new() { state &= ~STATE_NEW; }
   bool is_importing() { return state & STATE_IMPORTING; }
@@ -252,16 +253,34 @@ public:
   void mark_needsnapflush() { state |= STATE_NEEDSNAPFLUSH; }
   void clear_needsnapflush() { state &= ~STATE_NEEDSNAPFLUSH; }
 
-  CInode *get_inode() { return inode; }
-  client_t get_client() const { return client; }
+  bool is_clientwriteable() const { return state & STATE_CLIENTWRITEABLE; }
+  void mark_clientwriteable() {
+    if (!is_clientwriteable()) {
+      state |= STATE_CLIENTWRITEABLE;
+      if (!is_notable())
+	mark_notable();
+    }
+  }
+  void clear_clientwriteable() {
+    if (is_clientwriteable()) {
+      state &= ~STATE_CLIENTWRITEABLE;
+      maybe_clear_notable();
+    }
+  }
+
+  CInode *get_inode() const { return inode; }
+  Session *get_session() const { return session; }
+  client_t get_client() const;
 
   // caps this client wants to hold
-  int wanted() { return _wanted; }
+  int wanted() const { return _wanted; }
   void set_wanted(int w);
 
   void inc_last_seq() { last_sent++; }
-  ceph_seq_t get_last_seq() { return last_sent; }
-  ceph_seq_t get_last_issue() { return last_issue; }
+  ceph_seq_t get_last_seq() const {
+    return last_sent;
+  }
+  ceph_seq_t get_last_issue() const { return last_issue; }
 
   void reset_seq() {
     last_sent = 0;
@@ -269,21 +288,17 @@ public:
   }
   
   // -- exports --
-  Export make_export() {
-    return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
+  Export make_export() const {
+    return Export(cap_id, wanted(), issued(), pending(), client_follows, get_last_seq(), mseq+1, last_issue_stamp);
   }
   void merge(const Export& other, bool auth_cap) {
-    if (!is_stale()) {
-      // issued + pending
-      int newpending = other.pending | pending();
-      if (other.issued & ~newpending)
-	issue(other.issued | newpending);
-      else
-	issue(newpending);
-      last_issue_stamp = other.last_issue_stamp;
-    } else {
-      issue(CEPH_CAP_PIN);
-    }
+    // issued + pending
+    int newpending = other.pending | pending();
+    if (other.issued & ~newpending)
+      issue(other.issued | newpending);
+    else
+      issue(newpending);
+    last_issue_stamp = other.last_issue_stamp;
 
     client_follows = other.client_follows;
 
@@ -293,25 +308,20 @@ public:
       mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
-    if (!is_stale()) {
-      // issued + pending
-      int newpending = pending();
-      if (otherissued & ~newpending)
-	issue(otherissued | newpending);
-      else
-	issue(newpending);
-    } else {
-      issue(CEPH_CAP_PIN);
-    }
+    // issued + pending
+    int newpending = pending();
+    if (otherissued & ~newpending)
+      issue(otherissued | newpending);
+    else
+      issue(newpending);
 
     // wanted
     set_wanted(wanted() | otherwanted);
   }
 
   void revoke() {
-    if (pending() & ~CEPH_CAP_PIN)
-      issue(CEPH_CAP_PIN);
-    confirm_receipt(last_sent, CEPH_CAP_PIN);
+    if (revoking())
+      confirm_receipt(last_sent, pending());
   }
 
   // serializers
@@ -333,9 +343,10 @@ public:
 
 private:
   CInode *inode;
-  client_t client;
+  Session *session;
 
   uint64_t cap_id;
+  uint32_t cap_gen;
 
   __u32 _wanted;     // what the client wants (ideally)
 
@@ -355,6 +366,18 @@ private:
 
   int suppress;
   unsigned state;
+
+  void calc_issued() {
+    _issued = _pending;
+    for (const auto &r : _revokes) {
+      _issued |= r.before;
+    }
+  }
+
+  void revalidate();
+
+  void mark_notable();
+  void maybe_clear_notable();
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)

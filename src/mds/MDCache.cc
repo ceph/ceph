@@ -5896,12 +5896,13 @@ void MDCache::export_remaining_imported_caps()
   }
 }
 
-void MDCache::try_reconnect_cap(CInode *in, Session *session)
+Capability* MDCache::try_reconnect_cap(CInode *in, Session *session)
 {
   client_t client = session->info.get_client();
+  Capability *cap = nullptr;
   const cap_reconnect_t *rc = get_replay_cap_reconnect(in->ino(), client);
   if (rc) {
-    in->reconnect_cap(client, *rc, session);
+    cap = in->reconnect_cap(client, *rc, session);
     dout(10) << "try_reconnect_cap client." << client
 	     << " reconnect wanted " << ccap_string(rc->capinfo.wanted)
 	     << " issue " << ccap_string(rc->capinfo.issued)
@@ -5929,6 +5930,7 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
       cap_reconnect_waiters.erase(it);
     }
   }
+  return cap;
 }
 
 
@@ -6456,7 +6458,9 @@ void MDCache::identify_files_to_recover()
 	 p != in->inode.client_ranges.end();
 	 ++p) {
       Capability *cap = in->get_client_cap(p->first);
-      if (!cap) {
+      if (cap) {
+	cap->mark_clientwriteable();
+      } else {
 	dout(10) << " client." << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
 	recover = true;
 	break;
