@@ -2320,28 +2320,13 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   return 0;
 }
 
-void encode_json(const char *name, const RGWBucketSyncFlowManager::flow_map_t& m, Formatter *f)
+void encode_json(const char *name, const RGWBucketSyncFlowManager::pipe_set& pset, Formatter *f)
 {
   Formatter::ObjectSection top_section(*f, name);
   Formatter::ArraySection as(*f, "entries");
 
-  for (auto& entry : m) {
-    Formatter::ObjectSection os(*f, "entry");
-    auto& bucket = entry.first;
-    auto& pflow = entry.second;
-
-#if 0
-    encode_json("buckets", rgw_sync_bucket_entities::bucket_key(bucket), f);
-    {
-      Formatter::ArraySection fg(*f, "flow_groups");
-      for (auto& flow_group : pflow.flow_groups) {
-        encode_json("entry", *flow_group, f);
-      }
-    }
-#endif
-    for (auto& pipe : pflow.pipes) {
-      encode_json("pipe", pipe, f);
-    }
+  for (auto& pipe : pset.pipes) {
+    encode_json("pipe", pipe, f);
   }
 }
 
@@ -2394,8 +2379,8 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
     }
   }
 
-  RGWBucketSyncFlowManager::flow_map_t sources;
-  RGWBucketSyncFlowManager::flow_map_t dests;
+  RGWBucketSyncFlowManager::pipe_set sources;
+  RGWBucketSyncFlowManager::pipe_set dests;
 
   flow_mgr->reflect(eff_bucket, &sources, &dests);
 
@@ -7885,7 +7870,7 @@ next:
 
     if (opt_cmd == OPT::SYNC_GROUP_MODIFY) {
       auto iter = sync_policy.groups.find(*opt_group_id);
-      if (iter != sync_policy.groups.end()) {
+      if (iter == sync_policy.groups.end()) {
         cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
         return ENOENT;
       }
