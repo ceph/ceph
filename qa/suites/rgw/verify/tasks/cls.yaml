@@ -6,3 +6,4 @@ tasks:
         - cls/test_cls_log.sh
         - cls/test_cls_refcount.sh
         - cls/test_cls_rgw.sh
+        - rgw/test_rgw_gc_log.sh
