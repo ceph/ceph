@@ -274,7 +274,7 @@ def dmsetup_splitname(dev):
 ################################
 
 
-def get_api_pvs():
+def get_api_pvs(fields=None):
     """
     Return the list of physical volumes configured for lvm and available in the
     system using flags to include common metadata associated with them like the uuid
@@ -288,7 +288,8 @@ def get_api_pvs():
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
-    fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
+    if fields is None:
+        fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
     stdout, stderr, returncode = process.call(
         ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields],
@@ -517,7 +518,7 @@ def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
 #############################
 
 
-def get_api_vgs():
+def get_api_vgs(fields=None):
     """
     Return the list of group volumes available in the system using flags to
     include common metadata associated with them
@@ -532,7 +533,8 @@ def get_api_vgs():
     To normalize sizing, the units are forced in 'g' which is equivalent to
     gigabytes, which uses multiples of 1024 (as opposed to 1000)
     """
-    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
+    if fields is None:
+        fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
     stdout, stderr, returncode = process.call(
         ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields],
         verbose_on_failure=False
@@ -866,7 +868,7 @@ def get_vg(vg_name=None, vg_tags=None, vgs=None):
 ###############################
 
 
-def get_api_lvs():
+def get_api_lvs(fields=None):
     """
     Return the list of logical volumes available in the system using flags to include common
     metadata associated with them
@@ -878,7 +880,8 @@ def get_api_lvs():
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
-    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
+    if fields is None:
+        fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
         ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o', fields],
         verbose_on_failure=False
