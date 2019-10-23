@@ -161,6 +161,11 @@ class ElectionLogic {
    * Only used in the connectivity handler.
    * Points at a stable copy of the peer_tracker we use to keep scores
    * throughout an election period.
+   * TODO: hmm, this might not be strong enough since the scores
+   * may not match across all ranks. It's possible we need to do
+   * some kind of vector clock and use only the newest version of a report
+   * all up peers have seen? I haven't managed to break it yet in unit
+   * tests though so leave that as a possibility for later.
    */
   const ConnectionTracker *stable_peer_tracker;
   /**
