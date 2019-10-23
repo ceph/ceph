@@ -1105,7 +1105,7 @@ def command_shell():
 def command_enter():
     (daemon_type, daemon_id) = args.name.split('.')
     c = get_container(args.fsid, daemon_type, daemon_id)
-    subprocess.call(c.exec_cmd(['bash']))
+    subprocess.call(c.exec_cmd(args.command))
 
 ##################################
 
@@ -1458,6 +1458,10 @@ parser_enter.add_argument(
     '--name', '-n',
     required=True,
     help='daemon name (type.id)')
+parser_enter.add_argument(
+    'command', nargs='*',
+    default=['bash'],
+    help='command')
 
 parser_exec = subparsers.add_parser(
     'exec', help='run command inside a running daemon container')
