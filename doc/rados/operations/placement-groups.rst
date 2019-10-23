@@ -178,7 +178,7 @@ whether you specify a ``pg_num`` value or not does not affect whether
 the value is automatically tuned by the cluster after the fact.  To
 enable or disable auto-tuning,::
 
-  ceph osd pool set {pool-name} pg_autoscaler_mode (on|off|warn)
+  ceph osd pool set {pool-name} pg_autoscale_mode (on|off|warn)
 
 The "rule of thumb" for PGs per OSD has traditionally be 100.  With
 the additional of the balancer (which is also enabled by default), a
