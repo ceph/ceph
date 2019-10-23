@@ -3,6 +3,7 @@
 DEFAULT_IMAGE='ceph/daemon-base'
 DATA_DIR='/var/lib/ceph'
 LOG_DIR='/var/log/ceph'
+LOGROTATE_DIR='/etc/logrotate.d'
 UNIT_DIR='/etc/systemd/system'
 LOG_DIR_MODE=0o770
 DATA_DIR_MODE=0o700
@@ -508,6 +509,31 @@ def install_base_units(fsid):
         call_throws(['systemctl', 'enable', 'ceph-%s.target' % fsid])
         call_throws(['systemctl', 'start', 'ceph-%s.target' % fsid])
 
+    # logrotate for the cluster
+    with open(args.logrotate_dir + '/ceph-%s' % fsid, 'w') as f:
+        """
+        This is a bit sloppy in that the killall/pkill will touch all ceph daemons
+        in all containers, but I don't see an elegant way to send SIGHUP *just* to
+        the daemons for this cluster.  (1) systemd kill -s will get the signal to
+        podman, but podman will exit.  (2) podman kill will get the signal to the
+        first child (bash), but that isn't the ceph daemon.  This is simpler and
+        should be harmless.
+        """
+        f.write("""# created by ceph-daemon
+/var/log/ceph/%s/*.log {
+    rotate 7
+    daily
+    compress
+    sharedscripts
+    postrotate
+        killall -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw || pkill -1 -x "ceph-mon|ceph-mgr|ceph-mds|ceph-osd|ceph-fuse|radosgw" || true
+    endscript
+    missingok
+    notifempty
+    su root ceph
+}
+""" % fsid)
+
 def deploy_crash(fsid, uid, gid, config, keyring):
     crash_dir = os.path.join(args.data_dir, fsid, 'crash')
     makedirs(crash_dir, uid, gid, DATA_DIR_MODE)
@@ -562,7 +588,6 @@ def deploy_crash(fsid, uid, gid, config, keyring):
     if not existed:
         subprocess.check_output(['systemctl', 'enable', unit_name])
         subprocess.check_output(['systemctl', 'start', unit_name])
-
 
 def get_unit_file(fsid):
     u = """[Unit]
@@ -1316,6 +1341,8 @@ def command_rm_cluster():
     call_throws(['rm', '-rf', args.log_dir + '/' + args.fsid])
     call_throws(['rm', '-rf', args.log_dir +
                              '/*.wants/ceph-%s@*' % args.fsid])
+    # rm logrotate config
+    call_throws(['rm', '-f', args.logrotate_dir + '/ceph-%s' % args.fsid])
 
 
 ##################################
@@ -1339,6 +1366,10 @@ parser.add_argument(
     '--log-dir',
     default=LOG_DIR,
     help='base directory for daemon logs')
+parser.add_argument(
+    '--logrotate-dir',
+    default=LOGROTATE_DIR,
+    help='location of logrotate configuration files')
 parser.add_argument(
     '--unit-dir',
     default=UNIT_DIR,
