@@ -123,6 +123,7 @@ function check_tracker_status {
 
 function cherry_pick_phase {
     local base_branch=
+    local merged=
     local number_of_commits=
     local offset=0
     local singular_or_plural_commit=
@@ -151,6 +152,13 @@ function cherry_pick_phase {
         error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
         info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
         info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
+        false
+    fi
+    merged=$(echo ${remote_api_output} | jq -r .merged)
+    if [ "$merged" = "true" ] ; then
+        true
+    else
+        error "${original_pr_url} is not merged yet: cowardly refusing to perform automated cherry-pick"
         false
     fi
     number_of_commits=$(echo ${remote_api_output} | jq .commits)
