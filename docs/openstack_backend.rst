@@ -31,6 +31,10 @@ Setup
     $ cd teuthology ; ./bootstrap install
     $ source virtualenv/bin/activate
 
+* Setup the teuthology node::
+
+    $ teuthology-openstack --key-filename myself.pem --key-name myself --setup
+
 Get OpenStack credentials and test it
 -------------------------------------
 
