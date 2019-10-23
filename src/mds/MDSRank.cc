@@ -3668,6 +3668,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_max_purge_files",
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
+    "mds_max_snaps_per_dir",
     "mds_op_complaint_time",
     "mds_op_history_duration",
     "mds_op_history_size",
