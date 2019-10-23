@@ -741,6 +741,11 @@ class TestImage(object):
         eq(snap_data, b'\0' * 256)
         self.image.remove_snap('snap1')
 
+    def test_create_snap_ImageExists(self):
+        self.image.create_snap('snap1')
+        assert_raises(ImageExists, self.image.create_snap, 'snap1')
+        self.image.remove_snap('snap1')
+
     def test_list_snaps(self):
         eq([], list(self.image.list_snaps()))
         self.image.create_snap('snap1')
