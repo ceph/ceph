@@ -122,6 +122,7 @@ function check_tracker_status {
 }
 
 function cherry_pick_phase {
+    local base_branch=
     local number_of_commits=
     local offset=0
     local singular_or_plural_commit=
@@ -141,8 +142,17 @@ function cherry_pick_phase {
     fi
     info "Parent issue ostensibly fixed by: ${original_pr_url}"
 
-    debug "Counting commits in ${original_pr_url}"
+    verbose "Examining ${original_pr_url}"
     remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token})
+    base_branch=$(echo ${remote_api_output} | jq -r .base.label)
+    if [ "$base_branch" = "ceph:master" ] ; then
+        true
+    else
+        error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
+        info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
+        info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
+        false
+    fi
     number_of_commits=$(echo ${remote_api_output} | jq .commits)
     if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
         # \$number_of_commits is set, and is an integer
@@ -978,7 +988,7 @@ debug "Milestone number is $milestone_number"
 local_branch=wip-${issue}-${target_branch}
 if git show-ref --verify --quiet refs/heads/$local_branch ; then
     if [ "$EXPLICIT_PREPARE" ] ; then
-        error "local branch $local_branch already exists -- cannot --prepare"
+        error "local branch $local_branch already exists -- cannot -prepare"
         false
     fi
     info "local branch $local_branch already exists: skipping cherry-pick phase"
