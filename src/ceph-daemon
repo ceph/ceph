@@ -670,7 +670,6 @@ class CephContainer:
             'run',
             '-it',
             '--net=host',
-            '--privileged',
             '--env', 'LANG=C',
         ] + self.podman_args + envs + vols + [
             '--entrypoint', cmd[0],
