@@ -338,11 +338,7 @@ int Monitor::do_admin_command(
   } else if (command == "ops") {
     (void)op_tracker.dump_ops_in_flight(f);
   } else if (command == "sessions") {
-    f->open_array_section("sessions");
-    for (auto p : session_map.sessions) {
-      f->dump_stream("session") << *p;
-    }
-    f->close_section();
+    f->dump_object("sessions", session_map);
   } else if (command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f)) {
       err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \

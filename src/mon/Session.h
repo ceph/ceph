@@ -110,6 +110,14 @@ struct MonSession : public RefCountedObject {
   const entity_addr_t& get_peer_socket_addr() {
     return socket_addr;
   }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("num", name.num());
+    f->dump_object("addrs", addrs);
+    std::stringstream ss_f;
+    ss_f << "0x" << std::hex << con_features << std::dec;
+    f->dump_string("features", ss_f.str());
+  }
 };
 
 
@@ -244,6 +252,21 @@ struct MonSessionMap {
     sub->session->sub_map.erase(sub->type);
     sub->type_item.remove_myself();
     delete sub;
+  }
+
+  void dump(ceph::Formatter *f) const {
+    std::map<uint32_t, std::vector<MonSession*>> m;
+    for(auto s : sessions) {
+      m[s->con_type].push_back(s);
+    }
+
+    for (auto& p : m) {
+      f->open_array_section(ceph_entity_type_name(p.first));
+      for (auto& q : p.second) {
+        f->dump_object("group", *q);
+      }
+      f->close_section();
+    }
   }
 };
 
