@@ -681,6 +681,7 @@ class CephContainer:
         return [
             podman_path,
             'exec',
+            '--env', 'LANG=C',
             '-it',
             self.cname,
         ] + cmd
