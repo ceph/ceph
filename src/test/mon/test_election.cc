@@ -744,6 +744,38 @@ void netsplit_with_disallowed_tiebreaker_converges(ElectionLogic::election_strat
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
+void handles_singly_connected_peon(ElectionLogic::election_strategy strategy)
+{
+  Election election(5, strategy);
+  election.block_bidirectional_messages(0, 1);
+  election.block_bidirectional_messages(0, 2);
+  election.block_bidirectional_messages(0, 3);
+  election.block_bidirectional_messages(0, 4);
+
+  election.start_all();
+  election.run_timesteps(20);
+  ASSERT_TRUE(election.quorum_stable(5));
+  ASSERT_FALSE(election.election_stable());
+
+  election.unblock_bidirectional_messages(0, 1);
+  election.run_timesteps(100);
+  ASSERT_TRUE(election.quorum_stable(50));
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+
+  election.block_bidirectional_messages(0, 1);
+  election.unblock_bidirectional_messages(0, 4);
+  for (auto i : election.electors) {
+    i.second->trigger_new_election();
+  }
+  election.run_timesteps(15);
+  ASSERT_TRUE(election.quorum_stable(50));
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+}
+
 // TODO: Write a test that disallowing and disconnecting 0 is otherwise stable?
 
 #define test_classic(utest) TEST(classic, utest) { utest(ElectionLogic::CLASSIC); }
@@ -773,3 +805,4 @@ test_connectivity(disallowed_doesnt_win)
 test_connectivity(converges_after_flapping)
 test_connectivity(converges_while_flapping)
 test_connectivity(netsplit_with_disallowed_tiebreaker_converges)
+test_connectivity(handles_singly_connected_peon)
