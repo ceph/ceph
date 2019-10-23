@@ -64,15 +64,15 @@ for u in ceph.target \
 done
 systemctl | grep system-ceph | grep -q .slice  # naming is escaped and annoying
 
+# check ceph -s works (via shell w/ passed config/keyring)
+$SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+      ceph -s | grep $FSID
+
 ## ls
 $SUDO $CEPH_DAEMON ls | jq '.[]' | jq 'select(.name == "mon.a").fsid' \
     | grep $FSID
 $SUDO $CEPH_DAEMON ls | jq '.[]' | jq 'select(.name == "mgr.x").fsid' \
     | grep $FSID
-
-## exec (and ceph -s works)
-$SUDO $CEPH_DAEMON exec --fsid $FSID -n mon.a -- \
-      ceph -k /var/lib/ceph/mon/ceph-a/keyring -n mon. -s | grep $FSID
 
 ## deploy
 # add mon.b
@@ -87,9 +87,8 @@ for u in ceph-$FSID@mon.b; do
 done
 
 # add mgr.y
-$SUDO $CEPH_DAEMON exec --fsid $FSID -n mon.a -- \
-      ceph -k /var/lib/ceph/mon/ceph-a/keyring -n mon. \
-      auth get-or-create mgr.y \
+$SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+      ceph auth get-or-create mgr.y \
       mon 'allow profile mgr' \
       osd 'allow *' \
       mds 'allow *' > $TMPDIR/keyring.mgr.y
@@ -102,13 +101,14 @@ for u in ceph-$FSID@mgr.y; do
     systemctl is-active $u
 done
 for f in `seq 1 30`; do
-    if $SUDO $CEPH_DAEMON exec --fsid $FSID -n mon.a -- \
-	  ceph -k /var/lib/ceph/mon/ceph-a/keyring -n mon. -s -f json-pretty \
+    if $SUDO $CEPH_DAEMON shell --fsid $FSID \
+	     --config $CONFIG --keyring $KEYRING -- \
+	  ceph -s -f json-pretty \
 	| jq '.mgrmap.num_standbys' | grep -q 1 ; then break; fi
     sleep 1
 done
-$SUDO $CEPH_DAEMON exec --fsid $FSID -n mon.a -- \
-      ceph -k /var/lib/ceph/mon/ceph-a/keyring -n mon. -s -f json-pretty \
+$SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+      ceph -s -f json-pretty \
     | jq '.mgrmap.num_standbys' | grep -q 1
 
 ## run
