@@ -1071,7 +1071,7 @@ def command_deploy():
 def command_run():
     (daemon_type, daemon_id) = args.name.split('.')
     c = get_container(args.fsid, daemon_type, daemon_id)
-    subprocess.call(c.run_cmd())
+    return subprocess.call(c.run_cmd())
 
 ##################################
 
@@ -1098,14 +1098,14 @@ def command_shell():
         args=[],
         podman_args=['--privileged'],
         volume_mounts=mounts)
-    subprocess.call(c.shell_cmd(args.command))
+    return subprocess.call(c.shell_cmd(args.command))
 
 ##################################
 
 def command_enter():
     (daemon_type, daemon_id) = args.name.split('.')
     c = get_container(args.fsid, daemon_type, daemon_id)
-    subprocess.call(c.exec_cmd(args.command))
+    return subprocess.call(c.exec_cmd(args.command))
 
 ##################################
 
@@ -1113,7 +1113,7 @@ def command_exec():
     (daemon_type, daemon_id) = args.name.split('.')
     c = get_container(args.fsid, daemon_type, daemon_id,
                       privileged=args.privileged)
-    subprocess.call(c.exec_cmd(args.command))
+    return subprocess.call(c.exec_cmd(args.command))
 
 ##################################
 
