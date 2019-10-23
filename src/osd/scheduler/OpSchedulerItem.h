@@ -20,12 +20,23 @@
 #include "include/utime.h"
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
-#include "PGPeeringEvent.h"
+#include "osd/PGPeeringEvent.h"
+#include "messages/MOSDOp.h"
+
 
 class OSD;
 class OSDShard;
 
-class OpQueueItem {
+namespace ceph::osd::scheduler {
+
+enum class op_scheduler_class : uint8_t {
+  background_recovery = 0,
+  background_best_effort,
+  immediate,
+  client,
+};
+
+class OpSchedulerItem {
 public:
   class OrderLocker {
   public:
@@ -34,6 +45,7 @@ public:
     virtual void unlock() = 0;
     virtual ~OrderLocker() {}
   };
+
   // Abstraction for operations queueable in the op queue
   class OpQueueable {
   public:
@@ -76,6 +88,8 @@ public:
     virtual ostream &print(ostream &rhs) const = 0;
 
     virtual void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
+    virtual op_scheduler_class get_scheduler_class() const = 0;
+
     virtual ~OpQueueable() {}
     friend ostream& operator<<(ostream& out, const OpQueueable& q) {
       return q.print(out);
@@ -92,7 +106,7 @@ private:
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
 
 public:
-  OpQueueItem(
+  OpSchedulerItem(
     OpQueueable::Ref &&item,
     int cost,
     unsigned priority,
@@ -106,10 +120,10 @@ public:
       owner(owner),
       map_epoch(e)
   {}
-  OpQueueItem(OpQueueItem &&) = default;
-  OpQueueItem(const OpQueueItem &) = delete;
-  OpQueueItem &operator=(OpQueueItem &&) = default;
-  OpQueueItem &operator=(const OpQueueItem &) = delete;
+  OpSchedulerItem(OpSchedulerItem &&) = default;
+  OpSchedulerItem(const OpSchedulerItem &) = delete;
+  OpSchedulerItem &operator=(OpSchedulerItem &&) = default;
+  OpSchedulerItem &operator=(const OpSchedulerItem &) = delete;
 
   OrderLocker::Ref get_order_locker(PGRef pg) {
     return qitem->get_order_locker(pg);
@@ -151,8 +165,12 @@ public:
     return qitem->peering_requires_pg();
   }
 
-  friend ostream& operator<<(ostream& out, const OpQueueItem& item) {
-     out << "OpQueueItem("
+  op_scheduler_class get_scheduler_class() const {
+    return qitem->get_scheduler_class();
+  }
+
+  friend ostream& operator<<(ostream& out, const OpSchedulerItem& item) {
+     out << "OpSchedulerItem("
 	 << item.get_ordering_token() << " " << *item.qitem
 	 << " prio " << item.get_priority()
 	 << " cost " << item.get_cost()
@@ -162,10 +180,10 @@ public:
      }
     return out << ")";
   }
-}; // class OpQueueItem
+}; // class OpSchedulerItem
 
 /// Implements boilerplate for operations queued for the pg lock
-class PGOpQueueable : public OpQueueItem::OpQueueable {
+class PGOpQueueable : public OpSchedulerItem::OpQueueable {
   spg_t pgid;
 protected:
   const spg_t& get_pgid() const {
@@ -173,58 +191,80 @@ protected:
   }
 public:
   explicit PGOpQueueable(spg_t pg) : pgid(pg) {}
-  uint32_t get_queue_token() const override final {
+  uint32_t get_queue_token() const final {
     return get_pgid().ps();
   }
 
-  const spg_t& get_ordering_token() const override final {
+  const spg_t& get_ordering_token() const final {
     return get_pgid();
   }
 
-  OpQueueItem::OrderLocker::Ref get_order_locker(PGRef pg) override final {
-    class Locker : public OpQueueItem::OrderLocker {
+  OpSchedulerItem::OrderLocker::Ref get_order_locker(PGRef pg) final {
+    class Locker : public OpSchedulerItem::OrderLocker {
       PGRef pg;
     public:
       explicit Locker(PGRef pg) : pg(pg) {}
-      void lock() override final {
+      void lock() final {
 	pg->lock();
       }
-      void unlock() override final {
+      void unlock() final {
 	pg->unlock();
       }
     };
-    return OpQueueItem::OrderLocker::Ref(
+    return OpSchedulerItem::OrderLocker::Ref(
       new Locker(pg));
   }
 };
 
 class PGOpItem : public PGOpQueueable {
   OpRequestRef op;
+
+  const MOSDOp *maybe_get_mosd_op() const {
+    auto req = op->get_req();
+    if (req->get_type() == CEPH_MSG_OSD_OP) {
+      return op->get_req<MOSDOp>();
+    } else {
+      return nullptr;
+    }
+  }
+
 public:
   PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
-  op_type_t get_op_type() const override final {
+  op_type_t get_op_type() const final {
+
     return op_type_t::client_op;
   }
-  ostream &print(ostream &rhs) const override final {
+
+  ostream &print(ostream &rhs) const final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
   }
-  std::optional<OpRequestRef> maybe_get_op() const override final {
+
+  std::optional<OpRequestRef> maybe_get_op() const final {
     return op;
   }
-  void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+
+  op_scheduler_class get_scheduler_class() const final {
+    if (maybe_get_mosd_op()) {
+      return op_scheduler_class::client;
+    } else {
+      return op_scheduler_class::immediate;
+    }
+  }
+
+  void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
 };
 
 class PGPeeringItem : public PGOpQueueable {
   PGPeeringEventRef evt;
 public:
   PGPeeringItem(spg_t pg, PGPeeringEventRef e) : PGOpQueueable(pg), evt(e) {}
-  op_type_t get_op_type() const override final {
+  op_type_t get_op_type() const final {
     return op_type_t::peering_event;
   }
-  ostream &print(ostream &rhs) const override final {
+  ostream &print(ostream &rhs) const final {
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
-  void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+  void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
   bool is_peering() const override {
     return true;
   }
@@ -233,6 +273,9 @@ public:
   }
   const PGCreateInfo *creates_pg() const override {
     return evt->create_info.get();
+  }
+  op_scheduler_class get_scheduler_class() const final {
+    return op_scheduler_class::immediate;
   }
 };
 
@@ -243,16 +286,19 @@ public:
     spg_t pg,
     epoch_t epoch_queued)
     : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const override final {
+  op_type_t get_op_type() const final {
     return op_type_t::bg_snaptrim;
   }
-  ostream &print(ostream &rhs) const override final {
+  ostream &print(ostream &rhs) const final {
     return rhs << "PGSnapTrim(pgid=" << get_pgid()
 	       << "epoch_queued=" << epoch_queued
 	       << ")";
   }
   void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  op_scheduler_class get_scheduler_class() const final {
+    return op_scheduler_class::background_best_effort;
+  }
 };
 
 class PGScrub : public PGOpQueueable {
@@ -262,16 +308,19 @@ public:
     spg_t pg,
     epoch_t epoch_queued)
     : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const override final {
+  op_type_t get_op_type() const final {
     return op_type_t::bg_scrub;
   }
-  ostream &print(ostream &rhs) const override final {
+  ostream &print(ostream &rhs) const final {
     return rhs << "PGScrub(pgid=" << get_pgid()
 	       << "epoch_queued=" << epoch_queued
 	       << ")";
   }
   void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  op_scheduler_class get_scheduler_class() const final {
+    return op_scheduler_class::background_best_effort;
+  }
 };
 
 class PGRecovery : public PGOpQueueable {
@@ -285,20 +334,23 @@ public:
     : PGOpQueueable(pg),
       epoch_queued(epoch_queued),
       reserved_pushes(reserved_pushes) {}
-  op_type_t get_op_type() const override final {
+  op_type_t get_op_type() const final {
     return op_type_t::bg_recovery;
   }
-  virtual ostream &print(ostream &rhs) const override final {
+  ostream &print(ostream &rhs) const final {
     return rhs << "PGRecovery(pgid=" << get_pgid()
 	       << "epoch_queued=" << epoch_queued
 	       << "reserved_pushes=" << reserved_pushes
 	       << ")";
   }
-  virtual uint64_t get_reserved_pushes() const override final {
+  uint64_t get_reserved_pushes() const final {
     return reserved_pushes;
   }
-  virtual void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+  void run(
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  op_scheduler_class get_scheduler_class() const final {
+    return op_scheduler_class::background_recovery;
+  }
 };
 
 class PGRecoveryContext : public PGOpQueueable {
@@ -309,16 +361,19 @@ public:
 		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch)
     : PGOpQueueable(pgid),
       c(c), epoch(epoch) {}
-  op_type_t get_op_type() const override final {
+  op_type_t get_op_type() const final {
     return op_type_t::bg_recovery;
   }
-  ostream &print(ostream &rhs) const override final {
+  ostream &print(ostream &rhs) const final {
     return rhs << "PGRecoveryContext(pgid=" << get_pgid()
 	       << " c=" << c.get() << " epoch=" << epoch
 	       << ")";
   }
   void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  op_scheduler_class get_scheduler_class() const final {
+    return op_scheduler_class::background_recovery;
+  }
 };
 
 class PGDelete : public PGOpQueueable {
@@ -329,14 +384,19 @@ public:
     epoch_t epoch_queued)
     : PGOpQueueable(pg),
       epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const override final {
+  op_type_t get_op_type() const final {
     return op_type_t::bg_pg_delete;
   }
-  ostream &print(ostream &rhs) const override final {
+  ostream &print(ostream &rhs) const final {
     return rhs << "PGDelete(" << get_pgid()
 	       << " e" << epoch_queued
 	       << ")";
   }
   void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+  op_scheduler_class get_scheduler_class() const final {
+    return op_scheduler_class::background_best_effort;
+  }
 };
+
+}

@@ -235,3 +235,9 @@
 * The ``upmap_max_iterations`` config option of mgr/balancer has been
   renamed to ``upmap_max_optimizations`` to better match its behaviour.
 
+* ``mClockClientQueue`` and ``mClockClassQueue`` OpQueue
+  implementations have been removed in favor of of a single
+  ``mClockScheduler`` implementation of a simpler OSD interface.
+  Accordingly, the ``osd_op_queue_mclock*`` family of config options
+  has been removed in favor of the ``osd_mclock_scheduler*`` family
+  of options.

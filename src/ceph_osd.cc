@@ -68,12 +68,12 @@ TracepointProvider::Traits cyg_profile_traits("libcyg_profile_tp.so",
 
 } // anonymous namespace
 
-OSD *osd = nullptr;
+OSD *osdptr = nullptr;
 
 void handle_osd_signal(int signum)
 {
-  if (osd)
-    osd->handle_signal(signum);
+  if (osdptr)
+    osdptr->handle_signal(signum);
 }
 
 static void usage()
@@ -673,21 +673,21 @@ flushjournal_out:
     forker.exit(1);
   }
 
-  osd = new OSD(g_ceph_context,
-                store,
-                whoami,
-                ms_cluster,
-                ms_public,
-                ms_hb_front_client,
-                ms_hb_back_client,
-                ms_hb_front_server,
-                ms_hb_back_server,
-                ms_objecter,
-                &mc,
-                data_path,
-                journal_path);
+  osdptr = new OSD(g_ceph_context,
+		   store,
+		   whoami,
+		   ms_cluster,
+		   ms_public,
+		   ms_hb_front_client,
+		   ms_hb_back_client,
+		   ms_hb_front_server,
+		   ms_hb_back_server,
+		   ms_objecter,
+		   &mc,
+		   data_path,
+		   journal_path);
 
-  int err = osd->pre_init();
+  int err = osdptr->pre_init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: osd pre_init failed: " << cpp_strerror(-err)
 	 << TEXT_NORMAL << dendl;
@@ -703,7 +703,7 @@ flushjournal_out:
   ms_objecter->start();
 
   // start osd
-  err = osd->init();
+  err = osdptr->init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: osd init failed: " << cpp_strerror(-err)
          << TEXT_NORMAL << dendl;
@@ -721,7 +721,7 @@ flushjournal_out:
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
-  osd->final_init();
+  osdptr->final_init();
 
   if (g_conf().get_val<bool>("inject_early_sigterm"))
     kill(getpid(), SIGTERM);
@@ -740,7 +740,7 @@ flushjournal_out:
   shutdown_async_signal_handler();
 
   // done
-  delete osd;
+  delete osdptr;
   delete ms_public;
   delete ms_hb_front_client;
   delete ms_hb_back_client;
