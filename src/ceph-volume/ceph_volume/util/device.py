@@ -82,8 +82,20 @@ class Device(object):
 
     def __init__(self, path, lvs=None):
         global global_lvs
+
         self.path = path
-        self.lvs = lvs or global_lvs
+
+        if lvm.is_pv(path):
+            self.lvs = lvs or lvm.get_lv(pv_name=path, lvs=global_lvs)
+        elif lvm.is_vg(os.path.basename(path)):
+            self.lvs = lvs or lvm.get_lv(vg_name=os.path.basename(path),
+                                         lvs=global_lvs)
+        elif lvm.is_lv(lv_name=path):
+            self.lvs = lvs or global_lvs
+        # for new devices and for testing...
+        else:
+            self.lvs = lvs or []
+
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
@@ -134,7 +146,7 @@ class Device(object):
         lv = lvm.get_lv_from_argument(self.path, self.lvs)
         if lv:
             self.lv_api = lv
-            self.lvs = [lv]
+            self.lvs = lvm.Volumes(populate=False); self.lvs.append(lv)
             self.abspath = lv.lv_path
             self.vg_name = lv.vg_name
             self.lv_name = lv.name
