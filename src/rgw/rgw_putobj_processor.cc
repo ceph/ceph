@@ -557,6 +557,11 @@ int AppendObjectProcessor::prepare()
       size_t pos = s.find("-");
       cur_etag = s.substr(0, pos);
     }
+
+    iter = astate->attrset.find(RGW_ATTR_STORAGE_CLASS);
+    if (iter != astate->attrset.end()) {
+      tail_placement_rule.storage_class = iter->second.to_str();
+    }
     cur_manifest = &astate->manifest;
     manifest.set_prefix(cur_manifest->get_prefix());
   }
