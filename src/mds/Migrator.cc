@@ -788,6 +788,11 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   assert(dir->is_auth());
   assert(dest != mds->get_nodeid());
    
+  if (!mds->is_stopping() && !dir->inode->is_exportable(dest)) {
+    dout(25) << "dir is export pinned" << dendl;
+    return;
+  }
+
   if (!(mds->is_active() || mds->is_stopping())) {
     dout(7) << "i'm not active, no exports for now" << dendl;
     return;
@@ -814,11 +819,6 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   if (parent_dir && parent_dir->inode->is_stray()) {
     if (parent_dir->get_parent_dir()->ino() != MDS_INO_MDSDIR(dest)) {
       dout(7) << "i won't export anything in stray" << dendl;
-      return;
-    }
-  } else {
-    if (!mds->is_stopping() && !dir->inode->is_exportable(dest)) {
-      dout(7) << "dir is export pinned" << dendl;
       return;
     }
   }

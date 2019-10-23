@@ -162,12 +162,25 @@ void MDBalancer::handle_export_pins(void)
 
   set<CDir *> authsubs;
   mds->mdcache->get_auth_subtrees(authsubs);
+  bool print_auth_subtrees = true;
+
+  if (authsubs.size() > AUTH_TREES_THRESHOLD &&
+      !g_conf->subsys.should_gather<ceph_subsys_mds, 25>()) {
+    dout(15) << "number of auth trees = " << authsubs.size() << "; not "
+		"printing auth trees" << dendl;
+    print_auth_subtrees = false;
+  }
+
   for (auto &cd : authsubs) {
     mds_rank_t export_pin = cd->inode->get_export_pin();
-    dout(10) << "auth tree " << *cd << " export_pin=" << export_pin << dendl;
+
+    if (print_auth_subtrees) {
+      dout(25) << "auth tree " << *cd << " export_pin=" << export_pin <<
+		  dendl;
+    }
+
     if (export_pin >= 0 && export_pin < mds->mdsmap->get_max_mds() 
 	&& export_pin != mds->get_nodeid()) {
-      dout(10) << "exporting auth subtree " << *cd->inode << " to " << export_pin << dendl;
       mds->mdcache->migrator->export_dir(cd, export_pin);
     }
   }
@@ -205,6 +218,8 @@ void MDBalancer::tick()
     send_heartbeat();
     num_bal_times--;
   }
+
+  mds->mdcache->show_subtrees(10, true);
 }
 
 
