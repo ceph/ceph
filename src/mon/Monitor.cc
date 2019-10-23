@@ -3793,6 +3793,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     r = 0;
     rs = "safe to remove mon." + id;
+  } else if (prefix == "sessions") {
+    f->dump_object("sessions", session_map);
   } else if (prefix == "version") {
     if (f) {
       f->open_object_section("version");
