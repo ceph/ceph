@@ -16,8 +16,6 @@
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "gtest/gtest.h"
-#include <sys/time.h>
-#include <sys/resource.h>
 
 #include <errno.h>
 #include <map>
@@ -309,37 +307,4 @@ TEST_F(LibRadosMisc, MinCompatClient) {
 
   ASSERT_LE(-1, require_min_compat_client);
   ASSERT_GT(CEPH_RELEASE_MAX, require_min_compat_client);
-}
-
-static void shutdown_racer_func()
-{
-  const int niter = 32;
-  rados_t rad;
-  int i;
-
-  for (i = 0; i < niter; ++i) {
-    ASSERT_EQ("", connect_cluster(&rad));
-    rados_shutdown(rad);
-  }
-}
-
-// See trackers #20988 and #42026
-TEST_F(LibRadosMisc, ShutdownRace)
-{
-  const int nthreads = 128;
-  std::thread threads[nthreads];
-
-  // Need a bunch of fd's for this test
-  struct rlimit rold, rnew;
-  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rold), 0);
-  rnew = rold;
-  rnew.rlim_cur = rnew.rlim_max;
-  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rnew), 0);
-
-  for (int i = 0; i < nthreads; ++i)
-    threads[i] = std::thread(shutdown_racer_func);
-
-  for (int i = 0; i < nthreads; ++i)
-    threads[i].join();
-  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
