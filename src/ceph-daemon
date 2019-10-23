@@ -1191,7 +1191,10 @@ def command_ls():
             elif is_fsid(i):
                 fsid = i
                 for j in os.listdir(os.path.join(args.data_dir, i)):
-                    (daemon_type, daemon_id) = j.split('.', 1)
+                    bits = j.split('.')
+                    if len(bits) != 2:
+                        continue
+                    (daemon_type, daemon_id) = bits
                     (enabled, active) = check_unit(get_unit_name(fsid,
                                                                  daemon_type,
                                                                  daemon_id))
