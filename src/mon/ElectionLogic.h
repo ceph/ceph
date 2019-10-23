@@ -158,6 +158,12 @@ class ElectionLogic {
    */
   int last_voted_for = -1;
   /**
+   * Only used in the connectivity handler.
+   * Points at a stable copy of the peer_tracker we use to keep scores
+   * throughout an election period.
+   */
+  const ConnectionTracker *stable_peer_tracker;
+  /**
    * Indicates who we have acked
    */
   int leader_acked;
@@ -200,6 +206,7 @@ public:
   ElectionLogic(ElectionOwner *e, election_strategy es, ConnectionTracker *t,
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
 				  last_election_winner(-1), last_voted_for(-1),
+				  stable_peer_tracker(NULL),
 				  leader_acked(-1),
 				  strategy(es),
 				  participating(true),
@@ -421,6 +428,11 @@ private:
    * get from another rank makes any sense.
    */
   bool victory_makes_sense(int from);
+  /**
+   * Reset some data members which we only care about while we are in an election
+   * or need to be set consistently during stable states.
+   */
+  void clear_live_election_state();
 };
 
 #endif
