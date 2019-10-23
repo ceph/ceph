@@ -1149,7 +1149,9 @@ def command_ceph_volume():
         podman_args=['--privileged'],
         volume_mounts=mounts,
     )
-    call_throws(c.run_cmd(), verbose=True)
+    out, err, code = call_throws(c.run_cmd(), verbose=True)
+    if not code:
+        print(out)
 
 ##################################
 
