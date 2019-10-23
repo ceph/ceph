@@ -305,10 +305,13 @@ private:
     }
 
     // lazy delete, see "deleted_conns"
-    std::lock_guard l{deleted_lock};
-    if (deleted_conns.erase(p->second)) {
-      conns.erase(p);
-      return nullref;
+    // don't worry omit, Connection::send_message can handle this case.
+    if (p->second->is_unregistered()) {
+      std::lock_guard l{deleted_lock};
+      if (deleted_conns.erase(p->second)) {
+	conns.erase(p);
+	return nullref;
+      }
     }
 
     return p->second;
@@ -397,6 +400,7 @@ public:
     if (!accepting_conns.count(conn))
       conn->get_perf_counter()->dec(l_msgr_active_connections);
     deleted_conns.emplace(std::move(conn));
+    conn->unregister();
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
       local_worker->center.dispatch_event_external(reap_handler);

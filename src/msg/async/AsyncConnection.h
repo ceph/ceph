@@ -110,6 +110,7 @@ private:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
 		  Worker *w, bool is_msgr2, bool local);
   ~AsyncConnection() override;
+  bool unregistered = false;
 public:
   void maybe_start_delay_thread();
 
@@ -138,6 +139,14 @@ public:
   }
 
   int get_con_mode() const override;
+
+  bool is_unregistered() const {
+    return unregistered;
+  }
+
+  void unregister() {
+    unregistered = true;
+  }
 
  private:
   enum {
