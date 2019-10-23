@@ -564,8 +564,9 @@ class PlacementSpec(object):
     """
     For APIs that need to specify a node subset
     """
-    def __init__(self):
-        self.label = None
+    def __init__(self, label=None, nodes=[]):
+        self.label = label
+        self.nodes = nodes
 
 
 def handle_type_error(method):

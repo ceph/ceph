@@ -237,10 +237,15 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds add',
-                "name=svc_arg,type=CephString",
+                "name=svc_arg,type=CephString "
+                "name=num,type=CephInt,req=false "
+                "name=hosts,type=CephString,n=N,req=false",
                 'Create an MDS service')
-    def _mds_add(self, svc_arg):
-        spec = orchestrator.StatelessServiceSpec(svc_arg)
+    def _mds_add(self, svc_arg, num, hosts):
+        spec = orchestrator.StatelessServiceSpec(
+            svc_arg,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
