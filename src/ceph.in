@@ -399,7 +399,7 @@ def do_extended_help(parser, args, target, partial):
                                          prefix='get_command_descriptions',
                                          timeout=10)
         if ret:
-            if ret == -errno.EPERM and target[0] in ('osd', 'mds'):
+            if (ret == -errno.EPERM or ret == -errno.EACCES) and target[0] in ('osd', 'mds'):
                 print("Permission denied.  Check that your user has 'allow *' "
                       "capabilities for the target daemon type.", file=sys.stderr)
             elif ret == -errno.EPERM:

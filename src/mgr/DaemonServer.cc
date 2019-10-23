@@ -191,12 +191,12 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     catch (buffer::error& e) {
       dout(10) << " session " << s << " " << s->entity_name
                << " failed to decode caps" << dendl;
-      return -EPERM;
+      return -EACCES;
     }
     if (!s->caps.parse(str)) {
       dout(10) << " session " << s << " " << s->entity_name
 	       << " failed to parse caps '" << str << "'" << dendl;
-      return -EPERM;
+      return -EACCES;
     }
     dout(10) << " session " << s << " " << s->entity_name
              << " has caps " << s->caps << " '" << str << "'" << dendl;

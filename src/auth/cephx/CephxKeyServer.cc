@@ -436,7 +436,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
 				       CephXSessionAuthInfo& info)
 {
   if (!get_service_secret(service_id, info.service_secret, info.secret_id)) {
-    return -EPERM;
+    return -EACCES;
   }
 
   std::scoped_lock l{lock};

@@ -124,7 +124,7 @@ int KrbServiceHandler::handle_request(
             << gss_minor_status << " " 
             << status_str 
             << dendl;
-        result = (-EPERM);
+        result = (-EACCES);
         break;
       }
   }
@@ -206,7 +206,7 @@ int KrbServiceHandler::start_session(
         << gss_minor_status << " " 
         << status_str 
         << dendl;
-    return (-EPERM);
+    return (-EACCES);
   } else {
     KrbResponse krb_response;
     krb_response.m_response_type = 

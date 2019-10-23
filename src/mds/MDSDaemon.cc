@@ -500,7 +500,7 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
       << *m->get_connection()->peer_addrs << dendl;
 
     ss << "permission denied";
-    r = -EPERM;
+    r = -EACCES;
   } else if (m->cmd.empty()) {
     r = -EINVAL;
     ss << "no command given";
