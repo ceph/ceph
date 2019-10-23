@@ -782,3 +782,23 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                      'mds', 'allow'],
         })
         return self._create_daemon('mds', mds_id, host, keyring)
+
+    def remove_mds(self, mds_id):
+        # FIXME: this location should come from the inventory, not
+        # mds_metadata, so that we can remove/clean-up daemons that
+        # aren't correctly starting.
+        self.log.debug('metadtata %s' % self.get('mds_metadata'))
+        host = self.get('mds_metadata').get(mds_id, {}).get('hostname')
+        if not host:
+            raise RuntimeError('Unable to identify location of mds.%s' % mds_id)
+        return SSHWriteCompletion([
+            self._worker_pool.apply_async(self._remove_mds, (mds_id, host))
+        ])
+
+    def _remove_mds(self, mds_id, host):
+        name = 'mds.' + mds_id
+        out, code = self._run_ceph_daemon(
+            host, name, 'rm-daemon',
+            ['--name', name])
+        self.log.debug('remove_mds code %s out %s' % (code, out))
+        return "Removed {} from host '{}'".format(name, host)
