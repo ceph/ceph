@@ -527,13 +527,21 @@ public:
     return recovery_state.get_min_peer_features();
   }
   void send_message_osd_cluster(
-    int peer, Message *m, epoch_t from_epoch) override;
+    int peer, Message *m, epoch_t from_epoch) override {
+    osd->send_message_osd_cluster(peer, m, from_epoch);
+  }
   void send_message_osd_cluster(
-    std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override;
+    std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override {
+    osd->send_message_osd_cluster(messages, from_epoch);
+  }
   void send_message_osd_cluster(
-    Message *m, Connection *con) override;
+    Message *m, Connection *con) override {
+    osd->send_message_osd_cluster(m, con);
+  }
   void send_message_osd_cluster(
-    Message *m, const ConnectionRef& con) override;
+    Message *m, const ConnectionRef& con) override {
+    osd->send_message_osd_cluster(m, con);
+  }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
   entity_name_t get_cluster_msgr_name() override {
     return osd->get_cluster_msgr_name();
