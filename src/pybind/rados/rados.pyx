@@ -4071,7 +4071,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                                 c_keys[:key_length].split(b'\0')]
                     vals = [decode_cstr(val) for val in
                                 c_vals[:val_length].split(b'\0')]
-                    return zip(keys, vals)[:-1]
+                    return list(zip(keys, vals))[:-1]
                 elif ret == -errno.ERANGE:
                     pass
                 else:
