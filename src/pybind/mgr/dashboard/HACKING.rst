@@ -332,6 +332,91 @@ vs. ``it('image edit test' () => ...)``. As shown, the first example makes gramm
 prefix whereas the second message does not.``it()`` should describe what the individual test is doing and
 what it expects to happen.
 
+Differences between Frontend Unit Tests and End-to-End (E2E) Tests / FAQ
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+General introduction about testing and E2E/unit tests 
+
+
+What are E2E/unit tests designed for?
+.....................................
+
+E2E test:
+
+"Protractor is an end-to-end test framework for Angular and AngularJS applications.
+Protractor runs tests against your application running in a real browser,
+interacting with it as a user would." `(src) <http://www.protractortest.org/#/>`__
+
+It requires a fully functional system and tests the interaction of all components
+of the application (Ceph, back-end, front-end).
+E2E tests are designed to mimic the behavior of the user when interacting with the application
+- for example when it comes to workflows like creating/editing/deleting an item.
+Also the tests should verify that certain items are displayed as a user would see them
+when clicking through the UI (for example a menu entry or a pool that has been
+created during a test and the pool and its properties should be displayed in the table).
+
+Angular Unit Tests:
+
+Unit tests, as the name suggests, are tests for smaller units of the code.
+Those tests are designed for testing all kinds of Angulars' components (e.g. services, pipes etc.).
+They do not require a connection to the backend, hence those tests are independent of it.
+The expected data of the backend is mocked in the frontend and by using this data
+the functionality of the frontend can be tested without having to have real data from the backend.
+As previously mentioned, data is either mocked or, in a simple case, contains a static input,
+a function call and an expected static output.
+More complex examples include the state of a component (attributes of the component class),
+that define how the output changes according to the given input.
+
+Which E2E/unit tests are considered to be valid?
+................................................
+
+This is not easy to answer, but new tests that are written in the same way as already existing
+dashboard tests should generally be considered valid.
+Unit tests should focus on the component to be tested.
+This is either an Angular component, directive, service, pipe, etc.
+
+E2E tests should focus on testing the functionality of the whole application.
+Approximately a third of the overall E2E tests should verify the correctness
+of user visible elements.
+
+How should an E2E/unit test look like?
+......................................
+
+Unit tests should focus on the described purpose
+and shouldn't try to test other things in the same `it` block.
+
+E2E tests should contain a description that either verifies
+the correctness of a user visible element or a complete process
+like for example the creation/validation/deletion of a pool.
+
+What should an E2E/unit test cover?
+...................................
+
+E2E tests should mostly, but not exclusively, cover interaction with the backend.
+This way the interaction with the backend is utilized to write integration tests.
+
+A unit test should mostly cover critical or complex functionality
+of a component (Angular Components, Services, Pipes, Directives, etc).
+
+What should an E2E/unit test NOT cover?
+.......................................
+
+Avoid duplicate testing: do not write E2E tests for what's already
+been covered as frontend-unit tests and vice versa.
+It may not be possible to completely avoid an overlap.
+
+Unit tests should not be used to extensively click through components and E2E tests
+shouldn't be used to extensively test a single component of Angular.
+
+Best practices/guideline
+........................
+
+As a general guideline we try to follow the 70/20/10 approach - 70% unit tests,
+20% integration tests and 10% end-to-end tests.
+For further information please refer to `this document
+<https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html>`__
+and the included "Testing Pyramid".
+
 Further Help
 ~~~~~~~~~~~~
 
