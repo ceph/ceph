@@ -223,6 +223,19 @@ int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
   }
 }
 
+int cls_cxx_write_zero(cls_method_context_t hctx, int ofs, int len)
+{
+  OSDOp op{CEPH_OSD_OP_ZERO};
+  op.op.extent.offset = ofs;
+  op.op.extent.length = len;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->execute_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+}
+
 int cls_cxx_getxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *outbl)

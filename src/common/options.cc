@@ -3625,11 +3625,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_class_load_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
     .set_description(""),
 
     Option("osd_class_default_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
     .set_description(""),
 
     Option("osd_check_for_log_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -6432,7 +6432,7 @@ std::vector<Option> get_rgw_options() {
        "The length of time (in seconds) that the RGW collector will wait before purging "
        "a deleted object's data. RGW will not remove object immediately, as object could "
        "still have readers. A mechanism exists to increase the object's expiration time "
-       "when it's being read.")
+       "when it's being read. The recommended value of its lower limit is 30 minutes")
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -6468,6 +6468,22 @@ std::vector<Option> get_rgw_options() {
     .set_default(16)
     .set_description("Max number of keys to remove from garbage collector log in a single operation")
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_concurrent_io"}),
+
+    Option("rgw_gc_max_deferred_entries_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3072)
+    .set_description("maximum allowed size of deferred entries in queue head for gc"),
+
+    Option("rgw_gc_max_queue_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(134213632)
+    .set_description("Maximum allowed queue size for gc")
+    .set_long_description(
+        "The maximum allowed size of each gc queue, and its value should not "
+        "be greater than (osd_max_object_size - rgw_gc_max_deferred_entries_size - 1K).")
+    .add_see_also({"osd_max_object_size", "rgw_gc_max_deferred_entries_size"}),
+
+    Option("rgw_gc_max_deferred", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_description("Number of maximum deferred data entries to be stored in queue for gc"),
 
     Option("rgw_s3_success_create_obj_status", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -7223,7 +7239,6 @@ std::vector<Option> get_rgw_options() {
     .set_description("mclock limit for metadata requests")
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
-
   });
 }
 

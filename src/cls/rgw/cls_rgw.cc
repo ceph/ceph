@@ -13,6 +13,7 @@
 #include "common/escape.h"
 
 #include "include/compat.h"
+#include <boost/lexical_cast.hpp>
 
 CLS_VER(1,0)
 CLS_NAME(rgw)
@@ -3272,8 +3273,6 @@ static int gc_defer_entry(cls_method_context_t hctx, const string& tag, uint32_t
 {
   cls_rgw_gc_obj_info info;
   int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, tag, &info);
-  if (ret == -ENOENT)
-    return 0;
   if (ret < 0)
     return ret;
   return gc_update_entry(hctx, expiration_secs, info);
@@ -3943,7 +3942,6 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_clear_bucket_resharding;
   cls_method_handle_t h_rgw_guard_bucket_resharding;
   cls_method_handle_t h_rgw_get_bucket_resharding;
-
 
   cls_register(RGW_CLASS, &h_class);
 
