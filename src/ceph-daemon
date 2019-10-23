@@ -522,7 +522,6 @@ def deploy_crash(fsid, uid, gid, config, keyring):
         f.write(config)
 
     # ceph-crash unit
-    existed = os.path.exists(args.unit_dir + '/ceph-%s-crash.service' % fsid)
     mounts = {
         crash_dir: '/var/lib/ceph/crash:z',
         os.path.join(crash_dir, 'config'): '/etc/ceph/ceph.conf:z',
@@ -559,9 +558,8 @@ def deploy_crash(fsid, uid, gid, config, keyring):
         )
         os.rename(os.path.join(args.unit_dir, unit_name + '.new'),
                   os.path.join(args.unit_dir, unit_name))
-    if not existed:
-        subprocess.check_output(['systemctl', 'enable', unit_name])
-        subprocess.check_output(['systemctl', 'start', unit_name])
+    subprocess.check_output(['systemctl', 'enable', unit_name])
+    subprocess.check_output(['systemctl', 'start', unit_name])
 
 
 def get_unit_file(fsid):
