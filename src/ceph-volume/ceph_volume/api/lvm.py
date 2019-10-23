@@ -496,6 +496,15 @@ def remove_pv(pv_name):
     )
 
 
+def is_pv(pv_name):
+    stdout = [i.strip() for i in get_api_pvs(fields='pv_name', unparsed=True)]
+    try:
+        stdout.index(pv_name)
+    except ValueError:
+        return False
+    return True
+
+
 def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
     """
     Return a matching pv (physical volume) for the current system, requiring
