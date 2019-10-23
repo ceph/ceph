@@ -1576,31 +1576,32 @@ try:
 except NameError:
     av = sys.argv[1:]
 
-args = parser.parse_args(av)
+if __name__ != 'nosetests':
+    args = parser.parse_args(av)
 
-if args.debug:
-    logging.basicConfig(level=logging.DEBUG)
-else:
-    logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('ceph-daemon')
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger('ceph-daemon')
 
-# podman or docker?
-if args.docker:
-    podman_path = find_program('docker')
-else:
-    for i in PODMAN_PREFERENCE:
-        try:
-            podman_path = find_program(i)
-            break
-        except Exception as e:
-            logger.debug('could not locate %s: %s' % (i, e))
-    if not podman_path:
-        raise RuntimeError('unable to locate any of %s' % PODMAN_PREFERENCE)
+    # podman or docker?
+    if args.docker:
+        podman_path = find_program('docker')
+    else:
+        for i in PODMAN_PREFERENCE:
+            try:
+                podman_path = find_program(i)
+                break
+            except Exception as e:
+                logger.debug('could not locate %s: %s' % (i, e))
+        if not podman_path:
+            raise RuntimeError('unable to locate any of %s' % PODMAN_PREFERENCE)
 
-if 'func' not in args:
-    sys.stderr.write('No command specified; pass -h or --help for usage\n')
-    sys.exit(1)
-r = args.func()
-if not r:
-    r = 0
-sys.exit(r)
+    if 'func' not in args:
+        sys.stderr.write('No command specified; pass -h or --help for usage\n')
+        sys.exit(1)
+    r = args.func()
+    if not r:
+        r = 0
+    sys.exit(r)
