@@ -12,8 +12,10 @@
  *
  */
 
-#include "OpQueueItem.h"
-#include "OSD.h"
+#include "osd/scheduler/OpSchedulerItem.h"
+#include "osd/OSD.h"
+
+namespace ceph::osd::scheduler {
 
 void PGOpItem::run(
   OSD *osd,
@@ -81,4 +83,6 @@ void PGDelete::run(
   ThreadPool::TPHandle &handle)
 {
   osd->dequeue_delete(sdata, pg.get(), epoch_queued, handle);
+}
+
 }

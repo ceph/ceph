@@ -25,6 +25,7 @@
 #include "OpRequest.h"
 #include "ScrubStore.h"
 #include "Session.h"
+#include "osd/scheduler/OpSchedulerItem.h"
 
 #include "common/Timer.h"
 #include "common/perf_counters.h"
@@ -75,6 +76,8 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+
+using namespace ceph::osd::scheduler;
 
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
@@ -1270,8 +1273,8 @@ void PG::requeue_op(OpRequestRef op)
   } else {
     dout(20) << __func__ << " " << op << dendl;
     osd->enqueue_front(
-      OpQueueItem(
-        unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(info.pgid, op)),
+      OpSchedulerItem(
+        unique_ptr<OpSchedulerItem::OpQueueable>(new PGOpItem(info.pgid, op)),
 	op->get_req()->get_cost(),
 	op->get_req()->get_priority(),
 	op->get_req()->get_recv_stamp(),
@@ -1304,8 +1307,8 @@ void PG::requeue_map_waiters()
       dout(20) << __func__ << " " << p->first << " " << p->second << dendl;
       for (auto q = p->second.rbegin(); q != p->second.rend(); ++q) {
 	auto req = *q;
-	osd->enqueue_front(OpQueueItem(
-          unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(info.pgid, req)),
+	osd->enqueue_front(OpSchedulerItem(
+          unique_ptr<OpSchedulerItem::OpQueueable>(new PGOpItem(info.pgid, req)),
 	  req->get_req()->get_cost(),
 	  req->get_req()->get_priority(),
 	  req->get_req()->get_recv_stamp(),
