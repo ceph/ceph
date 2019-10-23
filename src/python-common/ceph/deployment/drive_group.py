@@ -3,7 +3,6 @@ try:
     from typing import Optional, List, Dict
 except ImportError:
     pass
-
 import six
 
 
@@ -45,7 +44,8 @@ class DeviceSelection(object):
     def validate(self):
         props = [self.id_model, self.size, self.rotates, self.count]
         if self.paths and any(p is not None for p in props):
-            raise DriveGroupValidationError('DeviceSelection: `paths` and other parameters are mutually exclusive')
+            raise DriveGroupValidationError(
+                'DeviceSelection: `paths` and other parameters are mutually exclusive')
         if not any(p is not None for p in [self.paths] + props):
             raise DriveGroupValidationError('DeviceSelection cannot be empty')
 
@@ -57,6 +57,7 @@ class DeviceSelection(object):
 class DriveGroupValidationError(Exception):
     def __init__(self, msg):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
+
 
 class DriveGroupSpec(object):
     """

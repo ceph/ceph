@@ -2,6 +2,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
 
+
 def test_DriveGroup():
     dg_json = {
         'host_pattern': 'hostname',
