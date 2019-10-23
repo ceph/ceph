@@ -1179,6 +1179,10 @@ function test_mon_mon()
   ceph mon feature set kraken --yes-i-really-mean-it
   expect_false ceph mon feature set abcd
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
+
+  report=$(ceph report -f json | jq -c '.features')
+  features=$(ceph features -f json | jq -c '.')
+  [[ "$report" == "$features" ]]
 }
 
 function test_mon_priority_and_weight()
