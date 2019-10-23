@@ -1209,20 +1209,35 @@ def remove_lv(lv):
     return True
 
 
-def is_lv(dev, lvs=None):
+def is_lv(dev=None, lv_name=None, lvs=None):
     """
     Boolean to detect if a device is an LV or not.
     """
-    splitname = dmsetup_splitname(dev)
-    # Allowing to optionally pass `lvs` can help reduce repetitive checks for
-    # multiple devices at once.
-    if lvs is None or len(lvs) == 0:
-        lvs = Volumes()
+    if dev and lv_name:
+        logger.fatal('is_lv: can\'t pass both dev and lv_name')
+        raise RuntimeError('internal error; please check logs and report')
+    if not dev and not lv_name:
+        logger.fatal('is_lv: must pass at least dev or lv_name')
+        raise RuntimeError('internal error; please check logs and report')
 
-    if splitname.get('LV_NAME'):
-        lvs.filter(lv_name=splitname['LV_NAME'], vg_name=splitname['VG_NAME'])
-        return len(lvs) > 0
-    return False
+    if dev:
+        # Allowing to optionally pass `lvs` can help reduce repetitive checks
+        # for multiple devices at once.
+        if lvs is None or len(lvs) == 0:
+            lvs = Volumes()
+
+        return len(lvs.filter(dev=dev)) > 0
+
+    if lv_name:
+        stdout, stderr, returncode = process.call(
+            ['lvs', '--no-heading', '--readonly', '--separator=";"', '-o',
+             'lv_name'], verbose_on_failure=False)
+        stdout = [i.strip() for i in stdout]
+        try:
+            stdout.index(lv_name)
+        except ValueError:
+            return False
+    return True
 
 
 def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None, lvs=None):
