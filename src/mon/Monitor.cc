@@ -3152,7 +3152,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
   MCommand *m = static_cast<MCommand*>(op->get_req());
   if (m->fsid != monmap->fsid) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
-    reply_command(op, -EPERM, "wrong fsid", 0);
+    reply_command(op, -EACCES, "wrong fsid", 0);
     return;
   }
   MonSession *session = op->get_session();
@@ -3180,7 +3180,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
 	  "mon", prefix, param_str_map,
 	  true, true, true,
 	  session->get_peer_socket_addr())) {
-      reply_tell_command(op, -EPERM, "insufficient caps");
+      reply_tell_command(op, -EACCES, "insufficient caps");
     }
   }
   // pass it to asok
@@ -6382,7 +6382,7 @@ int Monitor::ms_handle_authentication(Connection *con)
       derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
 	   << " in auth db" << dendl;
       str.clear();
-      ret = -EPERM;
+      ret = -EACCES;
     }
     if (ret >= 0) {
       if (s->caps.parse(str, NULL)) {
@@ -6391,7 +6391,7 @@ int Monitor::ms_handle_authentication(Connection *con)
       } else {
 	derr << __func__ << " unparseable caps '" << str << "' for "
 	     << con->get_peer_entity_name() << dendl;
-	ret = -EPERM;
+	ret = -EACCES;
       }
     }
   }
