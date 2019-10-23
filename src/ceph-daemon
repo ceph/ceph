@@ -897,6 +897,7 @@ def command_bootstrap():
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
 
     # crash unit
+    logger.info('Creating crash agent...')
     deploy_crash(fsid, uid, gid, config,
                  '[client.crash.%s]\n\tkey = %s\n' % (hostname, crash_key))
 
@@ -1316,7 +1317,7 @@ def command_rm_cluster():
     call_throws(['rm', '-f', args.unit_dir +
                              '/ceph-%s@.service' % args.fsid])
     call_throws(['rm', '-f', args.unit_dir +
-                             '/ceph-%s-crash@.service' % args.fsid])
+                             '/ceph-%s-crash.service' % args.fsid])
     call_throws(['rm', '-f', args.unit_dir +
                              '/ceph-%s.target' % args.fsid])
     call_throws(['rm', '-rf',
