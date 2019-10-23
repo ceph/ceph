@@ -1191,16 +1191,22 @@ def command_ls():
             elif is_fsid(i):
                 fsid = i
                 for j in os.listdir(os.path.join(args.data_dir, i)):
-                    bits = j.split('.')
-                    if len(bits) != 2:
-                        continue
-                    (daemon_type, daemon_id) = bits
-                    (enabled, active) = check_unit(get_unit_name(fsid,
-                                                                 daemon_type,
-                                                                 daemon_id))
+                    if j == 'crash':
+                        name = 'crash'
+                        unit_name = 'ceph-%s-crash.service' % fsid
+                        (enabled, active) = check_unit(unit_name)
+                    else:
+                        bits = j.split('.')
+                        if len(bits) != 2:
+                            continue
+                        name = j
+                        (daemon_type, daemon_id) = bits
+                        (enabled, active) = check_unit(get_unit_name(fsid,
+                                                                     daemon_type,
+                                                                     daemon_id))
                     ls.append({
                         'style': 'ceph-daemon:v1',
-                        'name': '%s.%s' % (daemon_type, daemon_id),
+                        'name': name,
                         'fsid': fsid,
                         'enabled': enabled,
                         'active': active,
