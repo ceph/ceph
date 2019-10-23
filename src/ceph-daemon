@@ -654,7 +654,7 @@ class CephContainer:
             self.image
         ] + self.args
 
-    def shell_cmd(self):
+    def shell_cmd(self, cmd):
         vols = sum(
             [['-v', f'{host_dir}:{container_dir}']
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -662,6 +662,9 @@ class CephContainer:
             '-e', f'CONTAINER_IMAGE={self.image}',
             '-e', f'NODE_NAME={get_hostname()}',
         ]
+        cmd_args = []
+        if cmd:
+            cmd_args = ['-c'] + cmd
         return [
             podman_path,
             'run',
@@ -670,9 +673,9 @@ class CephContainer:
             '--privileged',
             '--env', 'LANG=C',
         ] + self.podman_args + envs + vols + [
-            '--entrypoint', '/bin/bash',
+            '--entrypoint', cmd[0],
             self.image
-        ]
+        ] + cmd[1:]
 
     def exec_cmd(self, cmd):
         return [
@@ -1094,7 +1097,7 @@ def command_shell():
         args=[],
         podman_args=['--privileged'],
         volume_mounts=mounts)
-    subprocess.call(c.shell_cmd())
+    subprocess.call(c.shell_cmd(args.command))
 
 ##################################
 
@@ -1438,6 +1441,10 @@ parser_shell.add_argument(
 parser_shell.add_argument(
     '--keyring', '-k',
     help='ceph.keyring to pass through to the container')
+parser_shell.add_argument(
+    'command', nargs='*',
+    default=['bash'],
+    help='command (optional)')
 
 parser_enter = subparsers.add_parser(
     'enter', help='run an interactive shell inside a running daemon container')
