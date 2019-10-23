@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 fsid=2a833e3f-53e4-49a7-a7a0-bd89d193ab62
-image=ceph/daemon-base:latest-master-devel
+image=ceph/daemon-base:latest-master
 [ -z "$ip" ] && ip=127.0.0.1
 
 #A="-d"
