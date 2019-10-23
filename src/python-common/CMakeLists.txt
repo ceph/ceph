@@ -13,5 +13,5 @@ endforeach()
 
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(python-common)
+  add_tox_test(python-common TOX_ENVS lint)
 endif()
