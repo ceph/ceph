@@ -158,8 +158,8 @@ std::vector<rgw_sync_bucket_pipe> rgw_sync_bucket_pipes::expand() const
   for (auto& s : sources) {
     for (auto& d : dests) {
       rgw_sync_bucket_pipe pipe;
-      pipe.source = std::move(s);
-      pipe.dest = std::move(d);
+      pipe.source = s;
+      pipe.dest = d;
       result.push_back(pipe);
     }
   }
@@ -208,6 +208,9 @@ void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::op
     if (iter->id == flow_id) {
       if (!zones) {
         groups.erase(iter);
+        if (groups.empty()) {
+          symmetrical.reset();
+        }
         return;
       }
       break;
@@ -226,6 +229,9 @@ void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::op
 
   if (flow_group.zones.empty()) {
     groups.erase(iter);
+  }
+  if (groups.empty()) {
+    symmetrical.reset();
   }
 }
 
@@ -270,11 +276,19 @@ void rgw_sync_data_flow_group::remove_directional(const string& source_zone, con
     if (source_zone == rule.source_zone &&
         dest_zone == rule.dest_zone) {
       directional->erase(iter);
+      if (directional->empty()) {
+        directional.reset();
+      }
       return;
     }
   }
 }
 
+void rgw_sync_data_flow_group::init_default(const std::set<string>& zones)
+{
+  symmetrical.emplace();
+  symmetrical->push_back(rgw_sync_symmetric_group("default", zones));
+}
 
 bool rgw_sync_policy_group::find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipes **pipe)
 {

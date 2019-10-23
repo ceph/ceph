@@ -35,6 +35,11 @@ struct rgw_sync_group_pipe_map {
   zb_pipe_map_t sources; /* all the pipes where zone is pulling from */
   zb_pipe_map_t dests; /* all the pipes that pull from zone */
 
+  std::set<string> *pall_zones{nullptr};
+  rgw_sync_data_flow_group *default_flow{nullptr}; /* flow to use if policy doesn't define it,
+                                                      used in the case of bucket sync policy, not at the
+                                                      zonegroup level */
+
   void dump(ceph::Formatter *f) const;
 
   template <typename CB1, typename CB2>
@@ -65,6 +70,8 @@ struct rgw_sync_group_pipe_map {
   void init(const string& _zone,
             std::optional<rgw_bucket> _bucket,
             const rgw_sync_policy_group& group,
+            rgw_sync_data_flow_group *_default_flow,
+            std::set<std::string> *_pall_zones,
             CB filter_cb);
 
   /*
@@ -93,13 +100,11 @@ struct rgw_sync_group_pipe_map {
 
 class RGWBucketSyncFlowManager {
 public:
-  struct pipe_flow {
+  struct pipe_set {
     std::set<rgw_sync_bucket_pipe> pipes;
 
     void dump(ceph::Formatter *f) const;
   };
-
-  using flow_map_t = map<rgw_bucket, pipe_flow>;
 
 private:
 
@@ -110,6 +115,8 @@ private:
 
   map<string, rgw_sync_group_pipe_map> flow_groups;
 
+  std::set<std::string> all_zones;
+
   bool allowed_data_flow(const string& source_zone,
                          std::optional<rgw_bucket> source_bucket,
                          const string& dest_zone,
@@ -119,8 +126,6 @@ private:
   /*
    * find all the matching flows om a flow map for a specific bucket
    */
-  flow_map_t::iterator find_bucket_flow(flow_map_t& m, std::optional<rgw_bucket> bucket);
-
   void update_flow_maps(const rgw_sync_bucket_pipes& pipe);
 
 public:
@@ -131,8 +136,8 @@ public:
 
   void init(const rgw_sync_policy_info& sync_policy);
   void reflect(std::optional<rgw_bucket> effective_bucket,
-               flow_map_t *flow_by_source,
-               flow_map_t *flow_by_dest);
+               pipe_set *flow_by_source,
+               pipe_set *flow_by_dest);
 
 };
 

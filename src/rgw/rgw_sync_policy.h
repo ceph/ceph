@@ -22,6 +22,11 @@ struct rgw_sync_symmetric_group {
   string id;
   std::set<string> zones;
 
+  rgw_sync_symmetric_group() {}
+  rgw_sync_symmetric_group(const string& _id,
+                           const std::set<string> _zones) : id(_id), zones(_zones) {}
+
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(id, bl);
@@ -137,13 +142,17 @@ struct rgw_sync_bucket_entity {
   }
 
   const bool operator<(const rgw_sync_bucket_entity& e) const {
-    if (all_zones != e.all_zones) {
-      if (zone < e.zone) {
-        return true;
-      }
-      if (zone > e.zone) {
-        return false;
-      }
+    if (all_zones && !e.all_zones) {
+      return false;
+    }
+    if (!all_zones && e.all_zones) {
+      return true;
+    }
+    if (zone < e.zone) {
+      return true;
+    }
+    if (zone > e.zone) {
+      return false;
     }
     return (bucket < e.bucket);
   }
@@ -329,6 +338,8 @@ struct rgw_sync_data_flow_group {
   void remove_symmetrical(const string& flow_id, std::optional<std::vector<string> > zones);
   bool find_directional(const string& source_zone, const string& dest_zone, bool create, rgw_sync_directional_rule **flow_group);
   void remove_directional(const string& source_zone, const string& dest_zone);
+
+  void init_default(const std::set<string>& zones);
 };
 WRITE_CLASS_ENCODER(rgw_sync_data_flow_group)
 
