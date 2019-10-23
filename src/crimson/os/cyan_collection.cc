@@ -2,7 +2,7 @@
 
 #include "cyan_object.h"
 
-namespace ceph::os
+namespace crimson::os
 {
 
 Collection::Collection(const coll_t& c)
@@ -13,7 +13,7 @@ Collection::~Collection() = default;
 
 Collection::ObjectRef Collection::create_object() const
 {
-  return new ceph::os::Object{};
+  return new crimson::os::Object{};
 }
 
 Collection::ObjectRef Collection::get_object(ghobject_t oid)

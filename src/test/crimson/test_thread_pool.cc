@@ -5,7 +5,7 @@
 #include "crimson/thread/ThreadPool.h"
 
 using namespace std::chrono_literals;
-using ThreadPool = ceph::thread::ThreadPool;
+using ThreadPool = crimson::thread::ThreadPool;
 
 seastar::future<> test_accumulate(ThreadPool& tp) {
   static constexpr auto N = 5;

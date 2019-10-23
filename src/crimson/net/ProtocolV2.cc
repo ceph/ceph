@@ -55,25 +55,25 @@ namespace {
 //   - integrity checks;
 //   - etc.
 seastar::logger& logger() {
-  return ceph::get_logger(ceph_subsys_ms);
+  return crimson::get_logger(ceph_subsys_ms);
 }
 
 void abort_in_fault() {
-  throw std::system_error(make_error_code(ceph::net::error::negotiation_failure));
+  throw std::system_error(make_error_code(crimson::net::error::negotiation_failure));
 }
 
 void abort_protocol() {
-  throw std::system_error(make_error_code(ceph::net::error::protocol_aborted));
+  throw std::system_error(make_error_code(crimson::net::error::protocol_aborted));
 }
 
-void abort_in_close(ceph::net::ProtocolV2& proto) {
+void abort_in_close(crimson::net::ProtocolV2& proto) {
   (void) proto.close();
   abort_protocol();
 }
 
 inline void expect_tag(const Tag& expected,
                        const Tag& actual,
-                       ceph::net::SocketConnection& conn,
+                       crimson::net::SocketConnection& conn,
                        const char *where) {
   if (actual != expected) {
     logger().warn("{} {} received wrong tag: {}, expected {}",
@@ -85,7 +85,7 @@ inline void expect_tag(const Tag& expected,
 }
 
 inline void unexpected_tag(const Tag& unexpected,
-                           ceph::net::SocketConnection& conn,
+                           crimson::net::SocketConnection& conn,
                            const char *where) {
   logger().warn("{} {} received unexpected tag: {}",
                 conn, where, static_cast<uint32_t>(unexpected));
@@ -125,7 +125,7 @@ inline ostream& operator<<(
 }
 }
 
-namespace ceph::net {
+namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
 void intercept(Breakpoint bp, bp_type_t type,
@@ -696,7 +696,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
     return write_frame(frame).then([this] {
       return handle_auth_reply();
     });
-  } catch (const ceph::auth::error& e) {
+  } catch (const crimson::auth::error& e) {
     logger().error("{} get_initial_auth_request returned {}", conn, e);
     dispatch_reset();
     abort_in_close(*this);
@@ -780,7 +780,7 @@ ProtocolV2::client_connect()
             logger().warn("{} peer identifies as {}, does not include {}",
                           conn, server_ident.addrs(), conn.target_addr);
             throw std::system_error(
-                make_error_code(ceph::net::error::bad_peer_address));
+                make_error_code(crimson::net::error::bad_peer_address));
           }
 
           server_cookie = server_ident.cookie();
@@ -790,7 +790,7 @@ ProtocolV2::client_connect()
             logger().warn("{} peer advertises as {}, does not match {}",
                           conn, server_ident.addrs(), conn.peer_addr);
             throw std::system_error(
-                make_error_code(ceph::net::error::bad_peer_address));
+                make_error_code(crimson::net::error::bad_peer_address));
           }
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
@@ -954,7 +954,7 @@ void ProtocolV2::execute_connecting()
             logger().warn("{} peer sent a legacy address for me: {}",
                           conn, _my_addr_from_peer);
             throw std::system_error(
-                make_error_code(ceph::net::error::bad_peer_address));
+                make_error_code(crimson::net::error::bad_peer_address));
           }
           _my_addr_from_peer.set_type(entity_addr_t::TYPE_MSGR2);
           return messenger.learned_addr(_my_addr_from_peer, conn);
@@ -1280,13 +1280,13 @@ ProtocolV2::server_connect()
         client_ident.addrs().front() == entity_addr_t()) {
       logger().warn("{} oops, client_ident.addrs() is empty", conn);
       throw std::system_error(
-          make_error_code(ceph::net::error::bad_peer_address));
+          make_error_code(crimson::net::error::bad_peer_address));
     }
     if (!messenger.get_myaddrs().contains(client_ident.target_addr())) {
       logger().warn("{} peer is trying to reach {} which is not us ({})",
                     conn, client_ident.target_addr(), messenger.get_myaddrs());
       throw std::system_error(
-          make_error_code(ceph::net::error::bad_peer_address));
+          make_error_code(crimson::net::error::bad_peer_address));
     }
     // TODO: change peer_addr to entity_addrvec_t
     entity_addr_t paddr = client_ident.addrs().front();
@@ -1297,7 +1297,7 @@ ProtocolV2::server_connect()
       logger().warn("{} peer's address {} is not v2 or not the same host with {}",
                     conn, paddr, conn.target_addr);
       throw std::system_error(
-          make_error_code(ceph::net::error::bad_peer_address));
+          make_error_code(crimson::net::error::bad_peer_address));
     }
     conn.peer_addr = paddr;
     logger().debug("{} UPDATE: peer_addr={}", conn, conn.peer_addr);
@@ -1306,7 +1306,7 @@ ProtocolV2::server_connect()
       logger().warn("{} we don't know how to reconnect to peer {}",
                     conn, conn.target_addr);
       throw std::system_error(
-          make_error_code(ceph::net::error::bad_peer_address));
+          make_error_code(crimson::net::error::bad_peer_address));
     }
 
     conn.set_peer_id(client_ident.gid());
@@ -1421,7 +1421,7 @@ ProtocolV2::server_reconnect()
     } else {
       logger().warn("{} peer's address {} is not v2", conn, paddr);
       throw std::system_error(
-          make_error_code(ceph::net::error::bad_peer_address));
+          make_error_code(crimson::net::error::bad_peer_address));
     }
     if (conn.peer_addr == entity_addr_t()) {
       conn.peer_addr = paddr;
@@ -1430,7 +1430,7 @@ ProtocolV2::server_reconnect()
                      " reconnect failed",
                      conn, paddr, conn.peer_addr);
       throw std::system_error(
-          make_error_code(ceph::net::error::bad_peer_address));
+          make_error_code(crimson::net::error::bad_peer_address));
     }
     peer_global_seq = reconnect.global_seq();
 
@@ -1565,7 +1565,7 @@ void ProtocolV2::execute_accepting()
             logger().warn("{} my_addr_from_peer {} port/nonce doesn't match myaddr {}",
                           conn, _my_addr_from_peer, messenger.get_myaddr());
             throw std::system_error(
-                make_error_code(ceph::net::error::bad_peer_address));
+                make_error_code(crimson::net::error::bad_peer_address));
           }
           return messenger.learned_addr(_my_addr_from_peer, conn);
         }).then([this] {
@@ -2178,4 +2178,4 @@ void ProtocolV2::trigger_close()
 #endif
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

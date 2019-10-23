@@ -14,7 +14,7 @@
 #include "Interceptor.h"
 #endif
 
-namespace ceph::net {
+namespace crimson::net {
 
 class Socket;
 using SocketFRef = seastar::foreign_ptr<std::unique_ptr<Socket>>;
@@ -139,4 +139,4 @@ class Socket
 #endif
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

@@ -14,10 +14,10 @@
 namespace {
 
 using seastar::future;
-using ceph::net::error;
-using ceph::net::Socket;
-using ceph::net::SocketFRef;
-using ceph::net::stop_t;
+using crimson::net::error;
+using crimson::net::Socket;
+using crimson::net::SocketFRef;
+using crimson::net::stop_t;
 
 static seastar::logger logger{"crimsontest"};
 
@@ -127,12 +127,12 @@ future<> test_refused() {
 
 future<> test_bind_same() {
   logger.info("test_bind_same()...");
-  return ceph::net::create_sharded<AcceptTest>(
+  return crimson::net::create_sharded<AcceptTest>(
   ).then([] (AcceptTest* factory) {
     return factory->bind_accept(
     ).then([] {
       // try to bind the same address
-      return ceph::net::create_sharded<AcceptTest>(
+      return crimson::net::create_sharded<AcceptTest>(
       ).then([] (AcceptTest* factory2) {
         return factory2->bind_accept(
         ).then([] {
@@ -158,7 +158,7 @@ future<> test_bind_same() {
 
 future<> test_accept() {
   logger.info("test_accept()");
-  return ceph::net::create_sharded<AcceptTest>(
+  return crimson::net::create_sharded<AcceptTest>(
   ).then([] (AcceptTest* factory) {
     return factory->bind_accept().then([factory] {
       return seastar::when_all(
@@ -205,7 +205,7 @@ class SocketFactory final
   }
 
   static future<SocketFRef, SocketFRef> get_sockets() {
-    return ceph::net::create_sharded<SocketFactory>(seastar::engine().cpu_id()
+    return crimson::net::create_sharded<SocketFactory>(seastar::engine().cpu_id()
     ).then([] (SocketFactory* factory) {
       return factory->bind_accept().then([factory] {
         return connect();
