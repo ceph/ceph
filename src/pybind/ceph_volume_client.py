@@ -27,11 +27,9 @@ def to_bytes(param):
     Helper method that returns byte representation of the given parameter.
     '''
     if isinstance(param, str):
-        return param.encode('utf-8')
-    elif param is None:
-        return param
+        return param.encode()
     else:
-        return str(param).encode('utf-8')
+        return str(param).encode()
 
 class RadosError(Exception):
     """
@@ -245,10 +243,8 @@ class CephFSVolumeClient(object):
     DEFAULT_VOL_PREFIX = "/volumes"
     DEFAULT_NS_PREFIX = "fsvolumens_"
 
-    def __init__(self, auth_id, conf_path, cluster_name, volume_prefix=None, pool_ns_prefix=None,
-                 fs_name=None):
+    def __init__(self, auth_id, conf_path, cluster_name, volume_prefix=None, pool_ns_prefix=None):
         self.fs = None
-        self.fs_name = fs_name
         self.rados = None
         self.connected = False
         self.conf_path = conf_path
@@ -480,7 +476,7 @@ class CephFSVolumeClient(object):
             self.evict(premount_evict)
             log.debug("Premount eviction of {0} completes".format(premount_evict))
         log.debug("CephFS mounting...")
-        self.fs.mount(filesystem_name=to_bytes(self.fs_name))
+        self.fs.mount()
         log.debug("Connection to cephfs complete")
 
         # Recover from partial auth updates due to a previous
