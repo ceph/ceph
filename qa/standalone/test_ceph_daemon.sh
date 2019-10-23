@@ -112,10 +112,31 @@ $SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
     | jq '.mgrmap.num_standbys' | grep -q 1
 
 ## run
-## shell
-## enter
-## unit
+# WRITE ME
+
 ## adopt
+# WRITE ME
+
+## unit
+$SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- is-enabled
+$SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- is-active
+expect_false $SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.xyz -- is-active
+$SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- disable
+expect_false $SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- is-enabled
+$SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- enable
+$SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- is-enabled
+
+## shell
+$SUDO $CEPH_DAEMON --image $IMAGE shell -- true
+$SUDO $CEPH_DAEMON --image $IMAGE shell --fsid $FSID -- test -d /var/log/ceph
+
+## enter
+expect_false $SUDO $CEPH_DAEMON enter
+$SUDO $CEPH_DAEMON enter --fsid $FSID --name mon.a -- test -d /var/lib/ceph/mon/ceph-a
+$SUDO $CEPH_DAEMON enter --fsid $FSID --name mgr.x -- test -d /var/lib/ceph/mgr/ceph-x
+$SUDO $CEPH_DAEMON enter --fsid $FSID --name mon.a -- pidof ceph-mon
+expect_false $SUDO $CEPH_DAEMON enter --fsid $FSID --name mgr.x -- pidof ceph-mon
+$SUDO $CEPH_DAEMON enter --fsid $FSID --name mgr.x -- pidof ceph-mgr
 
 ## ceph-volume
 $SUDO $CEPH_DAEMON --image $IMAGE ceph-volume --fsid $FSID -- inventory --format=json \
