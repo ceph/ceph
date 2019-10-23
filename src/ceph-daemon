@@ -200,7 +200,7 @@ def make_log_dir(fsid, uid=None, gid=None):
 def find_program(filename):
     name = find_executable(filename)
     if name is None:
-        raise ValueError(f'{filename} not found')
+        raise ValueError('%s not found' % filename)
     return name
 
 def get_unit_name(fsid, daemon_type, daemon_id):
@@ -639,11 +639,11 @@ class CephContainer:
 
     def run_cmd(self):
         vols = sum(
-            [['-v', f'{host_dir}:{container_dir}']
+            [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
         envs = [
-            '-e', f'CONTAINER_IMAGE={self.image}',
-            '-e', f'NODE_NAME={get_hostname()}',
+            '-e', 'CONTAINER_IMAGE=%s' % self.image,
+            '-e', 'NODE_NAME=%s' % get_hostname(),
         ]
         cname = ['--name', self.cname] if self.cname else []
         return [
@@ -658,11 +658,11 @@ class CephContainer:
 
     def shell_cmd(self):
         vols = sum(
-            [['-v', f'{host_dir}:{container_dir}']
+            [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
         envs = [
-            '-e', f'CONTAINER_IMAGE={self.image}',
-            '-e', f'NODE_NAME={get_hostname()}',
+            '-e', 'CONTAINER_IMAGE=%s' % self.image,
+            '-e', 'NODE_NAME=%s' % get_hostname(),
         ]
         return [
             podman_path,
@@ -694,7 +694,7 @@ class CephContainer:
 
 def command_version():
     out = CephContainer(args.image, 'ceph', ['--version']).run()
-    print(out, end='')
+    print(out),
     return 0
 
 ##################################
