@@ -816,7 +816,7 @@ bool ECBackend::_handle_message(
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
     reply->trace = _op->pg_trace;
     get_parent()->send_message_osd_cluster(
-      op->op.from.osd, reply, get_osdmap_epoch());
+      reply, _op->get_req()->get_connection());
     return true;
   }
   case MSG_OSD_EC_READ_REPLY: {
