@@ -107,11 +107,21 @@ def log_exceptions(f):
 class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     _STORE_HOST_PREFIX = "host"
-    _DEFAULT_INVENTORY_CACHE_TIMEOUT_MIN = 10
 
+    NATIVE_OPTIONS = []
     MODULE_OPTIONS = [
-        {'name': 'ssh_config_file'},
-        {'name': 'inventory_cache_timeout_min'},
+        {
+            'name': 'ssh_config_file',
+            'type': 'str',
+            'default': None,
+            'desc': 'customized SSH config file to connect to managed hosts',
+        },
+        {
+            'name': 'inventory_cache_timeout',
+            'type': 'int',
+            'default': 10,
+            'desc': 'seconds to cache device inventory',
+        },
     ]
 
     COMMANDS = [
@@ -131,6 +141,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         super(SSHOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid = self.get('mon_map')['fsid']
 
+        self.config_notify()
+
         path = self.get_ceph_option('ceph_daemon_path')
         try:
             with open(path, 'r') as f:
@@ -149,14 +161,34 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         # cache is invalidated by
         # 1. timeout
         # 2. refresh parameter
-        self.inventory_cache = orchestrator.OutdatablePersistentDict(self, self._STORE_HOST_PREFIX)
+        self.inventory_cache = orchestrator.OutdatablePersistentDict(
+            self, self._STORE_HOST_PREFIX + '.devices')
+
+        self.daemon_cache = orchestrator.OutdatablePersistentDict(
+            self, self._STORE_HOST_PREFIX + '.daemons')
+
+    def config_notify(self):
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']) or opt['default'])
+            self.log.debug(' mgr option %s = %s',
+                           opt['name'], getattr(self, opt['name']))
+        for opt in self.NATIVE_OPTIONS:
+            setattr(self,
+                    opt,
+                    self.get_ceph_option(opt))
+            self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
     def _reconfig_ssh(self):
         temp_files = []
         ssh_options = []
 
         # ssh_config
-        ssh_config_fname = self.get_localized_module_option("ssh_config_file")
+        ssh_config_fname = self.ssh_config_file
         ssh_config = self.get_store("ssh_config")
         if ssh_config is not None or ssh_config_fname is None:
             if not ssh_config:
@@ -408,11 +440,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         def run(host, host_info):
             # type: (str, orchestrator.OutdatableData) -> orchestrator.InventoryNode
 
-            timeout_min = int(self.get_module_option(
-                "inventory_cache_timeout_min",
-                self._DEFAULT_INVENTORY_CACHE_TIMEOUT_MIN))
 
-            if host_info.outdated(timeout_min) or refresh:
+            if host_info.outdated(self.inventory_cache_timeout) or refresh:
                 self.log.info("refresh stale inventory for '{}'".format(host))
                 out, code = self._run_ceph_daemon(
                     host, 'osd',
