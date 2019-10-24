@@ -172,9 +172,10 @@ class ElectionLogic {
   
 public:
   enum election_strategy {
+			  // Keep in sync with MonMap.h!
     CLASSIC = 1, // the original rank-based one
-    DISALLOW, // disallow a set from being leader
-    CONNECTIVITY // includes DISALLOW, extends to prefer stronger connections
+    DISALLOW = 2, // disallow a set from being leader
+    CONNECTIVITY = 3 // includes DISALLOW, extends to prefer stronger connections
   };
   election_strategy strategy;
     

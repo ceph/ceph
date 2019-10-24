@@ -1553,6 +1553,11 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("maximum time for a mon election (seconds)"),
 
+    Option("mon_election_default_strategy", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min_max(1, 3)
+    .set_description("The election strategy to set when constructing the first monmap."),
+
     Option("mon_lease", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .add_service("mon")
