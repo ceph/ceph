@@ -716,13 +716,25 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
     wholedevno = sb.st_rdev;
   }
 
-  r = devno_to_krbd_id(ctx->udev, wholedevno, &id);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      cerr << "rbd: '" << devnode << "' is not an rbd device" << std::endl;
-      r = -EINVAL;
+  for (int tries = 0; ; tries++) {
+    r = devno_to_krbd_id(ctx->udev, wholedevno, &id);
+    if (r == -ENOENT && tries < 2) {
+      usleep(250 * 1000);
+    } else {
+      if (r < 0) {
+        if (r == -ENOENT) {
+          std::cerr << "rbd: '" << devnode << "' is not an rbd device"
+                    << std::endl;
+          r = -EINVAL;
+        }
+        return r;
+      }
+      if (tries) {
+        std::cerr << "rbd: udev enumerate missed a device, tries = " << tries
+                  << std::endl;
+      }
+      break;
     }
-    return r;
   }
 
   return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
@@ -739,14 +751,25 @@ static int unmap_image(struct krbd_ctx *ctx, const char *pool,
   if (!snap)
     snap = "-";
 
-  r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      cerr << "rbd: " << pool << "/" << image << "@" << snap
-           << ": not a mapped image or snapshot" << std::endl;
-      r = -EINVAL;
+  for (int tries = 0; ; tries++) {
+    r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
+    if (r == -ENOENT && tries < 2) {
+      usleep(250 * 1000);
+    } else {
+      if (r < 0) {
+        if (r == -ENOENT) {
+          std::cerr << "rbd: " << pool << "/" << image << "@" << snap
+                    << ": not a mapped image or snapshot" << std::endl;
+          r = -EINVAL;
+        }
+        return r;
+      }
+      if (tries) {
+        std::cerr << "rbd: udev enumerate missed a device, tries = " << tries
+                  << std::endl;
+      }
+      break;
     }
-    return r;
   }
 
   return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
