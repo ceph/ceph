@@ -96,7 +96,10 @@ void DispatchQueue::enqueue(const ref_t<Message>& m, int priority, uint64_t id)
 
 void DispatchQueue::local_delivery(const ref_t<Message>& m, int priority)
 {
-  m->set_recv_stamp(ceph_clock_now());
+  auto local_delivery_stamp = ceph_clock_now();
+  m->set_recv_stamp(local_delivery_stamp);
+  m->set_throttle_stamp(local_delivery_stamp);
+  m->set_recv_complete_stamp(local_delivery_stamp);
   std::lock_guard l{local_delivery_lock};
   if (local_messages.empty())
     local_delivery_cond.notify_all();
