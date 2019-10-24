@@ -4340,7 +4340,7 @@ int main(int argc, const char **argv)
 	}
 
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
+	int ret = zonegroup.init(g_ceph_context, store->svc.sysobj);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4353,7 +4353,6 @@ int main(int argc, const char **argv)
 	}
 	encode_json("placement_targets", p->second, formatter);
 	formatter->flush(cout);
-	cout << std::endl;
       }
       break;
     case OPT_ZONEGROUP_PLACEMENT_ADD:
@@ -4940,7 +4939,7 @@ int main(int argc, const char **argv)
 	}
 
 	RGWZoneParams zone(zone_id, zone_name);
-	int ret = zone.init(g_ceph_context, store);
+	int ret = zone.init(g_ceph_context, store->svc.sysobj);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
