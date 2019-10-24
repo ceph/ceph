@@ -96,11 +96,8 @@ def crush_rule_osds(node_buckets, rule):
             return set([node['id']])
 
         result = set()
-        for item in node['items']:
-            if item['id'] >= 0:
-                result.add(item['id'])
-            else:
-                result |= _gather_leaf_ids(nodes_by_id[item['id']])
+        for item in nodes_by_id[node['id']]['items']:
+            result |= _gather_leaf_ids(item)
 
         return result
 
