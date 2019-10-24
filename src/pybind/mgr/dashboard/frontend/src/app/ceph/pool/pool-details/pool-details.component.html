@@ -23,7 +23,7 @@
     <cd-rbd-configuration-table [data]="selectedPoolConfiguration"></cd-rbd-configuration-table>
   </tab>
   <tab i18n-heading
-       *ngIf="selection.first()['tiers'].length > 0"
+       *ngIf="selection.first()['tiers']?.length > 0"
        heading="Cache Tiers Details">
     <cd-table [data]="cacheTiers"
               [columns]="cacheTierColumns"
