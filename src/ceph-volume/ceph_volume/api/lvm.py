@@ -274,7 +274,7 @@ def dmsetup_splitname(dev):
 ################################
 
 
-def get_api_pvs(fields=None, unparsed=False):
+def get_api_pvs(fields=None, unparsed=False, sep='";"'):
     """
     Return the list of physical volumes configured for lvm and available in the
     system using flags to include common metadata associated with them like the uuid
@@ -292,9 +292,8 @@ def get_api_pvs(fields=None, unparsed=False):
         fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
     stdout, stderr, returncode = process.call(
-        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields],
-        verbose_on_failure=False
-    )
+        ['pvs', '--no-heading', '--readonly', '--separator=' + sep,
+         '-o', fields], verbose_on_failure=False)
 
     return stdout if unparsed else _output_parser(stdout, fields)
 
@@ -518,7 +517,7 @@ def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
 #############################
 
 
-def get_api_vgs(fields=None, unparsed=False):
+def get_api_vgs(fields=None, unparsed=False, sep='";"'):
     """
     Return the list of group volumes available in the system using flags to
     include common metadata associated with them
@@ -536,9 +535,9 @@ def get_api_vgs(fields=None, unparsed=False):
     if fields is None:
         fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields],
-        verbose_on_failure=False
-    )
+        ['vgs', '--noheadings', '--readonly', '--separator=' + sep,
+         '--units=g', '-o', fields], verbose_on_failure=False)
+
     return stdout if unparsed else _output_parser(stdout, fields)
 
 
@@ -868,7 +867,7 @@ def get_vg(vg_name=None, vg_tags=None, vgs=None):
 ###############################
 
 
-def get_api_lvs(fields=None, unparsed=False):
+def get_api_lvs(fields=None, unparsed=False, sep='";"'):
     """
     Return the list of logical volumes available in the system using flags to include common
     metadata associated with them
@@ -883,9 +882,8 @@ def get_api_lvs(fields=None, unparsed=False):
     if fields is None:
         fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o', fields],
-        verbose_on_failure=False
-    )
+        ['lvs', '--noheadings', '--readonly', '--separator=' + sep,
+         '-a', '-o', fields], verbose_on_failure=False)
 
     return stdout if unparsed else _output_parser(stdout, fields)
 
