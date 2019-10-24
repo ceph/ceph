@@ -19,8 +19,8 @@ enum {
 static constexpr uint64_t PERF_VAL = 42;
 
 static seastar::future<> test_perfcounters(){
-  return ceph::common::sharded_perf_coll().start().then([] {
-    return ceph::common::sharded_perf_coll().invoke_on_all([] (auto& s){
+  return crimson::common::sharded_perf_coll().start().then([] {
+    return crimson::common::sharded_perf_coll().invoke_on_all([] (auto& s){
       std::string name =fmt::format("seastar-osd::shard-{}",seastar::engine().cpu_id());
       PerfCountersBuilder plb(NULL, name, PERFTEST_FIRST,PERFTEST_LAST);
       plb.add_u64_counter(PERFTEST_INDEX, "perftest_count", "count perftest");
@@ -29,7 +29,7 @@ static seastar::future<> test_perfcounters(){
       s.get_perf_collection()->add(perf_logger);
     });
   }).then([]{
-    return ceph::common::sharded_perf_coll().invoke_on_all([] (auto& s){
+    return crimson::common::sharded_perf_coll().invoke_on_all([] (auto& s){
       auto pcc = s.get_perf_collection();
       pcc->with_counters([](auto& by_path){
         for (auto& perf_counter : by_path) {
@@ -40,7 +40,7 @@ static seastar::future<> test_perfcounters(){
       });
     });
   }).finally([] {
-     return ceph::common::sharded_perf_coll().stop();
+     return crimson::common::sharded_perf_coll().stop();
   });
 
 }

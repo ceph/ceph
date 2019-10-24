@@ -9,7 +9,7 @@
 #include "Fwd.h"
 #include "SocketConnection.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 class Protocol {
  public:
@@ -149,4 +149,4 @@ class Protocol {
   void write_event();
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

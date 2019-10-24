@@ -13,14 +13,14 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 ClientRequest::ClientRequest(
-  OSD &osd, ceph::net::ConnectionRef conn, Ref<MOSDOp> &&m)
+  OSD &osd, crimson::net::ConnectionRef conn, Ref<MOSDOp> &&m)
   : osd(osd), conn(conn), m(m)
 {}
 

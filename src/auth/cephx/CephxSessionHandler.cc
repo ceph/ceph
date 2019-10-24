@@ -26,8 +26,8 @@
 
 namespace {
 #ifdef WITH_SEASTAR
-  ceph::common::ConfigProxy& conf(CephContext*) {
-    return ceph::common::local_conf();
+  crimson::common::ConfigProxy& conf(CephContext*) {
+    return crimson::common::local_conf();
   }
 #else
   ConfigProxy& conf(CephContext* cct) {

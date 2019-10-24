@@ -6,7 +6,7 @@
 #include <exception>
 #include <system_error>
 
-namespace ceph::osd {
+namespace crimson::osd {
 class error : private std::system_error {
 public:
   error(const std::errc ec)
@@ -59,4 +59,4 @@ struct input_output_error : public error {
   input_output_error() : error(std::errc::io_error) {}
 };
 
-} // namespace ceph::osd
+} // namespace crimson::osd

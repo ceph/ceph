@@ -11,7 +11,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 class OSD;
 class PG;
@@ -25,12 +25,12 @@ public:
 
 private:
   OSD &osd;
-  ceph::net::ConnectionRef conn;
+  crimson::net::ConnectionRef conn;
   Ref<Message> m;
 
 public:
   CompoundPeeringRequest(
-    OSD &osd, ceph::net::ConnectionRef conn, Ref<Message> m);
+    OSD &osd, crimson::net::ConnectionRef conn, Ref<Message> m);
 
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;

@@ -28,7 +28,7 @@ namespace bpo = boost::program_options;
 namespace {
 
 seastar::logger& logger() {
-  return ceph::get_logger(ceph_subsys_ms);
+  return crimson::get_logger(ceph_subsys_ms);
 }
 
 static std::random_device rd;
@@ -41,10 +41,10 @@ static seastar::future<> test_echo(unsigned rounds,
 {
   struct test_state {
     struct Server final
-        : public ceph::net::Dispatcher,
+        : public crimson::net::Dispatcher,
           public seastar::peering_sharded_service<Server> {
-      ceph::net::Messenger *msgr = nullptr;
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::net::Messenger *msgr = nullptr;
+      crimson::auth::DummyAuthClientServer dummy_auth;
 
       Dispatcher* get_local_shard() override {
         return &(container().local());
@@ -52,7 +52,7 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> stop() {
         return seastar::make_ready_future<>();
       }
-      seastar::future<> ms_dispatch(ceph::net::Connection* c,
+      seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
         if (verbose) {
           logger().info("server got {}", *m);
@@ -65,11 +65,11 @@ static seastar::future<> test_echo(unsigned rounds,
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        auto&& fut = ceph::net::Messenger::create(name, lname, nonce);
-        return fut.then([this, addr](ceph::net::Messenger *messenger) {
+        auto&& fut = crimson::net::Messenger::create(name, lname, nonce);
+        return fut.then([this, addr](crimson::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
-                server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
+                server.msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
                 server.msgr->set_require_authorizer(false);
                 server.msgr->set_auth_client(&server.dummy_auth);
                 server.msgr->set_auth_server(&server.dummy_auth);
@@ -87,7 +87,7 @@ static seastar::future<> test_echo(unsigned rounds,
     };
 
     struct Client final
-        : public ceph::net::Dispatcher,
+        : public crimson::net::Dispatcher,
           public seastar::peering_sharded_service<Client> {
 
       struct PingSession : public seastar::enable_shared_from_this<PingSession> {
@@ -99,16 +99,16 @@ static seastar::future<> test_echo(unsigned rounds,
 
       unsigned rounds;
       std::bernoulli_distribution keepalive_dist;
-      ceph::net::Messenger *msgr = nullptr;
-      std::map<ceph::net::Connection*, seastar::promise<>> pending_conns;
-      std::map<ceph::net::Connection*, PingSessionRef> sessions;
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::net::Messenger *msgr = nullptr;
+      std::map<crimson::net::Connection*, seastar::promise<>> pending_conns;
+      std::map<crimson::net::Connection*, PingSessionRef> sessions;
+      crimson::auth::DummyAuthClientServer dummy_auth;
 
       Client(unsigned rounds, double keepalive_ratio)
         : rounds(rounds),
           keepalive_dist(std::bernoulli_distribution{keepalive_ratio}) {}
 
-      PingSessionRef find_session(ceph::net::Connection* c) {
+      PingSessionRef find_session(crimson::net::Connection* c) {
         auto found = sessions.find(c);
         if (found == sessions.end()) {
           ceph_assert(false);
@@ -122,7 +122,7 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> stop() {
         return seastar::now();
       }
-      seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override {
+      seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) override {
         auto session = seastar::make_shared<PingSession>();
         auto [i, added] = sessions.emplace(conn.get(), session);
         std::ignore = i;
@@ -130,7 +130,7 @@ static seastar::future<> test_echo(unsigned rounds,
         session->connected_time = mono_clock::now();
         return seastar::now();
       }
-      seastar::future<> ms_dispatch(ceph::net::Connection* c,
+      seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
         auto session = find_session(c);
         ++(session->count);
@@ -154,11 +154,11 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        return ceph::net::Messenger::create(name, lname, nonce)
-          .then([this](ceph::net::Messenger *messenger) {
+        return crimson::net::Messenger::create(name, lname, nonce)
+          .then([this](crimson::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& client) {
                 client.msgr = messenger->get_local_shard();
-                client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
+                client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
                 client.msgr->set_auth_client(&client.dummy_auth);
                 client.msgr->set_auth_server(&client.dummy_auth);
               }).then([this, messenger] {
@@ -208,7 +208,7 @@ static seastar::future<> test_echo(unsigned rounds,
       }
 
      private:
-      seastar::future<> do_dispatch_pingpong(ceph::net::Connection* conn) {
+      seastar::future<> do_dispatch_pingpong(crimson::net::Connection* conn) {
         return container().invoke_on_all([conn](auto& client) {
             auto [i, added] = client.pending_conns.emplace(conn, seastar::promise<>());
             std::ignore = i;
@@ -256,10 +256,10 @@ static seastar::future<> test_echo(unsigned rounds,
   logger().info("test_echo(rounds={}, keepalive_ratio={}, v2={}):",
                 rounds, keepalive_ratio, v2);
   return seastar::when_all_succeed(
-      ceph::net::create_sharded<test_state::Server>(),
-      ceph::net::create_sharded<test_state::Server>(),
-      ceph::net::create_sharded<test_state::Client>(rounds, keepalive_ratio),
-      ceph::net::create_sharded<test_state::Client>(rounds, keepalive_ratio))
+      crimson::net::create_sharded<test_state::Server>(),
+      crimson::net::create_sharded<test_state::Server>(),
+      crimson::net::create_sharded<test_state::Client>(rounds, keepalive_ratio),
+      crimson::net::create_sharded<test_state::Client>(rounds, keepalive_ratio))
     .then([rounds, keepalive_ratio, v2](test_state::Server *server1,
                                         test_state::Server *server2,
                                         test_state::Client *client1,
@@ -316,15 +316,15 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
 {
   struct test_state {
     struct Server final
-      : public ceph::net::Dispatcher,
+      : public crimson::net::Dispatcher,
         public seastar::peering_sharded_service<Server> {
-      ceph::net::Messenger *msgr = nullptr;
+      crimson::net::Messenger *msgr = nullptr;
       int count = 0;
       seastar::promise<> on_second; // satisfied on second dispatch
       seastar::promise<> on_done; // satisfied when first dispatch unblocks
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::auth::DummyAuthClientServer dummy_auth;
 
-      seastar::future<> ms_dispatch(ceph::net::Connection* c,
+      seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
         switch (++count) {
         case 1:
@@ -349,11 +349,11 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        return ceph::net::Messenger::create(name, lname, nonce, 0)
-          .then([this, addr](ceph::net::Messenger *messenger) {
+        return crimson::net::Messenger::create(name, lname, nonce, 0)
+          .then([this, addr](crimson::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
-                server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
+                server.msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
                 server.msgr->set_auth_client(&server.dummy_auth);
                 server.msgr->set_auth_server(&server.dummy_auth);
               }).then([messenger, addr] {
@@ -373,19 +373,19 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
     };
 
     struct Client final
-      : public ceph::net::Dispatcher,
+      : public crimson::net::Dispatcher,
         public seastar::peering_sharded_service<Client> {
-      ceph::net::Messenger *msgr = nullptr;
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::net::Messenger *msgr = nullptr;
+      crimson::auth::DummyAuthClientServer dummy_auth;
 
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        return ceph::net::Messenger::create(name, lname, nonce, 0)
-          .then([this](ceph::net::Messenger *messenger) {
+        return crimson::net::Messenger::create(name, lname, nonce, 0)
+          .then([this](crimson::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& client) {
                 client.msgr = messenger->get_local_shard();
-                client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
+                client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
                 client.msgr->set_auth_client(&client.dummy_auth);
                 client.msgr->set_auth_server(&client.dummy_auth);
               }).then([this, messenger] {
@@ -405,8 +405,8 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
 
   logger().info("test_concurrent_dispatch(v2={}):", v2);
   return seastar::when_all_succeed(
-      ceph::net::create_sharded<test_state::Server>(),
-      ceph::net::create_sharded<test_state::Client>())
+      crimson::net::create_sharded<test_state::Server>(),
+      crimson::net::create_sharded<test_state::Client>())
     .then([v2](test_state::Server *server,
              test_state::Client *client) {
       entity_addr_t addr;
@@ -423,7 +423,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
         .then([server, client] {
           return client->msgr->connect(server->msgr->get_myaddr(),
                                       entity_name_t::TYPE_OSD);
-        }).then([](ceph::net::ConnectionXRef conn) {
+        }).then([](crimson::net::ConnectionXRef conn) {
           // send two messages
           return (*conn)->send(make_message<MPing>()).then([conn] {
             return (*conn)->send(make_message<MPing>());
@@ -445,12 +445,12 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
 seastar::future<> test_preemptive_shutdown(bool v2) {
   struct test_state {
     class Server final
-      : public ceph::net::Dispatcher,
+      : public crimson::net::Dispatcher,
         public seastar::peering_sharded_service<Server> {
-      ceph::net::Messenger *msgr = nullptr;
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::net::Messenger *msgr = nullptr;
+      crimson::auth::DummyAuthClientServer dummy_auth;
 
-      seastar::future<> ms_dispatch(ceph::net::Connection* c,
+      seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
         return c->send(make_message<MPing>());
       }
@@ -460,11 +460,11 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        return ceph::net::Messenger::create(name, lname, nonce, seastar::engine().cpu_id()
-        ).then([this, addr](ceph::net::Messenger *messenger) {
+        return crimson::net::Messenger::create(name, lname, nonce, seastar::engine().cpu_id()
+        ).then([this, addr](crimson::net::Messenger *messenger) {
           return container().invoke_on_all([messenger](auto& server) {
             server.msgr = messenger->get_local_shard();
-            server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
+            server.msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
             server.msgr->set_auth_client(&server.dummy_auth);
             server.msgr->set_auth_server(&server.dummy_auth);
           }).then([messenger, addr] {
@@ -489,15 +489,15 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
     };
 
     class Client final
-      : public ceph::net::Dispatcher,
+      : public crimson::net::Dispatcher,
         public seastar::peering_sharded_service<Client> {
-      ceph::net::Messenger *msgr = nullptr;
-      ceph::auth::DummyAuthClientServer dummy_auth;
+      crimson::net::Messenger *msgr = nullptr;
+      crimson::auth::DummyAuthClientServer dummy_auth;
 
       bool stop_send = false;
       seastar::promise<> stopped_send_promise;
 
-      seastar::future<> ms_dispatch(ceph::net::Connection* c,
+      seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
         return seastar::now();
       }
@@ -506,11 +506,11 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        return ceph::net::Messenger::create(name, lname, nonce, seastar::engine().cpu_id()
-        ).then([this](ceph::net::Messenger *messenger) {
+        return crimson::net::Messenger::create(name, lname, nonce, seastar::engine().cpu_id()
+        ).then([this](crimson::net::Messenger *messenger) {
           return container().invoke_on_all([messenger](auto& client) {
             client.msgr = messenger->get_local_shard();
-            client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
+            client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
             client.msgr->set_auth_client(&client.dummy_auth);
             client.msgr->set_auth_server(&client.dummy_auth);
           }).then([this, messenger] {
@@ -520,7 +520,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       }
       seastar::future<> send_pings(const entity_addr_t& addr) {
         return msgr->connect(addr, entity_name_t::TYPE_OSD
-        ).then([this](ceph::net::ConnectionXRef conn) {
+        ).then([this](crimson::net::ConnectionXRef conn) {
           // forwarded to stopped_send_promise
           (void) seastar::do_until(
             [this] { return stop_send; },
@@ -551,8 +551,8 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
 
   logger().info("test_preemptive_shutdown(v2={}):", v2);
   return seastar::when_all_succeed(
-    ceph::net::create_sharded<test_state::Server>(),
-    ceph::net::create_sharded<test_state::Client>()
+    crimson::net::create_sharded<test_state::Server>(),
+    crimson::net::create_sharded<test_state::Client>()
   ).then([v2](test_state::Server *server,
              test_state::Client *client) {
     entity_addr_t addr;
@@ -583,17 +583,17 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
 }
 
 using ceph::msgr::v2::Tag;
-using ceph::net::bp_action_t;
-using ceph::net::bp_type_t;
-using ceph::net::Breakpoint;
-using ceph::net::Connection;
-using ceph::net::ConnectionRef;
-using ceph::net::custom_bp_t;
-using ceph::net::Dispatcher;
-using ceph::net::Interceptor;
-using ceph::net::Messenger;
-using ceph::net::SocketPolicy;
-using ceph::net::tag_bp_t;
+using crimson::net::bp_action_t;
+using crimson::net::bp_type_t;
+using crimson::net::Breakpoint;
+using crimson::net::Connection;
+using crimson::net::ConnectionRef;
+using crimson::net::custom_bp_t;
+using crimson::net::Dispatcher;
+using crimson::net::Interceptor;
+using crimson::net::Messenger;
+using crimson::net::SocketPolicy;
+using crimson::net::tag_bp_t;
 
 struct counter_t { unsigned counter = 0; };
 
@@ -918,7 +918,7 @@ SocketPolicy to_socket_policy(policy_t policy) {
 }
 
 class FailoverSuite : public Dispatcher {
-  ceph::auth::DummyAuthClientServer dummy_auth;
+  crimson::auth::DummyAuthClientServer dummy_auth;
   Messenger& test_msgr;
   const entity_addr_t test_peer_addr;
   TestInterceptor interceptor;
@@ -1315,7 +1315,7 @@ class FailoverSuite : public Dispatcher {
 };
 
 class FailoverTest : public Dispatcher {
-  ceph::auth::DummyAuthClientServer dummy_auth;
+  crimson::auth::DummyAuthClientServer dummy_auth;
   Messenger& cmd_msgr;
   ConnectionRef cmd_conn;
   const entity_addr_t test_addr;
@@ -1513,7 +1513,7 @@ class FailoverTest : public Dispatcher {
 
 class FailoverSuitePeer : public Dispatcher {
   using cb_t = std::function<seastar::future<>()>;
-  ceph::auth::DummyAuthClientServer dummy_auth;
+  crimson::auth::DummyAuthClientServer dummy_auth;
   Messenger& peer_msgr;
   cb_t op_callback;
 
@@ -1641,7 +1641,7 @@ class FailoverSuitePeer : public Dispatcher {
 };
 
 class FailoverTestPeer : public Dispatcher {
-  ceph::auth::DummyAuthClientServer dummy_auth;
+  crimson::auth::DummyAuthClientServer dummy_auth;
   Messenger& cmd_msgr;
   ConnectionRef cmd_conn;
   std::unique_ptr<FailoverSuitePeer> test_suite;

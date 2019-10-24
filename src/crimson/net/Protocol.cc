@@ -13,11 +13,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_ms);
+    return crimson::get_logger(ceph_subsys_ms);
   }
 }
 
-namespace ceph::net {
+namespace crimson::net {
 
 Protocol::Protocol(proto_t type,
                    Dispatcher& dispatcher,
@@ -306,4 +306,4 @@ void Protocol::write_event()
   }
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

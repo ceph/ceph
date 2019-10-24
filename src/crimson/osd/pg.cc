@@ -40,7 +40,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
@@ -54,9 +54,9 @@ std::ostream& operator<<(std::ostream& out, const signedspan& d)
 }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
-using ceph::common::local_conf;
+using crimson::common::local_conf;
 
 class RecoverablePredicate : public IsPGRecoverablePredicate {
 public:
@@ -77,7 +77,7 @@ public:
 PG::PG(
   spg_t pgid,
   pg_shard_t pg_shard,
-  ceph::os::CollectionRef coll_ref,
+  crimson::os::CollectionRef coll_ref,
   pg_pool_t&& pool,
   std::string&& name,
   cached_map_t osdmap,
@@ -275,7 +275,7 @@ void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
 
 
 void PG::init(
-  ceph::os::CollectionRef coll,
+  crimson::os::CollectionRef coll,
   int role,
   const vector<int>& newup, int new_up_primary,
   const vector<int>& newacting, int new_acting_primary,
@@ -290,7 +290,7 @@ void PG::init(
     new_acting_primary, history, pi, backfill, t);
 }
 
-seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
+seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 {
   return store->open_collection(coll_t(pgid)).then([this, store](auto ch) {
     coll_ref = ch;
@@ -461,8 +461,8 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
                                            0, false);
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }).handle_exception_type([=,&oid](const ceph::osd::error& e) {
-    logger().debug("got ceph::osd::error while handling object {}: {} ({})",
+  }).handle_exception_type([=,&oid](const crimson::osd::error& e) {
+    logger().debug("got crimson::osd::error while handling object {}: {} ({})",
                    oid, e.code(), e.what());
     return backend->evict_object_state(oid).then([=] {
       auto reply = make_message<MOSDOpReply>(
@@ -487,7 +487,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
                                            CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
                                            false);
     return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }).handle_exception_type([=](const ceph::osd::error& e) {
+  }).handle_exception_type([=](const crimson::osd::error& e) {
     auto reply = make_message<MOSDOpReply>(
       m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
     reply->set_enoent_reply_versions(peering_state.get_info().last_update,
@@ -496,7 +496,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
   });
 }
 
-seastar::future<> PG::handle_op(ceph::net::Connection* conn,
+seastar::future<> PG::handle_op(crimson::net::Connection* conn,
                                 Ref<MOSDOp> m)
 {
   return wait_for_active().then([conn, m, this] {
@@ -531,7 +531,7 @@ seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
     });
 }
 
-void PG::handle_rep_op_reply(ceph::net::Connection* conn,
+void PG::handle_rep_op_reply(crimson::net::Connection* conn,
 			     const MOSDRepOpReply& m)
 {
   backend->got_rep_op_reply(m);

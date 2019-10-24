@@ -7,7 +7,7 @@
 
 // prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
-using ceph::os::FuturizedStore;
+using crimson::os::FuturizedStore;
 
 PGMeta::PGMeta(FuturizedStore* store, spg_t pgid)
   : store{store},

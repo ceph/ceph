@@ -426,7 +426,7 @@ public:
    * @param errout std::ostream to send error messages too
    */
 #ifdef WITH_SEASTAR
-  seastar::future<> build_initial(const ceph::common::ConfigProxy& conf, bool for_mkfs);
+  seastar::future<> build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs);
 #else
   int build_initial(CephContext *cct, bool for_mkfs, std::ostream& errout);
 #endif
@@ -485,7 +485,7 @@ protected:
   seastar::future<> read_monmap(const std::string& monmap);
   /// try to build monmap with different settings, like
   /// mon_host, mon* sections, and mon_dns_srv_name
-  seastar::future<> build_monmap(const ceph::common::ConfigProxy& conf, bool for_mkfs);
+  seastar::future<> build_monmap(const crimson::common::ConfigProxy& conf, bool for_mkfs);
   /// initialize monmap by resolving given service name
   seastar::future<> init_with_dns_srv(bool for_mkfs, const std::string& name);
 #else

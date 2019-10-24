@@ -9,14 +9,14 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
 ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      pg_shard_t whoami,
                                      ReplicatedBackend::CollectionRef coll,
-                                     ceph::osd::ShardServices& shard_services)
+                                     crimson::osd::ShardServices& shard_services)
   : PGBackend{whoami.shard, coll, &shard_services.get_store()},
     pgid{pgid},
     whoami{whoami},
@@ -31,7 +31,7 @@ seastar::future<bufferlist> ReplicatedBackend::_read(const hobject_t& hoid,
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
-seastar::future<ceph::osd::acked_peers_t>
+seastar::future<crimson::osd::acked_peers_t>
 ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        const hobject_t& hoid,
                                        ceph::os::Transaction&& txn,
@@ -70,7 +70,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       pending_txn->second.all_committed = {};
       auto acked_peers = std::move(pending_txn->second.acked_peers);
       pending_trans.erase(pending_txn);
-      return seastar::make_ready_future<ceph::osd::acked_peers_t>(std::move(acked_peers));
+      return seastar::make_ready_future<crimson::osd::acked_peers_t>(std::move(acked_peers));
     });
 }
 

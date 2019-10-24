@@ -1,6 +1,6 @@
 #include "Throttle.h"
 
-namespace ceph::thread {
+namespace crimson::thread {
 
 int64_t Throttle::take(int64_t c)
 {
@@ -56,4 +56,4 @@ bool Throttle::_should_wait(size_t c) const {
           (c >= max && count > max));      // except for large c
 }
 
-} // namespace ceph::thread::seastar
+} // namespace crimson::thread
