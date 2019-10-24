@@ -487,20 +487,13 @@ MDSRank::MDSRank(
     Context *respawn_hook_,
     Context *suicide_hook_,
     boost::asio::io_context& ioctx) :
-    whoami(whoami_), incarnation(0),
-    mds_lock(mds_lock_), cct(msgr->cct), clog(clog_), timer(timer_),
-    mdsmap(mdsmap_),
+    cct(msgr->cct), mds_lock(mds_lock_), clog(clog_),
+    timer(timer_), mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, ctxpool, 0, 0)),
-    server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
-    balancer(NULL), scrubstack(NULL),
-    damage_table(whoami_),
-    inotable(NULL), snapserver(NULL), snapclient(NULL),
-    sessionmap(this), logger(NULL), mlogger(NULL),
+    damage_table(whoami_), sessionmap(this),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),
-    last_state(MDSMap::STATE_BOOT),
-    state(MDSMap::STATE_BOOT),
-    cluster_degraded(false), stopping(false),
+    progress_thread(this), whoami(whoami_),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
       new LambdaContext([this](int r) {
@@ -509,14 +502,10 @@ MDSRank::MDSRank(
 	}
       )
     ),
-    progress_thread(this), dispatch_depth(0),
-    hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
-    mds_slow_req_count(0),
-    last_client_mdsmap_bcast(0),
+    beacon(beacon_),
     messenger(msgr), monc(monc_), mgrc(mgrc),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
-    standby_replaying(false),
     starttime(mono_clock::now())
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
