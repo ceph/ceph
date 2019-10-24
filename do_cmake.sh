@@ -64,7 +64,9 @@ erasure code dir = lib
 EOF
 
 echo done.
-cat <<EOF
+
+if [[ ! $ARGS =~ "-DCMAKE_BUILD_TYPE" ]]; then
+  cat <<EOF
 
 ****
 WARNING: do_cmake.sh now creates debug builds by default. Performance
@@ -72,3 +74,5 @@ may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
 if a performance sensitive build is required.
 ****
 EOF
+fi
+
