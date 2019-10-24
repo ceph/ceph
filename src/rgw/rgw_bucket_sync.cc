@@ -455,19 +455,39 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
 
 int RGWBucketSyncPolicyHandler::init()
 {
-#warning FIXME
-#if 0
-  const auto& zone_id = zone_svc->get_zone().id;
-  auto& zg = zone_svc->get_zonegroup();
+  flow_mgr->init(*bucket_info.sync_policy);
 
-  if (!bucket_info.sync_policy) {
-    return 0;
+  RGWBucketSyncFlowManager::pipe_set sources_by_name;
+  RGWBucketSyncFlowManager::pipe_set targets_by_name;
+  flow_mgr->reflect(bucket_info.bucket, &sources_by_name, &targets_by_name);
+
+  /* convert to zone ids */
+
+  for (auto& pipe : sources_by_name.pipes) {
+    if (!pipe.source.zone) {
+      continue;
+    }
+    rgw_sync_bucket_pipe new_pipe = pipe;
+    string zone_id;
+
+    if (zone_svc->find_zone_id_by_name(*pipe.source.zone, &zone_id)) {
+      new_pipe.source.zone = zone_id;
+    }
+    sources[*new_pipe.source.zone].pipes.insert(new_pipe);
+  }
+  for (auto& pipe : targets_by_name.pipes) {
+    if (!pipe.dest.zone) {
+      continue;
+    }
+    rgw_sync_bucket_pipe new_pipe = pipe;
+    string zone_id;
+    if (zone_svc->find_zone_id_by_name(*pipe.dest.zone, &zone_id)) {
+      new_pipe.dest.zone = zone_id;
+    }
+    targets[*new_pipe.dest.zone].pipes.insert(new_pipe);
   }
 
-  auto& sync_policy = *bucket_info.sync_policy;
-
   return 0;
-#endif
 }
 
 bool RGWBucketSyncPolicyHandler::bucket_exports_data() const

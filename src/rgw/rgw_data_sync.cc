@@ -3410,7 +3410,7 @@ class RGWGetBucketSourcePeersCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   rgw_bucket bucket;
 
-  map<string, set<RGWBucketSyncPolicyHandler::peer_info> > *sources;
+  map<string, RGWBucketSyncFlowManager::pipe_set> *sources;
   RGWBucketInfo *pbucket_info;
 
   rgw_raw_obj sources_obj;
@@ -3426,7 +3426,7 @@ class RGWGetBucketSourcePeersCR : public RGWCoroutine {
 public:
   RGWGetBucketSourcePeersCR(RGWDataSyncEnv *_sync_env,
                             const rgw_bucket& _bucket,
-                            map<string, set<RGWBucketSyncPolicyHandler::peer_info> > *_sources,
+                            map<string, RGWBucketSyncFlowManager::pipe_set> *_sources,
                             RGWBucketInfo *_pbucket_info,
                             const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sync_env->cct),
@@ -3486,9 +3486,9 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
 
   rgw_raw_obj sources_obj;
 
-  map<string, set<RGWBucketSyncPolicyHandler::peer_info> > sources;
-  map<string, set<RGWBucketSyncPolicyHandler::peer_info> >::iterator siter;
-  set<RGWBucketSyncPolicyHandler::peer_info>::iterator piter;
+  map<string, RGWBucketSyncFlowManager::pipe_set> sources;
+  map<string, RGWBucketSyncFlowManager::pipe_set>::iterator siter;
+  set<rgw_sync_bucket_pipe>::iterator piter;
 
   rgw_bucket_sync_pair_info sync_pair;
 
@@ -3565,12 +3565,8 @@ int RGWRunBucketSourcesSyncCR::operate()
         }
         cur_sc->init(sync_env, conn, siter->first);
       }
-      for (piter = siter->second.begin(); piter != siter->second.end(); ++piter) {
-        if (!piter->is_rgw()) {
-          continue;
-        }
-
-        sync_pair.source_bs.bucket = piter->bucket;
+      for (piter = siter->second.pipes.begin(); piter != siter->second.pipes.end(); ++piter) {
+        sync_pair.source_bs.bucket = *piter->source.bucket;
         sync_pair.dest_bs.bucket = bucket_info.bucket;
 
         yield spawn(new RGWRunBucketSyncCoroutine(cur_sc, sync_pair, tn), false);

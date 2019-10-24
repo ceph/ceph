@@ -2453,8 +2453,8 @@ static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo&
   for (auto& m : sources) {
     auto& zone = m.first;
     out << indented{width, "source zone"} << zone << std::endl;
-    for (auto& s : m.second) {
-      out << indented{width, "bucket"} << s << std::endl;
+    for (auto& pipe : m.second.pipes) {
+      out << indented{width, "bucket"} << *pipe.source.bucket << std::endl;
     }
   }
 
