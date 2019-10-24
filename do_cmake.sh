@@ -55,6 +55,7 @@ else
     CMAKE=cmake
 fi
 ${CMAKE} $ARGS "$@" .. || exit 1
+set +x
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf
