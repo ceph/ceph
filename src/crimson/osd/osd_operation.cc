@@ -2,10 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "osd_operation.h"
+#include "common/Formatter.h"
 
-namespace ceph::osd {
+namespace crimson::osd {
 
-void Operation::dump(Formatter *f)
+void Operation::dump(ceph::Formatter* f)
 {
   f->open_object_section("operation");
   f->dump_string("type", get_type_name());
@@ -23,7 +24,7 @@ void Operation::dump(Formatter *f)
   f->close_section();
 }
 
-void Operation::dump_brief(Formatter *f)
+void Operation::dump_brief(ceph::Formatter* f)
 {
   f->open_object_section("operation");
   f->dump_string("type", get_type_name());
@@ -38,7 +39,7 @@ std::ostream &operator<<(std::ostream &lhs, const Operation &rhs) {
   return lhs;
 }
 
-void Blocker::dump(Formatter *f) const
+void Blocker::dump(ceph::Formatter* f) const
 {
   f->open_object_section("blocker");
   f->dump_string("op_type", get_type_name());
@@ -72,7 +73,7 @@ OrderedPipelinePhase::Handle::~Handle()
   exit();
 }
 
-void OrderedPipelinePhase::dump_detail(Formatter *f) const
+void OrderedPipelinePhase::dump_detail(ceph::Formatter* f) const
 {
 }
 

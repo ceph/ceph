@@ -15,12 +15,11 @@
 
 namespace ceph {
   class Formatter;
-  namespace osd {
-    class ShardServices;
-  }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
+
+class ShardServices;
 
 class OSDMapGate {
   struct OSDMapBlocker : public Blocker {

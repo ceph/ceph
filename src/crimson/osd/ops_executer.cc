@@ -20,11 +20,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 {
@@ -37,7 +37,7 @@ seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
     bp.copy(osd_op.op.cls.indata_len, indata);
   } catch (buffer::error&) {
     logger().warn("call unable to decode class + method + indata");
-    throw ceph::osd::invalid_argument{};
+    throw crimson::osd::invalid_argument{};
   }
 
   // NOTE: opening a class can actually result in dlopen(), and thus
@@ -48,23 +48,23 @@ seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   if (r) {
     logger().warn("class {} open got {}", cname, cpp_strerror(r));
     if (r == -ENOENT) {
-      throw ceph::osd::operation_not_supported{};
+      throw crimson::osd::operation_not_supported{};
     } else if (r == -EPERM) {
       // propagate permission errors
-      throw ceph::osd::permission_denied{};
+      throw crimson::osd::permission_denied{};
     }
-    throw ceph::osd::input_output_error{};
+    throw crimson::osd::input_output_error{};
   }
 
   ClassHandler::ClassMethod* method = cls->get_method(mname);
   if (!method) {
     logger().warn("call method {}.{} does not exist", cname, mname);
-    throw ceph::osd::operation_not_supported{};
+    throw crimson::osd::operation_not_supported{};
   }
 
   const auto flags = method->get_flags();
   if (!os->exists && (flags & CLS_METHOD_WR) == 0) {
-    throw ceph::osd::object_not_found{};
+    throw crimson::osd::object_not_found{};
   }
 
 #if 0
@@ -82,11 +82,11 @@ seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
                                   indata, outdata);
     if (num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
       logger().error("method tried to read object but is not marked RD");
-      throw ceph::osd::input_output_error{};
+      throw crimson::osd::input_output_error{};
     }
     if (num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
       logger().error("method tried to update object but is not marked WR");
-      throw ceph::osd::input_output_error{};
+      throw crimson::osd::input_output_error{};
     }
 
     // for write calls we never return data expect errors. For details refer
@@ -97,7 +97,7 @@ seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
       osd_op.outdata.claim_append(outdata);
     }
     if (ret < 0) {
-      throw ceph::osd::make_error(ret);
+      throw crimson::osd::make_error(ret);
     }
   });
 }
@@ -113,7 +113,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   } else {
     std::size_t dot = type.find(".");
     if (dot == type.npos || dot == 0 || dot == type.size() - 1) {
-      throw ceph::osd::invalid_argument{};
+      throw crimson::osd::invalid_argument{};
     }
 
     const std::string class_name = type.substr(0, dot);
@@ -124,9 +124,9 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
       logger().warn("can't open class {}: {}", class_name, cpp_strerror(r));
       if (r == -EPERM) {
         // propogate permission error
-        throw ceph::osd::permission_denied{};
+        throw crimson::osd::permission_denied{};
       } else {
-        throw ceph::osd::invalid_argument{};
+        throw crimson::osd::invalid_argument{};
       }
     } else {
       ceph_assert(cls);
@@ -135,7 +135,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
     ClassHandler::ClassFilter * const class_filter = cls->get_filter(filter_name);
     if (class_filter == nullptr) {
       logger().warn("can't find filter {} in class {}", filter_name, class_name);
-      throw ceph::osd::invalid_argument{};
+      throw crimson::osd::invalid_argument{};
     }
 
     filter.reset(class_filter->fn());
@@ -144,7 +144,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
       // give an error rather than asserting out.
       logger().warn("buggy class {} failed to construct filter {}",
                     class_name, filter_name);
-      throw ceph::osd::invalid_argument{};
+      throw crimson::osd::invalid_argument{};
     }
   }
 
@@ -152,7 +152,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   int r = filter->init(iter);
   if (r < 0) {
     logger().warn("error initializing filter {}: {}", type, cpp_strerror(r));
-    throw ceph::osd::invalid_argument{};
+    throw crimson::osd::invalid_argument{};
   }
 
   // successfully constructed and initialized, return it.
@@ -206,7 +206,7 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
   return backend.list_objects(lower_bound, limit).then(
     [&backend, filter, nspace](auto objects, auto next) {
       auto in_my_namespace = [&nspace](const hobject_t& obj) {
-        using ceph::common::local_conf;
+        using crimson::common::local_conf;
         if (obj.get_namespace() == local_conf()->osd_hit_set_namespace) {
           return false;
         } else if (nspace == librados::all_nspaces) {
@@ -305,7 +305,7 @@ static seastar::future<> do_pgnls_filtered(
     ceph::decode(mname, bp);
     ceph::decode(type, bp);
   } catch (const buffer::error&) {
-    throw ceph::osd::invalid_argument{};
+    throw crimson::osd::invalid_argument{};
   }
 
   auto filter = get_pgls_filter(type, bp);
@@ -416,7 +416,7 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
     });
   case CEPH_OSD_OP_OMAPSETVALS:
     if (!pg.get_pool().info.supports_omap()) {
-      throw ceph::osd::operation_not_supported{};
+      throw crimson::osd::operation_not_supported{};
     }
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_set_vals(os, osd_op, txn);
@@ -528,7 +528,7 @@ static seastar::future<> do_pgls_filtered(
     ceph::decode(mname, bp);
     ceph::decode(type, bp);
   } catch (const buffer::error&) {
-    throw ceph::osd::invalid_argument{};
+    throw crimson::osd::invalid_argument{};
   }
 
   auto filter = get_pgls_filter(type, bp);
@@ -589,4 +589,4 @@ OpsExecuter::execute_pg_op(OSDOp& osd_op)
   }
 }
 
-} // namespace ceph::osd
+} // namespace crimson::osd

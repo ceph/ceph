@@ -56,8 +56,8 @@ using ceph::HeartbeatMap;
 
 #ifdef WITH_SEASTAR
 CephContext::CephContext()
-  : _conf{ceph::common::local_conf()},
-    _perf_counters_collection{ceph::common::local_perf_coll()},
+  : _conf{crimson::common::local_conf()},
+    _perf_counters_collection{crimson::common::local_perf_coll()},
     _crypto_random{std::make_unique<CryptoRandom>()}
 {}
 

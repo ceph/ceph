@@ -51,7 +51,7 @@ std::ostream& operator<<(std::ostream& out, const ceph_msg_connect_reply& r)
 namespace {
 
 seastar::logger& logger() {
-  return ceph::get_logger(ceph_subsys_ms);
+  return crimson::get_logger(ceph_subsys_ms);
 }
 
 template <typename T>
@@ -78,7 +78,7 @@ void validate_banner(bufferlist::const_iterator& p)
     auto len = p.get_ptr_and_advance(remaining, &buf);
     if (!std::equal(buf, buf + len, b)) {
       throw std::system_error(
-          make_error_code(ceph::net::error::bad_connect_banner));
+          make_error_code(crimson::net::error::bad_connect_banner));
     }
     b += len;
   }
@@ -112,7 +112,7 @@ uint32_t get_proto_version(entity_type_t peer_type, bool connect)
 }
 
 void discard_up_to(std::deque<MessageRef>* queue,
-                   ceph::net::seq_num_t seq)
+                   crimson::net::seq_num_t seq)
 {
   while (!queue->empty() &&
          queue->front()->get_seq() < seq) {
@@ -122,7 +122,7 @@ void discard_up_to(std::deque<MessageRef>* queue,
 
 } // namespace anonymous
 
-namespace ceph::net {
+namespace crimson::net {
 
 ProtocolV1::ProtocolV1(Dispatcher& dispatcher,
                        SocketConnection& conn,
@@ -345,7 +345,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
             logger().error("{} my peer_addr {} doesn't match what peer advertized {}",
                            conn, conn.peer_addr, saddr);
             throw std::system_error(
-                make_error_code(ceph::net::error::bad_peer_address));
+                make_error_code(crimson::net::error::bad_peer_address));
           }
           conn.set_ephemeral_port(caddr.get_port(),
                                   SocketConnection::side_t::connector);
@@ -353,7 +353,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
             logger().warn("{} peer sent a v2 address for me: {}",
                           conn, caddr);
             throw std::system_error(
-                make_error_code(ceph::net::error::bad_peer_address));
+                make_error_code(crimson::net::error::bad_peer_address));
           }
           caddr.set_type(entity_addr_t::TYPE_LEGACY);
           return messenger.learned_addr(caddr, conn);
@@ -540,7 +540,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
           logger().error("{} we don't know how to reconnect to peer {}",
                          conn, conn.target_addr);
         throw std::system_error(
-            make_error_code(ceph::net::error::bad_peer_address));
+            make_error_code(crimson::net::error::bad_peer_address));
       }
       return socket->read(h.connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
@@ -643,7 +643,7 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
                            " which should be v1 and the same host with {}.",
                            conn, addr, conn.peer_addr);
             throw std::system_error(
-                make_error_code(ceph::net::error::bad_peer_address));
+                make_error_code(crimson::net::error::bad_peer_address));
           }
           conn.peer_addr = addr;
           conn.target_addr = conn.peer_addr;
@@ -963,4 +963,4 @@ seastar::future<> ProtocolV1::fault()
   return seastar::now();
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

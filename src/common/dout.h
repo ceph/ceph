@@ -120,14 +120,14 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #ifdef WITH_SEASTAR
 #define dout_impl(cct, sub, v)                                          \
   do {                                                                  \
-    if (ceph::common::local_conf()->subsys.should_gather(sub, v)) {     \
-      seastar::logger& _logger = ceph::get_logger(sub);                 \
+    if (crimson::common::local_conf()->subsys.should_gather(sub, v)) {  \
+      seastar::logger& _logger = crimson::get_logger(sub);              \
       const auto _lv = v;                                               \
       std::ostringstream _out;                                          \
       std::ostream* _dout = &_out;
 #define dendl_impl                              \
      "";                                        \
-      _logger.log(ceph::to_log_level(_lv),      \
+      _logger.log(crimson::to_log_level(_lv),   \
                   _out.str().c_str());          \
     }                                           \
   } while (0)

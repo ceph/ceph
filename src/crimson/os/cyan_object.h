@@ -7,7 +7,7 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include "include/buffer.h"
 
-namespace ceph::os {
+namespace crimson::os {
 
 struct Object : public boost::intrusive_ref_counter<
   Object,

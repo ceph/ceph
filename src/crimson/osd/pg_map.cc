@@ -8,11 +8,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 PGMap::PGCreationState::PGCreationState(spg_t pgid) : pgid(pgid) {}
 PGMap::PGCreationState::~PGCreationState() {}
