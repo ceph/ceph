@@ -148,7 +148,7 @@ public:
     if (f.fut.available() || f.fut.failed()) {
       return std::move(f.fut);
     }
-    ceph_assert(f.blocker);
+    assert(f.blocker);
     add_blocker(f.blocker);
     return std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
       clear_blocker(blocker);
