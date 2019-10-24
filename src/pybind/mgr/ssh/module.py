@@ -377,10 +377,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 conn,
                 ['/usr/bin/python3', '-u'],
                 stdin=script.encode('utf-8'))
-            if code:
-                self.log.debug('code %s, err %s' % (code, err))
-            # ceph-daemon combines stdout and stderr, so ignore err.
-            self.log.debug('code %s out %s' % (code, out))
+            self.log.debug('exit code %s out %s err %s' % (code, out, err))
             return out, code
 
         except Exception as ex:
@@ -421,9 +418,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     host, 'osd',
                     'ceph-volume',
                     ['--', 'inventory', '--format=json'])
-                # stdout and stderr get combined; assume last line is the real
-                # output and everything preceding it is an error.
-                data = json.loads(out[-1])
+                data = json.loads(''.join(out))
                 host_info = orchestrator.OutdatableData(data)
                 self.inventory_cache[host] = host_info
             else:
