@@ -339,7 +339,9 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
     if fsid:
         log_dir = get_log_dir(fsid)
         mounts[log_dir] = '/var/log/ceph:z'
-        mounts['/var/lib/ceph/%s/crash' % fsid] = '/var/lib/ceph/crash:z'
+        crash_dir = '/var/lib/ceph/%s/crash' % fsid
+        if os.path.exists(crash_dir):
+            mounts[crash_dir] = '/var/lib/ceph/crash:z'
 
     if daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
