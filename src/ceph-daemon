@@ -548,7 +548,6 @@ def deploy_crash(fsid, uid, gid, config, keyring):
         f.write(config)
 
     # ceph-crash unit
-    existed = os.path.exists(args.unit_dir + '/ceph-%s-crash.service' % fsid)
     mounts = {
         crash_dir: '/var/lib/ceph/crash:z',
         os.path.join(crash_dir, 'config'): '/etc/ceph/ceph.conf:z',
@@ -585,9 +584,8 @@ def deploy_crash(fsid, uid, gid, config, keyring):
         )
         os.rename(os.path.join(args.unit_dir, unit_name + '.new'),
                   os.path.join(args.unit_dir, unit_name))
-    if not existed:
-        subprocess.check_output(['systemctl', 'enable', unit_name])
-        subprocess.check_output(['systemctl', 'start', unit_name])
+    subprocess.check_output(['systemctl', 'enable', unit_name])
+    subprocess.check_output(['systemctl', 'start', unit_name])
 
 def get_unit_file(fsid):
     u = """[Unit]
@@ -681,7 +679,7 @@ class CephContainer:
             self.image
         ] + self.args
 
-    def shell_cmd(self):
+    def shell_cmd(self, cmd):
         vols = sum(
             [['-v', f'{host_dir}:{container_dir}']
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -689,22 +687,25 @@ class CephContainer:
             '-e', f'CONTAINER_IMAGE={self.image}',
             '-e', f'NODE_NAME={get_hostname()}',
         ]
+        cmd_args = []
+        if cmd:
+            cmd_args = ['-c'] + cmd
         return [
             podman_path,
             'run',
             '-it',
             '--net=host',
-            '--privileged',
             '--env', 'LANG=C',
         ] + self.podman_args + envs + vols + [
-            '--entrypoint', '/bin/bash',
+            '--entrypoint', cmd[0],
             self.image
-        ]
+        ] + cmd[1:]
 
     def exec_cmd(self, cmd):
         return [
             podman_path,
             'exec',
+            '--env', 'LANG=C',
             '-it',
             self.cname,
         ] + cmd
@@ -922,6 +923,7 @@ def command_bootstrap():
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid, config, mgr_keyring)
 
     # crash unit
+    logger.info('Creating crash agent...')
     deploy_crash(fsid, uid, gid, config,
                  '[client.crash.%s]\n\tkey = %s\n' % (hostname, crash_key))
 
@@ -1093,7 +1095,7 @@ def command_deploy():
 def command_run():
     (daemon_type, daemon_id) = args.name.split('.')
     c = get_container(args.fsid, daemon_type, daemon_id)
-    subprocess.call(c.run_cmd())
+    return subprocess.call(c.run_cmd())
 
 ##################################
 
@@ -1120,22 +1122,14 @@ def command_shell():
         args=[],
         podman_args=['--privileged'],
         volume_mounts=mounts)
-    subprocess.call(c.shell_cmd())
+    return subprocess.call(c.shell_cmd(args.command))
 
 ##################################
 
 def command_enter():
     (daemon_type, daemon_id) = args.name.split('.')
     c = get_container(args.fsid, daemon_type, daemon_id)
-    subprocess.call(c.exec_cmd(['bash']))
-
-##################################
-
-def command_exec():
-    (daemon_type, daemon_id) = args.name.split('.')
-    c = get_container(args.fsid, daemon_type, daemon_id,
-                      privileged=args.privileged)
-    subprocess.call(c.exec_cmd(args.command))
+    return subprocess.call(c.exec_cmd(args.command))
 
 ##################################
 
@@ -1174,7 +1168,9 @@ def command_ceph_volume():
         podman_args=['--privileged'],
         volume_mounts=mounts,
     )
-    call_throws(c.run_cmd(), verbose=True)
+    out, err, code = call_throws(c.run_cmd(), verbose=True)
+    if not code:
+        print(out)
 
 ##################################
 
@@ -1214,13 +1210,22 @@ def command_ls():
             elif is_fsid(i):
                 fsid = i
                 for j in os.listdir(os.path.join(args.data_dir, i)):
-                    (daemon_type, daemon_id) = j.split('.', 1)
-                    (enabled, active) = check_unit(get_unit_name(fsid,
-                                                                 daemon_type,
-                                                                 daemon_id))
+                    if j == 'crash':
+                        name = 'crash'
+                        unit_name = 'ceph-%s-crash.service' % fsid
+                        (enabled, active) = check_unit(unit_name)
+                    else:
+                        bits = j.split('.')
+                        if len(bits) != 2:
+                            continue
+                        name = j
+                        (daemon_type, daemon_id) = bits
+                        (enabled, active) = check_unit(get_unit_name(fsid,
+                                                                     daemon_type,
+                                                                     daemon_id))
                     ls.append({
                         'style': 'ceph-daemon:v1',
-                        'name': '%s.%s' % (daemon_type, daemon_id),
+                        'name': name,
                         'fsid': fsid,
                         'enabled': enabled,
                         'active': active,
@@ -1330,7 +1335,7 @@ def command_rm_cluster():
     call_throws(['rm', '-f', args.unit_dir +
                              '/ceph-%s@.service' % args.fsid])
     call_throws(['rm', '-f', args.unit_dir +
-                             '/ceph-%s-crash@.service' % args.fsid])
+                             '/ceph-%s-crash.service' % args.fsid])
     call_throws(['rm', '-f', args.unit_dir +
                              '/ceph-%s.target' % args.fsid])
     call_throws(['rm', '-rf',
@@ -1459,6 +1464,10 @@ parser_shell.add_argument(
 parser_shell.add_argument(
     '--keyring', '-k',
     help='ceph.keyring to pass through to the container')
+parser_shell.add_argument(
+    'command', nargs='*',
+    default=['bash'],
+    help='command (optional)')
 
 parser_enter = subparsers.add_parser(
     'enter', help='run an interactive shell inside a running daemon container')
@@ -1471,24 +1480,9 @@ parser_enter.add_argument(
     '--name', '-n',
     required=True,
     help='daemon name (type.id)')
-
-parser_exec = subparsers.add_parser(
-    'exec', help='run command inside a running daemon container')
-parser_exec.set_defaults(func=command_exec)
-parser_exec.add_argument(
-    '--fsid',
-    required=True,
-    help='cluster FSID')
-parser_exec.add_argument(
-    '--name', '-n',
-    required=True,
-    help='daemon name (type.id)')
-parser_exec.add_argument(
-    '--privileged',
-    action='store_true',
-    help='use a privileged container')
-parser_exec.add_argument(
-    'command', nargs='+',
+parser_enter.add_argument(
+    'command', nargs='*',
+    default=['bash'],
     help='command')
 
 parser_ceph_volume = subparsers.add_parser(

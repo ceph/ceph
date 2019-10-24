@@ -868,7 +868,7 @@ class InventoryDevice(object):
 
         dev = InventoryDevice()
         dev.id = data["path"]
-        dev.type = 'hdd' if data["sys_api"]["rotational"] == "1" else 'sdd/nvme'
+        dev.type = 'hdd' if data["sys_api"]["rotational"] == "1" else 'ssd/nvme'
         dev.size = data["sys_api"]["size"]
         dev.rotates = data["sys_api"]["rotational"] == "1"
         dev.available = data["available"]
