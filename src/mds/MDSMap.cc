@@ -944,3 +944,92 @@ bool MDSMap::check_health(mds_rank_t standby_daemon_count)
   }
   return false;
 }
+
+mds_gid_t MDSMap::find_mds_gid_by_name(std::string_view s) const {
+  for (const auto& [gid, info] : mds_info) {
+    if (info.name == s) {
+      return gid;
+    }
+  }
+  return MDS_GID_NONE;
+}
+
+unsigned MDSMap::get_num_mds(int state) const {
+  unsigned n = 0;
+  for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
+       p != mds_info.end();
+       ++p)
+    if (p->second.state == state) ++n;
+  return n;
+}
+
+void MDSMap::get_up_mds_set(std::set<mds_rank_t>& s) const {
+  for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
+       p != up.end();
+       ++p)
+    s.insert(p->first);
+}
+
+uint64_t MDSMap::get_up_features() {
+  if (!cached_up_features) {
+    bool first = true;
+    for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
+         p != up.end();
+         ++p) {
+      std::map<mds_gid_t, mds_info_t>::const_iterator q =
+        mds_info.find(p->second);
+      ceph_assert(q != mds_info.end());
+      if (first) {
+        cached_up_features = q->second.mds_features;
+        first = false;
+      } else {
+        cached_up_features &= q->second.mds_features;
+      }
+    }
+  }
+  return cached_up_features;
+}
+
+void MDSMap::get_recovery_mds_set(std::set<mds_rank_t>& s) const {
+  s = failed;
+  for (const auto& p : damaged)
+    s.insert(p);
+  for (const auto& p : mds_info)
+    if (p.second.state >= STATE_REPLAY && p.second.state <= STATE_STOPPING)
+      s.insert(p.second.rank);
+}
+
+void MDSMap::get_mds_set_lower_bound(std::set<mds_rank_t>& s, DaemonState first) const {
+  for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
+       p != mds_info.end();
+       ++p)
+    if (p->second.state >= first && p->second.state <= STATE_STOPPING)
+      s.insert(p->second.rank);
+}
+
+void MDSMap::get_mds_set(std::set<mds_rank_t>& s, DaemonState state) const {
+  for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
+       p != mds_info.end();
+       ++p)
+    if (p->second.state == state)
+      s.insert(p->second.rank);
+}
+
+mds_gid_t MDSMap::get_standby_replay(mds_rank_t r) const {
+  for (auto& [gid,info] : mds_info) {
+    if (info.rank == r && info.state == STATE_STANDBY_REPLAY) {
+      return gid;
+    }
+  }
+  return MDS_GID_NONE;
+}
+
+bool MDSMap::is_degraded() const {
+  if (!failed.empty() || !damaged.empty())
+    return true;
+  for (const auto& p : mds_info) {
+    if (p.second.is_degraded())
+      return true;
+  }
+  return false;
+}
