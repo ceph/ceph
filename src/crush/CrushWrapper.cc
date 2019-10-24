@@ -914,16 +914,27 @@ int CrushWrapper::verify_upmap(CephContext *cct,
                << dendl;
     return -ENOENT;
   }
+  int root_bucket = 0;
+  int cursor = 0;
   for (unsigned step = 0; step < rule->len; ++step) {
     auto curstep = &rule->steps[step];
     ldout(cct, 10) << __func__ << " step " << step << dendl;
     switch (curstep->op) {
+    case CRUSH_RULE_TAKE:
+      {
+        root_bucket = curstep->arg1;
+      }
+      break;
     case CRUSH_RULE_CHOOSELEAF_FIRSTN:
     case CRUSH_RULE_CHOOSELEAF_INDEP:
       {
+        int numrep = curstep->arg1;
         int type = curstep->arg2;
+        int real_rep = 0;
         if (type == 0) // osd
           break;
+        if (numrep <= 0)
+          numrep += pool_size;
         map<int, set<int>> osds_by_parent; // parent_of_desired_type -> osds
         for (auto osd : up) {
           auto parent = get_parent_of_type(osd, type, rule_id);
@@ -935,11 +946,29 @@ int CrushWrapper::verify_upmap(CephContext *cct,
                           << dendl;
           }
         }
+        ldout(cct, 10) << __func__ << " osds_by_parent " << osds_by_parent << dendl;
+        ceph_assert(root_bucket < 0);
         for (auto i : osds_by_parent) {
           if (i.second.size() > 1) {
             lderr(cct) << __func__ << " multiple osds " << i.second
                        << " come from same failure domain " << i.first
                        << dendl;
+            return -EINVAL;
+          }
+          if (subtree_contains(root_bucket, i.first)) {
+            real_rep++;
+          }
+        }
+        if (real_rep != numrep) {
+          lderr(cct) << __func__ << " expected " << numrep << " items in bucket " << root_bucket
+                     << " real " << real_rep << dendl;
+          return -EINVAL;
+        }
+        // validate the osd's in subtree
+        for (int c = 0; cursor < up.size() && c < numrep; ++cursor, ++c) {
+          int osd = up[cursor];
+          if (!subtree_contains(root_bucket, osd)) {
+            lderr(cct) << __func__ << " osd " << osd << " not in bucket " << root_bucket << dendl;
             return -EINVAL;
           }
         }
@@ -951,6 +980,7 @@ int CrushWrapper::verify_upmap(CephContext *cct,
       {
         int numrep = curstep->arg1;
         int type = curstep->arg2;
+        int real_rep = 0;
         if (type == 0) // osd
           break;
         if (numrep <= 0)
@@ -970,6 +1000,17 @@ int CrushWrapper::verify_upmap(CephContext *cct,
           lderr(cct) << __func__ << " number of buckets "
                      << parents_of_type.size() << " exceeds desired " << numrep
                      << dendl;
+          return -EINVAL;
+        }
+        ceph_assert(root_bucket < 0);
+        for (auto & i : parents_of_type) {
+          if (subtree_contains(root_bucket, i)) {
+            real_rep++;
+          }
+        }
+        if (real_rep != numrep) {
+          lderr(cct) << __func__ << " expected " << numrep << " items in bucket " << root_bucket
+                     << " real " << real_rep << dendl;
           return -EINVAL;
         }
       }
