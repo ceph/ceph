@@ -468,6 +468,10 @@ COMMAND("mon set-weight "
 COMMAND("mon enable-msgr2",
 	"enable the msgr2 protocol on port 3300",
 	"mon", "rw")
+COMMAND("mon set election_strategy " \
+	"name=strategy,type=CephString", \
+	"set the election strategy to use; choices CLASSIC, DISALLOW, CONNECTIVITY", \
+	"mon", "rw")
 
 /*
  * OSD commands

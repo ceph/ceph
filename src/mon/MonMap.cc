@@ -197,6 +197,8 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(ranks, blist);
   encode(min_mon_release, blist);
   encode(removed_ranks, blist);
+  uint8_t t = strategy;
+  encode(t, blist);
   ENCODE_FINISH(blist);
 }
 
@@ -247,6 +249,9 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   }
   if (struct_v >= 8) {
     decode(removed_ranks, p);
+    uint8_t t;
+    decode(t, p);
+    strategy = static_cast<election_strategy>(t);
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -334,6 +339,7 @@ void MonMap::print(ostream& out) const
   out << "created " << created << "\n";
   out << "min_mon_release " << to_integer<unsigned>(min_mon_release)
       << " (" << min_mon_release << ")\n";
+  out << "election_strategy: " << strategy << "\n";
   unsigned i = 0;
   for (auto p = ranks.begin(); p != ranks.end(); ++p) {
     out << i++ << ": " << get_addrs(*p) << " mon." << *p << "\n";
@@ -348,6 +354,7 @@ void MonMap::dump(Formatter *f) const
   created.gmtime(f->dump_stream("created"));
   f->dump_unsigned("min_mon_release", to_integer<unsigned>(min_mon_release));
   f->dump_string("min_mon_release_name", to_string(min_mon_release));
+  f->dump_int ("election_strategy", strategy);
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
@@ -871,6 +878,7 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
     errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;
   }
+  strategy = static_cast<election_strategy>(conf.get_val<uint64_t>("mon_election_default_strategy"));
   created = ceph_clock_now();
   last_changed = created;
   calc_legacy_ranks();

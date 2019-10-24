@@ -859,6 +859,26 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       }
     }
     err = 0;
+  } else if (prefix == "mon set election_strategy") {
+    string strat;
+    MonMap::election_strategy strategy;
+    if (!cmd_getval(cmdmap, "strategy", strat)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (strat == "CLASSIC") {
+      strategy = MonMap::CLASSIC;
+    } else if (strat == "DISALLOW") {
+      strategy = MonMap::DISALLOW;
+    } else if (strat == "CONNECTIVITY") {
+      strategy = MonMap::CONNECTIVITY;
+    } else {
+      err = -EINVAL;
+      goto reply;
+    }
+    err = 0;
+    pending_map.strategy = strategy;
+    propose = true;
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
