@@ -2282,6 +2282,15 @@ TEST_F(TestClsRbd, mirror_snapshot) {
   ASSERT_FALSE(nsn->copied);
   ASSERT_EQ(nsn->last_copied_object_number, 0);
 
+  ASSERT_EQ(0, mirror_image_snapshot_set_copy_progress(&ioctx, oid, 2, true,
+                                                       10));
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, 2, &snap));
+  nsn = boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
+    &snap.snapshot_namespace);
+  ASSERT_NE(nullptr, nsn);
+  ASSERT_TRUE(nsn->copied);
+  ASSERT_EQ(nsn->last_copied_object_number, 10);
+
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 1));
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 2));
 }
