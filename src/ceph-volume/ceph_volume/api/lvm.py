@@ -274,7 +274,7 @@ def dmsetup_splitname(dev):
 ################################
 
 
-def get_api_pvs(fields=None):
+def get_api_pvs(fields=None, unparsed=False):
     """
     Return the list of physical volumes configured for lvm and available in the
     system using flags to include common metadata associated with them like the uuid
@@ -296,7 +296,7 @@ def get_api_pvs(fields=None):
         verbose_on_failure=False
     )
 
-    return _output_parser(stdout, fields)
+    return stdout if unparsed else _output_parser(stdout, fields)
 
 
 class PVolume(object):
@@ -518,7 +518,7 @@ def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
 #############################
 
 
-def get_api_vgs(fields=None):
+def get_api_vgs(fields=None, unparsed=False):
     """
     Return the list of group volumes available in the system using flags to
     include common metadata associated with them
@@ -539,7 +539,7 @@ def get_api_vgs(fields=None):
         ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields],
         verbose_on_failure=False
     )
-    return _output_parser(stdout, fields)
+    return stdout if unparsed else _output_parser(stdout, fields)
 
 
 class VolumeGroup(object):
@@ -868,7 +868,7 @@ def get_vg(vg_name=None, vg_tags=None, vgs=None):
 ###############################
 
 
-def get_api_lvs(fields=None):
+def get_api_lvs(fields=None, unparsed=False):
     """
     Return the list of logical volumes available in the system using flags to include common
     metadata associated with them
@@ -886,7 +886,8 @@ def get_api_lvs(fields=None):
         ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o', fields],
         verbose_on_failure=False
     )
-    return _output_parser(stdout, fields)
+
+    return stdout if unparsed else _output_parser(stdout, fields)
 
 
 class Volume(object):
