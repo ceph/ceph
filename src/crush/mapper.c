@@ -494,9 +494,9 @@ parent_r %d stable %d\n",
 		tries, recurse_tries, local_retries, local_fallback_retries,
 		parent_r, stable);
 
+	ftotal = 0;
 	for (rep = stable ? 0 : outpos; rep < numrep && count > 0 ; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
-		ftotal = 0;
 		skip_rep = 0;
 		do {
 			retry_descent = 0;
