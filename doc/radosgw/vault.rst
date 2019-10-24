@@ -14,16 +14,25 @@ Configure Vault
 ===============
 
 Vault provides several Secret Engines, which can store, generate, and encrypt
-data. Currently, the Object Gateway supports the `KV Secrets engine`_ version 2
-only. To enable the KV engine version 2 in Vault, use the Vault command line
+data. Currently, the Object Gateway supports `KV Secrets engine`_ version 2
+an `KV Transit engine`_.
+
+Basic Vault Configuration
+-------------------------
+To enable the KV engine version 2 in Vault, use the Vault command line
 tool::
 
   vault secrets enable kv-v2
 
-Vault also provides several authentication mechanisms. Currently, the Object
-Gateway supports the `token authentication method`_ only. When authenticating
-using the token method, a token must be obtained for the Gateway and saved in a
-file as plain-text.
+Analogously for the Transit Engine::
+  vault secrets enable transit
+
+Vault also provides several authentication mechanisms.
+To simplify user's interaction with Vault, the Object Gateway supports
+two modes: `token authentication method`_ and `agent authentication method`_.
+
+When authenticating using the token method, a token must be obtained
+for the Gateway and saved in a file as plain-text.
 
 For security reasons, the Object Gateway should be given a Vault token with a
 restricted policy that allows it to fetch secrets only. Such a policy can be
@@ -56,6 +65,7 @@ The actual token, displayed in the output of the above command, must be saved
 in a file as plain-text. The path to this file must then be provided in the
 Gateway configuration file (see section below). For security reasons, ensure
 the file is readable by the Object Gateway only.
+
 
 Configure the Ceph Object Gateway
 =================================
