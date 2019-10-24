@@ -74,6 +74,8 @@ int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
     ldout(cct, 20) << "couldn't put bucket_sync_policy cache entry, might have raced with data changes" << dendl;
   }
 
+  *handler = e.handler;
+
   return 0;
 }
 

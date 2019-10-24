@@ -2413,33 +2413,6 @@ static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo&
     return 0;
   }
 
-#if 0
-#warning need to use bucket sources
-  auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
-  if (!source_zone_id.empty()) {
-    auto z = zonegroup.zones.find(source_zone_id);
-    if (z == zonegroup.zones.end()) {
-      lderr(store->ctx()) << "Source zone not found in zonegroup "
-          << zonegroup.get_name() << dendl;
-      return -EINVAL;
-    }
-    auto c = zone_conn_map.find(source_zone_id);
-    if (c == zone_conn_map.end()) {
-      lderr(store->ctx()) << "No connection to zone " << z->second.name << dendl;
-      return -EINVAL;
-    }
-    return bucket_source_sync_status(store, zone, z->second, c->second,
-                                     info, width, out);
-  }
-
-  for (const auto& z : zonegroup.zones) {
-    auto c = zone_conn_map.find(z.second.id);
-    if (c != zone_conn_map.end()) {
-      bucket_source_sync_status(store, zone, z.second, c->second,
-                                info, width, out);
-    }
-  }
-#endif
   RGWBucketSyncPolicyHandlerRef handler;
 
   int r = store->ctl()->bucket->get_sync_policy_handler(info.bucket, &handler, null_yield);
@@ -2457,10 +2430,6 @@ static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo&
       out << indented{width, "bucket"} << *pipe.source.bucket << std::endl;
     }
   }
-
-  JSONFormatter f;
-  encode_json("sources", sources, &f);
-  f.flush(out);
 
   return 0;
 }
