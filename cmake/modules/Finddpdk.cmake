@@ -12,7 +12,12 @@ if(PKG_CONFIG_FOUND)
   pkg_check_modules(dpdk QUIET libdpdk)
 endif()
 
-if(NOT dpdk_INCLUDE_DIRS)
+if(dpdk_INCLUDE_DIRS)
+  # good
+elseif(TARGET dpdk::dpdk)
+  get_target_property(dpdk_INCLUDE_DIRS
+     dpdk::dpdk INTERFACE_INCLUDE_DIRECTORIES)
+else()
   find_path(dpdk_config_INCLUDE_DIR rte_config.h
     HINTS
       ENV DPDK_DIR
@@ -58,13 +63,18 @@ set(_dpdk_libs)
 set(dpdk_LIBRARIES)
 
 foreach(c ${components})
-  find_library(DPDK_rte_${c}_LIBRARY rte_${c}
-    HINTS
-      ENV DPDK_DIR
-      ${dpdk_LIBRARY_DIRS}
-    PATH_SUFFIXES lib)
+  set(dpdk_lib dpdk::${c})
+  if(TARGET ${dpdk_lib})
+    get_target_property(DPDK_rte_${c}_LIBRARY
+      ${dpdk_lib} IMPORTED_LOCATION)
+  else()
+    find_library(DPDK_rte_${c}_LIBRARY rte_${c}
+      HINTS
+        ENV DPDK_DIR
+        ${dpdk_LIBRARY_DIRS}
+        PATH_SUFFIXES lib)
+  endif()
   if(DPDK_rte_${c}_LIBRARY)
-    set(dpdk_lib dpdk::${c})
     if (NOT TARGET ${dpdk_lib})
       add_library(${dpdk_lib} UNKNOWN IMPORTED)
       set_target_properties(${dpdk_lib} PROPERTIES
