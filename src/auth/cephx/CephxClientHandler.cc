@@ -166,7 +166,7 @@ int CephxClientHandler::handle_response(
 	
       if (!tickets.verify_service_ticket_reply(secret, indata)) {
 	ldout(cct, 0) << "could not verify service_ticket reply" << dendl;
-	return -EPERM;
+	return -EACCES;
       }
       ldout(cct, 10) << " want=" << want << " need=" << need << " have=" << have << dendl;
       if (!indata.end()) {
@@ -226,7 +226,7 @@ int CephxClientHandler::handle_response(
   
       if (!tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
         ldout(cct, 0) << "could not verify service_ticket reply" << dendl;
-        return -EPERM;
+        return -EACCES;
       }
       validate_tickets();
       if (!_need_tickets()) {

@@ -111,6 +111,9 @@
   fsck will warn but not fail on legacy stores, and repair will
   convert to per-pool stats.
 
+* The disaster-recovery related 'ceph mon sync force' command has been
+  replaced with 'ceph daemon <...> sync_force'.
+
 * The ``osd_recovery_max_active`` option now has
   ``osd_recovery_max_active_hdd`` and ``osd_recovery_max_active_ssd``
   variants, each with different default values for HDD and SSD-backed

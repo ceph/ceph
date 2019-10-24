@@ -345,9 +345,9 @@ def test_misc():
   expect_to_file(
       'ceph auth get-or-create client.caps mon \'allow command "auth caps"' \
           ' with entity="client.caps"\'', 0, k)
-  expect('ceph -n client.caps -k {kf} mon_status'.format(kf=k), errno.EACCES)
+  expect('ceph -n client.caps -k {kf} quorum_status'.format(kf=k), errno.EACCES)
   expect('ceph -n client.caps -k {kf} auth caps client.caps mon \'allow *\''.format(kf=k), 0)
-  expect('ceph -n client.caps -k {kf} mon_status'.format(kf=k), 0)
+  expect('ceph -n client.caps -k {kf} quorum_status'.format(kf=k), 0)
   destroy_keyring(k)
 
 def main():
