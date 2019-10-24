@@ -866,6 +866,10 @@ void handles_disagreeing_connectivity(ElectionLogic::election_strategy strategy)
 
 // TODO: Write a test that disallowing and disconnecting 0 is otherwise stable?
 
+// TODO: figure out how to test for bumping election epochs with changing scores,
+// a la what happened in run
+// http://pulpito.ceph.com/gregf-2019-11-26_10:50:50-rados:monthrash-wip-elector-distro-basic-mira/
+
 #define test_classic(utest) TEST(classic, utest) { utest(ElectionLogic::CLASSIC); }
 
 #define test_disallowed(utest) TEST(disallowed, utest) { utest(ElectionLogic::DISALLOW); }
@@ -873,6 +877,7 @@ void handles_disagreeing_connectivity(ElectionLogic::election_strategy strategy)
 #define test_connectivity(utest) TEST(connectivity, utest) { utest(ElectionLogic::CONNECTIVITY); }
 
 
+// TODO: test for expected failures; gtest probably supports that?
 test_classic(single_startup_election_completes)
 test_classic(everybody_starts_completes)
 test_classic(blocked_connection_continues_election)
