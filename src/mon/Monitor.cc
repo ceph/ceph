@@ -271,13 +271,13 @@ public:
 	   std::ostream& errss,
 	   bufferlist& out) override {
     stringstream outss;
-    mon->do_admin_command(command, cmdmap, f, errss, outss);
+    int r = mon->do_admin_command(command, cmdmap, f, errss, outss);
     out.append(outss);
-    return 0;
+    return r;
   }
 };
 
-void Monitor::do_admin_command(
+int Monitor::do_admin_command(
   std::string_view command,
   const cmdmap_t& cmdmap,
   Formatter *f,
@@ -286,6 +286,7 @@ void Monitor::do_admin_command(
 {
   std::lock_guard l(lock);
 
+  int r = 0;
   string args;
   for (auto p = cmdmap.begin();
        p != cmdmap.end(); ++p) {
@@ -308,7 +309,7 @@ void Monitor::do_admin_command(
     << "cmd='" << command << "' args=" << args << ": dispatch";
 
   if (command == "mon_status") {
-    get_mon_status(f, out);
+    get_mon_status(f);
   } else if (command == "quorum_status") {
     _quorum_status(f, out);
   } else if (command == "sync_force") {
@@ -318,9 +319,10 @@ void Monitor::do_admin_command(
       err << "are you SURE? this will mean the monitor store will be erased "
 	"the next time the monitor is restarted.  pass "
 	"'--yes-i-really-mean-it' if you really do.";
+      r = -EPERM;
       goto abort;
     }
-    sync_force(f, out);
+    sync_force(f);
   } else if (command.compare(0, 23, "add_bootstrap_peer_hint") == 0 ||
 	     command.compare(0, 24, "add_bootstrap_peer_hintv") == 0) {
     if (!_add_bootstrap_peer_hint(command, cmdmap, out))
@@ -356,6 +358,66 @@ void Monitor::do_admin_command(
       err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
+  } else if (command == "quorum") {
+    string quorumcmd;
+    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
+    if (quorumcmd == "exit") {
+      start_election();
+      elector.stop_participating();
+      out << "stopped responding to quorum, initiated new election" << std::endl;
+    } else if (quorumcmd == "enter") {
+      elector.start_participating();
+      start_election();
+      out << "started responding to quorum, initiated new election" << std::endl;
+    } else {
+      err << "needs a valid 'quorum' command" << std::endl;
+    }
+  } else if (command == "smart") {
+    string want_devid;
+    cmd_getval(cct, cmdmap, "devid", want_devid);
+
+    string devname = store->get_devname();
+    set<string> devnames;
+    get_raw_devices(devname, &devnames);
+    json_spirit::mObject json_map;
+    uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
+      "mon_smart_report_timeout");
+    for (auto& devname : devnames) {
+      string err;
+      string devid = get_device_id(devname, &err);
+      if (want_devid.size() && want_devid != devid) {
+	derr << "get_device_id failed on " << devname << ": " << err << dendl;
+	continue;
+      }
+      json_spirit::mValue smart_json;
+      if (block_device_get_metrics(devname, smart_timeout,
+				   &smart_json)) {
+	dout(10) << "block_device_get_metrics failed for /dev/" << devname
+		 << dendl;
+	continue;
+      }
+      json_map[devid] = smart_json;
+    }
+    json_spirit::write(json_map, out, json_spirit::pretty_print);
+  } else if (command == "heap") {
+    if (!ceph_using_tcmalloc()) {
+      err << "could not issue heap profiler command -- not using tcmalloc!";
+      r = -EOPNOTSUPP;
+      goto abort;
+    }
+    string cmd;
+    if (!cmd_getval(cct, cmdmap, "heapcmd", cmd)) {
+      err << "unable to get value for command \"" << cmd << "\"";
+      r = -EINVAL;
+      goto abort;
+    }
+    std::vector<std::string> cmd_vec;
+    get_str_vec(cmd, cmd_vec);
+    string val;
+    if (cmd_getval(cct, cmdmap, "value", val)) {
+      cmd_vec.push_back(val);
+    }
+    ceph_heap_profiler_handle_command(cmd_vec, out);
   } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
@@ -364,7 +426,7 @@ void Monitor::do_admin_command(
     << "entity='admin socket' "
     << "cmd=" << command << " "
     << "args=" << args << ": finished";
-  return;
+  return r;
 
 abort:
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -372,6 +434,7 @@ abort:
     << "entity='admin socket' "
     << "cmd=" << command << " "
     << "args=" << args << ": aborted";
+  return r;
 }
 
 void Monitor::handle_signal(int signum)
@@ -784,11 +847,12 @@ int Monitor::preinit()
   r = admin_socket->register_command("quorum_status",
 				     admin_hook, "show current quorum status");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("sync_force name=validate,"
-				     "type=CephChoices,"
-			             "strings=--yes-i-really-mean-it",
-				     admin_hook,
-				     "force sync of and clear monitor store");
+  r = admin_socket->register_command(
+    "sync_force "
+    //"name=yes_i_really_mean_it,type=CephBool,req=false",
+    "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
+    admin_hook,
+    "force sync of and clear monitor store");
   ceph_assert(r == 0);
   r = admin_socket->register_command("add_bootstrap_peer_hint name=addr,"
 				     "type=CephIPAddr",
@@ -829,6 +893,18 @@ int Monitor::preinit()
   r = admin_socket->register_command("dump_historic_slow_ops",
                                      admin_hook,
                                     "show recent slow ops");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("smart name=devid,type=CephString,req=false",
+                                     admin_hook,
+                                     "probe OSD devices for SMART data.");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "heap " \
+    "name=heapcmd,type=CephChoices,strings="				\
+    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
+    "name=value,type=CephString,req=false",
+    admin_hook,
+    "show heap usage info (available only if compiled with tcmalloc)");
   ceph_assert(r == 0);
 
   l.lock();
@@ -2440,16 +2516,8 @@ void Monitor::get_combined_feature_map(FeatureMap *fm)
   }
 }
 
-void Monitor::sync_force(Formatter *f, ostream& ss)
+void Monitor::sync_force(Formatter *f)
 {
-  bool free_formatter = false;
-
-  if (!f) {
-    // louzy/lazy hack: default to json if no formatter has been defined
-    f = new JSONFormatter();
-    free_formatter = true;
-  }
-
   auto tx(std::make_shared<MonitorDBStore::Transaction>());
   sync_stash_critical_state(tx);
   tx->put("mon_sync", "force_sync", 1);
@@ -2459,9 +2527,6 @@ void Monitor::sync_force(Formatter *f, ostream& ss)
   f->dump_int("ret", 0);
   f->dump_stream("msg") << "forcing store sync the next time the monitor starts";
   f->close_section(); // sync_force
-  f->flush(ss);
-  if (free_formatter)
-    delete f;
 }
 
 void Monitor::_quorum_status(Formatter *f, ostream& ss)
@@ -2496,6 +2561,11 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
 	mono_clock::now() - quorum_since).count());
   }
 
+  f->open_object_section("features");
+  f->dump_stream("quorum_con") << quorum_con_features;
+  quorum_mon_features.dump(f, "quorum_mon");
+  f->close_section();
+
   f->open_object_section("monmap");
   monmap->dump(f);
   f->close_section(); // monmap
@@ -2506,16 +2576,8 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     delete f;
 }
 
-void Monitor::get_mon_status(Formatter *f, ostream& ss)
+void Monitor::get_mon_status(Formatter *f)
 {
-  bool free_formatter = false;
-
-  if (!f) {
-    // louzy/lazy hack: default to json if no formatter has been defined
-    f = new JSONFormatter();
-    free_formatter = true;
-  }
-
   f->open_object_section("mon_status");
   f->dump_string("name", name);
   f->dump_int("rank", rank);
@@ -2587,12 +2649,6 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
 
   f->dump_object("feature_map", session_map.feature_map);
   f->close_section(); // mon_status
-
-  if (free_formatter) {
-    // flush formatter to ss and delete it iff we created the formatter
-    f->flush(ss);
-    delete f;
-  }
 }
 
 
@@ -3096,7 +3152,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
   MCommand *m = static_cast<MCommand*>(op->get_req());
   if (m->fsid != monmap->fsid) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
-    reply_command(op, -EPERM, "wrong fsid", 0);
+    reply_command(op, -EACCES, "wrong fsid", 0);
     return;
   }
   MonSession *session = op->get_session();
@@ -3105,7 +3161,27 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
     return;
   }
   if (!session->caps.is_allow_all()) {
-    reply_tell_command(op, -EPERM, "insufficient caps");
+    // see if command is whitelisted
+    cmdmap_t cmdmap;
+    stringstream ss;
+    if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+      reply_command(op, -EINVAL, ss.str(), 0);
+    }
+    map<string,string> param_str_map;
+    _generate_command_map(cmdmap, param_str_map);
+    string prefix;
+    if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+      reply_command(op, -EINVAL, "no prefix", 0);
+    }
+    if (!session->caps.is_capable(
+	  g_ceph_context,
+	  CEPH_ENTITY_TYPE_MON,
+	  session->entity_name,
+	  "mon", prefix, param_str_map,
+	  true, true, true,
+	  session->get_peer_socket_addr())) {
+      reply_tell_command(op, -EACCES, "insufficient caps");
+    }
   }
   // pass it to asok
   cct->get_admin_socket()->queue_tell_command(m);
@@ -3179,6 +3255,18 @@ void Monitor::handle_command(MonOpRequestRef op)
     format_command_descriptions(commands, f, features, &rdata);
     delete f;
     reply_command(op, 0, "", rdata, 0);
+    return;
+  }
+
+  // compat kludge for legacy clients trying to tell commands that are new
+  if (!HAVE_FEATURE(m->get_connection()->get_features(), SERVER_OCTOPUS) &&
+      (prefix == "injectargs" ||
+       prefix == "smart" ||
+       prefix == "mon_status" ||
+       prefix == "sync_force" ||
+       prefix == "heap")) {
+    dout(5) << __func__ << " passing command to tell/asok" << dendl;
+    cct->get_admin_socket()->queue_tell_command(m);
     return;
   }
 
@@ -3340,11 +3428,9 @@ void Monitor::handle_command(MonOpRequestRef op)
       /* Let the Monitor class handle the following commands:
        *  'mon compact'
        *  'mon scrub'
-       *  'mon sync force'
        */
       prefix != "mon compact" &&
       prefix != "mon scrub" &&
-      prefix != "mon sync force" &&
       prefix != "mon metadata" &&
       prefix != "mon versions" &&
       prefix != "mon count-metadata" &&
@@ -3415,21 +3501,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     oss << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb") << " in " << duration << " seconds";
     rs = oss.str();
     r = 0;
-  }
-  else if (prefix == "injectargs") {
-    vector<string> injected_args;
-    cmd_getval(g_ceph_context, cmdmap, "injected_args", injected_args);
-    if (!injected_args.empty()) {
-      dout(0) << "parsing injected options '" << injected_args << "'" << dendl;
-      ostringstream oss;
-      r = g_conf().injectargs(str_join(injected_args, " "), &oss);
-      ss << "injectargs:"  << oss.str();
-      rs = ss.str();
-      goto out;
-    } else {
-      rs = "must supply options to be parsed in a single string";
-      r = -EINVAL;
-    }
   } else if (prefix == "time-sync-status") {
     if (!f)
       f.reset(Formatter::create("json-pretty"));
@@ -3463,17 +3534,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
     r = 0;
     rs = "";
-  } else if (prefix == "config set") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    std::string val;
-    cmd_getval(cct, cmdmap, "value", val);
-    r = g_conf().set_val(key, val, &ss);
-    if (r == 0) {
-      g_conf().apply_changes(nullptr);
-    }
-    rs = ss.str();
-    goto out;
   } else if (prefix == "status" ||
 	     prefix == "health" ||
 	     prefix == "df") {
@@ -3737,64 +3797,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     r = 0;
     rs = "safe to remove mon." + id;
-  } else if (prefix == "mon_status") {
-    get_mon_status(f.get(), ds);
-    if (f)
-      f->flush(ds);
-    rdata.append(ds);
-    rs = "";
-    r = 0;
-  } else if (prefix == "sync force" ||
-             prefix == "mon sync force") {
-    bool validate1 = false;
-    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", validate1);
-    bool validate2 = false;
-    cmd_getval(g_ceph_context, cmdmap, "i_know_what_i_am_doing", validate2);
-
-    if (!validate1 || !validate2) {
-      r = -EINVAL;
-      rs = "are you SURE? this will mean the monitor store will be "
-	   "erased.  pass '--yes-i-really-mean-it "
-	   "--i-know-what-i-am-doing' if you really do.";
-      goto out;
-    }
-    sync_force(f.get(), ds);
-    rs = ds.str();
-    r = 0;
-  } else if (prefix == "heap") {
-    if (!ceph_using_tcmalloc())
-      rs = "tcmalloc not enabled, can't use heap profiler commands\n";
-    else {
-      string heapcmd;
-      cmd_getval(g_ceph_context, cmdmap, "heapcmd", heapcmd);
-      // XXX 1-element vector, change at callee or make vector here?
-      vector<string> heapcmd_vec;
-      get_str_vec(heapcmd, heapcmd_vec);
-      string value;
-      if (cmd_getval(g_ceph_context, cmdmap, "value", value))
-	 heapcmd_vec.push_back(value);
-      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
-      rdata.append(ds);
-      rs = "";
-      r = 0;
-    }
-  } else if (prefix == "quorum") {
-    string quorumcmd;
-    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
-    if (quorumcmd == "exit") {
-      start_election();
-      elector.stop_participating();
-      rs = "stopped responding to quorum, initiated new election";
-      r = 0;
-    } else if (quorumcmd == "enter") {
-      elector.start_participating();
-      start_election();
-      rs = "started responding to quorum, initiated new election";
-      r = 0;
-    } else {
-      rs = "needs a valid 'quorum' command";
-      r = -EINVAL;
-    }
   } else if (prefix == "version") {
     if (f) {
       f->open_object_section("version");
@@ -3866,37 +3868,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
     rs = "";
     r = 0;
-  } else if (prefix == "smart") {
-    string want_devid;
-    cmd_getval(cct, cmdmap, "devid", want_devid);
-
-    string devname = store->get_devname();
-    set<string> devnames;
-    get_raw_devices(devname, &devnames);
-    json_spirit::mObject json_map;
-    uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
-      "mon_smart_report_timeout");
-    for (auto& devname : devnames) {
-      string err;
-      string devid = get_device_id(devname, &err);
-      if (want_devid.size() && want_devid != devid) {
-	derr << "get_device_id failed on " << devname << ": " << err << dendl;
-	continue;
-      }
-      json_spirit::mValue smart_json;
-      if (block_device_get_metrics(devname, smart_timeout,
-				   &smart_json)) {
-	dout(10) << "block_device_get_metrics failed for /dev/" << devname
-		 << dendl;
-	continue;
-      }
-      json_map[devid] = smart_json;
-    }
-    ostringstream ss;
-    json_spirit::write(json_map, ss, json_spirit::pretty_print);
-    rdata.append(ss.str());
-    r = 0;
-    rs = "";
   }
 
  out:
@@ -4644,10 +4615,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   f->open_object_section("pong");
 
   healthmon()->get_health_status(false, f.get(), nullptr);
-  {
-    stringstream ss;
-    get_mon_status(f.get(), ss);
-  }
+  get_mon_status(f.get());
 
   f->close_section();
   stringstream ss;
@@ -6414,7 +6382,7 @@ int Monitor::ms_handle_authentication(Connection *con)
       derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
 	   << " in auth db" << dendl;
       str.clear();
-      ret = -EPERM;
+      ret = -EACCES;
     }
     if (ret >= 0) {
       if (s->caps.parse(str, NULL)) {
@@ -6423,7 +6391,7 @@ int Monitor::ms_handle_authentication(Connection *con)
       } else {
 	derr << __func__ << " unparseable caps '" << str << "' for "
 	     << con->get_peer_entity_name() << dendl;
-	ret = -EPERM;
+	ret = -EACCES;
       }
     }
   }

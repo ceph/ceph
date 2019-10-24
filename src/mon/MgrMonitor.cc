@@ -640,8 +640,7 @@ void MgrMonitor::send_digests()
     f.flush(mdigest->health_json);
     f.reset();
 
-    std::ostringstream ss;
-    mon->get_mon_status(&f, ss);
+    mon->get_mon_status(&f);
     f.flush(mdigest->mon_status_json);
     f.reset();
 

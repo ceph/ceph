@@ -28,6 +28,7 @@
 class AdminSocket;
 class CephContext;
 class MCommand;
+class MMonCommand;
 
 using namespace std::literals;
 
@@ -117,6 +118,7 @@ public:
     bufferlist *outbl);
 
   void queue_tell_command(ref_t<MCommand> m);
+  void queue_tell_command(ref_t<MMonCommand> m); // for compat
 
 private:
 
@@ -148,6 +150,7 @@ private:
 
   std::mutex tell_lock;
   std::list<ref_t<MCommand>> tell_queue;
+  std::list<ref_t<MMonCommand>> tell_legacy_queue;
 
   struct hook_info {
     AdminSocketHook* hook;

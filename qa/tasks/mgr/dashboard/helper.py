@@ -398,7 +398,7 @@ class DashboardTestCase(MgrTestCase):
 
     @classmethod
     def mons(cls):
-        out = cls.ceph_cluster.mon_manager.raw_cluster_cmd('mon_status')
+        out = cls.ceph_cluster.mon_manager.raw_cluster_cmd('quorum_status')
         j = json.loads(out)
         return [mon['name'] for mon in j['monmap']['mons']]
 
