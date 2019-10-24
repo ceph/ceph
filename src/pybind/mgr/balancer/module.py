@@ -13,6 +13,7 @@ import time
 from mgr_module import MgrModule, CommandResult
 from threading import Event
 from mgr_module import CRUSHMap
+import datetime
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
@@ -404,6 +405,11 @@ class Module(MgrModule):
     plans = {}
     mode = ''
     optimizing = False
+    last_optimize_started = ''
+    last_optimize_duration = ''
+    optimize_result = ''
+    success_string = 'Optimization plan created successfully'
+    in_progress_string = 'in progress'
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -415,6 +421,9 @@ class Module(MgrModule):
             s = {
                 'plans': list(self.plans.keys()),
                 'active': self.active,
+                'last_optimize_started': self.last_optimize_started,
+                'last_optimize_duration': self.last_optimize_duration,
+                'optimize_result': self.optimize_result,
                 'mode': self.get_module_option('mode'),
             }
             return (0, json.dumps(s, indent=4), '')
@@ -533,10 +542,18 @@ class Module(MgrModule):
             if len(invalid_pool_names):
                 return (-errno.EINVAL, '', 'pools %s not found' % invalid_pool_names)
             plan = self.plan_create(command['plan'], osdmap, pools)
+            self.last_optimize_started = time.asctime(time.localtime())
+            self.optimize_result = self.in_progress_string
+            start = time.time()
             r, detail = self.optimize(plan)
-            # Add plan if an optimization was created
-            if not r:
+            end = time.time()
+            self.last_optimize_duration = str(datetime.timedelta(seconds=(end - start)))
+            if r == 0:
+                # Add plan if an optimization was created
+                self.optimize_result = self.success_string
                 self.plans[command['plan']] = plan
+            else:
+                self.optimize_result = detail
             return (r, '', detail)
         elif command['prefix'] == 'balancer rm':
             self.plan_rm(command['plan'])
@@ -632,9 +649,17 @@ class Module(MgrModule):
                     final = [pool_name_by_id[p] for p in final if p in pool_name_by_id]
                 plan = self.plan_create(name, osdmap, final)
                 self.optimizing = True
+                self.last_optimize_started = time.asctime(time.localtime())
+                self.optimize_result = self.in_progress_string
+                start = time.time()
                 r, detail = self.optimize(plan)
+                end = time.time()
+                self.last_optimize_duration = str(datetime.timedelta(seconds=(end - start)))
                 if r == 0:
+                    self.optimize_result = self.success_string
                     self.execute(plan)
+                else:
+                    self.optimize_result = detail
                 self.optimizing = False
             self.log.debug('Sleeping for %d', sleep_interval)
             self.event.wait(sleep_interval)
