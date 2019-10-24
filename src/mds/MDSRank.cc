@@ -1413,7 +1413,7 @@ void MDSRank::send_message_client_counted(Message *m, client_t client)
 void MDSRank::send_message_client_counted(Message *m, Connection *connection)
 {
   // do not carry ref
-  auto session = static_cast<Session *>(m->get_connection()->get_priv().get());
+  auto session = static_cast<Session *>(connection->get_priv().get());
   if (session) {
     send_message_client_counted(m, session);
   } else {
