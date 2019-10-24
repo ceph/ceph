@@ -616,6 +616,7 @@ Usage:
    ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER
 
 Options (not needed in normal operation):
+    --cherry-pick-only (stop after cherry-pick phase)
     -c/--component COMPONENT
                        (explicitly set the component label; if omitted, the
                         script will try to guess the component)
@@ -664,6 +665,9 @@ PR phase:
    the backport
 7. (optionally) setting the milestone and label in the PR
 8. updating the Backport tracker issue
+
+When run with --cherry-pick-only, the script will stop after the cherry-pick
+phase.
 
 If any of the commits do not cherry-pick cleanly, the script will abort in
 step 4. In this case, you can either finish the cherry-picking manually
@@ -813,14 +817,14 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhpsv --long "component:,debug,help,milestones,prepare,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,help,milestones,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
 CHECK_MILESTONES=""
+CHERRY_PICK_ONLY=""
 DEBUG=""
 EXPLICIT_COMPONENT=""
-EXPLICIT_PREPARE=""
 HELP=""
 ISSUE=""
 SETUP_ADVICE=""
@@ -830,11 +834,11 @@ USAGE_ADVICE=""
 VERBOSE=""
 while true ; do
     case "$1" in
+        --cherry-pick-only) CHERRY_PICK_ONLY="$1" ; shift ;;
         --component|-c) shift ; EXPLICIT_COMPONENT="$1" ; shift ;;
         --debug|-d) DEBUG="$1" ; shift ;;
         --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
         --milestones) CHECK_MILESTONES="$1" ; shift ;;
-        --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
         --setup|-s) SETUP_ONLY="$1" ; shift ;;
         --setup-advice) ADVICE="1" ; SETUP_ADVICE="$1" ; shift ;;
         --troubleshooting-advice) ADVICE="$1" ; TROUBLESHOOTING_ADVICE="$1" ; shift ;;
@@ -995,7 +999,7 @@ debug "Milestone number is $milestone_number"
 
 local_branch=wip-${issue}-${target_branch}
 if git show-ref --verify --quiet refs/heads/$local_branch ; then
-    if [ "$EXPLICIT_PREPARE" ] ; then
+    if [ "$CHERRY_PICK_ONLY" ] ; then
         error "local branch $local_branch already exists -- cannot -prepare"
         false
     fi
@@ -1003,6 +1007,7 @@ if git show-ref --verify --quiet refs/heads/$local_branch ; then
 else
     info "$local_branch does not exist: will create it and attempt automated cherry-pick"
     cherry_pick_phase
+    [ "$CHERRY_PICK_ONLY" ] && exit 0
 fi
 
 
