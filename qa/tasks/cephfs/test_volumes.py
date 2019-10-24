@@ -50,18 +50,24 @@ class TestVolumes(CephFSTestCase):
 
     def  _get_subvolume_group_path(self, vol_name, group_name):
         args = ("subvolumegroup", "getpath", vol_name, group_name)
-        path = self._fs_cmd(*args)
-        # remove the leading '/', and trailing whitespaces
-        return path[1:].rstrip()
+        try:
+            path = self._fs_cmd(*args)
+            path = path[1:].rstrip() # remove the leading '/', and trailing whitespaces
+        except (CommandFailedError, TypeError) as ce:
+            path = None
+        return path
 
     def  _get_subvolume_path(self, vol_name, subvol_name, group_name=None):
         args = ["subvolume", "getpath", vol_name, subvol_name]
         if group_name:
             args.append(group_name)
         args = tuple(args)
-        path = self._fs_cmd(*args)
-        # remove the leading '/', and trailing whitespaces
-        return path[1:].rstrip()
+        try:
+            path = self._fs_cmd(*args)
+            path = path[1:].rstrip() # remove the leading '/', and trailing whitespaces
+        except (CommandFailedError, TypeError) as ce:
+            path = None
+        return path
 
     def _delete_test_volume(self):
         self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
@@ -224,6 +230,7 @@ class TestVolumes(CephFSTestCase):
         # create subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
         subvol_path = self._get_subvolume_path(self.volname, subvolume)
+        self.assertNotEqual(subvol_path, None)
 
         # check subvolume's uid and gid
         stat = self.mount_a.stat(subvol_path)
@@ -291,6 +298,7 @@ class TestVolumes(CephFSTestCase):
         # create group
         self._fs_cmd("subvolumegroup", "create", self.volname, group1)
         group1_path = self._get_subvolume_group_path(self.volname, group1)
+        self.assertNotEqual(group1_path, None)
 
         default_pool = self.mount_a.getfattr(group1_path, "ceph.dir.layout.pool")
         new_pool = "new_pool"
@@ -303,6 +311,7 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "create", self.volname, group2,
                      "--pool_layout", new_pool)
         group2_path = self._get_subvolume_group_path(self.volname, group2)
+        self.assertNotEqual(group2_path, None)
 
         desired_pool = self.mount_a.getfattr(group2_path, "ceph.dir.layout.pool")
         self.assertEqual(desired_pool, new_pool)
@@ -352,6 +361,7 @@ class TestVolumes(CephFSTestCase):
         # create subvolume in group.
         self._fs_cmd("subvolume", "create", self.volname, subvol1, "--group_name", group)
         subvol1_path = self._get_subvolume_path(self.volname, subvol1, group_name=group)
+        self.assertNotEqual(subvol1_path, None)
 
         default_pool = self.mount_a.getfattr(subvol1_path, "ceph.dir.layout.pool")
         new_pool = "new_pool"
@@ -364,6 +374,7 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "create", self.volname, subvol2, "--group_name", group,
                      "--pool_layout", new_pool)
         subvol2_path = self._get_subvolume_path(self.volname, subvol2, group_name=group)
+        self.assertNotEqual(subvol2_path, None)
 
         desired_pool = self.mount_a.getfattr(subvol2_path, "ceph.dir.layout.pool")
         self.assertEqual(desired_pool, new_pool)
@@ -385,7 +396,9 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "create", self.volname, group2, "--mode", "777")
 
         group1_path = self._get_subvolume_group_path(self.volname, group1)
+        self.assertNotEqual(group1_path, None)
         group2_path = self._get_subvolume_group_path(self.volname, group2)
+        self.assertNotEqual(group2_path, None)
 
         # check group's mode
         actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group1_path]).stdout.getvalue().strip()
@@ -416,8 +429,11 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "create", self.volname, subvol3, "--group_name", group, "--mode", "0777")
 
         subvol1_path = self._get_subvolume_path(self.volname, subvol1, group_name=group)
+        self.assertNotEqual(subvol1_path, None)
         subvol2_path = self._get_subvolume_path(self.volname, subvol2, group_name=group)
+        self.assertNotEqual(subvol2_path, None)
         subvol3_path = self._get_subvolume_path(self.volname, subvol3, group_name=group)
+        self.assertNotEqual(subvol3_path, None)
 
         # check subvolume's  mode
         actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', subvol1_path]).stdout.getvalue().strip()
@@ -453,6 +469,7 @@ class TestVolumes(CephFSTestCase):
         # create group
         self._fs_cmd("subvolumegroup", "create", self.volname, group)
         group_path = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(group_path, None)
 
         # check group's uid and gid
         stat = self.mount_a.stat(group_path)
