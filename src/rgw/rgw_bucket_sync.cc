@@ -343,7 +343,7 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
 
 void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucket,
                                        RGWBucketSyncFlowManager::pipe_set *source_pipes,
-                                       RGWBucketSyncFlowManager::pipe_set *dest_pipes)
+                                       RGWBucketSyncFlowManager::pipe_set *dest_pipes) const
 
 {
   rgw_sync_bucket_entity entity;
@@ -392,10 +392,66 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
 
 RGWBucketSyncFlowManager::RGWBucketSyncFlowManager(const string& _zone_name,
                                                    std::optional<rgw_bucket> _bucket,
-                                                   RGWBucketSyncFlowManager *_parent) : zone_name(_zone_name),
-                                                                                        bucket(_bucket),
-                                                                                        parent(_parent) {}
+                                                   const RGWBucketSyncFlowManager *_parent) : zone_name(_zone_name),
+                                                                                              bucket(_bucket),
+                                                                                              parent(_parent) {}
 
+
+void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
+                                                  RGWSI_SyncModules *sync_modules_svc,
+                                                  rgw_sync_policy_info *ppolicy)
+{
+  bool found = false;
+
+  rgw_sync_policy_info policy;
+
+  auto& group = policy.groups["default"];
+  auto& zonegroup = zone_svc->get_zonegroup();
+
+  for (const auto& ziter1 : zonegroup.zones) {
+    const string& id1 = ziter1.first;
+    const RGWZone& z1 = ziter1.second;
+
+    for (const auto& ziter2 : zonegroup.zones) {
+      const string& id2 = ziter2.first;
+      const RGWZone& z2 = ziter2.second;
+
+      if (id1 == id2) {
+        continue;
+      }
+
+      if (z1.syncs_from(z2.name)) {
+        found = true;
+        rgw_sync_directional_rule *rule;
+        group.data_flow.find_directional(z2.name, z1.name, true, &rule);
+      }
+    }
+  }
+
+  if (!found) { /* nothing syncs */
+    return;
+  }
+
+  rgw_sync_bucket_pipes pipes;
+  pipes.id = "all";
+  pipes.source.all_zones = true;
+  pipes.dest.all_zones = true;
+
+  group.pipes.emplace_back(std::move(pipes));
+
+
+  group.status = rgw_sync_policy_group::Status::ENABLED;
+
+  *ppolicy = std::move(policy);
+}
+
+RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
+                                                       RGWBucketInfo& _bucket_info) : zone_svc(_zone_svc),
+                                                                                      bucket_info(_bucket_info) {
+  flow_mgr.reset(new RGWBucketSyncFlowManager(zone_svc->zone_name(),
+                                              bucket_info.bucket,
+                                              zone_svc->get_sync_flow_manager()));
+}
 
 int RGWBucketSyncPolicyHandler::init()
 {
@@ -410,57 +466,8 @@ int RGWBucketSyncPolicyHandler::init()
 
   auto& sync_policy = *bucket_info.sync_policy;
 
-  if (sync_policy.dests) {
-    for (auto& dest : *sync_policy.dests) {
-      if (!(dest.bucket || *dest.bucket == bucket_info.bucket)) {
-        continue;
-      }
-
-      if (dest.zones.find("*") == dest.zones.end() &&
-          dest.zones.find(zone_id) == dest.zones.end()) {
-        continue;
-      }
-
-      if (dest.flow_rules) {
-        /* populate trivial peers */
-        for (auto& rule : *dest.flow_rules) {
-          set<string> source_zones;
-          set<string> dest_zones;
-          rule.get_zone_peers(zone_id, &source_zones, &dest_zones);
-
-          for (auto& sz : source_zones) {
-            peer_info sinfo;
-            sinfo.bucket = bucket_info.bucket;
-            sources[sz].insert(sinfo);
-          }
-
-          for (auto& tz : dest_zones) {
-            peer_info tinfo;
-            tinfo.bucket = bucket_info.bucket;
-            dests[tz].insert(tinfo);
-          }
-        }
-      }
-
-      /* non trivial sources */
-      for (auto& source : dest.sources) {
-        if (!source.bucket ||
-            *source.bucket == bucket_info.bucket) {
-          if ((source.type.empty() || source.type == "rgw") &&
-              source.zone &&
-              source.bucket) {
-            peer_info sinfo;
-            sinfo.type = source.type;
-            sinfo.bucket = *source.bucket;
-            sources[*source.zone].insert(sinfo);
-          }
-        }
-      }
-    }
-  }
-#endif
-
   return 0;
+#endif
 }
 
 bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
@@ -477,3 +484,4 @@ bool RGWBucketSyncPolicyHandler::bucket_imports_data() const
 {
   return bucket_is_sync_target();
 }
+

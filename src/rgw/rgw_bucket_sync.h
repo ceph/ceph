@@ -20,6 +20,7 @@
 #include "rgw_sync_policy.h"
 
 class RGWSI_Zone;
+class RGWSI_SyncModules;
 struct rgw_sync_group_pipe_map;
 struct rgw_sync_bucket_pipes;
 struct rgw_sync_policy_info;
@@ -98,6 +99,13 @@ struct rgw_sync_group_pipe_map {
                                           std::optional<rgw_bucket> dest_bucket) const;
 };
 
+class RGWSyncPolicyCompat {
+public:
+  static void convert_old_sync_config(RGWSI_Zone *zone_svc,
+                                      RGWSI_SyncModules *sync_modules_svc,
+                                      rgw_sync_policy_info *ppolicy);
+};
+
 class RGWBucketSyncFlowManager {
 public:
   struct pipe_set {
@@ -111,7 +119,7 @@ private:
   string zone_name;
   std::optional<rgw_bucket> bucket;
 
-  RGWBucketSyncFlowManager *parent{nullptr};
+  const RGWBucketSyncFlowManager *parent{nullptr};
 
   map<string, rgw_sync_group_pipe_map> flow_groups;
 
@@ -132,18 +140,19 @@ public:
 
   RGWBucketSyncFlowManager(const string& _zone_name,
                            std::optional<rgw_bucket> _bucket,
-                           RGWBucketSyncFlowManager *_parent);
+                           const RGWBucketSyncFlowManager *_parent);
 
   void init(const rgw_sync_policy_info& sync_policy);
   void reflect(std::optional<rgw_bucket> effective_bucket,
                pipe_set *flow_by_source,
-               pipe_set *flow_by_dest);
+               pipe_set *flow_by_dest) const;
 
 };
 
 class RGWBucketSyncPolicyHandler {
   RGWSI_Zone *zone_svc;
   RGWBucketInfo bucket_info;
+  std::unique_ptr<RGWBucketSyncFlowManager> flow_mgr;
 
   std::set<string> source_zones;
 
@@ -180,8 +189,7 @@ private:
 
 public:
   RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
-                             RGWBucketInfo& _bucket_info) : zone_svc(_zone_svc),
-                                                            bucket_info(_bucket_info) {}
+                             RGWBucketInfo& _bucket_info);
   int init();
 
   std::map<string, std::set<peer_info> >& get_sources() {

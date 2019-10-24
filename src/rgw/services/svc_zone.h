@@ -17,6 +17,8 @@ class RGWZoneParams;
 class RGWPeriod;
 class RGWZonePlacementInfo;
 
+class RGWBucketSyncFlowManager;
+
 class RGWRESTConn;
 
 class RGWSI_Zone : public RGWServiceInstance
@@ -34,6 +36,8 @@ class RGWSI_Zone : public RGWServiceInstance
   RGWPeriod *current_period{nullptr};
   uint32_t zone_short_id{0};
   bool writeable_zone{false};
+
+  RGWBucketSyncFlowManager *sync_flow_mgr{nullptr};
 
   RGWRESTConn *rest_master_conn{nullptr};
   map<string, RGWRESTConn *> zone_conn_map;
@@ -66,6 +70,10 @@ public:
   const RGWZoneGroup& get_zonegroup() const;
   int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) const;
   const RGWZone& get_zone() const;
+
+  const RGWBucketSyncFlowManager *get_sync_flow_manager() const {
+    return sync_flow_mgr;
+  }
 
   const string& zone_name() const;
   const string& zone_id() const;
