@@ -58,9 +58,9 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 		<< ").elector(" << epoch << ") ";
 }
 
-Elector::Elector(Monitor *m) : logic(this, ElectionLogic::CLASSIC,
-				     &peer_tracker, m->cct),
-			       peer_tracker(this, m->rank,
+Elector::Elector(Monitor *m, int strategy) : logic(this, static_cast<ElectionLogic::election_strategy>(strategy),
+						   &peer_tracker, m->cct),
+					     peer_tracker(this, m->rank,
 					    m->cct->_conf.get_val<uint64_t>("mon_con_tracker_score_halflife"),
 					    m->cct->_conf.get_val<uint64_t>("mon_con_tracker_persist_interval")),
 			       ping_timeout(m->cct->_conf.get_val<double>("mon_elector_ping_timeout")),
@@ -647,4 +647,9 @@ void Elector::notify_rank_changed(int new_rank)
 void Elector::notify_rank_removed(int rank_removed)
 {
   peer_tracker.notify_rank_removed(rank_removed);
+}
+
+void Elector::notify_strategy_maybe_changed(int strategy)
+{
+  logic.set_election_strategy(static_cast<ElectionLogic::election_strategy>(strategy));
 }

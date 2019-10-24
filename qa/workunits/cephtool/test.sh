@@ -1165,6 +1165,10 @@ function test_mon_mon()
   ceph mon feature set kraken --yes-i-really-mean-it
   expect_false ceph mon feature set abcd
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
+
+  ceph mon set election_strategy DISALLOW
+  ceph mon set election_strategy CONNECTIVITY
+  ceph mon set election_strategy CLASSIC
 }
 
 function test_mon_priority_and_weight()

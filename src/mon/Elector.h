@@ -272,8 +272,9 @@ class Elector : public ElectionOwner, RankProvider {
    * Create an Elector class
    *
    * @param m A Monitor instance
+   * @param strategy The election strategy to use, defined in MonMap/ElectionLogic
    */
-  explicit Elector(Monitor *m);
+  explicit Elector(Monitor *m, int strategy);
   virtual ~Elector() {}
 
   /**
@@ -358,6 +359,7 @@ class Elector : public ElectionOwner, RankProvider {
    * A peer has been removed so we should clean up state related to it.
    */
   void notify_rank_removed(int rank_removed);
+  void notify_strategy_maybe_changed(int strategy);
   /**
    * @}
    */

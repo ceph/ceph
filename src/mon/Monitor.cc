@@ -182,7 +182,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   store(s),
   
-  elector(this),
+  elector(this, map->strategy),
   required_features(0),
   leader(0),
   quorum_con_features(0),
@@ -6427,6 +6427,7 @@ int Monitor::ms_handle_authentication(Connection *con)
 
 void Monitor::notify_new_monmap()
 {
+  elector.notify_strategy_maybe_changed(monmap->strategy);
   for (auto i : monmap->removed_ranks) {
     elector.notify_rank_removed(i);
   }
