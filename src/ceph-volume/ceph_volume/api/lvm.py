@@ -1242,7 +1242,8 @@ def is_lv(dev=None, lv_name=None, lvs=None):
     return True
 
 
-def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None, lvs=None):
+def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None,
+           lv_tags=None, pv_name=None, lvs=None):
     """
     Return a matching lv for the current system, requiring ``lv_name``,
     ``vg_name``, ``lv_path`` or ``tags``. Raises an error if more than one lv
@@ -1252,16 +1253,31 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None,
     but it can also lead to multiple lvs being found, since a lot of metadata
     is shared between lvs of a distinct OSD.
     """
-    if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
+    if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags, pv_name]):
         return None
+    if (lv_name or vg_name or lv_path or lv_uuid or lv_tags) and pv_name:
+        logger.fatal('api.lvm.get_lv: can\'t pass pv_name with other '
+                           'arguments')
+        raise RuntimeError('internal error; please check logs and report')
 
     if lvs is None or len(lvs) == 0:
         lvs = Volumes()
 
-    return lvs.get(
-        lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_uuid=lv_uuid,
-        lv_tags=lv_tags
-    )
+    if lv_name or vg_name or lv_path or lv_uuid or lv_tags:
+        return lvs.get(lv_name=lv_name, vg_name=vg_name, lv_path=lv_path,
+                       lv_uuid=lv_uuid, lv_tags=lv_tags)
+
+    if pv_name:
+        filtered_lvs = Volumes(populate=False)
+        output = get_api_lvs(fields="lv_name,devices", unparsed=True, sep=" ")
+        # TODO: move this to process.py, get_api_* methods or wherever is the
+        # source of this output.
+        output = [line.strip() for line in output]
+        for line in output:
+            if line.find(pv_name) != -1:
+                filtered_lvs.append(get_lv(lv_name=line.split(' ')[0],
+                                    lvs=lvs))
+        return [] if len(filtered_lvs) == 0 else filtered_lvs
 
 
 def get_lv_from_argument(argument, lvs=None):
