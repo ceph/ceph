@@ -16,7 +16,7 @@
 #include "common/Clock.h"
 
 #include "msg/Message.h"
-#include "mon/Elector.h"
+#include "mon/ConnectionTracker.h"
 
 class MMonPing : public Message {
 private:
