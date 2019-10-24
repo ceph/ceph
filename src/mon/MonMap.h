@@ -143,6 +143,14 @@ class MonMap {
 			   int priority,
 			   bool for_mkfs=false);
 
+  enum election_strategy {
+			  // Keep in sync with ElectionLogic.h!
+    CLASSIC = 1, // the original rank-based one
+    DISALLOW = 2, // disallow a set from being leader
+    CONNECTIVITY = 3 // includes DISALLOW, extends to prefer stronger connections
+  };
+  election_strategy strategy = CLASSIC;
+
 public:
   void calc_legacy_ranks();
   void calc_addr_mons() {
