@@ -1496,7 +1496,10 @@ class FailoverTest : public Dispatcher {
 
   seastar::future<> markdown_peer() {
     logger().info("[Test] markdown_peer()");
-    return prepare_cmd(cmd_t::suite_markdown);
+    return prepare_cmd(cmd_t::suite_markdown).then([] {
+      // sleep awhile for peer markdown propagated
+      return seastar::sleep(100ms);
+    });
   }
 };
 
