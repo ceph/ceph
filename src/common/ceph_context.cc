@@ -135,6 +135,9 @@ public:
   {
     while (1) {
       Mutex::Locker l(_lock);
+      if (_exit_thread) {
+        break;
+      }
 
       if (_cct->_conf->heartbeat_interval) {
         utime_t interval(_cct->_conf->heartbeat_interval, 0);
