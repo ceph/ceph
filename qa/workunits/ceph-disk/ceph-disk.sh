@@ -14,9 +14,9 @@ $PYTHON --version
 
 type pip
 
-# newer versions of pytest (e.g. 3.7.0) seem to work fine with Python 2.7,
-# so just grab the latest version
-sudo -H pip install pytest
+# pytest supports python 2.7 up until the pytest 4.6 release, the 5.x series
+# supports Python 3 only
+sudo -H pip install "pytest==4.6.6"
 $PYTHON -m pytest --version
 
 # complete the cluster setup done by the teuthology ceph task
