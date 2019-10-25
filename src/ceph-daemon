@@ -1191,6 +1191,7 @@ def command_unit():
 
 def command_ls():
     ls = []
+    host_version = None
 
     # /var/lib/ceph
     if os.path.exists(args.data_dir):
@@ -1205,12 +1206,18 @@ def command_ls():
                                                   daemon_id) or 'unknown'
                     (enabled, active) = check_unit('ceph-%s@%s' % (daemon_type,
                                                                    daemon_id))
+                    if not host_version:
+                        out, err, code = call(['ceph', '-v'])
+                        if not code and out.startswith('ceph version '):
+                            host_version = out.split(' ')[3]
+
                     ls.append({
                         'style': 'legacy',
                         'name': '%s.%s' % (daemon_type, daemon_id),
                         'fsid': fsid,
                         'enabled': enabled,
                         'active': active,
+                        'version': host_version,
                     })
             elif is_fsid(i):
                 fsid = i
@@ -1228,12 +1235,32 @@ def command_ls():
                         (enabled, active) = check_unit(get_unit_name(fsid,
                                                                      daemon_type,
                                                                      daemon_id))
+
+                    # get container id
+                    container_id = None
+                    version = None
+                    out, err, code = call(
+                        [
+                            podman_path, 'inspect',
+                            '--format', '{{.Id}}',
+                            'ceph-%s-%s' % (fsid, j)
+                        ],
+                        podman_path)
+                    if not code:
+                        container_id = out.strip()[0:12]
+                        out, err, code = call(
+                            [podman_path, 'exec', container_id, 'ceph', '-v'],
+                            podman_path)
+                        if not code and out.startswith('ceph version '):
+                            version = out.split(' ')[2]
                     ls.append({
                         'style': 'ceph-daemon:v1',
                         'name': name,
                         'fsid': fsid,
                         'enabled': enabled,
                         'active': active,
+                        'container_id': container_id,
+                        'version': version,
                     })
 
     # /var/lib/rook
