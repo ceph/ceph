@@ -24,10 +24,8 @@ monitoring the Ceph Storage Cluster.
 OSDs Check Heartbeats
 =====================
 
-Each Ceph OSD Daemon checks the heartbeat of other Ceph OSD Daemons every 6
-seconds. You can change the heartbeat interval by adding an ``osd heartbeat
-interval`` setting under the ``[osd]`` section of your Ceph configuration file,
-or by setting the value at runtime. If a neighboring Ceph OSD Daemon doesn't
+Each Ceph OSD Daemon checks the heartbeat of other Ceph OSD Daemons at random
+intervals less than every 6 seconds.  If a neighboring Ceph OSD Daemon doesn't
 show a heartbeat within a 20 second grace period, the Ceph OSD Daemon may
 consider the neighboring Ceph OSD Daemon ``down`` and report it back to a Ceph
 Monitor, which will update the Ceph Cluster Map. You may change this grace
@@ -377,6 +375,15 @@ OSD Settings
 
 :Type: 32-bit Integer
 :Default: ``30``
+
+
+``osd mon heartbeat stat stale``
+
+:Description: Stop reporting on heartbeat ping times which haven't been updated for
+              this many seconds.  Set to zero to disable this action.
+
+:Type: 32-bit Integer
+:Default: ``3600``
 
 
 ``osd mon report interval max``

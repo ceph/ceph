@@ -224,6 +224,8 @@ void Mgr::init()
   py_module_registry->active_start(loaded_config, daemon_state, cluster_state, *monc,
       clog, *objecter, *client, finisher);
 
+  cluster_state.final_init();
+
   dout(4) << "Complete." << dendl;
   initializing = false;
   initialized = true;
