@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 DEFAULT_IMAGE='ceph/daemon-base'
 DATA_DIR='/var/lib/ceph'
