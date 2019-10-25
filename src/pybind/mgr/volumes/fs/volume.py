@@ -428,7 +428,6 @@ class VolumeClient(object):
         subvolname = kwargs['sub_name']
         newsize    = kwargs['new_size']
         groupname  = kwargs['group_name']
-        noshrink   = kwargs['no_shrink']
 
         try:
             with SubVolume(self.mgr, fs_handle) as sv:
@@ -442,9 +441,18 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume '{0}' not found, create it with " \
                         "'ceph fs subvolume create' before resizing subvolumes".format(subvolname))
-                nsize, usedbytes = sv.resize_subvolume(subvolpath, newsize, noshrink)
-                ret = 0, json.dumps([{'bytes_used': usedbytes},{'bytes_quota': nsize},
-                                     {'bytes_pcent': '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}], indent=2), ""
+
+                try:
+                    newsize = int(newsize)
+                except ValueError:
+                    newsize = newsize.lower()
+                    nsize, usedbytes = sv.resize_infinite(subvolpath, newsize)
+                    ret = 0, json.dumps([{'bytes_used': usedbytes}, {'bytes_quota': nsize}, {'bytes_pcent': "undefined"}], indent=2), ""
+                else:
+                    noshrink = kwargs['no_shrink']
+                    nsize, usedbytes = sv.resize_subvolume(subvolpath, newsize, noshrink)
+                    ret = 0, json.dumps([{'bytes_used': usedbytes}, {'bytes_quota': nsize},
+                                         {'bytes_pcent': '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}], indent=2), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
