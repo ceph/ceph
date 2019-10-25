@@ -147,8 +147,8 @@ def call_throws(command, **kwargs):
 ##################################
 
 def pathify(p):
-    if '/' not in p:
-        return './' + p
+    if not p.startswith('/'):
+        return os.path.join(os.getcwd(), p)
     return p
 
 def get_hostname():
