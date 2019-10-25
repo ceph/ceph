@@ -222,7 +222,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     @orchestrator._cli_read_command(
         'orchestrator device ls',
         "name=host,type=CephString,n=N,req=false "
-        "name=format,type=CephChoices,strings=json|plain,req=false "
+        "name=format,type=CephChoices,strings=json|plain,req=false,param=true "
         "name=refresh,type=CephBool,req=false",
         'List devices on a node')
     def _list_devices(self, host=None, format='plain', refresh=False):

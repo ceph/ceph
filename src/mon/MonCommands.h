@@ -53,6 +53,7 @@
  *    n=<n> is a repeat count for how many of this argument must be supplied.
  *          n=1 is the default.
  *          n=N is a special case that means "1 or more".
+ *    param=true forces the parameter to be non positionally and use the form `--<name>=` (defaults to false)
  *
  * A perhaps-incomplete list of types:
  *

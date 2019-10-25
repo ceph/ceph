@@ -22,6 +22,7 @@ import stat
 import sys
 import threading
 import uuid
+import argparse
 
 # Flags are from MonCommand.h
 class Flag:
@@ -634,7 +635,7 @@ class CephPrefix(CephArgtype):
 class argdesc(object):
     """
     argdesc(typename, name='name', n=numallowed|N,
-            req=False, helptext=helptext, **kwargs (type-specific))
+            req=False, param=True, helptext=helptext, **kwargs (type-specific))
 
     validation rules:
     typename: type(**kwargs) will be constructed
@@ -643,6 +644,7 @@ class argdesc(object):
     name is used for parse errors and for constructing JSON output
     n is a numeric literal or 'n|N', meaning "at least one, but maybe more"
     req=False means the argument need not be present in the list
+    param=True forces --name= in the helpstr
     helptext is the associated help for the command
     anything else are arguments to pass to the type constructor.
 
@@ -651,7 +653,7 @@ class argdesc(object):
     valid() will later be called with input to validate against it,
     and will store the validated value in self.instance.val for extraction.
     """
-    def __init__(self, t, name=None, n=1, req=True, **kwargs):
+    def __init__(self, t, name=None, n=1, req=True, param=False, **kwargs):
         if isinstance(t, basestring):
             self.t = CephPrefix
             self.typeargs = {'prefix': t}
@@ -667,6 +669,8 @@ class argdesc(object):
             self.n = 1
         else:
             self.n = int(n)
+
+        self.param = param in (True, 'True', 'true')
 
         self.numseen = 0
 
@@ -725,6 +729,8 @@ class argdesc(object):
         s = chunk
         if self.N:
             s += '...'
+        if self.param and not s.startswith("--"):
+            s = "--{0}={1}".format(self.name.replace("_", "-"), s)
         if not self.req:
             s = '[' + s + ']'
         return s
@@ -932,6 +938,54 @@ def store_arg(desc, d):
         d[desc.name] = desc.instance.val
 
 
+def _validate_non_positional_args(args, sig, d, partial=False):
+    # short circuit
+    if not any(map(lambda x: x.param, sig)):
+        return args, sig, d, 0
+
+    # We know there is at least 1 param argdesc, so lets deal with them now
+    # so they're not parsed positionally
+    matchcnt = 0
+    descs = []
+    parser = argparse.ArgumentParser()
+    for desc in sig.copy():
+        if desc.param:
+            if desc.t == CephBool:
+                parser.add_argument("--{}".format(desc.name),
+                                    dest="{}".format(desc.name),
+                                    action="store_true")
+                parser.add_argument("--{}".format(desc.name.replace('_', '-')),
+                                    dest="{}".format(desc.name),
+                                    action="store_true")
+            else:
+                parser.add_argument("--{}".format(desc.name),
+                                    dest="{}".format(desc.name))
+                parser.add_argument("--{}".format(desc.name.replace('_', '-')),
+                                    dest="{}".format(desc.name))
+            descs.append(desc)
+            sig.remove(desc)
+
+    # now lets parse the args to strip out these params that should be in the
+    # form '--<desc.name>'.
+    parsed_args, args = parser.parse_known_args(args)
+    parsed_args = vars(parsed_args)
+
+    for desc in descs:
+        if parsed_args.get(desc.name):
+            try:
+                validate_one(parsed_args[desc.name], desc)
+                store_arg(desc, d)
+                matchcnt += 1
+            except ArgumentError:
+                # argument mismatch
+                if partial:
+                    return args, sig, d, matchcnt
+                raise
+        elif desc.req:
+            raise ArgumentError("Missing required long parameter "
+                                "'--{}'".format(desc.name))
+    return args, sig, d, matchcnt
+
 def validate(args, signature, flags=0, partial=False):
     """
     validate(args, signature, flags=0, partial=False)
@@ -964,6 +1018,11 @@ def validate(args, signature, flags=0, partial=False):
     # Special case: detect "injectargs" (legacy way of modifying daemon
     # configs) and permit "--" string arguments if so.
     injectargs = myargs and myargs[0] == "injectargs"
+
+    # first parse and remove the non positional args, those with param=true
+    myargs, mysig, d, tmp_matchcnt = _validate_non_positional_args(
+        myargs, mysig, d, partial)
+    matchcnt += tmp_matchcnt
 
     # Make a pass through all arguments
     for desc in mysig:
@@ -1023,6 +1082,7 @@ def validate(args, signature, flags=0, partial=False):
                 if kwarg_desc:
                     validate_one(kwarg_v, kwarg_desc)
                     store_arg(kwarg_desc, d)
+                    matchcnt += 1
                     continue
 
             # Don't handle something as a positional argument if it
@@ -1123,7 +1183,7 @@ def validate_command(sigdict, args, verbose=False):
     Parse positional arguments into a parameter dict, according to
     the command descriptions.
 
-    Writes advice about nearly-matching commands ``sys.stderr`` if 
+    Writes advice about nearly-matching commands ``sys.stderr`` if
     the arguments do not match any command.
 
     :param sigdict: A command description dictionary, as returned
