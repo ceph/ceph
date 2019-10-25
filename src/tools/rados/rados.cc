@@ -111,7 +111,8 @@ void usage(ostream& out)
 "                                    clean up a previous benchmark operation\n"
 "                                    default run-name is 'benchmark_last_metadata'\n"
 "   load-gen [options]               generate load on the cluster\n"
-"   listomapkeys <obj-name>          list the keys in the object map\n"
+"   listomapkeys <obj-name> [--start-key start-key]\n"
+"                                    list the keys in the object map\n"
 "   listomapvals <obj-name>          list the keys and vals in the object map \n"
 "   getomapval <obj-name> <key> [file] show the value for the specified key\n"
 "                                    in the object's object map\n"
@@ -1875,6 +1876,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   std::string run_name;
   std::string prefix;
+  std::string start_key;
   bool forcefull = false;
   unique_ptr<Formatter> formatter = nullptr;
   bool pretty_format = false;
@@ -1929,6 +1931,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("prefix");
   if (i != opts.end()) {
     prefix = i->second;
+  }
+  i = opts.find("start-key");
+  if (i != opts.end()) {
+    start_key = i->second;
   }
   i = opts.find("block-size");
   if (i != opts.end()) {
@@ -3344,7 +3350,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
 
-    string last_read;
+    string last_read = start_key;
     bool more = true;
     do {
       set<string> out_keys;
@@ -3954,6 +3960,8 @@ int main(int argc, const char **argv)
       opts["run-name"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
       opts["prefix"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--start-key", (char*)NULL)) {
+      opts["start-key"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {
