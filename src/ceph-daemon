@@ -208,18 +208,17 @@ def get_unit_name(fsid, daemon_type, daemon_id):
     return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
 
 def check_unit(unit_name):
+    # NOTE: we ignore the exit code here because systemctl outputs
+    # various exit codes based on the state of the service, but the
+    # string result is more explicit (and sufficient).
     try:
         out, err, code = call(['systemctl', 'is-enabled', unit_name], 'systemctl')
-        if code:
-            raise RuntimeError('exited with %d' % code)
         enabled = out.strip() == 'enabled'
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
         enabled = False
     try:
         out, err, code = call(['systemctl', 'is-active', unit_name], 'systemctl')
-        if code:
-            raise RuntimeError('exited with %d' % code)
         active = out.strip() == 'active'
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
