@@ -6,14 +6,13 @@ Please see the ceph-mgr module developer's guide for more information.
 """
 import sys
 import time
-import fnmatch
+from collections import namedtuple
 from functools import wraps
 import uuid
 import string
 import random
 import datetime
-
-import six
+import copy
 
 from mgr_module import MgrModule, PersistentStoreDict
 from mgr_util import format_bytes
