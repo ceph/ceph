@@ -17,6 +17,7 @@
 #include "rgw_sync_trace.h"
 
 class JSONObj;
+struct rgw_sync_bucket_pipe;
 
 struct rgw_bucket_sync_pair_info {
   rgw_bucket_shard source_bs;
@@ -639,8 +640,10 @@ public:
 };
 
 /// read the sync status of all bucket shards from the given source zone
-int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, const std::string& source_zone,
-                           const RGWBucketInfo& bucket_info,
+int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
+                           rgw::sal::RGWRadosStore *store,
+                           const rgw_sync_bucket_pipe& pipe,
+                           const RGWBucketInfo& dest_bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status);
 
 class RGWDefaultSyncModule : public RGWSyncModule {

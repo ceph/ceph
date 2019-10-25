@@ -2254,17 +2254,18 @@ static int remote_bilog_markers(rgw::sal::RGWRadosStore *store, const RGWZone& s
 static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
+                                     const rgw_sync_bucket_pipe& pipe,
                                      int width, std::ostream& out)
 {
   out << indented{width, "source zone"} << source.id << " (" << source.name << ")\n";
 
   // syncing from this zone?
   if (!zone.syncs_from(source.name)) {
-    out << indented{width} << "not in sync_from\n";
+    out << indented{width} << "does not sync from zone\n";
     return 0;
   }
   std::vector<rgw_bucket_shard_sync_info> status;
-  int r = rgw_bucket_sync_status(dpp(), store, source.id, bucket_info, &status);
+  int r = rgw_bucket_sync_status(dpp(), store, pipe, bucket_info, &status);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
     return r;
@@ -2453,8 +2454,19 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
     return 0;
   }
 
-#warning need to use bucket sources
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = store->ctl()->bucket->get_sync_policy_handler(info.bucket, &handler, null_yield);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  auto& sources = handler->get_sources();
+
   auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
+  set<string> zone_ids;
+
   if (!source_zone_id.empty()) {
     auto z = zonegroup.zones.find(source_zone_id);
     if (z == zonegroup.zones.end()) {
@@ -2467,17 +2479,39 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
       lderr(store->ctx()) << "No connection to zone " << z->second.name << dendl;
       return -EINVAL;
     }
-    return bucket_source_sync_status(store, zone, z->second, c->second,
-                                     info, width, out);
-  }
-
-  for (const auto& z : zonegroup.zones) {
-    auto c = zone_conn_map.find(z.second.id);
-    if (c != zone_conn_map.end()) {
-      bucket_source_sync_status(store, zone, z.second, c->second,
-                                info, width, out);
+    zone_ids.insert(source_zone_id);
+  } else {
+    for (const auto& entry : zonegroup.zones) {
+      auto c = zone_conn_map.find(entry.second.id);
+      if (c == zone_conn_map.end()) {
+        continue;
+      }
+      zone_ids.insert(entry.second.name);
     }
   }
+
+  for (auto& zone_id : zone_ids) {
+    auto z = zonegroup.zones.find(zone_id);
+    if (z == zonegroup.zones.end()) { /* should't happen */
+      continue;
+    }
+    auto c = zone_conn_map.find(source_zone_id);
+    if (c == zone_conn_map.end()) { /* should't happen */
+      continue;
+    }
+
+    for (auto& m : sources) {
+      for (auto& pipe : m.second.pipes) {
+        if (pipe.source.zone.value_or("") == z->second.id) {
+          bucket_source_sync_status(store, zone, z->second,
+                                    c->second,
+                                    info, pipe,
+                                    width, out);
+        }
+      }
+    }
+  }
+
   return 0;
 }
 

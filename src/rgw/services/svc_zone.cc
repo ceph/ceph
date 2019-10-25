@@ -157,8 +157,33 @@ int RGWSI_Zone::do_start()
                                                nullopt,
                                                nullptr);
 
-  sync_flow_mgr->init(zonegroup->sync_policy);
+  rgw_sync_policy_info sync_policy = zonegroup->sync_policy;
 
+  if (sync_policy.empty()) {
+    RGWSyncPolicyCompat::convert_old_sync_config(this, sync_modules_svc, &sync_policy);
+  }
+
+  sync_flow_mgr->init(sync_policy);
+
+  RGWBucketSyncFlowManager::pipe_set zone_sources;
+  RGWBucketSyncFlowManager::pipe_set zone_targets;
+
+  sync_flow_mgr->reflect(nullopt, &zone_sources, &zone_targets);
+
+  set<string> source_zones_by_name;
+  set<string> target_zones_by_name;
+
+  for (auto& pipe : zone_sources.pipes) {
+    if (pipe.source.zone) {
+      source_zones_by_name.insert(*pipe.source.zone);
+    }
+  }
+
+  for (auto& pipe : zone_targets.pipes) {
+    if (pipe.dest.zone) {
+      target_zones_by_name.insert(*pipe.dest.zone);
+    }
+  }
 
   ret = sync_modules_svc->start();
   if (ret < 0) {
@@ -198,12 +223,15 @@ int RGWSI_Zone::do_start()
     ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
     RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints);
     zone_conn_map[id] = conn;
-    if (zone_syncs_from(*zone_public_config, z) ||
-        zone_syncs_from(z, *zone_public_config)) {
-      if (zone_syncs_from(*zone_public_config, z)) {
+
+    bool zone_is_source = source_zones_by_name.find(z.name) != source_zones_by_name.end();
+    bool zone_is_target = target_zones_by_name.find(z.name) != target_zones_by_name.end();
+
+    if (zone_is_source || zone_is_target) {
+      if (zone_is_source) {
         data_sync_source_zones.push_back(&z);
       }
-      if (zone_syncs_from(z, *zone_public_config)) {
+      if (zone_is_target) {
         zone_data_notify_to_map[id] = conn;
       }
     } else {
