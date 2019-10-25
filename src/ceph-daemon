@@ -164,7 +164,10 @@ def is_fsid(s):
     return True
 
 def makedirs(dir, uid, gid, mode):
-    os.makedirs(dir, exist_ok=True, mode=mode)
+    if not os.path.exists(dir):
+        os.makedirs(dir, mode=mode)
+    else:
+        os.chmod(dir, mode)
     os.chown(dir, uid, gid)
     os.chmod(dir, mode)   # the above is masked by umask...
 
