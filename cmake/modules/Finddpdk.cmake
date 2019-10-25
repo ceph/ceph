@@ -2,6 +2,7 @@
 #
 # Once done, this will define
 #
+# dpdk::dpdk
 # dpdk_FOUND
 # dpdk_INCLUDE_DIR
 # dpdk_LIBRARIES
@@ -11,7 +12,12 @@ if(PKG_CONFIG_FOUND)
   pkg_check_modules(dpdk QUIET libdpdk)
 endif()
 
-if(NOT dpdk_INCLUDE_DIRS)
+if(dpdk_INCLUDE_DIRS)
+  # good
+elseif(TARGET dpdk::dpdk)
+  get_target_property(dpdk_INCLUDE_DIRS
+     dpdk::dpdk INTERFACE_INCLUDE_DIRECTORIES)
+else()
   find_path(dpdk_config_INCLUDE_DIR rte_config.h
     HINTS
       ENV DPDK_DIR
@@ -51,16 +57,24 @@ set(components
   pmd_vmxnet3_uio
   ring)
 
+# for collecting dpdk library targets, it will be used when defining dpdk::dpdk
+set(_dpdk_libs)
+# for list of dpdk library archive paths
 set(dpdk_LIBRARIES)
 
 foreach(c ${components})
-  find_library(DPDK_rte_${c}_LIBRARY rte_${c}
-    HINTS
-      ENV DPDK_DIR
-      ${dpdk_LIBRARY_DIRS}
-    PATH_SUFFIXES lib)
+  set(dpdk_lib dpdk::${c})
+  if(TARGET ${dpdk_lib})
+    get_target_property(DPDK_rte_${c}_LIBRARY
+      ${dpdk_lib} IMPORTED_LOCATION)
+  else()
+    find_library(DPDK_rte_${c}_LIBRARY rte_${c}
+      HINTS
+        ENV DPDK_DIR
+        ${dpdk_LIBRARY_DIRS}
+        PATH_SUFFIXES lib)
+  endif()
   if(DPDK_rte_${c}_LIBRARY)
-    set(dpdk_lib dpdk::${c})
     if (NOT TARGET ${dpdk_lib})
       add_library(${dpdk_lib} UNKNOWN IMPORTED)
       set_target_properties(${dpdk_lib} PROPERTIES
@@ -73,7 +87,8 @@ foreach(c ${components})
         endif()
       endif()
     endif()
-    list(APPEND dpdk_LIBRARIES ${dpdk_lib})
+    list(APPEND _dpdk_libs ${dpdk_lib})
+    list(APPEND dpdk_LIBRARIES ${DPDK_rte_${c}_LIBRARY})
   endif()
 endforeach()
 
@@ -103,11 +118,13 @@ if(dpdk_FOUND)
   if(NOT TARGET dpdk::dpdk)
     add_library(dpdk::dpdk INTERFACE IMPORTED)
     find_package(Threads QUIET)
-    list(APPEND dpdk_LIBRARIES
+    list(APPEND _dpdk_libs
       Threads::Threads
       dpdk::cflags)
     set_target_properties(dpdk::dpdk PROPERTIES
-      INTERFACE_LINK_LIBRARIES "${dpdk_LIBRARIES}"
+      INTERFACE_LINK_LIBRARIES "${_dpdk_libs}"
       INTERFACE_INCLUDE_DIRECTORIES "${dpdk_INCLUDE_DIRS}")
   endif()
 endif()
+
+unset(_dpdk_libs)
