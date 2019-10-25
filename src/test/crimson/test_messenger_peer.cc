@@ -223,6 +223,7 @@ class FailoverTestPeer : public Dispatcher {
   Connection *cmd_conn = nullptr;
   const entity_addr_t test_peer_addr;
   std::unique_ptr<FailoverSuitePeer> test_suite;
+  const bool nonstop;
 
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message* m) const override { return false; }
@@ -251,8 +252,13 @@ class FailoverTestPeer : public Dispatcher {
       auto m_cmd = boost::static_pointer_cast<MCommand>(m);
       auto cmd = static_cast<cmd_t>(m_cmd->cmd[0][0]);
       if (cmd == cmd_t::shutdown) {
-        ldout(cct, 0) << "[CmdSrv] got shutdown..." << dendl;
-        cmd_msgr->shutdown();
+        ldout(cct, 0) << "All tests succeeded" << dendl;
+        if (!nonstop) {
+          ldout(cct, 0) << "[CmdSrv] shutdown ..." << dendl;
+          cmd_msgr->shutdown();
+        } else {
+          ldout(cct, 0) << "[CmdSrv] nonstop set ..." << dendl;
+        }
       } else {
         ldout(cct, 0) << "[CmdSrv] got cmd " << cmd << dendl;
         handle_cmd(cmd, m_cmd);
@@ -369,17 +375,22 @@ class FailoverTestPeer : public Dispatcher {
   }
 
  public:
-  FailoverTestPeer(CephContext* cct, entity_addr_t test_peer_addr)
-    : Dispatcher(cct), dummy_auth(cct), test_peer_addr(test_peer_addr) { }
+  FailoverTestPeer(CephContext* cct,
+                   entity_addr_t test_peer_addr,
+                   bool nonstop)
+    : Dispatcher(cct),
+      dummy_auth(cct),
+      test_peer_addr(test_peer_addr),
+      nonstop(nonstop) { }
 
   void wait() { cmd_msgr->wait(); }
 
   static std::unique_ptr<FailoverTestPeer>
-  create(CephContext* cct, entity_addr_t cmd_peer_addr) {
+  create(CephContext* cct, entity_addr_t cmd_peer_addr, bool nonstop) {
     // suite bind to cmd_peer_addr, with port + 1
     entity_addr_t test_peer_addr = cmd_peer_addr;
     test_peer_addr.set_port(cmd_peer_addr.get_port() + 1);
-    auto test_peer = std::make_unique<FailoverTestPeer>(cct, test_peer_addr);
+    auto test_peer = std::make_unique<FailoverTestPeer>(cct, test_peer_addr, nonstop);
     test_peer->init(cmd_peer_addr);
     ldout(cct, 0) << "[CmdSrv] ready" << dendl;
     return test_peer;
@@ -395,7 +406,9 @@ int main(int argc, char** argv)
   desc.add_options()
     ("help,h", "show help message")
     ("addr", po::value<std::string>()->default_value("v2:127.0.0.1:9013"),
-     "CmdSrv address, and TestPeer address with port+=1");
+     "CmdSrv address, and TestPeer address with port+=1")
+    ("nonstop", po::value<bool>()->default_value(false),
+     "Do not shutdown TestPeer when all tests are successful");
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
   try {
@@ -418,6 +431,7 @@ int main(int argc, char** argv)
   auto addr = vm["addr"].as<std::string>();
   entity_addr_t cmd_peer_addr;
   cmd_peer_addr.parse(addr.c_str(), nullptr);
+  auto nonstop = vm["nonstop"].as<bool>();
 
   std::vector<const char*> args(argv, argv + argc);
   auto cct = global_init(nullptr, args,
@@ -428,7 +442,6 @@ int main(int argc, char** argv)
   cct->_conf.set_val("ms_crc_header", "false");
   cct->_conf.set_val("ms_crc_data", "false");
 
-  auto test_peer = FailoverTestPeer::create(cct.get(), cmd_peer_addr);
+  auto test_peer = FailoverTestPeer::create(cct.get(), cmd_peer_addr, nonstop);
   test_peer->wait();
-  ldout(cct, 0) << "All tests succeeded" << dendl;
 }
