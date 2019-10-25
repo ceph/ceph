@@ -377,7 +377,58 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
         return orchestrator.TrivialReadCompletion(nodes)
 
-    def _run_ceph_daemon(self, host, entity, command, args, stdin=None):
+    def describe_service(self, service_type=None, service_id=None,
+                         node_name=None, refresh=False):
+
+        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
+            raise orchestrator.OrchestratorValidationError(
+                service_type + " unsupported")
+
+        #daemons = self.get_daemons()
+        daemons = {}
+        for host, _ in self._get_hosts():
+            self.log.info("refresh stale daemons for '{}'".format(host))
+            out, code = self._run_ceph_daemon(
+                host, 'mon', 'ls', [], no_fsid=True)
+            daemons[host] = json.loads(''.join(out))
+
+        result = []
+        for host, ls in daemons.items():
+            for d in ls:
+                if not d['style'].startswith('ceph-daemon'):
+                    self.log.debug('ignoring non-ceph-daemon on %s: %s' % (host, d))
+                    continue
+                if d['fsid'] != self._cluster_fsid:
+                    self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
+                    continue
+                self.log.debug('including %s' % d)
+                sd = orchestrator.ServiceDescription()
+                sd.service_type = d['name'].split('.')[0]
+                if service_type and service_type != sd.service_type:
+                    continue
+                if '.' in d['name']:
+                    sd.service_instance = d['name'].split('.')[1]
+                else:
+                    sd.service_instance = host  # e.g., crash
+                if service_id and service_id != sd.service_instance:
+                    continue
+                sd.nodename = host
+                sd.container_id = d['container_id']
+                sd.version = d['version']
+                sd.status_desc = d['state']
+                sd.status = {
+                    'running': 1,
+                    'inactive': 0,
+                    'error': -1,
+                    'unknown': -1,
+                }[d['state']]
+                result.append(sd)
+
+        return orchestrator.TrivialReadCompletion(result)
+
+    def _run_ceph_daemon(self, host, entity, command, args,
+                         stdin=None,
+                         no_fsid=False):
         """
         Run ceph-daemon on the remote host with the given command + args
         """
@@ -395,9 +446,11 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             final_args = [
                 '--image', image,
-                command,
-                '--fsid', self._cluster_fsid,
-            ] + args
+                command
+            ]
+            if not no_fsid:
+                final_args += ['--fsid', self._cluster_fsid]
+            final_args += args
 
             script = 'injected_argv = ' + json.dumps(final_args) + '\n'
             if stdin:
