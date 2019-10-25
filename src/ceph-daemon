@@ -478,13 +478,19 @@ def install_base_units(fsid):
     existed = os.path.exists(args.unit_dir + '/ceph.target')
     with open(args.unit_dir + '/ceph.target.new', 'w') as f:
         f.write('[Unit]\n'
-                'Description=all ceph service\n'
+                'Description=all ceph clusters and services\n'
                 '\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target\n')
         os.rename(args.unit_dir + '/ceph.target.new',
                   args.unit_dir + '/ceph.target')
     if not existed:
+        # we disable before enable in case a different ceph.target
+        # (from the traditional package) is present; while newer
+        # systemd is smart enough to disable the old
+        # (/lib/systemd/...) and enable the new (/etc/systemd/...),
+        # some older versions of systemd error out with EEXIST.
+        call_throws(['systemctl', 'disable', 'ceph.target'])
         call_throws(['systemctl', 'enable', 'ceph.target'])
         call_throws(['systemctl', 'start', 'ceph.target'])
 
