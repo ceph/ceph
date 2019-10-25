@@ -3,7 +3,8 @@ set -x
 
 git submodule update --init --recursive
 
-[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+: ${BUILD_DIR:=build}
+: ${CEPH_GIT_DIR:=..}
 
 if [ -e $BUILD_DIR ]; then
     echo "'$BUILD_DIR' dir already exists; either rm -rf '$BUILD_DIR' and re-run, or set BUILD_DIR env var to a different directory name"
@@ -54,7 +55,7 @@ if type cmake3 > /dev/null 2>&1 ; then
 else
     CMAKE=cmake
 fi
-${CMAKE} $ARGS "$@" .. || exit 1
+${CMAKE} $ARGS "$@" $CEPH_GIT_DIR || exit 1
 set +x
 
 # minimal config to find plugins
