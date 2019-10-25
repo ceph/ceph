@@ -988,7 +988,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	if (ret < 0) {
 	  ldout(cct, 0) <<  __func__ << ": Error in get_bucket_info: " <<
 	    cpp_strerror(-ret) << dendl;
-	  return -ret;
+	  return ret;
 	}
 
 	RGWBucketReshard br(store, bucket_info, attrs, nullptr);
