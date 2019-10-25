@@ -31,8 +31,15 @@ You can invoke ceph-daemon in two ways:
 """
 
 import argparse
-import configparser
+try:
+    from configparser import ConfigParser   # py3
+except ImportError:
+    from ConfigParser import ConfigParser   # py2
 import fcntl
+try:
+    from io import StringIO                 # py3
+except:
+    from StringIO import StringIO           # py2
 import json
 import logging
 import os
@@ -45,14 +52,6 @@ import time
 import uuid
 from distutils.spawn import find_executable
 
-try:
-    from StringIO import StringIO
-except ImportError:
-    pass
-try:
-    from io import StringIO
-except ImportError:
-    pass
 
 podman_path = None
 
@@ -228,7 +227,7 @@ def check_unit(unit_name):
 
 def get_legacy_config_fsid(cluster):
     try:
-        config = configparser.ConfigParser()
+        config = ConfigParser()
         config.read('/etc/ceph/%s.conf' % cluster)
         if 'global' in config and 'fsid' in config['global']:
             return config['global']['fsid']
@@ -739,7 +738,7 @@ def command_bootstrap():
     logging.info('Cluster fsid: %s' % fsid)
 
     # config
-    cp = configparser.ConfigParser()
+    cp = ConfigParser()
     if args.config:
         cp.read(args.config)
     if args.mon_ip:
