@@ -593,7 +593,7 @@ void ManagedLock<I>::send_reacquire_lock() {
   }
 
   m_new_cookie = encode_lock_cookie(watch_handle);
-  if (m_cookie == m_new_cookie) {
+  if (m_cookie == m_new_cookie && m_blacklist_on_break_lock) {
     ldout(m_cct, 10) << "skipping reacquire since cookie still valid"
                      << dendl;
     auto ctx = create_context_callback<
