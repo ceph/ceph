@@ -148,7 +148,7 @@ public:
    */
   ConnectionRef connect_to(int type,
 			   const entity_addrvec_t& addrs,
-			   bool anon) override;
+			   bool anon, bool not_local_dest=false) override;
   ConnectionRef get_loopback_connection() override;
   void mark_down(const entity_addr_t& addr) override {
     mark_down_addrs(entity_addrvec_t(addr));
