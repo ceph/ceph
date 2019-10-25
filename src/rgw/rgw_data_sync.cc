@@ -3470,7 +3470,10 @@ int RGWGetBucketSourcePeersCR::operate()
       auto& handler = policy->policy_handler;
 
       *sources = handler->get_sources();
-      *pbucket_info = handler->get_bucket_info();
+      auto& binfo = handler->get_bucket_info();
+      if (binfo) {
+        *pbucket_info = *binfo;
+      }
     }
 
     return set_cr_done();

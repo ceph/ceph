@@ -446,20 +446,65 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
 }
 
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
-                                                       RGWBucketInfo& _bucket_info) : zone_svc(_zone_svc),
-                                                                                      bucket_info(_bucket_info) {
-  flow_mgr.reset(new RGWBucketSyncFlowManager(zone_svc->zone_name(),
-                                              bucket_info.bucket,
-                                              zone_svc->get_sync_flow_manager()));
+                                                       RGWSI_SyncModules *sync_modules_svc,
+                                                       std::optional<string> effective_zone) : zone_svc(_zone_svc) {
+  zone_name = effective_zone.value_or(zone_svc->zone_name());
+  flow_mgr.reset(new RGWBucketSyncFlowManager(zone_name,
+                                              nullopt,
+                                              nullptr));
+  sync_policy = zone_svc->get_zonegroup().sync_policy;
+
+  if (sync_policy.empty()) {
+    RGWSyncPolicyCompat::convert_old_sync_config(zone_svc, sync_modules_svc, &sync_policy);
+  }
+
+  init();
 }
 
-int RGWBucketSyncPolicyHandler::init()
-{
-  flow_mgr->init(*bucket_info.sync_policy);
+RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
+                                                       const RGWBucketInfo& _bucket_info) : parent(_parent),
+                                                                                            bucket_info(_bucket_info) {
+  if (_bucket_info.sync_policy) {
+    sync_policy = *_bucket_info.sync_policy;
+  }
+  bucket = _bucket_info.bucket;
+  zone_svc = parent->zone_svc;
+  flow_mgr.reset(new RGWBucketSyncFlowManager(parent->zone_name,
+                                              _bucket_info.bucket,
+                                              parent->flow_mgr.get()));
+  init();
+}
 
-  RGWBucketSyncFlowManager::pipe_set sources_by_name;
-  RGWBucketSyncFlowManager::pipe_set targets_by_name;
-  flow_mgr->reflect(bucket_info.bucket, &sources_by_name, &targets_by_name);
+RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
+                                                       const rgw_bucket& _bucket,
+                                                       std::optional<rgw_sync_policy_info> _sync_policy) : parent(_parent) {
+  if (_sync_policy) {
+    sync_policy = *_sync_policy;
+  }
+  bucket = _bucket;
+  zone_svc = parent->zone_svc;
+  flow_mgr.reset(new RGWBucketSyncFlowManager(parent->zone_name,
+                                              _bucket,
+                                              parent->flow_mgr.get()));
+  init();
+}
+
+RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const RGWBucketInfo& bucket_info) const
+{
+  return new RGWBucketSyncPolicyHandler(this, bucket_info);
+}
+
+RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const rgw_bucket& bucket,
+                                                                    std::optional<rgw_sync_policy_info> sync_policy) const
+{
+  return new RGWBucketSyncPolicyHandler(this, bucket, sync_policy);
+}
+
+void RGWBucketSyncPolicyHandler::init()
+{
+  flow_mgr->init(sync_policy);
+
+  flow_mgr->reflect(bucket, &sources_by_name, &targets_by_name);
 
   /* convert to zone ids */
 
@@ -467,6 +512,7 @@ int RGWBucketSyncPolicyHandler::init()
     if (!pipe.source.zone) {
       continue;
     }
+    source_zones.insert(*pipe.source.zone);
     rgw_sync_bucket_pipe new_pipe = pipe;
     string zone_id;
 
@@ -479,6 +525,7 @@ int RGWBucketSyncPolicyHandler::init()
     if (!pipe.dest.zone) {
       continue;
     }
+    target_zones.insert(*pipe.dest.zone);
     rgw_sync_bucket_pipe new_pipe = pipe;
     string zone_id;
     if (zone_svc->find_zone_id_by_name(*pipe.dest.zone, &zone_id)) {
@@ -486,18 +533,20 @@ int RGWBucketSyncPolicyHandler::init()
     }
     targets[*new_pipe.dest.zone].pipes.insert(new_pipe);
   }
-
-  return 0;
 }
 
 bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
 {
+  if (!bucket) {
+    return false;
+  }
+
   if (bucket_is_sync_source()) {
     return true;
   }
 
   return (zone_svc->need_to_log_data() &&
-          bucket_info.datasync_flag_enabled());
+          bucket_info->datasync_flag_enabled());
 }
 
 bool RGWBucketSyncPolicyHandler::bucket_imports_data() const
