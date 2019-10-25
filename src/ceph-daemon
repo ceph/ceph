@@ -214,7 +214,7 @@ def check_unit(unit_name):
             raise RuntimeError('exited with %d' % code)
         enabled = out.strip() == 'enabled'
     except Exception as e:
-        logger.warning('unable to run systemctl' % e)
+        logger.warning('unable to run systemctl: %s' % e)
         enabled = False
     try:
         out, err, code = call(['systemctl', 'is-active', unit_name], 'systemctl')
