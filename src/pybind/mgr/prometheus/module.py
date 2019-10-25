@@ -619,6 +619,7 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
+            osd_dev_node = None
             if obj_store == "filestore":
                 # collect filestore backend device
                 osd_dev_node = osd_metadata.get(
@@ -634,8 +635,6 @@ class Module(MgrModule):
                 osd_wal_dev_node = osd_metadata.get('bluefs_wal_dev_node', '')
                 # collect bluestore db backend
                 osd_db_dev_node = osd_metadata.get('bluefs_db_dev_node', '')
-            else:
-                osd_dev_node = "unknown"
             if osd_dev_node and osd_dev_node == "unknown":
                 osd_dev_node = None
 
