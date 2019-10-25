@@ -491,7 +491,7 @@ function TEST_list_missing_erasure_coded_overwrites() {
 function TEST_corrupt_scrub_replicated() {
     local dir=$1
     local poolname=csr_pool
-    local total_objs=18
+    local total_objs=19
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
@@ -512,6 +512,11 @@ function TEST_corrupt_scrub_replicated() {
         rados --pool $poolname setomapheader $objname hdr-$objname || return 1
         rados --pool $poolname setomapval $objname key-$objname val-$objname || return 1
     done
+
+    # Increase file 1 MB + 1KB
+    dd if=/dev/zero of=$dir/new.ROBJ19 bs=1024 count=1025
+    rados --pool $poolname put $objname $dir/new.ROBJ19 || return 1
+    rm -f $dir/new.ROBJ19
 
     local pg=$(get_pg $poolname ROBJ0)
     local primary=$(get_primary $poolname ROBJ0)
@@ -632,11 +637,17 @@ function TEST_corrupt_scrub_replicated() {
 	   objectstore_tool $dir 1 $objname set-bytes $dir/new.ROBJ18 || return 1
 	   # Make one replica have a different object info, so a full repair must happen too
 	   objectstore_tool $dir $osd $objname corrupt-info || return 1
+	   ;;
+
+	19)
+	   # Set osd-max-object-size smaller than this object's size
 
         esac
     done
 
     local pg=$(get_pg $poolname ROBJ0)
+
+    ceph tell osd.\* injectargs -- --osd-max-object-size=1048576
 
     inject_eio rep data $poolname ROBJ11 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
     inject_eio rep mdata $poolname ROBJ12 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
@@ -665,9 +676,10 @@ function TEST_corrupt_scrub_replicated() {
     err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ffdb2004:::ROBJ9:head : object info inconsistent "
     err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head : no '_' attr"
     err_strings[17]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: .* no longer understand old encoding version 3 < 97"
-    err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub : stat mismatch, got 18/18 objects, 0/0 clones, 17/18 dirty, 17/18 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 113/120 bytes, 0/0 hit_set_archive bytes."
-    err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 1 missing, 7 inconsistent objects"
-    err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 17 errors"
+    err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub : stat mismatch, got 19/19 objects, 0/0 clones, 18/19 dirty, 18/19 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 1049713/1049720 bytes, 0/0 hit_set_archive bytes."
+    err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 1 missing, 8 inconsistent objects"
+    err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 18 errors"
+    err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:123a5f55:::ROBJ19:head : size 1049600 > 1048576 is too large"
 
     for err_string in "${err_strings[@]}"
     do
@@ -1211,6 +1223,69 @@ function TEST_corrupt_scrub_replicated() {
      "union_shard_errors": []
    },
    {
+      "object": {
+        "name": "ROBJ19",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 58
+      },
+      "errors": [
+        "size_too_large"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ19",
+          "key": "",
+          "snapid": -2,
+          "hash": 2868534344,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "63'59",
+        "prior_version": "63'58",
+        "last_reqid": "osd.1.0:58",
+        "user_version": 58,
+        "size": 1049600,
+        "mtime": "2019-08-09T23:33:58.340709+0000",
+        "local_mtime": "2019-08-09T23:33:58.345676+0000",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest",
+          "omap_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x3dde0ef3",
+        "omap_digest": "0xbffddd28",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "errors": [],
+          "size": 1049600
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "errors": [],
+          "size": 1049600
+        }
+      ]
+   },
+   {
       "shards": [
         {
           "size": 7,
@@ -1326,7 +1401,7 @@ function TEST_corrupt_scrub_replicated() {
         "version": "79'66",
         "prior_version": "79'65",
         "last_reqid": "client.4554.0:1",
-        "user_version": 74,
+        "user_version": 79,
         "size": 7,
         "mtime": "",
         "local_mtime": "",
@@ -1378,7 +1453,7 @@ function TEST_corrupt_scrub_replicated() {
             "version": "95'67",
             "prior_version": "51'64",
             "last_reqid": "client.4649.0:1",
-            "user_version": 75,
+            "user_version": 80,
             "size": 1,
             "mtime": "",
             "local_mtime": "",
@@ -1464,7 +1539,7 @@ function TEST_corrupt_scrub_replicated() {
         "version": "95'67",
         "prior_version": "51'64",
         "last_reqid": "client.4649.0:1",
-        "user_version": 75,
+        "user_version": 80,
         "size": 1,
         "mtime": "",
         "local_mtime": "",
@@ -1537,6 +1612,10 @@ EOF
     inject_eio rep mdata $poolname ROBJ12 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
     inject_eio rep mdata $poolname ROBJ13 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
     inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
+
+    # ROBJ19 won't error this time
+    ceph tell osd.\* injectargs -- --osd-max-object-size=134217728
+
     pg_deep_scrub $pg
 
     err_strings=()
@@ -1563,7 +1642,7 @@ EOF
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0 soid 3:c0c86b1d:::ROBJ14:head : candidate had a corrupt info"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:c0c86b1d:::ROBJ14:head : failed to pick suitable object info"
     err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ce3f1d6a:::ROBJ1:head : candidate size 9 info size 7 mismatch"
-    err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ce3f1d6a:::ROBJ1:head : data_digest 0x2d4a11c2 != data_digest 0x2ddbf8f5 from shard 0, data_digest 0x2d4a11c2 != data_digest 0x2ddbf8f5 from auth oi 3:ce3f1d6a:::ROBJ1:head[(][0-9]*'[0-9]* osd.1.0:65 dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [[]0 0 0[]][)], size 9 != size 7 from auth oi 3:ce3f1d6a:::ROBJ1:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [[]0 0 0[]][)], size 9 != size 7 from shard 0"
+    err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ce3f1d6a:::ROBJ1:head : data_digest 0x2d4a11c2 != data_digest 0x2ddbf8f5 from shard 0, data_digest 0x2d4a11c2 != data_digest 0x2ddbf8f5 from auth oi 3:ce3f1d6a:::ROBJ1:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [[]0 0 0[]][)], size 9 != size 7 from auth oi 3:ce3f1d6a:::ROBJ1:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [[]0 0 0[]][)], size 9 != size 7 from shard 0"
     err_strings[24]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:d60617f9:::ROBJ13:head : candidate had a read error"
     err_strings[25]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0 soid 3:d60617f9:::ROBJ13:head : candidate had a stat error"
     err_strings[26]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:d60617f9:::ROBJ13:head : failed to pick suitable object info"
@@ -1576,7 +1655,7 @@ EOF
     err_strings[33]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0 soid 3:ffdb2004:::ROBJ9:head : object info inconsistent "
     err_strings[34]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head : no '_' attr"
     err_strings[35]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: .* no longer understand old encoding version 3 < 97"
-    err_strings[36]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub : stat mismatch, got 18/18 objects, 0/0 clones, 17/18 dirty, 17/18 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 115/116 bytes, 0/0 hit_set_archive bytes."
+    err_strings[36]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub : stat mismatch, got 19/19 objects, 0/0 clones, 18/19 dirty, 18/19 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 1049715/1049716 bytes, 0/0 hit_set_archive bytes."
     err_strings[37]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 1 missing, 11 inconsistent objects"
     err_strings[38]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 35 errors"
 
@@ -2799,7 +2878,7 @@ EOF
         "version": "79'66",
         "prior_version": "79'65",
         "last_reqid": "client.4554.0:1",
-        "user_version": 74,
+        "user_version": 79,
         "size": 7,
         "mtime": "2018-04-05 14:34:05.598688",
         "local_mtime": "2018-04-05 14:34:05.599698",
@@ -2897,7 +2976,7 @@ EOF
             "version": "119'68",
             "prior_version": "51'64",
             "last_reqid": "client.4834.0:1",
-            "user_version": 76,
+            "user_version": 81,
             "size": 3,
             "mtime": "2018-04-05 14:35:01.500659",
             "local_mtime": "2018-04-05 14:35:01.502117",
@@ -2941,7 +3020,7 @@ EOF
         "version": "119'68",
         "prior_version": "51'64",
         "last_reqid": "client.4834.0:1",
-        "user_version": 76,
+        "user_version": 81,
         "size": 3,
         "mtime": "2018-04-05 14:35:01.500659",
         "local_mtime": "2018-04-05 14:35:01.502117",
