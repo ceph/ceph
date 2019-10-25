@@ -8203,9 +8203,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     }
     derr << "fsck " << w << ": store not yet converted to per-pool omap"
 	 << dendl;
-    if (repair) {
-      repairer.fix_per_pool_omap(db);
-    }
   }
 
   // get expected statfs; reset unaffected fields to be able to compare
@@ -8737,6 +8734,12 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     }
   }
   if (repair) {
+    if (!per_pool_omap &&
+	depth != FSCK_SHALLOW) {
+      dout(5) << __func__ << " marking per_pool_omap=1" << dendl;
+      repairer.fix_per_pool_omap(db);
+    }
+
     dout(5) << __func__ << " applying repair results" << dendl;
     repaired = repairer.apply(db);
     dout(5) << __func__ << " repair applied" << dendl;
