@@ -2339,15 +2339,15 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
 
   string zone_name = opt_target_zone.value_or(store->svc()->zone->zone_name());
 
-  RGWBucketSyncFlowManager zone_flow(zone_name, nullopt, nullptr);
+  RGWBucketSyncPolicyHandler zone_policy_handler(RGWBucketSyncPolicyHandler(store->svc()->zone,
+                                                                            store->svc()->sync_modules,
+                                                                            opt_target_zone));
 
-  zone_flow.init(zonegroup.sync_policy);
-
-  RGWBucketSyncFlowManager *flow_mgr = &zone_flow;
-
-  std::optional<RGWBucketSyncFlowManager> bucket_flow;
+  std::unique_ptr<RGWBucketSyncPolicyHandler> bucket_handler;
 
   std::optional<rgw_bucket> eff_bucket = opt_bucket;
+
+  auto handler = &zone_policy_handler;
 
   if (eff_bucket) {
     rgw_bucket bucket;
@@ -2359,36 +2359,25 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
       return ret;
     }
 
-    rgw_sync_policy_info default_policy;
-    rgw_sync_policy_info *policy;
-
-
-    if (ret == -ENOENT) {
-      cerr << "WARNING: bucket not found, simulating result" << std::endl;
-      bucket = *eff_bucket;
+    if (ret >= 0) {
+      bucket_handler.reset(handler->alloc_child(bucket_info));
     } else {
-      eff_bucket = bucket_info.bucket;
+      cerr << "WARNING: bucket not found, simulating result" << std::endl;
+      bucket_handler.reset(handler->alloc_child(*eff_bucket, nullopt));
     }
 
-    if (bucket_info.sync_policy) {
-      policy = (rgw_sync_policy_info *)bucket_info.sync_policy.get();
-      bucket_flow.emplace(zone_name, bucket, &zone_flow);
-
-      bucket_flow->init(*policy);
-
-      flow_mgr = &(*bucket_flow);
-    }
+    handler = bucket_handler.get();
   }
 
-  RGWBucketSyncFlowManager::pipe_set sources;
-  RGWBucketSyncFlowManager::pipe_set dests;
+  RGWBucketSyncFlowManager::pipe_set *sources;
+  RGWBucketSyncFlowManager::pipe_set *dests;
 
-  flow_mgr->reflect(eff_bucket, &sources, &dests);
+  handler->get_pipes(&sources, &dests);
 
   {
     Formatter::ObjectSection os(*formatter, "result");
-    encode_json("sources", sources, formatter);
-    encode_json("dests", dests, formatter);
+    encode_json("sources", *sources, formatter);
+    encode_json("dests", *dests, formatter);
   }
 
   formatter->flush(cout);

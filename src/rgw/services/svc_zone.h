@@ -17,9 +17,11 @@ class RGWZoneParams;
 class RGWPeriod;
 class RGWZonePlacementInfo;
 
-class RGWBucketSyncFlowManager;
+class RGWBucketSyncPolicyHandler;
 
 class RGWRESTConn;
+
+struct rgw_sync_policy_info;
 
 class RGWSI_Zone : public RGWServiceInstance
 {
@@ -37,7 +39,7 @@ class RGWSI_Zone : public RGWServiceInstance
   uint32_t zone_short_id{0};
   bool writeable_zone{false};
 
-  RGWBucketSyncFlowManager *sync_flow_mgr{nullptr};
+  RGWBucketSyncPolicyHandler *sync_policy_handler{nullptr};
 
   RGWRESTConn *rest_master_conn{nullptr};
   map<string, RGWRESTConn *> zone_conn_map;
@@ -47,6 +49,8 @@ class RGWSI_Zone : public RGWServiceInstance
 
   map<string, string> zone_id_by_name;
   map<string, RGWZone> zone_by_id;
+
+  std::unique_ptr<rgw_sync_policy_info> sync_policy;
 
   void init(RGWSI_SysObj *_sysobj_svc,
            RGWSI_RADOS *_rados_svc,
@@ -71,8 +75,8 @@ public:
   int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) const;
   const RGWZone& get_zone() const;
 
-  const RGWBucketSyncFlowManager *get_sync_flow_manager() const {
-    return sync_flow_mgr;
+  const RGWBucketSyncPolicyHandler *get_sync_policy_handler() const {
+    return sync_policy_handler;
   }
 
   const string& zone_name() const;

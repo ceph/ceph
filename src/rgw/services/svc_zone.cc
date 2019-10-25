@@ -38,7 +38,7 @@ void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
 
 RGWSI_Zone::~RGWSI_Zone()
 {
-  delete sync_flow_mgr;
+  delete sync_policy_handler;
   delete realm;
   delete zonegroup;
   delete zone_public_config;
@@ -153,36 +153,17 @@ int RGWSI_Zone::do_start()
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
-  sync_flow_mgr = new RGWBucketSyncFlowManager(zone_params->get_name(),
-                                               nullopt,
-                                               nullptr);
-
-  rgw_sync_policy_info sync_policy = zonegroup->sync_policy;
-
-  if (sync_policy.empty()) {
-    RGWSyncPolicyCompat::convert_old_sync_config(this, sync_modules_svc, &sync_policy);
-  }
-
-  sync_flow_mgr->init(sync_policy);
-
-  RGWBucketSyncFlowManager::pipe_set zone_sources;
-  RGWBucketSyncFlowManager::pipe_set zone_targets;
-
-  sync_flow_mgr->reflect(nullopt, &zone_sources, &zone_targets);
+  sync_policy_handler = new RGWBucketSyncPolicyHandler(this, sync_modules_svc);
 
   set<string> source_zones_by_name;
   set<string> target_zones_by_name;
 
-  for (auto& pipe : zone_sources.pipes) {
-    if (pipe.source.zone) {
-      source_zones_by_name.insert(*pipe.source.zone);
-    }
+  for (auto& zone_name : sync_policy_handler->get_source_zones()) {
+    source_zones_by_name.insert(zone_name);
   }
 
-  for (auto& pipe : zone_targets.pipes) {
-    if (pipe.dest.zone) {
-      target_zones_by_name.insert(*pipe.dest.zone);
-    }
+  for (auto& zone_name : sync_policy_handler->get_target_zones()) {
+    target_zones_by_name.insert(zone_name);
   }
 
   ret = sync_modules_svc->start();
