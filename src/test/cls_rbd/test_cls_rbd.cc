@@ -1120,6 +1120,9 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(0u, snapc.snaps[1]);
   ASSERT_EQ(1u, snapc.seq);
 
+  // snap id less than current snap seq
+  ASSERT_EQ(-ESTALE, snapshot_add(&ioctx, oid, 0, "snap3"));
+
   ASSERT_EQ(0, snapshot_get(&ioctx, oid, 1, &snap));
   ASSERT_EQ("snap2", snap.name);
   ASSERT_EQ(userSnapNamespace, snap.snapshot_namespace);
