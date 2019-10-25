@@ -172,6 +172,24 @@ class SubVolume(object):
             raise VolumeException(-e.args[0], "Cannot set new size for the subvolume. '{0}'".format(e.args[1]))
         return newsize, subvolstat.st_size
 
+    def resize_infinite(self, subvolpath, newsize):
+        """
+        :param subvolpath: the subvolume path
+        :param newsize: the string inf
+        :return: new quota size and used bytes as a tuple
+        """
+
+        if not (newsize == "inf" or newsize == "infinite"):
+            raise VolumeException(-errno.EINVAL, "Invalid parameter '{0}'".format(newsize))
+
+        subvolstat = self.fs.stat(subvolpath)
+        size = 0
+        try:
+            self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
+        except Exception as e:
+            raise VolumeException(-errno.ENOENT, "Cannot resize the subvolume to infinite size. '{0}'".format(e.args[1]))
+        return size, subvolstat.st_size
+
     def purge_subvolume(self, spec, should_cancel):
         """
         Finish clearing up a subvolume from the trash directory.
