@@ -30,6 +30,10 @@ $SUDO $CEPH_DAEMON --image $IMAGE version | grep 'ceph version'
 # try force docker; this won't work if docker isn't installed
 which docker && ( $SUDO $CEPH_DAEMON --docker version | grep 'ceph version' )
 
+## test shell before bootstrap, when crash dir isn't (yet) present on this host
+$SUDO $CEPH_DAEMON shell -- ceph -v | grep 'ceph version'
+$SUDO $CEPH_DAEMON shell --fsid $FSID -- ceph -v | grep 'ceph version'
+
 ## bootstrap
 ORIG_CONFIG=`mktemp -p $TMPDIR`
 CONFIG=`mktemp -p $TMPDIR`
