@@ -46,7 +46,7 @@ For example, to restrict client ``foo`` to writing only in the ``bar`` directory
    key: *key*
    caps: [mds] allow r, allow rw path=/bar
    caps: [mon] allow r
-   caps: [osd] allow rw tag cephfs data=cephfs_a
+   caps: [osd] allow rw tag cephfs data=cephfs
 
 To completely restrict the client to the ``bar`` directory, omit the
 root directory ::
