@@ -77,6 +77,11 @@ class Request(RestController):
         """
         Pass through method to create any request
         """
+        if isinstance(request.json, list):
+            command_list = []
+            for command in request.json:
+                command_list.append(command)
+            return context.instance.submit_request([command_list], **kwargs)
         return context.instance.submit_request([[request.json]], **kwargs)
 
 
