@@ -34,8 +34,8 @@ std::string rbd_features_to_string(uint64_t features,
   std::string r;
   for (auto& i : RBD_FEATURE_MAP) {
     if (features & i.second) {
-      if (r.empty()) {
-	r += ",";
+      if (!r.empty()) {
+      r += ",";
       }
       r += i.first;
       features &= ~i.second;
