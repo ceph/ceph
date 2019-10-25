@@ -2,6 +2,9 @@ roles:
 - [mon.a, mgr.x, osd.0, client.0]
 tasks:
 - install:
+- exec:
+    mon.a:
+      - yum install -y python3 || apt install -y python3
 - workunit:
     basedir: qa/standalone
     clients:
