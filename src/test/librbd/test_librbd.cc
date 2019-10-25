@@ -5713,6 +5713,33 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_DEEP_FLATTEN, true));
 }
 
+TEST_F(TestLibRBD, FeaturesBitmaskString)
+{
+  librbd::RBD rbd;
+  uint64_t features = RBD_FEATURES_DEFAULT;
+
+  std::string features_str;
+  std::string expected_str = "deep-flatten,exclusive-lock,fast-diff,layering,object-map";
+  rbd.features_to_string(features, &features_str);
+  ASSERT_EQ(expected_str, features_str);
+
+  features = RBD_FEATURE_LAYERING;
+  features_str = "";
+  expected_str = "layering";
+  rbd.features_to_string(features, &features_str);
+  ASSERT_EQ(expected_str, features_str);
+
+  uint64_t features_bitmask;
+  features_str = "deep-flatten,exclusive-lock,fast-diff,layering,object-map";
+  rbd.features_from_string(features_str, &features_bitmask);
+  ASSERT_EQ(features_bitmask, RBD_FEATURES_DEFAULT);
+
+  features_str = "layering";
+  features_bitmask = 0;
+  rbd.features_from_string(features_str, &features_bitmask);
+  ASSERT_EQ(features_bitmask, RBD_FEATURE_LAYERING);
+}
+
 TEST_F(TestLibRBD, RebuildObjectMap)
 {
   librados::IoCtx ioctx;
