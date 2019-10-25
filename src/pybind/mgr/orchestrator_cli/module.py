@@ -5,7 +5,7 @@ from functools import wraps
 from prettytable import PrettyTable
 
 try:
-    from typing import List, Set
+    from typing import List, Set, Optional
 except ImportError:
     pass  # just for type checking.
 
@@ -144,33 +144,21 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                 self._refresh_health()
             raise
 
-
-    @_write_cli(prefix='device fault-light-on',
-                cmd_args='name=devid,type=CephString',
-                desc='Enable device *fault* light')
-    def _device_fault_on(self, devid):
-        return self.light_on('fault', devid)
-
-    @_write_cli(prefix='device ident-light-on',
-                cmd_args='name=devid,type=CephString',
-                desc='Enable device *ident* light')
-    def _device_ident_on(self, devid):
-        return self.light_on('ident', devid)
-
-
-    @_write_cli(prefix='device fault-light-off',
-                cmd_args='name=devid,type=CephString '
+    @_write_cli(prefix='device light',
+                cmd_args='name=enable,type=CephChoices,strings=on|off '
+                         'name=devid,type=CephString '
+                         'name=light_type,type=CephChoices,strings=ident|fault,req=false '
                          'name=force,type=CephBool,req=false',
-                desc='Disable device *fault* light')
-    def _device_fault_off(self, devid, force=False):
-        return self.light_off('fault', devid, force)
-
-    @_write_cli(prefix='device ident-light-off',
-                cmd_args='name=devid,type=CephString '
-                         'name=force,type=CephBool,req=false',
-                desc='Disable device *ident* light')
-    def _device_ident_off(self, devid, force=False):
-        return self.light_off('ident', devid, force)
+                desc='Enable or disable the device light. Default type is `ident`\n'
+                     'Usage: device light (on|off) <devid> [ident|fault] [--force]')
+    def _device_light(self, enable, devid, light_type=None, force=False):
+        # type: (str, str, Optional[str], bool) -> HandleCommandResult
+        light_type = light_type or 'ident'
+        on = enable == 'on'
+        if on:
+            return self.light_on(light_type, devid)
+        else:
+            return self.light_off(light_type, devid, force)
 
     def _select_orchestrator(self):
         return self.get_module_option("orchestrator")

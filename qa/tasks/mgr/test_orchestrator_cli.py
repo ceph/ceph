@@ -106,7 +106,7 @@ class TestOrchestratorCli(MgrTestCase):
 
         for t in ["ident", "fault"]:
             self.assertNotIn(dev_id, _ls_lights(t))
-            self._cmd("device", t + "-light-on", dev_id)
+            self._cmd("device", "light", "on", dev_id, t)
             self.assertIn(dev_id, _ls_lights(t))
 
             health = {
@@ -115,7 +115,7 @@ class TestOrchestratorCli(MgrTestCase):
             }[t]
             self.wait_for_health(health, 30)
 
-            self._cmd("device", t + "-light-off", dev_id)
+            self._cmd("device", "light", "off", dev_id, t)
             self.assertNotIn(dev_id, _ls_lights(t))
 
         self.wait_for_health_clear(30)
