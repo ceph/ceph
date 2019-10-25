@@ -217,13 +217,23 @@ def check_unit(unit_name):
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
         enabled = False
+
+    state = 'unknown'
     try:
         out, err, code = call(['systemctl', 'is-active', unit_name], 'systemctl')
-        active = out.strip() == 'active'
+        out = out.strip()
+        if out in ['active']:
+            state = 'running'
+        elif out in ['inactive']:
+            state = 'stopped'
+        elif out in ['failed', 'auto-restart']:
+            state = 'error'
+        else:
+            state = 'unknown'
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
-        active = False
-    return (enabled, active)
+        state = 'unknown'
+    return (enabled, state)
 
 def get_legacy_config_fsid(cluster):
     try:
@@ -1204,8 +1214,8 @@ def command_ls():
                     (cluster, daemon_id) = j.split('-', 1)
                     fsid = get_legacy_daemon_fsid(cluster, daemon_type,
                                                   daemon_id) or 'unknown'
-                    (enabled, active) = check_unit('ceph-%s@%s' % (daemon_type,
-                                                                   daemon_id))
+                    (enabled, state) = check_unit('ceph-%s@%s' % (daemon_type,
+                                                                  daemon_id))
                     if not host_version:
                         out, err, code = call(['ceph', '-v'])
                         if not code and out.startswith('ceph version '):
@@ -1216,7 +1226,7 @@ def command_ls():
                         'name': '%s.%s' % (daemon_type, daemon_id),
                         'fsid': fsid,
                         'enabled': enabled,
-                        'active': active,
+                        'state': state,
                         'version': host_version,
                     })
             elif is_fsid(i):
@@ -1225,16 +1235,16 @@ def command_ls():
                     if j == 'crash':
                         name = 'crash'
                         unit_name = 'ceph-%s-crash.service' % fsid
-                        (enabled, active) = check_unit(unit_name)
+                        (enabled, state) = check_unit(unit_name)
                     else:
                         bits = j.split('.')
                         if len(bits) != 2:
                             continue
                         name = j
                         (daemon_type, daemon_id) = bits
-                        (enabled, active) = check_unit(get_unit_name(fsid,
-                                                                     daemon_type,
-                                                                     daemon_id))
+                        (enabled, state) = check_unit(get_unit_name(fsid,
+                                                                    daemon_type,
+                                                                    daemon_id))
 
                     # get container id
                     container_id = None
@@ -1258,7 +1268,7 @@ def command_ls():
                         'name': name,
                         'fsid': fsid,
                         'enabled': enabled,
-                        'active': active,
+                        'state': state,
                         'container_id': container_id,
                         'version': version,
                     })
@@ -1282,9 +1292,9 @@ def command_adopt():
         # cluster we are adopting based on the /etc/{defaults,sysconfig}/ceph
         # CLUSTER field.
         unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
-        (enabled, active) = check_unit(unit_name)
+        (enabled, state) = check_unit(unit_name)
 
-        if active:
+        if state == 'running':
             logger.info('Stopping old systemd unit %s...' % unit_name)
             call_throws(['systemctl', 'stop', unit_name])
         if enabled:
@@ -1322,7 +1332,7 @@ def command_adopt():
         c = get_container(fsid, daemon_type, daemon_id)
         deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                             enable=True,  # unconditionally enable the new unit
-                            start=active)
+                            start=(state == 'running'))
     else:
         raise RuntimeError('adoption of style %s not implemented' % args.style)
 
