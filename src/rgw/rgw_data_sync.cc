@@ -3915,43 +3915,86 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   rgw::sal::RGWRadosStore *const store;
   RGWDataSyncCtx *const sc;
   RGWDataSyncEnv *const env;
-  const int num_shards;
-  rgw_bucket_shard bs;
-#warning change this
+  RGWBucketInfo source_bucket_info;
+  RGWBucketInfo dest_bucket_info;
+  rgw_bucket_shard source_bs;
+  rgw_bucket_shard dest_bs;
+
   rgw_bucket_sync_pair_info sync_pair;
+
+  bool shard_to_shard_sync;
 
   using Vector = std::vector<rgw_bucket_shard_sync_info>;
   Vector::iterator i, end;
 
  public:
   RGWCollectBucketSyncStatusCR(rgw::sal::RGWRadosStore *store, RGWDataSyncCtx *sc,
-                               int num_shards, const rgw_bucket& bucket,
+                               const RGWBucketInfo& source_bucket_info,
+                               const RGWBucketInfo& dest_bucket_info,
                                Vector *status)
     : RGWShardCollectCR(sc->cct, max_concurrent_shards),
-      store(store), sc(sc), env(sc->env), num_shards(num_shards),
-      bs(bucket, num_shards > 0 ? 0 : -1), // start at shard 0 or -1
+      store(store), sc(sc), env(sc->env),
+      source_bucket_info(source_bucket_info),
+      dest_bucket_info(dest_bucket_info),
       i(status->begin()), end(status->end())
-  {}
+  {
+    shard_to_shard_sync = (source_bucket_info.num_shards == dest_bucket_info.num_shards);
+
+    source_bs = rgw_bucket_shard(source_bucket_info.bucket, source_bucket_info.num_shards > 0 ? 0 : -1);
+    dest_bs = rgw_bucket_shard(dest_bucket_info.bucket, dest_bucket_info.num_shards > 0 ? 0 : -1);
+
+    status->clear();
+    status->resize(std::max<size_t>(1, source_bucket_info.num_shards));
+
+    i = status->begin();
+    end = status->end();
+  }
 
   bool spawn_next() override {
     if (i == end) {
       return false;
     }
-    sync_pair.source_bs = bs;
+    sync_pair.source_bs = source_bs;
+    sync_pair.dest_bs = dest_bs;
     spawn(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &*i), false);
     ++i;
-    ++bs.shard_id;
+    ++source_bs.shard_id;
+    if (shard_to_shard_sync) {
+      dest_bs.shard_id = source_bs.shard_id;
+    }
     return true;
   }
 };
 
-int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, const std::string& source_zone,
-                           const RGWBucketInfo& bucket_info,
+int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
+                           rgw::sal::RGWRadosStore *store,
+                           const rgw_sync_bucket_pipe& pipe,
+                           const RGWBucketInfo& dest_bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status)
 {
-  const auto num_shards = bucket_info.num_shards;
-  status->clear();
-  status->resize(std::max<size_t>(1, num_shards));
+  if (!pipe.source.zone ||
+      !pipe.source.bucket ||
+      !pipe.dest.zone ||
+      !pipe.dest.bucket) {
+    return -EINVAL;
+  }
+
+  if (*pipe.dest.bucket !=
+      dest_bucket_info.bucket) {
+    return -EINVAL;
+  }
+
+  const rgw_bucket& source_bucket = *pipe.source.bucket;
+
+  RGWBucketInfo source_bucket_info;
+
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+
+  int ret = store->getRados()->get_bucket_instance_info(obj_ctx, source_bucket, source_bucket_info, nullptr, nullptr, null_yield);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info: bucket=" << source_bucket << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
@@ -3959,9 +4002,11 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStor
            nullptr, nullptr, nullptr, module, nullptr);
 
   RGWDataSyncCtx sc;
-  sc.init(&env, nullptr, source_zone);
+  sc.init(&env, nullptr, *pipe.source.zone);
 
   RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
-  return crs.run(new RGWCollectBucketSyncStatusCR(store, &sc, num_shards,
-                                                  bucket_info.bucket, status));
+  return crs.run(new RGWCollectBucketSyncStatusCR(store, &sc,
+                                                  source_bucket_info,
+                                                  dest_bucket_info,
+                                                  status));
 }
