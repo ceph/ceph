@@ -148,6 +148,8 @@ Resize a subvolume using::
 The command resizes the subvolume quota using the size specified by 'new_size'.
 '--no_shrink' flag prevents the subvolume to shrink below the current used size of the subvolume.
 
+The subvolume can be resized to an infinite size by passing 'inf' or 'infinite' as the new_size.
+
 Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
