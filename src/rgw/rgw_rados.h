@@ -616,6 +616,7 @@ public:
   int log_show_next(RGWAccessHandle handle, rgw_log_entry *entry);
 
   // log bandwidth info
+  void usage_log_hash(const string& name, string& hash, uint32_t index);
   int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info);
   int read_usage(const rgw_user& user, const string& bucket_name, uint64_t start_epoch, uint64_t end_epoch,
                  uint32_t max_entries, bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket,

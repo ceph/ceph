@@ -113,6 +113,7 @@
     usage show                 show usage (by user, by bucket, date range)
     usage trim                 trim usage (by user, by bucket, date range)
     usage clear                reset all the usage stats for the cluster
+    usage list-usable-shards   show all usable usage shards' id for the user or cluster
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
     gc process                 manually process garbage (specify

@@ -199,6 +199,7 @@ void usage()
   cout << "  usage show                 show usage (by user, by bucket, date range)\n";
   cout << "  usage trim                 trim usage (by user, by bucket, date range)\n";
   cout << "  usage clear                reset all the usage stats for the cluster\n";
+  cout << "  usage list-usable-shards   show all usable usage shards' id for the user or cluster\n";
   cout << "  gc list                    dump expired garbage collection objects (specify\n";
   cout << "                             --include-all to list all entries, including unexpired)\n";
   cout << "  gc process                 manually process garbage (specify\n";
@@ -438,6 +439,7 @@ enum {
   OPT_USAGE_SHOW,
   OPT_USAGE_TRIM,
   OPT_USAGE_CLEAR,
+  OPT_USAGE_LIST_USABLE_SHARDS,
   OPT_OBJECT_PUT,
   OPT_OBJECT_RM,
   OPT_OBJECT_UNLINK,
@@ -743,6 +745,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USAGE_TRIM;
     if (strcmp(cmd, "clear") == 0)
       return OPT_USAGE_CLEAR;
+    if (strcmp(cmd, "list-usable-shards") == 0)
+      return OPT_USAGE_LIST_USABLE_SHARDS;
   } else if (strcmp(prev_cmd, "caps") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_CAPS_ADD;
@@ -5819,6 +5823,23 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_USAGE_LIST_USABLE_SHARDS) {
+    string hash;
+    uint64_t max_shards = g_conf()->rgw_usage_max_shards;
+    uint64_t max_user_shards = g_conf()->rgw_usage_max_user_shards;
+
+    uint64_t num_shards = (user_id.empty() ? max_shards : max_user_shards);
+    formatter->open_object_section("usage_usable_shards:");
+    for (uint32_t i = 0; i < num_shards; i++) {
+      store->getRados()->usage_log_hash(user_id.id, hash, i);
+      encode_json("shard_id", hash, formatter);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+    formatter->close_section();
+    formatter->flush(cout);
+  }
 
   if (opt_cmd == OPT_OLH_GET || opt_cmd == OPT_OLH_READLOG) {
     if (bucket_name.empty()) {

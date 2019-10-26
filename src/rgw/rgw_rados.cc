@@ -1508,12 +1508,11 @@ int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
  * If name is not being set, results for all users will be returned
  * and index will wrap only after total shards number.
  *
- * @param cct [in] ceph context
  * @param name [in] user name
  * @param hash [out] hash value
  * @param index [in] shard index number 
  */
-static void usage_log_hash(CephContext *cct, const string& name, string& hash, uint32_t index)
+void RGWRados::usage_log_hash(const string& name, string& hash, uint32_t index)
 {
   uint32_t val = index;
 
@@ -1552,7 +1551,7 @@ int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
       /* index *should* be random, but why waste extra cycles
          in most cases max user shards is not going to exceed 1,
          so just incrementing it */
-      usage_log_hash(cct, ub.user, hash, index++);
+      usage_log_hash(ub.user, hash, index++);
     }
     last_user = ub.user;
     vector<rgw_usage_log_entry>& v = log_objs[hash].entries;
@@ -1579,10 +1578,10 @@ int RGWRados::read_usage(const rgw_user& user, const string& bucket_name, uint64
   uint32_t num = max_entries;
   string hash, first_hash;
   string user_str = user.to_str();
-  usage_log_hash(cct, user_str, first_hash, 0);
+  usage_log_hash(user_str, first_hash, 0);
 
   if (usage_iter.index) {
-    usage_log_hash(cct, user_str, hash, usage_iter.index);
+    usage_log_hash(user_str, hash, usage_iter.index);
   } else {
     hash = first_hash;
   }
@@ -1610,7 +1609,7 @@ int RGWRados::read_usage(const rgw_user& user, const string& bucket_name, uint64
 next:
     if (!*is_truncated) {
       usage_iter.read_iter.clear();
-      usage_log_hash(cct, user_str, hash, ++usage_iter.index);
+      usage_log_hash(user_str, hash, ++usage_iter.index);
     }
   } while (num && !*is_truncated && hash != first_hash);
   return 0;
@@ -1621,7 +1620,7 @@ int RGWRados::trim_usage(const rgw_user& user, const string& bucket_name, uint64
   uint32_t index = 0;
   string hash, first_hash;
   string user_str = user.to_str();
-  usage_log_hash(cct, user_str, first_hash, index);
+  usage_log_hash(user_str, first_hash, index);
 
   hash = first_hash;
   do {
@@ -1630,7 +1629,7 @@ int RGWRados::trim_usage(const rgw_user& user, const string& bucket_name, uint64
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    usage_log_hash(cct, user_str, hash, ++index);
+    usage_log_hash(user_str, hash, ++index);
   } while (hash != first_hash);
 
   return 0;
