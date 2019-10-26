@@ -488,6 +488,62 @@ class TestVolumes(CephFSTestCase):
         if len(subvolumels) > 0:
             raise RuntimeError("Expected the 'fs subvolume ls' command to output an empty list.")
 
+    def test_subvolume_resize_infinite_size(self):
+        """
+        That a subvolume can be resized to an infinite size by unsetting its quota.
+        """
+
+        # create subvolume
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size",
+                     str(self.DEFAULT_FILE_SIZE*1024*1024))
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname)
+        self.assertNotEqual(subvolpath, None)
+
+        # resize inf
+        self._fs_cmd("subvolume", "resize", self.volname, subvolname, "inf")
+
+        # verify that the quota is None
+        size = self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes")
+        self.assertEqual(size, None)
+
+    def test_subvolume_resize_infinite_size_future_writes(self):
+        """
+        That a subvolume can be resized to an infinite size and the future writes succeed.
+        """
+
+        # create subvolume
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size",
+                     str(self.DEFAULT_FILE_SIZE*1024*1024*5))
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname)
+        self.assertNotEqual(subvolpath, None)
+
+        # resize inf
+        self._fs_cmd("subvolume", "resize", self.volname, subvolname, "inf")
+
+        # verify that the quota is None
+        size = self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes")
+        self.assertEqual(size, None)
+
+        # create one file of 10MB and try to write
+        file_size=self.DEFAULT_FILE_SIZE*10
+        number_of_files=1
+        log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
+                                                                             number_of_files,
+                                                                             file_size))
+        filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, self.DEFAULT_NUMBER_OF_FILES+5)
+
+        try:
+            self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
+        except CommandFailedError:
+            raise RuntimeError("expected filling subvolume {0} with {1} file of size {2}MB "
+                               "to succeed".format(subvolname, number_of_files, file_size))
+
     ### subvolume group operations
 
     def test_subvolume_create_and_rm_in_group(self):
