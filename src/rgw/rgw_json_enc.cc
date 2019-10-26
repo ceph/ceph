@@ -921,6 +921,13 @@ void rgw_sync_bucket_entities::decode_json(JSONObj *obj)
     }
   }
   JSONDecoder::decode_json("zones", zones, obj);
+  if (zones && zones->size() == 1) {
+    auto iter = zones->begin();
+    if (*iter == "*") {
+      zones.reset();
+      all_zones = true;
+    }
+  }
 }
 
 void rgw_sync_bucket_pipe::dump(Formatter *f) const
@@ -1351,6 +1358,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("default_placement", default_placement.name, obj);
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("sync_policy", sync_policy, obj);
 }
 
 
