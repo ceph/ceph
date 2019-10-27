@@ -577,6 +577,12 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{_python_buildid}-kubernetes
+%if 0%{?fedora} || 0%{?rhel}
+Requires:       python%{_python_buildid}-yaml
+%endif
+%if 0%{?suse_version}
+Requires:       python%{_python_buildid}-PyYAML
+%endif
 %description mgr-k8sevents
 ceph-mgr-k8sevents is a ceph-mgr plugin that sends every ceph-events
 to kubernetes' events API
