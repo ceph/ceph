@@ -77,7 +77,49 @@ def accept_exceptions_from_builtin_ssl(v):
         patch_builtin_ssl_wrap(v, accept_ssl_errors)
 
 
+def accept_socket_error_0(v):
+    # see https://github.com/cherrypy/cherrypy/issues/1618
+    try:
+        import cheroot
+        cheroot_version = cheroot.__version__
+    except ImportError:
+        pass
+
+    if v < StrictVersion("9.0.0") or cheroot_version < StrictVersion("6.5.5"):
+        import six
+        if six.PY3:
+            generic_socket_error = OSError
+        else:
+            import socket
+            generic_socket_error = socket.error
+
+        def accept_socket_error_0(func):
+            def wrapper(self, sock):
+                try:
+                    return func(self, sock)
+                except generic_socket_error as e:
+                    """It is unclear why exactly this happens.
+
+                    It's reproducible only with openssl>1.0 and stdlib ``ssl`` wrapper.
+                    In CherryPy it's triggered by Checker plugin, which connects
+                    to the app listening to the socket port in TLS mode via plain
+                    HTTP during startup (from the same process).
+
+                    Ref: https://github.com/cherrypy/cherrypy/issues/1618
+                    """
+                    import ssl
+                    is_error0 = e.args == (0, 'Error')
+                    IS_ABOVE_OPENSSL10 = ssl.OPENSSL_VERSION_INFO >= (1, 1)
+                    del ssl
+                    if is_error0 and IS_ABOVE_OPENSSL10:
+                        return None, {}
+                    raise
+            return wrapper
+        patch_builtin_ssl_wrap(v, accept_socket_error_0)
+
+
 def patch_cherrypy(v):
     patch_http_connection_init(v)
     skip_wait_for_occupied_port(v)
     accept_exceptions_from_builtin_ssl(v)
+    accept_socket_error_0(v)
