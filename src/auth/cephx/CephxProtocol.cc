@@ -278,7 +278,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 						     bufferlist::const_iterator& indata)
 {
   __u8 service_ticket_reply_v;
-  uint32_t num;
+  uint32_t num = 0;
   try {
     decode(service_ticket_reply_v, indata);
     decode(num, indata);
@@ -289,7 +289,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
   ldout(cct, 10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
 
   for (int i=0; i<(int)num; i++) {
-    uint32_t type;
+    uint32_t type = 0;
     try {
       decode(type, indata);
     } catch (buffer::error& e) {
