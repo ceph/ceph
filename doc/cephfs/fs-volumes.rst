@@ -65,14 +65,14 @@ FS Subvolume groups
 
 Create a subvolume group using::
 
-    $ ceph fs subvolumegroup create <vol_name> <group_name> [--mode <octal_mode> --pool_layout <data_pool_name>]
+    $ ceph fs subvolumegroup create <vol_name> <group_name> [--pool_layout <data_pool_name> --uid <uid> --gid <gid> --mode <octal_mode>]
 
 The command succeeds even if the subvolume group already exists.
 
 When creating a subvolume group you can specify its data pool layout (see
-:doc:`/cephfs/file-layouts`), and file mode in octal numerals. By default, the
-subvolume group is created with an octal file mode '755', and data pool layout
-of its parent directory.
+:doc:`/cephfs/file-layouts`), uid, gid, and file mode in octal numerals. By default, the
+subvolume group is created with an octal file mode '755', uid '0', gid '0' and data pool
+layout of its parent directory.
 
 
 Remove a subvolume group using::
@@ -108,17 +108,17 @@ FS Subvolumes
 
 Create a subvolume using::
 
-    $ ceph fs subvolume create <vol_name> <subvol_name> [--group_name <subvol_group_name> --mode <octal_mode> --pool_layout <data_pool_name> --size <size_in_bytes>]
+    $ ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes> --group_name <subvol_group_name> --pool_layout <data_pool_name> --uid <uid> --gid <gid> --mode <octal_mode>]
 
 
 The command succeeds even if the subvolume already exists.
 
 When creating a subvolume you can specify its subvolume group, data pool layout,
-file mode in octal numerals, and size in bytes. The size of the subvolume is
+uid, gid, file mode in octal numerals, and size in bytes. The size of the subvolume is
 specified by setting a quota on it (see :doc:`/cephfs/quota`). By default a
 subvolume is created within the default subvolume group, and with an octal file
-mode '755', data pool layout of its parent directory and no size limit.
-
+mode '755', uid of its subvolume group, gid of its subvolume group, data pool layout of
+its parent directory and no size limit.
 
 Remove a subvolume group using::
 
