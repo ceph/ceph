@@ -1373,6 +1373,7 @@ static int bucket_stats(RGWRadosStore *store, const std::string& tenant_name, st
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
+  formatter->dump_int("num_shards", bucket_info.num_shards);
   formatter->dump_string("tenant", bucket.tenant);
   formatter->dump_string("zonegroup", bucket_info.zonegroup);
   formatter->dump_string("placement_rule", bucket_info.placement_rule.to_str());
