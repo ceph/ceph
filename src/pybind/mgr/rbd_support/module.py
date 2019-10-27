@@ -82,6 +82,10 @@ TASK_RETRY_INTERVAL = timedelta(seconds=30)
 MAX_COMPLETED_TASKS = 50
 
 
+class NotAuthorizedError(Exception):
+    pass
+
+
 def is_authorized(module, pool, namespace):
     return module.is_authorized({"pool": pool or '',
                                  "namespace": namespace or ''})
@@ -89,7 +93,7 @@ def is_authorized(module, pool, namespace):
 
 def authorize_request(module, pool, namespace):
     if not is_authorized(module, pool, namespace):
-        raise PermissionError("not authorized on pool={}, namespace={}".format(
+        raise NotAuthorizedError("not authorized on pool={}, namespace={}".format(
             pool, namespace))
 
 
@@ -1368,6 +1372,8 @@ class Module(MgrModule):
                 elif prefix.startswith('rbd task '):
                     return self.task.handle_command(inbuf, prefix[9:], cmd)
 
+            except NotAuthorizedError:
+                raise
             except Exception as ex:
                 # log the full traceback but don't send it to the CLI user
                 self.log.fatal("Fatal runtime error: {}\n{}".format(
@@ -1384,7 +1390,7 @@ class Module(MgrModule):
             return -errno.ENOENT, "", str(ex)
         except ValueError as ex:
             return -errno.EINVAL, "", str(ex)
-        except PermissionError as ex:
+        except NotAuthorizedError as ex:
             return -errno.EACCES, "", str(ex)
 
         raise NotImplementedError(cmd['prefix'])
