@@ -7861,9 +7861,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   cmd_getval(cct, cmdmap, "val", val);
 
   // create list of properties that use SI units
-  std::set<std::string> si_items = {};
+  std::set<std::string> si_items = {"target_max_objects"};
   // create list of properties that use IEC units
-  std::set<std::string> iec_items = {"target_size_bytes"};
+  std::set<std::string> iec_items = {"target_max_bytes", "target_size_bytes"};
 
   if (si_items.count(var)) {
     n = strict_si_cast<int64_t>(val.c_str(), &interr);
