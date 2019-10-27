@@ -7860,14 +7860,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   int64_t uf = 0;  // micro-f
   cmd_getval(cct, cmdmap, "val", val);
 
-  // create list of properties that use SI units
-  std::set<std::string> si_items = {"target_max_objects"};
-  // create list of properties that use IEC units
-  std::set<std::string> iec_items = {"target_max_bytes", "target_size_bytes"};
-
-  if (si_items.count(var)) {
+  auto si_options = {"target_max_objects"};
+  auto iec_options = {"target_max_bytes", "target_size_bytes"};
+  if (count(begin(si_options), end(si_options), var)) {
     n = strict_si_cast<int64_t>(val.c_str(), &interr);
-  } else if (iec_items.count(var)) {
+  } else if (count(begin(iec_options), end(iec_options), var)) {
     n = strict_iec_cast<int64_t>(val.c_str(), &interr);
   } else {
     // parse string as both int and float; different fields use different types.
