@@ -37,7 +37,47 @@ def skip_wait_for_occupied_port(v):
         from cherrypy.process import servers
         servers.wait_for_occupied_port = lambda host, port: None
 
+
+# cherrypy.wsgiserver was extracted wsgiserver into cheroot in cherrypy v9.0.0
+def patch_builtin_ssl_wrap(v, new_wrap):
+    if v < StrictVersion("9.0.0"):
+        from cherrypy.wsgiserver.ssl_builtin import BuiltinSSLAdapter as builtin_ssl
+    else:
+        from cherrypy.cheroot.ssl.builtin import BuiltinSSLAdapter as builtin_ssl
+    builtin_ssl.wrap = new_wrap(builtin_ssl.wrap)
+
+
+def accept_exceptions_from_builtin_ssl(v):
+    # the fix was included by cheroot v5.2.0, which was included by cherrypy
+    # 10.2.0.
+    if v < StrictVersion("10.2.0"):
+        # see https://github.com/cherrypy/cheroot/pull/4
+        import ssl
+
+        def accept_ssl_errors(func):
+            def wrapper(self, sock):
+                try:
+                    return func(self, sock)
+                except ssl.SSLError as e:
+                    if e.errno == ssl.SSL_ERROR_SSL:
+                        # Check if it's one of the known errors
+                        # Errors that are caught by PyOpenSSL, but thrown by
+                        # built-in ssl
+                        _block_errors = ('unknown protocol', 'unknown ca',
+                                         'unknown_ca', 'inappropriate fallback',
+                                         'wrong version number',
+                                         'no shared cipher', 'certificate unknown',
+                                         'ccs received early')
+                        for error_text in _block_errors:
+                            if error_text in e.args[1].lower():
+                                # Accepted error, let's pass
+                                return None, {}
+                        raise
+            return wrapper
+        patch_builtin_ssl_wrap(v, accept_ssl_errors)
+
+
 def patch_cherrypy(v):
     patch_http_connection_init(v)
     skip_wait_for_occupied_port(v)
-
+    accept_exceptions_from_builtin_ssl(v)
