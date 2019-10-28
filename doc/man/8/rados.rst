@@ -42,11 +42,9 @@ Options
    command to the monitor cluster. This is only used for specific
    monitor commands.
 
-.. option:: -o outfile
+.. option:: -o object_size
 
-   will write any payload returned by the monitor cluster with its
-   reply to outfile. Only specific monitor commands (e.g. osd getmap)
-   return a payload.
+   set the object size for put/get ops and for write benchmarking
 
 .. option:: -c ceph.conf, --conf=ceph.conf
 
