@@ -107,11 +107,21 @@ def log_exceptions(f):
 class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     _STORE_HOST_PREFIX = "host"
-    _DEFAULT_INVENTORY_CACHE_TIMEOUT_MIN = 10
 
+    NATIVE_OPTIONS = []
     MODULE_OPTIONS = [
-        {'name': 'ssh_config_file'},
-        {'name': 'inventory_cache_timeout_min'},
+        {
+            'name': 'ssh_config_file',
+            'type': 'str',
+            'default': None,
+            'desc': 'customized SSH config file to connect to managed hosts',
+        },
+        {
+            'name': 'inventory_cache_timeout',
+            'type': 'int',
+            'default': 10,
+            'desc': 'seconds to cache device inventory',
+        },
     ]
 
     COMMANDS = [
@@ -131,6 +141,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         super(SSHOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid = self.get('mon_map')['fsid']
 
+        self.config_notify()
+
         path = self.get_ceph_option('ceph_daemon_path')
         try:
             with open(path, 'r') as f:
@@ -149,14 +161,34 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         # cache is invalidated by
         # 1. timeout
         # 2. refresh parameter
-        self.inventory_cache = orchestrator.OutdatablePersistentDict(self, self._STORE_HOST_PREFIX)
+        self.inventory_cache = orchestrator.OutdatablePersistentDict(
+            self, self._STORE_HOST_PREFIX + '.devices')
+
+        self.daemon_cache = orchestrator.OutdatablePersistentDict(
+            self, self._STORE_HOST_PREFIX + '.daemons')
+
+    def config_notify(self):
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']) or opt['default'])
+            self.log.debug(' mgr option %s = %s',
+                           opt['name'], getattr(self, opt['name']))
+        for opt in self.NATIVE_OPTIONS:
+            setattr(self,
+                    opt,
+                    self.get_ceph_option(opt))
+            self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
     def _reconfig_ssh(self):
         temp_files = []
         ssh_options = []
 
         # ssh_config
-        ssh_config_fname = self.get_localized_module_option("ssh_config_file")
+        ssh_config_fname = self.ssh_config_file
         ssh_config = self.get_store("ssh_config")
         if ssh_config is not None or ssh_config_fname is None:
             if not ssh_config:
@@ -345,7 +377,58 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
         return orchestrator.TrivialReadCompletion(nodes)
 
-    def _run_ceph_daemon(self, host, entity, command, args, stdin=None):
+    def describe_service(self, service_type=None, service_id=None,
+                         node_name=None, refresh=False):
+
+        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
+            raise orchestrator.OrchestratorValidationError(
+                service_type + " unsupported")
+
+        #daemons = self.get_daemons()
+        daemons = {}
+        for host, _ in self._get_hosts():
+            self.log.info("refresh stale daemons for '{}'".format(host))
+            out, code = self._run_ceph_daemon(
+                host, 'mon', 'ls', [], no_fsid=True)
+            daemons[host] = json.loads(''.join(out))
+
+        result = []
+        for host, ls in daemons.items():
+            for d in ls:
+                if not d['style'].startswith('ceph-daemon'):
+                    self.log.debug('ignoring non-ceph-daemon on %s: %s' % (host, d))
+                    continue
+                if d['fsid'] != self._cluster_fsid:
+                    self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
+                    continue
+                self.log.debug('including %s' % d)
+                sd = orchestrator.ServiceDescription()
+                sd.service_type = d['name'].split('.')[0]
+                if service_type and service_type != sd.service_type:
+                    continue
+                if '.' in d['name']:
+                    sd.service_instance = d['name'].split('.')[1]
+                else:
+                    sd.service_instance = host  # e.g., crash
+                if service_id and service_id != sd.service_instance:
+                    continue
+                sd.nodename = host
+                sd.container_id = d['container_id']
+                sd.version = d['version']
+                sd.status_desc = d['state']
+                sd.status = {
+                    'running': 1,
+                    'inactive': 0,
+                    'error': -1,
+                    'unknown': -1,
+                }[d['state']]
+                result.append(sd)
+
+        return orchestrator.TrivialReadCompletion(result)
+
+    def _run_ceph_daemon(self, host, entity, command, args,
+                         stdin=None,
+                         no_fsid=False):
         """
         Run ceph-daemon on the remote host with the given command + args
         """
@@ -363,9 +446,11 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             final_args = [
                 '--image', image,
-                command,
-                '--fsid', self._cluster_fsid,
-            ] + args
+                command
+            ]
+            if not no_fsid:
+                final_args += ['--fsid', self._cluster_fsid]
+            final_args += args
 
             script = 'injected_argv = ' + json.dumps(final_args) + '\n'
             if stdin:
@@ -408,11 +493,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         def run(host, host_info):
             # type: (str, orchestrator.OutdatableData) -> orchestrator.InventoryNode
 
-            timeout_min = int(self.get_module_option(
-                "inventory_cache_timeout_min",
-                self._DEFAULT_INVENTORY_CACHE_TIMEOUT_MIN))
 
-            if host_info.outdated(timeout_min) or refresh:
+            if host_info.outdated(self.inventory_cache_timeout) or refresh:
                 self.log.info("refresh stale inventory for '{}'".format(host))
                 out, code = self._run_ceph_daemon(
                     host, 'osd',

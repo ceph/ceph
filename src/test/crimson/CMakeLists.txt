@@ -19,6 +19,9 @@ add_ceph_test(unittest_seastar_messenger
   unittest_seastar_messenger --memory 256M --smp 1)
 target_link_libraries(unittest_seastar_messenger crimson)
 
+add_executable(test_seastar_messenger_peer test_messenger_peer.cc)
+target_link_libraries(test_seastar_messenger_peer ceph-common global ${ALLOC_LIBS})
+
 add_executable(perf_crimson_msgr perf_crimson_msgr.cc)
 target_link_libraries(perf_crimson_msgr crimson)
 

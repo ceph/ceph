@@ -3258,12 +3258,15 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  // compat kludge for legacy clients trying to tell commands that are new
-  if (!HAVE_FEATURE(m->get_connection()->get_features(), SERVER_OCTOPUS) &&
+  // compat kludge for legacy clients trying to tell commands that are
+  // new.  see bottom of MonCommands.h.  we need to handle both (1)
+  // pre-octopus clients and (2) octopus clients with a mix of pre-octopus
+  // and octopus mons.
+  if ((!HAVE_FEATURE(m->get_connection()->get_features(), SERVER_OCTOPUS) ||
+       monmap->min_mon_release < ceph_release_t::octopus) &&
       (prefix == "injectargs" ||
        prefix == "smart" ||
        prefix == "mon_status" ||
-       prefix == "sync_force" ||
        prefix == "heap")) {
     dout(5) << __func__ << " passing command to tell/asok" << dendl;
     cct->get_admin_socket()->queue_tell_command(m);

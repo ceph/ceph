@@ -150,7 +150,7 @@ def cat_file(level, filename):
     print("<EOF>")
 
 
-def vstart(new, opt=""):
+def vstart(new, opt="-o osd_pool_default_pg_autoscale_mode=off"):
     print("vstarting....", end="")
     NEW = new and "-n" or "-N"
     call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
@@ -1542,7 +1542,10 @@ def main(argv):
                             logging.debug("FOUND: {json} in {osd} has value '{val}'".format(osd=osd, json=JSON, val=out))
                             found += 1
                         except subprocess.CalledProcessError as e:
-                            if "No such file or directory" not in e.output and "No data available" not in e.output:
+                            logging.debug("Error message: {output}".format(output=e.output))
+                            if "No such file or directory" not in e.output and \
+                               "No data available" not in e.output and \
+                               "not contained by pg" not in e.output:
                                 raise
                 # Assuming k=2 m=1 for the default ec pool
                 if found != 3:

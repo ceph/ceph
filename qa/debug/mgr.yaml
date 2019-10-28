@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        debug mon: 20
+      mgr:
+        debug mgr: 20
+        debug ms: 1
+      client:
+        debug client: 20
+        debug mgrc: 20
+        debug ms: 1
+      osd:
+        debug mgrc: 20
+      mds:
+        debug mgrc: 20
