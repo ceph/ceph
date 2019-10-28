@@ -1,12 +1,32 @@
 #!/bin/bash -ex
 
+# respawn ourselves with a modified path with both python2 and python3
+PYTHONS="python3 python2"  # which pythons we test
+if [ -z "$PYTHON_KLUDGE" ]; then
+   TMPBINDIR=`mktemp -d $TMPDIR`
+   trap "rm -rf $TMPBINDIR" TERM HUP INT
+
+   for p in $PYTHONS; do
+       ln -s `which $p` $TMPBINDIR/python
+       echo "=== re-running with $p ==="
+       PYTHON_KLUDGE=1 PATH=$TMPBINDIR:$PATH $0
+       rm $TMPBINDIR/python
+   done
+   rm -rf $TMPBINDIR
+   echo "PASS with all of: $PYTHONS"
+   exit 0
+fi
+
+echo "path is $PATH"
+ls -al `which python`
+
 [ -z "$SUDO" ] && SUDO=sudo
 [ -x ../src/ceph-daemon ] && CEPH_DAEMON=../src/ceph-daemon
 [ -x ./ceph-daemon ] && CEPH_DAEMON=.ceph-daemon
 which ceph-daemon && CEPH_DAEMON=$(which ceph-daemon)
 
 FSID='00000000-0000-0000-0000-0000deadbeef'
-IMAGE='ceph/daemon-base:latest-master'
+IMAGE='ceph/daemon-base:latest-master-devel'
 
 # clean up previous run(s)?
 $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID --force
