@@ -784,15 +784,15 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         })
         return self._create_daemon('mds', mds_id, host, keyring)
 
-    def remove_mds(self, mds_id):
+    def remove_mds(self, name):
         daemons = self._get_services('mds')
         results = []
         for d in daemons:
-            if d.service_instance == mds_id or d.service_instance.startswith(mds_id + '-'):
+            if d.service_instance == name or d.service_instance.startswith(name + '-'):
                 results.append(self._worker_pool.apply_async(
                     self._remove_mds, (d.service_instance, d.nodename)))
         if not results:
-            raise RuntimeError('Unable to find mds.%s[-*] daemon(s)' % mds_id)
+            raise RuntimeError('Unable to find mds.%s[-*] daemon(s)' % name)
         return SSHWriteCompletion(results)
 
     def _remove_mds(self, mds_id, host):

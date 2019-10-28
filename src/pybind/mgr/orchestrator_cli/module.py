@@ -292,10 +292,10 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds rm',
-                "name=svc_id,type=CephString",
-                'Remove an MDS service')
-    def _mds_rm(self, svc_id):
-        completion = self.remove_mds(svc_id)
+                "name=name,type=CephString",
+                'Remove an MDS service (mds id or fs_name)')
+    def _mds_rm(self, name):
+        completion = self.remove_mds(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
