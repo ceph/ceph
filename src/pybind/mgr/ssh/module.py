@@ -843,7 +843,10 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             raise RuntimeError("must specify at least %d hosts" % spec.count)
         daemons = self._get_services('mds')
         results = []
+        num_added = 0
         for host in spec.placement.nodes:
+            if num_added >= spec.count:
+                break
             mds_id = self.get_unique_name(daemons, spec.name)
             self.log.debug('placing mds.%s on host %s' % (mds_id, host))
             results.append(
@@ -855,6 +858,25 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             sd.service_type = 'mds'
             sd.nodename = host
             daemons.append(sd)
+            num_added += 1
+        return SSHWriteCompletion(results)
+
+    def update_mds(self, spec):
+        daemons = [
+            d for d in self._get_services('mds')
+            if d.service_instance.startswith(spec.name + '-')
+        ]
+        results = []
+        if len(daemons) > spec.count:
+            # remove some
+            to_remove = len(daemons) - spec.count
+            for d in daemons[0:to_remove]:
+                results.append(self._worker_pool.apply_async(
+                    self._remove_mds, (d.service_instance, d.nodename)))
+        elif len(daemons) < spec.count:
+            # add some
+            spec.count -= len(daemons)
+            return self.add_mds(spec)
         return SSHWriteCompletion(results)
 
     def _create_mds(self, mds_id, host):
