@@ -460,7 +460,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             out, err, code = remoto.process.check(
                 conn,
-                ['/usr/bin/python3', '-u'],
+                ['/usr/bin/python', '-u'],
                 stdin=script.encode('utf-8'))
             self.log.debug('exit code %s out %s err %s' % (code, out, err))
             return out, code
