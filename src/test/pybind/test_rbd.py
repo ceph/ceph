@@ -762,6 +762,15 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         eq([], list(self.image.list_snaps()))
 
+    def test_remove_snap2(self):
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+        self.image.protect_snap('snap1')
+        assert(self.image.is_protected_snap('snap1'))
+        self.image.remove_snap2('snap1',1)
+        eq([], list(self.image.list_snaps()))
+
     def test_remove_snap_by_id(self):
 	eq([], list(self.image.list_snaps()))
 	self.image.create_snap('snap1')
