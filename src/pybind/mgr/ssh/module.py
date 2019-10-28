@@ -377,14 +377,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
         return orchestrator.TrivialReadCompletion(nodes)
 
-    def describe_service(self, service_type=None, service_id=None,
-                         node_name=None, refresh=False):
-
-        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
-            raise orchestrator.OrchestratorValidationError(
-                service_type + " unsupported")
-
-        #daemons = self.get_daemons()
+    def _get_services(self, service_type=None, service_id=None,
+                      node_name=None):
         daemons = {}
         for host, _ in self._get_hosts():
             self.log.info("refresh stale daemons for '{}'".format(host))
@@ -423,7 +417,14 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     'unknown': -1,
                 }[d['state']]
                 result.append(sd)
+        return result
 
+    def describe_service(self, service_type=None, service_id=None,
+                         node_name=None, refresh=False):
+        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
+            raise orchestrator.OrchestratorValidationError(
+                service_type + " unsupported")
+        result = self._get_services(service_type, service_id, node_name)
         return orchestrator.TrivialReadCompletion(result)
 
     def _run_ceph_daemon(self, host, entity, command, args,
@@ -784,16 +785,15 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._create_daemon('mds', mds_id, host, keyring)
 
     def remove_mds(self, mds_id):
-        # FIXME: this location should come from the inventory, not
-        # mds_metadata, so that we can remove/clean-up daemons that
-        # aren't correctly starting.
-        self.log.debug('metadtata %s' % self.get('mds_metadata'))
-        host = self.get('mds_metadata').get(mds_id, {}).get('hostname')
-        if not host:
-            raise RuntimeError('Unable to identify location of mds.%s' % mds_id)
-        return SSHWriteCompletion([
-            self._worker_pool.apply_async(self._remove_mds, (mds_id, host))
-        ])
+        daemons = self._get_services('mds')
+        results = []
+        for d in daemons:
+            if d.service_instance == mds_id or d.service_instance.startswith(mds_id + '-'):
+                results.append(self._worker_pool.apply_async(
+                    self._remove_mds, (d.service_instance, d.nodename)))
+        if not results:
+            raise RuntimeError('Unable to find mds.%s[-*] daemon(s)' % mds_id)
+        return SSHWriteCompletion(results)
 
     def _remove_mds(self, mds_id, host):
         name = 'mds.' + mds_id
