@@ -3,8 +3,10 @@ import errno
 import logging
 from functools import wraps
 
+import string
 import six
 import os
+import random
 import tempfile
 import multiprocessing.pool
 
@@ -182,6 +184,22 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     opt,
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
+
+    def get_unique_name(self, existing, prefix=None):
+        """
+        Generate a unique random service name
+        """
+        while True:
+            if prefix:
+                name = prefix + '-'
+            else:
+                name = ''
+            name += ''.join(random.choice(string.ascii_lowercase)
+                            for i in range(6))
+            if len([d for d in existing if d.service_instance == name]):
+                self.log('name %s exists, trying again', name)
+                continue
+            return name
 
     def _reconfig_ssh(self):
         temp_files = []
