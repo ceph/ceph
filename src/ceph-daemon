@@ -32,14 +32,14 @@ You can invoke ceph-daemon in two ways:
 
 import argparse
 try:
-    from configparser import ConfigParser   # py3
-except ImportError:
     from ConfigParser import ConfigParser   # py2
+except ImportError:
+    from configparser import ConfigParser   # py3
 import fcntl
 try:
-    from io import StringIO                 # py3
-except:
     from StringIO import StringIO           # py2
+except:
+    from io import StringIO                 # py3
 import json
 import logging
 import os
