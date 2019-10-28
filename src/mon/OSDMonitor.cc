@@ -3087,6 +3087,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   }
 
   set<string> reporters_by_subtree;
+  set<string> reporters_by_subtree_addr;//   get_nonce() osdmap.get_addr(from)
   auto reporter_subtree_level = g_conf().get_val<string>("mon_osd_reporter_subtree_level");
   utime_t orig_grace(g_conf()->osd_heartbeat_grace, 0);
   utime_t max_failed_since = fi.get_failed_since();
@@ -3122,9 +3123,9 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
       auto reporter_loc = osdmap.crush->get_full_location(p->first);
       if (auto iter = reporter_loc.find(reporter_subtree_level);
           iter == reporter_loc.end()) {
-        reporters_by_subtree.insert("osd." + to_string(p->first));
+        reporters_by_subtree_addr.insert(osdmap.get_addr(p->first).get_addr_to_string());
       } else {
-        reporters_by_subtree.insert(iter->second);
+        reporters_by_subtree_addr.insert(osdmap.get_addr(p->first).get_addr_to_string());
       }
       if (g_conf()->mon_osd_adjust_heartbeat_grace) {
         const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
@@ -3150,17 +3151,15 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
 
-  if (failed_for >= grace &&
-      reporters_by_subtree.size() >= g_conf().get_val<uint64_t>("mon_osd_min_down_reporters")) {
-    dout(1) << " we have enough reporters to mark osd." << target_osd
-	    << " down" << dendl;
+  if (failed_for >= grace && (int)reporters_by_subtree_addr.size()>= g_conf().get_val<uint64_t>("mon_osd_min_down_reporters")) {
+    dout(1) << " we have enough reporters to mark osd." << target_osd<<  dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
     mon->clog->info() << "osd." << target_osd << " failed ("
 		      << osdmap.crush->get_full_location_ordered_string(
 			target_osd)
 		      << ") ("
-		      << (int)reporters_by_subtree.size()
+		      << (int)reporters_by_subtree_addr.size()
 		      << " reporters from different "
 		      << reporter_subtree_level << " after "
 		      << failed_for << " >= grace " << grace << ")";
@@ -7860,12 +7859,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   int64_t uf = 0;  // micro-f
   cmd_getval(cct, cmdmap, "val", val);
 
-  // create list of properties that use SI units
-  std::set<std::string> si_items = {"target_max_objects"};
-  // create list of properties that use IEC units
-  std::set<std::string> iec_items = {"target_max_bytes", "target_size_bytes"};
-
-  if (si_items.count(var)) {
+  auto si_options = {"target_max_objects"};
+  auto iec_options = {"target_max_bytes", "target_size_bytes"};
+  if (count(begin(si_options), end(si_options), var)) {
     n = strict_si_cast<int64_t>(val.c_str(), &interr);
   } else if (iec_items.count(var)) {
     n = strict_iec_cast<int64_t>(val.c_str(), &interr);

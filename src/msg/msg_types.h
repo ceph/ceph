@@ -442,6 +442,8 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0, int type=0);
 
+  const std::string get_addr_to_string() const;//get IP from entity_addr_t,return the IP string
+  
   void decode_legacy_addr_after_marker(ceph::buffer::list::const_iterator& bl)
   {
     using ceph::decode;

@@ -175,6 +175,25 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
   return true;
 }
 
+const std::string entity_addr_t::get_addr_to_string() const
+{
+  char buf[NI_MAXHOST] = { 0 };
+  char serv[NI_MAXSERV] = { 0 };
+  size_t hostlen;
+
+  const sockaddr_storage& ss = addr;
+  if (ss.ss_family == AF_INET)
+    hostlen = sizeof(struct sockaddr_in);
+  else if (ss.ss_family == AF_INET6)
+    hostlen = sizeof(struct sockaddr_in6);
+  else
+    hostlen = sizeof(struct sockaddr_storage);
+  getnameinfo((struct sockaddr *)&ss, hostlen, buf, sizeof(buf),
+              serv, sizeof(serv),
+              NI_NUMERICHOST | NI_NUMERICSERV);
+  return std::string(buf);
+}
+
 ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
   if (addr.type == entity_addr_t::TYPE_NONE) {
