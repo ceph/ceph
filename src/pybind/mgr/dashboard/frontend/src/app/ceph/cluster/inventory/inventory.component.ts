@@ -1,4 +1,5 @@
-import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
@@ -18,6 +19,8 @@ import { Device, InventoryNode } from './inventory.model';
 export class InventoryComponent implements OnChanges, OnInit {
   @ViewChild(TableComponent, { static: false })
   table: TableComponent;
+  @ViewChild('osds', { static: true })
+  osds: TemplateRef<any>;
 
   @Input() hostname = '';
 
@@ -69,6 +72,12 @@ export class InventoryComponent implements OnChanges, OnInit {
         name: this.i18n('Model'),
         prop: 'model',
         flexGrow: 1
+      },
+      {
+        name: this.i18n('OSDs'),
+        prop: 'osd_ids',
+        flexGrow: 1,
+        cellTemplate: this.osds
       }
     ];
 
