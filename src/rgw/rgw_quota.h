@@ -108,8 +108,7 @@ public:
 			  uint64_t num_objs, uint64_t size) = 0;
 
   virtual void check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
-				   const rgw_bucket& bucket, uint64_t num_objs,
-				   bool& need_resharding, uint32_t *suggested_num_shards) = 0;
+				   uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) = 0;
 
   virtual void update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 

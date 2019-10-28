@@ -973,8 +973,7 @@ public:
   }
 
   void check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
-			   const rgw_bucket& bucket, uint64_t num_objs,
-			   bool& need_resharding, uint32_t *suggested_num_shards) override
+			   uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     if (num_objs > num_shards * max_objs_per_shard) {
       ldout(store->ctx(), 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
