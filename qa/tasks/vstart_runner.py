@@ -638,7 +638,7 @@ class LocalKernelMount(KernelMount):
         rproc.wait()
         self.mounted = False
 
-    def mount(self, mount_path=None, mount_fs_name=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mount_options=[]):
         self.setupfs(name=mount_fs_name)
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
@@ -661,6 +661,9 @@ class LocalKernelMount(KernelMount):
 
         if mount_fs_name is not None:
             opts += ",mds_namespace={0}".format(mount_fs_name)
+
+        for mount_opt in mount_options:
+            opts += ",{0}".format(mount_opt)
 
         self.client_remote.run(
             args=[
@@ -800,7 +803,7 @@ class LocalFuseMount(FuseMount):
         if self.is_mounted():
             super(LocalFuseMount, self).umount()
 
-    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         if mountpoint is not None:
             self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
@@ -840,6 +843,8 @@ class LocalFuseMount(FuseMount):
 
         if mount_fs_name is not None:
             prefix += ["--client_mds_namespace={0}".format(mount_fs_name)]
+
+        prefix += mount_options;
 
         self.fuse_daemon = self.client_remote.run(args=
                                             prefix + [
