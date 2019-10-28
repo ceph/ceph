@@ -841,15 +841,20 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_mds(self, spec):
         if len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
-        n=0
+        daemons = self._get_services('mds')
         results = []
         for host in spec.placement.nodes:
-            mds_id = spec.name + '-%d' % n
+            mds_id = self.get_unique_name(daemons, spec.name)
             self.log.debug('placing mds.%s on host %s' % (mds_id, host))
             results.append(
                 self._worker_pool.apply_async(self._create_mds, (mds_id, host))
             )
-            n += 1
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.ServiceDescription()
+            sd.service_instance = mds_id
+            sd.service_type = 'mds'
+            sd.nodename = host
+            daemons.append(sd)
         return SSHWriteCompletion(results)
 
     def _create_mds(self, mds_id, host):
