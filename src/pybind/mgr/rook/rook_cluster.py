@@ -454,6 +454,20 @@ class RookCluster(object):
 
         return "Updated mon count to {0}".format(newcount)
 
+    def update_mds_count(self, svc_id, newcount):
+        patch = [{"op": "replace", "path": "/spec/metadataServer/activeCount",
+                  "value": newcount}]
+
+        try:
+            self.rook_api_patch(
+                "cephfilesystems/{0}".format(svc_id),
+                body=patch)
+        except ApiException as e:
+            log.exception("API exception: {0}".format(e))
+            raise ApplyException(
+                "Failed to update NFS server count for {0}: {1}".format(svc_id, e))
+        return "Updated NFS server count for {0} to {1}".format(svc_id, newcount)
+
     def update_nfs_count(self, svc_id, newcount):
         patch = [{"op": "replace", "path": "/spec/server/active", "value": newcount}]
 
