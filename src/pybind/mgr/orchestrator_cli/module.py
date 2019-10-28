@@ -251,6 +251,21 @@ Usage:
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_write_cli('orchestrator mds update',
+                "name=fs_name,type=CephString "
+                "name=num,type=CephInt,req=true "
+                "name=hosts,type=CephString,n=N,req=false",
+                'Update the number of MDS instances for the given fs_name')
+    def _mds_update(self, fs_name, num, hosts=None):
+        spec = orchestrator.StatelessServiceSpec(
+            fs_name,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
+        completion = self.update_mds(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_write_cli('orchestrator rgw add',
                 'name=zone_name,type=CephString,req=false',
                 'Create an RGW service. A complete <rgw_spec> can be provided'\
