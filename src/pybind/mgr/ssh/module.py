@@ -665,11 +665,32 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             return "Created {} on host '{}'".format(name, host)
 
         except Exception as e:
-            self.log.error("create_mgr({}): error: {}".format(host, e))
+            self.log.error("create_daemon({}): error: {}".format(host, e))
             raise
 
         finally:
-            self.log.info("create_mgr({}): finished".format(host))
+            self.log.info("create_daemon({}): finished".format(host))
+            conn.exit()
+
+    def _remove_daemon(self, daemon_type, daemon_id, host):
+        """
+        Remove a daemon
+        """
+        conn = self._get_connection(host)
+        try:
+            name = '%s.%s' % (daemon_type, daemon_id)
+
+            out, code = self._run_ceph_daemon(host, name, 'rm-daemon', [])
+            self.log.debug('remove_daemon code %s out %s' % (code, out))
+
+            return "Removed {} on host '{}'".format(name, host)
+
+        except Exception as e:
+            self.log.error("remove_daemon({}): error: {}".format(host, e))
+            raise
+
+        finally:
+            self.log.info("remove_daemon({}): finished".format(host))
             conn.exit()
 
     def _create_mon(self, host, network):
@@ -727,53 +748,93 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return SSHWriteCompletion(results)
 
-    def _create_mgr(self, host):
+    def _create_mgr(self, host, name):
         """
         Create a new manager instance on a host.
         """
-        self.log.info("create_mgr({}): starting".format(host))
+        self.log.info("create_mgr({}, mgr.{}): starting".format(host, name))
 
         # get mgr. key
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % host,
+            'entity': 'mgr.%s' % name,
             'caps': ['mon', 'allow profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
 
-        return self._create_daemon('mgr', host, host, keyring)
+        return self._create_daemon('mgr', name, host, keyring)
+
+    def _remove_mgr(self, mgr_id, host):
+        name = 'mgr.' + mgr_id
+        out, code = self._run_ceph_daemon(
+            host, name, 'rm-daemon',
+            ['--name', name])
+        self.log.debug('remove_mgr code %s out %s' % (code, out))
+        return "Removed {} from host '{}'".format(name, host)
 
     def update_mgrs(self, num, hosts):
         """
         Adjust the number of cluster managers.
         """
-        # current support limited to adding managers.
-        mgr_map = self.get("mgr_map")
-        num_mgrs = 1 if mgr_map["active_name"] else 0
-        num_mgrs += len(mgr_map["standbys"])
+        daemons = self._get_services('mgr')
+        num_mgrs = len(daemons)
         if num == num_mgrs:
             return SSHWriteCompletionReady("The requested number of managers exist.")
-        if num < num_mgrs:
-            raise NotImplementedError("Removing managers is not supported")
 
         # check that all the hosts are registered
         self._require_hosts(hosts)
 
-        # we assume explicit placement by which there are the same number of
-        # hosts specified as the size of increase in number of daemons.
-        num_new_mgrs = num - num_mgrs
-        if len(hosts) < num_new_mgrs:
-            raise RuntimeError("Error: {} hosts provided, expected {}".format(
-                len(hosts), num_new_mgrs))
-
-        self.log.info("creating {} managers on hosts: '{}'".format(
-            num_new_mgrs, ",".join(hosts)))
-
         results = []
-        for i in range(num_new_mgrs):
-            result = self._worker_pool.apply_async(self._create_mgr, (hosts[i],))
-            results.append(result)
+        if num < num_mgrs:
+            num_to_remove = num_mgrs - num
+
+            # first try to remove unconnected mgr daemons that the
+            # cluster doesn't see
+            connected = []
+            mgr_map = self.get("mgr_map")
+            if mgr_map["active_name"]:
+                connected.append(mgr_map['active_name'])
+            for standby in mgr_map['standbys']:
+                connected.append(standby['name'])
+            for daemon in daemons:
+                if daemon.service_instance not in connected:
+                    result = self._worker_pool.apply_async(
+                        self._remove_mgr,
+                        (daemon.service_instance, daemon.nodename))
+                    results.append(result)
+                    num_to_remove -= 1
+                    if num_to_remove == 0:
+                        break
+
+            # otherwise, remove *any* mgr
+            if num_to_remove > 0:
+                for daemon in daemons:
+                    result = self._worker_pool.apply_async(
+                        self._remove_mgr,
+                        (daemon.service_instance, daemon.nodename))
+                    results.append(result)
+                    num_to_remove -= 1
+                    if num_to_remove == 0:
+                        break
+
+        else:
+            # we assume explicit placement by which there are the same number of
+            # hosts specified as the size of increase in number of daemons.
+            num_new_mgrs = num - num_mgrs
+            if len(hosts) < num_new_mgrs:
+                raise RuntimeError(
+                    "Error: {} hosts provided, expected {}".format(
+                        len(hosts), num_new_mgrs))
+
+            self.log.info("creating {} managers on hosts: '{}'".format(
+                num_new_mgrs, ",".join(hosts)))
+
+            for i in range(num_new_mgrs):
+                name = self.get_unique_name(daemons)
+                result = self._worker_pool.apply_async(self._create_mgr,
+                                                       (hosts[i], name))
+                results.append(result)
 
         return SSHWriteCompletion(results)
 
