@@ -47,6 +47,8 @@ REVISION = 2
 # Version 3:
 #   - added CephFS metadata (how many MDSs, fs features, how many data pools)
 #   - remove crush_rule
+#   - added CephFS metadata (how many MDSs, fs features, how many data pools,
+#     how much metadata is cached)
 #   - added more pool metadata (rep vs ec, cache tiering mode, ec profile)
 
 class Module(MgrModule):
@@ -271,6 +273,14 @@ class Module(MgrModule):
             r.append('basic')
         return r
 
+    def get_latest(self, daemon_type, daemon_name, stat):
+        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+        #self.log.error("get_latest {0} data={1}".format(stat, data))
+        if data:
+            return data[-1][1]
+        else:
+            return 0
+
     def compile_report(self, channels=[]):
         if not channels:
             channels = self.get_active_channels()
@@ -359,6 +369,22 @@ class Module(MgrModule):
             num_mds = len(fs_map['standbys'])
             for fsm in fs_map['filesystems']:
                 fs = fsm['mdsmap']
+                num_sessions = 0
+                cached_ino = 0
+                cached_dn = 0
+                cached_cap = 0
+                subtrees = 0
+                for gid, mds in fs['info'].items():
+                    num_sessions += self.get_latest('mds', mds['name'],
+                                                    'mds_sessions.session_count')
+                    cached_ino += self.get_latest('mds', mds['name'],
+                                                  'mds_mem.ino')
+                    cached_dn += self.get_latest('mds', mds['name'],
+                                                 'mds_mem.dn')
+                    cached_cap += self.get_latest('mds', mds['name'],
+                                                  'mds_mem.cap')
+                    subtrees += self.get_latest('mds', mds['name'],
+                                                'mds.subtrees')
                 report['fs']['filesystems'].append({
                     'max_mds': fs['max_mds'],
                     'ever_allowed_features': fs['ever_allowed_features'],
@@ -369,6 +395,11 @@ class Module(MgrModule):
                         [mds for gid, mds in fs['info'].items()
                          if mds['state'] == 'up:standby-replay']),
                     'num_mds': len(fs['info']),
+                    'num_sessions': num_sessions,
+                    'cached_inos': cached_ino,
+                    'cached_dns': cached_dn,
+                    'cached_caps': cached_cap,
+                    'cached_subtrees': subtrees,
                     'balancer_enabled': len(fs['balancer']) > 0,
                     'num_data_pools': len(fs['data_pools']),
                     'standby_count_wanted': fs['standby_count_wanted'],
