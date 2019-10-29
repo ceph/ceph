@@ -524,9 +524,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
-    MDSCommand("injectargs name=injected_args,type=CephString,n=N", "inject configuration arguments into running MDS"),
-    MDSCommand("config set name=key,type=CephString name=value,type=CephString", "Set a configuration option at runtime (not persistent)"),
-    MDSCommand("config unset name=key,type=CephString", "Unset a configuration option at runtime (not persistent)"),
     MDSCommand("exit", "Terminate this MDS"),
     MDSCommand("respawn", "Restart this MDS"),
     MDSCommand("session kill name=session_id,type=CephInt", "End a client session"),
@@ -541,7 +538,6 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 	"Config a client session"),
     MDSCommand("damage ls", "List detected metadata damage"),
     MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
-    MDSCommand("version", "report version of MDS"),
     MDSCommand("heap "
         "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats",
         "show heap usage info (available only if compiled with tcmalloc)"),
@@ -627,48 +623,7 @@ int MDSDaemon::_handle_command(
   }
 
   cmd_getval(cct, cmdmap, "format", format);
-  if (prefix == "version") {
-    if (f) {
-      f->open_object_section("version");
-      f->dump_string("version", pretty_version_to_str());
-      f->close_section();
-      f->flush(ds);
-    } else {
-      ds << pretty_version_to_str();
-    }
-  } else if (prefix == "injectargs") {
-    vector<string> argsvec;
-    cmd_getval(cct, cmdmap, "injected_args", argsvec);
-
-    if (argsvec.empty()) {
-      r = -EINVAL;
-      ss << "ignoring empty injectargs";
-      goto out;
-    }
-    string args = argsvec.front();
-    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
-      args += " " + *a;
-    r = cct->_conf.injectargs(args, &ss);
-  } else if (prefix == "config set") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    std::string val;
-    cmd_getval(cct, cmdmap, "value", val);
-    r = cct->_conf.set_val(key, val, &ss);
-    if (r == 0) {
-      cct->_conf.apply_changes(nullptr);
-    }
-  } else if (prefix == "config unset") {
-    std::string key;
-    cmd_getval(cct, cmdmap, "key", key);
-    r = cct->_conf.rm_val(key);
-    if (r == 0) {
-      cct->_conf.apply_changes(nullptr);
-    }
-    if (r == -ENOENT) {
-      r = 0; // idempotent
-    }
-  } else if (prefix == "exit") {
+  if (prefix == "exit") {
     // We will send response before executing
     ss << "Exiting...";
     *run_later = new SuicideLater(this);
