@@ -68,7 +68,10 @@ truncate it like so:
 
 ::
 
-    cephfs-journal-tool journal reset
+    cephfs-journal-tool [--rank=N] journal reset
+
+Specify the MDS rank using the ``--rank`` option when the file system has/had
+multiple active MDS.
 
 .. warning::
 
