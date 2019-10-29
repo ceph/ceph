@@ -747,6 +747,12 @@ void PrimaryLogPG::maybe_force_recovery()
     }
   }
 
+  hobject_t head = soid.get_head();
+  if (soid.is_snap() && pg_log.get_missing().is_missing(head)) {
+    dout(10) << __func__ << " the oldest object is snap, recover head firstly, " << soid << dendl;
+    soid = head; // recover head firstly
+  }
+
   // recover it
   if (soid != hobject_t())
     maybe_kick_recovery(soid);
