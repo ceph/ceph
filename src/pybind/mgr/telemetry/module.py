@@ -70,6 +70,11 @@ class Module(MgrModule):
             'default': 'https://telemetry.ceph.com/report'
         },
         {
+            'name': 'device_url',
+            'type': 'str',
+            'default': 'https://telemetry.ceph.com/device'
+        },
+        {
             'name': 'enabled',
             'type': 'bool',
             'default': False
@@ -143,7 +148,8 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
-            "cmd": "telemetry send",
+            "cmd": "telemetry send "
+                   "name=endpoint,type=CephChoices,strings=ceph|device,n=N,req=false",
             "desc": "Force sending data to Ceph telemetry",
             "perm": "rw"
         },
@@ -304,10 +310,11 @@ class Module(MgrModule):
 
         devices = self.get('devices')['devices']
 
-        res = {}
+        res = {}  # anon-host-id -> anon-devid -> { timestamp -> record }
         for d in devices:
             devid = d['devid']
             try:
+                # this is a map of stamp -> {device info}
                 m = self.remote('devicehealth', 'get_recent_device_metrics',
                                 devid, min_sample)
             except:
@@ -322,7 +329,8 @@ class Module(MgrModule):
             if not anon_host:
                 anon_host = str(uuid.uuid1())
                 self.set_store('host-id/%s' % host, anon_host)
-            m['host_id'] = anon_host
+            for dev, rep in m.items():
+                rep['host_id'] = anon_host
 
             # anonymize device id
             (vendor, model, serial) = devid.split('_')
@@ -330,7 +338,6 @@ class Module(MgrModule):
             if not anon_devid:
                 anon_devid = '%s_%s_%s' % (vendor, model, uuid.uuid1())
                 self.set_store('devid-id/%s' % devid, anon_devid)
-
             self.log.info('devid %s / %s, host %s / %s' % (devid, anon_devid,
                                                            host, anon_host))
 
@@ -339,7 +346,9 @@ class Module(MgrModule):
                 if k in m:
                     m.pop(k)
 
-            res[anon_devid] = m
+            if anon_host not in res:
+                res[anon_host] = {}
+            res[anon_host][anon_devid] = m
         return res
 
     def compile_report(self, channels=[]):
@@ -432,24 +441,75 @@ class Module(MgrModule):
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
 
-        if 'device' in channels:
-            report['devices'] = self.gather_device_report()
+        # NOTE: We do not include the 'device' channel in this report; it is
+        # sent to a different endpoint.
 
         return report
 
-    def send(self, report):
-        self.log.info('Upload report to: %s', self.url)
+    def send(self, report, endpoint=None):
+        if not endpoint:
+            endpoint = ['ceph', 'device']
+        failed = []
+        success = []
         proxies = dict()
+        self.log.debug('Send endpoints %s' % endpoint)
         if self.proxy:
-            self.log.info('Using HTTP(S) proxy: %s', self.proxy)
+            self.log.info('Send using HTTP(S) proxy: %s', self.proxy)
             proxies['http'] = self.proxy
             proxies['https'] = self.proxy
-
-        resp = requests.put(url=self.url, json=report, proxies=proxies)
-        if not resp.ok:
-            self.log.error("Report send failed: %d %s %s" %
-                           (resp.status_code, resp.reason, resp.text))
-        return resp
+        for e in endpoint:
+            if e == 'ceph':
+                self.log.info('Sending ceph report to: %s', self.url)
+                resp = requests.put(url=self.url, json=report, proxies=proxies)
+                if not resp.ok:
+                    self.log.error("Report send failed: %d %s %s" %
+                                   (resp.status_code, resp.reason, resp.text))
+                    failed.append('Failed to send report to %s: %d %s %s' % (
+                        self.url,
+                        resp.status_code,
+                        resp.reason,
+                        resp.text
+                    ))
+                else:
+                    now = int(time.time())
+                    self.last_upload = now
+                    self.set_store('last_upload', str(now))
+                    success.append('Ceph report sent to {0}'.format(self.url))
+                    self.info('Sent report to {0}'.format(self.url))
+            elif e == 'device':
+                if 'device' in self.get_active_channels():
+                    self.log.info('hi')
+                    self.log.info('Sending device report to: %s',
+                                  self.device_url)
+                    devices = self.gather_device_report()
+                    num_devs = 0
+                    num_hosts = 0
+                    for host, ls in devices.items():
+                        self.log.debug('host %s devices %s' % (host, ls))
+                        if not len(ls):
+                            continue
+                        resp = requests.put(url=self.device_url, json=ls,
+                                            proxies=proxies)
+                        if not resp.ok:
+                            self.log.error(
+                                "Device report failed: %d %s %s" %
+                                (resp.status_code, resp.reason, resp.text))
+                            failed.append(
+                                'Failed to send devices to %s: %d %s %s' % (
+                                    self.device_url,
+                                    resp.status_code,
+                                    resp.reason,
+                                    resp.text
+                                ))
+                        else:
+                            num_devs += len(ls)
+                            num_hosts += 1
+                    if num_devs:
+                        success.append('Reported %d devices across %d hosts' % (
+                            num_devs, len(devices)))
+        if failed:
+            return 1, '', '\n'.join(success + failed)
+        return 0, '', '\n'.join(success)
 
     def handle_command(self, inbuf, command):
         if command['prefix'] == 'telemetry status':
@@ -469,15 +529,7 @@ class Module(MgrModule):
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
-            resp = self.send(self.last_report)
-            if resp.ok:
-                return 0, 'Report sent to {0}'.format(self.url), ''
-            return 1, '', 'Failed to send report to %s: %d %s %s' % (
-                self.url,
-                resp.status_code,
-                resp.reason,
-                resp.text
-            )
+            return self.send(self.last_report, command.get('endpoint'))
 
         elif command['prefix'] == 'telemetry show':
             report = self.compile_report(
@@ -545,15 +597,7 @@ class Module(MgrModule):
                 except:
                     self.log.exception('Exception while compiling report:')
 
-                try:
-                    resp = self.send(self.last_report)
-                    # self.send logs on failure; only update last_upload
-                    # if we succeed
-                    if resp.ok:
-                        self.last_upload = now
-                        self.set_store('last_upload', str(now))
-                except:
-                    self.log.exception('Exception while sending report:')
+                self.send(self.last_report)
             else:
                 self.log.debug('Interval for sending new report has not expired')
 
