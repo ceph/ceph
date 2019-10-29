@@ -4073,24 +4073,24 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     signal_cond_list(in->waitfor_caps);
 }
 
-void Client::remove_cap(Cap *cap, bool queue_release)
+void Client::remove_cap(Cap **cap, bool queue_release)
 {
-  auto &in = cap->inode;
-  MetaSession *session = cap->session;
-  mds_rank_t mds = cap->session->mds_num;
+  auto &in = (*cap)->inode;
+  MetaSession *session = (*cap)->session;
+  mds_rank_t mds = (*cap)->session->mds_num;
 
   ldout(cct, 10) << __func__ << " mds." << mds << " on " << in << dendl;
   
   if (queue_release) {
     session->enqueue_cap_release(
       in.ino,
-      cap->cap_id,
-      cap->issue_seq,
-      cap->mseq,
+      (*cap)->cap_id,
+      (*cap)->issue_seq,
+      (*cap)->mseq,
       cap_epoch_barrier);
   }
 
-  if (in.auth_cap == cap) {
+  if (in.auth_cap == *cap) {
     if (in.flushing_cap_item.is_on_list()) {
       ldout(cct, 10) << " removing myself from flushing_cap list" << dendl;
       in.flushing_cap_item.remove_myself();
@@ -4099,7 +4099,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   }
   size_t n = in.caps.erase(mds);
   ceph_assert(n == 1);
-  cap = nullptr;
+  *cap = nullptr;
 
   if (!in.is_any_caps()) {
     ldout(cct, 15) << __func__ << " last one, closing snaprealm " << in.snaprealm << dendl;
@@ -4111,8 +4111,10 @@ void Client::remove_cap(Cap *cap, bool queue_release)
 
 void Client::remove_all_caps(Inode *in)
 {
-  while (!in->caps.empty())
-    remove_cap(&in->caps.begin()->second, true);
+  while (!in->caps.empty()) {
+    Cap *cap = &in->caps.begin()->second;
+    remove_cap(&cap, true);
+  }
 }
 
 void Client::remove_session_caps(MetaSession *s)
@@ -4130,7 +4132,7 @@ void Client::remove_session_caps(MetaSession *s)
     }
     if (cap->wanted | cap->issued)
       in->flags |= I_CAP_DROPPED;
-    remove_cap(cap, false);
+    remove_cap(&cap, false);
     in->cap_snaps.clear();
     if (dirty_caps) {
       lderr(cct) << __func__ << " still has dirty|flushing caps on " << *in << dendl;
@@ -4261,7 +4263,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
       // disposable non-auth cap
       if (!(get_caps_used(in.get()) & ~oissued & mine)) {
 	ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
-	cap = (remove_cap(cap, true), nullptr);
+	cap = (remove_cap(&cap, true), nullptr);
 	trimmed++;
       }
     } else {
@@ -4890,7 +4892,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<
 		 m->get_realm(), CEPH_CAP_FLAG_AUTH, cap_perms);
   
   if (cap && cap->cap_id == m->peer.cap_id) {
-      remove_cap(cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
+      remove_cap(&cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
   }
 
   if (realm)
@@ -4911,8 +4913,8 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, const MConstRef<
 
   auto it = in->caps.find(mds);
   if (it != in->caps.end()) {
-    Cap &cap = it->second;
-    if (cap.cap_id == m->get_cap_id()) {
+    Cap *cap = &it->second;
+    if (cap->cap_id == m->get_cap_id()) {
       if (m->peer.cap_id) {
 	const auto peer_mds = mds_rank_t(m->peer.mds);
         MetaSession *tsession = _get_or_open_mds_session(peer_mds);
@@ -4924,21 +4926,21 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, const MConstRef<
 	    tcap.cap_id = m->peer.cap_id;
 	    tcap.seq = m->peer.seq - 1;
 	    tcap.issue_seq = tcap.seq;
-	    tcap.issued |= cap.issued;
-	    tcap.implemented |= cap.issued;
-	    if (&cap == in->auth_cap)
+	    tcap.issued |= cap->issued;
+	    tcap.implemented |= cap->issued;
+	    if (cap == in->auth_cap)
 	      in->auth_cap = &tcap;
 	    if (in->auth_cap == &tcap && in->flushing_cap_item.is_on_list())
 	      adjust_session_flushing_caps(in, session, tsession);
 	  }
         } else {
-	  add_update_cap(in, tsession, m->peer.cap_id, cap.issued, 0,
+	  add_update_cap(in, tsession, m->peer.cap_id, cap->issued, 0,
 		         m->peer.seq - 1, m->peer.mseq, (uint64_t)-1,
-		         &cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0,
-		         cap.latest_perms);
+		         cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0,
+		         cap->latest_perms);
         }
       } else {
-	if (cap.wanted | cap.issued)
+	if (cap->wanted | cap->issued)
 	  in->flags |= I_CAP_DROPPED;
       }
 
