@@ -3696,7 +3696,7 @@ cdef class Image(object):
 
         :param name: the name of the snapshot
         :type name: str
-        :raises: :class:`IOError`, :class:`ImageBusy`
+        :raises: :class:`IOError`, :class:`ImageBusy`, :class:`ImageNotFound`
         """
         name = cstr(name, 'name')
         cdef char *_name = name
