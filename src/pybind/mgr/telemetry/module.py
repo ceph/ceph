@@ -51,7 +51,7 @@ REVISION = 3
 #   - added device health metrics (i.e., SMART data, minus serial number)
 #   - remove crush_rule
 #   - added CephFS metadata (how many MDSs, fs features, how many data pools,
-#     how much metadata is cached)
+#     how much metadata is cached, rfiles, rbytes, rsnapshots)
 #   - added more pool metadata (rep vs ec, cache tiering mode, ec profile)
 #   - added host count, and counts for hosts with each of (mon, osd, mds, mgr)
 #   - whether an OSD cluster network is in use
@@ -486,6 +486,9 @@ class Module(MgrModule):
                 cached_dn = 0
                 cached_cap = 0
                 subtrees = 0
+                rfiles = 0
+                rbytes = 0
+                rsnaps = 0
                 for gid, mds in fs['info'].items():
                     num_sessions += self.get_latest('mds', mds['name'],
                                                     'mds_sessions.session_count')
@@ -497,6 +500,13 @@ class Module(MgrModule):
                                                   'mds_mem.cap')
                     subtrees += self.get_latest('mds', mds['name'],
                                                 'mds.subtrees')
+                    if mds['rank'] == 0:
+                        rfiles = self.get_latest('mds', mds['name'],
+                                                 'mds.root_rfiles')
+                        rbytes = self.get_latest('mds', mds['name'],
+                                                 'mds.root_rbytes')
+                        rsnaps = self.get_latest('mds', mds['name'],
+                                                 'mds.root_rsnaps')
                 report['fs']['filesystems'].append({
                     'max_mds': fs['max_mds'],
                     'ever_allowed_features': fs['ever_allowed_features'],
@@ -516,6 +526,9 @@ class Module(MgrModule):
                     'num_data_pools': len(fs['data_pools']),
                     'standby_count_wanted': fs['standby_count_wanted'],
                     'approx_ctime': fs['created'][0:7],
+                    'files': rfiles,
+                    'bytes': rbytes,
+                    'snaps': rsnaps,
                 })
                 num_mds += len(fs['info'])
             report['fs']['total_num_mds'] = num_mds
