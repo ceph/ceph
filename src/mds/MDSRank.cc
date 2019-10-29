@@ -2434,7 +2434,7 @@ void MDSRankDispatcher::handle_asok_command(
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
   int r = 0;
-  ostringstream ss;
+  stringstream ss;
   bufferlist outbl;
   if (command == "dump_ops_in_flight" ||
       command == "ops") {
@@ -2482,10 +2482,23 @@ void MDSRankDispatcher::handle_asok_command(
     heartbeat_reset();
 
     dump_sessions(SessionFilter(), f);
-  } else if (command == "session evict") {
+  } else if (command == "session evict" ||
+	     command == "client evict") {
+    std::lock_guard l(mds_lock);
+    std::vector<std::string> filter_args;
+    cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
+
+    SessionFilter filter;
+    r = filter.parse(filter_args, &ss);
+    if (r != 0) {
+      r = -EINVAL;
+      goto out;
+    }
+    evict_clients(filter, on_finish);
+    return;
+  } else if (command == "session kill") {
     std::string client_id;
-    const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
-    if(!got_arg) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "client_id", client_id)) {
       ss << "Invalid client_id specified";
       r = -ENOENT;
       goto out;
@@ -2495,7 +2508,7 @@ void MDSRankDispatcher::handle_asok_command(
         g_conf()->mds_session_blacklist_on_evict, ss);
     if (!evicted) {
       dout(15) << ss.str() << dendl;
-      r = -EBUSY;
+      r = -ENOENT;
     }
   } else if (command == "session config") {
     int64_t client_id;
@@ -2708,13 +2721,13 @@ private:
  * MDSRank after calling it (we could have gone into shutdown): just
  * send your result back to the calling client and finish.
  */
-void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const cref_t<MCommand> &m)
+void MDSRankDispatcher::evict_clients(
+  const SessionFilter &filter,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
-  C_MDS_Send_Command_Reply *reply = new C_MDS_Send_Command_Reply(this, m);
-
+  bufferlist outbl;
   if (is_any_replay()) {
-    reply->send(-EAGAIN, "MDS is replaying log");
-    delete reply;
+    on_finish(-EAGAIN, "MDS is replaying log", outbl);
     return;
   }
 
@@ -2727,7 +2740,8 @@ void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const cref_t<
 
     Session *s = p.second;
 
-    if (filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
+    if (filter.match(*s, std::bind(&Server::waiting_for_reconnect, server,
+				   std::placeholders::_1))) {
       victims.push_back(s);
     }
   }
@@ -2735,12 +2749,15 @@ void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const cref_t<
   dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
 
   if (victims.empty()) {
-    reply->send(0, "");
-    delete reply;
+    on_finish(0, {}, outbl);
     return;
   }
 
-  C_GatherBuilder gather(g_ceph_context, reply);
+  C_GatherBuilder gather(g_ceph_context,
+			 new LambdaContext([on_finish](int r) {
+					     bufferlist bl;
+					     on_finish(r, {}, bl);
+					   }));
   for (const auto s : victims) {
     std::stringstream ss;
     evict_client(s->get_client().v, false,
@@ -3527,20 +3544,6 @@ bool MDSRankDispatcher::handle_command(
     JSONFormatter f(true);
     dump_sessions(filter, &f);
     f.flush(*ds);
-    return true;
-  } else if (prefix == "session evict" || prefix == "client evict") {
-    std::vector<std::string> filter_args;
-    cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
-
-    SessionFilter filter;
-    *r = filter.parse(filter_args, ss);
-    if (*r != 0) {
-      return true;
-    }
-
-    evict_clients(filter, m);
-
-    *need_reply = false;
     return true;
   } else if (prefix == "session config" || prefix == "client config") {
     int64_t client_id;

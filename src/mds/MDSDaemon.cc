@@ -302,9 +302,17 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump snapshots");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session evict name=client_id,type=CephString",
+  r = admin_socket->register_command("session evict name=filters,type=CephString,n=N,req=false",
 				     asok_hook,
-				     "Evict a CephFS client");
+				     "Evict client session(s) based on a filter");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("client evict name=filters,type=CephString,n=N,req=false",
+				     asok_hook,
+				     "Evict client session(s) based on a filter");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("session kill name=client_id,type=CephString",
+				     asok_hook,
+				     "Evict a client session by id");
   ceph_assert(r == 0);
   r = admin_socket->register_command("session ls",
 				     asok_hook,
@@ -584,11 +592,8 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
-    MDSCommand("session kill name=session_id,type=CephInt", "End a client session"),
     MDSCommand("session ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
     MDSCommand("client ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
-    MDSCommand("session evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
-    MDSCommand("client evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
     MDSCommand("session config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
 	"Config a client session"),
     MDSCommand("client config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
@@ -645,22 +650,7 @@ int MDSDaemon::_handle_command(
   }
 
   cmd_getval(cct, cmdmap, "format", format);
-  if (prefix == "session kill") {
-    if (mds_rank == NULL) {
-      r = -EINVAL;
-      ss << "MDS not active";
-      goto out;
-    }
-    // FIXME harmonize `session kill` with admin socket session evict
-    int64_t session_id = 0;
-    bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
-    ceph_assert(got);
-    bool killed = mds_rank->evict_client(session_id, false,
-                                         g_conf()->mds_session_blacklist_on_evict,
-                                         ss);
-    if (!killed)
-      r = -ENOENT;
-  } else {
+  if (true) {
     // Give MDSRank a shot at the command
     if (!mds_rank) {
       ss << "MDS not active";

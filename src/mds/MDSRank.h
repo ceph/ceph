@@ -653,7 +653,8 @@ public:
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
-  void evict_clients(const SessionFilter &filter, const cref_t<MCommand> &m);
+  void evict_clients(const SessionFilter &filter,
+		     std::function<void(int,const std::string&,bufferlist&)> on_finish);
 
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(const cref_t<Message> &m);
