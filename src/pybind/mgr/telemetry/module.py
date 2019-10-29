@@ -52,6 +52,7 @@ REVISION = 3
 #   - remove crush_rule
 #   - added more pool metadata (rep vs ec, cache tiering mode, ec profile)
 #   - added host count, and counts for hosts with each of (mon, osd, mds, mgr)
+#   - whether an OSD cluster network is in use
 
 class Module(MgrModule):
     config = dict()
@@ -433,10 +434,18 @@ class Module(MgrModule):
                 )
 
             # osds
+            cluster_network = False
+            for osd in osd_map['osds']:
+                if osd['up'] and not cluster_network:
+                    front_ip = osd['public_addrs']['addrvec'][0]['addr'].split(':')[0]
+                    back_ip = osd['public_addrs']['addrvec'][0]['addr'].split(':')[0]
+                    if front_ip != back_ip:
+                        cluster_network = True
             report['osd'] = {
                 'count': len(osd_map['osds']),
                 'require_osd_release': osd_map['require_osd_release'],
-                'require_min_compat_client': osd_map['require_min_compat_client']
+                'require_min_compat_client': osd_map['require_min_compat_client'],
+                'cluster_network': cluster_network,
             }
 
             # cephfs
