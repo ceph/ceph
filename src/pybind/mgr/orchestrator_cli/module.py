@@ -237,11 +237,31 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds add',
-                "name=svc_arg,type=CephString",
+                "name=fs_name,type=CephString "
+                "name=num,type=CephInt,req=false "
+                "name=hosts,type=CephString,n=N,req=false",
                 'Create an MDS service')
-    def _mds_add(self, svc_arg):
-        spec = orchestrator.StatelessServiceSpec(svc_arg)
+    def _mds_add(self, fs_name, num, hosts):
+        spec = orchestrator.StatelessServiceSpec(
+            fs_name,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
         completion = self.add_mds(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator mds update',
+                "name=fs_name,type=CephString "
+                "name=num,type=CephInt,req=true "
+                "name=hosts,type=CephString,n=N,req=false",
+                'Update the number of MDS instances for the given fs_name')
+    def _mds_update(self, fs_name, num, hosts=None):
+        spec = orchestrator.StatelessServiceSpec(
+            fs_name,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
+        completion = self.update_mds(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -287,10 +307,10 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds rm',
-                "name=svc_id,type=CephString",
-                'Remove an MDS service')
-    def _mds_rm(self, svc_id):
-        completion = self.remove_mds(svc_id)
+                "name=name,type=CephString",
+                'Remove an MDS service (mds id or fs_name)')
+    def _mds_rm(self, name):
+        completion = self.remove_mds(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
