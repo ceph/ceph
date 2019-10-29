@@ -3759,7 +3759,10 @@ void Locker::get_late_revoking_clients(std::list<client_t> *result,
   // Slow path: execute in O(N_clients)
   for (auto &p : revoking_caps_by_client) {
     if (any_late_revoking_caps(p.second, timeout)) {
-      result->push_back(p.first);
+      // Search the list for duplicate and only insert if unique
+      std::list<client_t>::const_iterator it = std::find(result->begin(), result->end(), p.first);
+      if (it == result->end())
+        result->push_back(p.first);
     }
   }
 }
