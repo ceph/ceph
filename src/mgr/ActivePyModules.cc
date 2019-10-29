@@ -250,6 +250,20 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       f.close_section();
     }
     return f.get();
+  } else if (what == "mds_metadata") {
+    auto dmc = daemon_state.get_by_service("mds");
+    PyEval_RestoreThread(tstate);
+
+    for (const auto &[key, state] : dmc) {
+      std::lock_guard l(state->lock);
+      f.open_object_section(key.name.c_str());
+      f.dump_string("hostname", state->hostname);
+      for (const auto &[name, val] : state->metadata) {
+        f.dump_string(name.c_str(), val);
+      }
+      f.close_section();
+    }
+    return f.get();
   } else if (what == "pg_summary") {
     cluster_state.with_pgmap(
         [&f, &tstate](const PGMap &pg_map) {

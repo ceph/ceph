@@ -427,6 +427,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             lambda: self.rook_cluster.update_mon_count(num), None,
             "Updating mon count to {0}".format(num))
 
+    def update_mds(self, spec):
+        num = spec.count
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.update_mds_count(spec.name, num), None,
+                "Updating MDS server count in {0} to {1}".format(spec.name, num))
+
     def update_nfs(self, spec):
         num = spec.count
         return RookWriteCompletion(
