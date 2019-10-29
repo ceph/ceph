@@ -189,7 +189,7 @@ class Prepare(object):
         :param cluster_fsid: The cluster fsid/uuid
         :param osd_fsid: The OSD fsid/uuid
         """
-        if disk.is_partition(arg) or disk.is_device(arg):
+        if disk.is_block_device(arg) and not disk.is_logical_volume(arg):
             # we must create a vg, and then a single lv
             vg = api.create_vg(arg)
             lv_name = "osd-%s-%s" % (device_type, osd_fsid)

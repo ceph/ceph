@@ -334,9 +334,6 @@ def is_device(dev):
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
-    if stat.S_ISBLK(os.lstat(dev)):
-        return True
-    return False
 
 
 def is_partition(dev):
@@ -360,6 +357,31 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
     return False
+
+
+def is_block_device(dev):
+    """
+    Boolean to determine if a given device is a block device
+    """
+    if not os.path.exists(dev):
+        return False
+    # use lsblk first, fall back to using stat
+    TYPE = lsblk(dev).get('TYPE')
+    if TYPE:
+        return True
+
+    # fallback to stat
+    return _stat_is_device(os.lstat(dev).st_mode)
+
+
+def is_logical_volume(dev):
+    """
+    Boolean to determine if a given device is a logical volume
+    """
+    if not os.path.exists(dev):
+        return False
+    TYPE = lsblk(dev).get('TYPE')
+    return TYPE == 'lvm'
 
 
 def _map_dev_paths(_path, include_abspath=False, include_realpath=False):
