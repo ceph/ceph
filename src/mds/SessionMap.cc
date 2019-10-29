@@ -546,8 +546,8 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
     decode(n, p);
     
     while (n-- && !p.end()) {
-      bufferlist::iterator p2 = p;
-      Session *s = new Session;
+      auto p2 = p;
+      Session *s = new Session(ConnectionRef());
       s->info.decode(p);
       if (session_map.count(s->info.inst.name)) {
 	// eager client connected too fast!  aie.
@@ -896,11 +896,8 @@ size_t Session::get_request_count()
  */
 void Session::notify_cap_release(size_t n_caps)
 {
-  if (recalled_at != time::min()) {
-    recall_release_count += n_caps;
-    if (recall_release_count >= recall_count)
-      clear_recalled_at();
-  }
+  recall_caps.hit(ceph_clock_now(), -(double)n_caps);
+  release_caps.hit(ceph_clock_now(), n_caps);
 }
 
 /**
@@ -909,25 +906,26 @@ void Session::notify_cap_release(size_t n_caps)
  * in order to generate health metrics if the session doesn't see
  * a commensurate number of calls to ::notify_cap_release
  */
-void Session::notify_recall_sent(const size_t new_limit)
+uint64_t Session::notify_recall_sent(size_t new_limit)
 {
-  if (recalled_at == time::min()) {
-    // Entering recall phase, set up counters so we can later
-    // judge whether the client has respected the recall request
-    recalled_at = last_recall_sent = clock::now();
-    assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
-    recall_count = caps.size() - new_limit;
-    recall_release_count = 0;
+  const auto num_caps = caps.size();
+  ceph_assert(new_limit < num_caps);  // Behaviour of Server::recall_client_state
+  const auto count = num_caps-new_limit;
+  uint64_t new_change;
+  if (recall_limit != new_limit) {
+    new_change = count;
   } else {
-    last_recall_sent = clock::now();
+    new_change = 0; /* no change! */
   }
-}
 
-void Session::clear_recalled_at()
-{
-  recalled_at = last_recall_sent = time::min();
-  recall_count = 0;
-  recall_release_count = 0;
+  /* Always hit the session counter as a RECALL message is still sent to the
+   * client and we do not want the MDS to burn its global counter tokens on a
+   * session that is not releasing caps (i.e. allow the session counter to
+   * throttle future RECALL messages).
+   */
+  recall_caps_throttle.hit(ceph_clock_now(), count);
+  recall_caps.hit(ceph_clock_now(), count);
+  return new_change;
 }
 
 void Session::set_client_metadata(const client_metadata_t& meta)
@@ -1027,23 +1025,53 @@ void SessionMap::hit_session(Session *session) {
 }
 
 void SessionMap::handle_conf_change(const struct md_config_t *conf,
-                                    const std::set <std::string> &changed) {
+                                    const std::set <std::string> &changed)
+{
   if (changed.count("mds_request_load_average_decay_rate")) {
-    decay_rate = conf->get_val<double>("mds_request_load_average_decay_rate");
-    dout(20) << __func__ << " decay rate changed to " << decay_rate << dendl;
+    auto d = g_conf->get_val<double>("mds_request_load_average_decay_rate");
+    dout(20) << __func__ << " decay rate changed to " << d << dendl;
 
-    total_load_avg_rate = DecayRate(decay_rate);
+    decay_rate = d;
+    total_load_avg = DecayCounter(ceph_clock_now(), d);
 
-    auto p = by_state.find(Session::STATE_OPEN);
-    if (p != by_state.end()) {
-      for (const auto &session : *(p->second)) {
-        session->set_load_avg_decay_rate(decay_rate);
+    auto it = by_state.find(Session::STATE_OPEN);
+    if (it != by_state.end()) {
+      for (const auto &session : *(it->second)) {
+        session->set_load_avg_decay_rate(d);
       }
     }
-    p = by_state.find(Session::STATE_STALE);
-    if (p != by_state.end()) {
-      for (const auto &session : *(p->second)) {
-        session->set_load_avg_decay_rate(decay_rate);
+    it = by_state.find(Session::STATE_STALE);
+    if (it != by_state.end()) {
+      for (const auto &session : *(it->second)) {
+        session->set_load_avg_decay_rate(d);
+      }
+    }
+  }
+  if (changed.count("mds_recall_max_decay_rate")) {
+    auto d = g_conf->get_val<double>("mds_recall_max_decay_rate");
+    if (auto it = by_state.find(Session::STATE_OPEN); it != by_state.end()) {
+      for (const auto &session : *(it->second)) {
+        session->recall_caps_throttle = DecayCounter(ceph_clock_now(), d);
+      }
+    }
+    if (auto it = by_state.find(Session::STATE_STALE); it != by_state.end()) {
+      for (const auto &session : *(it->second)) {
+        session->recall_caps_throttle = DecayCounter(ceph_clock_now(), d);
+      }
+    }
+  }
+  if (changed.count("mds_recall_warning_decay_rate")) {
+    auto d = g_conf->get_val<double>("mds_recall_warning_decay_rate");
+    if (auto it = by_state.find(Session::STATE_OPEN); it != by_state.end()) {
+      for (const auto &session : *(it->second)) {
+        session->recall_caps = DecayCounter(ceph_clock_now(), d);
+        session->release_caps = DecayCounter(ceph_clock_now(), d);
+      }
+    }
+    if (auto it = by_state.find(Session::STATE_STALE); it != by_state.end()) {
+      for (const auto &session : *(it->second)) {
+        session->recall_caps = DecayCounter(ceph_clock_now(), d);
+        session->release_caps = DecayCounter(ceph_clock_now(), d);
       }
     }
   }
