@@ -477,6 +477,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   struct udev_device *dev;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -498,8 +499,14 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   }
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   l = udev_enumerate_get_list_entry(enm);
   if (!l) {
@@ -530,6 +537,7 @@ static int __enumerate_devices(struct udev *udev, const krbd_spec& spec,
   struct udev_enumerate *enm;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -565,8 +573,14 @@ static int __enumerate_devices(struct udev *udev, const krbd_spec& spec,
     goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   *penm = enm;
   return 0;
@@ -800,13 +814,25 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
     wholedevno = sb.st_rdev;
   }
 
-  r = devno_to_krbd_id(ctx->udev, wholedevno, &id);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      cerr << "rbd: '" << devnode << "' is not an rbd device" << std::endl;
-      r = -EINVAL;
+  for (int tries = 0; ; tries++) {
+    r = devno_to_krbd_id(ctx->udev, wholedevno, &id);
+    if (r == -ENOENT && tries < 2) {
+      usleep(250 * 1000);
+    } else {
+      if (r < 0) {
+        if (r == -ENOENT) {
+          std::cerr << "rbd: '" << devnode << "' is not an rbd device"
+                    << std::endl;
+          r = -EINVAL;
+        }
+        return r;
+      }
+      if (tries) {
+        std::cerr << "rbd: udev enumerate missed a device, tries = " << tries
+                  << std::endl;
+      }
+      break;
     }
-    return r;
   }
 
   return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
@@ -819,14 +845,25 @@ static int unmap_image(struct krbd_ctx *ctx, const krbd_spec& spec,
   string id;
   int r;
 
-  r = spec_to_devno_and_krbd_id(ctx->udev, spec, &devno, &id);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      cerr << "rbd: " << spec << ": not a mapped image or snapshot"
-           << std::endl;
-      r = -EINVAL;
+  for (int tries = 0; ; tries++) {
+    r = spec_to_devno_and_krbd_id(ctx->udev, spec, &devno, &id);
+    if (r == -ENOENT && tries < 2) {
+      usleep(250 * 1000);
+    } else {
+      if (r < 0) {
+        if (r == -ENOENT) {
+          std::cerr << "rbd: " << spec << ": not a mapped image or snapshot"
+                    << std::endl;
+          r = -EINVAL;
+        }
+        return r;
+      }
+      if (tries) {
+        std::cerr << "rbd: udev enumerate missed a device, tries = " << tries
+                  << std::endl;
+      }
+      break;
     }
-    return r;
   }
 
   return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
@@ -866,6 +903,7 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
   bool have_output = false;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -875,8 +913,14 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
     goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   udev_list_entry_foreach(l, udev_enumerate_get_list_entry(enm)) {
     struct udev_device *dev;
