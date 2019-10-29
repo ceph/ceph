@@ -46,6 +46,7 @@ REVISION = 2
 #
 # Version 3:
 #   - added CephFS metadata (how many MDSs, fs features, how many data pools)
+#   - remove crush_rule
 
 class Module(MgrModule):
     config = dict()
@@ -323,8 +324,7 @@ class Module(MgrModule):
                         'pg_num': pool['pg_num'],
                         'pgp_num': pool['pg_placement_num'],
                         'size': pool['size'],
-                        'min_size': pool['min_size'],
-                        'crush_rule': pool['crush_rule']
+                        'min_size': pool['min_size']
                     }
                 )
 
