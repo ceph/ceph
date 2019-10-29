@@ -138,10 +138,29 @@ void MDSDaemon::asok_command(
 	  << " (starting...)" << dendl;
 
   int r = -ENOSYS;
+  bufferlist outbl;
   stringstream ss;
   if (command == "status") {
     dump_status(f);
     r = 0;
+  } else if (command == "exit") {
+    outbl.append("Exiting...\n");
+    r = 0;
+    std::thread t([this](){
+		    // Wait a little to improve chances of caller getting
+		    // our response before seeing us disappear from mdsmap
+		    sleep(1);
+		    suicide();
+		  });
+  } else if (command == "respawn") {
+    outbl.append("Respawning...\n");
+    r = 0;
+    std::thread t([this](){
+		    // Wait a little to improve chances of caller getting
+		    // our response before seeing us disappear from mdsmap
+		    sleep(1);
+		    respawn();
+		  });
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
@@ -156,7 +175,6 @@ void MDSDaemon::asok_command(
       }
     }
   }
-  bufferlist outbl;
   on_finish(r, ss.str(), outbl);
 }
 
@@ -319,6 +337,13 @@ void MDSDaemon::set_up_admin_socket()
                                      "name=number,type=CephInt,req=true",
 				     asok_hook,
 				     "dump inode by inode number");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("exit",
+				     asok_hook,
+				     "Terminate this MDS");
+  r = admin_socket->register_command("respawn",
+				     asok_hook,
+				     "Respawn this MDS");
   ceph_assert(r == 0);
 }
 
@@ -524,8 +549,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
-    MDSCommand("exit", "Terminate this MDS"),
-    MDSCommand("respawn", "Restart this MDS"),
     MDSCommand("session kill name=session_id,type=CephInt", "End a client session"),
     MDSCommand("cpu_profiler name=arg,type=CephChoices,strings=status|flush", "run cpu profiling on daemon"),
     MDSCommand("session ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
@@ -563,38 +586,6 @@ int MDSDaemon::_handle_command(
   ceph_assert(outbl != NULL);
   ceph_assert(outs != NULL);
 
-  class SuicideLater : public Context
-  {
-    MDSDaemon *mds;
-
-    public:
-    explicit SuicideLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) override {
-      // Wait a little to improve chances of caller getting
-      // our response before seeing us disappear from mdsmap
-      sleep(1);
-
-      mds->suicide();
-    }
-  };
-
-
-  class RespawnLater : public Context
-  {
-    MDSDaemon *mds;
-
-    public:
-
-    explicit RespawnLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) override {
-      // Wait a little to improve chances of caller getting
-      // our response before seeing us disappear from mdsmap
-      sleep(1);
-
-      mds->respawn();
-    }
-  };
-
   std::stringstream ds;
   std::stringstream ss;
   std::string prefix;
@@ -623,15 +614,7 @@ int MDSDaemon::_handle_command(
   }
 
   cmd_getval(cct, cmdmap, "format", format);
-  if (prefix == "exit") {
-    // We will send response before executing
-    ss << "Exiting...";
-    *run_later = new SuicideLater(this);
-  } else if (prefix == "respawn") {
-    // We will send response before executing
-    ss << "Respawning...";
-    *run_later = new RespawnLater(this);
-  } else if (prefix == "session kill") {
+  if (prefix == "session kill") {
     if (mds_rank == NULL) {
       r = -EINVAL;
       ss << "MDS not active";
