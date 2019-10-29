@@ -630,8 +630,12 @@ public:
   void init();
   void tick();
   void shutdown();
-  int handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
-			  Formatter *f, std::ostream& ss);
+  void handle_asok_command(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist &inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
   void handle_mds_map(const cref_t<MMDSMap> &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();

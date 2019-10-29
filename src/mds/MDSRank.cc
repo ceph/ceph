@@ -2426,11 +2426,16 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
   snapclient->handle_mds_failure(who);
 }
 
-int MDSRankDispatcher::handle_asok_command(std::string_view command,
-					   const cmdmap_t& cmdmap,
-					   Formatter *f,
-					   std::ostream& ss)
+void MDSRankDispatcher::handle_asok_command(
+  std::string_view command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  const bufferlist &inbl,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
+  int r = 0;
+  ostringstream ss;
+  bufferlist outbl;
   if (command == "dump_ops_in_flight" ||
       command == "ops") {
     if (!op_tracker.dump_ops_in_flight(f)) {
@@ -2458,7 +2463,8 @@ int MDSRankDispatcher::handle_asok_command(std::string_view command,
 
     if (!got_val) {
       ss << "no target epoch given";
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
     {
       std::lock_guard l(mds_lock);
@@ -2481,15 +2487,15 @@ int MDSRankDispatcher::handle_asok_command(std::string_view command,
     const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
     if(!got_arg) {
       ss << "Invalid client_id specified";
-      return -ENOENT;
+      r = -ENOENT;
+      goto out;
     }
     std::lock_guard l(mds_lock);
-    std::stringstream dss;
     bool evicted = evict_client(strtol(client_id.c_str(), 0, 10), true,
-        g_conf()->mds_session_blacklist_on_evict, dss);
+        g_conf()->mds_session_blacklist_on_evict, ss);
     if (!evicted) {
-      dout(15) << dss.str() << dendl;
-      ss << dss.str();
+      dout(15) << ss.str() << dendl;
+      r = -EBUSY;
     }
   } else if (command == "session config") {
     int64_t client_id;
@@ -2501,7 +2507,7 @@ int MDSRankDispatcher::handle_asok_command(std::string_view command,
     bool got_value = cmd_getval(g_ceph_context, cmdmap, "value", value);
 
     std::lock_guard l(mds_lock);
-    config_client(client_id, !got_value, option, value, ss);
+    r = config_client(client_id, !got_value, option, value, ss);
   } else if (command == "scrub_path") {
     string path;
     vector<string> scrubop_vec;
@@ -2529,27 +2535,23 @@ int MDSRankDispatcher::handle_asok_command(std::string_view command,
     string path;
     if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
       ss << "malformed path";
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
     int64_t rank;
     if(!cmd_getval(g_ceph_context, cmdmap, "rank", rank)) {
       ss << "malformed rank";
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
     command_export_dir(f, path, (mds_rank_t)rank);
   } else if (command == "dump cache") {
     std::lock_guard l(mds_lock);
     string path;
-    int r;
-    if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
       r = mdcache->dump_cache(f);
     } else {
       r = mdcache->dump_cache(path);
-    }
-
-    if (r != 0) {
-      ss << "Failed to dump cache: " << cpp_strerror(r);
-      f->reset();
     }
   } else if (command == "cache status") {
     std::lock_guard l(mds_lock);
@@ -2558,11 +2560,7 @@ int MDSRankDispatcher::handle_asok_command(std::string_view command,
     command_dump_tree(cmdmap, ss, f);
   } else if (command == "dump loads") {
     std::lock_guard l(mds_lock);
-    int r = balancer->dump_loads(f);
-    if (r != 0) {
-      ss << "Failed to dump loads: " << cpp_strerror(r);
-      f->reset();
-    }
+    r = balancer->dump_loads(f);
   } else if (command == "dump snaps") {
     std::lock_guard l(mds_lock);
     string server;
@@ -2571,14 +2569,11 @@ int MDSRankDispatcher::handle_asok_command(std::string_view command,
       if (mdsmap->get_tableserver() == whoami) {
 	snapserver->dump(f);
       } else {
+	r = -EXDEV;
 	ss << "Not snapserver";
       }
     } else {
-      int r = snapclient->dump_cache(f);
-      if (r != 0) {
-	ss << "Failed to dump snapclient: " << cpp_strerror(r);
-	f->reset();
-      }
+      r = snapclient->dump_cache(f);
     }
   } else if (command == "force_readonly") {
     std::lock_guard l(mds_lock);
@@ -2594,10 +2589,10 @@ int MDSRankDispatcher::handle_asok_command(std::string_view command,
   } else if (command == "dump inode") {
     command_dump_inode(f, cmdmap, ss);
   } else {
-    return -ENOSYS;
+    r = -ENOSYS;
   }
-
-  return 0;
+out:
+  on_finish(r, ss.str(), outbl);
 }
 
 class C_MDS_Send_Command_Reply : public MDSInternalContext {

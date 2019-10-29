@@ -93,8 +93,12 @@ class MDSDaemon : public Dispatcher {
   void set_up_admin_socket();
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
-  int asok_command(std::string_view command, const cmdmap_t& cmdmap,
-		   Formatter *f, ostream& ss);
+  void asok_command(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist &inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
 
   void dump_status(Formatter *f);
 

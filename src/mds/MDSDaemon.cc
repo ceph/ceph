@@ -109,23 +109,36 @@ class MDSSocketHook : public AdminSocketHook {
   MDSDaemon *mds;
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
-  int call(std::string_view command, const cmdmap_t& cmdmap,
-	   Formatter *f,
-	   std::ostream& ss,
-	   bufferlist& out) override {
-    stringstream outss;
-    int r = mds->asok_command(command, cmdmap, f, outss);
-    out.append(outss);
-    return r;
+  int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out) override {
+    ceph_abort("shoudl go to call_async");
+  }
+  void call_async(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    Formatter *f,
+    const bufferlist& inbl,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
+    mds->asok_command(command, cmdmap, f, inbl, on_finish);
   }
 };
 
-int MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
-			    Formatter *f, std::ostream& ss)
+void MDSDaemon::asok_command(
+  std::string_view command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  const bufferlist& inbl,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
-  dout(1) << "asok_command: " << command << " (starting...)" << dendl;
+  dout(1) << "asok_command: " << command << " " << cmdmap
+	  << " (starting...)" << dendl;
 
   int r = -ENOSYS;
+  stringstream ss;
   if (command == "status") {
     dump_status(f);
     r = 0;
@@ -135,15 +148,16 @@ int MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
       f->dump_string("error", "mds_not_active");
     } else {
       try {
-	r = mds_rank->handle_asok_command(command, cmdmap, f, ss);
+	mds_rank->handle_asok_command(command, cmdmap, f, inbl, on_finish);
+	return;
       } catch (const bad_cmd_get& e) {
 	ss << e.what();
 	r = -EINVAL;
       }
     }
   }
-  dout(1) << "asok_command: " << command << " (complete)" << dendl;
-  return r;
+  bufferlist outbl;
+  on_finish(r, ss.str(), outbl);
 }
 
 void MDSDaemon::dump_status(Formatter *f)
