@@ -161,6 +161,27 @@ void MDSDaemon::asok_command(
 		    sleep(1);
 		    respawn();
 		  });
+  } else if (command == "heap") {
+    if (!ceph_using_tcmalloc()) {
+      ss << "not using tcmalloc";
+      r = -EOPNOTSUPP;
+    } else {
+      string heapcmd;
+      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
+      vector<string> heapcmd_vec;
+      get_str_vec(heapcmd, heapcmd_vec);
+      string value;
+      if (cmd_getval(cct, cmdmap, "value", value)) {
+	heapcmd_vec.push_back(value);
+      }
+      ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+    }
+  } else if (command == "cpu_profiler") {
+    string arg;
+    cmd_getval(cct, cmdmap, "arg", arg);
+    vector<string> argvec;
+    get_str_vec(arg, argvec);
+    cpu_profiler_handle_command(argvec, ss);
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
@@ -344,6 +365,20 @@ void MDSDaemon::set_up_admin_socket()
   r = admin_socket->register_command("respawn",
 				     asok_hook,
 				     "Respawn this MDS");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "heap " \
+    "name=heapcmd,type=CephChoices,strings="				\
+    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
+    "name=value,type=CephString,req=false",
+    asok_hook,
+    "show heap usage info (available only if compiled with tcmalloc)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "cpu_profiler " \
+    "name=arg,type=CephChoices,strings=status|flush",
+    asok_hook,
+    "run cpu profiling on daemon");
   ceph_assert(r == 0);
 }
 
@@ -550,7 +585,6 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
     MDSCommand("session kill name=session_id,type=CephInt", "End a client session"),
-    MDSCommand("cpu_profiler name=arg,type=CephChoices,strings=status|flush", "run cpu profiling on daemon"),
     MDSCommand("session ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
     MDSCommand("client ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
     MDSCommand("session evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
@@ -561,9 +595,6 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 	"Config a client session"),
     MDSCommand("damage ls", "List detected metadata damage"),
     MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
-    MDSCommand("heap "
-        "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats",
-        "show heap usage info (available only if compiled with tcmalloc)"),
     MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
     MDSCommand("scrub start name=path,type=CephString name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false name=tag,type=CephString,req=false",
                "scrub an inode and output results"),
@@ -629,26 +660,6 @@ int MDSDaemon::_handle_command(
                                          ss);
     if (!killed)
       r = -ENOENT;
-  } else if (prefix == "heap") {
-    if (!ceph_using_tcmalloc()) {
-      r = -EOPNOTSUPP;
-      ss << "could not issue heap profiler command -- not using tcmalloc!";
-    } else {
-      string heapcmd;
-      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
-      vector<string> heapcmd_vec;
-      get_str_vec(heapcmd, heapcmd_vec);
-      string value;
-      if (cmd_getval(cct, cmdmap, "value", value))
-	 heapcmd_vec.push_back(value);
-      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
-    }
-  } else if (prefix == "cpu_profiler") {
-    string arg;
-    cmd_getval(cct, cmdmap, "arg", arg);
-    vector<string> argvec;
-    get_str_vec(arg, argvec);
-    cpu_profiler_handle_command(argvec, ds);
   } else {
     // Give MDSRank a shot at the command
     if (!mds_rank) {
