@@ -43,6 +43,9 @@ REVISION = 2
 #   - added config option changes
 #   - added channels
 #   - added explicit license acknowledgement to the opt-in process
+#
+# Version 3:
+#   - added CephFS metadata (how many MDSs, fs features, how many data pools)
 
 class Module(MgrModule):
     config = dict()
@@ -322,8 +325,31 @@ class Module(MgrModule):
             }
 
             report['fs'] = {
-                'count': len(fs_map['filesystems'])
+                'count': len(fs_map['filesystems']),
+                'feature_flags': fs_map['feature_flags'],
+                'num_standby_mds': len(fs_map['standbys']),
+                'filesystems': [],
             }
+            num_mds = len(fs_map['standbys'])
+            for fsm in fs_map['filesystems']:
+                fs = fsm['mdsmap']
+                report['fs']['filesystems'].append({
+                    'max_mds': fs['max_mds'],
+                    'ever_allowed_features': fs['ever_allowed_features'],
+                    'explicitly_allowed_features': fs['explicitly_allowed_features'],
+                    'num_in': len(fs['in']),
+                    'num_up': len(fs['up']),
+                    'num_standby_replay': len(
+                        [mds for gid, mds in fs['info'].items()
+                         if mds['state'] == 'up:standby-replay']),
+                    'num_mds': len(fs['info']),
+                    'balancer_enabled': len(fs['balancer']) > 0,
+                    'num_data_pools': len(fs['data_pools']),
+                    'standby_count_wanted': fs['standby_count_wanted'],
+                    'approx_ctime': fs['created'][0:7],
+                })
+                num_mds += len(fs['info'])
+            report['fs']['total_num_mds'] = num_mds
 
             report['metadata'] = dict()
             report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
