@@ -897,6 +897,12 @@ public:
     Mutex::Locker l(stat_lock);
     return osd_stat.seq;
   }
+  void get_hb_pingtime(map<int, osd_stat_t::Interfaces> *pp)
+  {
+    Mutex::Locker l(stat_lock);
+    *pp = osd_stat.hb_pingtime;
+    return;
+  }
 
   // -- OSD Full Status --
 private:
@@ -1512,20 +1518,57 @@ private:
     utime_t last_rx_front;  ///< last time we got a ping reply on the front side
     utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
+    /// number of connections we send and receive heartbeat pings/replies
+    const static int HEARTBEAT_MAX_CONN = 2;
+    /// history of inflight pings, arranging by timestamp we sent
+    /// send time -> deadline -> remaining replies
+    map<utime_t, pair<utime_t, int>> ping_history;
 
-    bool is_unhealthy(utime_t cutoff) const {
-      return
-	! ((last_rx_front > cutoff ||
-	    (last_rx_front == utime_t() && (last_tx == utime_t() ||
-					    first_tx > cutoff))) &&
-	   (last_rx_back > cutoff ||
-	    (last_rx_back == utime_t() && (last_tx == utime_t() ||
-					   first_tx > cutoff))));
-    }
-    bool is_healthy(utime_t cutoff) const {
-      return last_rx_front > cutoff && last_rx_back > cutoff;
+    utime_t hb_interval_start;
+    uint32_t hb_average_count = 0;
+    uint32_t hb_index = 0;
+
+    uint32_t hb_total_back = 0;
+    uint32_t hb_min_back = UINT_MAX;
+    uint32_t hb_max_back = 0;
+    vector<uint32_t> hb_back_pingtime;
+    vector<uint32_t> hb_back_min;
+    vector<uint32_t> hb_back_max;
+
+    uint32_t hb_total_front = 0;
+    uint32_t hb_min_front = UINT_MAX;
+    uint32_t hb_max_front = 0;
+    vector<uint32_t> hb_front_pingtime;
+    vector<uint32_t> hb_front_min;
+    vector<uint32_t> hb_front_max;
+
+    bool is_stale(utime_t stale) {
+      if (ping_history.empty()) {
+        return false;
+      }
+      utime_t oldest_deadline = ping_history.begin()->second.first;
+      return oldest_deadline <= stale;
     }
 
+    bool is_unhealthy(utime_t now) {
+      if (ping_history.empty()) {
+        /// we haven't sent a ping yet or we have got all replies,
+        /// in either way we are safe and healthy for now
+        return false;
+      }
+
+      utime_t oldest_deadline = ping_history.begin()->second.first;
+      return now > oldest_deadline;
+    }
+
+    bool is_healthy(utime_t now) {
+      if (last_rx_front == utime_t() || last_rx_back == utime_t()) {
+        // only declare to be healthy until we have received the first
+        // replies from both front/back connections
+        return false;
+      }
+      return !is_unhealthy(now);
+    }
   };
   /// state attached to outgoing heartbeat connections
   struct HeartbeatSession : public RefCountedObject {
@@ -1545,12 +1588,16 @@ private:
   Messenger *hb_back_server_messenger;
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
   double daily_loadavg;
-  
+
+  // Track ping repsonse times using vector as a circular buffer
+  // MUST BE A POWER OF 2
+  const uint32_t hb_vector_size = 16;
+
   void _add_heartbeat_peer(int p);
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
-  void reset_heartbeat_peers();
+  void reset_heartbeat_peers(bool all);
   bool heartbeat_peers_need_update() {
     return heartbeat_need_update.load();
   }

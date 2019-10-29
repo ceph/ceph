@@ -16,6 +16,8 @@
 #include "messages/MPGStats.h"
 
 #include "mgr/ClusterState.h"
+#include <time.h>
+#include <boost/range/adaptor/reversed.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -29,7 +31,8 @@ ClusterState::ClusterState(
   : monc(monc_),
     objecter(objecter_),
     lock("ClusterState"),
-    mgr_map(mgrmap)
+    mgr_map(mgrmap),
+    asok_hook(NULL)
 {}
 
 void ClusterState::set_objecter(Objecter *objecter_)
@@ -162,4 +165,191 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   // TODO: Complete the separation of PG state handling so
   // that a cut-down set of functionality remains in PGMonitor
   // while the full-blown PGMap lives only here.
+}
+
+class ClusterSocketHook : public AdminSocketHook {
+  ClusterState *cluster_state;
+public:
+  explicit ClusterSocketHook(ClusterState *o) : cluster_state(o) {}
+  bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
+    stringstream ss;
+    bool r = cluster_state->asok_command(admin_command, cmdmap, format, ss);
+    out.append(ss);
+    return r;
+  }
+};
+
+void ClusterState::final_init()
+{
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  asok_hook = new ClusterSocketHook(this);
+  int r = admin_socket->register_command("dump_osd_network",
+		      "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
+		      "Dump osd heartbeat network ping times");
+  ceph_assert(r == 0);
+}
+
+void ClusterState::shutdown()
+{
+  // unregister commands
+  g_ceph_context->get_admin_socket()->unregister_command("dump_osd_network");
+  delete asok_hook;
+  asok_hook = NULL;
+}
+
+bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
+		       std::string_view format, ostream& ss)
+{
+  Mutex::Locker l(lock);
+  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+  if (admin_command == "dump_osd_network") {
+    int64_t value = 0;
+    // Default to health warning level if nothing specified
+    if (!(cmd_getval(g_ceph_context, cmdmap, "value", value))) {
+      // Convert milliseconds to microseconds
+      value = static_cast<int64_t>(g_ceph_context->_conf->get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
+      if (value == 0) {
+        double ratio = g_conf->get_val<double>("mon_warn_on_slow_ping_ratio");
+	value = g_conf->get_val<int64_t>("osd_heartbeat_grace");
+	value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
+      }
+    } else {
+      // Convert user input to microseconds
+      value *= 1000;
+    }
+    if (value < 0)
+      value = 0;
+
+    struct mgr_ping_time_t {
+      uint32_t pingtime;
+      int from;
+      int to;
+      bool back;
+      std::array<uint32_t,3> times;
+      std::array<uint32_t,3> min;
+      std::array<uint32_t,3> max;
+      uint32_t last;
+      uint32_t last_update;
+
+      bool operator<(const mgr_ping_time_t& rhs) const {
+        if (pingtime < rhs.pingtime)
+          return true;
+        if (pingtime > rhs.pingtime)
+          return false;
+        if (from < rhs.from)
+          return true;
+        if (from > rhs.from)
+          return false;
+        if (to < rhs.to)
+          return true;
+        if (to > rhs.to)
+          return false;
+        return back;
+      }
+    };
+
+    set<mgr_ping_time_t> sorted;
+    utime_t now = ceph_clock_now();
+    for (auto i : pg_map.osd_stat) {
+      for (auto j : i.second.hb_pingtime) {
+
+	if (j.second.last_update == 0)
+	  continue;
+	auto stale_time = g_ceph_context->_conf->get_val<int64_t>("osd_mon_heartbeat_stat_stale");
+	if (now.sec() - j.second.last_update > stale_time) {
+	  dout(20) << __func__ << " time out heartbeat for osd " << i.first
+	           << " last_update " << j.second.last_update << dendl;
+	   continue;
+	}
+	mgr_ping_time_t item;
+	item.pingtime = std::max(j.second.back_pingtime[0], j.second.back_pingtime[1]);
+	item.pingtime = std::max(item.pingtime, j.second.back_pingtime[2]);
+	if (!value || item.pingtime >= value) {
+	  item.from = i.first;
+	  item.to = j.first;
+	  item.times[0] = j.second.back_pingtime[0];
+	  item.times[1] = j.second.back_pingtime[1];
+	  item.times[2] = j.second.back_pingtime[2];
+	  item.min[0] = j.second.back_min[0];
+	  item.min[1] = j.second.back_min[1];
+	  item.min[2] = j.second.back_min[2];
+	  item.max[0] = j.second.back_max[0];
+	  item.max[1] = j.second.back_max[1];
+	  item.max[2] = j.second.back_max[2];
+	  item.last = j.second.back_last;
+	  item.back = true;
+	  item.last_update = j.second.last_update;
+	  sorted.emplace(item);
+	}
+
+	if (j.second.front_last == 0)
+	  continue;
+	item.pingtime = std::max(j.second.front_pingtime[0], j.second.front_pingtime[1]);
+	item.pingtime = std::max(item.pingtime, j.second.front_pingtime[2]);
+	if (!value || item.pingtime >= value) {
+	  item.from = i.first;
+	  item.to = j.first;
+	  item.times[0] = j.second.front_pingtime[0];
+	  item.times[1] = j.second.front_pingtime[1];
+	  item.times[2] = j.second.front_pingtime[2];
+	  item.min[0] = j.second.front_min[0];
+	  item.min[1] = j.second.front_min[1];
+	  item.min[2] = j.second.front_min[2];
+	  item.max[0] = j.second.front_max[0];
+	  item.max[1] = j.second.front_max[1];
+	  item.max[2] = j.second.front_max[2];
+	  item.last = j.second.front_last;
+	  item.back = false;
+	  item.last_update = j.second.last_update;
+	  sorted.emplace(item);
+	}
+      }
+    }
+
+    // Network ping times (1min 5min 15min)
+    f->open_object_section("network_ping_times");
+    f->dump_int("threshold", value / 1000);
+    f->open_array_section("entries");
+    for (auto &sitem : boost::adaptors::reverse(sorted)) {
+      ceph_assert(!value || sitem.pingtime >= value);
+
+      f->open_object_section("entry");
+
+      const time_t lu(sitem.last_update);
+      char buffer[26];
+      string lustr(ctime_r(&lu, buffer));
+      lustr.pop_back();   // Remove trailing \n
+      auto stale = g_ceph_context->_conf->get_val<int64_t>("osd_heartbeat_stale");
+      f->dump_string("last update", lustr);
+      f->dump_bool("stale", ceph_clock_now().sec() - sitem.last_update > stale);
+      f->dump_int("from osd", sitem.from);
+      f->dump_int("to osd", sitem.to);
+      f->dump_string("interface", (sitem.back ? "back" : "front"));
+      f->open_object_section("average");
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.times[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.times[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.times[2],3).c_str());
+      f->close_section(); // average
+      f->open_object_section("min");
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.min[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.min[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.min[2],3).c_str());
+      f->close_section(); // min
+      f->open_object_section("max");
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.max[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.max[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.max[2],3).c_str());
+      f->close_section(); // max
+      f->dump_format_unquoted("last", "%s", fixed_u_to_string(sitem.last,3).c_str());
+      f->close_section(); // entry
+    }
+    f->close_section(); // entries
+    f->close_section(); // network_ping_times
+  } else {
+    ceph_abort();
+  }
+  f->flush(ss);
+  delete f;
+  return true;
 }
