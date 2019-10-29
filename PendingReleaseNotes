@@ -192,6 +192,23 @@
     ceph config set mgr mgr/telemetry/channel_crash false
     ceph telemetry on
 
+* The telemetry module now reports more information about CephFS file systems,
+  including:
+
+    - how many MDS daemons (in total and per file system)
+    - which features are (or have been) enabled
+    - how many data pools
+    - approximate file system age (year + month of creation)
+
+  If you had telemetry enabled, you will need to re-opt-in with::
+
+    ceph telemetry on
+
+  You can view exactly what information will be reported first with::
+
+    ceph telemetry show        # see everything
+    ceph telemetry show basic  # basic cluster info, including the new CephFS info
+
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
   * invalid `m` for "reed_sol_r6_op" erasure technique
