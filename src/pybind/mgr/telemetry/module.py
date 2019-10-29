@@ -50,6 +50,7 @@ REVISION = 3
 #   - added device health metrics (i.e., SMART data, minus serial number)
 #   - added CephFS metadata (how many MDSs, fs features, how many data pools)
 #   - remove crush_rule
+#   - added more pool metadata (rep vs ec, cache tiering mode, ec profile)
 
 class Module(MgrModule):
     config = dict()
@@ -372,6 +373,7 @@ class Module(MgrModule):
 
             report['created'] = mon_map['created']
 
+            # mons
             v1_mons = 0
             v2_mons = 0
             ipv4_mons = 0
@@ -398,10 +400,20 @@ class Module(MgrModule):
 
             report['config'] = self.gather_configs()
 
+            # pools
             num_pg = 0
             report['pools'] = list()
             for pool in osd_map['pools']:
                 num_pg += pool['pg_num']
+                ec_profile = {}
+                if pool['erasure_code_profile']:
+                    orig = osd_map['erasure_code_profiles'].get(
+                        pool['erasure_code_profile'], {})
+                    ec_profile = {
+                        k: orig[k] for k in orig.keys()
+                        if k in ['k', 'm', 'plugin', 'technique',
+                                 'crush-failure-domain', 'l']
+                    }
                 report['pools'].append(
                     {
                         'pool': pool['pool'],
@@ -413,15 +425,20 @@ class Module(MgrModule):
                         'pg_autoscale_mode': pool['pg_autoscale_mode'],
                         'target_max_bytes': pool['target_max_bytes'],
                         'target_max_objects': pool['target_max_objects'],
+                        'type': ['', 'replicated', '', 'erasure'][pool['type']],
+                        'erasure_code_profile': ec_profile,
+                        'cache_mode': pool['cache_mode'],
                     }
                 )
 
+            # osds
             report['osd'] = {
                 'count': len(osd_map['osds']),
                 'require_osd_release': osd_map['require_osd_release'],
                 'require_min_compat_client': osd_map['require_min_compat_client']
             }
 
+            # cephfs
             report['fs'] = {
                 'count': len(fs_map['filesystems']),
                 'feature_flags': fs_map['feature_flags'],
@@ -449,6 +466,7 @@ class Module(MgrModule):
                 num_mds += len(fs['info'])
             report['fs']['total_num_mds'] = num_mds
 
+            # daemons
             report['metadata'] = dict()
             report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
             report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
