@@ -371,9 +371,28 @@ class Module(MgrModule):
 
             report['created'] = mon_map['created']
 
+            v1_mons = 0
+            v2_mons = 0
+            ipv4_mons = 0
+            ipv6_mons = 0
+            for mon in mon_map['mons']:
+                for a in mon['public_addrs']['addrvec']:
+                    if a['type'] == 'v2':
+                        v2_mons += 1
+                    elif a['type'] == 'v1':
+                        v1_mons += 1
+                    if a['addr'].startswith('['):
+                        ipv6_mons += 1
+                    else:
+                        ipv4_mons += 1
             report['mon'] = {
                 'count': len(mon_map['mons']),
-                'features': mon_map['features']
+                'features': mon_map['features'],
+                'min_mon_release': mon_map['min_mon_release'],
+                'v1_addr_mons': v1_mons,
+                'v2_addr_mons': v2_mons,
+                'ipv4_addr_mons': ipv4_mons,
+                'ipv6_addr_mons': ipv6_mons,
             }
 
             report['config'] = self.gather_configs()
