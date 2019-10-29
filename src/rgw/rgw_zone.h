@@ -238,6 +238,12 @@ public:
     }
   }
 
+  void remove_storage_class(const string& sc) {
+    if (!sc.empty()) {
+      m.erase(sc);
+    }
+  }
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(m, bl);
