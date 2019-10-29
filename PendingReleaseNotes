@@ -55,6 +55,12 @@
     - how many data pools
     - approximate file system age (year + month of creation)
 
+  We have also added:
+
+    - which Ceph release the monitors are running
+    - whether msgr v1 or v2 addresses are used for the monitors
+    - whether IPv4 or IPv6 addresses are used for the monitors
+
   If you had telemetry enabled, you will need to re-opt-in with::
 
     ceph telemetry on
@@ -62,7 +68,7 @@
   You can view exactly what information will be reported first with::
 
     ceph telemetry show        # see everything
-    ceph telemetry show basic  # basic cluster info, including the new CephFS info
+    ceph telemetry show basic  # basic cluster info (including all of the new info)
 
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
