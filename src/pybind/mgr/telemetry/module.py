@@ -51,6 +51,7 @@ REVISION = 3
 #   - added CephFS metadata (how many MDSs, fs features, how many data pools)
 #   - remove crush_rule
 #   - added more pool metadata (rep vs ec, cache tiering mode, ec profile)
+#   - added host count, and counts for hosts with each of (mon, osd, mds, mgr)
 
 class Module(MgrModule):
     config = dict()
@@ -483,6 +484,18 @@ class Module(MgrModule):
             report['metadata'] = dict()
             report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
             report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
+
+            # host counts
+            servers = self.list_servers()
+            self.log.debug('servers %s' % servers)
+            report['hosts'] = {
+                'num': len([h for h in servers if h['hostname']]),
+            }
+            for t in ['mon', 'mds', 'osd', 'mgr']:
+                report['hosts']['num_with_' + t] = len(
+                    [h for h in servers
+                     if len([s for s in h['services'] if s['type'] == t])]
+                )
 
             report['usage'] = {
                 'pools': len(df['pools']),

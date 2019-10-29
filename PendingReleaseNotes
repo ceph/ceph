@@ -63,6 +63,7 @@
     - whether RADOS cache tiering is enabled (and which mode)
     - whether pools are replicated or erasure coded, and
       which erasure code profile plugin and parameters are in use
+    - how many hosts are in the cluster, and how many hosts have each type of daemon
 
   If you had telemetry enabled, you will need to re-opt-in with::
 
