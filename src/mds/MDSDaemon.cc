@@ -497,8 +497,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
   std::stringstream ss;
   std::string outs;
   bufferlist outbl;
-  Context *run_after = NULL;
-  bool need_reply = true;
 
   if (!session->auth_caps.allow_all()) {
     dout(1) << __func__
@@ -515,22 +513,12 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
     r = -EINVAL;
     outs = ss.str();
   } else {
-    try {
-      r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
-    } catch (const bad_cmd_get& e) {
-      outs = e.what();
-      r = -EINVAL;
-    }
+    cct->get_admin_socket()->queue_tell_command(m);
+    return;
   }
   priv.reset();
 
-  if (need_reply) {
-    send_command_reply(m, mds_rank, r, outbl, outs);
-  }
-
-  if (run_after) {
-    run_after->complete(0);
-  }
+  send_command_reply(m, mds_rank, r, outbl, outs);
 }
 
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
