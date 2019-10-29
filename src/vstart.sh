@@ -17,11 +17,7 @@ quoted_print() {
 }
 
 debug() {
-  if [ -w /dev/tty -a ! -t 2 ]; then
-    "$@" | tee /dev/tty >&2
-  else
-    "$@" >&2
-  fi
+  "$@" >&2
 }
 
 prunb() {
