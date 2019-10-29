@@ -54,6 +54,7 @@
     - which features are (or have been) enabled
     - how many data pools
     - approximate file system age (year + month of creation)
+    - how much metadata is being cached per file system
 
   We have also added:
 
