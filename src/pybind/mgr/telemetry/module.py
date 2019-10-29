@@ -297,9 +297,19 @@ class Module(MgrModule):
 
             report['created'] = mon_map['created']
 
+            ipv4_mons = 0
+            ipv6_mons = 0
+            for mon in mon_map['mons']:
+                if mon['public_addr'].startswith('['):
+                    ipv6_mons += 1
+                else:
+                    ipv4_mons += 1
+
             report['mon'] = {
                 'count': len(mon_map['mons']),
-                'features': mon_map['features']
+                'features': mon_map['features'],
+                'ipv4_addr_mons': ipv4_mons,
+                'ipv6_addr_mons': ipv6_mons,
             }
 
             num_pg = 0
