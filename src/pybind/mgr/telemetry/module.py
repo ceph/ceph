@@ -49,6 +49,7 @@ REVISION = 3
 # Version 3:
 #   - added device health metrics (i.e., SMART data, minus serial number)
 #   - added CephFS metadata (how many MDSs, fs features, how many data pools)
+#   - remove crush_rule
 
 class Module(MgrModule):
     config = dict()
@@ -409,7 +410,6 @@ class Module(MgrModule):
                         'pgp_num': pool['pg_placement_num'],
                         'size': pool['size'],
                         'min_size': pool['min_size'],
-                        'crush_rule': pool['crush_rule'],
                         'pg_autoscale_mode': pool['pg_autoscale_mode'],
                         'target_max_bytes': pool['target_max_bytes'],
                         'target_max_objects': pool['target_max_objects'],
