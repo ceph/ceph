@@ -1,6 +1,7 @@
 import sys
 
 from setuptools import setup, find_packages
+from setuptools.command.test import test as TestCommand
 
 
 if sys.version_info >= (3,0):
@@ -15,6 +16,22 @@ with open("README.rst", "r") as fh:
     long_description = fh.read()
 
 
+class PyTest(TestCommand):
+    user_options = [('addopts=', 'a', "Arguments to pass to py.test")]
+
+    def initialize_options(self):
+        TestCommand.initialize_options(self)
+        self.addopts = []
+
+    def run_tests(self):
+        # import here, cause outside the eggs aren't loaded
+        import pytest
+
+        args = self.addopts.split() if isinstance(self.addopts, str) else self.addopts
+        errno = pytest.main(args)
+        sys.exit(errno)
+
+
 setup(
     name='ceph',
     version='1.0.0',
@@ -27,10 +44,10 @@ setup(
     keywords='ceph',
     url="https://github.com/ceph/ceph",
     zip_safe = False,
+    cmdclass={'pytest': PyTest},
     install_requires=(
         'six',
     ),
-    setup_requires=['pytest-runner'],
     tests_require=[
         pytest,
         'tox',
