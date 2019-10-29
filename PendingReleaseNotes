@@ -210,6 +210,7 @@
       which erasure code profile plugin and parameters are in use
     - how many hosts are in the cluster, and how many hosts have each type of daemon
     - whether a separate OSD cluster network is being used
+    - how many RBD pools and images are in the cluster, and how many pools have RBD mirroring enabled
 
   If you had telemetry enabled, you will need to re-opt-in with::
 
