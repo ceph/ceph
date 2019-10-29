@@ -229,6 +229,11 @@ void MDCache::log_stat()
   mds->logger->set(l_mds_inodes_pin_tail, lru.lru_get_pintail());
   mds->logger->set(l_mds_inodes_with_caps, num_inodes_with_caps);
   mds->logger->set(l_mds_caps, Capability::count());
+  if (root) {
+    mds->logger->set(l_mds_root_rfiles, root->inode.rstat.rfiles);
+    mds->logger->set(l_mds_root_rbytes, root->inode.rstat.rbytes);
+    mds->logger->set(l_mds_root_rsnaps, root->inode.rstat.rsnaps);
+  }
 }
 
 
