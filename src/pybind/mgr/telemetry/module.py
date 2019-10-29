@@ -47,6 +47,7 @@ REVISION = 2
 # Version 3:
 #   - added CephFS metadata (how many MDSs, fs features, how many data pools)
 #   - remove crush_rule
+#   - added more pool metadata (rep vs ec, cache tiering mode, ec profile)
 
 class Module(MgrModule):
     config = dict()
@@ -313,10 +314,20 @@ class Module(MgrModule):
                 'ipv6_addr_mons': ipv6_mons,
             }
 
+            # pools
             num_pg = 0
             report['pools'] = list()
             for pool in osd_map['pools']:
                 num_pg += pool['pg_num']
+                ec_profile = {}
+                if pool['erasure_code_profile']:
+                    orig = osd_map['erasure_code_profiles'].get(
+                        pool['erasure_code_profile'], {})
+                    ec_profile = {
+                        k: orig[k] for k in orig.keys()
+                        if k in ['k', 'm', 'plugin', 'technique',
+                                 'crush-failure-domain', 'l']
+                    }
                 report['pools'].append(
                     {
                         'pool': pool['pool'],
@@ -324,16 +335,21 @@ class Module(MgrModule):
                         'pg_num': pool['pg_num'],
                         'pgp_num': pool['pg_placement_num'],
                         'size': pool['size'],
-                        'min_size': pool['min_size']
+                        'min_size': pool['min_size'],
+                        'type': ['', 'replicated', '', 'erasure'][pool['type']],
+                        'erasure_code_profile': ec_profile,
+                        'cache_mode': pool['cache_mode'],
                     }
                 )
 
+            # osds
             report['osd'] = {
                 'count': len(osd_map['osds']),
                 'require_osd_release': osd_map['require_osd_release'],
                 'require_min_compat_client': osd_map['require_min_compat_client']
             }
 
+            # cephfs
             report['fs'] = {
                 'count': len(fs_map['filesystems']),
                 'feature_flags': fs_map['feature_flags'],
@@ -361,6 +377,7 @@ class Module(MgrModule):
                 num_mds += len(fs['info'])
             report['fs']['total_num_mds'] = num_mds
 
+            # daemons
             report['metadata'] = dict()
             report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
             report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
