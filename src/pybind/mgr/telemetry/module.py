@@ -7,6 +7,7 @@ when user has opted-in
 import errno
 import hashlib
 import json
+import rbd
 import re
 import requests
 import uuid
@@ -53,6 +54,7 @@ REVISION = 3
 #   - added more pool metadata (rep vs ec, cache tiering mode, ec profile)
 #   - added host count, and counts for hosts with each of (mon, osd, mds, mgr)
 #   - whether an OSD cluster network is in use
+#   - rbd pool and image count, and rbd mirror mode (pool-level)
 
 class Module(MgrModule):
     config = dict()
@@ -416,6 +418,11 @@ class Module(MgrModule):
             report['config'] = self.gather_configs()
 
             # pools
+            report['rbd'] = {
+                'num_pools': 0,
+                'num_images_by_pool': [],
+                'mirroring_by_pool': [],
+            }
             num_pg = 0
             report['pools'] = list()
             for pool in osd_map['pools']:
@@ -445,6 +452,13 @@ class Module(MgrModule):
                         'cache_mode': pool['cache_mode'],
                     }
                 )
+                if 'rbd' in pool['application_metadata']:
+                    report['rbd']['num_pools'] += 1
+                    ioctx = self.rados.open_ioctx(pool['pool_name'])
+                    report['rbd']['num_images_by_pool'].append(
+                        sum(1 for _ in rbd.RBD().list2(ioctx)))
+                    report['rbd']['mirroring_by_pool'].append(
+                        rbd.RBD().mirror_mode_get(ioctx) != rbd.RBD_MIRROR_MODE_DISABLED)
 
             # osds
             cluster_network = False
