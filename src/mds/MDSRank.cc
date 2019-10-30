@@ -2526,15 +2526,62 @@ void MDSRankDispatcher::handle_asok_command(
 
     std::lock_guard l(mds_lock);
     r = config_client(client_id, !got_value, option, value, ss);
-  } else if (command == "scrub_path") {
+  } else if (command == "scrub start" ||
+	     command == "scrub_start") {
     string path;
+    string tag;
     vector<string> scrubop_vec;
     cmd_getval(g_ceph_context, cmdmap, "scrubops", scrubop_vec);
     cmd_getval(g_ceph_context, cmdmap, "path", path);
-
-    C_SaferCond cond;
-    command_scrub_start(f, path, "", scrubop_vec, &cond);
-    cond.wait();
+    cmd_getval(g_ceph_context, cmdmap, "tag", tag);
+    finisher->queue(
+      new LambdaContext(
+	[this, on_finish, f, path, tag, scrubop_vec](int r) {
+	  command_scrub_start(
+	    f, path, tag, scrubop_vec,
+	    new LambdaContext(
+	      [on_finish](int r) {
+		bufferlist outbl;
+		on_finish(r, {}, outbl);
+	      }));
+	}));
+    return;
+  } else if (command == "scrub abort") {
+    finisher->queue(
+      new LambdaContext(
+	[this, on_finish, f](int r) {
+	  command_scrub_abort(
+	    f,
+	    new LambdaContext(
+	      [on_finish, f](int r) {
+		bufferlist outbl;
+		f->open_object_section("result");
+		f->dump_int("return_code", r);
+		f->close_section();
+		on_finish(r, {}, outbl);
+	      }));
+	}));
+    return;
+  } else if (command == "scrub pause") {
+    finisher->queue(
+      new LambdaContext(
+	[this, on_finish, f](int r) {
+	  command_scrub_pause(
+	    f,
+	    new LambdaContext(
+	      [on_finish, f](int r) {
+		bufferlist outbl;
+		f->open_object_section("result");
+		f->dump_int("return_code", r);
+		f->close_section();
+		on_finish(r, {}, outbl);
+	      }));
+	}));
+    return;
+  } else if (command == "scrub resume") {
+    command_scrub_resume(f);
+  } else if (command == "scrub status") {
+    command_scrub_status(f);
   } else if (command == "tag path") {
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
@@ -2675,52 +2722,6 @@ private:
   uint64_t timeout;
 };
 
-class C_ScrubExecAndReply : public C_ExecAndReply {
-public:
-  C_ScrubExecAndReply(MDSRank *mds, const cref_t<MCommand> &m,
-                      const std::string &path, const std::string &tag,
-                      const std::vector<std::string> &scrubop)
-    : C_ExecAndReply(mds, m), path(path), tag(tag), scrubop(scrubop) {
-  }
-
-  void exec() override {
-    mds->command_scrub_start(&f, path, tag, scrubop, this);
-  }
-
-private:
-  std::string path;
-  std::string tag;
-  std::vector<std::string> scrubop;
-};
-
-class C_ScrubControlExecAndReply : public C_ExecAndReply {
-public:
-  C_ScrubControlExecAndReply(MDSRank *mds, const cref_t<MCommand> &m,
-                             const std::string &command)
-    : C_ExecAndReply(mds, m), command(command) {
-  }
-
-  void exec() override {
-    if (command == "abort") {
-      mds->command_scrub_abort(&f, this);
-    } else if (command == "pause") {
-      mds->command_scrub_pause(&f, this);
-    } else {
-      ceph_abort();
-    }
-  }
-
-  void finish(int r) override {
-    f.open_object_section("result");
-    f.dump_int("return_code", r);
-    f.close_section();
-    C_ExecAndReply::finish(r);
-  }
-
-private:
-  std::string command;
-};
-
 /**
  * This function drops the mds_lock, so don't do anything with
  * MDSRank after calling it (we could have gone into shutdown): just
@@ -2832,6 +2833,7 @@ void MDSRank::command_scrub_pause(Formatter *f, Context *on_finish) {
 }
 
 void MDSRank::command_scrub_resume(Formatter *f) {
+  std::lock_guard l(mds_lock);
   int r = scrubstack->scrub_resume();
 
   f->open_object_section("result");
@@ -2840,6 +2842,7 @@ void MDSRank::command_scrub_resume(Formatter *f) {
 }
 
 void MDSRank::command_scrub_status(Formatter *f) {
+  std::lock_guard l(mds_lock);
   scrubstack->scrub_status(f);
 }
 
@@ -3571,38 +3574,6 @@ bool MDSRankDispatcher::handle_command(
     *need_reply = false;
     *run_later = create_async_exec_context(new C_CacheDropExecAndReply
                                            (this, m, (uint64_t)timeout));
-    return true;
-  } else if (prefix == "scrub start") {
-    string path;
-    string tag;
-    vector<string> scrubop_vec;
-    cmd_getval(g_ceph_context, cmdmap, "scrubops", scrubop_vec);
-    cmd_getval(g_ceph_context, cmdmap, "path", path);
-    cmd_getval(g_ceph_context, cmdmap, "tag", tag);
-
-    *need_reply = false;
-    *run_later = create_async_exec_context(new C_ScrubExecAndReply
-                                           (this, m, path, tag, scrubop_vec));
-    return true;
-  } else if (prefix == "scrub abort") {
-    *need_reply = false;
-    *run_later = create_async_exec_context(new C_ScrubControlExecAndReply
-                                           (this, m, "abort"));
-    return true;
-  } else if (prefix == "scrub pause") {
-    *need_reply = false;
-    *run_later = create_async_exec_context(new C_ScrubControlExecAndReply
-                                           (this, m, "pause"));
-    return true;
-  } else if (prefix == "scrub resume") {
-    JSONFormatter f(true);
-    command_scrub_resume(&f);
-    f.flush(*ds);
-    return true;
-  } else if (prefix == "scrub status") {
-    JSONFormatter f(true);
-    command_scrub_status(&f);
-    f.flush(*ds);
     return true;
   } else {
     return false;
