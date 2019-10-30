@@ -113,6 +113,20 @@ public:
   struct pipe_set {
     std::set<rgw_sync_bucket_pipe> pipes;
 
+    using iterator = std::set<rgw_sync_bucket_pipe>::iterator;
+
+    void insert(const rgw_sync_bucket_pipe& pipe) {
+      pipes.insert(pipe);
+    }
+
+    iterator begin() {
+      return pipes.begin();
+    }
+
+    iterator end() {
+      return pipes.end();
+    }
+
     void dump(ceph::Formatter *f) const;
   };
 
