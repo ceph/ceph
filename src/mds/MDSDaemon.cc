@@ -302,6 +302,14 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump snapshots");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("session ls name=filters,type=CephString,n=N,req=false",
+				     asok_hook,
+				     "List client sessions based on a filter");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("client ls name=filters,type=CephString,n=N,req=false",
+				     asok_hook,
+				     "List client sessions based on a filter");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("session evict name=filters,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "Evict client session(s) based on a filter");
@@ -592,8 +600,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
-    MDSCommand("session ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
-    MDSCommand("client ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
     MDSCommand("session config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
 	"Config a client session"),
     MDSCommand("client config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
