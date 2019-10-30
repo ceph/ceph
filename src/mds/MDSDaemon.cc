@@ -579,35 +579,6 @@ void MDSDaemon::tick()
   }
 }
 
-void MDSDaemon::send_command_reply(const cref_t<MCommand> &m, MDSRank *mds_rank,
-				   int r, bufferlist outbl,
-				   std::string_view outs)
-{
-  auto priv = m->get_connection()->get_priv();
-  auto session = static_cast<Session *>(priv.get());
-  ceph_assert(session != NULL);
-  // If someone is using a closed session for sending commands (e.g.
-  // the ceph CLI) then we should feel free to clean up this connection
-  // as soon as we've sent them a response.
-  const bool live_session =
-    session->get_state_seq() > 0 &&
-    mds_rank &&
-    mds_rank->sessionmap.get_session(session->info.inst.name);
-
-  if (!live_session) {
-    // This session only existed to issue commands, so terminate it
-    // as soon as we can.
-    ceph_assert(session->is_closed());
-    session->get_connection()->mark_disposable();
-  }
-  priv.reset();
-
-  auto reply = make_message<MCommandReply>(r, outs);
-  reply->set_tid(m->get_tid());
-  reply->set_data(outbl);
-  m->get_connection()->send_message2(reply);
-}
-
 void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 {
   auto priv = m->get_connection()->get_priv();
@@ -638,9 +609,27 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
     cct->get_admin_socket()->queue_tell_command(m);
     return;
   }
+
+  // If someone is using a closed session for sending commands (e.g.
+  // the ceph CLI) then we should feel free to clean up this connection
+  // as soon as we've sent them a response.
+  const bool live_session =
+    session->get_state_seq() > 0 &&
+    mds_rank &&
+    mds_rank->sessionmap.get_session(session->info.inst.name);
+
+  if (!live_session) {
+    // This session only existed to issue commands, so terminate it
+    // as soon as we can.
+    ceph_assert(session->is_closed());
+    session->get_connection()->mark_disposable();
+  }
   priv.reset();
 
-  send_command_reply(m, mds_rank, r, outbl, outs);
+  auto reply = make_message<MCommandReply>(r, outs);
+  reply->set_tid(m->get_tid());
+  reply->set_data(outbl);
+  m->get_connection()->send_message2(reply);
 }
 
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
