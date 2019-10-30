@@ -21,41 +21,13 @@
 #include "messages/MMDSTableRequest.h"
 
 class MDSTableServer : public MDSTable {
-protected:
-  int table;
-  bool recovered;
-  set<mds_rank_t> active_clients;
-private:
-  map<version_t,mds_table_pending_t> pending_for_mds;  // ** child should encode this! **
-  set<version_t> committing_tids;
-
-  struct notify_info_t {
-    set<mds_rank_t> notify_ack_gather;
-    mds_rank_t mds;
-    ref_t<MMDSTableRequest> reply;
-    MDSContext *onfinish;
-    notify_info_t() : reply(NULL), onfinish(NULL) {}
-  };
-  map<version_t, notify_info_t> pending_notifies;
-
-  void handle_prepare(const cref_t<MMDSTableRequest> &m);
-  void _prepare_logged(const cref_t<MMDSTableRequest> &m, version_t tid);
-  friend class C_Prepare;
-
-  void handle_commit(const cref_t<MMDSTableRequest> &m);
-  void _commit_logged(const cref_t<MMDSTableRequest> &m);
-  friend class C_Commit;
-
-  void handle_rollback(const cref_t<MMDSTableRequest> &m);
-  void _rollback_logged(const cref_t<MMDSTableRequest> &m);
-  friend class C_Rollback;
-
-  void _server_update_logged(bufferlist& bl);
-  friend class C_ServerUpdate;
-
-  void handle_notify_ack(const cref_t<MMDSTableRequest> &m);
-
 public:
+  friend class C_ServerRecovery;
+
+  MDSTableServer(MDSRank *m, int tab) :
+    MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
+  ~MDSTableServer() override {}
+
   virtual void handle_query(const cref_t<MMDSTableRequest> &m) = 0;
   virtual void _prepare(const bufferlist &bl, uint64_t reqid, mds_rank_t bymds, bufferlist& out) = 0;
   virtual void _get_reply_buffer(version_t tid, bufferlist *pbl) const = 0;
@@ -90,10 +62,6 @@ public:
       projected_version = version;
   }
 
-  MDSTableServer(MDSRank *m, int tab) :
-    MDSTable(m, get_mdstable_name(tab), false), table(tab), recovered(false) {}
-  ~MDSTableServer() override {}
-
   void reset_state() override {
     pending_for_mds.clear();
     ++version;
@@ -117,10 +85,43 @@ public:
   // recovery
   void finish_recovery(set<mds_rank_t>& active);
   void _do_server_recovery();
-  friend class C_ServerRecovery;
 
   void handle_mds_recovery(mds_rank_t who);
   void handle_mds_failure_or_stop(mds_rank_t who);
-};
+protected:
+  int table;
+  bool recovered = false;
+  set<mds_rank_t> active_clients;
+private:
+  struct notify_info_t {
+    notify_info_t() {}
+    set<mds_rank_t> notify_ack_gather;
+    mds_rank_t mds;
+    ref_t<MMDSTableRequest> reply = NULL;
+    MDSContext *onfinish = nullptr;
+  };
 
+  friend class C_Prepare;
+  friend class C_Commit;
+  friend class C_Rollback;
+  friend class C_ServerUpdate;
+
+  void handle_prepare(const cref_t<MMDSTableRequest> &m);
+  void _prepare_logged(const cref_t<MMDSTableRequest> &m, version_t tid);
+
+  void handle_commit(const cref_t<MMDSTableRequest> &m);
+  void _commit_logged(const cref_t<MMDSTableRequest> &m);
+
+  void handle_rollback(const cref_t<MMDSTableRequest> &m);
+  void _rollback_logged(const cref_t<MMDSTableRequest> &m);
+
+  void _server_update_logged(bufferlist& bl);
+
+  void handle_notify_ack(const cref_t<MMDSTableRequest> &m);
+
+  map<version_t,mds_table_pending_t> pending_for_mds;  // ** child should encode this! **
+  set<version_t> committing_tids;
+
+  map<version_t, notify_info_t> pending_notifies;
+};
 #endif
