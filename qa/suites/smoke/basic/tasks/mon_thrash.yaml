@@ -3,7 +3,6 @@ overrides:
     log-whitelist:
       - reached quota
       - \(POOL_APP_NOT_ENABLED\)
-      - \(OSD_SLOW_PING_TIME
     conf:
       global:
         ms inject delay max: 1
