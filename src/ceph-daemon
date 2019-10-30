@@ -38,7 +38,7 @@ except ImportError:
 import fcntl
 try:
     from StringIO import StringIO           # py2
-except:
+except ImportError:
     from io import StringIO                 # py3
 import json
 import logging
@@ -51,6 +51,26 @@ import tempfile
 import time
 import uuid
 from distutils.spawn import find_executable
+
+try:
+    from tempfile import TemporaryDirectory # py3
+except ImportError:
+    # define a minimal (but sufficient) equivalent for <= py 3.2
+    import shutil
+    class TemporaryDirectory(object):
+        def __init__(self):
+            self.name = tempfile.mkdtemp()
+
+        def __enter__(self):
+            if not self.name:
+                self.name = tempfile.mkdtemp()
+            return self.name
+
+        def cleanup(self):
+            shutil.rmtree(self.name)
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.cleanup()
 
 
 podman_path = None
@@ -645,7 +665,7 @@ WantedBy=ceph-{fsid}.target
     return u
 
 def gen_ssh_key(fsid):
-    tmp_dir = tempfile.TemporaryDirectory()
+    tmp_dir = TemporaryDirectory()
     path = tmp_dir.name + '/key'
     call_throws([
         'ssh-keygen',
