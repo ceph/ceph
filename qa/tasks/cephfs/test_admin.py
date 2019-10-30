@@ -3,6 +3,21 @@ from unittest import case
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 
+class TestAdminCommands(CephFSTestCase):
+    """
+    Tests for administration command.
+    """
+
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    def test_fs_status(self):
+        """
+        That `ceph fs status` command functions.
+        """
+
+        s = self.fs.mon_manager.raw_cluster_cmd("fs", "status")
+        self.assertTrue("active" in s)
 
 class TestConfigCommands(CephFSTestCase):
     """
@@ -12,6 +27,17 @@ class TestConfigCommands(CephFSTestCase):
 
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
+
+    def test_ceph_config_show(self):
+        """
+        That I can successfully show MDS configuration.
+        """
+
+        names = self.fs.get_rank_names()
+        for n in names:
+            s = self.fs.mon_manager.raw_cluster_cmd("config", "show", "mds."+n)
+            self.assertTrue("NAME" in s)
+            self.assertTrue("mon_host" in s)
 
     def test_client_config(self):
         """
