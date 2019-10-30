@@ -1,3 +1,4 @@
+os_type: ubuntu
 roles:
 - [mon.a, mgr.x, osd.0, client.0]
 tasks:
