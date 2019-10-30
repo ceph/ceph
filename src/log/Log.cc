@@ -209,7 +209,7 @@ void Log::flush()
     m_queue_mutex_holder = 0;
   }
 
-  _flush(m_flush, true, false);
+  _flush(m_flush, false);
   m_flush_mutex_holder = 0;
 }
 
@@ -235,14 +235,15 @@ void Log::_flush_logbuf()
   }
 }
 
-void Log::_flush(EntryVector& t, bool requeue, bool crash)
+void Log::_flush(EntryVector& t, bool crash)
 {
   long len = 0;
+  if (t.empty()) {
+    assert(m_log_buf.empty());
+    return;
+  }
   if (crash) {
     len = t.size();
-  }
-  if (!requeue && t.empty()) {
-    return;
   }
   for (auto& e : t) {
     auto prio = e.m_prio;
@@ -302,9 +303,7 @@ void Log::_flush(EntryVector& t, bool requeue, bool crash)
       m_graylog->log_entry(e);
     }
 
-    if (requeue) {
-      m_recent.push_back(std::move(e));
-    }
+    m_recent.push_back(std::move(e));
   }
   t.clear();
 
@@ -345,7 +344,7 @@ void Log::dump_recent()
     m_queue_mutex_holder = 0;
   }
 
-  _flush(m_flush, true, false);
+  _flush(m_flush, false);
   _flush_logbuf();
 
   _log_message("--- begin dump of recent events ---", true);
@@ -353,7 +352,7 @@ void Log::dump_recent()
     EntryVector t;
     t.insert(t.end(), std::make_move_iterator(m_recent.begin()), std::make_move_iterator(m_recent.end()));
     m_recent.clear();
-    _flush(t, true, true);
+    _flush(t, true);
   }
 
   char buf[4096];
