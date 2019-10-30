@@ -494,7 +494,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
             assert False, \
                 "GitHub PR description does not contain a Tracker URL"
         self.backport_trackers = []
-        for issue_url in matching_strings:
+        for issue_url in list(dict.fromkeys(matching_strings)):
             p = re.compile('\\d+')
             issue_id = p.search(issue_url).group()
             if not issue_id:
