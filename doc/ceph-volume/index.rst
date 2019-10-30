@@ -15,8 +15,11 @@ follow a predictable, and robust way of preparing, activating, and starting OSDs
 There is currently support for ``lvm``, and plain disks (with GPT partitions)
 that may have been deployed with ``ceph-disk``.
 
+``zfs`` support is available for running a FreeBSD cluster.
+
 * :ref:`ceph-volume-lvm`
 * :ref:`ceph-volume-simple`
+* :ref:`ceph-volume-zfs`
 
 **Node inventory**
 
@@ -76,3 +79,5 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
    simple/activate
    simple/scan
    simple/systemd
+   zfs/index
+   zfs/inventory
