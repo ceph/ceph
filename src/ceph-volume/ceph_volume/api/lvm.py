@@ -853,6 +853,15 @@ def remove_vg(vg_name):
     )
 
 
+def is_vg(vg_name):
+    stdout = [i.strip() for i in get_api_vgs(fields='pv_name', unparsed=True)]
+    try:
+        stdout.index(vg_name)
+    except ValueError:
+        return False
+    return True
+
+
 def get_vg(vg_name=None, vg_tags=None, vgs=None):
     """
     Return a matching vg for the current system, requires ``vg_name`` or
