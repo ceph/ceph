@@ -1064,7 +1064,7 @@ def command_bootstrap():
         logger.info('Adding key to root@localhost\'s authorized_keys...')
         with open('/root/.ssh/authorized_keys', 'a') as f:
             os.fchmod(f.fileno(), 0o600)  # just in case we created it
-            f.write(ssh_pub + '\n')
+            f.write(ssh_pub.strip() + '\n')
 
         logger.info('Enabling ssh module...')
         CephContainer(
