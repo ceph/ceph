@@ -17,10 +17,10 @@
 #
 #
 
-SCRIPT_VERSION="15.0.0.5775"
+SCRIPT_VERSION="15.0.0.6270"
 full_path="$0"
 this_script=$(basename "$full_path")
-how_to_get_setup_advice="For additional setup advice, run:  ${this_script} --setup-advice"
+how_to_get_setup_advice="For setup advice, run: \"${this_script} --setup-advice | less\""
 
 if [[ $* == *--debug* ]]; then
     set -x
@@ -66,6 +66,8 @@ declare -A comp_hash=(
 ["tool"]="tools"
 )
 
+declare -A flagged_pr_hash=()
+
 function bail_out_github_api {
     local api_said="$1"
     info "GitHub API said:"
@@ -77,8 +79,54 @@ function bail_out_github_api {
     false
 }
 
+function blindly_set_pr_metadata {
+    local pr_number="$1"
+    local json_blob="$2"
+    curl --silent --data-binary "$json_blob" 'https://api.github.com/repos/ceph/ceph/issues/'$pr_number'?access_token='$github_token >/dev/null 2>&1 || true
+}
+
+function check_milestones {
+    local milestones_to_check="$(echo "$1" | tr '\n' ' ' | xargs)"
+    info "Active milestones: $milestones_to_check"
+    for m in $milestones_to_check ; do
+        info "Examining all PRs targeting base branch \"$m\""
+        vet_prs_for_milestone "$m"
+    done
+    dump_flagged_prs
+}
+
+function check_tracker_status {
+    local -a ok_statuses=("new" "need more info")
+    local ts="$1"
+    local tslc="${ts,,}"
+    local tslc_is_ok=
+    for oks in "${ok_statuses[@]}"; do
+        if [ "$tslc" = "$oks" ] ; then
+            debug "Tracker status $ts is OK for backport to proceed"
+            tslc_is_ok="yes"
+            break
+        fi
+    done
+    if [ "$tslc_is_ok" ] ; then
+        true
+    else
+        if [ "$tslc" = "in progress" ] ; then
+            error "Backport $redmine_url is already in progress"
+            false
+        else
+            error "Backport $redmine_url is closed (status: ${ts})"
+            false
+        fi
+    fi
+    echo "$tslc_is_ok"
+}
+
 function cherry_pick_phase {
+    local base_branch=
+    local merged=
+    local number_of_commits=
     local offset=0
+    local singular_or_plural_commit=
     populate_original_issue
     if [ -z "$original_issue" ] ; then
         error "Could not find original issue"
@@ -95,13 +143,28 @@ function cherry_pick_phase {
     fi
     info "Parent issue ostensibly fixed by: ${original_pr_url}"
 
-    debug "Counting commits in ${original_pr_url}"
+    verbose "Examining ${original_pr_url}"
     remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token})
-    number=$(echo ${remote_api_output} | jq .commits)
-    singular_or_plural_commit=
-    if [ "$number" -eq "$number" ] 2>/dev/null ; then
-        # \$number is an integer
-        if [ "$number" -eq "1" ] ; then
+    base_branch=$(echo ${remote_api_output} | jq -r .base.label)
+    if [ "$base_branch" = "ceph:master" ] ; then
+        true
+    else
+        error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
+        info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
+        info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
+        false
+    fi
+    merged=$(echo ${remote_api_output} | jq -r .merged)
+    if [ "$merged" = "true" ] ; then
+        true
+    else
+        error "${original_pr_url} is not merged yet: cowardly refusing to perform automated cherry-pick"
+        false
+    fi
+    number_of_commits=$(echo ${remote_api_output} | jq .commits)
+    if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
+        # \$number_of_commits is set, and is an integer
+        if [ "$number_of_commits" -eq "1" ] ; then
             singular_or_plural_commit="commit"
         else
             singular_or_plural_commit="commits"
@@ -110,7 +173,7 @@ function cherry_pick_phase {
         error "Could not determine the number of commits in ${original_pr_url}"
         bail_out_github_api "$remote_api_output"
     fi
-    info "Found $number $singular_or_plural_commit in $original_pr_url"
+    info "Found $number_of_commits $singular_or_plural_commit in $original_pr_url"
 
     debug "Fetching latest commits from $upstream_remote"
     git fetch $upstream_remote
@@ -126,16 +189,14 @@ function cherry_pick_phase {
     debug "Fetching latest commits from ${original_pr_url}"
     git fetch $upstream_remote pull/$original_pr/head:pr-$original_pr
 
-    info "Attempting to cherry pick $number commits from ${original_pr_url} into local branch $local_branch"
-    let offset=$number-1 || true # don't fail on set -e when result is 0
+    info "Attempting to cherry pick $number_of_commits commits from ${original_pr_url} into local branch $local_branch"
+    let offset=${number_of_commits}-1 || true # don't fail on set -e when result is 0
     for ((i=$offset; i>=0; i--)) ; do
         debug "Cherry-picking commit $(git log --oneline --max-count=1 --no-decorate pr-$original_pr~$i)"
         if git cherry-pick -x "pr-$original_pr~$i" ; then
             true
         else
-            if [ "$VERBOSE" ] ; then
-                git status
-            fi
+            [ "$VERBOSE" ] && git status
             error "Cherry pick failed"
             info "Next, manually fix conflicts and complete the current cherry-pick"
             if [ "$i" -gt "0" ] >/dev/null 2>&1 ; then
@@ -151,6 +212,10 @@ function cherry_pick_phase {
         fi
     done
     info "Cherry picking completed without conflicts"
+}
+
+function clear_line {
+    log overwrite "                                                                             \r"
 }
 
 function debug {
@@ -185,6 +250,23 @@ function display_version_message_and_exit {
     exit 0 
 }
 
+function dump_flagged_prs {
+    local url=
+    clear_line
+    if [ "${#flagged_pr_hash[@]}" -eq "0" ] ; then
+        info "All backport PRs appear to have milestone set correctly"
+    else
+        warning "Some backport PRs had problematic milestone settings"
+        log bare "==========="
+        log bare "Flagged PRs"
+        log bare "==========="
+        for url in "${!flagged_pr_hash[@]}" ; do
+            log bare "$url - ${flagged_pr_hash[$url]}"
+        done
+        log bare "==========="
+    fi
+}
+
 function eol {
     log mtt=$1
     error "$mtt is EOL"
@@ -197,8 +279,29 @@ function error {
 
 function failed_mandatory_var_check {
     local varname="$1"
-    error "$varname not defined"
+    local error="$2"
+    error "$varname $error"
     setup_ok=""
+}
+
+function flag_pr {
+    local pr_num="$1"
+    local pr_url="$2"
+    local flag_reason="$3"
+    warning "flagging PR#${pr_num} because $flag_reason"
+    flagged_pr_hash["${pr_url}"]="$flag_reason"
+}
+
+# takes a string and a substring - returns position of substring within string,
+# or -1 if not found
+# NOTE: position of first character in string is 0
+function grep_for_substr {
+    munged="${1%%$2*}"
+    if [ "$munged" = "$1" ] ; then
+        echo "-1"
+    else
+        echo "${#munged}"
+    fi
 }
 
 # takes PR title, attempts to guess component
@@ -224,61 +327,78 @@ function info {
     log info "$@"
 }
 
-function init_github_user {
-    debug "Initializing mandatory variables - GitHub user"
-    if [ "$github_user" ] ; then
-        true
-    else
-        warning "github_user variable not set, falling back to \$USER"
-        github_user="$USER"
-        if [ "$github_user" ] ; then
-            true
-        else
-            failed_mandatory_var_check github_user
-            info "$how_to_get_setup_advice"
-            false
-        fi
-    fi
-}
-
-function init_mandatory_vars {
-    debug "Initializing mandatory variables - endpoints"
+function init_endpoints {
+    verbose "Initializing remote API endpoints"
     redmine_endpoint="${redmine_endpoint:-"https://tracker.ceph.com"}"
     github_endpoint="${github_endpoint:-"https://github.com/ceph/ceph"}"
-    debug "Initializing mandatory variables - GitHub remotes"
+}
+
+function init_remotes {
+    # if github_user is not set, we cannot initialize fork_remote
+    vet_github_user
+    verbose "Initializing GitHub repos (\"remotes\")"
     upstream_remote="${upstream_remote:-$(deduce_remote upstream)}"
     fork_remote="${fork_remote:-$(deduce_remote fork)}"
 }
 
+function is_active_milestone {
+    local is_active=
+    local milestone_under_test="$1"
+    for m in $active_milestones ; do
+        if [ "$milestone_under_test" = "$m" ] ; then
+            verbose "Milestone $m is active"
+            is_active="yes"
+            break
+        fi
+    done
+    echo "$is_active"
+}
+
 function log {
     local level="$1"
+    local trailing_newline="yes"
     shift
     local msg="$@"
     prefix="${this_script}: "
     verbose_only=
     case $level in
+        bare)
+            prefix=
+            ;;
+        debug)
+            prefix="${prefix}DEBUG: "
+            verbose_only="yes"
+            ;;
         err*)
             prefix="${prefix}ERROR: "
             ;;
         info)
             :
             ;;
-        bare)
+        overwrite)
+            trailing_newline=
             prefix=
+            ;;
+        verbose)
+            verbose_only="yes"
+            ;;
+        verbose_en)
+            verbose_only="yes"
+            trailing_newline=
             ;;
         warn|warning)
             prefix="${prefix}WARNING: "
-            ;;
-        debug|verbose)
-            prefix="${prefix}DEBUG: "
-            verbose_only="1"
             ;;
     esac
     if [ "$verbose_only" -a -z "$VERBOSE" ] ; then
         true
     else
         msg="${prefix}${msg}"
-        echo "$msg" >&2
+        if [ "$trailing_newline" ] ; then
+            echo "${msg}" >&2
+        else
+            echo -en "${msg}" >&2
+        fi
     fi
 }
 
@@ -292,10 +412,7 @@ function milestone_number_from_remote_api {
         echo "$mn"
     else
         error "Could not determine milestone number of ->$milestone<-"
-        if [ "$VERBOSE" ] ; then
-            info "GitHub API said:"
-            log bare "$remote_api_output"
-        fi
+        verbose_en "GitHub API said:\n${remote_api_output}\n"
         info "Valid values are $(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
         info "(This probably means the Release field of ${redmine_url} is populated with"
         info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
@@ -369,6 +486,7 @@ EOM
 
 function setup_report {
     local not_set="!!! NOT SET !!!"
+    local set_but_not_valid="!!! SET, BUT NOT VALID !!!"
     local redmine_endpoint_display="${redmine_endpoint:-$not_set}"
     local redmine_user_id_display="${redmine_user_id:-$not_set}"
     local github_endpoint_display="${github_endpoint:-$not_set}"
@@ -377,17 +495,26 @@ function setup_report {
     local fork_remote_display="${fork_remote:-$not_set}"
     local redmine_key_display=""
     local github_token_display=""
+    verbose Checking mandatory variables
+    if [ "$github_token" ] ; then
+        if [ "$(vet_github_token)" ] ; then
+            github_token_display="(OK, not shown)"
+        else
+            github_token_display="$set_but_not_valid"
+            failed_mandatory_var_check github_token "set, but not valid"
+        fi
+    else
+        github_token_display="$not_set"
+        failed_mandatory_var_check github_token "not set"
+    fi
     [ "$redmine_key" ] && redmine_key_display="(OK, not shown)" || redmine_key_display="$not_set"
-    [ "$github_token" ] && github_token_display="(OK, not shown)" || github_token_display="$not_set"
-    debug Re-checking mandatory variables
-    test "$redmine_key"      || failed_mandatory_var_check redmine_key
-    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id
-    test "$github_user"      || failed_mandatory_var_check github_user
-    test "$github_token"     || failed_mandatory_var_check github_token
-    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote
-    test "$fork_remote"      || failed_mandatory_var_check fork_remote
-    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint
-    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint
+    test "$redmine_key"      || failed_mandatory_var_check redmine_key "not set"
+    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id "not set"
+    test "$github_user"      || failed_mandatory_var_check github_user "not set"
+    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote "not set"
+    test "$fork_remote"      || failed_mandatory_var_check fork_remote "not set"
+    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint "not set"
+    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint "not set"
     if [ "$SETUP_ONLY" ] ; then
         read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
 redmine_endpoint $redmine_endpoint
@@ -406,27 +533,15 @@ EOM
         log bare "--------------------------------"
         log bare "$setup_summary"
         log bare "================================"
-    elif [ "$VERBOSE" ] ; then
-        debug "redmine_endpoint $redmine_endpoint_display"
-        debug "redmine_user_id  $redmine_user_id_display"
-        debug "redmine_key      $redmine_key_display"
-        debug "github_endpoint  $github_endpoint_display"
-        debug "github_user      $github_user_display"
-        debug "github_token     $github_token_display"
-        debug "upstream_remote  $upstream_remote_display"
-        debug "fork_remote      $fork_remote_display"
-    fi
-}
-
-# takes a string and a substring - returns position of substring within string,
-# or -1 if not found
-# NOTE: position of first character in string is 0
-function grep_for_substr {
-    munged="${1%%$2*}"
-    if [ "$munged" = "$1" ] ; then
-        echo "-1"
     else
-        echo "${#munged}"
+        verbose "redmine_endpoint $redmine_endpoint_display"
+        verbose "redmine_user_id  $redmine_user_id_display"
+        verbose "redmine_key      $redmine_key_display"
+        verbose "github_endpoint  $github_endpoint_display"
+        verbose "github_user      $github_user_display"
+        verbose "github_token     $github_token_display"
+        verbose "upstream_remote  $upstream_remote_display"
+        verbose "fork_remote      $fork_remote_display"
     fi
 }
 
@@ -471,6 +586,7 @@ function try_known_milestones {
         luminous) mn="10" ;;
         mimic) mn="11" ;;
         nautilus) mn="12" ;;
+        octopus) echo "Octopus milestone number is unknown! Update the script now." ; exit -1 ;;
     esac
     echo "$mn"
 }
@@ -500,9 +616,12 @@ Usage:
    ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER
 
 Options (not needed in normal operation):
-    -c/--component COMPONENT (will try to set this label in the PR; if
-                       omitted, the script will try to guess the component)
+    --cherry-pick-only (stop after cherry-pick phase)
+    -c/--component COMPONENT
+                       (explicitly set the component label; if omitted, the
+                        script will try to guess the component)
     --debug            (turns on "set -x")
+    --milestones       (vet all backport PRs for correct milestone setting)
     -s/--setup         (check the setup and report any problems found)
     --update-version   (this option exists as a convenience for the script
                         maintainer only: not intended for day-to-day usage)
@@ -547,6 +666,9 @@ PR phase:
 7. (optionally) setting the milestone and label in the PR
 8. updating the Backport tracker issue
 
+When run with --cherry-pick-only, the script will stop after the cherry-pick
+phase.
+
 If any of the commits do not cherry-pick cleanly, the script will abort in
 step 4. In this case, you can either finish the cherry-picking manually
 or abort the cherry-pick. In any case, when and if the local wip branch is
@@ -574,6 +696,105 @@ For more information on Ceph backporting, see:
 EOM
 }
 
+function verbose {
+    log verbose "$@"
+}
+
+function verbose_en {
+    log verbose_en "$@"
+}
+
+function vet_github_token {
+    # github_token is set, but we don't know, yet, if the remote API will honor
+    # it. Fortunately, with GitHub it's simple:
+    #
+    # $ curl --silent https://api.github.com/repos/ceph/ceph/pulls/19999?access_token=invalid
+    # {
+    #   "message": "Bad credentials",
+    #   "documentation_url": "https://developer.github.com/v3"
+    # }
+    #
+    local number=
+    local test_pr_id='19999'
+    remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${test_pr_id}?access_token=${github_token})
+    number=$(echo ${remote_api_output} | jq .number)
+    # in invalid case, $number will be equal to "null"
+    # in valid case, it will be "19999"
+    if [ "$number" -eq "$test_pr_id" ] 2>/dev/null ; then
+        echo "valid"
+    else
+        echo ""
+    fi
+}
+
+function vet_github_user {
+    if [ "$github_user" ] ; then
+        true
+    else
+        failed_mandatory_var_check github_user "not set"
+        info "$how_to_get_setup_advice"
+        false
+    fi
+}
+
+function vet_pr_milestone {
+    local pr_number="$1"
+    local pr_title="$2"
+    local pr_url="$3"
+    local milestone_stanza="$4"
+    local milestone_title_should_be="$5"
+    local milestone_number_should_be=$(try_known_milestones "$milestone_title_should_be")
+    local milestone_number_is=
+    local milestone_title_is=
+    log overwrite "Vetting milestone of PR#${pr_number}\r"
+    if [ "$milestone_stanza" = "null" ] ; then
+        blindly_set_pr_metadata "$pr_number" "{\"milestone\": $milestone_number_should_be}"
+        warning "$pr_url: set milestone to \"$milestone_title_should_be\""
+        flag_pr "$pr_number" "$pr_url" "milestone not set"
+    else
+        milestone_title_is=$(echo "$milestone_stanza" | jq -r '.title')
+        milestone_number_is=$(echo "$milestone_stanza" | jq -r '.number')
+        if [ "$milestone_number_is" -eq "$milestone_number_should_be" ] ; then
+            true
+        else
+            blindly_set_pr_metadata "$pr_number" "{\"milestone\": $milestone_number_should_be}"
+            warning "$pr_url: changed milestone from \"$milestone_title_is\" to \"$milestone_title_should_be\""
+            flag_pr "$pr_number" "$pr_url" "milestone set to wrong value \"$milestone_title_is\""
+        fi
+    fi
+}
+
+function vet_prs_for_milestone {
+    local milestone_title="$1"
+    local pages_of_output=
+    local pr_number=
+    local pr_title=
+    local pr_url=
+    # determine last page (i.e., total number of pages)
+    remote_api_output=$(curl --silent --head https://api.github.com/repos/ceph/ceph/pulls?base=${milestone_title}\&access_token=${github_token} | grep -E '^Link' || true)
+    if [ "$remote_api_output" ] ; then
+         # Link: <https://api.github.com/repositories/2310495/pulls?base=luminous&access_token=f9b0beb6922e418663396f3ff2ab69467a3268f9&page=2>; rel="next", <https://api.github.com/repositories/2310495/pulls?base=luminous&access_token=f9b0beb6922e418663396f3ff2ab69467a3268f9&page=2>; rel="last"
+         pages_of_output=$(echo "$remote_api_output" | sed 's/^.*&page\=\([0-9]\+\)>; rel=\"last\".*$/\1/g')
+    else
+         pages_of_output="1"
+    fi
+    verbose "GitHub has $pages_of_output pages of pull request data for \"base:${milestone_title}\""
+    for ((page=1; page<=${pages_of_output}; page++)) ; do
+        verbose "Fetching PRs (page $page of ${pages_of_output})"
+        remote_api_output=$(curl --silent -X GET https://api.github.com/repos/ceph/ceph/pulls?base=${milestone_title}\&access_token=${github_token}\&page=${page})
+        prs_in_page=$(echo "$remote_api_output" | jq -r '. | length')
+        verbose "Page $page of remote API output contains information on $prs_in_page PRs"
+        for ((i=0; i<${prs_in_page}; i++)) ; do
+            pr_number=$(echo "$remote_api_output" | jq -r '.['$i'].number')
+            pr_title=$(echo "$remote_api_output" | jq -r '.['$i'].title')
+            pr_url="${github_endpoint}/pull/${pr_number}"
+            milestone_stanza=$(echo "$remote_api_output" | jq -r '.['$i'].milestone')
+            vet_pr_milestone "$pr_number" "$pr_title" "$pr_url" "$milestone_stanza" "$milestone_title"
+        done
+        clear_line
+    done
+}
+
 function warning {
     log warning "$@"
 }
@@ -587,6 +808,7 @@ if git status >/dev/null 2>&1 ; then
     debug "In a local git clone. Good."
 else
     error "This script must be run from inside a local git clone"
+    info "$how_to_get_setup_advice"
     false
 fi
 
@@ -595,13 +817,14 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,help,milestones,setup,setup-advice,troubleshooting-advice,update-version,usage-advice,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
+CHECK_MILESTONES=""
+CHERRY_PICK_ONLY=""
 DEBUG=""
 EXPLICIT_COMPONENT=""
-EXPLICIT_PREPARE=""
 HELP=""
 ISSUE=""
 SETUP_ADVICE=""
@@ -611,10 +834,11 @@ USAGE_ADVICE=""
 VERBOSE=""
 while true ; do
     case "$1" in
+        --cherry-pick-only) CHERRY_PICK_ONLY="$1" ; shift ;;
         --component|-c) shift ; EXPLICIT_COMPONENT="$1" ; shift ;;
         --debug|-d) DEBUG="$1" ; shift ;;
         --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
-        --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
+        --milestones) CHECK_MILESTONES="$1" ; shift ;;
         --setup|-s) SETUP_ONLY="$1" ; shift ;;
         --setup-advice) ADVICE="1" ; SETUP_ADVICE="$1" ; shift ;;
         --troubleshooting-advice) ADVICE="$1" ; TROUBLESHOOTING_ADVICE="$1" ; shift ;;
@@ -635,7 +859,7 @@ if [ "$ADVICE" ] ; then
     exit 0
 fi
 
-[ "$SETUP_ONLY" ] && ISSUE="0"
+[ "$SETUP_ONLY" -o "$CHECK_MILESTONES" ] && ISSUE="0"
 if [[ $ISSUE =~ ^[0-9]+$ ]] ; then
     issue=$ISSUE
 else
@@ -660,10 +884,10 @@ fi
 #
 
 BACKPORT_COMMON=$HOME/bin/backport_common.sh
-[ -f "$BACKPORT_COMMON" ] && source $HOME/bin/backport_common.sh
+[ -f "$BACKPORT_COMMON" ] && source "$BACKPORT_COMMON"
 setup_ok="1"
-init_github_user
-init_mandatory_vars
+init_endpoints
+init_remotes
 setup_report
 if [ "$setup_ok" ] ; then
     if [ "$SETUP_ONLY" ] ; then
@@ -675,7 +899,6 @@ if [ "$setup_ok" ] ; then
 else
     if [ "$SETUP_ONLY" ] ; then
         log bare "Setup is NOT OK"
-        log bare "(hint) set variables via the environment"
         log bare "$how_to_get_setup_advice"
         false
     else
@@ -686,6 +909,22 @@ else
     fi
 fi
 
+#
+# query remote GitHub API for active milestones
+#
+
+verbose "Querying GitHub API for active milestones"
+remote_api_output="$(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)"
+active_milestones="$(echo $remote_api_output | jq -r '.[] | .title')"
+if [ "$active_milestones" = "null" ] ; then
+    error "Could not determine the active milestones"
+    bail_out_github_api "$remote_api_output"
+fi
+
+if [ "$CHECK_MILESTONES" ] ; then
+    check_milestones "$active_milestones"
+    exit 0
+fi
 
 #
 # query remote Redmine API for information about the Backport tracker issue
@@ -713,6 +952,16 @@ else
     false
 fi
 
+debug "Looking up status of $redmine_url"
+tracker_status=$(echo $remote_api_output | jq -r '.issue.status.name')
+if [ "$tracker_status" ] ; then
+    debug "Tracker status: $tracker_status"
+    test "$(check_tracker_status "$tracker_status")"
+else
+    error "could not obtain status from ${redmine_url}"
+    false
+fi
+
 tracker_title=$(echo $remote_api_output | jq -r '.issue.subject')
 debug "Title of $redmine_url is ->$tracker_title<-"
 
@@ -725,6 +974,12 @@ if [ "$tracker_assignee_id" = "null" -o "$tracker_assignee_id" = "$redmine_user_
 else
     error "$redmine_url is assigned to $tracker_assignee_name (ID $tracker_assignee_id)"
     info "Cowardly refusing to work on an issue that is assigned to someone else"
+    false
+fi
+
+if [ -z "$(is_active_milestone "$milestone")" ] ; then
+    error "$redmine_url is a backport to $milestone which is not an active milestone"
+    info "Cowardly refusing to work on a backport to an inactive release"
     false
 fi
 
@@ -744,14 +999,15 @@ debug "Milestone number is $milestone_number"
 
 local_branch=wip-${issue}-${target_branch}
 if git show-ref --verify --quiet refs/heads/$local_branch ; then
-    if [ "$EXPLICIT_PREPARE" ] ; then
-        error "local branch $local_branch already exists -- cannot --prepare"
+    if [ "$CHERRY_PICK_ONLY" ] ; then
+        error "local branch $local_branch already exists -- cannot -prepare"
         false
     fi
     info "local branch $local_branch already exists: skipping cherry-pick phase"
 else
     info "$local_branch does not exist: will create it and attempt automated cherry-pick"
     cherry_pick_phase
+    [ "$CHERRY_PICK_ONLY" ] && exit 0
 fi
 
 
@@ -817,7 +1073,7 @@ else
     debug "Attempting to set ${milestone} milestone in ${backport_pr_url}"
     data_binary='{"milestone":'$milestone_number'}'
 fi
-curl --silent --data-binary "$data_binary" 'https://api.github.com/repos/ceph/ceph/issues/'$backport_pr_number'?access_token='$github_token >/dev/null 2>&1 || true
+blindly_set_pr_metadata "$backport_pr_number" "$data_binary"
 
 pgrep firefox >/dev/null && firefox ${backport_pr_url}
 
