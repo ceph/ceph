@@ -2654,6 +2654,17 @@ void MDSRankDispatcher::handle_asok_command(
     command_openfiles_ls(f);
   } else if (command == "dump inode") {
     command_dump_inode(f, cmdmap, ss);
+  } else if (command == "damage ls") {
+    std::lock_guard l(mds_lock);
+    damage_table.dump(f);
+  } else if (command == "damage rm") {
+    std::lock_guard l(mds_lock);
+    damage_entry_id_t id = 0;
+    if (!cmd_getval(g_ceph_context, cmdmap, "damage_id", (int64_t&)id)) {
+      r = -EINVAL;
+      goto out;
+    }
+    damage_table.erase(id);
   } else {
     r = -ENOSYS;
   }
@@ -3540,22 +3551,7 @@ bool MDSRankDispatcher::handle_command(
   std::string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  if (prefix == "damage ls") {
-    JSONFormatter f(true);
-    damage_table.dump(&f);
-    f.flush(*ds);
-    return true;
-  } else if (prefix == "damage rm") {
-    damage_entry_id_t id = 0;
-    bool got = cmd_getval(g_ceph_context, cmdmap, "damage_id", (int64_t&)id);
-    if (!got) {
-      *r = -EINVAL;
-      return true;
-    }
-
-    damage_table.erase(id);
-    return true;
-  } else if (prefix == "cache drop") {
+  if (prefix == "cache drop") {
     int64_t timeout;
     if (!cmd_getval(g_ceph_context, cmdmap, "timeout", timeout)) {
       timeout = 0;

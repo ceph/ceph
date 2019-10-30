@@ -364,6 +364,15 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Config a CephFS client session");
   assert(r == 0);
+  r = admin_socket->register_command("damage ls",
+				     asok_hook,
+				     "List detected metadata damage");
+  assert(r == 0);
+  r = admin_socket->register_command("damage rm "
+				     "name=damage_id,type=CephInt",
+				     asok_hook,
+				     "Remove a damage table entry");
+  assert(r == 0);
   r = admin_socket->register_command("osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");
@@ -632,8 +641,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
-    MDSCommand("damage ls", "List detected metadata damage"),
-    MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
     MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
   };
   return commands;
