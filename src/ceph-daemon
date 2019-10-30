@@ -764,9 +764,9 @@ def command_bootstrap():
         cp.add_section('global')
     cp.set('global', 'fsid', fsid);
     cp.set('global', 'mon host', addr_arg)
-    with StringIO() as f:
-        cp.write(f)
-        config = f.getvalue()
+    cpf = StringIO()
+    cp.write(cpf)
+    config = cpf.getvalue()
 
     if not args.skip_ping_check:
         logger.info('Verifying we can ping mon IP %s...' % mon_ip)
