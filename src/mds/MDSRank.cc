@@ -2619,6 +2619,21 @@ void MDSRankDispatcher::handle_asok_command(
     } else {
       r = mdcache->dump_cache(path);
     }
+  } else if (command == "cache drop") {
+    int64_t timeout = 0;
+    cmd_getval(g_ceph_context, cmdmap, "timeout", timeout);
+    finisher->queue(
+      new LambdaContext(
+	[this, on_finish, f, timeout](int r) {
+	  command_cache_drop(
+	    timeout, f,
+	    new LambdaContext(
+	      [on_finish](int r) {
+		bufferlist outbl;
+		on_finish(r, {}, outbl);
+	      }));
+	}));
+    return;
   } else if (command == "cache status") {
     std::lock_guard l(mds_lock);
     mdcache->cache_status(f);
@@ -2717,21 +2732,6 @@ public:
 
 protected:
   JSONFormatter f;
-};
-
-class C_CacheDropExecAndReply : public C_ExecAndReply {
-public:
-  C_CacheDropExecAndReply(MDSRank *mds, const cref_t<MCommand> &m,
-                          uint64_t timeout)
-    : C_ExecAndReply(mds, m), timeout(timeout) {
-  }
-
-  void exec() override {
-    mds->command_cache_drop(timeout, &f, this);
-  }
-
-private:
-  uint64_t timeout;
 };
 
 /**
@@ -3551,19 +3551,7 @@ bool MDSRankDispatcher::handle_command(
   std::string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  if (prefix == "cache drop") {
-    int64_t timeout;
-    if (!cmd_getval(g_ceph_context, cmdmap, "timeout", timeout)) {
-      timeout = 0;
-    }
-
-    *need_reply = false;
-    *run_later = create_async_exec_context(new C_CacheDropExecAndReply
-                                           (this, m, (uint64_t)timeout));
-    return true;
-  } else {
-    return false;
-  }
+  return false;
 }
 
 void MDSRank::command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish) {
