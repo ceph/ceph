@@ -2007,6 +2007,20 @@ TEST_F(TestLibRBD, TestIO)
   ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_release(comp);
 
+  std::string write_buffer("This is a testThis is a test");
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0],  .iov_len = 6},
+    {.iov_base = &write_buffer[6],  .iov_len = 5},
+    {.iov_base = &write_buffer[11],  .iov_len = 7},
+    {.iov_base = &write_buffer[18], .iov_len = 2},
+    {.iov_base = &write_buffer[20], .iov_len = 8}
+  };
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(0, rbd_aio_compare_and_writev(image, write_iovs, sizeof(write_iovs) / sizeof(struct iovec), 0, comp, &mismatch_offset, 0));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(0U, mismatch_offset);
+  rbd_aio_release(comp);
+
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
 

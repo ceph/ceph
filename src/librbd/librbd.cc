@@ -5910,6 +5910,47 @@ extern "C" ssize_t rbd_aio_compare_and_write(rbd_image_t image, uint64_t off,
   return 0;
 }
 
+extern "C" int rbd_aio_compare_and_writev(rbd_image_t image, const struct iovec *iov,
+                                          int iovcnt, uint64_t off,
+                                          rbd_completion_t c, uint64_t *mismatch_off,
+                                          int op_flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  auto aio_completion = get_aio_completion(comp);
+  ssize_t len = 0;
+  bufferlist bl;
+  bufferlist bl_cmp;
+  bufferlist bl_buf;
+  for (int i = 0; i < iovcnt; ++i) {
+    const struct iovec &io = iov[i];
+    len += io.iov_len;
+    if (len < 0) {
+      break;
+    }
+    
+    bl.push_back(create_write_raw(ictx, static_cast<char*>(io.iov_base), io.iov_len, aio_completion)); 
+  }
+ 
+  int r = 0;
+  if (0 >= iovcnt || len < 0 || 0 != len % 2)
+  {
+    r = -EINVAL;
+  }
+ 
+  tracepoint(librbd, aio_compare_and_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+                ictx->read_only, off, len/2 , NULL, NULL, comp->pc, op_flags); 
+ 
+  bl.copy(0, len/2, bl_cmp); 
+  bl.copy(len/2, len/2, bl_buf);
+  ictx->io_work_queue->aio_compare_and_write(aio_completion, off, len/2,
+                                               std::move(bl_cmp), std::move(bl_buf),
+                                               mismatch_off, op_flags, false); 
+
+  return r;
+}
+
 extern "C" int rbd_invalidate_cache(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
