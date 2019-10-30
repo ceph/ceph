@@ -2476,12 +2476,17 @@ void MDSRankDispatcher::handle_asok_command(
       dout(4) << __func__ << ": waiting for OSD epoch " << target_epoch << dendl;
       cond.wait();
     }
-  } else if (command == "session ls") {
+  } else if (command == "session ls" ||
+	     command == "client ls") {
     std::lock_guard l(mds_lock);
-
-    heartbeat_reset();
-
-    dump_sessions(SessionFilter(), f);
+    std::vector<std::string> filter_args;
+    cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
+    SessionFilter filter;
+    r = filter.parse(filter_args, &ss);
+    if (r != 0) {
+      goto out;
+    }
+    dump_sessions(filter, f);
   } else if (command == "session evict" ||
 	     command == "client evict") {
     std::lock_guard l(mds_lock);
@@ -3531,21 +3536,7 @@ bool MDSRankDispatcher::handle_command(
   std::string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  if (prefix == "session ls" || prefix == "client ls") {
-    std::vector<std::string> filter_args;
-    cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
-
-    SessionFilter filter;
-    *r = filter.parse(filter_args, ss);
-    if (*r != 0) {
-      return true;
-    }
-
-    JSONFormatter f(true);
-    dump_sessions(filter, &f);
-    f.flush(*ds);
-    return true;
-  } else if (prefix == "session config" || prefix == "client config") {
+  if (prefix == "session config" || prefix == "client config") {
     int64_t client_id;
     std::string option;
     std::string value;
