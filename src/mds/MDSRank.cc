@@ -2515,7 +2515,8 @@ void MDSRankDispatcher::handle_asok_command(
       dout(15) << ss.str() << dendl;
       r = -ENOENT;
     }
-  } else if (command == "session config") {
+  } else if (command == "session config" ||
+	     command == "client config") {
     int64_t client_id;
     std::string option;
     std::string value;
@@ -3539,18 +3540,7 @@ bool MDSRankDispatcher::handle_command(
   std::string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  if (prefix == "session config" || prefix == "client config") {
-    int64_t client_id;
-    std::string option;
-    std::string value;
-
-    cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
-    cmd_getval(g_ceph_context, cmdmap, "option", option);
-    bool got_value = cmd_getval(g_ceph_context, cmdmap, "value", value);
-
-    *r = config_client(client_id, !got_value, option, value, *ss);
-    return true;
-  } else if (prefix == "damage ls") {
+  if (prefix == "damage ls") {
     JSONFormatter f(true);
     damage_table.dump(&f);
     f.flush(*ds);
