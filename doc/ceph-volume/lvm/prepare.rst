@@ -19,8 +19,7 @@ work with Ceph, the tool will assign a few pieces of metadata information using
 part of a Ceph system, and what role they have (journal, filestore, bluestore,
 etc...)
 
-Although initially :term:`filestore` is supported (and supported by default)
-the back end can be specified with:
+Although :term:`bluestore` is the default, the back end can be specified with:
 
 
 * :ref:`--filestore <ceph-volume-lvm-prepare_filestore>`
