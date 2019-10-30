@@ -261,9 +261,33 @@ void MDSDaemon::set_up_admin_socket()
   ceph_assert(r == 0);
   r = admin_socket->register_command("scrub_path name=path,type=CephString "
 				     "name=scrubops,type=CephChoices,"
-				     "strings=force|recursive|repair,n=N,req=false",
+				     "strings=force|recursive|repair,n=N,req=false "
+				     "name=tag,type=CephString,req=false",
                                      asok_hook,
                                      "scrub an inode and output results");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub start "
+				     "name=path,type=CephString "
+				     "name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false "
+				     "name=tag,type=CephString,req=false",
+				     asok_hook,
+				     "scrub and inode and output results");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub abort",
+                                     asok_hook,
+                                     "Abort in progress scrub operations(s)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub pause",
+                                     asok_hook,
+                                     "Pause in progress scrub operations(s)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub resume",
+                                     asok_hook,
+                                     "Resume paused scrub operations(s)");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub status",
+                                     asok_hook,
+                                     "Status of scrub operations(s)");
   ceph_assert(r == 0);
   r = admin_socket->register_command("tag path name=path,type=CephString"
                                      " name=tag,type=CephString",
@@ -607,12 +631,6 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
     MDSCommand("damage ls", "List detected metadata damage"),
     MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
     MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
-    MDSCommand("scrub start name=path,type=CephString name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false name=tag,type=CephString,req=false",
-               "scrub an inode and output results"),
-    MDSCommand("scrub abort", "Abort in progress scrub operation(s)"),
-    MDSCommand("scrub pause", "Pause in progress scrub operation(s)"),
-    MDSCommand("scrub resume", "Resume paused scrub operation(s)"),
-    MDSCommand("scrub status", "Status of scrub operation"),
   };
   return commands;
 };
