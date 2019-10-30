@@ -452,7 +452,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(13, 2, bl);
+  ENCODE_START(14, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -487,6 +487,8 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(num_osds, bl);
   encode(num_per_pool_osds, bl);
 
+  encode((uint32_t)0, bl); // compatibility
+
   // hb_pingtime map
   encode((int)hb_pingtime.size(), bl);
   for (auto i : hb_pingtime) {
@@ -520,7 +522,7 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(13, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -587,8 +589,13 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
     num_osds = 0;
     num_per_pool_osds = 0;
   }
-  hb_pingtime.clear();
+  // Compatibility num_per_pool_omap_osds
   if (struct_v >= 13) {
+    uint32_t dummy;
+    decode(dummy, bl);
+  }
+  hb_pingtime.clear();
+  if (struct_v >= 14) {
     int count;
     decode(count, bl);
     for (int i = 0 ; i < count ; i++) {
