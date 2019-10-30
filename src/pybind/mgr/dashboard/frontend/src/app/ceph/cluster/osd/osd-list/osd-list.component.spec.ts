@@ -113,7 +113,11 @@ describe('OsdListComponent', () => {
 
   it('should have columns that are sortable', () => {
     fixture.detectChanges();
-    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+    expect(
+      component.columns
+        .filter((column) => !column.checkboxable)
+        .every((column) => Boolean(column.prop))
+    ).toBeTruthy();
   });
 
   describe('getOsdList', () => {
