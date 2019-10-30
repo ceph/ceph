@@ -302,19 +302,7 @@ public:
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
-        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
-          writing.push_back(*b);
-        } else {
-          auto it = writing.begin();
-          while (it->seq < b->seq) {
-            ++it;
-          }
-
-          ceph_assert(it->seq >= b->seq);
-          // note that this will insert b before it
-          // hence the order is maintained
-          writing.insert(it, *b);
-        }
+        _add_writing(b);
       } else {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
 	cache->_add(b, level, near);
@@ -325,17 +313,7 @@ public:
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
     void _rm_buffer(BufferCacheShard* cache,
-		    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
-      ceph_assert(p != buffer_map.end());
-      cache->_audit("_rm_buffer start");
-      if (p->second->is_writing()) {
-        writing.erase(writing.iterator_to(*p->second));
-      } else {
-	cache->_rm(p->second.get());
-      }
-      buffer_map.erase(p);
-      cache->_audit("_rm_buffer end");
-    }
+      std::map<uint32_t, std::unique_ptr<Buffer>>::iterator p);
 
     std::map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
       uint32_t offset) {
@@ -348,8 +326,7 @@ public:
       return i;
     }
 
-    // must be called under protection of the Cache lock
-    void _clear(BufferCacheShard* cache);
+    void clear(BufferCacheShard* cache);
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
     int discard(BufferCacheShard* cache, uint32_t offset, uint32_t length) {
@@ -400,46 +377,94 @@ public:
       }
       f->close_section();
     }
+
+    void claim(BufferSpace& from);
+
+  private:
+    void _add_writing(Buffer* b);
+
   };
 
   struct SharedBlobSet;
 
+  class BufferSpaceBase
+  {
+    CollectionRef coll;
+
+    virtual void get() {
+      ++nref;
+    }
+    virtual void put() {
+      if (--nref == 0) {
+        delete this;
+      }
+    }
+
+  protected:
+    std::atomic_int nref = { 0 }; ///< reference count
+
+  public:
+    //MEMPOOL_CLASS_HELPERS();
+
+    BufferSpace bc;             ///< buffer cache
+
+    BufferSpaceBase(Collection* _coll) : coll(_coll) {
+    }
+    virtual ~BufferSpaceBase();
+
+    friend void intrusive_ptr_add_ref(BufferSpaceBase* b) { b->get(); }
+    friend void intrusive_ptr_release(BufferSpaceBase* b) { b->put(); }
+
+    inline BufferCacheShard* get_cache() const {
+      return coll ? coll->cache : nullptr;
+    }
+
+    inline CollectionRef get_collection() const {
+      return coll;
+    }
+    void update_collection(CollectionRef _coll) {
+      coll = _coll;
+    }
+
+    inline bool is_referenced() const {
+      return nref != 0;
+    }
+
+    void finish_write(uint64_t seq);
+
+    virtual void dump(Formatter* f) const {
+    }
+    virtual void dump(ostream& out) const {
+    }
+  };
+  typedef boost::intrusive_ptr<BufferSpaceBase> BufferSpaceRef;
+
   /// in-memory shared blob state (incl cached buffers)
-  struct SharedBlob {
+  struct SharedBlob : public BufferSpaceBase {
     MEMPOOL_CLASS_HELPERS();
 
-    std::atomic_int nref = {0}; ///< reference count
     bool loaded = false;
 
-    CollectionRef coll;
     union {
       uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
     };
-    BufferSpace bc;             ///< buffer cache
 
-    SharedBlob(Collection *_coll) : coll(_coll), sbid_unloaded(0) {
-      if (get_cache()) {
-	get_cache()->add_blob();
-      }
-    }
+    SharedBlob(Collection* _coll);
     SharedBlob(uint64_t i, Collection *_coll);
-    ~SharedBlob();
+    ~SharedBlob() override;
 
     uint64_t get_sbid() const {
       return loaded ? persistent->sbid : sbid_unloaded;
     }
 
-    friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
-    friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
-
-    void dump(ceph::Formatter* f) const;
-    friend std::ostream& operator<<(std::ostream& out, const SharedBlob& sb);
-
-    void get() {
-      ++nref;
+    inline SharedBlobSet* get_parent() {
+      auto coll = get_collection();
+      return coll ? &(coll->shared_blob_set) : nullptr;
     }
-    void put();
+
+    void dump(Formatter* f) const override;
+    void dump(ostream& out) const override;
 
     /// get logical references
     void get_ref(uint64_t offset, uint32_t length);
@@ -448,22 +473,16 @@ public:
     void put_ref(uint64_t offset, uint32_t length,
 		 PExtentVector *r, bool *unshare);
 
-    void finish_write(uint64_t seq);
-
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
-    }
-    inline BufferCacheShard* get_cache() {
-      return coll ? coll->cache : nullptr;
-    }
-    inline SharedBlobSet* get_parent() {
-      return coll ? &(coll->shared_blob_set) : nullptr;
     }
     inline bool is_loaded() const {
       return loaded;
     }
 
+    void put() override;
   };
+
   typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
 
   /// a lookup table of SharedBlobs
@@ -479,22 +498,21 @@ public:
       std::lock_guard l(lock);
       auto p = sb_map.find(sbid);
       if (p == sb_map.end() ||
-	  p->second->nref == 0) {
+	  !p->second->is_referenced()) {
         return nullptr;
       }
       return p->second;
     }
 
-    void add(Collection* coll, SharedBlob *sb) {
+    void add(SharedBlob *sb) {
       std::lock_guard l(lock);
       sb_map[sb->get_sbid()] = sb;
-      sb->coll = coll;
     }
 
     bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
       std::lock_guard l(lock);
       ceph_assert(sb->get_parent() == this);
-      if (verify_nref_is_zero && sb->nref != 0) {
+      if (verify_nref_is_zero && sb->is_referenced()) {
 	return false;
       }
       // only remove if it still points to us
@@ -518,15 +536,46 @@ public:
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
 
   /// in-memory blob metadata and associated cached buffers (if any)
+  struct Blob;
+  typedef boost::intrusive_ptr<Blob> BlobRef;
+
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
 
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
-    SharedBlobRef shared_blob;      ///< shared blob state (if any)
+
+    const BufferSpaceBase* buffer_space() const {
+      if (unlikely(is_shared())) {
+        return _shared_blob.get();
+      }
+      return _shared_bspace.get();
+    }
+    BufferSpaceBase* buffer_space() {
+      if (unlikely(is_shared())) {
+        return _shared_blob.get();
+      }
+      return _shared_bspace.get();
+    }
+    bool is_shared() const {
+      return blob.is_shared();
+    }
+    SharedBlobRef shared_blob() {
+      ceph_assert(is_shared());
+      return _shared_blob;
+    }
+
+    void open_shared_blob(Collection* coll, uint64_t sbid);
+    void make_blob_shared(Collection* coll, uint64_t sbid);
+    void make_blob_unshared(Collection* coll);
 
   private:
+    union {
+      BufferSpaceRef _shared_bspace;
+      SharedBlobRef _shared_blob;      ///< shared blob state (if any)
+    };
+
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
 #ifdef CACHE_BLOB_BL
     mutable ceph::buffer::list blob_bl;     ///< cached encoded blob, blob is dirty if empty
@@ -536,6 +585,24 @@ public:
 
   public:
 
+    Blob(bool _new, Collection* coll) : _shared_bspace(nullptr) {
+      if (_new) {
+        _shared_bspace = new BufferSpaceBase(coll);
+      }
+      coll->cache->add_blob();
+    }
+
+    ~Blob() {
+      auto bspace = buffer_space();
+      if (bspace && bspace->get_cache()) {
+        bspace->get_cache()->rm_blob();
+      }
+      if (unlikely(blob.is_shared())) {
+        _shared_blob.reset();
+      } else {
+        _shared_bspace.reset();
+      }
+    }
     friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
     friend void intrusive_ptr_release(Blob *b) { b->put(); }
 
@@ -557,9 +624,10 @@ public:
     }
 
     bool can_split() const {
-      std::lock_guard l(shared_blob->get_cache()->lock);
+      auto bc = buffer_space();
+      std::lock_guard l(bc->get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
-      return shared_blob->bc.writing.empty() &&
+      return bc->bc.writing.empty() &&
              used_in_blob.can_split() &&
              get_blob().can_split();
     }
@@ -575,7 +643,11 @@ public:
 			uint32_t *length0);
 
     void dup(Blob& o) {
-      o.shared_blob = shared_blob;
+      if (is_shared()) {
+        o._shared_blob = _shared_blob;
+      } else {
+        o._shared_bspace = _shared_bspace;
+      }
       o.blob = blob;
 #ifdef CACHE_BLOB_BL
       o.blob_bl = blob_bl;
@@ -687,7 +759,6 @@ public:
       bool include_ref_map);
 #endif
   };
-  typedef boost::intrusive_ptr<Blob> BlobRef;
   typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
@@ -713,7 +784,7 @@ public:
     }
     ~Extent() {
       if (blob) {
-	blob->shared_blob->get_cache()->rm_extent();
+	blob->buffer_space()->get_cache()->rm_extent();
       }
     }
 
@@ -722,7 +793,7 @@ public:
     void assign_blob(const BlobRef& b) {
       ceph_assert(!blob);
       blob = b;
-      blob->shared_blob->get_cache()->add_extent();
+      blob->buffer_space()->get_cache()->add_extent();
     }
 
     // comparators for intrusive_set
@@ -1363,16 +1434,7 @@ public:
     //  open = SharedBlob is instantiated
     //  shared = blob_t shared flag is std::set; SharedBlob is hashed.
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
-    void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
-    void make_blob_shared(uint64_t sbid, BlobRef b);
-    uint64_t make_blob_unshared(SharedBlob *sb);
-
-    BlobRef new_blob() {
-      BlobRef b = new Blob();
-      b->shared_blob = new SharedBlob(this);
-      return b;
-    }
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -1599,7 +1661,7 @@ public:
     std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
 
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
+    std::set<BlobRef> blobs_written;       ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
@@ -1653,7 +1715,7 @@ public:
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
     }
-    void write_shared_blob(SharedBlobRef &sb) {
+    void write_shared_blob(SharedBlobRef sb) {
       shared_blobs.insert(sb);
     }
     void unshare_blob(SharedBlob *sb) {
@@ -2515,9 +2577,10 @@ private:
     uint64_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    b->shared_blob->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
-			     flags);
-    txc->shared_blobs_written.insert(b->shared_blob);
+
+    b->buffer_space()->bc.write(
+      b->buffer_space()->get_cache(), txc->seq, offset, bl, flags);
+    txc->blobs_written.insert(b);
   }
 
   int _collection_list(
