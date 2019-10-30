@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/exclusive_lock/MockPolicy.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ManagedLock.h"
 #include "librbd/exclusive_lock/PreAcquireRequest.h"
@@ -288,6 +289,16 @@ public:
   void expect_shut_down(MockManagedLock &managed_lock) {
     EXPECT_CALL(managed_lock, shut_down(_))
       .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(nullptr)));
+  }
+
+  void expect_accept_blocked_request(
+      MockExclusiveLockImageCtx &mock_image_ctx,
+      exclusive_lock::MockPolicy &policy,
+      exclusive_lock::OperationRequestType request_type, bool value) {
+    EXPECT_CALL(mock_image_ctx, get_exclusive_lock_policy())
+      .WillOnce(Return(&policy));
+    EXPECT_CALL(policy, accept_blocked_request(request_type))
+      .WillOnce(Return(value));
   }
 
   int when_init(MockExclusiveLockImageCtx &mock_image_ctx,
@@ -663,6 +674,7 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock exclusive_lock(mock_image_ctx);
+  exclusive_lock::MockPolicy mock_exclusive_lock_policy;
 
   expect_op_work_queue(mock_image_ctx);
 
@@ -675,19 +687,35 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
   int ret_val;
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
-  ASSERT_TRUE(exclusive_lock.accept_requests(&ret_val));
+  ASSERT_TRUE(exclusive_lock.accept_request(
+                exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(0, ret_val);
 
   exclusive_lock.block_requests(-EROFS);
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
-  ASSERT_FALSE(exclusive_lock.accept_requests(&ret_val));
+  expect_accept_blocked_request(mock_image_ctx, mock_exclusive_lock_policy,
+                                exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                                false);
+  ASSERT_FALSE(exclusive_lock.accept_request(
+                 exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(-EROFS, ret_val);
+
+  expect_is_state_shutdown(exclusive_lock, false);
+  expect_is_state_locked(exclusive_lock, true);
+  expect_accept_blocked_request(
+    mock_image_ctx, mock_exclusive_lock_policy,
+    exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE, true);
+  ASSERT_TRUE(exclusive_lock.accept_request(
+                exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE,
+                &ret_val));
+  ASSERT_EQ(0, ret_val);
 
   exclusive_lock.unblock_requests();
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
-  ASSERT_TRUE(exclusive_lock.accept_requests(&ret_val));
+  ASSERT_TRUE(exclusive_lock.accept_request(
+                exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(0, ret_val);
 }
 
