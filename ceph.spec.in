@@ -537,13 +537,16 @@ Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{_python_buildid}-numpy
 %if 0%{without python2}
 Requires:       python3-scipy
+Requires:       python3-pandas
 %else
 Requires:       python2-scipy
+Requires:       python2-pandas
 %endif
 %endif
 %if 0%{?rhel} == 7
 Requires:       numpy
 Requires:       scipy
+Requires:       pandas
 %endif
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr plugin that tries to predict
