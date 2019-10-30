@@ -5,4 +5,3 @@ overrides:
         ms inject socket failures: 5000
     log-whitelist:
     - but it is still running
-    - \(OSD_SLOW_PING_TIME

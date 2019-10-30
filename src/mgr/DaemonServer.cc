@@ -340,7 +340,6 @@ void DaemonServer::shutdown()
   dout(10) << "begin" << dendl;
   msgr->shutdown();
   msgr->wait();
-  cluster_state.shutdown();
   dout(10) << "done" << dendl;
 }
 
