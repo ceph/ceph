@@ -38,7 +38,7 @@ except ImportError:
 import fcntl
 try:
     from StringIO import StringIO           # py2
-except:
+except ImportError:
     from io import StringIO                 # py3
 import json
 import logging
@@ -51,6 +51,26 @@ import tempfile
 import time
 import uuid
 from distutils.spawn import find_executable
+
+try:
+    from tempfile import TemporaryDirectory # py3
+except ImportError:
+    # define a minimal (but sufficient) equivalent for <= py 3.2
+    import shutil
+    class TemporaryDirectory(object):
+        def __init__(self):
+            self.name = tempfile.mkdtemp()
+
+        def __enter__(self):
+            if not self.name:
+                self.name = tempfile.mkdtemp()
+            return self.name
+
+        def cleanup(self):
+            shutil.rmtree(self.name)
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.cleanup()
 
 
 podman_path = None
@@ -241,8 +261,8 @@ def get_legacy_config_fsid(cluster):
     try:
         config = ConfigParser()
         config.read('/etc/ceph/%s.conf' % cluster)
-        if 'global' in config and 'fsid' in config['global']:
-            return config['global']['fsid']
+        if config.has_section('global') and config.has_option('global', 'fsid'):
+            return config.get('global', 'fsid')
     except Exception as e:
         logger.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
         return None
@@ -645,7 +665,7 @@ WantedBy=ceph-{fsid}.target
     return u
 
 def gen_ssh_key(fsid):
-    tmp_dir = tempfile.TemporaryDirectory()
+    tmp_dir = TemporaryDirectory()
     path = tmp_dir.name + '/key'
     call_throws([
         'ssh-keygen',
@@ -760,11 +780,13 @@ def command_bootstrap():
         mon_ip = args.mon_addrv.split(':')[1]
     else:
         raise RuntimeError('must specify --mon-ip or --mon-addrv')
-    cp['global']['fsid'] = fsid;
-    cp['global']['mon host'] = addr_arg
-    with StringIO() as f:
-        cp.write(f)
-        config = f.getvalue()
+    if not cp.has_section('global'):
+        cp.add_section('global')
+    cp.set('global', 'fsid', fsid);
+    cp.set('global', 'mon host', addr_arg)
+    cpf = StringIO()
+    cp.write(cpf)
+    config = cpf.getvalue()
 
     if not args.skip_ping_check:
         logger.info('Verifying we can ping mon IP %s...' % mon_ip)
