@@ -174,7 +174,7 @@
   clusters.
 
 * The telemetry module now has a 'device' channel, enabled by default, that
-  will report anonymized hard disk and SSD health metrics to telemetry.ceph.com
+  will report anonymized hard disk and SSD hea lth metrics to telemetry.ceph.com
   in order to build and improve device failure prediction algorithms.  Because
   the content of telemetry reports has changed, you will need to either re-opt-in
   with::
@@ -213,6 +213,7 @@
     - how many hosts are in the cluster, and how many hosts have each type of daemon
     - whether a separate OSD cluster network is being used
     - how many RBD pools and images are in the cluster, and how many pools have RBD mirroring enabled
+    - how many RGW daemons, zones, and zonegroups are present; which RGW frontends are in use
 
   If you had telemetry enabled, you will need to re-opt-in with::
 
