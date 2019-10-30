@@ -459,6 +459,11 @@ public:
     _close_writer(h);
   }
 
+  void close_reader(FileReader *h) {
+    std::lock_guard l(lock);
+    delete h;
+  }
+
   int rename(const string& old_dir, const string& old_file,
 	     const string& new_dir, const string& new_file);
 

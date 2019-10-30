@@ -106,7 +106,7 @@ TEST(BlueFS, write_read) {
     BlueFS::FileReaderBuffer buf(4096);
     ASSERT_EQ(9, fs.read(h, &buf, 0, 1024, &bl, NULL));
     ASSERT_EQ(0, strncmp("foobarbaz", bl.c_str(), 9));
-    delete h;
+    fs.close_reader(h);
   }
   fs.umount();
 }
@@ -187,7 +187,7 @@ TEST(BlueFS, very_large_write) {
       }
       ASSERT_EQ(0, r);
     }
-    delete h;
+    fs.close_reader(h);
   }
   fs.umount();
 
