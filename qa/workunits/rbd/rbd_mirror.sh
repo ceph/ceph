@@ -242,6 +242,20 @@ compare_images ${POOL} ${clone_image}
 
 clone_image ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
 
+clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} \
+            ${clone_image}_v1 --rbd-default-clone-format 1
+test $(get_clone_format ${CLUSTER2} ${POOL} ${clone_image}_v1) = 1
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}_v1
+test $(get_clone_format ${CLUSTER1} ${POOL} ${clone_image}_v1) = 1
+
+parent_snap=snap_v2
+create_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} \
+            ${clone_image}_v2 --rbd-default-clone-format 2
+test $(get_clone_format ${CLUSTER2} ${POOL} ${clone_image}_v2) = 2
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}_v2
+test $(get_clone_format ${CLUSTER1} ${POOL} ${clone_image}_v2) = 2
+
 testlog "TEST: data pool"
 dp_image=test_data_pool
 create_image ${CLUSTER2} ${POOL} ${dp_image} 128 --data-pool ${PARENT_POOL}
