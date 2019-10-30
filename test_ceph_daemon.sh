@@ -22,8 +22,7 @@ EOF
     --mon-ip $ip \
     --config c \
     --output-keyring k \
-    --output-config c \
-    --skip-ssh
+    --output-config c
 chmod 644 k c
 
 if [ -n "$ip2" ]; then
