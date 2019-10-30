@@ -140,9 +140,12 @@ class RbdMirroringTest(DashboardTestCase):
         expected_peer = {
             'uuid': uuid,
             'cluster_name': 'remote',
+            'site_name': 'remote',
             'client_id': 'admin',
             'mon_host': '',
-            'key': ''
+            'key': '',
+            'direction': 'rx-tx',
+            'fsid': ''
         }
         peer = self.get_peer('rbd', uuid)
         self.assertEqual(expected_peer, peer)

@@ -420,6 +420,14 @@ class RbdMirroringPoolPeer(RESTController):
         peer['client_id'] = peer['client_name'].split('.', 1)[-1]
         del peer['client_name']
 
+        # convert direction enum to string
+        directions = {
+            rbd.RBD_MIRROR_PEER_DIRECTION_RX: 'rx',
+            rbd.RBD_MIRROR_PEER_DIRECTION_TX: 'tx',
+            rbd.RBD_MIRROR_PEER_DIRECTION_RX_TX: 'rx-tx'
+        }
+        peer['direction'] = directions[peer.get('direction', rbd.RBD_MIRROR_PEER_DIRECTION_RX)]
+
         try:
             attributes = rbd.RBD().mirror_peer_get_attributes(ioctx, peer_uuid)
         except rbd.ImageNotFound:

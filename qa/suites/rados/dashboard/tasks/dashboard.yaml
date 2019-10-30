@@ -42,6 +42,7 @@ tasks:
         - tasks.mgr.dashboard.test_rgw
         - tasks.mgr.dashboard.test_rbd
         - tasks.mgr.dashboard.test_pool
+        - tasks.mgr.dashboard.test_rbd_mirroring
         - tasks.mgr.dashboard.test_requests
         - tasks.mgr.dashboard.test_role
         - tasks.mgr.dashboard.test_settings
