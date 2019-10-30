@@ -3,7 +3,7 @@
           [data]="buckets"
           [columns]="columns"
           columnMode="flex"
-          selectionType="multi"
+          selectionType="multiClick"
           (updateSelection)="updateSelection($event)"
           identifier="bid"
           (fetchData)="getBucketList($event)">

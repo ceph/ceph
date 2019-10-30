@@ -5,7 +5,7 @@
     <cd-table [data]="osds"
               (fetchData)="getOsdList()"
               [columns]="columns"
-              selectionType="multi"
+              selectionType="multiClick"
               (updateSelection)="updateSelection($event)"
               [updateSelectionOnRefresh]="'never'">
 
