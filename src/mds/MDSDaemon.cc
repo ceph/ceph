@@ -350,7 +350,15 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session config name=client_id,type=CephInt,req=true "
+  r = admin_socket->register_command("session config "
+				     "name=client_id,type=CephInt,req=true "
+				     "name=option,type=CephString,req=true "
+				     "name=value,type=CephString,req=false ",
+				     asok_hook,
+				     "Config a CephFS client session");
+  assert(r == 0);
+  r = admin_socket->register_command("client config "
+				     "name=client_id,type=CephInt,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
@@ -624,10 +632,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 {
   static const std::vector<MDSCommand> commands = {
-    MDSCommand("session config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
-	"Config a client session"),
-    MDSCommand("client config name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
-	"Config a client session"),
     MDSCommand("damage ls", "List detected metadata damage"),
     MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
     MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
