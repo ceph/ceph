@@ -241,8 +241,8 @@ def get_legacy_config_fsid(cluster):
     try:
         config = ConfigParser()
         config.read('/etc/ceph/%s.conf' % cluster)
-        if 'global' in config and 'fsid' in config['global']:
-            return config['global']['fsid']
+        if config.has_section('global') and config.has_option('global', 'fsid'):
+            return config.get('global', 'fsid')
     except Exception as e:
         logger.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
         return None
@@ -760,8 +760,10 @@ def command_bootstrap():
         mon_ip = args.mon_addrv.split(':')[1]
     else:
         raise RuntimeError('must specify --mon-ip or --mon-addrv')
-    cp['global']['fsid'] = fsid;
-    cp['global']['mon host'] = addr_arg
+    if not cp.has_section('global'):
+        cp.add_section('global')
+    cp.set('global', 'fsid', fsid);
+    cp.set('global', 'mon host', addr_arg)
     with StringIO() as f:
         cp.write(f)
         config = f.getvalue()
