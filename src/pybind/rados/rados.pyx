@@ -142,6 +142,8 @@ cdef extern from "rados/librados.h" nogil:
     int rados_pool_reverse_lookup(rados_t cluster, int64_t id, char *buf, size_t maxlen)
     int rados_pool_create(rados_t cluster, const char *pool_name)
     int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name, uint8_t crush_rule_num)
+    int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t auid)
+    int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t auid, uint8_t crush_rule_num)
     int rados_pool_get_base_tier(rados_t cluster, int64_t pool, int64_t *base_tier)
     int rados_pool_list(rados_t cluster, char *buf, size_t len)
     int rados_pool_delete(rados_t cluster, const char *pool_name)
@@ -1078,17 +1080,21 @@ Rados object in state %s." % self.state)
         finally:
             free(name)
 
-    @requires(('pool_name', str_type), ('crush_rule', opt(int)))
-    def create_pool(self, pool_name, crush_rule=None):
+    @requires(('pool_name', str_type), ('crush_rule', opt(int)), ('auid', opt(int)))
+    def create_pool(self, pool_name, crush_rule=None, auid=None):
         """
         Create a pool:
-        - with default settings: if crush_rule=None
+        - with default settings: if crush_rule=None and auid=None
         - with a specific CRUSH rule: crush_rule given
-
+        - with a specific auid: auid given
+        - with a specific CRUSH rule and auid: crush_rule and auid given       
+ 
         :param pool_name: name of the pool to create
         :type pool_name: str
         :param crush_rule: rule to use for placement in the new pool
         :type crush_rule: int
+        :param auid: id of the owner of the new pool
+        :type auid: int
 
         :raises: :class:`TypeError`, :class:`Error`
         """
@@ -1098,14 +1104,24 @@ Rados object in state %s." % self.state)
         cdef:
             char *_pool_name = pool_name
             uint8_t _crush_rule
+            uint64_t _auid
 
-        if crush_rule is None:
+        if crush_rule is None and auid is None:
             with nogil:
                 ret = rados_pool_create(self.cluster, _pool_name)
-        else:
+        elif crush_rule is not None and auid is None:
             _crush_rule = crush_rule
             with nogil:
                 ret = rados_pool_create_with_crush_rule(self.cluster, _pool_name, _crush_rule)
+        elif crush_rule is None and auid is not None:
+            _auid = auid
+            with nogil:
+                ret = rados_pool_create_with_auid(self.cluster, _pool_name, _auid)
+        else:
+            _crush_rule = crush_rule
+            _auid = auid
+            with nogil:
+                ret = rados_pool_create_with_all(self.cluster, _pool_name, _auid, _crush_rule)
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
