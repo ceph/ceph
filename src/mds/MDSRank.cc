@@ -2706,30 +2706,6 @@ public:
   }
 };
 
-class C_ExecAndReply : public C_MDS_Send_Command_Reply {
-public:
-  C_ExecAndReply(MDSRank *mds, const cref_t<MCommand> &m)
-    : C_MDS_Send_Command_Reply(mds, m), f(true) {
-  }
-
-  void finish(int r) override {
-    std::stringstream ds;
-    std::stringstream ss;
-    if (r != 0) {
-      f.flush(ss);
-    } else {
-      f.flush(ds);
-    }
-
-    send(r, ss.str(), ds);
-  }
-
-  virtual void exec() = 0;
-
-protected:
-  JSONFormatter f;
-};
-
 /**
  * This function drops the mds_lock, so don't do anything with
  * MDSRank after calling it (we could have gone into shutdown): just
@@ -3503,12 +3479,6 @@ void MDSRank::bcast_mds_map()
     session->get_connection()->send_message2(std::move(m));
   }
   last_client_mdsmap_bcast = mdsmap->get_epoch();
-}
-
-Context *MDSRank::create_async_exec_context(C_ExecAndReply *ctx) {
-  return new C_OnFinisher(new LambdaContext([ctx](int) {
-        ctx->exec();
-      }), finisher);
 }
 
 MDSRankDispatcher::MDSRankDispatcher(
