@@ -3499,27 +3499,6 @@ MDSRankDispatcher::MDSRankDispatcher(
     g_conf().add_observer(this);
 }
 
-bool MDSRankDispatcher::handle_command(
-  const cmdmap_t &cmdmap,
-  const cref_t<MCommand> &m,
-  int *r,
-  std::stringstream *ds,
-  std::stringstream *ss,
-  Context **run_later,
-  bool *need_reply)
-{
-  ceph_assert(r != nullptr);
-  ceph_assert(ds != nullptr);
-  ceph_assert(ss != nullptr);
-
-  *need_reply = true;
-
-  std::string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
-
-  return false;
-}
-
 void MDSRank::command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish) {
   dout(20) << __func__ << dendl;
 

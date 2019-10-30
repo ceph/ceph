@@ -643,15 +643,6 @@ public:
   const char** get_tracked_conf_keys() const override final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
-  bool handle_command(
-    const cmdmap_t &cmdmap,
-    const cref_t<MCommand> &m,
-    int *r,
-    std::stringstream *ds,
-    std::stringstream *ss,
-    Context **run_later,
-    bool *need_reply);
-
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
   void evict_clients(const SessionFilter &filter,
 		     std::function<void(int,const std::string&,bufferlist&)> on_finish);
