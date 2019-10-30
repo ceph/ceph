@@ -633,7 +633,8 @@ public:
   int init_sync_status();
 
   static string status_oid(const string& source_zone, const rgw_bucket_sync_pair_info& bs);
-  static string obj_status_oid(const string& source_zone, const rgw_obj& obj); /* can be used by sync modules */
+  static string obj_status_oid(const string& source_zone, const rgw_obj& obj); /* specific source obj sync status,
+                                                                                  can be used by sync modules */
 
   // implements DoutPrefixProvider
   CephContext *get_cct() const override;
