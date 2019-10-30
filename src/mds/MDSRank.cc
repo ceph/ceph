@@ -2683,29 +2683,6 @@ out:
   on_finish(r, ss.str(), outbl);
 }
 
-class C_MDS_Send_Command_Reply : public MDSInternalContext {
-protected:
-  cref_t<MCommand> m;
-public:
-  C_MDS_Send_Command_Reply(MDSRank *_mds, const cref_t<MCommand> &_m) :
-    MDSInternalContext(_mds), m(_m) {}
-
-  void send(int r, std::string_view ss) {
-    std::stringstream ds;
-    send(r, ss, ds);
-  }
-
-  void send(int r, std::string_view ss, std::stringstream &ds) {
-    bufferlist bl;
-    bl.append(ds);
-    MDSDaemon::send_command_reply(m, mds, r, bl, ss);
-  }
-
-  void finish(int r) override {
-    send(r, "");
-  }
-};
-
 /**
  * This function drops the mds_lock, so don't do anything with
  * MDSRank after calling it (we could have gone into shutdown): just

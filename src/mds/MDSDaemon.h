@@ -120,8 +120,6 @@ class MDSDaemon : public Dispatcher {
 
   bool handle_core_message(const cref_t<Message> &m);
   
-  static void send_command_reply(const cref_t<MCommand> &m, MDSRank* mds_rank, int r,
-				 bufferlist outbl, std::string_view outs);
   void handle_command(const cref_t<MCommand> &m);
   void handle_mds_map(const cref_t<MMDSMap> &m);
 
