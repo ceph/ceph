@@ -56,6 +56,7 @@ REVISION = 3
 #   - added host count, and counts for hosts with each of (mon, osd, mds, mgr)
 #   - whether an OSD cluster network is in use
 #   - rbd pool and image count, and rbd mirror mode (pool-level)
+#   - rgw daemons, zones, zonegroups; which rgw frontends
 
 class Module(MgrModule):
     config = dict()
@@ -574,6 +575,36 @@ class Module(MgrModule):
             report['services'] = defaultdict(int)
             for key, value in service_map['services'].items():
                 report['services'][key] += 1
+                if key == 'rgw':
+                    report['rgw'] = {
+                        'count': 0,
+                    }
+                    zones = set()
+                    realms = set()
+                    zonegroups = set()
+                    frontends = set()
+                    d = value.get('daemons', dict())
+
+                    for k,v in d.items():
+                        if k == 'summary' and v:
+                            report['rgw'][k] = v
+                        elif isinstance(v, dict) and 'metadata' in v:
+                            report['rgw']['count'] += 1
+                            zones.add(v['metadata']['zone_id'])
+                            zonegroups.add(v['metadata']['zonegroup_id'])
+                            frontends.add(v['metadata']['frontend_type#0'])
+
+                            # we could actually iterate over all the keys of
+                            # the dict and check for how many frontends there
+                            # are, but it is unlikely that one would be running
+                            # more than 2 supported ones
+                            f2 = v['metadata'].get('frontend_type#1', None)
+                            if f2:
+                                frontends.add(f2)
+
+                    report['rgw']['zones'] = len(zones)
+                    report['rgw']['zonegroups'] = len(zonegroups)
+                    report['rgw']['frontends'] = list(frontends)  # sets aren't json-serializable
 
             try:
                 report['balancer'] = self.remote('balancer', 'gather_telemetry')
