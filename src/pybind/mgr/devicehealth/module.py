@@ -378,7 +378,7 @@ class Module(MgrModule):
         r, outb, outs = result.wait()
 
         try:
-            return json.loads(outb)
+            return json.loads(outb or outs)
         except (IndexError, ValueError):
             self.log.error(
                 "Fail to parse JSON result from daemon {0}.{1} ({2})".format(
