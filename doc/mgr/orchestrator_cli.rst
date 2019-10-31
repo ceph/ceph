@@ -285,33 +285,33 @@ This is an overview of the current implementation status of the orchestrators.
 =================================== ========= ====== ========= =====
  Command                             Ansible   Rook   DeepSea   SSH
 =================================== ========= ====== ========= =====
- host add                            ✔️         ⚪       ⚪         ✔️
- host ls                             ✔️         ✔️       ⚪         ✔️
- host rm                             ✔️         ⚪       ⚪         ✔️
- mgr update                          ⚪         ⚪       ⚪         ✔️
- mon update                          ⚪         ✔️       ⚪         ✔️
- osd create                          ✔️         ✔️       ⚪         ✔️
+ host add                            ✔         ⚪       ⚪         ✔
+ host ls                             ✔         ✔       ⚪         ✔
+ host rm                             ✔         ⚪       ⚪         ✔
+ mgr update                          ⚪         ⚪       ⚪         ✔
+ mon update                          ⚪         ✔       ⚪         ✔
+ osd create                          ✔         ✔       ⚪         ✔
  osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
- osd rm                              ✔️         ⚪       ⚪         ⚪
+ osd rm                              ✔         ⚪       ⚪         ⚪
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ⚪
- device ls                           ✔️         ✔️       ✔️         ✔️
- service ls                          ⚪         ✔️       ✔️         ✔
+ device ls                           ✔         ✔       ✔         ✔
+ service ls                          ⚪         ✔       ✔         ✔
  service-instance status             ⚪         ⚪       ⚪         ✔
  service-instance {stop,start,...}   ⚪         ⚪       ⚪         ✔
  iscsi add                           ⚪         ⚪       ⚪         ⚪
  iscsi rm                            ⚪         ⚪       ⚪         ⚪
  iscsi update                        ⚪         ⚪       ⚪         ⚪
- mds add                             ⚪         ✔️       ⚪         ✔
- mds rm                              ⚪         ✔️       ⚪         ✔
+ mds add                             ⚪         ✔       ⚪         ✔
+ mds rm                              ⚪         ✔       ⚪         ✔
  mds update                          ⚪         ✔       ⚪         ✔
- nfs add                             ⚪         ✔️       ⚪         ⚪
- nfs rm                              ⚪         ✔️       ⚪         ⚪
- nfs update                          ⚪         ✔️       ⚪         ⚪
+ nfs add                             ⚪         ✔       ⚪         ⚪
+ nfs rm                              ⚪         ✔       ⚪         ⚪
+ nfs update                          ⚪         ✔       ⚪         ⚪
  rbd-mirror add                      ⚪         ⚪       ⚪         ⚪
  rbd-mirror rm                       ⚪         ⚪       ⚪         ⚪
  rbd-mirror update                   ⚪         ⚪       ⚪         ⚪
- rgw add                             ✔️         ✔️       ⚪         ⚪
- rgw rm                              ✔️         ✔️       ⚪         ⚪
+ rgw add                             ✔         ✔       ⚪         ⚪
+ rgw rm                              ✔         ✔       ⚪         ⚪
  rgw update                          ⚪         ⚪       ⚪         ⚪
 =================================== ========= ====== ========= =====
 
