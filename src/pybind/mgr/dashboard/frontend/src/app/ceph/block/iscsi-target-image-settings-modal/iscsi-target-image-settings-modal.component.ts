@@ -42,7 +42,11 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
   }
 
   getDiskControlLimits(backstore, setting) {
-    return this.disk_controls_limits[backstore][setting];
+    if (this.disk_controls_limits) {
+      return this.disk_controls_limits[backstore][setting];
+    }
+    // backward compatibility
+    return { type: 'int' };
   }
 
   save() {
