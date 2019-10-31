@@ -416,7 +416,8 @@ def extract_uid_gid():
 
 def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
                   config=None, keyring=None):
-    if daemon_type == 'mon':
+    if daemon_type == 'mon' and not os.path.exists(get_data_dir(fsid, 'mon',
+                                                                daemon_id)):
         # tmp keyring file
         tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
         os.fchmod(tmp_keyring.fileno(), 0o600)
