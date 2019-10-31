@@ -312,7 +312,7 @@ This is an overview of the current implementation status of the orchestrators.
  rbd-mirror update                   ⚪         ⚪       ⚪         ⚪
  rgw add                             ✔         ✔       ⚪         ✔
  rgw rm                              ✔         ✔       ⚪         ✔
- rgw update                          ⚪         ⚪       ⚪         ⚪
+ rgw update                          ⚪         ⚪       ⚪         ✔
 =================================== ========= ====== ========= =====
 
 where
