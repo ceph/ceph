@@ -529,6 +529,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         actions = {
             'start': ['reset-failed', 'start'],
             'stop': ['stop'],
+            'restart': ['reset-failed', 'restart'],
         }
         name = '%s.%s' % (service_type, service_id)
         for a in actions[action]:
