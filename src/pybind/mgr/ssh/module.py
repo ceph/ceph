@@ -869,10 +869,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return SSHWriteCompletion(results)
 
     def update_mds(self, spec):
-        daemons = [
-            d for d in self._get_services('mds')
-            if d.service_instance.startswith(spec.name + '-')
-        ]
+        daemons = self._get_services('mds', service_name=spec.name)
         results = []
         if len(daemons) > spec.count:
             # remove some
