@@ -1535,6 +1535,49 @@ TEST_F(TestLibRBD, TestCreateLsDeleteSnapPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, TestGetNameIdSnapPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 2 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_EQ(0, image.snap_create("snap2"));
+    ASSERT_EQ(0, image.snap_create("snap3"));
+    vector<librbd::snap_info_t> snaps;
+    int r = image.snap_list(snaps);
+    EXPECT_TRUE(r >= 0);
+
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      std::string expected_snap_name;
+      image.snap_get_name(snaps[i].id, &expected_snap_name);
+      ASSERT_EQ(expected_snap_name, snaps[i].name);
+    }
+
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      uint64_t expected_snap_id;
+      image.snap_get_id(snaps[i].name, &expected_snap_id);
+      ASSERT_EQ(expected_snap_id, snaps[i].id);
+    }
+
+    ASSERT_EQ(0, image.snap_remove("snap1"));
+    ASSERT_EQ(0, image.snap_remove("snap2"));
+    ASSERT_EQ(0, image.snap_remove("snap3"));
+    ASSERT_EQ(0, test_ls_snaps(image, 0));
+  }
+
+  ioctx.close();
+}
+
 TEST_F(TestLibRBD, TestCreateLsRenameSnapPP)
 {
   librados::IoCtx ioctx;
