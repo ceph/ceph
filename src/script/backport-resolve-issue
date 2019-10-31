@@ -175,13 +175,6 @@ def get_project(r, p_id):
         project_id2project[p_id] = p_obj
     return project_id2project[p_id]
 
-def get_tracker_target_version(redmine_issue):
-    if redmine_issue.fixed_version:
-        logging.debug("Target version: ID {}, name {}"
-                      .format(self.redmine_issue.fixed_version.id, self.redmine_issue.fixed_version.name))
-        return self.redmine_issue.fixed_version.name
-    return None
-
 def has_tracker(r, p_id, tracker_name):
     for tracker in get_project(r, p_id).trackers:
         if tracker['name'] == tracker_name:
@@ -431,7 +424,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
             #
             # is the Backport Tracker's "Target version" custom field populated?
             try:
-                ttv = self.get_tracker_target_version(bt.redmine_issue)
+                ttv = bt.get_tracker_target_version()
             except:
                 logging.info("Backport Tracker {} target version not populated yet!"
                              .format(bt.issue_id))
@@ -501,7 +494,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
             assert False, \
                 "GitHub PR description does not contain a Tracker URL"
         self.backport_trackers = []
-        for issue_url in matching_strings:
+        for issue_url in list(dict.fromkeys(matching_strings)):
             p = re.compile('\\d+')
             issue_id = p.search(issue_url).group()
             if not issue_id:
@@ -534,6 +527,13 @@ class BackportTracker(Backport):
         self.redmine_issue = redmine_issue
         self.issue_id = issue_id
         self.parent = backport_obj
+
+    def get_tracker_target_version(self):
+        if self.redmine_issue.fixed_version:
+            logging.debug("Target version: ID {}, name {}"
+                          .format(self.redmine_issue.fixed_version.id, self.redmine_issue.fixed_version.name))
+            return self.redmine_issue.fixed_version.name
+        return None
 
     def issue_url(self):
         return "{}/issues/{}".format(redmine_endpoint, self.issue_id)
