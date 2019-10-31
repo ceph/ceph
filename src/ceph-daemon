@@ -503,6 +503,10 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
     call_throws(['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(fsid, daemon_type, daemon_id)
+    call(['systemctl', 'stop', unit_name],
+         verbose_on_failure=False)
+    call(['systemctl', 'reset-failed', unit_name],
+         verbose_on_failure=False)
     if enable:
         call_throws(['systemctl', 'enable', unit_name])
     if start:
