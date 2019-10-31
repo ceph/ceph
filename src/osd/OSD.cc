@@ -1285,11 +1285,11 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   int max = cct->_conf->osd_map_message_max;
   ssize_t max_bytes = cct->_conf->osd_map_message_max_bytes;
 
-  if (since > m->oldest_map) {
+  if (since < m->oldest_map) {
     // we don't have the next map the target wants, so start with a
     // full map.
     bufferlist bl;
-    dout(10) << __func__ << " oldest map " << max_oldest_map << " < since "
+    dout(10) << __func__ << " oldest map " << max_oldest_map << " > since "
 	     << since << ", starting with full map" << dendl;
     since = m->oldest_map;
     if (!get_map_bl(since, bl)) {
