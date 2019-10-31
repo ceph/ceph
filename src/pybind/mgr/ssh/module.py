@@ -526,6 +526,22 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return SSHWriteCompletion(results)
 
     def _service_action(self, service_type, service_id, host, action):
+        if action == 'redeploy':
+            # recreate the systemd unit and then restart
+            if service_type == 'mon':
+                # get mon. key
+                ret, keyring, err = self.mon_command({
+                    'prefix': 'auth get',
+                    'entity': 'mon.',
+                })
+            else:
+                ret, keyring, err = self.mon_command({
+                    'prefix': 'auth get',
+                    'entity': '%s.%s' % (service_type, service_id),
+                })
+            return self._create_daemon(service_type, service_id, host,
+                                       keyring)
+
         actions = {
             'start': ['reset-failed', 'start'],
             'stop': ['stop'],
@@ -709,7 +725,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 stdin=j)
             self.log.debug('create_daemon code %s out %s' % (code, out))
 
-            return "Created {} on host '{}'".format(name, host)
+            return "(Re)deployed {} on host '{}'".format(name, host)
 
         except Exception as e:
             self.log.error("create_daemon({}): error: {}".format(host, e))
