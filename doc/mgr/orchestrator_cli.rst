@@ -296,7 +296,7 @@ This is an overview of the current implementation status of the orchestrators.
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ⚪
  device ls                           ✔️         ✔️       ✔️         ✔️
  service ls                          ⚪         ✔️       ✔️         ✔
- service-instance status             ⚪         ⚪       ⚪         ⚪
+ service-instance status             ⚪         ⚪       ⚪         ✔
  iscsi {stop,start,reload}           ⚪         ⚪       ⚪         ⚪
  iscsi add                           ⚪         ⚪       ⚪         ⚪
  iscsi rm                            ⚪         ⚪       ⚪         ⚪
