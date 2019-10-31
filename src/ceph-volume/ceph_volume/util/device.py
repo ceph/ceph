@@ -62,6 +62,7 @@ class Device(object):
         'available',
         'path',
         'sys_api',
+        'device_id',
     ]
     pretty_report_sys_fields = [
         'human_readable_size',
