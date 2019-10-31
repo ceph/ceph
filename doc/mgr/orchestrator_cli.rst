@@ -298,22 +298,18 @@ This is an overview of the current implementation status of the orchestrators.
  service ls                          ⚪         ✔️       ✔️         ✔
  service-instance status             ⚪         ⚪       ⚪         ✔
  service-instance {stop,start,...}   ⚪         ⚪       ⚪         ✔
- iscsi {stop,start,reload}           ⚪         ⚪       ⚪         ⚪
  iscsi add                           ⚪         ⚪       ⚪         ⚪
  iscsi rm                            ⚪         ⚪       ⚪         ⚪
  iscsi update                        ⚪         ⚪       ⚪         ⚪
  mds add                             ⚪         ✔️       ⚪         ✔
  mds rm                              ⚪         ✔️       ⚪         ✔
  mds update                          ⚪         ✔       ⚪         ✔
- nfs {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
  nfs add                             ⚪         ✔️       ⚪         ⚪
  nfs rm                              ⚪         ✔️       ⚪         ⚪
  nfs update                          ⚪         ✔️       ⚪         ⚪
- rbd-mirror {stop,start,reload}      ⚪         ⚪       ⚪         ⚪
  rbd-mirror add                      ⚪         ⚪       ⚪         ⚪
  rbd-mirror rm                       ⚪         ⚪       ⚪         ⚪
  rbd-mirror update                   ⚪         ⚪       ⚪         ⚪
- rgw {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
  rgw add                             ✔️         ✔️       ⚪         ⚪
  rgw rm                              ✔️         ✔️       ⚪         ⚪
  rgw update                          ⚪         ⚪       ⚪         ⚪
