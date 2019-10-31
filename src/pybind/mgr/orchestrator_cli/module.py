@@ -344,7 +344,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator service',
-                "name=action,type=CephChoices,strings=start|stop|reload|restart "
+                "name=action,type=CephChoices,strings=start|stop|reload|restart|redeploy "
                 "name=svc_type,type=CephString "
                 "name=svc_name,type=CephString",
                 'Start, stop or reload an entire service (i.e. all daemons)')
@@ -355,7 +355,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator service-instance',
-                "name=action,type=CephChoices,strings=start|stop|reload|restart "
+                "name=action,type=CephChoices,strings=start|stop|reload|restart|redeploy "
                 "name=svc_type,type=CephString "
                 "name=svc_id,type=CephString",
                 'Start, stop or reload a specific service instance')
