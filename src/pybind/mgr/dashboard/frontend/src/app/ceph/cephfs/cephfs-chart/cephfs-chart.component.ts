@@ -168,6 +168,14 @@ export class CephfsChartComponent implements OnChanges, OnInit {
         y: dp[1]
       });
     });
+
+    /**
+     * MDS performance counters chart is expecting the same number of items
+     * from each data series. Since in deltaTimeSeries we are ignoring the first
+     * element, we will do the same here.
+     */
+    data.shift();
+
     return data;
   }
 
