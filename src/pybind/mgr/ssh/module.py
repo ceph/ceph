@@ -1003,3 +1003,22 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                      'osd', 'allow rwx'],
         })
         return self._create_daemon('rgw', rgw_id, host, keyring)
+
+    def remove_rgw(self, name):
+        daemons = self._get_services('rgw')
+        results = []
+        for d in daemons:
+            if d.service_instance == name or d.service_instance.startswith(name + '-'):
+                results.append(self._worker_pool.apply_async(
+                    self._remove_rgw, (d.service_instance, d.nodename)))
+        if not results:
+            raise RuntimeError('Unable to find rgw.%s[-*] daemon(s)' % name)
+        return SSHWriteCompletion(results)
+
+    def _remove_rgw(self, rgw_id, host):
+        name = 'rgw.' + rgw_id
+        out, code = self._run_ceph_daemon(
+            host, name, 'rm-daemon',
+            ['--name', name])
+        self.log.debug('remove_rgw code %s out %s' % (code, out))
+        return "Removed {} from host '{}'".format(name, host)

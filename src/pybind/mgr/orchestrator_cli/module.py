@@ -321,10 +321,10 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator rgw rm',
-                "name=svc_id,type=CephString",
+                "name=name,type=CephString",
                 'Remove an RGW service')
-    def _rgw_rm(self, svc_id):
-        completion = self.remove_rgw(svc_id)
+    def _rgw_rm(self, name):
+        completion = self.remove_rgw(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
