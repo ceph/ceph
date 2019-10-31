@@ -379,7 +379,10 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
 
     if daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
-        cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
+        if daemon_type == 'rgw':
+            cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (daemon_id)
+        else:
+            cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
         mounts[data_dir] = cdata_dir + ':z'
         mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
 
@@ -399,11 +402,17 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         podman_args = []
     if daemon_type == 'osd' or privileged:
         podman_args += ['--privileged']
+    if daemon_type == 'rgw':
+        entrypoint = '/usr/bin/radosgw'
+        name = 'client.rgw.%s' % daemon_id
+    else:
+        entrypoint = '/usr/bin/ceph-' + daemon_type
+        name = '%s.%s' % (daemon_type, daemon_id)
     return CephContainer(
         image=args.image,
-        entrypoint='/usr/bin/ceph-' + daemon_type,
+        entrypoint=entrypoint,
         args=[
-            '-n', '%s.%s' % (daemon_type, daemon_id),
+            '-n', name,
             '-f', # foreground
         ] + get_daemon_args(fsid, daemon_type, daemon_id),
         podman_args=podman_args,
