@@ -314,10 +314,15 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what.size() > 7 &&
 	     what.substr(0, 7) == "device ") {
     string devid = what.substr(7);
-    daemon_state.with_device(devid, [&f, &tstate] (const DeviceState& dev) {
-        PyEval_RestoreThread(tstate);
-	f.dump_object("device", dev);
-      });
+    if (!daemon_state.with_device(
+	  devid,
+	  [&f, &tstate] (const DeviceState& dev) {
+	    PyEval_RestoreThread(tstate);
+	    f.dump_object("device", dev);
+	  })) {
+      // device not found
+      PyEval_RestoreThread(tstate);
+    }
     return f.get();
   } else if (what == "io_rate") {
     cluster_state.with_pgmap(
