@@ -418,7 +418,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(9, 2, bl);
+  ENCODE_START(14, 2, bl);
   encode(kb, bl);
   encode(kb_used, bl);
   encode(kb_avail, bl);
@@ -434,6 +434,32 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(kb_used_data, bl);
   encode(kb_used_omap, bl);
   encode(kb_used_meta, bl);
+
+  // Compatibility
+  // Build statfs just like decode handles old versions (pre version 9) in later releases
+  store_statfs_t statfs;
+  statfs.total = kb << 10;
+  statfs.available = kb_avail << 10;
+  statfs.internally_reserved =
+    statfs.total > statfs.available ? statfs.total - statfs.available : 0;
+  int64_t used = kb_used << 10;
+  if ((int64_t)statfs.internally_reserved > used) {
+    statfs.internally_reserved -= used;
+  } else {
+    statfs.internally_reserved = 0;
+  }
+  statfs.allocated = kb_used_data << 10;
+  statfs.omap_allocated = kb_used_omap << 10;
+  statfs.internal_metadata = kb_used_meta << 10;
+  encode(statfs, bl);
+  ///////////////////////////////////
+  os_alerts_t os_alerts;
+  encode(os_alerts, bl);
+  encode((uint64_t)0, bl); // num_shards_repaired
+  encode((uint32_t)0, bl); // num_osds
+  encode((uint32_t)0, bl); // num_per_pool_osds
+  encode((uint32_t)0, bl); // num_per_pool_omap_osds
+
   // hb_pingtime map
   encode((int)hb_pingtime.size(), bl);
   for (auto i : hb_pingtime) {
@@ -465,7 +491,7 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -494,8 +520,29 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
     kb_used_omap = 0;
     kb_used_meta = 0;
   }
-  hb_pingtime.clear();
   if (struct_v >= 9) {
+    store_statfs_t statfs;
+    decode(statfs, bl);
+  }
+  if (struct_v >= 10) {
+    os_alerts_t os_alerts;
+    decode(os_alerts, bl);
+  }
+  if (struct_v >= 11) {
+    uint64_t dummy;
+    decode(dummy, bl);
+  }
+  if (struct_v >= 12) {
+    uint32_t dummy;
+    decode(dummy, bl);
+    decode(dummy, bl);
+  }
+  if (struct_v >= 13) {
+    uint32_t dummy;
+    decode(dummy, bl);
+  }
+  hb_pingtime.clear();
+  if (struct_v >= 14) {
     int count;
     decode(count, bl);
     for (int i = 0 ; i < count ; i++) {
