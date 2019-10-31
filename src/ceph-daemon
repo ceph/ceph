@@ -78,7 +78,7 @@ podman_path = None
 ##################################
 # Popen wrappers, lifted from ceph-volume
 
-def call(command, desc, verbose=False, **kw):
+def call(command, desc=None, verbose=False, **kw):
     """
     Wrap subprocess.Popen to
 
@@ -91,6 +91,8 @@ def call(command, desc, verbose=False, **kw):
     :param verbose_on_failure: On a non-zero exit status, it will forcefully set
                                logging ON for the terminal
     """
+    if not desc:
+        desc = command[0]
     verbose_on_failure = kw.pop('verbose_on_failure', True)
 
     logger.debug("Running command: %s" % ' '.join(command))
@@ -234,7 +236,7 @@ def check_unit(unit_name):
     # various exit codes based on the state of the service, but the
     # string result is more explicit (and sufficient).
     try:
-        out, err, code = call(['systemctl', 'is-enabled', unit_name], 'systemctl')
+        out, err, code = call(['systemctl', 'is-enabled', unit_name])
         enabled = out.strip() == 'enabled'
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
@@ -242,7 +244,7 @@ def check_unit(unit_name):
 
     state = 'unknown'
     try:
-        out, err, code = call(['systemctl', 'is-active', unit_name], 'systemctl')
+        out, err, code = call(['systemctl', 'is-active', unit_name])
         out = out.strip()
         if out in ['active']:
             state = 'running'
@@ -1305,13 +1307,11 @@ def command_ls():
                             podman_path, 'inspect',
                             '--format', '{{.Id}}',
                             'ceph-%s-%s' % (fsid, j)
-                        ],
-                        podman_path)
+                        ])
                     if not code:
                         container_id = out.strip()[0:12]
                         out, err, code = call(
-                            [podman_path, 'exec', container_id, 'ceph', '-v'],
-                            podman_path)
+                            [podman_path, 'exec', container_id, 'ceph', '-v'])
                         if not code and out.startswith('ceph version '):
                             version = out.split(' ')[2]
                     ls.append({
@@ -1410,16 +1410,16 @@ def command_rm_cluster():
     # ignore errors here
     for unit_name in ['ceph-%s.target' % args.fsid,
                       'ceph-%s-crash.service' % args.fsid]:
-        call(['systemctl', 'stop', unit_name], 'systemctl',
+        call(['systemctl', 'stop', unit_name],
              verbose_on_failure=False)
-        call(['systemctl', 'reset-failed', unit_name], 'systemctl',
+        call(['systemctl', 'reset-failed', unit_name],
              verbose_on_failure=False)
-        call(['systemctl', 'disable', unit_name], 'systemctl',
+        call(['systemctl', 'disable', unit_name],
              verbose_on_failure=False)
 
     slice_name = 'system-%s.slice' % (('ceph-%s' % args.fsid).replace('-',
                                                                       '\\x2d'))
-    call(['systemctl', 'stop', slice_name], 'systemctl',
+    call(['systemctl', 'stop', slice_name],
          verbose_on_failure=False)
 
     # FIXME: stop + disable individual daemon units, too?
