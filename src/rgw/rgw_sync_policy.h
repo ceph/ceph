@@ -312,6 +312,11 @@ struct rgw_sync_bucket_pipes {
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_pipes)
 
+std::ostream& operator<<(std::ostream& os, const rgw_sync_bucket_entity& e);
+std::ostream& operator<<(std::ostream& os, const rgw_sync_bucket_pipe& pipe);
+std::ostream& operator<<(std::ostream& os, const rgw_sync_bucket_entities& e);
+std::ostream& operator<<(std::ostream& os, const rgw_sync_bucket_pipes& pipe);
+
 /*
  * define data flow between zones. Symmetrical: zones sync from each other.
  * Directional: one zone fetches data from another.
