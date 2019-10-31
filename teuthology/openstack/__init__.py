@@ -692,11 +692,10 @@ class TeuthologyOpenStack(OpenStack):
         self.setup_logs()
         set_config_attr(self.args)
         log.debug('Teuthology config: %s' % self.config.openstack)
-        for keyfile in [self.args.key_filename,
-                        os.environ['HOME'] + '/.ssh/id_rsa',
-                        os.environ['HOME'] + '/.ssh/id_dsa',
-                        os.environ['HOME'] + '/.ssh/id_ecdsa']:
-            if (keyfile and os.path.isfile(keyfile)):
+        key_filenames = (lambda x: x if isinstance(x, list) else [x]) \
+            (self.args.key_filename)
+        for keyfile in key_filenames:
+            if os.path.isfile(keyfile):
                 self.key_filename = keyfile
                 break
         if not self.key_filename:
@@ -918,8 +917,8 @@ class TeuthologyOpenStack(OpenStack):
         return self.ssh(command)
 
     def reminders(self):
-        if self.args.key_filename:
-            identity = '-i ' + self.args.key_filename + ' '
+        if self.key_filename:
+            identity = '-i ' + self.key_filename + ' '
         else:
             identity = ''
         if self.args.upload:
