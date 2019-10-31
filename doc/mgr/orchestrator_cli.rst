@@ -302,9 +302,9 @@ This is an overview of the current implementation status of the orchestrators.
  iscsi rm                            ⚪         ⚪       ⚪         ⚪
  iscsi update                        ⚪         ⚪       ⚪         ⚪
  mds {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
- mds add                             ⚪         ✔️       ⚪         ⚪
- mds rm                              ⚪         ✔️       ⚪         ⚪
- mds update                          ⚪         ⚪       ⚪         ⚪
+ mds add                             ⚪         ✔️       ⚪         ✔
+ mds rm                              ⚪         ✔️       ⚪         ✔
+ mds update                          ⚪         ✔       ⚪         ✔
  nfs {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
  nfs add                             ⚪         ✔️       ⚪         ⚪
  nfs rm                              ⚪         ✔️       ⚪         ⚪
