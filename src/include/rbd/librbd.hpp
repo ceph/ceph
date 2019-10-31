@@ -523,6 +523,8 @@ public:
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
   int snap_set_by_id(uint64_t snap_id);
+  int snap_get_name(uint64_t snap_id, std::string *snap_name);
+  int snap_get_id(const std::string snap_name, uint64_t *snap_id);
   int snap_rename(const char *srcname, const char *dstname);
   int snap_get_limit(uint64_t *limit);
   int snap_set_limit(uint64_t limit);

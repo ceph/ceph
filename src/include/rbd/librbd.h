@@ -733,6 +733,8 @@ CEPH_RBD_API int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, str
 
 CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id);
+CEPH_RBD_API int rbd_snap_get_name(rbd_image_t image, uint64_t snap_id, char *snapname, size_t *name_len);
+CEPH_RBD_API int rbd_snap_get_id(rbd_image_t image, const char *snapname, uint64_t *snap_id);
 
 CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
                                              uint64_t snap_id,

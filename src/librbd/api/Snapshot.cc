@@ -190,6 +190,38 @@ int Snapshot<I>::remove(I *ictx, uint64_t snap_id) {
   return r;
 }
 
+template <typename I>
+int Snapshot<I>::get_name(I *ictx, uint64_t snap_id, std::string *snap_name)
+  {
+    ldout(ictx->cct, 20) << "snap_get_name " << ictx << " " << snap_id << dendl;
+
+    int r = ictx->state->refresh_if_required();
+    if (r < 0)
+      return r;
+
+    std::shared_lock image_locker{ictx->image_lock};
+    r = ictx->get_snap_name(snap_id, snap_name);
+
+    return r;
+  }
+
+template <typename I>
+int Snapshot<I>::get_id(I *ictx, const std::string& snap_name, uint64_t *snap_id)
+  {
+    ldout(ictx->cct, 20) << "snap_get_id " << ictx << " " << snap_name << dendl;
+
+    int r = ictx->state->refresh_if_required();
+    if (r < 0)
+      return r;
+
+    std::shared_lock image_locker{ictx->image_lock};
+    *snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
+    if (*snap_id == CEPH_NOSNAP)
+      return -ENOENT;
+
+    return 0;
+  }
+
 } // namespace api
 } // namespace librbd
 
