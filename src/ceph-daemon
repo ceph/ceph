@@ -841,11 +841,11 @@ def command_bootstrap():
                % (mon_key, admin_key, mgr_id, mgr_key, hostname, crash_key))
 
     # tmp keyring file
-    tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_keyring.fileno(), 0o600)
-    os.fchown(tmp_keyring.fileno(), uid, gid)
-    tmp_keyring.write(keyring)
-    tmp_keyring.flush()
+    tmp_bootstrap_keyring = tempfile.NamedTemporaryFile(mode='w')
+    os.fchmod(tmp_bootstrap_keyring.fileno(), 0o600)
+    os.fchown(tmp_bootstrap_keyring.fileno(), uid, gid)
+    tmp_bootstrap_keyring.write(keyring)
+    tmp_bootstrap_keyring.flush()
 
     # create initial monmap, tmp monmap file
     logger.info('Creating initial monmap...')
@@ -883,7 +883,7 @@ def command_bootstrap():
         volume_mounts={
             log_dir: '/var/log/ceph:z',
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-            tmp_keyring.name: '/tmp/keyring:z',
+            tmp_bootstrap_keyring.name: '/tmp/keyring:z',
             tmp_monmap.name: '/tmp/monmap:z',
         },
     ).run()
@@ -896,18 +896,31 @@ def command_bootstrap():
     mon_c = get_container(fsid, 'mon', mon_id)
     deploy_daemon_units(fsid, uid, gid, 'mon', mon_id, mon_c)
 
+    # client.admin key + config to issue various CLI commands
+    tmp_admin_keyring = tempfile.NamedTemporaryFile(mode='w')
+    os.fchmod(tmp_admin_keyring.fileno(), 0o600)
+    os.fchown(tmp_admin_keyring.fileno(), uid, gid)
+    tmp_admin_keyring.write('[client.admin]\n'
+                      '\tkey = ' + admin_key + '\n')
+    tmp_admin_keyring.flush()
+
+    tmp_config = tempfile.NamedTemporaryFile(mode='w')
+    os.fchmod(tmp_config.fileno(), 0o600)
+    os.fchown(tmp_config.fileno(), uid, gid)
+    tmp_config.write(config)
+    tmp_config.flush()
+
     logger.info('Waiting for mon to start...')
     while True:
         c = CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=[
-                '-n', 'mon.',
-                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
                 'status'],
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
             },
         )
         out, err, ret = call(c.run_cmd(), c.entrypoint)
@@ -922,27 +935,27 @@ def command_bootstrap():
         out = CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
-            args=['-n', 'mon.',
-                  '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
-                  '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                  'config', 'assimilate-conf',
+            args=['config', 'assimilate-conf',
                   '-i', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
             volume_mounts={
                 log_dir: '/var/log/ceph:z',
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id},
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id,
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
+            },
         ).run()
         logger.info('Generating new minimal ceph.conf...')
         out = CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
-            args=['-n', 'mon.',
-                  '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
-                  '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                  'config', 'generate-minimal-conf',
-                '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
+            args=['config', 'generate-minimal-conf',
+                  '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
             volume_mounts={
                 log_dir: '/var/log/ceph:z',
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id},
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id,
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
+            },
         ).run()
         # re-read our minimized config
         with open(mon_dir + '/config', 'r') as f:
@@ -983,12 +996,11 @@ def command_bootstrap():
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=[
-                '-n', 'mon.',
-                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
                 'status', '-f', 'json-pretty'],
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
             },
         ).run()
         j = json.loads(out)
@@ -1022,9 +1034,6 @@ def command_bootstrap():
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=[
-                '-n', 'mon.',
-                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
                 'config-key',
                 'set',
                 'mgr/ssh/ssh_identity_key',
@@ -1032,15 +1041,14 @@ def command_bootstrap():
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
                 tmp_key.name: '/tmp/key:z',
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
             },
         ).run()
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=[
-                '-n', 'mon.',
-                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
                 'config-key',
                 'set',
                 'mgr/ssh/ssh_identity_pub',
@@ -1048,27 +1056,28 @@ def command_bootstrap():
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
                 tmp_pub.name: '/tmp/pub:z',
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
             },
         ).run()
 
         logger.info('Adding key to root@localhost\'s authorized_keys...')
         with open('/root/.ssh/authorized_keys', 'a') as f:
             os.fchmod(f.fileno(), 0o600)  # just in case we created it
-            f.write(ssh_pub + '\n')
+            f.write(ssh_pub.strip() + '\n')
 
         logger.info('Enabling ssh module...')
         CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=[
-                '-n', 'mon.',
-                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
                 'mgr', 'module', 'enable', 'ssh'
             ],
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
                 tmp_pub.name: '/tmp/pub:z',
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
             },
         ).run()
         logger.info('Setting orchestrator backend to ssh...')
@@ -1076,14 +1085,14 @@ def command_bootstrap():
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=[
-                '-n', 'mon.',
-                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
                 'orchestrator', 'set', 'backend', 'ssh'
             ],
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+                log_dir: '/var/log/ceph:z',
                 tmp_pub.name: '/tmp/pub:z',
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
             },
         ).run()
         host = get_hostname()
@@ -1092,14 +1101,13 @@ def command_bootstrap():
             image=args.image,
             entrypoint='/usr/bin/ceph',
             args=[
-                '-n', 'mon.',
-                '-k', '/var/lib/ceph/mon/ceph-%s/keyring' % mon_id,
-                '-c', '/var/lib/ceph/mon/ceph-%s/config' % mon_id,
                 'orchestrator', 'host', 'add', host
             ],
             volume_mounts={
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
                 tmp_pub.name: '/tmp/pub:z',
+                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                tmp_config.name: '/etc/ceph/ceph.conf:z',
             },
         ).run()
 

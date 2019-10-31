@@ -70,8 +70,7 @@ $SUDO $CEPH_DAEMON --image $IMAGE bootstrap \
       --fsid $FSID \
       --config $ORIG_CONFIG \
       --output-config $CONFIG \
-      --output-keyring $KEYRING \
-      --skip-ssh
+      --output-keyring $KEYRING
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
