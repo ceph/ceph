@@ -351,6 +351,54 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             executable_path))
         return executable_path
 
+    def _run_ceph_daemon(self, host, entity, command, args,
+                         stdin=None,
+                         no_fsid=False):
+        """
+        Run ceph-daemon on the remote host with the given command + args
+        """
+        conn = self._get_connection(host)
+
+        try:
+            # get container image
+            ret, image, err = self.mon_command({
+                'prefix': 'config get',
+                'who': entity,
+                'key': 'container_image',
+            })
+            image = image.strip()
+            self.log.debug('%s container image %s' % (entity, image))
+
+            final_args = [
+                '--image', image,
+                command
+            ]
+            if not no_fsid:
+                final_args += ['--fsid', self._cluster_fsid]
+            final_args += args
+            self.log.debug('args: %s' % final_args)
+            self.log.debug('stdin: %s' % stdin)
+
+            script = 'injected_argv = ' + json.dumps(final_args) + '\n'
+            if stdin:
+                script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
+            script += self._ceph_daemon
+            #self.log.debug('script is %s' % script)
+
+            out, err, code = remoto.process.check(
+                conn,
+                ['/usr/bin/python', '-u'],
+                stdin=script.encode('utf-8'))
+            self.log.debug('exit code %s out %s err %s' % (code, out, err))
+            return out, code
+
+        except Exception as ex:
+            self.log.exception(ex)
+            raise
+
+        finally:
+            conn.exit()
+
     def _get_hosts(self, wanted=None):
         return self.inventory_cache.items_filtered(wanted)
 
@@ -444,54 +492,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 service_type + " unsupported")
         result = self._get_services(service_type, service_id, node_name)
         return orchestrator.TrivialReadCompletion(result)
-
-    def _run_ceph_daemon(self, host, entity, command, args,
-                         stdin=None,
-                         no_fsid=False):
-        """
-        Run ceph-daemon on the remote host with the given command + args
-        """
-        conn = self._get_connection(host)
-
-        try:
-            # get container image
-            ret, image, err = self.mon_command({
-                'prefix': 'config get',
-                'who': entity,
-                'key': 'container_image',
-            })
-            image = image.strip()
-            self.log.debug('%s container image %s' % (entity, image))
-
-            final_args = [
-                '--image', image,
-                command
-            ]
-            if not no_fsid:
-                final_args += ['--fsid', self._cluster_fsid]
-            final_args += args
-            self.log.debug('args: %s' % final_args)
-            self.log.debug('stdin: %s' % stdin)
-
-            script = 'injected_argv = ' + json.dumps(final_args) + '\n'
-            if stdin:
-                script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-            script += self._ceph_daemon
-            #self.log.debug('script is %s' % script)
-
-            out, err, code = remoto.process.check(
-                conn,
-                ['/usr/bin/python', '-u'],
-                stdin=script.encode('utf-8'))
-            self.log.debug('exit code %s out %s err %s' % (code, out, err))
-            return out, code
-
-        except Exception as ex:
-            self.log.exception(ex)
-            raise
-
-        finally:
-            conn.exit()
 
     def get_inventory(self, node_filter=None, refresh=False):
         """
