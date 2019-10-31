@@ -25,6 +25,9 @@
 #include "common/numa.h"
 
 #include <netdb.h>
+#include <string>
+#include <string.h>
+#include <vector>
 
 #define dout_subsys ceph_subsys_
 
@@ -508,15 +511,29 @@ int get_iface_numa_node(
   const std::string& iface,
   int *node)
 {
-  string fn = std::string("/sys/class/net/") + iface + "/device/numa_node";
+  int ifatype = IFACE_DEFAULT;
+  string ifa = iface;
+  int pos = ifa.find(":");
+  if (pos != string::npos) {
+    ifa.erase(pos);
+  }
+  string fn = std::string("/sys/class/net/") + ifa + "/device/numa_node";
+  int fd = ::open(fn.c_str(), O_RDONLY);
+  if (fd < 0) {
+    fn = std::string("/sys/class/net/") + ifa + "/bonding/slaves";
+    fd = ::open(fn.c_str(), O_RDONLY);
+    if (fd < 0) {
+      return -errno;
+    }
+    ifatype = IFACE_BOND_PORT;
+  } else {
+    ifatype = IFACE_PHY_PORT;
+  }
 
   int r = 0;
   char buf[1024];
   char *endptr = 0;
-  int fd = ::open(fn.c_str(), O_RDONLY);
-  if (fd < 0) {
-    return -errno;
-  }
+  int bond_node = -1;
   r = safe_read(fd, &buf, sizeof(buf));
   if (r < 0) {
     goto out;
@@ -525,13 +542,43 @@ int get_iface_numa_node(
   while (r > 0 && ::isspace(buf[--r])) {
     buf[r] = 0;
   }
-  *node = strtoll(buf, &endptr, 10);
-  if (endptr != buf + strlen(buf)) {
-    r = -EINVAL;
-    goto out;
+
+  switch (ifatype) {
+  case IFACE_PHY_PORT:
+    *node = strtoll(buf, &endptr, 10);
+    if (endptr != buf + strlen(buf)) {
+      r = -EINVAL;
+      goto out;
+    }
+    r = 0;
+    break;
+  case IFACE_BOND_PORT:
+    std::vector<std::string> sv;
+    char *q, *p = strtok_r(buf, " ", &q);
+    while (p != NULL) {
+      sv.push_back(p);
+      p = strtok_r(NULL, " ", &q);
+    }
+    for (auto& iter : sv) {
+      int bn = -1;
+      r = get_iface_numa_node(iter, &bn);
+      if (r >= 0) {
+        if (bond_node == -1 || bn == bond_node) {
+          bond_node = bn;
+        } else {
+          *node = -2;
+          goto out;
+        }
+      } else {
+        goto out;
+      }
+    }
+    *node = bond_node;
+    break;
   }
-  r = 0;
- out:
+
+  out:
   ::close(fd);
   return r;
 }
+
