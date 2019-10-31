@@ -115,6 +115,10 @@ public:
 
     using iterator = std::set<rgw_sync_bucket_pipe>::iterator;
 
+    void clear() {
+      pipes.clear();
+    }
+
     void insert(const rgw_sync_bucket_pipe& pipe) {
       pipes.insert(pipe);
     }
@@ -219,6 +223,10 @@ public:
 
   const  map<string, RGWBucketSyncFlowManager::pipe_set>& get_sources() {
     return sources;
+  }
+
+  const  map<string, RGWBucketSyncFlowManager::pipe_set>& get_targets() {
+    return targets;
   }
 
   const std::optional<RGWBucketInfo>& get_bucket_info() const {

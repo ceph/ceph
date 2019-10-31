@@ -86,6 +86,10 @@ struct rgw_sync_bucket_entity {
                          std::optional<rgw_bucket> _bucket) : zone(_zone),
                                                               bucket(_bucket.value_or(rgw_bucket())) {}
 
+  bool specific() const {
+    return zone && bucket;
+  }
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(all_zones, bl);
@@ -165,6 +169,10 @@ struct rgw_sync_bucket_pipe {
 public:
   rgw_sync_bucket_entity source;
   rgw_sync_bucket_entity dest;
+
+  bool specific() const {
+    return source.specific() && dest.specific();
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
