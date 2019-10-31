@@ -27,6 +27,10 @@ struct Snapshot {
 
   static int remove(ImageCtxT *ictx, uint64_t snap_id);
 
+  static int get_name(ImageCtxT *ictx, uint64_t snap_id, std::string *snap_name);
+
+  static int get_id(ImageCtxT *ictx, const std::string& snap_name, uint64_t *snap_id);
+
 };
 
 } // namespace api
