@@ -38,7 +38,7 @@ inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pair_info& p) {
     out << "/" << p.source_prefix;
   }
 
-  out << " -> " << p.dest_bs.bucket;
+  out << "->" << p.dest_bs.bucket;
 
   if (!p.dest_prefix.empty()) {
     out << "/" << p.dest_prefix;
