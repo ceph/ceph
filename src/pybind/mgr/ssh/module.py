@@ -478,7 +478,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 sd.status_desc = d['state']
                 sd.status = {
                     'running': 1,
-                    'inactive': 0,
+                    'stopped': 0,
                     'error': -1,
                     'unknown': -1,
                 }[d['state']]
