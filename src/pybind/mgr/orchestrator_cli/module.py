@@ -298,6 +298,21 @@ Usage:
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_write_cli('orchestrator rgw update',
+                "name=zone_name,type=CephString "
+                "name=num,type=CephInt "
+                "name=hosts,type=CephString,n=N,req=false",
+                'Update the number of RGW instances for the given zone')
+    def _rgw_update(self, zone_name, num, hosts=None):
+        spec = orchestrator.RGWSpec(
+            rgw_zone=zone_name,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
+        completion = self.update_rgw(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_write_cli('orchestrator nfs add',
                 "name=svc_arg,type=CephString "
                 "name=pool,type=CephString "
