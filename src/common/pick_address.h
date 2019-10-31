@@ -20,6 +20,12 @@ class entity_addrvec_t;
 #define CEPH_PICK_ADDRESS_PREFER_IPV4 0x40
 #define CEPH_PICK_ADDRESS_DEFAULT_MON_PORTS  0x80
 
+enum IfaceType {
+  IFACE_DEFAULT = 0,
+  IFACE_PHY_PORT = 1,
+  IFACE_BOND_PORT = 2
+};
+
 #ifndef WITH_SEASTAR
 /*
   Pick addresses based on subnets if needed.
