@@ -361,6 +361,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         try:
             # get container image
+            if entity.startswith('rgw.'):
+                entity = 'client.' + entity
             ret, image, err = self.mon_command({
                 'prefix': 'config get',
                 'who': entity,
@@ -492,7 +494,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def describe_service(self, service_type=None, service_id=None,
                          node_name=None, refresh=False):
-        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
+        if service_type not in ("mds", "osd", "mgr", "mon", 'rgw', "nfs", None):
             raise orchestrator.OrchestratorValidationError(
                 service_type + " unsupported")
         result = self._get_services(service_type,
@@ -968,3 +970,36 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             ['--name', name])
         self.log.debug('remove_mds code %s out %s' % (code, out))
         return "Removed {} from host '{}'".format(name, host)
+
+    def add_rgw(self, spec):
+        if len(spec.placement.nodes) < spec.count:
+            raise RuntimeError("must specify at least %d hosts" % spec.count)
+        daemons = self._get_services('rgw')
+        results = []
+        num_added = 0
+        for host in spec.placement.nodes:
+            if num_added >= spec.count:
+                break
+            rgw_id = self.get_unique_name(daemons, spec.name)
+            self.log.debug('placing rgw.%s on host %s' % (rgw_id, host))
+            results.append(
+                self._worker_pool.apply_async(self._create_rgw, (rgw_id, host))
+            )
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.ServiceDescription()
+            sd.service_instance = rgw_id
+            sd.service_type = 'rgw'
+            sd.nodename = host
+            daemons.append(sd)
+            num_added += 1
+        return SSHWriteCompletion(results)
+
+    def _create_rgw(self, rgw_id, host):
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.rgw.' + rgw_id,
+            'caps': ['mon', 'allow rw',
+                     'mgr', 'allow rw',
+                     'osd', 'allow rwx'],
+        })
+        return self._create_daemon('rgw', rgw_id, host, keyring)
