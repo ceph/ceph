@@ -1022,3 +1022,18 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             ['--name', name])
         self.log.debug('remove_rgw code %s out %s' % (code, out))
         return "Removed {} from host '{}'".format(name, host)
+
+    def update_rgw(self, spec):
+        daemons = self._get_services('rgw', service_name=spec.name)
+        results = []
+        if len(daemons) > spec.count:
+            # remove some
+            to_remove = len(daemons) - spec.count
+            for d in daemons[0:to_remove]:
+                results.append(self._worker_pool.apply_async(
+                    self._remove_rgw, (d.service_instance, d.nodename)))
+        elif len(daemons) < spec.count:
+            # add some
+            spec.count -= len(daemons)
+            return self.add_rgw(spec)
+        return SSHWriteCompletion(results)
