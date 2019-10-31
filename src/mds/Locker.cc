@@ -3012,8 +3012,9 @@ void Locker::handle_client_caps(MClientCaps *m)
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
       }
     }
+    if (cap->need_snapflush() && !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))
+      cap->clear_needsnapflush();
 
-    bool need_snapflush = cap->need_snapflush();
     if (m->get_dirty() && in->is_auth()) {
       dout(7) << " flush client." << client << " dirty " << ccap_string(m->get_dirty())
 	      << " seq " << m->get_seq() << " on " << *in << dendl;
@@ -3021,12 +3022,6 @@ void Locker::handle_client_caps(MClientCaps *m)
 			    m->get_caps(), 0, m->get_dirty(), 0, mds->get_osd_epoch_barrier());
       ack->set_client_tid(m->get_client_tid());
       ack->set_oldest_flush_tid(m->get_oldest_flush_tid());
-
-      // client flushes and releases caps at the same time. make sure MDCache::cow_inode()
-      // properly setup CInode::client_need_snapflush
-      if (!need_snapflush && (m->get_dirty() & ~cap->issued()) &&
-	  (m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))
-	cap->mark_needsnapflush();
     }
 
     // filter wanted based on what we could ever give out (given auth/replica status)
@@ -3040,15 +3035,10 @@ void Locker::handle_client_caps(MClientCaps *m)
 
       adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
     }
-
-    bool updated = in->is_auth() &&
-		   _do_cap_update(in, cap, m->get_dirty(), follows, m, ack, &need_flush);
-
-    if (cap->need_snapflush() &&
-	(!need_snapflush || !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP)))
-      cap->clear_needsnapflush();
-
-    if (updated) {
+      
+    if (in->is_auth() &&
+	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack, &need_flush)) {
+      // updated
       eval(in, CEPH_CAP_LOCKS);
 
       if (!need_flush && (cap->wanted() & ~cap->pending()))
