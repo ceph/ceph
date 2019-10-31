@@ -406,6 +406,7 @@ class DeepSea(Task):
                 )
         deepsea_ctx['repositories'] = self.config.get("repositories", None)
         deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
+        deepsea_ctx['validation_tests_already_run'] = []
         self.__populate_install_method('install')
 
     def __populate_install_method_basic(self, key):
@@ -1864,7 +1865,13 @@ class Validation(DeepSea):
         """
         Use to activate tests that should always be run.
         """
-        self.config[validation_test] = self.config.get(validation_test, default_config)
+        if validation_test in deepsea_ctx["validation_tests_already_run"]:
+            self.log.info(
+                "Default test {} has already been run once: skipping"
+                .format(validation_test)
+                )
+        else:
+            self.config[validation_test] = self.config.get(validation_test, default_config)
 
     def ceph_version_sanity(self, **kwargs):
         self.scripts.run(
@@ -1994,6 +2001,7 @@ class Validation(DeepSea):
             method = getattr(self, method_spec, None)
             if method:
                 method(**kwargs)
+                deepsea_ctx['validation_tests_already_run'].append(method_spec)
             else:
                 raise ConfigError(self.err_prefix + "No such method ->{}<-"
                                   .format(method_spec))
