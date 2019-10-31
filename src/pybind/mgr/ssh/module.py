@@ -443,7 +443,10 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
         return orchestrator.TrivialReadCompletion(nodes)
 
-    def _get_services(self, service_type=None, service_id=None,
+    def _get_services(self,
+                      service_type=None,
+                      service_name=None,
+                      service_id=None,
                       node_name=None):
         daemons = {}
         for host, _ in self._get_hosts():
@@ -467,10 +470,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 if service_type and service_type != sd.service_type:
                     continue
                 if '.' in d['name']:
-                    sd.service_instance = d['name'].split('.')[1]
+                    sd.service_instance = '.'.join(d['name'].split('.')[1:])
                 else:
                     sd.service_instance = host  # e.g., crash
                 if service_id and service_id != sd.service_instance:
+                    continue
+                if service_name and not sd.service_instance.startswith(service_name + '-'):
                     continue
                 sd.nodename = host
                 sd.container_id = d['container_id']
@@ -490,7 +495,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
             raise orchestrator.OrchestratorValidationError(
                 service_type + " unsupported")
-        result = self._get_services(service_type, service_id, node_name)
+        result = self._get_services(service_type,
+                                    service_id=service_id,
+                                    node_name=node_name)
         return orchestrator.TrivialReadCompletion(result)
 
     def get_inventory(self, node_filter=None, refresh=False):
