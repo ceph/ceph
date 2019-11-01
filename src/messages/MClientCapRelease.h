@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 
 
-class MClientCapRelease : public Message {
+class MClientCapRelease : public SafeMessage {
  public:
   std::string_view get_type_name() const override { return "client_cap_release";}
   void print(ostream& out) const override {
@@ -56,7 +56,7 @@ private:
   static constexpr int COMPAT_VERSION = 1;
 
   MClientCapRelease() : 
-    Message{CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION}
+    SafeMessage{CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION}
   {
     memset(&head, 0, sizeof(head));
   }

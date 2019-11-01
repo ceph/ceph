@@ -27,7 +27,7 @@
 
 // sent from replica to auth
 
-class MMDSCacheRejoin : public Message {
+class MMDSCacheRejoin : public SafeMessage {
 public:
   static constexpr int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static constexpr int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
@@ -348,7 +348,7 @@ private:
   static constexpr int COMPAT_VERSION = 1;
 
   MMDSCacheRejoin(int o) : MMDSCacheRejoin() { op = o; }
-  MMDSCacheRejoin() : Message{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSCacheRejoin() : SafeMessage{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION} {}
   ~MMDSCacheRejoin() override {}
 };
 

@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MClientSession : public Message {
+class MClientSession : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -36,15 +36,15 @@ public:
   int get_max_leases() const { return head.max_leases; }
 
 protected:
-  MClientSession() : Message{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} { }
+  MClientSession() : SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} { }
   MClientSession(int o, version_t s=0) : 
-    Message{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
+    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    Message{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
+    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;
