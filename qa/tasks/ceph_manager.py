@@ -106,7 +106,8 @@ class OSDThrasher(Thrasher):
     Object used to thrash Ceph
     """
     def __init__(self, manager, config, logger):
-        super(OSDThrasher, self).__init__()
+        Thrasher.__init__(self, "OSDThrasher")
+
         self.ceph_manager = manager
         self.cluster = manager.cluster
         self.ceph_manager.wait_for_clean()

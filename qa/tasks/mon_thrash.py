@@ -86,7 +86,8 @@ class MonitorThrasher(Thrasher):
             - mon/workloadgen.sh
     """
     def __init__(self, ctx, manager, config, logger):
-        super(MonitorThrasher, self).__init__()
+        Thrasher.__init__(self, "MonitorThrasher")
+
         self.ctx = ctx
         self.manager = manager
         self.manager.wait_for_clean()
