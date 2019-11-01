@@ -11592,7 +11592,7 @@ void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
   ceph_assert(r == 0);
 }
 
-void PrimaryLogPG::finish_degraded_object(const hobject_t& oid)
+void PrimaryLogPG::finish_degraded_object(const hobject_t oid)
 {
   dout(10) << __func__ << " " << oid << dendl;
   if (callbacks_for_degraded_object.count(oid)) {
