@@ -71,6 +71,10 @@ Options
    Available for stat, stat2, get, put, append, truncate, rm, ls
    and all xattr related operation
 
+.. option:: -O object_size
+
+   Set the object size for put/get ops and for write benchmarking
+
 
 Global commands
 ===============
