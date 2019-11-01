@@ -533,7 +533,7 @@ def install_base_units(fsid):
     existed = os.path.exists(args.unit_dir + '/ceph.target')
     with open(args.unit_dir + '/ceph.target.new', 'w') as f:
         f.write('[Unit]\n'
-                'Description=all ceph clusters and services\n'
+                'Description=All Ceph clusters and services\n'
                 '\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target\n')
@@ -553,7 +553,7 @@ def install_base_units(fsid):
     existed = os.path.exists(args.unit_dir + '/ceph-%s.target' % fsid)
     with open(args.unit_dir + '/ceph-%s.target.new' % fsid, 'w') as f:
         f.write('[Unit]\n'
-                'Description=ceph cluster {fsid}\n'
+                'Description=Ceph cluster {fsid}\n'
                 'PartOf=ceph.target\n'
                 'Before=ceph.target\n'
                 '\n'
@@ -621,7 +621,7 @@ def deploy_crash(fsid, uid, gid, config, keyring):
     unit_name = 'ceph-%s-crash.service' % fsid
     with open(os.path.join(args.unit_dir, unit_name + '.new'), 'w') as f:
         f.write('[Unit]\n'
-                'Description=ceph cluster {fsid} crash dump collector\n'
+                'Description=Ceph cluster {fsid} crash dump collector\n'
                 'PartOf=ceph-{fsid}.target\n'
                 'Before=ceph-{fsid}.target\n'
                 '\n'
