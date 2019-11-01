@@ -931,8 +931,8 @@ void ImageRequestWQ<I>::process_io(ImageDispatchSpec<I> *req,
   const auto& extents = req->get_image_extents();
   bool write_op = req->is_write_op();
   uint64_t tid = req->get_tid();
-  uint64_t offset;
-  uint64_t length;
+  uint64_t offset = 0;
+  uint64_t length = 0;
 
   if (write_op) {
     std::lock_guard locker{m_lock};
