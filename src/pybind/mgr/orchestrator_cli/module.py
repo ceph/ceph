@@ -241,7 +241,7 @@ Usage:
                 "name=num,type=CephInt,req=false "
                 "name=hosts,type=CephString,n=N,req=false",
                 'Create an MDS service')
-    def _mds_add(self, fs_name, num, hosts):
+    def _mds_add(self, fs_name, num=None, hosts=None):
         spec = orchestrator.StatelessServiceSpec(
             fs_name,
             placement=orchestrator.PlacementSpec(nodes=hosts),
