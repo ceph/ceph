@@ -210,7 +210,7 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0), m_snapc), comp);
 
-  comp->wait_for_safe();
+  comp->wait_for_complete();
   int ret = comp->get_return_value();
   comp->put();
   return ret;

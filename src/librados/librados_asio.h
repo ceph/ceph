@@ -85,7 +85,7 @@ struct AsyncOp : Invoker<Result> {
   static auto create(const Executor1& ex1, CompletionHandler&& handler) {
     auto p = Completion::create(ex1, std::move(handler));
     p->user_data.aio_completion.reset(
-        Rados::aio_create_completion(p.get(), nullptr, aio_dispatch));
+        Rados::aio_create_completion(p.get(), aio_dispatch));
     return p;
   }
 };
