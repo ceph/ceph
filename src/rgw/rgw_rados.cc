@@ -971,7 +971,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
 
   *result = entry;
 
-  entry->rados_completion = librados::Rados::aio_create_completion(entry, NULL, obj_complete_cb);
+  entry->rados_completion = librados::Rados::aio_create_completion(entry, obj_complete_cb);
 
   std::lock_guard l{locks[shard_id]};
   completions[shard_id].insert(entry);
@@ -5252,7 +5252,7 @@ int RGWRados::Object::Stat::stat_async()
   librados::ObjectReadOperation op;
   op.stat2(&result.size, &result.mtime, NULL);
   op.getxattrs(&result.attrs, NULL);
-  state.completion = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  state.completion = librados::Rados::aio_create_completion(nullptr, nullptr);
   state.io_ctx.locator_set_key(loc);
   r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
   if (r < 0) {
@@ -7497,7 +7497,7 @@ int RGWRados::append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl)
     return r;
   }
   librados::Rados *rad = get_rados_handle();
-  librados::AioCompletion *completion = rad->aio_create_completion(NULL, NULL, NULL);
+  librados::AioCompletion *completion = rad->aio_create_completion(nullptr, nullptr);
 
   r = ref.pool.ioctx().aio_append(ref.obj.oid, completion, bl, size);
   completion->release();
@@ -8050,7 +8050,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
       ObjectWriteOperation o;
       cls_rgw_suggest_changes(o, miter->second);
       // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+      AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
       ioctx.aio_operate(miter->first, c, &o);
       c->release();
     }
@@ -8211,7 +8211,7 @@ check_updates:
       ObjectWriteOperation o;
       cls_rgw_suggest_changes(o, miter->second);
       // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+      AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
       ioctx.aio_operate(miter->first, c, &o);
       c->release();
     }
@@ -8628,7 +8628,7 @@ int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompl
   list<string> prefixes;
   cls_rgw_remove_obj(op, prefixes);
 
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.pool.ioctx().aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;
@@ -8668,7 +8668,7 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   list<string> prefixes;
   cls_rgw_remove_obj(op, prefixes);
 
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.pool.ioctx().aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;

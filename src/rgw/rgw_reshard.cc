@@ -93,7 +93,7 @@ class BucketReshardShard {
       }
     }
 
-    *c = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
+    *c = librados::Rados::aio_create_completion(nullptr, nullptr);
     aio_completions.push_back(*c);
 
     return 0;
