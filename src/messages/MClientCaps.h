@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
 
-class MClientCaps : public Message {
+class MClientCaps : public SafeMessage {
 private:
 
   static constexpr int HEAD_VERSION = 11;
@@ -129,7 +129,7 @@ private:
 
 protected:
   MClientCaps()
-    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION} {}
+    : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION} {}
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
@@ -140,7 +140,7 @@ protected:
 	      int dirty,
 	      int mseq,
               epoch_t oeb)
-    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
+    : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
@@ -157,7 +157,7 @@ protected:
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
-    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
+    : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;

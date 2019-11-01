@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirPrep : public Message {
+class MExportDirPrep : public SafeMessage {
 private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -44,7 +44,7 @@ public:
 protected:
   MExportDirPrep() = default;
   MExportDirPrep(dirfrag_t df, uint64_t tid) :
-    Message{MSG_MDS_EXPORTDIRPREP, HEAD_VERSION, COMPAT_VERSION},
+    SafeMessage{MSG_MDS_EXPORTDIRPREP, HEAD_VERSION, COMPAT_VERSION},
     dirfrag(df)
   {
     set_tid(tid);
