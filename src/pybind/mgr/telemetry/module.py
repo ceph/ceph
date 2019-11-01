@@ -57,6 +57,7 @@ REVISION = 3
 #   - whether an OSD cluster network is in use
 #   - rbd pool and image count, and rbd mirror mode (pool-level)
 #   - rgw daemons, zones, zonegroups; which rgw frontends
+#   - crush map stats
 
 class Module(MgrModule):
     config = dict()
@@ -244,6 +245,45 @@ class Module(MgrModule):
                 metadata[k][v] += 1
 
         return metadata
+
+    def gather_crush_info(self):
+        osdmap = self.get_osdmap()
+        crush_raw = osdmap.get_crush()
+        crush = crush_raw.dump()
+
+        def inc(d, k):
+            if k in d:
+                d[k] += 1
+            else:
+                d[k] = 1
+
+        device_classes = {}
+        for dev in crush['devices']:
+            inc(device_classes, dev.get('class', ''))
+
+        bucket_algs = {}
+        bucket_types = {}
+        bucket_sizes = {}
+        for bucket in crush['buckets']:
+            if '~' in bucket['name']:  # ignore shadow buckets
+                continue
+            inc(bucket_algs, bucket['alg'])
+            inc(bucket_types, bucket['type_id'])
+            inc(bucket_sizes, len(bucket['items']))
+
+        return {
+            'num_devices': len(crush['devices']),
+            'num_types': len(crush['types']),
+            'num_buckets': len(crush['buckets']),
+            'num_rules': len(crush['rules']),
+            'device_classes': list(device_classes.values()),
+            'tunables': crush['tunables'],
+            'compat_weight_set': '-1' in crush['choose_args'],
+            'num_weight_sets': len(crush['choose_args']),
+            'bucket_algs': bucket_algs,
+            'bucket_sizes': bucket_sizes,
+            'bucket_types': bucket_types,
+        }
 
     def gather_configs(self):
         # cluster config options
@@ -471,6 +511,9 @@ class Module(MgrModule):
                 'require_min_compat_client': osd_map['require_min_compat_client'],
                 'cluster_network': cluster_network,
             }
+
+            # crush
+            report['crush'] = self.gather_crush_info()
 
             # cephfs
             report['fs'] = {
