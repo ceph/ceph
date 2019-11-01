@@ -282,6 +282,9 @@ public:
   PrimaryLogPG::CopyResults *results = nullptr;
   PrimaryLogPG::OpContext *ctx;
   OSDOp &osd_op;
+  uint32_t truncate_seq;
+  uint64_t truncate_size;
+  bool have_truncate = false;
 
   CopyFromCallback(PrimaryLogPG::OpContext *ctx, OSDOp &osd_op)
     : ctx(ctx), osd_op(osd_op) {
@@ -291,6 +294,13 @@ public:
   void finish(PrimaryLogPG::CopyCallbackResults results_) override {
     results = results_.get<1>();
     int r = results_.get<0>();
+
+    // Only use truncate_{seq,size} from the original object if the client
+    // did not sent us these parameters
+    if (!have_truncate) {
+      truncate_seq = results->truncate_seq;
+      truncate_size = results->truncate_size;
+    }
 
     // for finish_copyfrom
     ctx->user_at_version = results->user_version;
@@ -314,6 +324,11 @@ public:
   }
   uint64_t get_data_size() {
     return results->object_size;
+  }
+  void set_truncate(uint32_t seq, uint64_t size) {
+    truncate_seq = seq;
+    truncate_size = size;
+    have_truncate = true;
   }
 };
 
@@ -7670,11 +7685,21 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	object_t src_name;
 	object_locator_t src_oloc;
+	uint32_t truncate_seq = 0;
+	uint64_t truncate_size = 0;
+	bool have_truncate = false;
 	snapid_t src_snapid = (uint64_t)op.copy_from.snapid;
 	version_t src_version = op.copy_from.src_version;
 	try {
 	  decode(src_name, bp);
 	  decode(src_oloc, bp);
+	  // check if client sent us truncate_seq and truncate_size
+	  if ((op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ) &&
+	      !bp.end()) {
+	    decode(truncate_seq, bp);
+	    decode(truncate_size, bp);
+	    have_truncate = true;
+	  }
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
@@ -7715,6 +7740,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	  }
 	  CopyFromCallback *cb = new CopyFromCallback(ctx, osd_op);
+	  if (have_truncate)
+	    cb->set_truncate(truncate_seq, truncate_size);
           ctx->op_finishers[ctx->current_osd_subop_num].reset(
             new CopyFromFinisher(cb));
 	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
@@ -9546,8 +9573,8 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     obs.oi.clear_omap_digest();
   }
 
-  obs.oi.truncate_seq = cb->results->truncate_seq;
-  obs.oi.truncate_size = cb->results->truncate_size;
+  obs.oi.truncate_seq = cb->truncate_seq;
+  obs.oi.truncate_size = cb->truncate_size;
 
   obs.oi.mtime = ceph::real_clock::to_timespec(cb->results->mtime);
   ctx->mtime = utime_t();
