@@ -1062,6 +1062,8 @@ def command_bootstrap():
         ).run()
 
         logger.info('Adding key to root@localhost\'s authorized_keys...')
+        if not os.path.exists('/root/.ssh'):
+            os.mkdir('/root/.ssh', mode=0o700)
         with open('/root/.ssh/authorized_keys', 'a') as f:
             os.fchmod(f.fileno(), 0o600)  # just in case we created it
             f.write(ssh_pub.strip() + '\n')
