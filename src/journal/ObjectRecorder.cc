@@ -360,7 +360,7 @@ bool ObjectRecorder::send_appends(bool force, ceph::ref_t<FutureImpl> flush_futu
     }
 
     auto rados_completion = librados::Rados::aio_create_completion(
-      new C_AppendFlush(this, append_tid), nullptr, utils::rados_ctx_callback);
+      new C_AppendFlush(this, append_tid), utils::rados_ctx_callback);
     int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
     ceph_assert(r == 0);
     rados_completion->release();
