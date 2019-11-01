@@ -63,8 +63,6 @@
 // cons/des
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
-  mds_lock(ceph::make_mutex("MDSDaemon::mds_lock")),
-  stopping(false),
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   beacon(m->cct, mc, n),
@@ -73,8 +71,6 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   monc(mc),
   mgrc(m->cct, m, &mc->monmap),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
-  mds_rank(NULL),
-  asok_hook(NULL),
   starttime(mono_clock::now())
 {
   orig_argc = 0;
