@@ -1100,7 +1100,7 @@ class Volumes(list):
             lv_tags=lv_tags
         )
         if not lvs:
-            return None
+            return []
         if len(lvs) > 1:
             raise MultipleLVsError(lv_name, lv_path)
         return lvs[0]

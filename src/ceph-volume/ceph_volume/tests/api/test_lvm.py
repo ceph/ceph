@@ -219,7 +219,7 @@ class TestVolumes(object):
         assert volumes.get() is None
 
     def test_volume_get_filtered_has_no_volumes(self, volumes):
-        assert volumes.get(lv_name='ceph') is None
+        assert volumes.get(lv_name='ceph') == []
 
     def test_volume_has_multiple_matches(self, volumes):
         volume1 = volume2 = api.Volume(lv_name='foo', lv_path='/dev/vg/lv', lv_tags='')
@@ -525,7 +525,7 @@ class TestGetLVFromArgument(object):
 
     def test_absolute_path_is_not_lv(self, volumes):
         volumes.append(self.foo_volume)
-        assert api.get_lv_from_argument('/path') is None
+        assert api.get_lv_from_argument('/path') == []
 
     def test_absolute_path_is_lv(self, volumes):
         volumes.append(self.foo_volume)
