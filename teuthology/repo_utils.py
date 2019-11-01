@@ -199,10 +199,10 @@ def fetch_branch(repo_path, branch, shallow=True):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
     if proc.wait() != 0:
-        not_found_str = "fatal: Couldn't find remote ref %s" % branch
+        not_found_str = "fatal: couldn't find remote ref %s" % branch
         out = proc.stdout.read()
         log.error(out)
-        if not_found_str in out:
+        if not_found_str in out.lower():
             raise BranchNotFoundError(branch)
         else:
             raise GitError("git fetch failed!")
