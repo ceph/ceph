@@ -62,11 +62,6 @@ Get OpenStack credentials and test it
 Usage
 -----
 
-* Create a passwordless ssh public key::
-
-    $ openstack keypair create myself > myself.pem
-    $ chmod 600 myself.pem
-
 * Run the dummy suite. It does nothing useful but shows all works as
   expected. Note that the first time it is run, it can take a long
   time (from a few minutes to half an hour or so) because it downloads
