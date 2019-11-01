@@ -29,7 +29,7 @@
 ------
 
 * The telemetry module now has a 'device' channel, enabled by default, that
-  will report anonymized hard disk and SSD hea lth metrics to telemetry.ceph.com
+  will report anonymized hard disk and SSD health metrics to telemetry.ceph.com
   in order to build and improve device failure prediction algorithms.  Because
   the content of telemetry reports has changed, you will need to either re-opt-in
   with::
