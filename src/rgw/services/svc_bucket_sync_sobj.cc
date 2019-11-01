@@ -29,26 +29,41 @@ int RGWSI_Bucket_Sync_SObj::do_start()
 }
 
 int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
-                                               const rgw_bucket& bucket,
+                                               std::optional<string> zone,
+                                               std::optional<rgw_bucket> _bucket,
                                                RGWBucketSyncPolicyHandlerRef *handler,
                                                optional_yield y)
 {
-  string key = RGWSI_Bucket::get_bi_meta_key(bucket);
-  string cache_key("bi/");
-  cache_key.append(key);
+  if (!_bucket) {
+    *handler = svc.zone->get_sync_policy_handler(zone);
+    return 0;
+  }
+
+  auto& bucket = *_bucket;
+
+  string zone_key;
+  string bucket_key;
+
+  if (zone && *zone != svc.zone->zone_id()) {
+    zone_key = *zone;
+  }
+
+  bucket_key = RGWSI_Bucket::get_bi_meta_key(bucket);
+
+  string cache_key("bi/" + zone_key + "/" + bucket_key);
 
   if (auto e = sync_policy_cache->find(cache_key)) {
     *handler = e->handler;
     return 0;
   }
 
-
+  bucket_sync_policy_cache_entry e;
   rgw_cache_entry_info cache_info;
 
   RGWBucketInfo bucket_info;
 
   int r = svc.bucket_sobj->read_bucket_instance_info(ctx,
-                                                     key,
+                                                     bucket_key,
                                                      &bucket_info,
                                                      nullptr,
                                                      nullptr,
@@ -56,13 +71,12 @@ int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
                                                      &cache_info);
   if (r < 0) {
     if (r != -ENOENT) {
-      ldout(cct, 0) << "ERROR: svc.bucket->read_bucket_instance_info(key=" << key << ") returned r=" << r << dendl;
+      ldout(cct, 0) << "ERROR: svc.bucket->read_bucket_instance_info(key=" << bucket_key << ") returned r=" << r << dendl;
     }
     return r;
   }
 
-  bucket_sync_policy_cache_entry e;
-  e.handler.reset(svc.zone->get_sync_policy_handler()->alloc_child(bucket_info));
+  e.handler.reset(svc.zone->get_sync_policy_handler(zone)->alloc_child(bucket_info));
 
   if (!sync_policy_cache->put(svc.cache, cache_key, &e, {&cache_info})) {
     ldout(cct, 20) << "couldn't put bucket_sync_policy cache entry, might have raced with data changes" << dendl;

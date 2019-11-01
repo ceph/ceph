@@ -870,7 +870,8 @@ public:
                       RGWBucketEnt* pent = nullptr);
 
   /* bucket sync */
-  int get_sync_policy_handler(const rgw_bucket& bucket,
+  int get_sync_policy_handler(std::optional<string> zone,
+                              std::optional<rgw_bucket> bucket,
 			      RGWBucketSyncPolicyHandlerRef *phandler,
 			      optional_yield y);
   int bucket_exports_data(const rgw_bucket& bucket,

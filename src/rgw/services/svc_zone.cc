@@ -38,12 +38,22 @@ void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
 
 RGWSI_Zone::~RGWSI_Zone()
 {
-  delete sync_policy_handler;
   delete realm;
   delete zonegroup;
   delete zone_public_config;
   delete zone_params;
   delete current_period;
+}
+
+std::shared_ptr<RGWBucketSyncPolicyHandler> RGWSI_Zone::get_sync_policy_handler(std::optional<string> zone) const {
+  if (!zone || *zone == zone_id()) {
+    return sync_policy_handler;
+  }
+  auto iter = sync_policy_handlers.find(*zone);
+  if (iter == sync_policy_handlers.end()) {
+    return std::shared_ptr<RGWBucketSyncPolicyHandler>();
+  }
+  return iter->second;
 }
 
 bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const
@@ -153,18 +163,20 @@ int RGWSI_Zone::do_start()
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
-  sync_policy_handler = new RGWBucketSyncPolicyHandler(this, sync_modules_svc);
+  for (auto ziter : zonegroup->zones) {
+    sync_policy_handlers[ziter.second.id].reset(new RGWBucketSyncPolicyHandler(this, sync_modules_svc, ziter.second.name));
+  }
+
+  sync_policy_handler = sync_policy_handlers[zone_id()]; /* we made sure earlier that zonegroup->zones has our zone */
 
   set<string> source_zones_by_name;
   set<string> target_zones_by_name;
 
-  for (auto& zone_name : sync_policy_handler->get_source_zones()) {
-    source_zones_by_name.insert(zone_name);
-  }
-
-  for (auto& zone_name : sync_policy_handler->get_target_zones()) {
-    target_zones_by_name.insert(zone_name);
-  }
+  sync_policy_handler->reflect(nullptr, nullptr,
+                               nullptr, nullptr,
+                               &source_zones_by_name,
+                               &target_zones_by_name,
+                               false); /* relaxed: also get all zones that we allow to sync to/from */
 
   ret = sync_modules_svc->start();
   if (ret < 0) {

@@ -343,7 +343,8 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
 
 void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucket,
                                        RGWBucketSyncFlowManager::pipe_set *source_pipes,
-                                       RGWBucketSyncFlowManager::pipe_set *dest_pipes) const
+                                       RGWBucketSyncFlowManager::pipe_set *dest_pipes,
+                                       bool only_enabled) const
 
 {
   rgw_sync_bucket_entity entity;
@@ -351,14 +352,15 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
   entity.bucket = effective_bucket.value_or(rgw_bucket());
 
   if (parent) {
-    parent->reflect(effective_bucket, source_pipes, dest_pipes);
+    parent->reflect(effective_bucket, source_pipes, dest_pipes, only_enabled);
   }
 
   for (auto& item : flow_groups) {
     auto& flow_group_map = item.second;
 
     /* only return enabled groups */
-    if (flow_group_map.status != rgw_sync_policy_group::Status::ENABLED) {
+    if (flow_group_map.status != rgw_sync_policy_group::Status::ENABLED &&
+        (only_enabled || flow_group_map.status != rgw_sync_policy_group::Status::ALLOWED)) {
       continue;
     }
 
@@ -504,34 +506,75 @@ void RGWBucketSyncPolicyHandler::init()
 {
   flow_mgr->init(sync_policy);
 
-  flow_mgr->reflect(bucket, &sources_by_name, &targets_by_name);
+  reflect(&sources_by_name,
+          &targets_by_name,
+          &sources,
+          &targets,
+          &source_zones,
+          &target_zones,
+          true);
+}
 
-  /* convert to zone ids */
+void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *psources_by_name,
+                                         RGWBucketSyncFlowManager::pipe_set *ptargets_by_name,
+                                         map<string, RGWBucketSyncFlowManager::pipe_set> *psources,
+                                         map<string, RGWBucketSyncFlowManager::pipe_set> *ptargets,
+                                         std::set<string> *psource_zones,
+                                         std::set<string> *ptarget_zones,
+                                         bool only_enabled) const
+{
+  RGWBucketSyncFlowManager::pipe_set _sources_by_name;
+  RGWBucketSyncFlowManager::pipe_set _targets_by_name;
+  map<string, RGWBucketSyncFlowManager::pipe_set> _sources;
+  map<string, RGWBucketSyncFlowManager::pipe_set> _targets;
+  std::set<string> _source_zones;
+  std::set<string> _target_zones;
 
-  for (auto& pipe : sources_by_name.pipes) {
+  flow_mgr->reflect(bucket, &_sources_by_name, &_targets_by_name, only_enabled);
+
+  for (auto& pipe : _sources_by_name.pipes) {
     if (!pipe.source.zone) {
       continue;
     }
-    source_zones.insert(*pipe.source.zone);
+    _source_zones.insert(*pipe.source.zone);
     rgw_sync_bucket_pipe new_pipe = pipe;
     string zone_id;
 
     if (zone_svc->find_zone_id_by_name(*pipe.source.zone, &zone_id)) {
       new_pipe.source.zone = zone_id;
     }
-    sources[*new_pipe.source.zone].pipes.insert(new_pipe);
+    _sources[*new_pipe.source.zone].pipes.insert(new_pipe);
   }
-  for (auto& pipe : targets_by_name.pipes) {
+  for (auto& pipe : _targets_by_name.pipes) {
     if (!pipe.dest.zone) {
       continue;
     }
-    target_zones.insert(*pipe.dest.zone);
+    _target_zones.insert(*pipe.dest.zone);
     rgw_sync_bucket_pipe new_pipe = pipe;
     string zone_id;
     if (zone_svc->find_zone_id_by_name(*pipe.dest.zone, &zone_id)) {
       new_pipe.dest.zone = zone_id;
     }
-    targets[*new_pipe.dest.zone].pipes.insert(new_pipe);
+    _targets[*new_pipe.dest.zone].pipes.insert(new_pipe);
+  }
+
+  if (psources_by_name) {
+    *psources_by_name = std::move(_sources_by_name);
+  }
+  if (ptargets_by_name) {
+    *ptargets_by_name = std::move(_targets_by_name);
+  }
+  if (psources) {
+    *psources = std::move(_sources);
+  }
+  if (ptargets) {
+    *ptargets = std::move(_targets);
+  }
+  if (psource_zones) {
+    *psource_zones = std::move(_source_zones);
+  }
+  if (ptarget_zones) {
+    *ptarget_zones = std::move(_target_zones);
   }
 }
 
