@@ -279,7 +279,8 @@ int RGWBucketGetSyncPolicyHandlerCR::Request::_send_request()
 {
   CephContext *cct = store->ctx();
 
-  int r = store->ctl()->bucket->get_sync_policy_handler(params.bucket,
+  int r = store->ctl()->bucket->get_sync_policy_handler(params.zone,
+                                                        params.bucket,
                                                         &result->policy_handler,
                                                         null_yield);
   if (r < 0) {

@@ -2333,21 +2333,24 @@ void encode_json(const char *name, const RGWBucketSyncFlowManager::pipe_set& pse
 
 static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bucket> opt_bucket, Formatter *formatter)
 {
-  const RGWRealm& realm = store->svc()->zone->get_realm();
-  const RGWZoneGroup& zonegroup = store->svc()->zone->get_zonegroup();
-  const RGWZone& zone = store->svc()->zone->get_zone();
+  std::optional<string> zone_id;
 
-  string zone_name = opt_target_zone.value_or(store->svc()->zone->zone_name());
+  if (opt_target_zone) {
+    string zid;
+    if (!store->svc()->zone->find_zone_id_by_name(*opt_target_zone, &zid)) {
+      cerr << "WARNING: cannot find zone id for zone=" << *opt_target_zone << std::endl;
+      return -ENOENT;
+    }
+    zone_id = zid;
+  }
 
-  RGWBucketSyncPolicyHandler zone_policy_handler(RGWBucketSyncPolicyHandler(store->svc()->zone,
-                                                                            store->svc()->sync_modules,
-                                                                            opt_target_zone));
+  auto zone_policy_handler = store->svc()->zone->get_sync_policy_handler(zone_id);
 
-  std::unique_ptr<RGWBucketSyncPolicyHandler> bucket_handler;
+  RGWBucketSyncPolicyHandlerRef bucket_handler;
 
   std::optional<rgw_bucket> eff_bucket = opt_bucket;
 
-  auto handler = &zone_policy_handler;
+  auto handler = zone_policy_handler;
 
   if (eff_bucket) {
     rgw_bucket bucket;
@@ -2366,7 +2369,7 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
       bucket_handler.reset(handler->alloc_child(*eff_bucket, nullopt));
     }
 
-    handler = bucket_handler.get();
+    handler = bucket_handler;
   }
 
   RGWBucketSyncFlowManager::pipe_set *sources;
@@ -2405,7 +2408,7 @@ static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo&
 
   RGWBucketSyncPolicyHandlerRef handler;
 
-  int r = store->ctl()->bucket->get_sync_policy_handler(info.bucket, &handler, null_yield);
+  int r = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, info.bucket, &handler, null_yield);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
     return r;
@@ -2445,7 +2448,7 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
 
   RGWBucketSyncPolicyHandlerRef handler;
 
-  int r = store->ctl()->bucket->get_sync_policy_handler(info.bucket, &handler, null_yield);
+  int r = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, info.bucket, &handler, null_yield);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
     return r;

@@ -3662,12 +3662,13 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
   return ctl.user->flush_bucket_stats(user_id, *pent);
 }
 
-int RGWBucketCtl::get_sync_policy_handler(const rgw_bucket& bucket,
+int RGWBucketCtl::get_sync_policy_handler(std::optional<string> zone,
+                                          std::optional<rgw_bucket> bucket,
                                           RGWBucketSyncPolicyHandlerRef *phandler,
                                           optional_yield y)
 {
   int r = call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket_sync->get_policy_handler(ctx.bi, bucket, phandler, y);
+    return svc.bucket_sync->get_policy_handler(ctx.bi, zone, bucket, phandler, y);
   });
   if (r < 0) {
     ldout(cct, 20) << __func__ << "(): failed to get policy handler for bucket=" << bucket << " (r=" << r << ")" << dendl;
@@ -3682,7 +3683,7 @@ int RGWBucketCtl::bucket_exports_data(const rgw_bucket& bucket,
 
   RGWBucketSyncPolicyHandlerRef handler;
 
-  int r = get_sync_policy_handler(bucket, &handler, y);
+  int r = get_sync_policy_handler(std::nullopt, bucket, &handler, y);
   if (r < 0) {
     return r;
   }
@@ -3696,7 +3697,7 @@ int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
 
   RGWBucketSyncPolicyHandlerRef handler;
 
-  int r = get_sync_policy_handler(bucket, &handler, y);
+  int r = get_sync_policy_handler(std::nullopt, bucket, &handler, y);
   if (r < 0) {
     return r;
   }

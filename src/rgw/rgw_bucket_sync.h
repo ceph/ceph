@@ -166,7 +166,8 @@ public:
 
   void reflect(std::optional<rgw_bucket> effective_bucket,
                pipe_set *flow_by_source,
-               pipe_set *flow_by_dest) const;
+               pipe_set *flow_by_dest,  
+               bool only_enabled) const;
 
 };
 
@@ -212,6 +213,14 @@ public:
   RGWBucketSyncPolicyHandler *alloc_child(const RGWBucketInfo& bucket_info) const;
   RGWBucketSyncPolicyHandler *alloc_child(const rgw_bucket& bucket,
                                           std::optional<rgw_sync_policy_info> sync_policy) const;
+
+  void reflect(RGWBucketSyncFlowManager::pipe_set *psources_by_name,
+               RGWBucketSyncFlowManager::pipe_set *ptargets_by_name,
+               map<string, RGWBucketSyncFlowManager::pipe_set> *psources,
+               map<string, RGWBucketSyncFlowManager::pipe_set> *ptargets,
+               std::set<string> *psource_zones,
+               std::set<string> *ptarget_zones,
+               bool only_enabled) const;
 
   const std::set<string>& get_source_zones() const {
     return source_zones;
