@@ -626,6 +626,7 @@ def deploy_crash(fsid, uid, gid, config, keyring):
     subprocess.check_output(['systemctl', 'start', unit_name])
 
 def get_unit_file(fsid, uid, gid):
+    install_path = find_program('install')
     u = """[Unit]
 Description=Ceph daemon for {fsid}
 
@@ -644,8 +645,8 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
 ExecStartPre=-{podman_path} rm ceph-{fsid}-%i
-ExecStartPre=-install -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}
-ExecStart={data_dir}/{fsid}/%i/cmd
+ExecStartPre=-{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}
+ExecStart=/bin/bash {data_dir}/{fsid}/%i/cmd
 ExecStop=-{podman_path} stop ceph-{fsid}-%i
 Restart=on-failure
 RestartSec=10s
@@ -658,6 +659,7 @@ StartLimitBurst=5
 WantedBy=ceph-{fsid}.target
 """.format(
     podman_path=podman_path,
+    install_path=install_path,
     fsid=fsid,
     uid=uid,
     gid=gid,
