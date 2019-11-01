@@ -12901,19 +12901,19 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
   std::lock_guard lock(client_lock);
 
   inodeno_t ino = in->ino;
+  *layout=in->layout;	        //fill layout
   uint32_t object_size = layout->object_size;
   uint32_t su = layout->stripe_unit;
   uint32_t stripe_count = layout->stripe_count;
-  uint64_t stripes_per_object = object_size / su;
-  uint64_t stripeno = 0, stripepos = 0;
-
-  if(stripe_count) {
-      stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
-      stripepos = blockno % stripe_count;   // which object in the object set (X)
+  uint64_t stripeno = 0, stripepos = 0,stripes_per_object=0,objectsetno=0,objectno=0;
+  if(stripe_count && object_size && su)	 //check 
+  {
+    stripes_per_object = object_size / su;
+    stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
+    stripepos = blockno % stripe_count;   // which object in the object set (X)
+    objectsetno = stripeno / stripes_per_object;       // which object set
+    objectno = objectsetno * stripe_count + stripepos;  // object id
   }
-  uint64_t objectsetno = stripeno / stripes_per_object;       // which object set
-  uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
-
   object_t oid = file_object_t(ino, objectno);
   return objecter->with_osdmap([&](const OSDMap& o) {
       ceph_object_layout olayout =
