@@ -582,7 +582,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
     if (iter == mirroring_namespaces.end()) {
       auto namespace_replayer = it->second;
       auto on_shut_down = new LambdaContext(
-        [this, namespace_replayer, ctx=gather_ctx->new_sub()](int r) {
+        [namespace_replayer, ctx=gather_ctx->new_sub()](int r) {
           delete namespace_replayer;
           ctx->complete(r);
         });
@@ -712,7 +712,7 @@ void PoolReplayer<I>::namespace_replayer_acquire_leader(const std::string &name,
           auto namespace_replayer = m_namespace_replayers[name];
           m_namespace_replayers.erase(name);
           auto on_shut_down = new LambdaContext(
-              [this, namespace_replayer, on_finish](int r) {
+              [namespace_replayer, on_finish](int r) {
                 delete namespace_replayer;
                 on_finish->complete(r);
               });
