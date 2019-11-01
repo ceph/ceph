@@ -974,6 +974,13 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_rgw(self, spec):
         if len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
+        # ensure rgw_zone is set for these daemons
+        ret, out, err = self.mon_command({
+            'prefix': 'config set',
+            'who': 'client.rgw.' + spec.name,
+            'name': 'rgw_zone',
+            'value': spec.name,
+        })
         daemons = self._get_services('rgw')
         results = []
         num_added = 0
