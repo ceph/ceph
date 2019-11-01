@@ -57,6 +57,7 @@ class Osd(RESTController):
         def add_id(osd):
             osd['id'] = osd['osd']
             return osd
+
         resp = {
             osd['osd']: add_id(osd)
             for osd in mgr.get('osd_map')['osds'] if svc_id is None or osd['osd'] == int(svc_id)
@@ -77,11 +78,13 @@ class Osd(RESTController):
             if dev_id not in smart_data:
                 dev_smart_data = mgr.remote('devicehealth', 'do_scrape_daemon', 'osd', svc_id,
                                             dev_id)
-                for _, dev_data in dev_smart_data.items():
-                    if 'error' in dev_data:
-                        logger.warning('[OSD] Error retrieving smartctl data for device ID %s: %s',
-                                       dev_id, dev_smart_data)
-                smart_data.update(dev_smart_data)
+                if dev_smart_data:
+                    for _, dev_data in dev_smart_data.items():
+                        if 'error' in dev_data:
+                            logger.warning(
+                                '[OSD] Error retrieving smartctl data for device ID %s: %s', dev_id,
+                                dev_smart_data)
+                    smart_data.update(dev_smart_data)
         return smart_data
 
     @RESTController.Resource('GET')
