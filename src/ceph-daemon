@@ -1141,7 +1141,7 @@ def command_bootstrap():
 ##################################
 
 def command_deploy():
-    (daemon_type, daemon_id) = args.name.split('.')
+    (daemon_type, daemon_id) = args.name.split('.', 1)
     if daemon_type not in ['mon', 'mgr', 'mds', 'osd', 'rgw']:
         raise RuntimeError('daemon type %s not recognized' % daemon_type)
     (config, keyring, crash_keyring) = get_config_and_both_keyrings()
@@ -1163,7 +1163,7 @@ def command_deploy():
 ##################################
 
 def command_run():
-    (daemon_type, daemon_id) = args.name.split('.')
+    (daemon_type, daemon_id) = args.name.split('.', 1)
     c = get_container(args.fsid, daemon_type, daemon_id)
     return subprocess.call(c.run_cmd())
 
@@ -1174,7 +1174,7 @@ def command_shell():
         make_log_dir(args.fsid)
     if args.name:
         if '.' in args.name:
-            (daemon_type, daemon_id) = args.name.split('.')
+            (daemon_type, daemon_id) = args.name.split('.', 1)
         else:
             daemon_type = args.name
             daemon_id = None
@@ -1206,7 +1206,7 @@ def command_shell():
 ##################################
 
 def command_enter():
-    (daemon_type, daemon_id) = args.name.split('.')
+    (daemon_type, daemon_id) = args.name.split('.', 1)
     podman_args = []
     if args.command:
         command = args.command
@@ -1264,7 +1264,7 @@ def command_ceph_volume():
 ##################################
 
 def command_unit():
-    (daemon_type, daemon_id) = args.name.split('.')
+    (daemon_type, daemon_id) = args.name.split('.', 1)
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
     call_throws([
         'systemctl',
@@ -1310,15 +1310,14 @@ def command_ls():
                         name = 'crash'
                         unit_name = 'ceph-%s-crash.service' % fsid
                         (enabled, state) = check_unit(unit_name)
-                    else:
-                        bits = j.split('.')
-                        if len(bits) != 2:
-                            continue
+                    elif '.' in j:
                         name = j
-                        (daemon_type, daemon_id) = bits
+                        (daemon_type, daemon_id) = j.split('.', 1)
                         (enabled, state) = check_unit(get_unit_name(fsid,
                                                                     daemon_type,
                                                                     daemon_id))
+                    else:
+                        continue
 
                     # get container id
                     container_id = None
@@ -1353,7 +1352,7 @@ def command_ls():
 ##################################
 
 def command_adopt():
-    (daemon_type, daemon_id) = args.name.split('.')
+    (daemon_type, daemon_id) = args.name.split('.', 1)
     (uid, gid) = extract_uid_gid()
     if args.style == 'legacy':
         fsid = get_legacy_daemon_fsid(args.cluster, daemon_type, daemon_id)
@@ -1408,7 +1407,7 @@ def command_adopt():
 ##################################
 
 def command_rm_daemon():
-    (daemon_type, daemon_id) = args.name.split('.')
+    (daemon_type, daemon_id) = args.name.split('.', 1)
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise RuntimeError('must pass --force to proceed: '
                            'this command may destroy precious data!')
