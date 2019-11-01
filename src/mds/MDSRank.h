@@ -77,6 +77,9 @@ enum {
   l_mds_openino_dir_fetch,
   l_mds_openino_backtrace_fetch,
   l_mds_openino_peer_discover,
+  l_mds_root_rfiles,
+  l_mds_root_rbytes,
+  l_mds_root_rsnaps,
   l_mds_last,
 };
 
