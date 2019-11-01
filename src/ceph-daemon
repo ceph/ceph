@@ -378,12 +378,12 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
         mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
 
     if daemon_type in ['mon', 'osd']:
-        mounts['/dev'] = '/dev:z'  # FIXME: narrow this down?
-        mounts['/run/udev'] = '/run/udev:z'
+        mounts['/dev'] = '/dev'  # FIXME: narrow this down?
+        mounts['/run/udev'] = '/run/udev'
     if daemon_type == 'osd':
-        mounts['/sys'] = '/sys:z'  # for numa.cc, pick_address, cgroups, ...
-        mounts['/run/lvm'] = '/run/lvm:z'
-        mounts['/run/lock/lvm'] = '/run/lock/lvm:z'
+        mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
+        mounts['/run/lvm'] = '/run/lvm'
+        mounts['/run/lock/lvm'] = '/run/lock/lvm'
 
     return mounts
 
