@@ -603,7 +603,6 @@ int RGWBucket::init(RGWRadosStore *storage, RGWBucketAdminOpState& op_state,
   }
 
   if (!bucket.name.empty()) {
-    ceph::real_time mtime;
     int r = store->ctl()->bucket->read_bucket_info(
         bucket, &bucket_info, y,
         RGWBucketCtl::BucketInstance::GetParams().set_attrs(pattrs),
