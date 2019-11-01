@@ -277,3 +277,14 @@
   Accordingly, the ``osd_op_queue_mclock*`` family of config options
   has been removed in favor of the ``osd_mclock_scheduler*`` family
   of options.
+
+* The config subsystem now searches dot ('.') delineated prefixes for
+  options.  That means for an entity like ``client.foo.bar``, it's
+  overall configuration will be a combination of the global options,
+  ``client``, ``client.foo``, and ``client.foo.bar``.  Previously,
+  only global, ``client``, and ``client.foo.bar`` options would apply.
+  This change may affect the configuration for clients that include a
+  ``.`` in their name.
+
+  Note that this only applies to configuration options in the
+  monitor's database--config file parsing is not affected.
