@@ -80,9 +80,3 @@
     ceph telemetry show        # see everything
     ceph telemetry show basic  # basic cluster info (including all of the new info)
 
-* Following invalid settings now are not tolerated anymore
-  for the command `ceph osd erasure-code-profile set xxx`.
-  * invalid `m` for "reed_sol_r6_op" erasure technique
-  * invalid `m` and invalid `w` for "liber8tion" erasure technique
-
-## NOTE remove this previous item once these telemetry items are cherry-picked ##
