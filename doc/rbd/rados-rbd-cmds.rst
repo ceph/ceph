@@ -35,13 +35,13 @@ recommended that you utilize a more restricted user wherever possible.
 To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
 command, user name, monitor caps, and OSD caps::
 
-        ceph auth get-or-create client.{ID} mon 'profile rbd' osd 'profile {profile name} [pool={pool-name}][, profile ...]'
+        ceph auth get-or-create client.{ID} mon 'profile rbd' osd 'profile {profile name} [pool={pool-name}][, profile ...]' mgr 'profile rbd [pool={pool-name}]'
 
 For example, to create a user ID named ``qemu`` with read-write access to the
 pool ``vms`` and read-only access to the pool ``images``, execute the
 following::
 
-	ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images'
+	ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=images'
 
 The output from the ``ceph auth get-or-create`` command will be the keyring for
 the specified user, which can be written to ``/etc/ceph/ceph.client.{ID}.keyring``.
