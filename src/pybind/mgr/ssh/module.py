@@ -191,7 +191,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         while True:
             if prefix:
-                name = prefix + '-'
+                name = prefix + '.'
             else:
                 name = ''
             name += ''.join(random.choice(string.ascii_lowercase)
@@ -477,7 +477,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     sd.service_instance = host  # e.g., crash
                 if service_id and service_id != sd.service_instance:
                     continue
-                if service_name and not sd.service_instance.startswith(service_name + '-'):
+                if service_name and not sd.service_instance.startswith(service_name + '.'):
                     continue
                 sd.nodename = host
                 sd.container_id = d['container_id']
@@ -956,7 +956,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         daemons = self._get_services('mds')
         results = []
         for d in daemons:
-            if d.service_instance == name or d.service_instance.startswith(name + '-'):
+            if d.service_instance == name or d.service_instance.startswith(name + '.'):
                 results.append(self._worker_pool.apply_async(
                     self._remove_mds, (d.service_instance, d.nodename)))
         if not results:
@@ -1008,7 +1008,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         daemons = self._get_services('rgw')
         results = []
         for d in daemons:
-            if d.service_instance == name or d.service_instance.startswith(name + '-'):
+            if d.service_instance == name or d.service_instance.startswith(name + '.'):
                 results.append(self._worker_pool.apply_async(
                     self._remove_rgw, (d.service_instance, d.nodename)))
         if not results:
