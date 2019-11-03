@@ -231,7 +231,7 @@ inline ostream& operator<<(ostream &out, const MutationImpl &mut)
   return out;
 }
 
-typedef boost::intrusive_ptr<MutationImpl> MutationRef;
+using MutationRef = ceph::ref_t<MutationImpl>;
 
 
 
@@ -410,7 +410,7 @@ struct MDRequestImpl : public MutationImpl {
   void reset_slave_request(const cref_t<MMDSSlaveRequest>& req=nullptr);
 
   // TrackedOp stuff
-  typedef boost::intrusive_ptr<MDRequestImpl> Ref;
+  using Ref = ref_t<MDRequestImpl>;
   std::vector<Ref> batch_reqs;
 protected:
   void _dump(Formatter *f) const override;
@@ -419,7 +419,7 @@ private:
   mutable ceph::spinlock msg_lock;
 };
 
-typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
+using MDRequestRef = ref_t<MDRequestImpl>;
 
 
 struct MDSlaveUpdate {

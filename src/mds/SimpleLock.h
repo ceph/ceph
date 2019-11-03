@@ -16,8 +16,6 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
-#include <boost/intrusive_ptr.hpp>
-
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
 
@@ -26,7 +24,7 @@
 
 
 struct MutationImpl;
-typedef boost::intrusive_ptr<MutationImpl> MutationRef;
+using MutationRef = ref_t<MutationImpl>;
 
 extern "C" {
 #include "locks.h"
