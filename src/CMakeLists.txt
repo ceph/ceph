@@ -473,9 +473,7 @@ if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
-if(WITH_MGR)
-  add_subdirectory(mgr)
-endif()
+add_subdirectory(mgr)
 
 set(librados_config_srcs
   librados-config.cc)
