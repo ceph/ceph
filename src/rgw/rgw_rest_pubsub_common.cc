@@ -1,12 +1,50 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "rgw_common.h"
 #include "rgw_rest_pubsub_common.h"
 #include "common/dout.h"
+#include "rgw_url.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+bool validate_and_update_endpoint_secret(rgw_pubsub_sub_dest& dest, CephContext *cct, const RGWEnv& env) {
+  if (dest.push_endpoint.empty()) {
+      return true;
+  }
+  std::string user;
+  std::string password;
+  if (!rgw::parse_url_userinfo(dest.push_endpoint, user, password)) {
+    ldout(cct, 1) << "endpoint validation error: malformed endpoint URL:" << dest.push_endpoint << dendl;
+    return false;
+  }
+  // this should be verified inside parse_url()
+  ceph_assert(user.empty() == password.empty());
+  if (!user.empty()) {
+      dest.stored_secret = true;
+      if (!rgw_transport_is_secure(cct, env)) {
+        ldout(cct, 1) << "endpoint validation error: sending password over insecure transport" << dendl;
+        return false;
+      }
+  }
+  return true;
+}
+
+bool subscription_has_endpoint_secret(const rgw_pubsub_sub_config& sub) {
+    return sub.dest.stored_secret;
+}
+
+bool topic_has_endpoint_secret(const rgw_pubsub_topic_subs& topic) {
+    return topic.topic.dest.stored_secret;
+}
+
+bool topics_has_endpoint_secret(const rgw_pubsub_user_topics& topics) {
+    for (const auto& topic : topics.topics) {
+        if (topic_has_endpoint_secret(topic.second)) return true;
+    }
+    return false;
+}
 void RGWPSCreateTopicOp::execute() {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -25,8 +63,15 @@ void RGWPSCreateTopicOp::execute() {
 void RGWPSListTopicsOp::execute() {
   ups.emplace(store, s->owner.get_id());
   op_ret = ups->get_user_topics(&result);
+  // if there are no topics it is not considered an error
+  op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get topics, ret=" << op_ret << dendl;
+    return;
+  }
+  if (topics_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
+    ldout(s->cct, 1) << "topics contain secret and cannot be sent over insecure transport" << dendl;
+    op_ret = -EPERM;
     return;
   }
   ldout(s->cct, 20) << "successfully got topics" << dendl;
@@ -39,6 +84,11 @@ void RGWPSGetTopicOp::execute() {
   }
   ups.emplace(store, s->owner.get_id());
   op_ret = ups->get_topic(topic_name, &result);
+  if (topic_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
+    ldout(s->cct, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
+    op_ret = -EPERM;
+    return;
+  }
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -83,6 +133,11 @@ void RGWPSGetSubOp::execute() {
   ups.emplace(store, s->owner.get_id());
   auto sub = ups->get_sub(sub_name);
   op_ret = sub->get_conf(&result);
+  if (subscription_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
+    ldout(s->cct, 1) << "subscription '" << sub_name << "' contain secret and cannot be sent over insecure transport" << dendl;
+    op_ret = -EPERM;
+    return;
+  }
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
@@ -195,7 +250,7 @@ int RGWPSListNotifsOp::verify_permission() {
   }
 
   if (bucket_info.owner != s->owner.get_id()) {
-    ldout(s->cct, 1) << "user doesn't own bucket, cannot get topic list" << dendl;
+    ldout(s->cct, 1) << "user doesn't own bucket, cannot get notification list" << dendl;
     return -EPERM;
   }
 

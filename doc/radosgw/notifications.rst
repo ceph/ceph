@@ -68,8 +68,10 @@ To update a topic, use the same command used for topic creation, with the topic 
    &push-endpoint=<endpoint>
    [&Attributes.entry.1.key=amqp-exchange&Attributes.entry.1.value=<exchange>]
    [&Attributes.entry.2.key=amqp-ack-level&Attributes.entry.2.value=none|broker]
-   [&Attributes.entry.3.key=verify-sll&Attributes.entry.3.value=true|false]
+   [&Attributes.entry.3.key=verify-ssl&Attributes.entry.3.value=true|false]
    [&Attributes.entry.4.key=kafka-ack-level&Attributes.entry.4.value=none|broker]
+   [&Attributes.entry.5.key=use-ssl&Attributes.entry.5.value=true|false]
+   [&Attributes.entry.6.key=ca-location&Attributes.entry.6.value=<file path>]
 
 Request parameters:
 
@@ -83,7 +85,8 @@ Request parameters:
 - AMQP0.9.1 endpoint
 
  - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
- - user/password defaults to : guest/guest
+ - user/password defaults to: guest/guest
+ - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
  - port defaults to: 5672
  - vhost defaults to: "/"
  - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
@@ -94,7 +97,11 @@ Request parameters:
 
 - Kafka endpoint 
 
- - URI: ``kafka://<fqdn>[:<port]``
+ - URI: ``kafka://[<user>:<password>@]<fqdn>[:<port]``
+ - if ``use-ssl`` is set to "true", secure connection will be used for connecting with the broker ("false" by default)
+ - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
+ - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
+ - user/password may only be provided together with ``use-ssl``, connection to the broker would fail if not
  - port defaults to: 9092
  - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
 
@@ -161,6 +168,7 @@ Response will have the following format:
 - User: name of the user that created the topic
 - Name: name of the topic
 - EndPoinjtAddress: the push-endpoint URL
+- if endpoint URL contain user/password information, request must be made over HTTPS. Topic get request will be rejected if not 
 - EndPointArgs: the push-endpoint args
 - EndpointTopic: the topic name that should be sent to the endpoint (mat be different than the above topic name)
 - TopicArn: topic ARN
@@ -218,6 +226,8 @@ Response will have the following format:
             <RequestId></RequestId>
         </ResponseMetadata>
     </ListTopicsResponse>    
+
+- if endpoint URL contain user/password information, in any of the topic, request must be made over HTTPS. Topic list request will be rejected if not 
 
 Notifications
 ~~~~~~~~~~~~~

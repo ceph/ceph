@@ -187,6 +187,12 @@ add_ceph_unittest(unittest_rgw_kms)
 
 target_link_libraries(unittest_rgw_kms ${rgw_libs})
 
+# unittest_rgw_url
+add_executable(unittest_rgw_url test_rgw_url.cc)
+add_ceph_unittest(unittest_rgw_url)
+
+target_link_libraries(unittest_rgw_url ${rgw_libs})
+
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
