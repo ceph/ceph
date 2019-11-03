@@ -520,7 +520,7 @@ public:
         cct(_cct),
         endpoint(_endpoint), 
         topic(_topic),
-        conn(kafka::connect(endpoint)) {
+        conn(kafka::connect(endpoint, args.get_optional("ca-location"))) {
     if (!conn) { 
       throw configuration_error("Kafka: failed to create connection to: " + endpoint);
     }
