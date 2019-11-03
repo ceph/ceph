@@ -364,7 +364,9 @@ def get_config_and_both_keyrings():
 def get_container_mounts(fsid, daemon_type, daemon_id):
     mounts = {}
     if fsid:
-        mounts['/var/run/ceph/%s' % fsid] = '/var/run/ceph:z'
+        run_path = os.path.join('/var/run/ceph', fsid);
+        if os.path.exists(run_path):
+            mounts[run_path] = '/var/run/ceph:z'
         log_dir = get_log_dir(fsid)
         mounts[log_dir] = '/var/log/ceph:z'
         crash_dir = '/var/lib/ceph/%s/crash' % fsid
