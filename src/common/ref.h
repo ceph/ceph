@@ -17,6 +17,10 @@ template<class T, class U>
 ref_t<T> ref_cast(ref_t<U>&& r) noexcept {
   return {static_cast<T*>(r.detach()), false};
 }
+template<class T, typename U>
+auto ref_cast(U* p, bool own=true) noexcept {
+  return ref_t<T>(static_cast<T*>(p), own);
+}
 template<class T, class U>
 cref_t<T> ref_cast(const cref_t<U>& r) noexcept {
   return static_cast<const T*>(r.get());
