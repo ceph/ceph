@@ -1028,7 +1028,7 @@ def command_bootstrap():
         tmp_pub.flush()
 
         if args.output_pub_ssh_key:
-            with open(args.output_put_ssh_key, 'w') as f:
+            with open(args.output_pub_ssh_key, 'w') as f:
                 f.write(ssh_pub)
             logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
