@@ -172,3 +172,9 @@ add_ceph_unittest(unittest_rgw_arn)
 
 target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
+# unittest_rgw_url
+add_executable(unittest_rgw_url test_rgw_url.cc)
+add_ceph_unittest(unittest_rgw_url)
+
+target_link_libraries(unittest_rgw_url ${rgw_libs})
+

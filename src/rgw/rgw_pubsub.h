@@ -342,19 +342,21 @@ struct rgw_pubsub_sub_dest {
   std::string push_endpoint;
   std::string push_endpoint_args;
   std::string arn_topic;
+  bool stored_secret = false;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(bucket_name, bl);
     encode(oid_prefix, bl);
     encode(push_endpoint, bl);
     encode(push_endpoint_args, bl);
     encode(arn_topic, bl);
+    encode(stored_secret, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(bucket_name, bl);
     decode(oid_prefix, bl);
     decode(push_endpoint, bl);
@@ -363,6 +365,9 @@ struct rgw_pubsub_sub_dest {
     }
     if (struct_v >= 3) {
         decode(arn_topic, bl);
+    }
+    if (struct_v >= 4) {
+        decode(stored_secret, bl);
     }
     DECODE_FINISH(bl);
   }
