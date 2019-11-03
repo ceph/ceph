@@ -486,3 +486,17 @@ Usage:
         self._set_backend('')
         assert self._select_orchestrator() is None
         self._set_backend(old_orch)
+
+        e = self.remote('selftest', 'remote_from_orchestrator_cli_self_test', "ZeroDivisionError")
+        try:
+            orchestrator.raise_if_exception(e)
+            assert False
+        except ZeroDivisionError as e:
+            assert e.args == ('hello', 'world')
+
+        e = self.remote('selftest', 'remote_from_orchestrator_cli_self_test', "OrchestratorError")
+        try:
+            orchestrator.raise_if_exception(e)
+            assert False
+        except orchestrator.OrchestratorError as e:
+            assert e.args == ('hello', 'world')
