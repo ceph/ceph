@@ -142,7 +142,8 @@ set(librgw_common_srcs
   rgw_perf_counters.cc
   rgw_rest_iam.cc
   rgw_object_lock.cc
-  rgw_kms.cc)
+  rgw_kms.cc
+  rgw_url.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)

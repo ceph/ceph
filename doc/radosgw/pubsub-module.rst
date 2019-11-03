@@ -150,7 +150,7 @@ To update a topic, use the same command used for topic creation, with the topic 
 
 ::
 
-   PUT /topics/<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker]]
+   PUT /topics/<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker][&use-ssl=true|false][&ca-location=<file path>]]
 
 Request parameters:
 
@@ -167,7 +167,8 @@ The endpoint URI may include parameters depending with the type of endpoint:
 - AMQP0.9.1 endpoint
 
  - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
- - user/password defaults to : guest/guest
+ - user/password defaults to: guest/guest
+ - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
  - port defaults to: 5672
  - vhost defaults to: "/"
  - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
@@ -178,7 +179,11 @@ The endpoint URI may include parameters depending with the type of endpoint:
 
 - Kafka endpoint 
 
- - URI: ``kafka://<fqdn>[:<port]``
+ - URI: ``kafka://[<user>:<password>@]<fqdn>[:<port]``
+ - if ``use-ssl`` is set to "true", secure connection will be used for connecting with the broker ("false" by default)
+ - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
+ - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
+ - user/password may only be provided together with ``use-ssl``, connection to the broker would fail if not
  - port defaults to: 9092
  - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
 
@@ -212,7 +217,8 @@ Response will have the following format (JSON):
                "bucket_name":"",
                "oid_prefix":"",
                "push_endpoint":"",
-               "push_endpoint_args":""
+               "push_endpoint_args":"",
+               "push_endpoint_topic":""
            },
            "arn":""
        },
@@ -224,7 +230,9 @@ Response will have the following format (JSON):
 - dest.bucket_name: not used
 - dest.oid_prefix: not used
 - dest.push_endpoint: in case of S3-compliant notifications, this value will be used as the push-endpoint URL
+- if push-endpoint URL contain user/password information, request must be made over HTTPS. Topic get request will be rejected if not 
 - dest.push_endpoint_args: in case of S3-compliant notifications, this value will be used as the push-endpoint args
+- dest.push_endpoint_topic: in case of S3-compliant notifications, this value will hold the topic name as sent to the endpoint (may be different than the internal topic name)
 - topic.arn: topic ARN
 - subs: list of subscriptions associated with this topic
 
@@ -246,6 +254,8 @@ List all topics that user defined.
 
    GET /topics
  
+- if push-endpoint URL contain user/password information, in any of the topic, request must be made over HTTPS. Topic list request will be rejected if not 
+
 S3-Compliant Notifications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -316,7 +326,8 @@ Response will have the following format (JSON):
                "bucket_name":"",
                "oid_prefix":"",
                "push_endpoint":"",
-               "push_endpoint_args":""
+               "push_endpoint_args":"",
+               "push_endpoint_topic":""
             }
             "arn":""
          },
@@ -334,7 +345,7 @@ Creates a new subscription.
 
 ::
 
-   PUT /subscriptions/<sub-name>?topic=<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker]]
+   PUT /subscriptions/<sub-name>?topic=<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker][&ca-location=<file path>]]
 
 Request parameters:
 
@@ -363,7 +374,10 @@ The endpoint URI may include parameters depending with the type of endpoint:
 
 - Kafka endpoint 
 
- - URI: ``kafka://<fqdn>[:<port]``
+ - URI: ``kafka://[<user>:<password>@]<fqdn>[:<port]``
+ - if ``ca-location`` is provided, secure connection will be used for connection with the broker
+ - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
+ - user/password may only be provided together with ``ca-location``. Topic creation request will be rejected if not
  - port defaults to: 9092
  - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
 
@@ -392,7 +406,8 @@ Response will have the following format (JSON):
            "bucket_name":"",
            "oid_prefix":"",
            "push_endpoint":"",
-           "push_endpoint_args":""
+           "push_endpoint_args":"",
+           "push_endpoint_topic":""
        }
        "s3_id":""
    }             
@@ -400,6 +415,13 @@ Response will have the following format (JSON):
 - user: name of the user that created the subscription
 - name: name of the subscription
 - topic: name of the topic the subscription is associated with
+- dest.bucket_name: name of the bucket storing the events
+- dest.oid_prefix: oid prefix for the events stored in the bucket
+- dest.push_endpoint: in case of S3-compliant notifications, this value will be used as the push-endpoint URL
+- if push-endpoint URL contain user/password information, request must be made over HTTPS. Topic get request will be rejected if not 
+- dest.push_endpoint_args: in case of S3-compliant notifications, this value will be used as the push-endpoint args
+- dest.push_endpoint_topic: in case of S3-compliant notifications, this value will hold the topic name as sent to the endpoint (may be different than the internal topic name)
+- s3_id: in case of S3-compliant notifications, this will hold the notification name that created the subscription
 
 Delete Subscription
 ```````````````````
