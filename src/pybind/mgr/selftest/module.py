@@ -444,6 +444,17 @@ class Module(MgrModule):
         else:
             raise RuntimeError("KeyError not raised")
 
+    def remote_from_orchestrator_cli_self_test(self, what):
+        import orchestrator
+        if what == 'OrchestratorError':
+            c = orchestrator.TrivialReadCompletion(result=None)
+            c.exception = orchestrator.OrchestratorError('hello', 'world')
+            return c
+        elif what == "ZeroDivisionError":
+            c = orchestrator.TrivialReadCompletion(result=None)
+            c.exception = ZeroDivisionError('hello', 'world')
+            return c
+        assert False, repr(what)
 
     def shutdown(self):
         self._workload = self.SHUTDOWN
