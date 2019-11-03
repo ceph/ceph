@@ -8,7 +8,7 @@ This documentation assumes a Kubernetes environment is available.
 Current limitations
 ===================
 
- - The public and cluster networks must be the same
+ - The public and cluster networks used by ceph must be the same
  - If the storage class user id is not admin, you will have to manually create the user
    in your Ceph cluster and create its secret in Kubernetes
  - ceph-mgr can only run with 1 replica
