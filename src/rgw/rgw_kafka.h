@@ -6,6 +6,7 @@
 #include <string>
 #include <functional>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
+#include <boost/optional.hpp>
 
 class CephContext;
 
@@ -30,7 +31,7 @@ bool init(CephContext* cct);
 void shutdown();
 
 // connect to a kafka endpoint
-connection_ptr_t connect(const std::string& url);
+connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location);
 
 // publish a message over a connection that was already created
 int publish(connection_ptr_t& conn,
@@ -72,6 +73,9 @@ size_t get_max_queue();
 
 // disconnect from a kafka broker
 bool disconnect(connection_ptr_t& conn);
+
+// display connection as string
+std::string to_string(const connection_ptr_t& conn);
 
 }
 
