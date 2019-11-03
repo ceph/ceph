@@ -345,7 +345,6 @@ void Log::dump_recent()
   }
 
   _flush(m_flush, false);
-  _flush_logbuf();
 
   _log_message("--- begin dump of recent events ---", true);
   {
@@ -375,7 +374,7 @@ void Log::dump_recent()
 
   _log_message("--- end dump of recent events ---", true);
 
-  _flush_logbuf();
+  assert(m_log_buf.empty());
 
   m_flush_mutex_holder = 0;
 }
