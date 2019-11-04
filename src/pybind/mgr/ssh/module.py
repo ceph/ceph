@@ -351,100 +351,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             executable_path))
         return executable_path
 
-    def _get_hosts(self, wanted=None):
-        return self.inventory_cache.items_filtered(wanted)
-
-    def add_host(self, host):
-        """
-        Add a host to be managed by the orchestrator.
-
-        :param host: host name
-        """
-        @log_exceptions
-        def run(host):
-            self.inventory_cache[host] = orchestrator.OutdatableData()
-            return "Added host '{}'".format(host)
-
-        return SSHWriteCompletion(
-            self._worker_pool.apply_async(run, (host,)))
-
-    def remove_host(self, host):
-        """
-        Remove a host from orchestrator management.
-
-        :param host: host name
-        """
-        @log_exceptions
-        def run(host):
-            del self.inventory_cache[host]
-            return "Removed host '{}'".format(host)
-
-        return SSHWriteCompletion(
-            self._worker_pool.apply_async(run, (host,)))
-
-    def get_hosts(self):
-        """
-        Return a list of hosts managed by the orchestrator.
-
-        Notes:
-          - skip async: manager reads from cache.
-
-        TODO:
-          - InventoryNode probably needs to be able to report labels
-        """
-        nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
-        return orchestrator.TrivialReadCompletion(nodes)
-
-    def _get_services(self, service_type=None, service_id=None,
-                      node_name=None):
-        daemons = {}
-        for host, _ in self._get_hosts():
-            self.log.info("refresh stale daemons for '{}'".format(host))
-            out, code = self._run_ceph_daemon(
-                host, 'mon', 'ls', [], no_fsid=True)
-            daemons[host] = json.loads(''.join(out))
-
-        result = []
-        for host, ls in daemons.items():
-            for d in ls:
-                if not d['style'].startswith('ceph-daemon'):
-                    self.log.debug('ignoring non-ceph-daemon on %s: %s' % (host, d))
-                    continue
-                if d['fsid'] != self._cluster_fsid:
-                    self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
-                    continue
-                self.log.debug('including %s' % d)
-                sd = orchestrator.ServiceDescription()
-                sd.service_type = d['name'].split('.')[0]
-                if service_type and service_type != sd.service_type:
-                    continue
-                if '.' in d['name']:
-                    sd.service_instance = d['name'].split('.')[1]
-                else:
-                    sd.service_instance = host  # e.g., crash
-                if service_id and service_id != sd.service_instance:
-                    continue
-                sd.nodename = host
-                sd.container_id = d['container_id']
-                sd.version = d['version']
-                sd.status_desc = d['state']
-                sd.status = {
-                    'running': 1,
-                    'inactive': 0,
-                    'error': -1,
-                    'unknown': -1,
-                }[d['state']]
-                result.append(sd)
-        return result
-
-    def describe_service(self, service_type=None, service_id=None,
-                         node_name=None, refresh=False):
-        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
-            raise orchestrator.OrchestratorValidationError(
-                service_type + " unsupported")
-        result = self._get_services(service_type, service_id, node_name)
-        return orchestrator.TrivialReadCompletion(result)
-
     def _run_ceph_daemon(self, host, entity, command, args,
                          stdin=None,
                          no_fsid=False):
@@ -492,6 +398,163 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         finally:
             conn.exit()
+
+    def _get_hosts(self, wanted=None):
+        return self.inventory_cache.items_filtered(wanted)
+
+    def add_host(self, host):
+        """
+        Add a host to be managed by the orchestrator.
+
+        :param host: host name
+        """
+        @log_exceptions
+        def run(host):
+            self.inventory_cache[host] = orchestrator.OutdatableData()
+            return "Added host '{}'".format(host)
+
+        return SSHWriteCompletion(
+            self._worker_pool.apply_async(run, (host,)))
+
+    def remove_host(self, host):
+        """
+        Remove a host from orchestrator management.
+
+        :param host: host name
+        """
+        @log_exceptions
+        def run(host):
+            del self.inventory_cache[host]
+            return "Removed host '{}'".format(host)
+
+        return SSHWriteCompletion(
+            self._worker_pool.apply_async(run, (host,)))
+
+    def get_hosts(self):
+        """
+        Return a list of hosts managed by the orchestrator.
+
+        Notes:
+          - skip async: manager reads from cache.
+
+        TODO:
+          - InventoryNode probably needs to be able to report labels
+        """
+        nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
+        return orchestrator.TrivialReadCompletion(nodes)
+
+    def _get_services(self,
+                      service_type=None,
+                      service_name=None,
+                      service_id=None,
+                      node_name=None):
+        daemons = {}
+        for host, _ in self._get_hosts():
+            self.log.info("refresh stale daemons for '{}'".format(host))
+            out, code = self._run_ceph_daemon(
+                host, 'mon', 'ls', [], no_fsid=True)
+            daemons[host] = json.loads(''.join(out))
+
+        result = []
+        for host, ls in daemons.items():
+            for d in ls:
+                if not d['style'].startswith('ceph-daemon'):
+                    self.log.debug('ignoring non-ceph-daemon on %s: %s' % (host, d))
+                    continue
+                if d['fsid'] != self._cluster_fsid:
+                    self.log.debug('ignoring foreign daemon on %s: %s' % (host, d))
+                    continue
+                self.log.debug('including %s' % d)
+                sd = orchestrator.ServiceDescription()
+                sd.service_type = d['name'].split('.')[0]
+                if service_type and service_type != sd.service_type:
+                    continue
+                if '.' in d['name']:
+                    sd.service_instance = '.'.join(d['name'].split('.')[1:])
+                else:
+                    sd.service_instance = host  # e.g., crash
+                if service_id and service_id != sd.service_instance:
+                    continue
+                if service_name and not sd.service_instance.startswith(service_name + '-'):
+                    continue
+                sd.nodename = host
+                sd.container_id = d['container_id']
+                sd.version = d['version']
+                sd.status_desc = d['state']
+                sd.status = {
+                    'running': 1,
+                    'stopped': 0,
+                    'error': -1,
+                    'unknown': -1,
+                }[d['state']]
+                result.append(sd)
+        return result
+
+    def describe_service(self, service_type=None, service_id=None,
+                         node_name=None, refresh=False):
+        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
+            raise orchestrator.OrchestratorValidationError(
+                service_type + " unsupported")
+        result = self._get_services(service_type,
+                                    service_id=service_id,
+                                    node_name=node_name)
+        return orchestrator.TrivialReadCompletion(result)
+
+    def service_action(self, action, service_type,
+                       service_name=None,
+                       service_id=None):
+        self.log.debug('service_action action %s type %s name %s id %s' % (
+            action, service_type, service_name, service_id))
+        if action == 'reload':
+            return orchestrator.TrivialReadCompletion(
+                ["Reload is a no-op"])
+        daemons = self._get_services(
+            service_type,
+            service_name=service_name,
+            service_id=service_id)
+        results = []
+        for d in daemons:
+            results.append(self._worker_pool.apply_async(
+                self._service_action, (d.service_type, d.service_instance,
+                                       d.nodename, action)))
+        if not results:
+            n = service_name
+            if n:
+                n += '-*'
+            raise OrchestratorError('Unable to find %s.%s%s daemon(s)' % (
+                service_type, service_id, n))
+        return SSHWriteCompletion(results)
+
+    def _service_action(self, service_type, service_id, host, action):
+        if action == 'redeploy':
+            # recreate the systemd unit and then restart
+            if service_type == 'mon':
+                # get mon. key
+                ret, keyring, err = self.mon_command({
+                    'prefix': 'auth get',
+                    'entity': 'mon.',
+                })
+            else:
+                ret, keyring, err = self.mon_command({
+                    'prefix': 'auth get',
+                    'entity': '%s.%s' % (service_type, service_id),
+                })
+            return self._create_daemon(service_type, service_id, host,
+                                       keyring)
+
+        actions = {
+            'start': ['reset-failed', 'start'],
+            'stop': ['stop'],
+            'restart': ['reset-failed', 'restart'],
+        }
+        name = '%s.%s' % (service_type, service_id)
+        for a in actions[action]:
+            out, code = self._run_ceph_daemon(
+                host, name, 'unit',
+                ['--name', name, a])
+            self.log.debug('_service_action code %s out %s' % (code, out))
+        return "{} {} from host '{}'".format(action, name, host)
+
 
     def get_inventory(self, node_filter=None, refresh=False):
         """
@@ -662,7 +725,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 stdin=j)
             self.log.debug('create_daemon code %s out %s' % (code, out))
 
-            return "Created {} on host '{}'".format(name, host)
+            return "(Re)deployed {} on host '{}'".format(name, host)
 
         except Exception as e:
             self.log.error("create_daemon({}): error: {}".format(host, e))
@@ -862,10 +925,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return SSHWriteCompletion(results)
 
     def update_mds(self, spec):
-        daemons = [
-            d for d in self._get_services('mds')
-            if d.service_instance.startswith(spec.name + '-')
-        ]
+        daemons = self._get_services('mds', service_name=spec.name)
         results = []
         if len(daemons) > spec.count:
             # remove some
@@ -898,7 +958,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 results.append(self._worker_pool.apply_async(
                     self._remove_mds, (d.service_instance, d.nodename)))
         if not results:
-            raise RuntimeError('Unable to find mds.%s[-*] daemon(s)' % name)
+            raise OrchestratorError('Unable to find mds.%s[-*] daemon(s)' % name)
         return SSHWriteCompletion(results)
 
     def _remove_mds(self, mds_id, host):
