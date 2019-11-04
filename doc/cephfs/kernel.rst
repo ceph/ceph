@@ -111,9 +111,24 @@ To unmount the Ceph file system, use the ``umount`` command as usual::
 .. tip:: Ensure that you are not within the file system directories before
    executing this command.
 
-See fstab_ to find out how to make kernel mounted CephFS persist across
-reboots, `User Management`_ for details on CephX user management and
-mount.ceph_ manual for more options it can take. For troubleshooting, see
+Persistent Mounts
+------------------
+
+To mount CephFS in your file systems table as a kernel driver, add the
+following to ``/etc/fstab``::
+
+    [{ipaddress}:{port}]:/ {mount}/{mountpoint} ceph [name=username,secret=secretkey|secretfile=/path/to/secretfile],[{mount.options}]
+
+For example::
+
+    :/     /mnt/ceph    ceph    name=admin,noatime,_netdev    0       2
+
+The default for the ``name=`` parameter is ``guest``. If the ``secret`` or
+``secretfile`` options are not specified then the mount helper will attempt to
+find a secret for the given ``name`` in one of the configured keyrings.
+
+See `User Management`_ for details on CephX user management and mount.ceph_
+manual for more options it can take. For troubleshooting, see
 :ref:`kernel_mount_debugging`.
 
 .. _fstab: ../fstab/#kernel-driver
