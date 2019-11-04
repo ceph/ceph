@@ -585,6 +585,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             out, code = self._run_ceph_daemon(
                 host, name, 'unit',
                 ['--name', name, a])
+            self.service_cache.invalidate(host)
             self.log.debug('_service_action code %s out %s' % (code, out))
         return "{} {} from host '{}'".format(action, name, host)
 
@@ -757,7 +758,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 ] + extra_args,
                 stdin=j)
             self.log.debug('create_daemon code %s out %s' % (code, out))
-
+            self.service_cache.invalidate(host)
             return "(Re)deployed {} on host '{}'".format(name, host)
 
         except Exception as e:
@@ -776,6 +777,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             host, name, 'rm-daemon',
             ['--name', name])
         self.log.debug('_remove_daemon code %s out %s' % (code, out))
+        self.service_cache.invalidate(host)
         return "Removed {} from host '{}'".format(name, host)
 
     def _create_mon(self, host, network):
