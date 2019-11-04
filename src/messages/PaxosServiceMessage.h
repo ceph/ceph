@@ -16,6 +16,7 @@ public:
   // discard forwarded requests appropriately on election boundaries.
   epoch_t rx_election_epoch;
 
+ protected:
   PaxosServiceMessage()
     : Message{MSG_PAXOS},
       version(0), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
@@ -24,7 +25,6 @@ public:
     : Message{type, enc_version, compat_enc_version},
       version(v), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0)  { }
- protected:
   virtual ~PaxosServiceMessage() override {}
 
  public:
