@@ -251,15 +251,15 @@ typedef struct {
 
 typedef struct {
   bool demoted;
-  size_t mirror_peers_count;
-  char *mirror_peers;
+  size_t mirror_peer_uuids_count;
+  char *mirror_peer_uuids;
 } rbd_snap_mirror_primary_namespace_t;
 
 typedef struct {
   char *primary_mirror_uuid;
   uint64_t primary_snap_id;
   bool copied;
-  uint64_t copy_progress;
+  uint64_t last_copied_object_number;
 } rbd_snap_mirror_non_primary_namespace_t;
 
 typedef enum {

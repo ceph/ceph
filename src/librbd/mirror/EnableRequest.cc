@@ -166,8 +166,7 @@ void EnableRequest<I>::send_notify_mirroring_watcher() {
     klass, &klass::handle_notify_mirroring_watcher>(this);
 
   MirroringWatcher<>::notify_image_updated(m_io_ctx,
-                                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-                                           m_image_id,
+                                           m_mirror_image.state, m_image_id,
                                            m_mirror_image.global_image_id, ctx);
 }
 

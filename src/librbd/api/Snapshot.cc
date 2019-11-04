@@ -111,7 +111,7 @@ public:
   inline int operator()(
       const cls::rbd::MirrorPrimarySnapshotNamespace& snap_namespace) {
     mirror_snap->demoted = snap_namespace.demoted;
-    mirror_snap->mirror_peers = snap_namespace.mirror_peers;
+    mirror_snap->mirror_peer_uuids = snap_namespace.mirror_peer_uuids;
     return 0;
   }
 };
@@ -135,7 +135,8 @@ public:
     mirror_snap->primary_mirror_uuid = snap_namespace.primary_mirror_uuid;
     mirror_snap->primary_snap_id = snap_namespace.primary_snap_id;
     mirror_snap->copied = snap_namespace.copied;
-    mirror_snap->copy_progress = snap_namespace.copy_progress;
+    mirror_snap->last_copied_object_number =
+      snap_namespace.last_copied_object_number;
     return 0;
   }
 };

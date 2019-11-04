@@ -129,14 +129,14 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef struct rbd_snap_mirror_primary_namespace_t:
         bint demoted
-        size_t mirror_peers_count
-        char *mirror_peers
+        size_t mirror_peer_uuids_count
+        char *mirror_peer_uuids
 
     ctypedef struct rbd_snap_mirror_non_primary_namespace_t:
         char *primary_mirror_uuid
         uint64_t primary_snap_id
         bint copied
-        uint64_t copy_progress
+        uint64_t last_copied_object_number
 
     ctypedef struct rbd_group_info_t:
         char *name
@@ -5079,7 +5079,7 @@ written." % (self.name, ret, length))
 
             * ``demoted`` (bool) - True if snapshot is in demoted state
 
-            * ``mirror_peers`` (list) - mirror peer uuids
+            * ``mirror_peer_uuids`` (list) - mirror peer uuids
         """
         cdef:
             rbd_snap_mirror_primary_namespace_t sn
@@ -5092,15 +5092,15 @@ written." % (self.name, ret, length))
             raise make_ex(ret, 'error getting snapshot mirror primary '
                                'namespace for image: %s, snap_id: %d' %
                                (self.name, snap_id))
-        peers = []
-        p = sn.mirror_peers
-        for i in range(sn.mirror_peers_count):
-            peer = decode_cstr(p)
-            peers.append(peer)
-            p += len(peer) + 1
+        uuids = []
+        cdef char *p = sn.mirror_peer_uuids
+        for i in range(sn.mirror_peer_uuids_count):
+            uuid = decode_cstr(p)
+            uuids.append(uuid)
+            p += len(uuid) + 1
         info = {
                 'demoted' : sn.demoted,
-                'mirror_peers' : peers,
+                'mirror_peer_uuids' : uuids,
             }
         rbd_snap_mirror_primary_namespace_cleanup(
             &sn, sizeof(rbd_snap_mirror_primary_namespace_t))
@@ -5119,7 +5119,7 @@ written." % (self.name, ret, length))
 
             * ``copied`` (bool) - True if snapsho is copied
 
-           *  ``copy_progress`` (int) - copy progress
+           *  ``last_copied_object_number`` (int) - last copied object number
         """
         cdef:
             rbd_snap_mirror_non_primary_namespace_t sn
@@ -5136,7 +5136,7 @@ written." % (self.name, ret, length))
                 'primary_mirror_uuid' : decode_cstr(sn.primary_mirror_uuid),
                 'primary_snap_id' : sn.primary_snap_id,
                 'copied' : sn.copied,
-                'copy_progress' : sn.copy_progress,
+                'last_copied_object_number' : sn.last_copied_object_number,
             }
         rbd_snap_mirror_non_primary_namespace_cleanup(
             &sn, sizeof(rbd_snap_mirror_non_primary_namespace_t))

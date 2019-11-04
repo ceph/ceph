@@ -60,7 +60,13 @@ void IsPrimaryRequest<I>::handle_get_mirror_state(int r) {
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
     if (r == 0) {
       if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-        send_is_tag_owner();
+        if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+          send_is_tag_owner();
+        } else if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+          // TODO: get primary state from mirroring snapshots
+          ceph_abort();
+          finish(0);
+        }
         return;
       } else if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
         dout(5) << ": image mirroring is being disabled" << dendl;

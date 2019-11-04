@@ -75,14 +75,14 @@ namespace librbd {
 
   typedef struct {
     bool demoted;
-    std::set<std::string> mirror_peers;
+    std::set<std::string> mirror_peer_uuids;
   } snap_mirror_primary_namespace_t;
 
   typedef struct {
     std::string primary_mirror_uuid;
     uint64_t primary_snap_id;
     bool copied;
-    uint64_t copy_progress;
+    uint64_t last_copied_object_number;
   } snap_mirror_non_primary_namespace_t;
 
   typedef struct {
