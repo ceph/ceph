@@ -46,7 +46,7 @@ class Actions(Enum):
 
 # pylint: disable=too-many-ancestors
 @PM.add_plugin
-class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
+class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
                      I.HasCommands, I.FilterRequest.BeforeHandler,
                      I.HasControllers):
     OPTION_FMT = 'FEATURE_TOGGLE_{}'
