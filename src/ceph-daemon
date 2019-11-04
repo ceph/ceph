@@ -270,7 +270,7 @@ def get_legacy_config_fsid(cluster):
         return None
     return None
 
-def get_legacy_daemon_fsid(cluster_name, daemon_type, daemon_id):
+def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id):
     fsid = None
     if daemon_type == 'osd':
         try:
