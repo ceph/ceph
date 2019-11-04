@@ -1733,9 +1733,12 @@ TEST_F(TestClsRbd, mirror_image) {
   std::map<std::string, std::string> mirror_image_ids;
   ASSERT_EQ(-ENOENT, mirror_image_list(&ioctx, "", 0, &mirror_image_ids));
 
-  cls::rbd::MirrorImage image1("uuid1", cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-  cls::rbd::MirrorImage image2("uuid2", cls::rbd::MIRROR_IMAGE_STATE_DISABLING);
-  cls::rbd::MirrorImage image3("uuid3", cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1",
+                               cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2",
+                               cls::rbd::MIRROR_IMAGE_STATE_DISABLING);
+  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3",
+                               cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
   ASSERT_EQ(-ENOENT, mirror_image_set(&ioctx, "image_id2", image2));
@@ -1824,9 +1827,12 @@ TEST_F(TestClsRbd, mirror_image_status) {
 
   // Test status set
 
-  cls::rbd::MirrorImage image1("uuid1", cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-  cls::rbd::MirrorImage image2("uuid2", cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-  cls::rbd::MirrorImage image3("uuid3", cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1",
+                               cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2",
+                               cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3",
+                               cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
@@ -2090,7 +2096,8 @@ TEST_F(TestClsRbd, mirror_image_status) {
   for (size_t i = 0; i < N; i++) {
     std::string id = "id" + stringify(i);
     std::string uuid = "uuid" + stringify(i);
-    cls::rbd::MirrorImage image(uuid, cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+    cls::rbd::MirrorImage image(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, uuid,
+                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
     cls::rbd::MirrorImageSiteStatus status(
       "", cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "");
     ASSERT_EQ(0, mirror_image_set(&ioctx, id, image));

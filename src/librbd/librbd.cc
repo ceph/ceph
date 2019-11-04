@@ -6859,14 +6859,15 @@ extern "C" int rbd_snap_get_mirror_primary_namespace(
   }
 
   mirror_snap->demoted = mirror_namespace.demoted;
-  mirror_snap->mirror_peers_count = mirror_namespace.mirror_peers.size();
+  mirror_snap->mirror_peer_uuids_count =
+    mirror_namespace.mirror_peer_uuids.size();
   size_t len = 0;
-  for (auto &peer : mirror_namespace.mirror_peers) {
+  for (auto &peer : mirror_namespace.mirror_peer_uuids) {
     len += peer.size() + 1;
   }
-  mirror_snap->mirror_peers = (char *)malloc(len);
-  char *p = mirror_snap->mirror_peers;
-  for (auto &peer : mirror_namespace.mirror_peers) {
+  mirror_snap->mirror_peer_uuids = (char *)malloc(len);
+  char *p = mirror_snap->mirror_peer_uuids;
+  for (auto &peer : mirror_namespace.mirror_peer_uuids) {
     strncpy(p, peer.c_str(), peer.size() + 1);
     p += peer.size() + 1;
   }
@@ -6881,7 +6882,7 @@ extern "C" int rbd_snap_mirror_primary_namespace_cleanup(
     return -ERANGE;
   }
 
-  free(mirror_snap->mirror_peers);
+  free(mirror_snap->mirror_peer_uuids);
   return 0;
 }
 
@@ -6903,10 +6904,11 @@ extern "C" int rbd_snap_get_mirror_non_primary_namespace(
   }
 
   mirror_snap->primary_mirror_uuid =
-      strdup(mirror_namespace.primary_mirror_uuid.c_str());
+    strdup(mirror_namespace.primary_mirror_uuid.c_str());
   mirror_snap->primary_snap_id = mirror_namespace.primary_snap_id;
   mirror_snap->copied = mirror_namespace.copied;
-  mirror_snap->copy_progress = mirror_namespace.copy_progress;
+  mirror_snap->last_copied_object_number =
+    mirror_namespace.last_copied_object_number;
 
   return 0;
 }
