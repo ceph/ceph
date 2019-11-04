@@ -15259,6 +15259,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
     eio_errors_to_process = true;
     ceph_assert(is_clean());
     state_set(PG_STATE_REPAIR);
+    state_clear(PG_STATE_CLEAN);
     queue_peering_event(
         PGPeeringEventRef(
 	  std::make_shared<PGPeeringEvent>(
