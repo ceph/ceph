@@ -6,7 +6,7 @@ Orchestrator CLI
 ================
 
 This module provides a command line interface (CLI) to orchestrator
-modules (ceph-mgr modules which interface with external orchestation services)
+modules (ceph-mgr modules which interface with external orchestration services).
 
 As the orchestrator CLI unifies different external orchestrators, a common nomenclature
 for the orchestrator module is needed.
@@ -68,7 +68,7 @@ Disable the Orchestrator
 
 To disable the orchestrator again, use the empty string ``""``::
 
-    ceph orchestrator set backend ""``
+    ceph orchestrator set backend ""
     ceph mgr module disable rook
 
 Usage
