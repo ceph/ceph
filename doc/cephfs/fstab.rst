@@ -27,19 +27,27 @@ See `User Management`_ for details.
 FUSE
 ====
 
-To mount CephFS in your file systems table as a file system in user space, add the
-following to ``/etc/fstab``::
+To mount CephFS in your file systems table as a file system in user space, add
+the following to ``/etc/fstab``::
 
        #DEVICE PATH       TYPE      OPTIONS
-       none    /mnt/ceph  fuse.ceph ceph.id={user-ID}[,ceph.conf={path/to/conf.conf}],_netdev,defaults  0 0
+       none    /mnt/mycephfs  fuse.ceph ceph.id={user-ID}[,ceph.conf={path/to/conf.conf}],_netdev,defaults  0 0
 
 For example::
 
-       none    /mnt/ceph  fuse.ceph ceph.id=myuser,_netdev,defaults  0 0
-       none    /mnt/ceph  fuse.ceph ceph.id=myuser,ceph.conf=/etc/ceph/foo.conf,_netdev,defaults  0 0
+       none    /mnt/mycephfs  fuse.ceph ceph.id=myuser,_netdev,defaults  0 0
+       none    /mnt/mycephfs  fuse.ceph ceph.id=myuser,ceph.conf=/etc/ceph/foo.conf,_netdev,defaults  0 0
 
-Ensure you use the ID (e.g., ``admin``, not ``client.admin``). You can pass any valid 
-``ceph-fuse`` option to the command line this way.
+Ensure you use the ID (e.g., ``admin``, not ``client.admin``). You can pass
+any valid ``ceph-fuse`` option to the command line this way.
+
+``ceph-fuse@.service`` and ``ceph-fuse.target`` systemd units are available.
+As usual, these unit files declare the default dependencies and recommended
+execution context for ``ceph-fuse``. For example, after making the fstab entry
+shown above, ``ceph-fuse`` run following commands::
+
+    systemctl start ceph-fuse@-mnt-mycephfs.service
+    systemctl enable ceph-fuse@-mnt-mycephfs.service
 
 See `User Management`_ for details.
 
