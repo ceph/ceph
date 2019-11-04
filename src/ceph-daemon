@@ -78,7 +78,7 @@ podman_path = None
 ##################################
 # Popen wrappers, lifted from ceph-volume
 
-def call(command, desc=None, verbose=False, **kw):
+def call(command, desc=None, verbose=False, **kwargs):
     """
     Wrap subprocess.Popen to
 
@@ -93,7 +93,7 @@ def call(command, desc=None, verbose=False, **kw):
     """
     if not desc:
         desc = command[0]
-    verbose_on_failure = kw.pop('verbose_on_failure', True)
+    verbose_on_failure = kwargs.pop('verbose_on_failure', True)
 
     logger.debug("Running command: %s" % ' '.join(command))
     process = subprocess.Popen(
@@ -101,7 +101,7 @@ def call(command, desc=None, verbose=False, **kw):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         close_fds=True,
-        **kw
+        **kwargs
     )
     # get current p.stdout flags, add O_NONBLOCK
     stdout_flags = fcntl.fcntl(process.stdout, fcntl.F_GETFL)
@@ -160,7 +160,7 @@ def call(command, desc=None, verbose=False, **kw):
     return out, err, returncode
 
 def call_throws(command, **kwargs):
-    out, err, ret = call(command, command[0], **kwargs)
+    out, err, ret = call(command, **kwargs)
     if ret:
         raise RuntimeError('Failed command: %s' % ' '.join(command))
     return out, err, ret
@@ -757,7 +757,7 @@ class CephContainer:
 
     def run(self):
         logger.debug(self.run_cmd())
-        out, _, _ = call(self.run_cmd(), self.entrypoint)
+        out, _, _ = call_throws(self.run_cmd(), desc=self.entrypoint)
         return out
 
 
