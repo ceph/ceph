@@ -1942,7 +1942,6 @@ In order to create a new plugin, the following steps are required:
 The available Mixins (helpers) are:
 
 - ``CanMgr``: provides the plug-in with access to the ``mgr`` instance under ``self.mgr``.
-- ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
 
 The available Interfaces are:
 
@@ -1985,9 +1984,8 @@ A sample plugin implementation would look like this:
   import cherrypy
 
   @PM.add_plugin
-  class Mute(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
-                       I.HasCommands, I.FilterRequest.BeforeHandler,
-                       I.HasControllers):
+  class Mute(I.CanMgr, I.Setupable, I.HasOptions, I.HasCommands,
+                       I.FilterRequest.BeforeHandler, I.HasControllers):
     @PM.add_hook
     def get_options(self):
       return [Option('mute', default=False, type='bool')]
