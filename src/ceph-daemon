@@ -44,19 +44,21 @@ import json
 import logging
 import os
 import select
+import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+
 from distutils.spawn import find_executable
+from glob import glob
 
 try:
     from tempfile import TemporaryDirectory # py3
 except ImportError:
     # define a minimal (but sufficient) equivalent for <= py 3.2
-    import shutil
     class TemporaryDirectory(object):
         def __init__(self):
             self.name = tempfile.mkdtemp()
@@ -1360,32 +1362,29 @@ def command_adopt():
             logger.info('Disabling old systemd unit %s...' % unit_name)
             call_throws(['systemctl', 'disable', unit_name])
 
+        # data
         logger.info('Moving data...')
-        make_data_dir_base(fsid, uid, gid)
-        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
-        call_throws([
-            'mv',
-            '/var/lib/ceph/%s/%s-%s' % (daemon_type, args.cluster, daemon_id),
-            data_dir])
-        call_throws([
-            'cp',
-            '/etc/ceph/%s.conf' % args.cluster,
-            os.path.join(data_dir, 'config')])
-        os.chmod(data_dir, DATA_DIR_MODE)
-        os.chown(data_dir, uid, gid)
+        data_dir_src = ('/var/lib/ceph/%s/%s-%s/*' %
+                        (daemon_type, args.cluster, daemon_id))
+        data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id)
+        for data_file in glob(data_dir_src):
+            logger.debug('Move \'%s\' -> \'%s\'' % (data_file, data_dir_dst))
+            shutil.move(data_file, data_dir_dst)
 
+        # config
+        config_src = '/etc/ceph/%s.conf' % (args.cluster)
+        config_dst = os.path.join(data_dir_dst, 'config')
+        logger.debug('Copy \'%s\' -> \'%s\'' % (config_src, config_dst))
+        shutil.copy(config_src, config_dst)
+
+        # logs
         logger.info('Moving logs...')
-        log_dir = make_log_dir(fsid, uid=uid, gid=gid)
-        try:
-            call_throws(
-                ['mv',
-                 '/var/log/ceph/%s-%s.%s.log*' % (args.cluster,
-                                                  daemon_type, daemon_id),
-                 os.path.join(log_dir)],
-                shell=True)
-        except Exception as e:
-            logger.warning('unable to move log file: %s' % e)
-            pass
+        log_dir_src = ('/var/log/ceph/%s-%s.%s.log*' %
+                        (args.cluster, daemon_type, daemon_id))
+        log_dir_dst = make_log_dir(fsid, uid=uid, gid=gid)
+        for log_file in glob(log_dir_src):
+            logger.debug('Move \'%s\' -> \'%s\'' % (log_file, log_dir_dst))
+            shutil.move(log_file, log_dir_dst)
 
         logger.info('Creating new units...')
         c = get_container(fsid, daemon_type, daemon_id)
