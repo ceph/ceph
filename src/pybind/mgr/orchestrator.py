@@ -1044,7 +1044,7 @@ class OrchestratorClientMixin(Orchestrator):
             self._update_completion_progress(c)
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
-                time.sleep(5)
+                time.sleep(1)
             else:
                 break
         for c in completions:
