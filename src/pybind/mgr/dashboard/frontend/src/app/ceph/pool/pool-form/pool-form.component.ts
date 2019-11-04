@@ -11,6 +11,7 @@ import { ConfigurationService } from '../../../shared/api/configuration.service'
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -177,6 +178,8 @@ export class PoolFormComponent implements OnInit {
       this.initEcp(data[2]);
       if (this.editing) {
         this.initEditMode();
+      } else {
+        this.setAvailableApps();
       }
       this.listenToChanges();
       this.setComplexValidators();
@@ -250,7 +253,14 @@ export class PoolFormComponent implements OnInit {
       }
     });
     this.data.pgs = this.form.getValue('pgNum');
+    this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
+  }
+
+  private setAvailableApps(apps: string[] = this.data.applications.default) {
+    this.data.applications.available = _.uniq(apps.sort()).map(
+      (x: string) => new SelectOption(false, x, '')
+    );
   }
 
   private listenToChanges() {
