@@ -797,7 +797,7 @@ class Module(MgrModule):
 
         # Make sure roots don't overlap their devices.  If so, we
         # can't proceed.
-        roots = pe.target_by_root.keys()
+        roots = list(pe.target_by_root.keys())
         self.log.debug('roots %s', roots)
         visited = {}
         overlap = {}
