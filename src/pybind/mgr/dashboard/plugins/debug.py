@@ -3,7 +3,6 @@ from __future__ import absolute_import
 
 from enum import Enum
 import json
-import uuid
 
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
@@ -17,7 +16,7 @@ class Actions(Enum):
 
 
 @PM.add_plugin  # pylint: disable=too-many-ancestors
-class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy, I.FilterRequest.BeforeHandler):
+class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy):
     NAME = 'debug'
 
     OPTIONS = [
@@ -52,7 +51,7 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy, I.FilterRequest.BeforeHandl
 
     def custom_error_response(self, status, message, traceback, version):
         self.response.headers['Content-Type'] = 'application/json'
-        error_response = dict(status=status, detail=message, request_id=self.request.unique_id)
+        error_response = dict(status=status, detail=message, request_id=str(self.request.unique_id))
 
         if self.get_option(self.NAME):
             error_response.update(dict(traceback=traceback, version=version))
@@ -65,9 +64,3 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy, I.FilterRequest.BeforeHandl
             'environment': 'test_suite' if self.get_option(self.NAME) else 'production',
             'error_page.default': self.custom_error_response,
         })
-
-    @PM.add_hook
-    def filter_request_before_handler(self, request):
-        if not hasattr(request, 'unique_id'):
-            # Cherrypy v8.9.1 doesn't have this property
-            request.unique_id = str(uuid.uuid4())
