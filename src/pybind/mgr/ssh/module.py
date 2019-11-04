@@ -175,6 +175,15 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.service_cache = orchestrator.OutdatablePersistentDict(
             self, self._STORE_HOST_PREFIX + '.services')
 
+        # ensure the host lists are in sync
+        for h in set(self.inventory_cache.keys()) | set(self.service_cache.keys())hosts:
+            if h not in self.inventory_cache:
+                self.log.debug('adding inventory item for %s' % h)
+                self.inventory_cache[h] = orchestrator.OutdatableData()
+            if h not in self.service_cache:
+                self.log.debug('adding service item for %s' % h)
+                self.service_cache[h] = orchestrator.OutdatableData()
+
     def config_notify(self):
         """
         This method is called whenever one of our config options is changed.
