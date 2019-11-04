@@ -120,8 +120,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         },
         {
             'name': 'inventory_cache_timeout',
-            'type': 'int',
-            'default': 10,
+            'type': 'seconds',
+            'default': 10 * 60,
             'desc': 'seconds to cache device inventory',
         },
     ]

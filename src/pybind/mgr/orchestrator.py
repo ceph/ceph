@@ -1115,13 +1115,13 @@ class OutdatableData(object):
     def from_json(cls, data):
         return cls(data['data'], cls.time_from_string(data['last_refresh']))
 
-    def outdated(self, timeout_min=None):
-        if timeout_min is None:
-            timeout_min = 10
+    def outdated(self, timeout=None):
+        if timeout is None:
+            timeout = 600
         if self.last_refresh is None:
             return True
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-            minutes=timeout_min)
+            seconds=timeout)
         return self.last_refresh < cutoff
 
     def __repr__(self):
