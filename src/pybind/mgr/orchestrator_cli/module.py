@@ -146,8 +146,12 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout=json.dumps(data))
         else:
             table = PrettyTable(
-                ['type', 'id', 'host', 'container', 'version', 'status', 'description'],
+                ['TYPE', 'ID', 'HOST', 'CONTAINER', 'VERSION', 'STATUS',
+                 'DESCRIPTION'],
                 border=False)
+            table.align = 'l'
+            table.left_padding_width = 0
+            table.right_padding_width = 1
             for s in services:
                 if s.service is None:
                     service_id = s.service_instance
