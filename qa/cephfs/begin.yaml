@@ -4,4 +4,6 @@ tasks:
       extra_system_packages:
         deb: ['bison', 'flex', 'libelf-dev', 'libssl-dev']
         rpm: ['bison', 'flex', 'elfutils-libelf-devel', 'openssl-devel']
+      extra_packages:
+        - python3-cephfs
   - ceph:
