@@ -424,23 +424,26 @@ class FileHandler(logging.FileHandler):
         self.setFormatter(logging.Formatter("%(asctime)s [%(threadName)s] [%(levelname)-4s] [%(name)s] %(message)s"))
 
 
-class MgrModuleLoggingTrait(object):
-    def _configure_logging(self, level, log_to_file):
+class MgrModuleLoggingMixin(object):
+    def _configure_logging(self, mgr_level, module_level, log_to_file):
+        self._mgr_level = None
+        self._module_level = None
         self._root_logger = logging.getLogger()
 
         self._unconfigure_logging()
+
         # the ceph log handler is initialized only once
         self._ceph_log_handler = CPlusPlusHandler(self)
-        self._ceph_log_handler.setLevel(level)
         self._file_log_handler = FileHandler(self)
-        self._file_log_handler.setLevel(self._ceph_log_handler.level)
 
+        self.log_to_file = log_to_file
         if log_to_file:
             self._root_logger.addHandler(self._file_log_handler)
         else:
             self._root_logger.addHandler(self._ceph_log_handler)
 
         self._root_logger.setLevel(logging.NOTSET)
+        self._set_log_level(mgr_level, module_level)
 
     def _unconfigure_logging(self):
         # remove existing handlers:
@@ -448,18 +451,48 @@ class MgrModuleLoggingTrait(object):
             h for h in self._root_logger.handlers if isinstance(h, CPlusPlusHandler) or isinstance(h, FileHandler)]
         for h in rm_handlers:
             self._root_logger.removeHandler(h)
+        self.log_to_file = False
 
-    def _set_log_level(self, level):
+    def _set_log_level(self, mgr_level, module_level):
+        module_level = module_level.upper() if module_level else ''
+        if not self._module_level:
+            # using debug_mgr level
+            if not module_level and self._mgr_level == mgr_level:
+                # no change in module level neither in debug_mgr
+                return
+        else:
+            if self._module_level == module_level:
+                # no change in module level
+                return
+
+        if not self._module_level and not module_level:
+            level = self._ceph_log_level_to_python(mgr_level)
+            self.getLogger().warning("setting log level based on debug_mgr: %s (%s)", level, mgr_level)
+        elif self._module_level and not module_level:
+            level = self._ceph_log_level_to_python(mgr_level)
+            self.getLogger().warning("unsetting module log level, falling back to "
+                                     "debug_mgr level: %s (%s)", level, mgr_level)
+        elif module_level:
+            level = module_level
+            self.getLogger().warning("setting log level: %s", level)
+
+        self._module_level = module_level
+        self._mgr_level = mgr_level
+
         self._ceph_log_handler.setLevel(level)
         self._file_log_handler.setLevel(level)
 
     def _enable_file_log(self):
         # disable ceph log and enable file log
+        self.getLogger().warning("enabling logging to file")
+        self.log_to_file = True
         self._root_logger.addHandler(self._file_log_handler)
         self._root_logger.removeHandler(self._ceph_log_handler)
 
     def _disable_file_log(self):
         # disable file log and enable ceph log
+        self.getLogger().warning("disabling logging to file")
+        self.log_to_file = False
         self._root_logger.addHandler(self._ceph_log_handler)
         self._root_logger.removeHandler(self._file_log_handler)
 
@@ -485,7 +518,7 @@ class MgrModuleLoggingTrait(object):
         return logging.getLogger(name)
 
 
-class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingTrait):
+class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     """
     Standby modules only implement a serve and shutdown method, they
     are not permitted to implement commands and they do not receive
@@ -502,12 +535,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingTrait):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
 
-        ceph_log_level = self._ceph_get_option("debug_mgr")
+        mgr_level = self._ceph_get_option("debug_mgr")
         log_level = self.get_module_option("log_level")
-        if not log_level:
-            log_level = self._ceph_log_level_to_python(ceph_log_level)
-
-        self._configure_logging(log_level, False)
+        self._configure_logging(mgr_level, log_level, False)
 
         # for backwards compatibility
         self._logger = self.getLogger()
@@ -574,7 +604,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingTrait):
             return r
 
 
-class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingTrait):
+class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     COMMANDS = []
     MODULE_OPTIONS = []
     MODULE_OPTION_DEFAULTS = {}
@@ -611,12 +641,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingTrait):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        ceph_log_level = self._ceph_get_option("debug_mgr")
+        mgr_level = self._ceph_get_option("debug_mgr")
         log_level = self.get_module_option("log_level")
-        if not log_level:
-            log_level = self._ceph_log_level_to_python(ceph_log_level)
-
-        self._configure_logging(log_level,
+        self._configure_logging(mgr_level, log_level,
                                 self.get_module_option("log_to_file", False))
 
         # for backwards compatibility
@@ -646,33 +673,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingTrait):
 
     @classmethod
     def _register_commands(cls, module_name):
-        cls.MODULE_OPTIONS.append(Option(name='log_level', type='str', default="", runtime=True))
+        cls.MODULE_OPTIONS.append(Option(name='log_level', type='str', default="", runtime=True,
+                                         enum_allowed=['info', 'debug', 'critical', 'error', 'warning', '']))
         cls.MODULE_OPTIONS.append(Option(name='log_to_file', type='bool', default=False, runtime=True))
 
         cls.COMMANDS.extend(CLICommand.dump_cmd_list())
-        cls.COMMANDS.extend([{
-            'cmd': '{} logging level set '
-                   'name=level,type=CephChoices,'
-                   'strings=INFO|DEBUG|CRITICAL|ERROR|WARNING|NOTSET'.format(module_name),
-            'desc': 'Set the module python logging level',
-            'perm': 'w'
-        }, {
-            'cmd': '{} logging level get'.format(module_name),
-            'desc': 'Show the module python logging level',
-            'perm': 'r'
-        }, {
-            'cmd': '{} logging file enable'.format(module_name),
-            'desc': 'Enable module logging to its own file',
-            'perm': 'w'
-        }, {
-            'cmd': '{} logging file disable'.format(module_name),
-            'desc': 'Disable module logging to its own file',
-            'perm': 'w'
-        }, {
-            'cmd': '{} logging file status'.format(module_name),
-            'desc': 'Show module logging to its own file status',
-            'perm': 'w'
-        }])
 
     @property
     def log(self):
@@ -725,6 +730,23 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingTrait):
                             ``from send_command``.
         """
         pass
+
+    def _config_notify(self):
+        # check logging options for changes
+        mgr_level = self._ceph_get_option("debug_mgr")
+        module_level = self.get_module_option("log_level")
+        log_to_file = self.get_module_option("log_to_file", False)
+
+        self._set_log_level(mgr_level, module_level)
+
+        if log_to_file != self.log_to_file:
+            if log_to_file:
+                self._enable_file_log()
+            else:
+                self._disable_file_log()
+
+        # call module subclass implementations
+        self.config_notify()
 
     def config_notify(self):
         """
@@ -1032,33 +1054,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingTrait):
         self._ceph_set_health_checks(checks)
 
     def _handle_command(self, inbuf, cmd):
-        if cmd['prefix'] == '{} logging level set'.format(self.module_name):
-            if cmd['level'] not in ['INFO', 'WARNING', 'ERROR', 'DEBUG', 'CRITICAL', 'NOTSET']:
-                return HandleCommandResult(retval=-errno.EINVAL,
-                                           stderr='invalid log level: {}'.format(cmd['level']))
-            self.set_module_option("log_level", cmd['level'])
-            self._set_log_level(cmd['level'])
-            return HandleCommandResult(stdout='log level updated to {}'.format(cmd['level']))
-
-        if cmd['prefix'] == '{} logging level get'.format(self.module_name):
-            return HandleCommandResult(stdout=logging.getLevelName(self._ceph_log_handler.level))
-
-        if cmd['prefix'] == '{} logging file enable'.format(self.module_name):
-            self.set_module_option("log_to_file", True)
-            self._enable_file_log()
-            return HandleCommandResult(stdout="Enabled logging to file: {}"
-                                              .format(self._file_log_handler.path))
-
-        if cmd['prefix'] == '{} logging file disable'.format(self.module_name):
-            self.set_module_option("log_to_file", False)
-            self._disable_file_log()
-            return HandleCommandResult(stdout="Disabled logging to file")
-
-        if cmd['prefix'] == '{} logging file status'.format(self.module_name):
-            is_enabled = self.get_module_option("log_to_file", False)
-            return HandleCommandResult(stdout="Logging to file is {}"
-                                              .format("enabled" if is_enabled else "disabled"))
-
         if cmd['prefix'] not in CLICommand.COMMANDS:
             return self.handle_command(inbuf, cmd)
 
