@@ -18,6 +18,12 @@ export class TimeDiffService {
     return duration;
   }
 
+  /**
+   * Get the duration in the format '[Nd] [Nh] [Nm]', e.g. '2d 1h 15m'.
+   * @param ms The time in milliseconds.
+   * @return The duration. An empty string is returned if the duration is
+   *   less than a minute.
+   */
   private getDuration(ms: number): string {
     const date = new Date(ms);
     const h = date.getUTCHours();
