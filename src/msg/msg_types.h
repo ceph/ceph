@@ -137,7 +137,7 @@ inline std::ostream& operator<<(std::ostream& out, const entity_name_t& addr) {
     return out << addr.type_str() << '.' << addr.num();
 }
 inline std::ostream& operator<<(std::ostream& out, const ceph_entity_name& addr) {
-  return out << *(const entity_name_t*)&addr;
+  return out << entity_name_t{addr.type, static_cast<int64_t>(addr.num)};
 }
 
 namespace std {

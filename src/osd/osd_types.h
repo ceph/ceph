@@ -5368,6 +5368,9 @@ struct PromoteCounter {
   }
 };
 
+typedef std::map<std::string,std::string> osd_alert_list_t;
+typedef std::map<int, osd_alert_list_t> os_alerts_t;
+
 /** store_statfs_t
  * ObjectStore full statfs information
  */
@@ -5375,6 +5378,7 @@ struct store_statfs_t
 {
   uint64_t total = 0;                  ///< Total bytes
   uint64_t available = 0;              ///< Free bytes available
+  uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes
 
   int64_t allocated = 0;               ///< Bytes allocated by the store
 
@@ -5391,7 +5395,23 @@ struct store_statfs_t
   }
   bool operator ==(const store_statfs_t& other) const;
   void dump(Formatter *f) const;
+  DENC(store_statfs_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.total, p);
+    denc(v.available, p);
+    denc(v.internally_reserved, p);
+    denc(v.allocated, p);
+    denc(v.data_stored, p);
+    denc(v.data_compressed, p);
+    denc(v.data_compressed_allocated, p);
+    denc(v.data_compressed_original, p);
+    denc(v.omap_allocated, p);
+    denc(v.internal_metadata, p);
+    DENC_FINISH(p);
+  }
 };
+WRITE_CLASS_DENC(store_statfs_t)
+
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
 
 // omap specific stats
