@@ -1072,8 +1072,8 @@ class Module(MgrModule):
                     raise cherrypy.HTTPError(503, 'No MON connection')
 
         # Make the cache timeout for collecting configurable
-        self.collect_timeout = self.get_localized_module_option(
-            'scrape_interval', 5.0)
+        self.collect_timeout = float(self.get_localized_module_option(
+            'scrape_interval', 5.0))
 
         server_addr = self.get_localized_module_option(
             'server_addr', get_default_addr())
