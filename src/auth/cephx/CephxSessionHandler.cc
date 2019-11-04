@@ -37,16 +37,16 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
     // - skip the leading 4 byte wrapper from encode_encrypt
     struct {
       __u8 v;
-      __le64 magic;
-      __le32 len;
-      __le32 header_crc;
-      __le32 front_crc;
-      __le32 middle_crc;
-      __le32 data_crc;
+      ceph_le64 magic;
+      ceph_le32 len;
+      ceph_le32 header_crc;
+      ceph_le32 front_crc;
+      ceph_le32 middle_crc;
+      ceph_le32 data_crc;
     } __attribute__ ((packed)) sigblock = {
-      1, mswab(AUTH_ENC_MAGIC), mswab<uint32_t>(4*4),
-      mswab<uint32_t>(header.crc), mswab<uint32_t>(footer.front_crc),
-      mswab<uint32_t>(footer.middle_crc), mswab<uint32_t>(footer.data_crc)
+      1, init_le64(AUTH_ENC_MAGIC), init_le32(4*4),
+      init_le32(header.crc), init_le32(footer.front_crc),
+      init_le32(footer.middle_crc), init_le32(footer.data_crc)
     };
 
     char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
@@ -66,27 +66,27 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
       return -1;
     }
 
-    *psig = *reinterpret_cast<__le64*>(exp_buf);
+    *psig = *reinterpret_cast<ceph_le64*>(exp_buf);
   } else {
     // newer mimic+ signatures
     struct {
-      __le32 header_crc;
-      __le32 front_crc;
-      __le32 front_len;
-      __le32 middle_crc;
-      __le32 middle_len;
-      __le32 data_crc;
-      __le32 data_len;
-      __le32 seq_lower_word;
+      ceph_le32 header_crc;
+      ceph_le32 front_crc;
+      ceph_le32 front_len;
+      ceph_le32 middle_crc;
+      ceph_le32 middle_len;
+      ceph_le32 data_crc;
+      ceph_le32 data_len;
+      ceph_le32 seq_lower_word;
     } __attribute__ ((packed)) sigblock = {
-      mswab<uint32_t>(header.crc),
-      mswab<uint32_t>(footer.front_crc),
-      mswab<uint32_t>(header.front_len),
-      mswab<uint32_t>(footer.middle_crc),
-      mswab<uint32_t>(header.middle_len),
-      mswab<uint32_t>(footer.data_crc),
-      mswab<uint32_t>(header.data_len),
-      mswab<uint32_t>(header.seq)
+      init_le32(header.crc),
+      init_le32(footer.front_crc),
+      init_le32(header.front_len),
+      init_le32(footer.middle_crc),
+      init_le32(header.middle_len),
+      init_le32(footer.data_crc),
+      init_le32(header.data_len),
+      init_le32(header.seq)
     };
 
     char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
@@ -107,7 +107,7 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
     }
 
     struct enc {
-      __le64 a, b, c, d;
+      ceph_le64 a, b, c, d;
     } *penc = reinterpret_cast<enc*>(exp_buf);
     *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
   }

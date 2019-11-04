@@ -37,9 +37,9 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
     return;
 
   uint64_t k = 0;
-  const uint64_t *p = (const uint64_t *)enc.c_str();
+  const ceph_le64 *p = (const ceph_le64 *)enc.c_str();
   for (int pos = 0; pos + sizeof(k) <= enc.length(); pos+=sizeof(k), p++)
-    k ^= mswab(*p);
+    k ^= *p;
   *key = k;
 }
 

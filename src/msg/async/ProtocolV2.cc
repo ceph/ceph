@@ -502,8 +502,8 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   ceph_msg_header2 header2{header.seq,        header.tid,
                            header.type,       header.priority,
                            header.version,
-                           0,                 header.data_off,
-                           ack_seq,
+                           init_le32(0),      header.data_off,
+                           init_le64(ack_seq),
                            footer.flags,      header.compat_version,
                            header.reserved};
 
@@ -1385,15 +1385,16 @@ CtPtr ProtocolV2::handle_message() {
                          current_header.type,
                          current_header.priority,
                          current_header.version,
-                         msg_frame.front_len(),
-                         msg_frame.middle_len(),
-                         msg_frame.data_len(),
+                         init_le32(msg_frame.front_len()),
+                         init_le32(msg_frame.middle_len()),
+                         init_le32(msg_frame.data_len()),
                          current_header.data_off,
                          peer_name,
                          current_header.compat_version,
                          current_header.reserved,
-                         0};
-  ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
+                         init_le32(0)};
+  ceph_msg_footer footer{init_le32(0), init_le32(0),
+	                 init_le32(0), init_le64(0), current_header.flags};
 
   Message *message = decode_message(cct, 0, header, footer,
       msg_frame.front(),

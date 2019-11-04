@@ -33,7 +33,7 @@ class XioMessenger;
 class XioMsgCnt
 {
 public:
-  __le32 msg_cnt;
+  ceph_le32 msg_cnt;
   buffer::list bl;
 public:
   explicit XioMsgCnt(buffer::ptr p)
@@ -48,8 +48,8 @@ class XioMsgHdr
 {
 public:
   char tag;
-  __le32 msg_cnt;
-  __le32 peer_type;
+  ceph_le32 msg_cnt;
+  ceph_le32 peer_type;
   entity_addr_t addr; /* XXX hack! */
   ceph_msg_header* hdr;
   ceph_msg_footer* ftr;
@@ -57,7 +57,7 @@ public:
   buffer::list bl;
 public:
   XioMsgHdr(ceph_msg_header& _hdr, ceph_msg_footer& _ftr, uint64_t _features)
-    : tag(CEPH_MSGR_TAG_MSG), msg_cnt(0), hdr(&_hdr), ftr(&_ftr),
+    : tag(CEPH_MSGR_TAG_MSG), msg_cnt(init_le32(0)), hdr(&_hdr), ftr(&_ftr),
       features(_features)
     { }
 

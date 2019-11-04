@@ -1093,7 +1093,7 @@ struct cls_rgw_gc_obj_info
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.back()->tag = "footag";
-    ceph_timespec ts{21, 32};
+    ceph_timespec ts{init_le32(21), init_le32(32)};
     ls.back()->time = ceph::real_clock::from_ceph_timespec(ts);
   }
 };

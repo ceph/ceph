@@ -7,6 +7,14 @@
 
 #include "include/int_types.h"
 
+/* See comment in ceph_fs.h.  */
+#ifndef __KERNEL__
+#include "byteorder.h"
+#define __le16 ceph_le16
+#define __le32 ceph_le32
+#define __le64 ceph_le64
+#endif
+
 /*
  * Data types for message passing layer used by Ceph.
  */
@@ -236,5 +244,10 @@ struct ceph_msg_footer {
 #define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
 #define CEPH_MSG_FOOTER_SIGNED	  (1<<2)   /* msg was signed */
 
+#ifndef __KERNEL__
+#undef __le16
+#undef __le32
+#undef __le64
+#endif
 
 #endif

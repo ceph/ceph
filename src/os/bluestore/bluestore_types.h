@@ -756,11 +756,11 @@ public:
     case 1:
       return reinterpret_cast<const uint8_t*>(p)[i];
     case 2:
-      return reinterpret_cast<const __le16*>(p)[i];
+      return reinterpret_cast<const ceph_le16*>(p)[i];
     case 4:
-      return reinterpret_cast<const __le32*>(p)[i];
+      return reinterpret_cast<const ceph_le32*>(p)[i];
     case 8:
-      return reinterpret_cast<const __le64*>(p)[i];
+      return reinterpret_cast<const ceph_le64*>(p)[i];
     default:
       ceph_abort_msg("unrecognized csum word size");
     }
