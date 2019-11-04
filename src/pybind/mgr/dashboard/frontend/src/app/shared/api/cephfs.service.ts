@@ -1,6 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import { Observable } from 'rxjs';
+
+import { CephfsDir } from '../models/cephfs-directory-models';
 import { ApiModule } from './api.module';
 
 @Injectable({
@@ -13,6 +16,14 @@ export class CephfsService {
 
   list() {
     return this.http.get(`${this.baseURL}`);
+  }
+
+  lsDir(id, path?): Observable<CephfsDir[]> {
+    let apiPath = `${this.baseURL}/${id}/ls_dir?depth=2`;
+    if (path) {
+      apiPath += `&path=${encodeURIComponent(path)}`;
+    }
+    return this.http.get<CephfsDir[]>(apiPath);
   }
 
   getCephfs(id) {

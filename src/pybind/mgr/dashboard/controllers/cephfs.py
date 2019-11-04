@@ -325,7 +325,7 @@ class CephFS(RESTController):
         return CephFS_(fs_name)
 
     @RESTController.Resource('GET')
-    def ls_dir(self, fs_id, path=None):
+    def ls_dir(self, fs_id, path=None, depth=1):
         """
         List directories of specified path.
         :param fs_id: The filesystem identifier.
@@ -340,12 +340,13 @@ class CephFS(RESTController):
             path = os.path.normpath(path)
         try:
             cfs = self._cephfs_instance(fs_id)
-            paths = cfs.ls_dir(path, 1)
+            paths = cfs.ls_dir(path, int(depth))
             # Convert (bytes => string), prettify paths (strip slashes)
             # and append additional information.
             paths = [{
                 'name': os.path.basename(p.decode()),
                 'path': p.decode(),
+                'parent': os.path.dirname(p.decode()),
                 'snapshots': cfs.ls_snapshots(p.decode()),
                 'quotas': cfs.get_quotas(p.decode())
             } for p in paths if p != path.encode()]

@@ -55,4 +55,12 @@ describe('CephfsService', () => {
     const req = httpTesting.expectOne('api/cephfs/1/mds_counters');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call lsDir', () => {
+    service.lsDir(1).subscribe();
+    const req = httpTesting.expectOne('api/cephfs/1/ls_dir?depth=2');
+    expect(req.request.method).toBe('GET');
+    service.lsDir(2, '/some/path').subscribe();
+    httpTesting.expectOne('api/cephfs/2/ls_dir?depth=2&path=%2Fsome%2Fpath');
+  });
 });
