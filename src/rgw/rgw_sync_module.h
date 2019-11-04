@@ -39,6 +39,7 @@ public:
 
 class RGWRESTMgr;
 class RGWMetadataHandler;
+class RGWBucketInstanceMetadataHandlerBase;
 
 class RGWSyncModuleInstance {
 public:
@@ -52,7 +53,7 @@ public:
     return false;
   }
   virtual RGWMetadataHandler *alloc_bucket_meta_handler();
-  virtual RGWMetadataHandler *alloc_bucket_instance_meta_handler();
+  virtual RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler();
 
   // indication whether the sync module start with full sync (default behavior)
   // incremental sync would follow anyway

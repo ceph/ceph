@@ -81,7 +81,7 @@ int RGWServices_Def::init(CephContext *cct,
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
-                    sync_modules.get());
+                    sync_modules.get(), bucket_sync_sobj.get());
   bucket_sync_sobj->init(zone.get(), sysobj_cache.get(),
                          bucket_sobj.get());
   cls->init(zone.get(), rados.get());

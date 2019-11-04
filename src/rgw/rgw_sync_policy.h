@@ -309,6 +309,10 @@ struct rgw_sync_bucket_pipes {
   void decode_json(JSONObj *obj);
 
   std::vector<rgw_sync_bucket_pipe> expand() const;
+
+  void get_potential_related_buckets(const rgw_bucket& bucket,
+                                     std::set<rgw_bucket> *sources,
+                                     std::set<rgw_bucket> *dests) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_pipes)
 
@@ -412,6 +416,11 @@ struct rgw_sync_policy_group {
 
   bool find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipes **pipe);
   void remove_pipe(const string& pipe_id);
+
+  void get_potential_related_buckets(const rgw_bucket& bucket,
+                                     std::set<rgw_bucket> *sources,
+                                     std::set<rgw_bucket> *dests) const;
+
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_group)
 
@@ -436,6 +445,10 @@ struct rgw_sync_policy_info {
   bool empty() const {
     return groups.empty();
   }
+
+  void get_potential_related_buckets(const rgw_bucket& bucket,
+                                     std::set<rgw_bucket> *sources,
+                                     std::set<rgw_bucket> *dests) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_info)
 

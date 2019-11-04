@@ -192,7 +192,6 @@ public:
   virtual void init(RGWSI_Zone *zone_svc,
                     RGWSI_Bucket *bucket_svc,
                     RGWSI_BucketIndex *bi_svc) = 0;
-
 };
 
 class RGWBucketMetaHandlerAllocator {

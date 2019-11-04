@@ -22,7 +22,7 @@ RGWMetadataHandler *RGWSyncModuleInstance::alloc_bucket_meta_handler()
   return RGWBucketMetaHandlerAllocator::alloc();
 }
 
-RGWMetadataHandler *RGWSyncModuleInstance::alloc_bucket_instance_meta_handler()
+RGWBucketInstanceMetadataHandlerBase *RGWSyncModuleInstance::alloc_bucket_instance_meta_handler()
 {
   return RGWBucketInstanceMetaHandlerAllocator::alloc();
 }

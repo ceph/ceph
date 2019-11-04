@@ -39,7 +39,6 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
   unique_ptr<RGWChainedCacheImpl_bucket_sync_policy_cache_entry> sync_policy_cache;
 
   int do_start() override;
-
 public:
   struct Svc {
     RGWSI_Zone *zone{nullptr};
@@ -60,5 +59,8 @@ public:
                          std::optional<rgw_bucket> bucket,
                          RGWBucketSyncPolicyHandlerRef *handler,
                          optional_yield y) override;
+
+  int handle_bi_update(RGWBucketInfo& bucket_info,
+                       RGWBucketInfo *orig_bucket_info) override;
 };
 

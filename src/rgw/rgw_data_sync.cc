@@ -2020,7 +2020,7 @@ public:
   RGWMetadataHandler *alloc_bucket_meta_handler() override {
     return RGWArchiveBucketMetaHandlerAllocator::alloc();
   }
-  RGWMetadataHandler *alloc_bucket_instance_meta_handler() override {
+  RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler() override {
     return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc();
   }
 };
@@ -3638,7 +3638,7 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
   rgw_sync_pipe_info_set::iterator siter;
 
   rgw_bucket_sync_sources_local_info sources_local_info;
-  rgw_bucket_sync_sources_local_info expected_local_info;
+  rgw_bucket_sync_sources_local_info targets_local_info;
 
   rgw_bucket_get_sync_policy_params get_policy_params;
   std::shared_ptr<rgw_bucket_get_sync_policy_result> source_policy;
@@ -4009,7 +4009,7 @@ int RGWGetBucketPeersCR::operate()
       yield call(new RGWSimpleRadosReadCR<rgw_bucket_sync_sources_local_info>(sync_env->async_rados,
                                                                               sync_env->svc->sysobj,
                                                                               RGWBucketSyncPeersManager::sync_targets_obj(sync_env->svc->zone, *source_zone, *source_bucket),
-                                                                              &sources_local_info));
+                                                                              &targets_local_info));
       if (retcode < 0 &&
           retcode != -ENOENT) {
         return set_cr_error(retcode);
