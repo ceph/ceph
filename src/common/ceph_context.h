@@ -29,6 +29,7 @@
 
 #include "include/any.h"
 #include "include/common_fwd.h"
+#include "include/compat.h"
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
