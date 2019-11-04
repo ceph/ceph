@@ -743,26 +743,15 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             self.log.info("create_daemon({}): finished".format(host))
             conn.exit()
 
-    def _remove_daemon(self, daemon_type, daemon_id, host):
+    def _remove_daemon(self, name, host):
         """
         Remove a daemon
         """
-        conn = self._get_connection(host)
-        try:
-            name = '%s.%s' % (daemon_type, daemon_id)
-
-            out, code = self._run_ceph_daemon(host, name, 'rm-daemon', [])
-            self.log.debug('remove_daemon code %s out %s' % (code, out))
-
-            return "Removed {} on host '{}'".format(name, host)
-
-        except Exception as e:
-            self.log.error("remove_daemon({}): error: {}".format(host, e))
-            raise
-
-        finally:
-            self.log.info("remove_daemon({}): finished".format(host))
-            conn.exit()
+        out, code = self._run_ceph_daemon(
+            host, name, 'rm-daemon',
+            ['--name', name])
+        self.log.debug('_remove_daemon code %s out %s' % (code, out))
+        return "Removed {} from host '{}'".format(name, host)
 
     def _create_mon(self, host, network):
         """
@@ -836,14 +825,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return self._create_daemon('mgr', name, host, keyring)
 
-    def _remove_mgr(self, mgr_id, host):
-        name = 'mgr.' + mgr_id
-        out, code = self._run_ceph_daemon(
-            host, name, 'rm-daemon',
-            ['--name', name])
-        self.log.debug('remove_mgr code %s out %s' % (code, out))
-        return "Removed {} from host '{}'".format(name, host)
-
     def update_mgrs(self, num, hosts):
         """
         Adjust the number of cluster managers.
@@ -868,11 +849,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 connected.append(mgr_map['active_name'])
             for standby in mgr_map['standbys']:
                 connected.append(standby['name'])
-            for daemon in daemons:
-                if daemon.service_instance not in connected:
+            for d in daemons:
+                if d.service_instance not in connected:
                     result = self._worker_pool.apply_async(
-                        self._remove_mgr,
-                        (daemon.service_instance, daemon.nodename))
+                        self._remove_daemon,
+                        ('%s.%s' % (d.service_type, d.service_instance),
+                         d.nodename))
                     results.append(result)
                     num_to_remove -= 1
                     if num_to_remove == 0:
@@ -940,7 +922,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             to_remove = len(daemons) - spec.count
             for d in daemons[0:to_remove]:
                 results.append(self._worker_pool.apply_async(
-                    self._remove_mds, (d.service_instance, d.nodename)))
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
         elif len(daemons) < spec.count:
             # add some
             spec.count -= len(daemons)
@@ -964,18 +948,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         for d in daemons:
             if d.service_instance == name or d.service_instance.startswith(name + '.'):
                 results.append(self._worker_pool.apply_async(
-                    self._remove_mds, (d.service_instance, d.nodename)))
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
         if not results:
             raise OrchestratorError('Unable to find mds.%s[-*] daemon(s)' % name)
         return SSHWriteCompletion(results)
-
-    def _remove_mds(self, mds_id, host):
-        name = 'mds.' + mds_id
-        out, code = self._run_ceph_daemon(
-            host, name, 'rm-daemon',
-            ['--name', name])
-        self.log.debug('remove_mds code %s out %s' % (code, out))
-        return "Removed {} from host '{}'".format(name, host)
 
     def add_rgw(self, spec):
         if len(spec.placement.nodes) < spec.count:
@@ -1023,18 +1001,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         for d in daemons:
             if d.service_instance == name or d.service_instance.startswith(name + '.'):
                 results.append(self._worker_pool.apply_async(
-                    self._remove_rgw, (d.service_instance, d.nodename)))
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
         if not results:
             raise RuntimeError('Unable to find rgw.%s[-*] daemon(s)' % name)
         return SSHWriteCompletion(results)
-
-    def _remove_rgw(self, rgw_id, host):
-        name = 'rgw.' + rgw_id
-        out, code = self._run_ceph_daemon(
-            host, name, 'rm-daemon',
-            ['--name', name])
-        self.log.debug('remove_rgw code %s out %s' % (code, out))
-        return "Removed {} from host '{}'".format(name, host)
 
     def update_rgw(self, spec):
         daemons = self._get_services('rgw', service_name=spec.name)
