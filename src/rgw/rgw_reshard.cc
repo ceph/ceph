@@ -988,12 +988,12 @@ int RGWReshard::process_single_logshard(int logshard_num)
   RGWBucketReshardLock logshard_lock(store, logshard_oid, false);
 
   int ret = logshard_lock.lock();
-  if (ret == -EBUSY) { /* already locked by another processor */
+  if (ret < 0) { 
     ldout(store->ctx(), 5) << __func__ << "(): failed to acquire lock on " <<
-      logshard_oid << dendl;
+      logshard_oid << ", ret = " << ret <<dendl;
     return ret;
   }
-
+  
   do {
     std::list<cls_rgw_reshard_entry> entries;
     ret = list(logshard_num, marker, max_entries, entries, &truncated);
