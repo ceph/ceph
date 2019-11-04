@@ -630,7 +630,9 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.1.0.0/16",
-    "eth0");
+    "eth0",
+    "",
+    "");
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
@@ -638,7 +640,9 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.2.0.0/16",
-    "eth1");
+    "eth1",
+    "lo",
+    "lo:");
   ASSERT_EQ((struct sockaddr*)&a_two, result);
 
   // match by eth name
@@ -647,7 +651,9 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
-    "eth0");
+    "eth0",
+    "lo,tunl0",
+    "lo:,tunl");
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
@@ -655,7 +661,9 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
-    "eth1");
+    "eth1",
+    "",
+    "");
   ASSERT_EQ((struct sockaddr*)&a_two, result);
 
   result = find_ip_in_subnet_list(
@@ -663,8 +671,32 @@ TEST(pick_address, find_ip_in_subnet_list)
     &one,
     CEPH_PICK_ADDRESS_IPV6,
     "2001::/16",
-    "eth1");
+    "eth1",
+    "",
+    "");
   ASSERT_EQ((struct sockaddr*)&a_three, result);
+
+  // excluding by interface
+  result = find_ip_in_subnet_list(
+    g_ceph_context,
+    &one,
+    CEPH_PICK_ADDRESS_IPV4,
+    "10.0.0.0/8",
+    "",
+    "eth0",
+    "");
+  ASSERT_EQ((struct sockaddr*)&a_two, result);
+
+  // excluding by prefix
+  result = find_ip_in_subnet_list(
+    g_ceph_context,
+    &one,
+    CEPH_PICK_ADDRESS_IPV4,
+    "10.0.0.0/8",
+    "",
+    "",
+    "eth0");
+  ASSERT_EQ((struct sockaddr*)&a_two, result);
 }
 
 TEST(pick_address, filtering)
@@ -699,6 +731,8 @@ TEST(pick_address, filtering)
   cct->_conf.set_val("cluster_addr", "");
   cct->_conf.set_val("cluster_network", "");
   cct->_conf.set_val("cluster_network_interface", "");
+  cct->_conf.set_val("excluded_network_interfaces", "");
+  cct->_conf.set_val("excluded_network_interface_prefixes", "");
 
   entity_addrvec_t av;
   {
@@ -811,6 +845,40 @@ TEST(pick_address, filtering)
     ASSERT_EQ(string("v2:10.2.1.123:0/0"), stringify(av.v[1]));
     cct->_conf.set_val("public_network", "");
     cct->_conf.set_val("public_network_interface", "");
+  }
+  {
+    cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
+    cct->_conf.set_val("excluded_network_interfaces", "eth0");
+    int r = pick_addresses(cct,
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_IPV6 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(2u, av.v.size());
+    ASSERT_EQ(string("v2:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
+    ASSERT_EQ(string("v2:10.2.1.123:0/0"), stringify(av.v[1]));
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("excluded_network_interfaces", "");
+  }
+  {
+    cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
+    cct->_conf.set_val("excluded_network_interface_prefixes", "eth0");
+    int r = pick_addresses(cct,
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_IPV6 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(2u, av.v.size());
+    ASSERT_EQ(string("v2:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
+    ASSERT_EQ(string("v2:10.2.1.123:0/0"), stringify(av.v[1]));
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("excluded_network_interface_prefixes", "");
   }
   {
     cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
