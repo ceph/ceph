@@ -958,7 +958,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 results.append(self._worker_pool.apply_async(
                     self._remove_mds, (d.service_instance, d.nodename)))
         if not results:
-            raise RuntimeError('Unable to find mds.%s[-*] daemon(s)' % name)
+            raise OrchestratorError('Unable to find mds.%s[-*] daemon(s)' % name)
         return SSHWriteCompletion(results)
 
     def _remove_mds(self, mds_id, host):
