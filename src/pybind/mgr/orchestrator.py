@@ -1144,6 +1144,10 @@ class OutdatableDictMixin(object):
         for o in outdated:
             del self[o]
 
+    def invalidate(self, key):
+        self[key] = OutdatableData(self[key].data,
+                                   datetime.datetime.fromtimestamp(0))
+
 class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
     pass
 
