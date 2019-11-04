@@ -3000,7 +3000,7 @@ public:
   int delete_pool(int64_t pool, Context *onfinish);
   int delete_pool(const std::string& name, Context *onfinish);
 
-  void handle_pool_op_reply(MPoolOpReply *m);
+  void handle_pool_op_reply(const ref_t<MPoolOpReply>& m);
   int pool_op_cancel(ceph_tid_t tid, int r);
 
   // --------------------------
@@ -3008,7 +3008,7 @@ public:
 private:
   void _poolstat_submit(PoolStatOp *op);
 public:
-  void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
+  void handle_get_pool_stats_reply(const ref_t<MGetPoolStatsReply>& m);
   void get_pool_stats(std::list<std::string>& pools,
 		      std::map<std::string,pool_stat_t> *result,
 		      bool *per_pool,

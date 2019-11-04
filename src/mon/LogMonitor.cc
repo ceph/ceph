@@ -632,7 +632,7 @@ void LogMonitor::check_sub(Subscription *s)
     return;
   } 
  
-  MLog *mlog = new MLog(mon->monmap->fsid);
+  auto mlog = make_message<MLog>(mon->monmap->fsid);
 
   if (s->next == 0) { 
     /* First timer, heh? */
@@ -647,9 +647,7 @@ void LogMonitor::check_sub(Subscription *s)
 	  << " (version " << mlog->version << ")" << dendl;
   
   if (!mlog->entries.empty()) {
-    s->session->con->send_message(mlog);
-  } else {
-    mlog->put();
+    s->session->con->send_message2(std::move(mlog));
   }
   if (s->onetime)
     mon->session_map.remove_sub(s);
@@ -665,7 +663,7 @@ void LogMonitor::check_sub(Subscription *s)
  * @param level	The max log level of the messages the client is interested in.
  * @param sv	The version the client is looking for.
  */
-void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
+void LogMonitor::_create_sub_incremental(const ref_t<MLog>& mlog, int level, version_t sv)
 {
   dout(10) << __func__ << " level " << level << " ver " << sv 
 	  << " cur summary ver " << summary.version << dendl; 

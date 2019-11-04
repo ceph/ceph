@@ -1820,7 +1820,7 @@ protected:
   void _send_boot();
   void _collect_metadata(map<string,string> *pmeta);
   void _get_purged_snaps();
-  void handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *r);
+  void handle_get_purged_snaps_reply(const ref_t<MMonGetPurgedSnapsReply>& r);
 
   void start_waiting_for_healthy();
   bool _is_healthy();

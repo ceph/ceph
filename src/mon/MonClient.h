@@ -543,7 +543,7 @@ private:
   int _cancel_mon_command(uint64_t tid);
   void _finish_command(MonCommand *r, int ret, std::string rs);
   void _finish_auth();
-  void handle_mon_command_ack(MMonCommandAck *ack);
+  void handle_mon_command_ack(const ref_t<class MMonCommandAck>& ack);
   void handle_command_reply(MCommandReply *reply);
 
 public:

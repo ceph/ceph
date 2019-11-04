@@ -872,8 +872,8 @@ public:
 
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we create a non-locking version for this class
-  void _ms_dispatch(Message *m);
-  bool ms_dispatch(Message *m) override {
+  void _ms_dispatch(const ref_t<Message>& m);
+  bool ms_dispatch2(const ref_t<Message>& m) override {
     std::lock_guard l{lock};
     _ms_dispatch(m);
     return true;

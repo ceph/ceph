@@ -159,7 +159,7 @@ public:
   int pg_command(pg_t pgid, vector<string>& cmd, const bufferlist& inbl,
 	         bufferlist *poutbl, string *prs);
 
-  void handle_log(MLog *m);
+  void handle_log(const ref_t<MLog>& m);
   int monitor_log(const string& level, rados_log_callback_t cb,
 		  rados_log_callback2_t cb2, void *arg);
 

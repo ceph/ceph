@@ -6307,13 +6307,12 @@ void OSD::_get_purged_snaps()
   monc->send_mon_message(m);
 }
 
-void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
+void OSD::handle_get_purged_snaps_reply(const ref_t<MMonGetPurgedSnapsReply>& m)
 {
   dout(10) << __func__ << " " << *m << dendl;
   ObjectStore::Transaction t;
-  if (!is_preboot() ||
-      m->last < superblock.purged_snaps_last) {
-    goto out;
+  if (!is_preboot() || m->last < superblock.purged_snaps_last) {
+    return;
   }
   SnapMapper::record_purged_snaps(cct, store, service.meta_ch,
 				  make_purged_snaps_oid(), &t,
@@ -6329,8 +6328,6 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
   } else {
     start_boot();
   }
-out:
-  m->put();
 }
 
 void OSD::send_full_update()
@@ -7151,7 +7148,7 @@ void OSD::_dispatch(Message *m)
     handle_osd_map(static_cast<MOSDMap*>(m));
     break;
   case MSG_MON_GET_PURGED_SNAPS_REPLY:
-    handle_get_purged_snaps_reply(static_cast<MMonGetPurgedSnapsReply*>(m));
+    handle_get_purged_snaps_reply(ref_cast<MMonGetPurgedSnapsReply>(m, false));
     break;
 
     // osd

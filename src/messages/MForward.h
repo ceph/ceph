@@ -33,35 +33,28 @@ public:
   MonCap client_caps;
   uint64_t con_features;
   EntityName entity_name;
-  PaxosServiceMessage *msg;   // incoming or outgoing message
+  ref_t<PaxosServiceMessage> msg;   // incoming or outgoing message
 
   string msg_desc;  // for operator<< only
   
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
 
+private:
   MForward() : Message{MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION},
                tid(0), con_features(0), msg(NULL) {}
-  MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
+  MForward(uint64_t t, ref_t<PaxosServiceMessage> m, uint64_t feat,
            const MonCap& caps) :
     Message{MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION},
-    tid(t), client_caps(caps), msg(NULL) {
+    tid(t), client_caps(caps), msg(std::move(m)) {
     client_type = m->get_source().type();
     client_addrs = m->get_source_addrs();
     if (auto con = m->get_connection()) {
       client_socket_addr = con->get_peer_socket_addr();
     }
     con_features = feat;
-    msg = (PaxosServiceMessage*)m->get();
   }
-private:
-  ~MForward() override {
-    if (msg) {
-      // message was unclaimed
-      msg->put();
-      msg = NULL;
-    }
-  }
+  ~MForward() = default;
 
 public:
   void encode_payload(uint64_t features) override {
@@ -83,7 +76,7 @@ public:
       if (con_features != features) {
 	msg->clear_payload();
       }
-      encode_message(msg, features & con_features, payload);
+      encode_message(msg.get(), features & con_features, payload);
       encode(con_features, payload);
       encode(entity_name, payload);
       return;
@@ -103,7 +96,7 @@ public:
     if (con_features != features) {
       msg->clear_payload();
     }
-    encode_message(msg, features & con_features, payload);
+    encode_message(msg.get(), features & con_features, payload);
     encode(con_features, payload);
     encode(entity_name, payload);
   }
@@ -123,18 +116,17 @@ public:
       decode(client_socket_addr, p);
     }
     decode(client_caps, p);
-    msg = (PaxosServiceMessage *)decode_message(NULL, 0, p);
+    using mtype = decltype(msg)::element_type;
+    msg = ref_cast<mtype>(decode_message(NULL, 0, p), false);
     decode(con_features, p);
     decode(entity_name, p);
   }
 
-  PaxosServiceMessage *claim_message() {
+  auto claim_message() {
     // let whoever is claiming the message deal with putting it.
     ceph_assert(msg);
     msg_desc = stringify(*msg);
-    PaxosServiceMessage *m = msg;
-    msg = NULL;
-    return m;
+    return std::move(msg);
   }
 
   std::string_view get_type_name() const override { return "forward"; }

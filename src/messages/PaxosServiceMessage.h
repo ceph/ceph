@@ -6,7 +6,7 @@
 #include "msg/Message.h"
 #include "mon/Session.h"
 
-class PaxosServiceMessage : public Message {
+class PaxosServiceMessage : public SafeMessage {
 public:
   version_t version;
   __s16 deprecated_session_mon;
@@ -18,11 +18,11 @@ public:
 
  protected:
   PaxosServiceMessage()
-    : Message{MSG_PAXOS},
+    : SafeMessage{MSG_PAXOS},
       version(0), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0) { }
   PaxosServiceMessage(int type, version_t v, int enc_version=1, int compat_enc_version=0)
-    : Message{type, enc_version, compat_enc_version},
+    : SafeMessage{type, enc_version, compat_enc_version},
       version(v), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0)  { }
   virtual ~PaxosServiceMessage() override {}

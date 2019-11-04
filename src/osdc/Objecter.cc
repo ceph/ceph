@@ -1007,11 +1007,11 @@ bool Objecter::ms_dispatch(Message *m)
     }
 
   case MSG_GETPOOLSTATSREPLY:
-    handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
+    handle_get_pool_stats_reply(ref_cast<MGetPoolStatsReply>(m, false));
     return true;
 
   case CEPH_MSG_POOLOP_REPLY:
-    handle_pool_op_reply(static_cast<MPoolOpReply*>(m));
+    handle_pool_op_reply(ref_cast<MPoolOpReply>(m, false));
     return true;
 
   case CEPH_MSG_STATFS_REPLY:
@@ -4070,13 +4070,12 @@ void Objecter::_pool_op_submit(PoolOp *op)
  * have a new enough map.
  * Lastly, clean up the message and PoolOp.
  */
-void Objecter::handle_pool_op_reply(MPoolOpReply *m)
+void Objecter::handle_pool_op_reply(const ref_t<MPoolOpReply>& m)
 {
   FUNCTRACE(cct);
   shunique_lock sul(rwlock, acquire_shared);
   if (!initialized) {
     sul.unlock();
-    m->put();
     return;
   }
 
@@ -4132,7 +4131,6 @@ done:
   sul.unlock();
 
   ldout(cct, 10) << "done" << dendl;
-  m->put();
 }
 
 int Objecter::pool_op_cancel(ceph_tid_t tid, int r)
@@ -4214,14 +4212,13 @@ void Objecter::_poolstat_submit(PoolStatOp *op)
   logger->inc(l_osdc_poolstat_send);
 }
 
-void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
+void Objecter::handle_get_pool_stats_reply(const ref_t<MGetPoolStatsReply>& m)
 {
   ldout(cct, 10) << "handle_get_pool_stats_reply " << *m << dendl;
   ceph_tid_t tid = m->get_tid();
 
   unique_lock wl(rwlock);
   if (!initialized) {
-    m->put();
     return;
   }
 
@@ -4240,7 +4237,6 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     ldout(cct, 10) << "unknown request " << tid << dendl;
   }
   ldout(cct, 10) << "done" << dendl;
-  m->put();
 }
 
 int Objecter::pool_stat_op_cancel(ceph_tid_t tid, int r)

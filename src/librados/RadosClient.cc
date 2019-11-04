@@ -545,7 +545,7 @@ bool librados::RadosClient::_dispatch(Message *m)
     break;
 
   case MSG_LOG:
-    handle_log(static_cast<MLog *>(m));
+    handle_log(ref_cast<MLog>(m, false));
     break;
 
   default:
@@ -1028,7 +1028,7 @@ int librados::RadosClient::monitor_log(const string& level,
   return 0;
 }
 
-void librados::RadosClient::handle_log(MLog *m)
+void librados::RadosClient::handle_log(const ref_t<MLog>& m)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 10) << __func__ << " version " << m->version << dendl;
@@ -1064,8 +1064,6 @@ void librados::RadosClient::handle_log(MLog *m)
 
     monclient.sub_got(log_watch, log_last_version);
   }
-
-  m->put();
 }
 
 int librados::RadosClient::service_daemon_register(

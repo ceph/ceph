@@ -155,7 +155,7 @@ private:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  void _create_sub_incremental(MLog *mlog, int level, version_t sv);
+  void _create_sub_incremental(const ref_t<MLog>& mlog, int level, version_t sv);
 
  public:
   LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 

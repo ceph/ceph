@@ -77,21 +77,18 @@ struct MonOpRequest : public TrackedOp {
   MonOpRequest & operator = (const MonOpRequest &other) = delete;
 
 private:
-  Message *request;
+  ref_t<Message> request;
   utime_t dequeued_time;
   RefCountedPtr session;
   ConnectionRef con;
-  bool forwarded_to_leader;
-  op_type_t op_type;
+  bool forwarded_to_leader = false;
+  op_type_t op_type = OP_TYPE_NONE;
 
-  MonOpRequest(Message *req, OpTracker *tracker) :
+  MonOpRequest(ref_t<Message> req, OpTracker *tracker) :
     TrackedOp(tracker,
       req->get_recv_stamp().is_zero() ?
       ceph_clock_now() : req->get_recv_stamp()),
-    request(req),
-    con(NULL),
-    forwarded_to_leader(false),
-    op_type(OP_TYPE_NONE)
+    request(std::move(req))
   {
     if (req) {
       con = req->get_connection();
@@ -124,16 +121,14 @@ protected:
   }
 
 public:
-  ~MonOpRequest() override {
-    request->put();
-  }
+  ~MonOpRequest() override = default;
 
   MonSession *get_session() const {
     return static_cast<MonSession*>(session.get());
   }
 
   template<class T>
-  T *get_req() const { return static_cast<T*>(request); }
+  T *get_req() const { return static_cast<T*>(request.get()); }
 
   Message *get_req() const { return get_req<Message>(); }
 

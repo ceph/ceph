@@ -330,7 +330,7 @@ bool MonClient::ms_dispatch(Message *m)
     handle_get_version_reply(static_cast<MMonGetVersionReply*>(m));
     break;
   case MSG_MON_COMMAND_ACK:
-    handle_mon_command_ack(static_cast<MMonCommandAck*>(m));
+    handle_mon_command_ack(ref_cast<MMonCommandAck>(m, false));
     break;
   case MSG_COMMAND_REPLY:
     if (m->get_connection()->is_anon() &&
@@ -1205,7 +1205,7 @@ void MonClient::_resend_mon_commands()
   }
 }
 
-void MonClient::handle_mon_command_ack(MMonCommandAck *ack)
+void MonClient::handle_mon_command_ack(const ref_t<MMonCommandAck>& ack)
 {
   MonCommand *r = NULL;
   uint64_t tid = ack->get_tid();
@@ -1217,7 +1217,6 @@ void MonClient::handle_mon_command_ack(MMonCommandAck *ack)
     auto p = mon_commands.find(tid);
     if (p == mon_commands.end()) {
       ldout(cct, 10) << __func__ << " " << ack->get_tid() << " not found" << dendl;
-      ack->put();
       return;
     }
     r = p->second;
@@ -1227,7 +1226,6 @@ void MonClient::handle_mon_command_ack(MMonCommandAck *ack)
   if (r->poutbl)
     r->poutbl->claim(ack->get_data());
   _finish_command(r, ack->r, ack->rs);
-  ack->put();
 }
 
 void MonClient::handle_command_reply(MCommandReply *reply)

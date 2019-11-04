@@ -3938,7 +3938,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
     dout(10) << "forward_request " << rr->tid << " request " << *req
 	     << " features " << rr->con_features << dendl;
 
-    MForward *forward = new MForward(rr->tid,
+    auto forward = make_message<MForward>(rr->tid,
                                      req,
 				     rr->con_features,
 				     rr->session->caps);
@@ -3948,7 +3948,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
     } else if (req->get_source().is_mon()) {
       forward->entity_name.set_type(CEPH_ENTITY_TYPE_MON);
     }
-    send_mon_message(forward, mon);
+    send_mon_message(forward.detach(), mon);
     op->mark_forwarded();
     ceph_assert(op->get_req()->get_type() != 0);
   } else {
@@ -4001,8 +4001,8 @@ void Monitor::handle_forward(MonOpRequestRef op)
   } else {
     // see PaxosService::dispatch(); we rely on this being anon
     // (c->msgr == NULL)
-    PaxosServiceMessage *req = m->claim_message();
-    ceph_assert(req != NULL);
+    auto req = m->claim_message();
+    ceph_assert(req);
 
     auto c = ceph::make_ref<AnonConnection>(cct, m->client_socket_addr);
     MonSession *s = new MonSession(static_cast<Connection*>(c.get()));
@@ -4167,21 +4167,17 @@ void Monitor::resend_routed_requests()
       delete rr;
     } else {
       auto q = rr->request_bl.cbegin();
-      PaxosServiceMessage *req =
-	(PaxosServiceMessage *)decode_message(cct, 0, q);
+      auto req = ref_cast<PaxosServiceMessage>(decode_message(cct, 0, q), false);
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
 	       << dendl;
-      MForward *forward = new MForward(rr->tid,
-				       req,
-				       rr->con_features,
-				       rr->session->caps);
-      req->put();  // forward takes its own ref; drop ours.
+      auto forward = make_message<MForward>(rr->tid, std::move(req),
+          rr->con_features, rr->session->caps);
       forward->client_type = rr->con->get_peer_type();
       forward->client_addrs = rr->con->get_peer_addrs();
       forward->client_socket_addr = rr->con->get_peer_socket_addr();
       forward->set_priority(req->get_priority());
-      send_mon_message(forward, mon);
+      send_mon_message(forward.detach(), mon);
     }
   }
   if (mon == rank) {
@@ -4267,10 +4263,9 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
   }
 }
 
-void Monitor::_ms_dispatch(Message *m)
+void Monitor::_ms_dispatch(const ceph::ref_t<Message>& m)
 {
   if (is_shutdown()) {
-    m->put();
     return;
   }
 
