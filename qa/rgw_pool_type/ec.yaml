@@ -1,7 +1,4 @@
 overrides:
-  ceph:
-    log-whitelist:
-    - \(SLOW_OPS\) # see https://tracker.ceph.com/issues/41834
   rgw:
     ec-data-pool: true
   s3tests:
