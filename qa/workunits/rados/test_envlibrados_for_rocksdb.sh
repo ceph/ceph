@@ -2,29 +2,8 @@
 ############################################
 #			Helper functions
 ############################################
-function install() {
-    for package in "$@" ; do
-        install_one $package
-    done
-    return 0
-}
+source $(dirname $0)/../ceph-helpers-root.sh
 
-function install_one() {
-    case $(lsb_release -si) in
-        Ubuntu|Debian|Devuan)
-            sudo apt-get install -y --force-yes "$@"
-            ;;
-        CentOS|Fedora|RedHatEnterpriseServer)
-            sudo yum install -y "$@"
-            ;;
-        *SUSE*)
-            sudo zypper --non-interactive install "$@"
-            ;;
-        *)
-            echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
-            ;;
-    esac
-}
 ############################################
 #			Install required tools
 ############################################
@@ -38,15 +17,18 @@ CURRENT_PATH=`pwd`
 ############################################
 # install prerequisites
 # for rocksdb
-case $(lsb_release -si) in
-	Ubuntu|Debian|Devuan)
+case $(distro_id) in
+	ubuntu|debian|devuan)
 		install g++ libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev librados-dev
 		;;
-	CentOS|Fedora|RedHatEnterpriseServer)
+	centos|fedora|rhel)
 		install gcc-c++.x86_64 gflags-devel snappy-devel zlib zlib-devel bzip2 bzip2-devel librados2-devel.x86_64
 		;;
+	opensuse*|suse|sles)
+		install gcc-c++ snappy-devel zlib-devel libbz2-devel
+		;;
 	*)
-        echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
+        echo "$(distro_id) is unknown, $@ will have to be installed manually."
         ;;
 esac
 
