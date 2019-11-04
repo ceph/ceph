@@ -3073,13 +3073,20 @@ TEST_F(TestClsRbd, sparsify)
   ASSERT_EQ(0, sparsify(&ioctx, oid, 16, false));
   std::map<uint64_t, uint64_t> m;
   bufferlist outbl;
-  std::map<uint64_t, uint64_t> expected_m = {{0, 0}};
+  std::map<uint64_t, uint64_t> expected_m;
   bufferlist expected_outbl;
-  if (sparse_read_supported) {
+  switch (int r = ioctx.sparse_read(oid, m, outbl, inbl.length(), 0); r) {
+  case 0:
     expected_m = {};
+    ASSERT_EQ(expected_m, m);
+    break;
+  case 1:
+    expected_m = {{0, 0}};
+    ASSERT_EQ(expected_m, m);
+    break;
+  default:
+    FAIL() << r << " is odd";
   }
-  ASSERT_EQ((int)expected_m.size(),
-            ioctx.sparse_read(oid, m, outbl, inbl.length(), 0));
   ASSERT_EQ(m, expected_m);
   ASSERT_EQ(0, sparsify(&ioctx, oid, 16, true));
   ASSERT_EQ(-ENOENT, sparsify(&ioctx, oid, 16, true));
