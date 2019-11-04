@@ -35,6 +35,8 @@ public:
                                  std::optional<rgw_bucket> bucket,
                                  RGWBucketSyncPolicyHandlerRef *handler,
                                  optional_yield y) = 0;
+  virtual int handle_bi_update(RGWBucketInfo& bucket_info,
+                               RGWBucketInfo *orig_bucket_info) = 0;
 };
 
 

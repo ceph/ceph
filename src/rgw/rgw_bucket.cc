@@ -3056,8 +3056,9 @@ int RGWMetadataHandlerPut_BucketInstance::put_post()
   objv_tracker = bci.info.objv_tracker;
 
   int ret = bihandler->svc.bi->init_index(bci.info);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   return STATUS_APPLIED;
 }
@@ -3071,7 +3072,6 @@ public:
     return 0;
   }
 };
-
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,

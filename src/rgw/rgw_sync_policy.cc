@@ -168,6 +168,27 @@ std::vector<rgw_sync_bucket_pipe> rgw_sync_bucket_pipes::expand() const
 }
 
 
+void rgw_sync_bucket_pipes::get_potential_related_buckets(const rgw_bucket& bucket,
+                                                          std::set<rgw_bucket> *sources,
+                                                          std::set<rgw_bucket> *dests) const
+{
+  if (dest.match_bucket(bucket)) {
+    auto expanded_sources = source.expand();
+
+    for (auto& s : expanded_sources) {
+      sources->insert(*s.bucket);
+    }
+  }
+
+  if (source.match_bucket(bucket)) {
+    auto expanded_dests = dest.expand();
+
+    for (auto& d : expanded_dests) {
+      dests->insert(*d.bucket);
+    }
+  }
+}
+
 bool rgw_sync_data_flow_group::find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group)
 {
   if (!symmetrical) {
@@ -317,5 +338,24 @@ void rgw_sync_policy_group::remove_pipe(const string& pipe_id)
       pipes.erase(iter);
       return;
     }
+  }
+}
+
+void rgw_sync_policy_group::get_potential_related_buckets(const rgw_bucket& bucket,
+                                                          std::set<rgw_bucket> *sources,
+                                                          std::set<rgw_bucket> *dests) const
+{
+  for (auto& pipe : pipes) {
+    pipe.get_potential_related_buckets(bucket, sources, dests);
+  }
+}
+
+void rgw_sync_policy_info::get_potential_related_buckets(const rgw_bucket& bucket,
+                                                         std::set<rgw_bucket> *sources,
+                                                         std::set<rgw_bucket> *dests) const
+{
+  for (auto& entry : groups) {
+    auto& group = entry.second;
+    group.get_potential_related_buckets(bucket, sources, dests);
   }
 }
