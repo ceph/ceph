@@ -506,15 +506,23 @@ function interactive_setup_routine {
     local default_val
     local original_github_token
     local original_redmine_key
+    local total_steps
     local yes_or_no_answer
     original_github_token="$github_token"
     original_redmine_key="$redmine_key"
-    maybe_delete_backport_common
+    total_steps="4"
+    if [ -e "$deprecated_backport_common" ] ; then
+        github_token=""
+        redmine_key=""
+        # shellcheck disable=SC1090
+        source "$deprecated_backport_common" 2>/dev/null || true
+        total_steps="$((total_steps+1))"
+    fi
     echo
     echo "Welcome to the ${this_script} interactive setup routine!"
     echo
     echo "---------------------------------------------------------------------"
-    echo "Setup step 1 of 4 - GitHub token"
+    echo "Setup step 1 of $total_steps - GitHub token"
     echo "---------------------------------------------------------------------"
     echo "For information on how to generate a GitHub personal access token"
     echo "to use with this script, go to https://github.com/settings/tokens"
@@ -544,7 +552,7 @@ function interactive_setup_routine {
     [ "$github_user" ] || assert_fail "github_user not set, even after completing Step 1 of interactive setup"
     echo
     echo "---------------------------------------------------------------------"
-    echo "Setup step 2 of 4 - GitHub user"
+    echo "Setup step 2 of $total_steps - GitHub user"
     echo "---------------------------------------------------------------------"
     echo "Based on the GitHub token set in the previous step, the script thinks"
     echo "your GitHub username (login) is:"
@@ -573,7 +581,7 @@ function interactive_setup_routine {
     [ "$github_user" ] || assert_fail "github_user not set, even after completing Steps 1 and 2 of interactive setup"
     echo
     echo "---------------------------------------------------------------------"
-    echo "Setup step 3 of 4 - remote repos"
+    echo "Setup step 3 of $total_steps - remote repos"
     echo "---------------------------------------------------------------------"
     echo "Searching \"git remote -v\" for remote repos"
     echo
@@ -586,7 +594,7 @@ function interactive_setup_routine {
     [ "$fork_remote" ] || assert_fail "fork_remote not set, even after completing Steps 1-3 of interactive setup"
     echo
     echo "---------------------------------------------------------------------"
-    echo "Setup step 4 of 4 - Redmine key"
+    echo "Setup step 4 of $total_steps - Redmine key"
     echo "---------------------------------------------------------------------"
     echo "To generate a Redmine API access key, go to https://tracker.ceph.com"
     echo "After signing in, click: \"My account\""
@@ -624,6 +632,13 @@ function interactive_setup_routine {
     [ "$redmine_key" ] || assert_fail "redmine_key not set, even after completing Steps 1-4 of interactive setup"
     [ "$redmine_user_id" ] || assert_fail "redmine_user_id not set, even after completing Steps 1-4 of interactive setup"
     [ "$redmine_login" ] || assert_fail "redmine_login not set, even after completing Steps 1-4 of interactive setup"
+    if [ "$total_steps" -gt "4" ] ; then
+        echo
+        echo "---------------------------------------------------------------------"
+        echo "Step 5 of $total_steps - delete deprecated $deprecated_backport_common file"
+        echo "---------------------------------------------------------------------"
+    fi
+    maybe_delete_deprecated_backport_common
     vet_setup --interactive
 }
 
@@ -709,42 +724,17 @@ function maybe_deduce_remote {
     echo "$remote"
 }
 
-function maybe_delete_backport_common {
+function maybe_delete_deprecated_backport_common {
     local default_val
     local user_inp
     if [ -e "$deprecated_backport_common" ] ; then
-        echo
-        echo "---------------------------------------------------------------------"
-        echo "Deprecated configuration file detected"
-        echo "---------------------------------------------------------------------"
         echo "You still have a $deprecated_backport_common file,"
         echo "which was used to store configuration parameters in version"
         echo "15.0.0.6270 and earlier versions of ${this_script}."
         echo
-
-        github_token=""
-        redmine_key=""
-        # shellcheck disable=SC1090
-        source "$deprecated_backport_common" 2>/dev/null || true
-
-        if [ "$github_token" ] || [ "$redmine_key" ] ; then
-            github_token="${github_token:-(not set)}"
-            redmine_key="${redmine_key:-(not set)}"
-            echo "This file has been read and the following values extracted:"
-            echo
-            echo "github_token  $github_token"
-            echo "redmine_key   $redmine_key"
-            echo
-            echo "If both of these are shown correctly, no other information is"
-            echo "needed. The values read will be offered as defaults."
-        else
-            echo "This file has been read, but the script could not extract"
-            echo "either the GitHub personal access token, nor the Redmine API"
-            echo "access key from it."
-        fi
-        echo
         echo "Since $deprecated_backport_common has been deprecated in favor"
-        echo "of this interactive setup routine, the file should be deleted now."
+        echo "of the interactive setup routine, which has been completed"
+        echo "successfully, the file should be deleted now."
         echo
         echo -n "Delete it now? (default: y) "
         default_val="y"
@@ -1381,17 +1371,11 @@ init_redmine_key
 setup_ok="OK"
 if [ "$SETUP_OPTION" ] ; then
     vet_setup --report
+    maybe_delete_deprecated_backport_common
     if [ "$setup_ok" ] ; then
         exit 0
     else
         default_val="y"
-        echo "Setup is NOT OK"
-        echo
-        if [ -e "$deprecated_backport_common" ] ; then
-            warning "$deprecated_backport_common file detected"
-            info "Please run the interactive setup routine now."
-            echo
-        fi
         echo -n "Run the interactive setup routine now? (default: ${default_val}) "
         yes_or_no_answer="$(get_user_input "$default_val")"
         [ "$yes_or_no_answer" ] && yes_or_no_answer="${yes_or_no_answer:0:1}"
@@ -1404,6 +1388,7 @@ if [ "$INTERACTIVE_SETUP_ROUTINE" ] ; then
     interactive_setup_routine
 else
     vet_setup --normal-operation
+    maybe_delete_deprecated_backport_common
 fi
 if [ "$INTERACTIVE_SETUP_ROUTINE" ] || [ "$SETUP_OPTION" ] ; then
     echo
