@@ -2331,10 +2331,11 @@ void PGMap::get_health_checks(
   typedef enum pg_consequence_t {
     UNAVAILABLE = 1,   // Client IO to the pool may block
     DEGRADED = 2,      // Fewer than the requested number of replicas are present
-    DEGRADED_FULL = 3, // Fewer than the request number of replicas may be present
-                       //  and insufficiet resources are present to fix this
-    DAMAGED = 4        // The data may be missing or inconsistent on disk and
+    BACKFILL_FULL = 3, // Backfill is blocked for space considerations
+                       // This may or may not be a deadlock condition.
+    DAMAGED = 4,        // The data may be missing or inconsistent on disk and
                        //  requires repair
+    RECOVERY_FULL = 5  // Recovery is blocked because OSDs are full
   } pg_consequence_t;
 
   // For a given PG state, how should it be reported at the pool level?
@@ -2377,8 +2378,8 @@ void PGMap::get_health_checks(
     { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
     { PG_STATE_RECOVERY_UNFOUND, {DAMAGED,     {}} },
     { PG_STATE_BACKFILL_UNFOUND, {DAMAGED,     {}} },
-    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED_FULL, {}} },
-    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED_FULL, {}} },
+    { PG_STATE_BACKFILL_TOOFULL, {BACKFILL_FULL, {}} },
+    { PG_STATE_RECOVERY_TOOFULL, {RECOVERY_FULL, {}} },
     { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
     { PG_STATE_DOWN,             {UNAVAILABLE, {}} },
     // Delayed (wait until stuck) reports
@@ -2522,14 +2523,19 @@ void PGMap::get_health_checks(
         summary = "Degraded data redundancy: ";
         sev = HEALTH_WARN;
         break;
-      case DEGRADED_FULL:
-        health_code = "PG_DEGRADED_FULL";
-        summary = "Degraded data redundancy (low space): ";
-        sev = HEALTH_ERR;
+      case BACKFILL_FULL:
+        health_code = "PG_BACKFILL_FULL";
+        summary = "Low space hindering backfill (add storage if this doesn't resolve itself): ";
+        sev = HEALTH_WARN;
         break;
       case DAMAGED:
         health_code = "PG_DAMAGED";
         summary = "Possible data damage: ";
+        sev = HEALTH_ERR;
+        break;
+      case RECOVERY_FULL:
+        health_code = "PG_RECOVERY_FULL";
+        summary = "Full OSDs blocking recovery: ";
         sev = HEALTH_ERR;
         break;
       default:

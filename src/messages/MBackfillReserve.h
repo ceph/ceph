@@ -30,9 +30,9 @@ public:
   enum {
     REQUEST = 0,   // primary->replica: please reserve a slot
     GRANT = 1,     // replica->primary: ok, i reserved it
-    REJECT = 2,    // replica->primary: sorry, try again later (*)
+    REJECT_TOOFULL = 2,    // replica->primary: too full, sorry, try again later (*)
     RELEASE = 3,   // primary->replcia: release the slot i reserved before
-    TOOFULL = 4,   // replica->primary: too full, stop backfilling
+    REVOKE_TOOFULL = 4,   // replica->primary: too full, stop backfilling
     REVOKE = 5,    // replica->primary: i'm taking back the slot i gave you
     // (*) NOTE: prior to luminous, REJECT was overloaded to also mean release
   };
@@ -63,7 +63,7 @@ public:
 	query_epoch,
 	query_epoch,
 	RemoteBackfillReserved());
-    case REJECT:
+    case REJECT_TOOFULL:
       // NOTE: this is replica -> primary "i reject your request"
       //      and also primary -> replica "cancel my previously-granted request"
       //                                  (for older peers)
@@ -72,13 +72,13 @@ public:
       return new PGPeeringEvent(
 	query_epoch,
 	query_epoch,
-	RemoteReservationRejected());
+	RemoteReservationRejectedTooFull());
     case RELEASE:
       return new PGPeeringEvent(
 	query_epoch,
 	query_epoch,
 	RemoteReservationCanceled());
-    case TOOFULL:
+    case REVOKE_TOOFULL:
       return new PGPeeringEvent(
 	query_epoch,
 	query_epoch,
@@ -119,14 +119,14 @@ public:
     case GRANT:
       out << "GRANT";
       break;
-    case REJECT:
-      out << "REJECT ";
+    case REJECT_TOOFULL:
+      out << "REJECT_TOOFULL";
       break;
     case RELEASE:
       out << "RELEASE";
       break;
-    case TOOFULL:
-      out << "TOOFULL";
+    case REVOKE_TOOFULL:
+      out << "REVOKE_TOOFULL";
       break;
     case REVOKE:
       out << "REVOKE";
@@ -159,8 +159,8 @@ public:
       header.compat_version = 3;
       encode(pgid.pgid, payload);
       encode(query_epoch, payload);
-      encode((type == RELEASE || type == TOOFULL || type == REVOKE) ?
-	       REJECT : type, payload);
+      encode((type == RELEASE || type == REVOKE_TOOFULL || type == REVOKE) ?
+	       REJECT_TOOFULL : type, payload);
       encode(priority, payload);
       encode(pgid.shard, payload);
       return;

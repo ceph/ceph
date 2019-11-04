@@ -69,8 +69,8 @@ map is ``active + clean``.
   The placement group is waiting in line to start backfill.
 
 *backfill_toofull*
-  A backfill operation is waiting because the destination OSD is over its
-  full ratio.
+  A backfill operation is waiting because the destination OSD is over
+  the backfillfull ratio.
 
 *backfill_unfound*
   Backfill stopped due to unfound objects.
