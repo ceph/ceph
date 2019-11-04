@@ -12,6 +12,10 @@
 #include "include/ceph_assert.h"
 #include "common/ceph_time.h"
 
+#ifndef suseconds_t
+typedef long suseconds_t;
+#endif
+
 namespace ceph {
 namespace logging {
 namespace _logclock {
@@ -130,7 +134,7 @@ inline int append_time(const log_time& t, char *out, int outlen) {
   bool coarse = t.time_since_epoch().count().coarse;
   auto tv = log_clock::to_timeval(t);
   std::tm bdt;
-  localtime_r(&tv.tv_sec, &bdt);
+  localtime_r((time_t*)&tv.tv_sec, &bdt);
   char tz[32] = { 0 };
   strftime(tz, sizeof(tz), "%z", &bdt);
 
