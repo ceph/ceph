@@ -41,7 +41,7 @@ def catches(catch=None, handler=None, exit=True):
             some_call()
             print "Success!"
 
-    If multiple exceptions need to be catched they need to be provided as a
+    If multiple exceptions need to be caught they need to be provided as a
     tuple::
 
         @catches((TypeError, AttributeError))
