@@ -717,6 +717,7 @@ class RGWSpec(StatelessServiceSpec):
     """
     def __init__(self,
                  rgw_zone,  # type: str
+                 placement=None,
                  hosts=None,  # type: Optional[List[str]]
                  rgw_multisite=None,  # type: Optional[bool]
                  rgw_zonemaster=None,  # type: Optional[bool]
@@ -734,10 +735,12 @@ class RGWSpec(StatelessServiceSpec):
         # default values that makes sense for Ansible. Rook has default values implemented
         # in Rook itself. Thus we don't set any defaults here in this class.
 
-        super(RGWSpec, self).__init__(name=rgw_zone, count=count)
+        super(RGWSpec, self).__init__(name=rgw_zone, count=count,
+                                      placement=placement)
 
         #: List of hosts where RGWs should run. Not for Rook.
-        self.hosts = hosts
+        if hosts:
+            self.placement.hosts = hosts
 
         #: is multisite
         self.rgw_multisite = rgw_multisite

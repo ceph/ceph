@@ -191,7 +191,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         while True:
             if prefix:
-                name = prefix + '-'
+                name = prefix + '.'
             else:
                 name = ''
             name += ''.join(random.choice(string.ascii_lowercase)
@@ -361,6 +361,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         try:
             # get container image
+            if entity.startswith('rgw.'):
+                entity = 'client.' + entity
             ret, image, err = self.mon_command({
                 'prefix': 'config get',
                 'who': entity,
@@ -475,7 +477,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                     sd.service_instance = host  # e.g., crash
                 if service_id and service_id != sd.service_instance:
                     continue
-                if service_name and not sd.service_instance.startswith(service_name + '-'):
+                if service_name and not sd.service_instance.startswith(service_name + '.'):
                     continue
                 sd.nodename = host
                 sd.container_id = d['container_id']
@@ -492,7 +494,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def describe_service(self, service_type=None, service_id=None,
                          node_name=None, refresh=False):
-        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
+        if service_type not in ("mds", "osd", "mgr", "mon", 'rgw', "nfs", None):
             raise orchestrator.OrchestratorValidationError(
                 service_type + " unsupported")
         result = self._get_services(service_type,
@@ -954,7 +956,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         daemons = self._get_services('mds')
         results = []
         for d in daemons:
-            if d.service_instance == name or d.service_instance.startswith(name + '-'):
+            if d.service_instance == name or d.service_instance.startswith(name + '.'):
                 results.append(self._worker_pool.apply_async(
                     self._remove_mds, (d.service_instance, d.nodename)))
         if not results:
@@ -968,3 +970,77 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             ['--name', name])
         self.log.debug('remove_mds code %s out %s' % (code, out))
         return "Removed {} from host '{}'".format(name, host)
+
+    def add_rgw(self, spec):
+        if len(spec.placement.nodes) < spec.count:
+            raise RuntimeError("must specify at least %d hosts" % spec.count)
+        # ensure rgw_zone is set for these daemons
+        ret, out, err = self.mon_command({
+            'prefix': 'config set',
+            'who': 'client.rgw.' + spec.name,
+            'name': 'rgw_zone',
+            'value': spec.name,
+        })
+        daemons = self._get_services('rgw')
+        results = []
+        num_added = 0
+        for host in spec.placement.nodes:
+            if num_added >= spec.count:
+                break
+            rgw_id = self.get_unique_name(daemons, spec.name)
+            self.log.debug('placing rgw.%s on host %s' % (rgw_id, host))
+            results.append(
+                self._worker_pool.apply_async(self._create_rgw, (rgw_id, host))
+            )
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.ServiceDescription()
+            sd.service_instance = rgw_id
+            sd.service_type = 'rgw'
+            sd.nodename = host
+            daemons.append(sd)
+            num_added += 1
+        return SSHWriteCompletion(results)
+
+    def _create_rgw(self, rgw_id, host):
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.rgw.' + rgw_id,
+            'caps': ['mon', 'allow rw',
+                     'mgr', 'allow rw',
+                     'osd', 'allow rwx'],
+        })
+        return self._create_daemon('rgw', rgw_id, host, keyring)
+
+    def remove_rgw(self, name):
+        daemons = self._get_services('rgw')
+        results = []
+        for d in daemons:
+            if d.service_instance == name or d.service_instance.startswith(name + '.'):
+                results.append(self._worker_pool.apply_async(
+                    self._remove_rgw, (d.service_instance, d.nodename)))
+        if not results:
+            raise RuntimeError('Unable to find rgw.%s[-*] daemon(s)' % name)
+        return SSHWriteCompletion(results)
+
+    def _remove_rgw(self, rgw_id, host):
+        name = 'rgw.' + rgw_id
+        out, code = self._run_ceph_daemon(
+            host, name, 'rm-daemon',
+            ['--name', name])
+        self.log.debug('remove_rgw code %s out %s' % (code, out))
+        return "Removed {} from host '{}'".format(name, host)
+
+    def update_rgw(self, spec):
+        daemons = self._get_services('rgw', service_name=spec.name)
+        results = []
+        if len(daemons) > spec.count:
+            # remove some
+            to_remove = len(daemons) - spec.count
+            for d in daemons[0:to_remove]:
+                results.append(self._worker_pool.apply_async(
+                    self._remove_rgw, (d.service_instance, d.nodename)))
+        elif len(daemons) < spec.count:
+            # add some
+            spec.count -= len(daemons)
+            return self.add_rgw(spec)
+        return SSHWriteCompletion(results)
