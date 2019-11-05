@@ -38,7 +38,7 @@ void MetaSession::enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t
     ceph_seq_t mseq, epoch_t osd_barrier)
 {
   if (!release) {
-    release.reset(new MClientCapRelease, false);
+    release = ceph::make_message<MClientCapRelease>();
   }
 
   if (osd_barrier > release->osd_epoch_barrier) {
