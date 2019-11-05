@@ -174,13 +174,12 @@ class TransitSecretEngine: public VaultSecretEngine {
 private:
   int get_key_version(boost::string_view key_id, string& version)
   {
-    vector<boost::string_view> tokens;
     size_t pos = 0;
 
-    pos = key_id.rfind("/", key_id.length());
+    pos = key_id.rfind("/");
     if (pos != std::string::npos){
-      boost::string_view token = key_id.substr(pos, key_id.length());
-      if (tokens.size() >= 1 && token.find_first_not_of("0123456789") == std::string::npos){
+      boost::string_view token = key_id.substr(pos+1, key_id.length()-pos);
+      if (!token.empty() && token.find_first_not_of("0123456789") == std::string::npos){
         version.assign(std::string(token));
         return 0;
       }
@@ -193,7 +192,7 @@ public:
 
   int get_key(boost::string_view key_id, std::string& actual_key)
   {
-    JSONParser* parser = new JSONParser();
+    JSONParser parser;
     string version;
 
     if (get_key_version(key_id, version) < 0){
@@ -201,12 +200,12 @@ public:
       return -EINVAL;
     }
 
-    int res = send_request(key_id, parser);
+    int res = send_request(key_id, &parser);
     if (res < 0) {
       return res;
     }
 
-    JSONObj* json_obj = &(*parser);
+    JSONObj* json_obj = &parser;
     std::array<std::string, 3> elements = {"data", "keys", version};
     for(const auto& elem : elements) {
       json_obj = json_obj->find_obj(elem);
@@ -246,43 +245,6 @@ public:
       }
     }
     return decode_secret(json_obj, actual_key);
-  }
-
-};
-
-
-class VaultKMS : KMS {
-
-protected:
-  CephContext *cct;
-  VaultSecretEngine *engine;
-
-public:
-  int get_key(boost::string_view key_id, std::string& actual_key) {
-    if (!engine){
-      ldout(cct, 5) << "ERROR: No supported Vault Secret Engine found" << dendl;
-      return -EINVAL;
-    }
-    return engine->get_key(key_id, actual_key);
-  }
-
-  VaultKMS(CephContext *cct) {
-    std::string secret_engine = cct->_conf->rgw_crypt_vault_secret_engine;
-
-    ldout(cct, 10) << "Selected " << secret_engine << " secret engine" << dendl;
-
-    if (RGW_SSE_KMS_VAULT_SE_KV == secret_engine)
-      engine = new KvSecretEngine(cct);
-    else if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine)
-      engine = new TransitSecretEngine(cct);
-    else
-      ldout(cct, 0) << "Missing or invalid secret engine" << dendl;
-
-    this->cct = cct;
-  }
-
-  ~VaultKMS(){
-    delete engine;
   }
 
 };
@@ -401,13 +363,24 @@ static int get_actual_key_from_vault(CephContext *cct,
                                      boost::string_view key_id,
                                      std::string& actual_key)
 {
+  std::string secret_engine = cct->_conf->rgw_crypt_vault_secret_engine;
   ldout(cct, 20) << "Vault authentication method: " << cct->_conf->rgw_crypt_vault_auth << dendl;
-  ldout(cct, 20) << "Vault Secrets Engine: " << cct->_conf->rgw_crypt_vault_secret_engine << dendl;
-  VaultKMS *kms = new VaultKMS(cct);
-  int res = kms->get_key(key_id, actual_key);
-  delete kms;
-  return res;
+  ldout(cct, 20) << "Vault Secrets Engine: " << secret_engine << dendl;
+
+  if (RGW_SSE_KMS_VAULT_SE_KV == secret_engine){
+    KvSecretEngine engine(cct);
+    return engine.get_key(key_id, actual_key);
+  }
+  else if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
+    TransitSecretEngine engine(cct);
+    return engine.get_key(key_id, actual_key);
+  }
+  else{
+    ldout(cct, 0) << "Missing or invalid secret engine" << dendl;
+    return -EINVAL;
+  }
 }
+
 
 int get_actual_key_from_kms(CephContext *cct,
                             boost::string_view key_id,
