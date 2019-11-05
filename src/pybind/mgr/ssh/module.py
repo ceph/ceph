@@ -735,6 +735,17 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return SSHWriteCompletion(result)
 
+    def remove_osds(self, name):
+        daemons = self._get_services('osd', service_id=name)
+        results = []
+        for d in daemons:
+            results.append(self._worker_pool.apply_async(
+                self._remove_daemon,
+                ('osd.%s' % d.service_instance, d.nodename)))
+        if not results:
+            raise OrchestratorError('Unable to find osd.%s' % name)
+        return SSHWriteCompletion(results)
+
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
                        extra_args=[]):
         conn = self._get_connection(host)
