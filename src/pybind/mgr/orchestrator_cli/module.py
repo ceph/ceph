@@ -251,8 +251,8 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout=json.dumps(data))
         else:
             table = PrettyTable(
-                ['NAME', 'HOST', 'CONTAINER', 'VERSION', 'STATUS',
-                 'DESCRIPTION'],
+                ['NAME', 'HOST', 'STATUS',
+                 'VERSION', 'IMAGE NAME', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
@@ -268,10 +268,11 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                 table.add_row((
                     s.name(),
                     ukn(s.nodename),
-                    ukn(s.container_id),
-                    ukn(s.version),
                     status,
-                    ukn(s.status_desc)))
+                    ukn(s.version),
+                    ukn(s.container_image_name),
+                    ukn(s.container_image_id)[0:12],
+                    ukn(s.container_id)[0:12]))
 
             return HandleCommandResult(stdout=table.get_string())
 

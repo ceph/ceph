@@ -723,15 +723,21 @@ class ServiceDescription(object):
     has decided the service should run.
     """
 
-    def __init__(self, nodename=None, container_id=None, service=None, service_instance=None,
+    def __init__(self, nodename=None,
+                 container_id=None, container_image_id=None,
+                 container_image_name=None,
+                 service=None, service_instance=None,
                  service_type=None, version=None, rados_config_location=None,
                  service_url=None, status=None, status_desc=None):
         # Node is at the same granularity as InventoryNode
         self.nodename = nodename
 
         # Not everyone runs in containers, but enough people do to
-        # justify having this field here.
-        self.container_id = container_id
+        # justify having the container_id (runtime id) and container_image
+        # (image name)
+        self.container_id = container_id                  # runtime id
+        self.container_image_id = container_image_id      # image hash
+        self.container_image_name = container_image_name  # image friendly name
 
         # Some services can be deployed in groups. For example, mds's can
         # have an active and standby daemons, and nfs-ganesha can run daemons
