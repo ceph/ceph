@@ -368,11 +368,12 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
   return 0;
 }
 
-/// A method to reset the user.buckets header stats in accordance to the values
-/// seen in the user.buckets omap keys. This will not be equivalent to --sync-stats
-/// which requires comparing the values with actual bucket meta stats supplied
-/// by RGW
-static int cls_user_reset_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out /*ignore*/)
+/// A method to reset the user.buckets header stats in accordance to
+/// the values seen in the user.buckets omap keys. This is not be
+/// equivalent to --sync-stats which also re-calculates the stats for
+/// each bucket.
+static int cls_user_reset_stats(cls_method_context_t hctx,
+				bufferlist *in, bufferlist *out /*ignore*/)
 {
   cls_user_reset_stats_op op;
 
@@ -380,27 +381,33 @@ static int cls_user_reset_stats(cls_method_context_t hctx, bufferlist *in, buffe
     auto bliter = in->begin();
     ::decode(op, bliter);
   } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: cls_user_reset_op(): failed to decode op");
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
+
   cls_user_header header;
   bool truncated = false;
   string from_index, prefix;
   do {
     map<string, bufferlist> keys;
-    int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES, &keys, &truncated);
-
-    if (rc < 0)
+    int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
+				  &keys, &truncated);
+    if (rc < 0) {
+      CLS_LOG(0, "ERROR: %s failed to retrieve omap key-values", __func__);
       return rc;
+    }
+    CLS_LOG(20, "%s: read %lu key-values, truncated=%d",
+	    __func__, keys.size(), truncated);
 
-    for (const auto&kv : keys){
+    for (const auto& kv : keys) {
       cls_user_bucket_entry e;
       try {
 	auto bl = kv.second;
 	auto bliter = bl.begin();
 	decode(e, bliter);
       } catch (buffer::error& err) {
-	CLS_LOG(0, "ERROR: failed to decode bucket entry for %s", kv.first.c_str());
+	CLS_LOG(0, "ERROR: %s failed to decode bucket entry for %s",
+		__func__, kv.first.c_str());
 	return -EIO;
       }
       add_header_stats(&header.stats, e);
@@ -411,6 +418,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx, bufferlist *in, buffe
   header.last_stats_update = op.time;
   ::encode(header, bl);
 
+  CLS_LOG(20, "%s: updating header", __func__);
   return cls_cxx_map_write_header(hctx, &bl);
 }
 
