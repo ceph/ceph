@@ -353,7 +353,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def _run_ceph_daemon(self, host, entity, command, args,
                          stdin=None,
-                         no_fsid=False):
+                         no_fsid=False,
+                         error_ok=False):
         """
         Run ceph-daemon on the remote host with the given command + args
         """
@@ -392,6 +393,10 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 ['/usr/bin/python', '-u'],
                 stdin=script.encode('utf-8'))
             self.log.debug('exit code %s out %s err %s' % (code, out, err))
+            if code and not error_ok:
+                raise RuntimeError(
+                    'ceph-daemon exited with an error code: %d, stderr:%s' % (
+                        code, '\n'.join(err)))
             return out, code
 
         except Exception as ex:
@@ -553,7 +558,8 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         for a in actions[action]:
             out, code = self._run_ceph_daemon(
                 host, name, 'unit',
-                ['--name', name, a])
+                ['--name', name, a],
+                error_ok=True)
             self.log.debug('_service_action code %s out %s' % (code, out))
         return "{} {} from host '{}'".format(action, name, host)
 
