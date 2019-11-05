@@ -248,6 +248,6 @@ export class OsdService {
       'safe-to-destroy': boolean;
       message?: string;
     }
-    return this.http.get<SafeToDestroyResponse>(`${this.path}/${ids}/safe_to_destroy`);
+    return this.http.get<SafeToDestroyResponse>(`${this.path}/safe_to_destroy?ids=${ids}`);
   }
 }
