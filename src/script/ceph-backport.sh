@@ -23,10 +23,12 @@ full_path="$0"
 
 SCRIPT_VERSION="15.0.0.6814"
 active_milestones=""
+backport_pr_labels=""
 backport_pr_number=""
 backport_pr_title=""
 backport_pr_url=""
 deprecated_backport_common="$HOME/bin/backport_common.sh"
+existing_pr_milestone_number=""
 github_token=""
 github_token_file="$HOME/.github_token"
 github_token_ok=""
@@ -103,6 +105,26 @@ function assert_fail {
     error "(internal error) $message"
     info "This could be reported as a bug!"
     false
+}
+
+function backport_pr_needs_label {
+    local check_label="$1"
+    local label
+    local needs_label="yes"
+    while read -r label ; do
+        if [ "$label" = "$check_label" ] ; then
+            needs_label=""
+        fi
+    done <<< "$backport_pr_labels"
+    echo "$needs_label"
+}
+
+function backport_pr_needs_milestone {
+    if [ "$existing_pr_milestone_number" ] ; then
+        echo ""
+    else
+        echo "yes"
+    fi
 }
 
 function bail_out_github_api {
@@ -342,6 +364,11 @@ function existing_pr_routine {
         error "could not get PR title of existing PR ${backport_pr_number}"
         bail_out_github_api "$remote_api_output"
     fi
+    existing_pr_milestone_number="$(echo "$remote_api_output" | jq -r '.milestone.number')"
+    if [ "$existing_pr_milestone_number" = "null" ] ; then
+        existing_pr_milestone_number=""
+    fi
+    backport_pr_labels="$(echo "$remote_api_output" | jq -r '.labels[].name')"
     pr_body="$(echo "$remote_api_output" | jq -r '.body')"
     if [ "$pr_body" = "null" ] ; then
         error "could not get PR body of existing PR ${backport_pr_number}"
@@ -404,7 +431,7 @@ $clipped_pr_body
 
 updated using ceph-backport.sh version ${SCRIPT_VERSION}"
     fi
-    maybe_update_pr_title_body "${backport_pr_number}" "${new_pr_title}" "${new_pr_body}"
+    maybe_update_pr_title_body "${new_pr_title}" "${new_pr_body}"
 }
 
 function failed_mandatory_var_check {
@@ -765,10 +792,11 @@ function maybe_delete_deprecated_backport_common {
 }
 
 function maybe_update_pr_milestone_labels {
-    local pr_number="$1"
-    local pr_url
     local component
     local data_binary
+    local data_binary
+    local label
+    local needs_milestone
     if [ "$EXPLICIT_COMPONENT" ] ; then
         debug "Component given on command line: using it"
         component="$EXPLICIT_COMPONENT"
@@ -776,21 +804,40 @@ function maybe_update_pr_milestone_labels {
         debug "Attempting to guess component"
         component=$(guess_component "$backport_pr_title")
     fi
-    pr_url="$(number_to_url "github" "${pr_number}")"
-    if [ "$component" ] ; then
-        debug "Attempting to set ${component} label and ${milestone} milestone in ${pr_url}"
-        data_binary='{"milestone":'$milestone_number',"labels":["'$component'"]}'
+    data_binary="{"
+    needs_milestone="$(backport_pr_needs_milestone)"
+    if [ "$needs_milestone" ] ; then
+        debug "Attempting to set ${milestone} milestone in ${backport_pr_url}"
+        data_binary="${data_binary}\"milestone\":${milestone_number}"
     else
-        debug "Attempting to set ${milestone} milestone in ${pr_url}"
-        data_binary='{"milestone":'$milestone_number'}'
+        info "Backport PR ${backport_pr_url} already has ${milestone} milestone"
     fi
-    blindly_set_pr_metadata "$pr_number" "$data_binary"
+    if [ "$(backport_pr_needs_label "$component")" ] ; then
+        debug "Attempting to add ${component} label to ${backport_pr_url}"
+        if [ "$needs_milestone" ] ; then
+            data_binary="${data_binary},"
+        fi
+        data_binary="${data_binary}\"labels\":[\"${component}\""
+        while read -r label ; do
+            if [ "$label" ] ; then
+                data_binary="${data_binary},\"${label}\""
+            fi
+        done <<< "$backport_pr_labels"
+        data_binary="${data_binary}]}"
+    else
+        info "Backport PR ${backport_pr_url} already has label ${component}"
+        data_binary="${data_binary}}"
+    fi
+    if [ "$data_binary" = "{}" ] ; then
+        true
+    else
+        blindly_set_pr_metadata "$backport_pr_number" "$data_binary"
+    fi
 }
 
 function maybe_update_pr_title_body {
-    local pr_number="$1"
-    local new_title="$2"
-    local new_body="$3"
+    local new_title="$1"
+    local new_body="$2"
     local data_binary
     if [ "$new_title" ] && [ "$new_body" ] ; then
         data_binary="{\"title\":\"${new_title}\", \"body\":\"$(munge_body "${new_body}")\"}"
@@ -803,7 +850,7 @@ function maybe_update_pr_title_body {
         #echo -n "${data_binary}"
     fi
     if [ "$data_binary" ] ; then
-        blindly_set_pr_metadata "${pr_number}" "$data_binary"
+        blindly_set_pr_metadata "${backport_pr_number}" "$data_binary"
     fi
 }
 
@@ -1515,7 +1562,6 @@ fi
 info "milestone/release is $milestone"
 debug "milestone number is $milestone_number"
 
-
 if [ "$CHERRY_PICK_PHASE" ] ; then
     local_branch=wip-${issue}-${target_branch}
     if git show-ref --verify --quiet "refs/heads/$local_branch" ; then
@@ -1603,7 +1649,7 @@ if [ "$EXISTING_PR" ] ; then
 fi
 
 if [ "$PR_PHASE" ] || [ "$EXISTING_PR" ] ; then
-    maybe_update_pr_milestone_labels "${backport_pr_number}"
+    maybe_update_pr_milestone_labels
     pgrep firefox >/dev/null && firefox "${backport_pr_url}"
 fi
 
