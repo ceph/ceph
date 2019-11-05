@@ -22,8 +22,16 @@ import orchestrator
 
 class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = [
-        {'name': 'orchestrator'}
+        {
+            'name': 'orchestrator',
+            'default': None,
+            'desc': 'Orchestrator backend',
+            'enum_allowed': ['ssh', 'rook', 'ansible', 'deepsea',
+                             'test_orchestrator'],
+            'runtime': True,
+        },
     ]
+    NATIVE_OPTIONS = []
 
     def __init__(self, *args, **kwargs):
         super(OrchestratorCli, self).__init__(*args, **kwargs)
