@@ -89,7 +89,10 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
             key_filename = opts['identityfile']
 
     if key_filename:
-        connect_args['key_filename'] = os.path.expanduser(key_filename)
+        if not isinstance(key_filename, list):
+            key_filename = [key_filename]
+        key_filename = [os.path.expanduser(f) for f in key_filename]
+        connect_args['key_filename'] = key_filename
 
     log.debug(connect_args)
 
