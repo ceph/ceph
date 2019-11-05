@@ -617,8 +617,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if service_name and not sd.service_instance.startswith(service_name + '.'):
                     continue
                 sd.nodename = host
-                sd.container_id = d['container_id']
-                sd.version = d['version']
+                sd.container_id = d.get('container_id')
+                sd.container_image_name = d.get('container_image_name')
+                sd.container_image_id = d.get('container_image_id')
+                sd.version = d.get('version')
                 sd.status_desc = d['state']
                 sd.status = {
                     'running': 1,
