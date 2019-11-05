@@ -1,2 +1,1 @@
-os_type: rhel
-os_version: "8.0"
+../all/rhel_8.0.yaml
