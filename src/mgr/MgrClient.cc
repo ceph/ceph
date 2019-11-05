@@ -574,7 +574,7 @@ int MgrClient::service_daemon_register(
   daemon_dirty_status = true;
 
   // late register?
-  if (msgr->get_mytype() != CEPH_ENTITY_TYPE_CLIENT && session && session->con) {
+  if (msgr->get_mytype() == CEPH_ENTITY_TYPE_CLIENT && session && session->con) {
     _send_open();
   }
 
