@@ -273,6 +273,7 @@ def dmsetup_splitname(dev):
 #
 ################################
 
+PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
 def get_api_pvs():
     """
@@ -288,14 +289,13 @@ def get_api_pvs():
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
-    fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
-
     stdout, stderr, returncode = process.call(
-        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields],
+        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o',
+         PV_FIELDS],
         verbose_on_failure=False
     )
 
-    return _output_parser(stdout, fields)
+    return _output_parser(stdout, PV_FIELDS)
 
 
 class PVolume(object):
@@ -516,6 +516,9 @@ def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
 #
 #############################
 
+#TODO add vg_extent_size here to have that available in VolumeGroup class
+VG_FIELDS = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
+
 
 def get_api_vgs():
     """
@@ -532,13 +535,12 @@ def get_api_vgs():
     To normalize sizing, the units are forced in 'g' which is equivalent to
     gigabytes, which uses multiples of 1024 (as opposed to 1000)
     """
-    #TODO add vg_extent_size here to have that available in VolumeGroup class
-    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields],
+        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"',
+         '-o', VG_FIELDS],
         verbose_on_failure=False
     )
-    return _output_parser(stdout, fields)
+    return _output_parser(stdout, VG_FIELDS)
 
 
 class VolumeGroup(object):
@@ -861,13 +863,12 @@ def get_vg(vg_name=None, vg_tags=None, vgs=None):
 
 
 def get_device_vgs(device, name_prefix=''):
-    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
     stdout, stderr, returncode = process.call(
         ['pvs', '--noheadings', '--readonly', '--units=g', '--separator=";"',
-         '-o', fields, device],
+         '-o', VG_FIELDS, device],
         verbose_on_failure=False
     )
-    vgs = _output_parser(stdout, fields)
+    vgs = _output_parser(stdout, VG_FIELDS)
     return [VolumeGroup(**vg) for vg in vgs]
 
 
@@ -878,6 +879,7 @@ def get_device_vgs(device, name_prefix=''):
 #
 ###############################
 
+LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
 
 def get_api_lvs():
     """
@@ -891,12 +893,12 @@ def get_api_lvs():
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
-    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o', fields],
+        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o',
+         LV_FIELDS],
         verbose_on_failure=False
     )
-    return _output_parser(stdout, fields)
+    return _output_parser(stdout, LV_FIELDS)
 
 
 class Volume(object):
