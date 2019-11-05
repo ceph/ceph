@@ -1712,6 +1712,13 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two pg_num value"),
 
+    Option("mon_warn_on_pool_no_redundancy", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("Issue a health warning if any pool is configured with no replicas")
+    .add_see_also("osd_pool_default_size")
+    .add_see_also("osd_pool_default_min_size"),
+
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mgr")

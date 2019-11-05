@@ -5915,6 +5915,27 @@ void OSDMap::check_health(CephContext *cct,
       d.detail.swap(detail);
     }
   }
+
+  // POOL_NO_REDUNDANCY
+  if (cct->_conf.get_val<bool>("mon_warn_on_pool_no_redundancy"))
+  {
+    list<string> detail;
+    for (auto it : get_pools()) {
+      if (it.second.get_size() == 1) {
+        ostringstream ss;
+        ss << "pool '" << get_pool_name(it.first)
+           << "' has no replicas configured";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have no replicas configured";
+      auto& d = checks->add("POOL_NO_REDUNDANCY", HEALTH_WARN,
+        ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
 }
 
 int OSDMap::parse_osd_id_list(const vector<string>& ls, set<int> *out,
