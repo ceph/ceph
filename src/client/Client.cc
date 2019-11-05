@@ -3222,8 +3222,10 @@ void Client::put_cap_ref(Inode *in, int cap)
   }
 }
 
-int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
+int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 {
+  Inode *in = fh->inode.get();
+
   int r = check_pool_perm(in, need);
   if (r < 0)
     return r;
@@ -3236,6 +3238,9 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 		     << dendl;
       return -EBADF;
     }
+
+    if ((in->flags & I_ERROR_FILELOCK) && fh->has_any_filelocks())
+      return -EIO;
 
     int implemented;
     int have = in->caps_issued(&implemented);
@@ -8907,7 +8912,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
       if (cmode & CEPH_FILE_MODE_RD)
         need |= CEPH_CAP_FILE_RD;
 
-      result = get_caps(in, need, want, &have, -1);
+      Fh fh(in, flags, cmode, perms);
+      result = get_caps(&fh, need, want, &have, -1);
       if (result < 0) {
 	ldout(cct, 8) << "Unable to get caps after open of inode " << *in <<
 			  " . Denying open: " <<
@@ -9238,7 +9244,7 @@ retry:
     want = CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO;
   else
     want = CEPH_CAP_FILE_CACHE;
-  r = get_caps(in, CEPH_CAP_FILE_RD, want, &have, -1);
+  r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1);
   if (r < 0) {
     goto done;
   }
@@ -9668,7 +9674,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO;
   else
     want = CEPH_CAP_FILE_BUFFER;
-  int r = get_caps(in, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
+  int r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
   if (r < 0)
     return r;
 
@@ -13616,7 +13622,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   }
 
   int have;
-  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, -1);
+  int r = get_caps(fh, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, -1);
   if (r < 0)
     return r;
 
