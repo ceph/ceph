@@ -22,7 +22,7 @@
 #include <string>
 
 
-class MDiscover : public Message {
+class MDiscover : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -50,14 +50,14 @@ private:
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
 protected:
-  MDiscover() : Message(MSG_MDS_DISCOVER, HEAD_VERSION, COMPAT_VERSION) { }
+  MDiscover() : SafeMessage(MSG_MDS_DISCOVER, HEAD_VERSION, COMPAT_VERSION) { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
 	    snapid_t s,
             filepath& want_path_,
             bool want_base_dir_ = true,
 	    bool discover_xlocks_ = false) :
-    Message{MSG_MDS_DISCOVER},
+    SafeMessage{MSG_MDS_DISCOVER},
     base_ino(base_ino_),
     base_dir_frag(base_frag_),
     snapid(s),

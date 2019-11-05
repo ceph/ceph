@@ -3959,15 +3959,13 @@ void MDCache::rejoin_send_rejoins()
 
   // if i am rejoining, send a rejoin to everyone.
   // otherwise, just send to others who are rejoining.
-  for (set<mds_rank_t>::iterator p = recovery_set.begin();
-       p != recovery_set.end();
-       ++p) {
-    if (*p == mds->get_nodeid())  continue;  // nothing to myself!
-    if (rejoin_sent.count(*p)) continue;     // already sent a rejoin to this node!
+  for (const auto& rank : recovery_set) {
+    if (rank == mds->get_nodeid())  continue;  // nothing to myself!
+    if (rejoin_sent.count(rank)) continue;     // already sent a rejoin to this node!
     if (mds->is_rejoin())
-      rejoins[*p] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_WEAK);
-    else if (mds->mdsmap->is_rejoin(*p))
-      rejoins[*p] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_STRONG);
+      rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_WEAK);
+    else if (mds->mdsmap->is_rejoin(rank))
+      rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_STRONG);
   }
 
   if (mds->is_rejoin()) {
@@ -4092,7 +4090,7 @@ void MDCache::rejoin_send_rejoins()
 	if (!q.first->is_auth()) {
 	  ceph_assert(q.second == q.first->authority().first);
 	  if (rejoins.count(q.second) == 0) continue;
-	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[q.second];
+	  const auto& rejoin = rejoins[q.second];
 	  
 	  dout(15) << " " << *mdr << " authpin on " << *q.first << dendl;
 	  MDSCacheObjectInfo i;
@@ -4115,7 +4113,7 @@ void MDCache::rejoin_send_rejoins()
 	if (q.is_xlock() && !obj->is_auth()) {
 	  mds_rank_t who = obj->authority().first;
 	  if (rejoins.count(who) == 0) continue;
-	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[who];
+	  const auto& rejoin = rejoins[who];
 	  
 	  dout(15) << " " << *mdr << " xlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -4129,7 +4127,7 @@ void MDCache::rejoin_send_rejoins()
 	} else if (q.is_remote_wrlock()) {
 	  mds_rank_t who = q.wrlock_target;
 	  if (rejoins.count(who) == 0) continue;
-	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[who];
+	  const auto& rejoin = rejoins[who];
 
 	  dout(15) << " " << *mdr << " wrlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -4700,7 +4698,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
     
     const auto it = strong->strong_dentries.find(dirfrag);
     if (it != strong->strong_dentries.end()) {
-      const map<string_snap_t,MMDSCacheRejoin::dn_strong>& dmap = it->second;
+      const auto& dmap = it->second;
       for (const auto &q : dmap) {
         const string_snap_t& ss = q.first;
         const MMDSCacheRejoin::dn_strong& d = q.second;

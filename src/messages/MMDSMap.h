@@ -20,7 +20,7 @@
 #include "mds/MDSMap.h"
 #include "include/ceph_features.h"
 
-class MMDSMap : public Message {
+class MMDSMap : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -34,9 +34,9 @@ public:
 
 protected:
   MMDSMap() : 
-    Message{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
+    SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSMap(const uuid_d &f, const MDSMap &mm) :
-    Message{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
+    SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
     fsid(f) {
     epoch = mm.get_epoch();
     mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
