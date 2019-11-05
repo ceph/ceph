@@ -47,13 +47,4 @@ protected:
   virtual int send_request(boost::string_view key_id, JSONParser* parser) = 0;
   virtual int decode_secret(JSONObj* json_obj, std::string& actual_key) = 0;
 };
-
-class KMS {
-
-public:
-  virtual int get_key(boost::string_view key_id, std::string& actual_key) = 0;
-  virtual ~KMS(){};
-};
-
-
 #endif
