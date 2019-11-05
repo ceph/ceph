@@ -230,8 +230,12 @@ def find_program(filename):
         raise ValueError('%s not found' % filename)
     return name
 
-def get_unit_name(fsid, daemon_type, daemon_id):
-    return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
+def get_unit_name(fsid, daemon_type, daemon_id=None):
+    # accept either name or type + id
+    if daemon_id is not None:
+        return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
+    else:
+        return 'ceph-%s@%s' % (fsid, daemon_type)
 
 def check_unit(unit_name):
     # NOTE: we ignore the exit code here because systemctl outputs
@@ -1274,8 +1278,12 @@ def command_unit():
 ##################################
 
 def command_ls():
-    ls = []
     host_version = None
+    ls = list_daemons()
+    print(json.dumps(ls, indent=4))
+
+def list_daemons():
+    ls = []
 
     # /var/lib/ceph
     if os.path.exists(args.data_dir):
@@ -1346,8 +1354,8 @@ def command_ls():
 
     # /var/lib/rook
     # WRITE ME
+    return ls
 
-    print(json.dumps(ls, indent=4))
 
 ##################################
 
@@ -1412,8 +1420,12 @@ def command_rm_daemon():
         raise RuntimeError('must pass --force to proceed: '
                            'this command may destroy precious data!')
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
-    call_throws(['systemctl', 'stop', unit_name])
-    call_throws(['systemctl', 'disable', unit_name])
+    call(['systemctl', 'stop', unit_name],
+         verbose_on_failure=False)
+    call(['systemctl', 'reset-failed', unit_name],
+         verbose_on_failure=False)
+    call(['systemctl', 'disable', unit_name],
+         verbose_on_failure=False)
     data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
     call_throws(['rm', '-rf', data_dir])
 
@@ -1424,7 +1436,21 @@ def command_rm_cluster():
         raise RuntimeError('must pass --force to proceed: '
                            'this command may destroy precious data!')
 
-    # ignore errors here
+    # stop + disable individual daemon units
+    for d in list_daemons():
+        if d['fsid'] != args.fsid:
+            continue
+        if d['style'] != 'ceph-daemon:v1':
+            continue
+        unit_name = get_unit_name(args.fsid, d['name'])
+        call(['systemctl', 'stop', unit_name],
+             verbose_on_failure=False)
+        call(['systemctl', 'reset-failed', unit_name],
+             verbose_on_failure=False)
+        call(['systemctl', 'disable', unit_name],
+             verbose_on_failure=False)
+
+    # cluster units
     for unit_name in ['ceph-%s.target' % args.fsid,
                       'ceph-%s-crash.service' % args.fsid]:
         call(['systemctl', 'stop', unit_name],
@@ -1438,8 +1464,6 @@ def command_rm_cluster():
                                                                       '\\x2d'))
     call(['systemctl', 'stop', slice_name],
          verbose_on_failure=False)
-
-    # FIXME: stop + disable individual daemon units, too?
 
     # rm units
     call_throws(['rm', '-f', args.unit_dir +
