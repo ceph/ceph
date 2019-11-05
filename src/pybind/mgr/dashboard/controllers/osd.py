@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-from . import ApiController, RESTController, UpdatePermission
+import json
+from . import ApiController, RESTController, Endpoint, ReadPermission, UpdatePermission
 from .. import mgr, logger
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
@@ -199,18 +200,23 @@ class Osd(RESTController):
         CephService.send_command(
             'mon', 'osd destroy-actual', id=int(svc_id), yes_i_really_mean_it=True)
 
-    @RESTController.Resource('GET')
-    def safe_to_destroy(self, svc_id):
+    @Endpoint('GET', query_params=['ids'])
+    @ReadPermission
+    def safe_to_destroy(self, ids):
         """
-        :type svc_id: int|[int]
+        :type ids: int|[int]
         """
-        if not isinstance(svc_id, list):
-            svc_id = [svc_id]
-        svc_id = list(map(str, svc_id))
+
+        ids = json.loads(ids)
+        if isinstance(ids, list):
+            ids = list(map(str, ids))
+        else:
+            ids = [str(ids)]
+
         try:
             result = CephService.send_command(
-                'mon', 'osd safe-to-destroy', ids=svc_id, target=('mgr', ''))
-            result['is_safe_to_destroy'] = set(result['safe_to_destroy']) == set(map(int, svc_id))
+                'mon', 'osd safe-to-destroy', ids=ids, target=('mgr', ''))
+            result['is_safe_to_destroy'] = set(result['safe_to_destroy']) == set(map(int, ids))
             return result
 
         except SendCommandError as e:
