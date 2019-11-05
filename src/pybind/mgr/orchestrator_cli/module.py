@@ -47,8 +47,37 @@ _write_cli = _cli_command('rw')
 
 class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = [
-        {'name': 'orchestrator'}
+        {
+            'name': 'orchestrator',
+            'default': None,
+            'desc': 'Orchestrator backend',
+            'enum_allowed': ['ssh', 'rook', 'ansible', 'deepsea'],
+            'runtime': True,
+        },
     ]
+    NATIVE_OPTIONS = []
+
+    def __init__(self, *args, **kwargs):
+        super(OrchestratorCli, self).__init__(*args, **kwargs)
+
+        # ensure config options members are initialized; see config_notify()
+        self.config_notify()
+
+    def config_notify(self):
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']) or opt['default'])
+            self.log.debug(' mgr option %s = %s',
+                           opt['name'], getattr(self, opt['name']))
+        for opt in self.NATIVE_OPTIONS:
+            setattr(self,
+                    opt,
+                    self.get_ceph_option(opt))
+            self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
     def __init__(self, *args, **kwargs):
         super(OrchestratorCli, self).__init__(*args, **kwargs)
@@ -165,7 +194,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return self.light_off(light_type, devid, force)
 
     def _select_orchestrator(self):
-        return self.get_module_option("orchestrator")
+        return self.orchestrator
 
     @_write_cli('orchestrator host add',
                 "name=host,type=CephString,req=true",
@@ -609,6 +638,7 @@ Usage:
 
         if module_name is None or module_name == "":
             self.set_module_option("orchestrator", None)
+            self.orchestrator = None
             return HandleCommandResult()
 
         for module in mgr_map['available_modules']:
@@ -636,6 +666,7 @@ Usage:
                                            stderr="'{0}' is not an orchestrator module".format(module_name))
 
             self.set_module_option("orchestrator", module_name)
+            self.orchestrator = module_name
 
             return HandleCommandResult()
 
@@ -644,7 +675,7 @@ Usage:
     @_read_cli('orchestrator status',
                desc='Report configured backend and its status')
     def _status(self):
-        o = self._select_orchestrator()
+        o = self.orchestrator
         if o is None:
             raise orchestrator.NoOrchestrator()
 
@@ -659,9 +690,9 @@ Usage:
                                        ))
 
     def self_test(self):
-        old_orch = self._select_orchestrator()
+        old_orch = self.orchestrator
         self._set_backend('')
-        assert self._select_orchestrator() is None
+        assert self.orchestrator is None
         self._set_backend(old_orch)
 
         e = self.remote('selftest', 'remote_from_orchestrator_cli_self_test', "ZeroDivisionError")
