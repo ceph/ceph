@@ -2643,7 +2643,9 @@ will start to track new ops received afterwards.";
   } else if (prefix == "smart") {
     string devid;
     cmd_getval(cct, cmdmap, "devid", devid);
-    probe_smart(devid, ss);
+    ostringstream out;
+    probe_smart(devid, out);
+    outbl.append(out.str());
   } else if (prefix == "list_devices") {
     set<string> devnames;
     store->get_devices(&devnames);
