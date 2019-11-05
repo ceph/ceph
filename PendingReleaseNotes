@@ -15,3 +15,14 @@
     ceph osd pool set <pool-name> pg_autoscale_mode warn
 
 * The format of MDSs in `ceph fs dump` has changed.
+
+* Ceph will issue a health warning if a RADOS pool's ``size`` is set to 1
+  or in other words the pool is configured with no redundancy. This can
+  be fixed by setting the pool size to the minimum recommended value
+  with::
+
+    ceph osd pool set <pool-name> size <num-replicas>
+
+  The warning can be silenced with::
+
+    ceph config set global mon_warn_on_pool_no_redundancy false
