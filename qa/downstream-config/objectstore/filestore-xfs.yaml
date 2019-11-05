@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    fs: xfs
+    conf:
+      osd:
+        osd objectstore: filestore
+        osd sloppy crc: true
+        osd max object name len: 400
+        osd max object namespace len: 64
+  ceph-deploy:
+    fs: xfs
+    filestore: True
+    conf:
+      osd:
+        osd objectstore: filestore
+        osd sloppy crc: true
+        osd max object name len: 400
+        osd max object namespace len: 64
