@@ -1439,22 +1439,26 @@ def list_daemons(detail=True, legacy_dir=None):
                         # get container id
                         (i['enabled'], i['state']) = check_unit(unit_name)
                         container_id = None
+                        image_name = None
+                        image_id = None
                         version = None
                         out, err, code = call(
                             [
                                 container_path, 'inspect',
-                                '--format', '{{.Id}}',
+                                '--format', '{{.Id}},{{.Config.Image}},{{.Image}}',
                                 'ceph-%s-%s' % (fsid, j)
                             ],
                             verbose_on_failure=False)
                         if not code:
-                            container_id = out.strip()[0:12]
+                            (container_id, image_name, image_id) = out.strip().split(',')
                             out, err, code = call(
                                 [container_path, 'exec', container_id,
                                  'ceph', '-v'])
                             if not code and out.startswith('ceph version '):
                                 version = out.split(' ')[2]
                         i['container_id'] = container_id
+                        i['container_image_name'] = image_name
+                        i['container_image_id'] = image_id
                         i['version'] = version
                     ls.append(i)
 
