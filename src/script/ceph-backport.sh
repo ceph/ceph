@@ -24,12 +24,14 @@ full_path="$0"
 SCRIPT_VERSION="15.0.0.6814"
 active_milestones=""
 backport_pr_number=""
+backport_pr_title=""
 backport_pr_url=""
 deprecated_backport_common="$HOME/bin/backport_common.sh"
 github_token=""
 github_token_file="$HOME/.github_token"
 github_token_ok=""
 github_user=""
+milestone=""
 non_interactive=""
 original_issue=""
 original_issue_url=""
@@ -332,11 +334,11 @@ function existing_pr_routine {
     local new_pr_title
     local pr_body
     local pr_json_tempfile
-    local pr_title
     local remote_api_output
+    local update_pr_body
     remote_api_output="$(curl --silent "https://api.github.com/repos/ceph/ceph/pulls/${backport_pr_number}?access_token=${github_token}")"
-    pr_title="$(echo "$remote_api_output" | jq -r '.title')"
-    if [ "$pr_title" = "null" ] ; then
+    backport_pr_title="$(echo "$remote_api_output" | jq -r '.title')"
+    if [ "$backport_pr_title" = "null" ] ; then
         error "could not get PR title of existing PR ${backport_pr_number}"
         bail_out_github_api "$remote_api_output"
     fi
@@ -358,11 +360,11 @@ function existing_pr_routine {
     clipped_pr_body="$(xargs < "$pr_json_tempfile")"
     rm "$pr_json_tempfile"
     verbose_en "Clipped body of existing PR ${backport_pr_number}:\n${clipped_pr_body}\n"
-    if [[ "$pr_title" =~ ^${milestone}: ]] ; then
+    if [[ "$backport_pr_title" =~ ^${milestone}: ]] ; then
         verbose "Existing backport PR ${backport_pr_number} title has ${milestone} prepended"
     else
         warning "Existing backport PR ${backport_pr_number} title does NOT have ${milestone} prepended"
-        new_pr_title="${milestone}: $pr_title"
+        new_pr_title="${milestone}: $backport_pr_title"
         if [[ "$new_pr_title" =~ \" ]] ; then
             new_pr_title="${new_pr_title//\"/\\\"}"
         fi
@@ -757,6 +759,7 @@ function maybe_delete_deprecated_backport_common {
 
 function maybe_update_pr_milestone_labels {
     local pr_number="$1"
+    local pr_url
     local component
     local data_binary
     if [ "$EXPLICIT_COMPONENT" ] ; then
@@ -764,8 +767,9 @@ function maybe_update_pr_milestone_labels {
         component="$EXPLICIT_COMPONENT"
     else
         debug "Attempting to guess component"
-        component=$(guess_component "$title")
+        component=$(guess_component "$backport_pr_title")
     fi
+    pr_url="$(number_to_url "github" "${pr_number}")"
     if [ "$component" ] ; then
         debug "Attempting to set ${component} label and ${milestone} milestone in ${pr_url}"
         data_binary='{"milestone":'$milestone_number',"labels":["'$component'"]}'
@@ -785,6 +789,7 @@ function maybe_update_pr_title_body {
         data_binary="{\"title\":\"${new_title}\", \"body\":\"$(munge_body "${new_body}")\"}"
     elif [ "$new_title" ] ; then
         data_binary="{\"title\":\"${new_title}\"}"
+        backport_pr_title="${new_title}"
     elif [ "$new_body" ] ; then
         data_binary="{\"body\":\"$(munge_body "${new_body}")\"}"
         #log hex "${data_binary}"
@@ -1559,21 +1564,20 @@ if [ "$PR_PHASE" ] ; then
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
-        title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+        backport_pr_title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
     else
         if [[ $tracker_title =~ ^${milestone}: ]] ; then
-            title="${tracker_title}"
+            backport_pr_title="${tracker_title}"
         else
-            title="${milestone}: ${tracker_title}"
+            backport_pr_title="${milestone}: ${tracker_title}"
         fi
     fi
-    if [[ "$title" =~ \" ]] ; then
-        #title="$(echo "$title" | sed -e 's/"/\\"/g')"
-        title="${title//\"/\\\"}"
+    if [[ "$backport_pr_title" =~ \" ]] ; then
+        backport_pr_title="${backport_pr_title//\"/\\\"}"
     fi
     
     debug "Opening backport PR"
-    remote_api_output=$(curl --silent --data-binary "{\"title\":\"${title}\",\"head\":\"${github_user}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "https://api.github.com/repos/ceph/ceph/pulls?access_token=${github_token}")
+    remote_api_output=$(curl --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${github_user}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "https://api.github.com/repos/ceph/ceph/pulls?access_token=${github_token}")
     backport_pr_number=$(echo "$remote_api_output" | jq -r .number)
     if [ -z "$backport_pr_number" ] || [ "$backport_pr_number" = "null" ] ; then
         error "failed to open backport PR"
