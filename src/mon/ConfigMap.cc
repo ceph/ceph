@@ -109,15 +109,26 @@ ConfigMap::generate_entity_map(
   const std::string& device_class,
   std::map<std::string,pair<std::string,const MaskedOption*>> *src)
 {
-  // global, then by type, then by full name.
+  // global, then by type, then by name prefix component(s), then name.
+  // name prefix components are .-separated,
+  // e.g. client.a.b.c -> [global, client, client.a, client.a.b, client.a.b.c]
   vector<pair<string,Section*>> sections = { make_pair("global", &global) };
   auto p = by_type.find(name.get_type_name());
   if (p != by_type.end()) {
     sections.push_back(make_pair(name.get_type_name(), &p->second));
   }
-  auto q = by_id.find(name.to_str());
-  if (q != by_id.end()) {
-    sections.push_back(make_pair(name.to_str(), &q->second));
+  vector<std::string> name_bits;
+  boost::split(name_bits, name.to_str(), [](char c){ return c == '.'; });
+  std::string tname;
+  for (unsigned p = 0; p < name_bits.size(); ++p) {
+    if (p) {
+      tname += '.';
+    }
+    tname += name_bits[p];
+    auto q = by_id.find(tname);
+    if (q != by_id.end()) {
+      sections.push_back(make_pair(tname, &q->second));
+    }
   }
   std::map<std::string,std::string,std::less<>> out;
   MaskedOption *prev = nullptr;
