@@ -552,7 +552,7 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
 
 static int do_put(IoCtx& io_ctx, 
             const char *objname, const char *infile, int op_size,
-            uint64_t obj_offset,
+            uint64_t obj_offset, bool create_object,
             const bool use_striper)
 {
   string oid(objname);
@@ -595,7 +595,7 @@ static int do_put(IoCtx& io_ctx,
      continue;
     }
 
-    if (0 == offset)
+    if (0 == offset && create_object)
       ret = detail::write_full(io_ctx, oid, indata, use_striper);
     else
       ret = detail::write(io_ctx, oid, indata, count, offset, use_striper);
@@ -1846,6 +1846,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   unsigned object_size = 0;
   unsigned max_objects = 0;
   uint64_t obj_offset = 0;
+  bool obj_offset_specified = false;
   bool block_size_specified = false;
   int bench_write_dest = 0;
   bool cleanup = true;
@@ -1955,6 +1956,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (rados_sistrtoll(i, &obj_offset)) {
       return -EINVAL;
     }
+    obj_offset_specified = true;
   }
   i = opts.find("snap");
   if (i != opts.end()) {
@@ -2562,7 +2564,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage(cerr);
       return 1;
     }
-    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, obj_offset, use_striper);
+    bool create_object = !obj_offset_specified;
+    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, obj_offset, create_object, use_striper);
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       return 1;
