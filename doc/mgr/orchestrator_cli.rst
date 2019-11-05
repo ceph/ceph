@@ -301,7 +301,7 @@ This is an overview of the current implementation status of the orchestrators.
  mon update                          ⚪         ✔       ⚪         ✔
  osd create                          ✔         ✔       ⚪         ✔
  osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
- osd rm                              ✔         ⚪       ⚪         ⚪
+ osd rm                              ✔         ⚪       ⚪         ✔
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ⚪
  device ls                           ✔         ✔       ✔         ✔
  service ls                          ⚪         ✔       ✔         ✔
