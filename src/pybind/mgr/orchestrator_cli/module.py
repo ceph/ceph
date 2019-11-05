@@ -267,10 +267,12 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator rgw add',
-                'name=zone_name,type=CephString,req=false',
+                'name=zone_name,type=CephString,req=false '
+                'name=num,type=CephInt,req=false '
+                "name=hosts,type=CephString,n=N,req=false",
                 'Create an RGW service. A complete <rgw_spec> can be provided'\
                 ' using <-i> to customize completelly the RGW service')
-    def _rgw_add(self, zone_name=None, inbuf=None):
+    def _rgw_add(self, zone_name, num, hosts, inbuf=None):
         usage = """
 Usage:
   ceph orchestrator rgw add -i <json_file>
@@ -284,11 +286,29 @@ Usage:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
         elif zone_name:
-            rgw_spec = orchestrator.RGWSpec(rgw_zone=zone_name)
+            rgw_spec = orchestrator.RGWSpec(
+                rgw_zone=zone_name,
+                placement=orchestrator.PlacementSpec(nodes=hosts),
+                count=num or 1)
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
         completion = self.add_rgw(rgw_spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator rgw update',
+                "name=zone_name,type=CephString "
+                "name=num,type=CephInt "
+                "name=hosts,type=CephString,n=N,req=false",
+                'Update the number of RGW instances for the given zone')
+    def _rgw_update(self, zone_name, num, hosts=None):
+        spec = orchestrator.RGWSpec(
+            rgw_zone=zone_name,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
+        completion = self.update_rgw(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -316,10 +336,10 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator rgw rm',
-                "name=svc_id,type=CephString",
+                "name=name,type=CephString",
                 'Remove an RGW service')
-    def _rgw_rm(self, svc_id):
-        completion = self.remove_rgw(svc_id)
+    def _rgw_rm(self, name):
+        completion = self.remove_rgw(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

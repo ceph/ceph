@@ -310,9 +310,9 @@ This is an overview of the current implementation status of the orchestrators.
  rbd-mirror add                      ⚪         ⚪       ⚪         ⚪
  rbd-mirror rm                       ⚪         ⚪       ⚪         ⚪
  rbd-mirror update                   ⚪         ⚪       ⚪         ⚪
- rgw add                             ✔         ✔       ⚪         ⚪
- rgw rm                              ✔         ✔       ⚪         ⚪
- rgw update                          ⚪         ⚪       ⚪         ⚪
+ rgw add                             ✔         ✔       ⚪         ✔
+ rgw rm                              ✔         ✔       ⚪         ✔
+ rgw update                          ⚪         ⚪       ⚪         ✔
 =================================== ========= ====== ========= =====
 
 where
