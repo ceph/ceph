@@ -30,6 +30,12 @@ struct Fh {
   std::unique_ptr<ceph_lock_state_t> fcntl_locks;
   std::unique_ptr<ceph_lock_state_t> flock_locks;
 
+  bool has_any_filelocks() {
+    return
+      (fcntl_locks && !fcntl_locks->empty()) ||
+      (flock_locks && !flock_locks->empty());
+  }
+
   // IO error encountered by any writeback on this Inode while
   // this Fh existed (i.e. an fsync on another Fh will still show
   // up as an async_err here because it could have been the same
