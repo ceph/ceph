@@ -1553,19 +1553,8 @@ public:
 };
 
 class RGWDeleteLC : public RGWOp {
-protected:
-  size_t len;
-  char *data;
-
 public:
-  RGWDeleteLC() {
-    len = 0;
-    data = NULL;
-  }
-  ~RGWDeleteLC() override {
-    free(data);
-  }
-
+  RGWDeleteLC() = default;
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
