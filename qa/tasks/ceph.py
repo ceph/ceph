@@ -383,14 +383,14 @@ def cephfs_setup(ctx, config):
     yield
 
 
-def get_mons(roles, ips):
+def get_mons(roles, ips, cluster_name):
     """
     Get monitors and their associated addresses
     """
     mons = {}
     ports = {}
     mon_id = 0
-    is_mon = teuthology.is_type('mon')
+    is_mon = teuthology.is_type('mon', cluster_name)
     for idx, roles in enumerate(roles):
         for role in roles:
             if not is_mon(role):
@@ -590,7 +590,7 @@ def cluster(ctx, config):
     roles = [role_list for (remote, role_list) in remotes_and_roles]
     ips = [host for (host, port) in
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
-    mons = get_mons(roles, ips)
+    mons = get_mons(roles, ips, cluster_name)
     conf = skeleton_config(
         ctx, roles=roles, ips=ips, mons=mons, cluster=cluster_name,
     )
