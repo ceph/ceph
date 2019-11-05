@@ -606,6 +606,22 @@ bool HealthMonitor::check_member_health()
       d.detail.push_back(ds.str());
     }
   }
+  // MON_OSD_REPORT_TIMEOUT_TOO_SMALL
+  {
+    // mon_osd_report_timeout <= osd_beacon_report_interval will result in mon mark
+    // the osd down wrongly. Sometimes we change one and may ingnore the other one. 
+    // It is a error configuration but not easy be found by ceph beginner, so we should
+    // report a HEALTH_WARN in this case.As osd_beacon_report_interval can be configued
+    // separately by osd, we cannot get the realtime osd config here, the warnging is 
+    // incomplete.
+    if (g_conf()->mon_osd_report_timeout <= g_conf()->osd_beacon_report_interval) {
+      ostringstream ss, ds;
+      ss << "mon%plurals% %names% %hasorhave% mon_osd_report_timeout is less than or equal to osd_beacon_report_interval";
+      auto& d = next.add("MON_OSD_REPORT_TIMEOUT_TOO_SMALL", HEALTH_WARN, ss.str(), 1);
+      ds << "mon." << mon->name << " mon_osd_report_timeout is less than or equal to osd_beacon_report_interval";
+      d.detail.push_back(ds.str());
+    }
+  }
 
   auto p = quorum_checks.find(mon->rank);
   if (p == quorum_checks.end()) {
