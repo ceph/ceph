@@ -312,3 +312,13 @@ const i18nProviders = [
 ];
 
 export { i18nProviders };
+
+export function expectItemTasks(item: any, executing: string, percentage?: number) {
+  if (executing) {
+    executing = executing + '...';
+    if (percentage) {
+      executing = `${executing} ${percentage}%`;
+    }
+  }
+  expect(item.cdExecuting).toBe(executing);
+}

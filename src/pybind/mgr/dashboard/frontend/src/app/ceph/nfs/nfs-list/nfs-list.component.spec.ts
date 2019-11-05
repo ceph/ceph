@@ -9,6 +9,7 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import {
   configureTestBed,
+  expectItemTasks,
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
@@ -127,10 +128,6 @@ describe('NfsListComponent', () => {
       summaryService.addRunningTask(task);
     };
 
-    const expectExportTasks = (expo: any, executing: string) => {
-      expect(expo.cdExecuting).toEqual(executing);
-    };
-
     beforeEach(() => {
       exports = [];
       addExport('a');
@@ -154,18 +151,18 @@ describe('NfsListComponent', () => {
       addTask('nfs/create', 'd');
       tick();
       expect(component.exports.length).toBe(4);
-      expectExportTasks(component.exports[0], undefined);
-      expectExportTasks(component.exports[1], undefined);
-      expectExportTasks(component.exports[2], undefined);
-      expectExportTasks(component.exports[3], 'Creating');
+      expectItemTasks(component.exports[0], undefined);
+      expectItemTasks(component.exports[1], undefined);
+      expectItemTasks(component.exports[2], undefined);
+      expectItemTasks(component.exports[3], 'Creating');
     }));
 
     it('should show when an existing export is being modified', () => {
       addTask('nfs/edit', 'a');
       addTask('nfs/delete', 'b');
       expect(component.exports.length).toBe(3);
-      expectExportTasks(component.exports[0], 'Updating');
-      expectExportTasks(component.exports[1], 'Deleting');
+      expectItemTasks(component.exports[0], 'Updating');
+      expectItemTasks(component.exports[1], 'Deleting');
     });
   });
 
