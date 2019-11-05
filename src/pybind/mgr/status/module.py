@@ -108,7 +108,8 @@ class Module(MgrModule):
                         ) + "/s"
 
                     metadata = self.get_metadata('mds', info['name'])
-                    mds_versions[metadata.get('ceph_version', "unknown")].append(info['name'])
+                    if metadata:
+                        mds_versions[metadata.get('ceph_version', "unknown")].append(info['name'])
                     rank_table.add_row([
                         mgr_util.bold(rank.__str__()), c_state, info['name'],
                         activity,
@@ -135,7 +136,8 @@ class Module(MgrModule):
                 ) + "/s"
 
                 metadata = self.get_metadata('mds', daemon_info['name'])
-                mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
+                if metadata:
+                    mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
 
                 rank_table.add_row([
                     "{0}-s".format(daemon_info['rank']), "standby-replay",
@@ -173,7 +175,8 @@ class Module(MgrModule):
         standby_table = PrettyTable(["Standby MDS"])
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
-            mds_versions[metadata.get('ceph_version', "unknown")].append(standby['name'])
+            if metadata:
+                mds_versions[metadata.get('ceph_version', "unknown")].append(standby['name'])
 
             standby_table.add_row([standby['name']])
 
