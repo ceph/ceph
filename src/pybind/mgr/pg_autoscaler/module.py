@@ -164,6 +164,10 @@ class PgAutoscaler(MgrModule):
             self._maybe_adjust()
             self._shutdown.wait(timeout=int(self.sleep_interval))
 
+    def shutdown(self):
+        self.log.info('Stopping pg_autoscaler')
+        self._shutdown.set()
+
     def get_subtree_resource_status(self, osdmap, crush):
         """
         For each CRUSH subtree of interest (i.e. the roots under which
