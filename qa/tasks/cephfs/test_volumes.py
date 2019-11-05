@@ -27,14 +27,20 @@ class TestVolumes(CephFSTestCase):
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
 
-    def _generate_random_subvolume_name(self):
-        return "{0}_{1}".format(TestVolumes.TEST_SUBVOLUME_PREFIX, random.randint(0, 10000))
+    def _generate_random_subvolume_name(self, count=1):
+        r = random.sample(range(10000), count)
+        subvolumes = ["{0}_{1}".format(TestVolumes.TEST_SUBVOLUME_PREFIX, c) for c in r]
+        return subvolumes[0] if count == 1 else subvolumes
 
-    def _generate_random_group_name(self):
-        return "{0}_{1}".format(TestVolumes.TEST_GROUP_PREFIX, random.randint(0, 100))
+    def _generate_random_group_name(self, count=1):
+        r = random.sample(range(100), count)
+        groups = ["{0}_{1}".format(TestVolumes.TEST_GROUP_PREFIX, c) for c in r]
+        return groups[0] if count == 1 else groups
 
-    def _generate_random_snapshot_name(self):
-        return "{0}_{1}".format(TestVolumes.TEST_SNAPSHOT_PREFIX, random.randint(0, 100))
+    def _generate_random_snapshot_name(self, count=1):
+        r = random.sample(range(100), count)
+        snaps = ["{0}_{1}".format(TestVolumes.TEST_SNAPSHOT_PREFIX, c) for c in r]
+        return snaps[0] if count == 1 else snaps
 
     def _enable_multi_fs(self):
         self._fs_cmd("flag", "set", "enable_multiple", "true", "--yes-i-really-mean-it")
@@ -479,10 +485,9 @@ class TestVolumes(CephFSTestCase):
         subvolumes = []
 
         # create subvolumes
-        for i in range(3):
-            svname = self._generate_random_subvolume_name()
-            self._fs_cmd("subvolume", "create", self.volname, svname)
-            subvolumes.append(svname)
+        subvolumes = self._generate_random_subvolume_name(3)
+        for subvolume in subvolumes:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume)
 
         # list subvolumes
         subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
@@ -814,10 +819,9 @@ class TestVolumes(CephFSTestCase):
         subvolumegroups = []
 
         #create subvolumegroups
-        for i in range(3):
-            groupname = self._generate_random_group_name()
+        subvolumegroups = self._generate_random_group_name(3)
+        for groupname in subvolumegroups:
             self._fs_cmd("subvolumegroup", "create", self.volname, groupname)
-            subvolumegroups.append(groupname)
 
         subvolumegroupls = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname))
         if len(subvolumegroupls) == 0:
@@ -944,10 +948,9 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
 
         # create subvolume snapshots
-        for i in range(3):
-            sname = self._generate_random_snapshot_name()
-            self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, sname)
-            snapshots.append(sname)
+        snapshots = self._generate_random_snapshot_name(3)
+        for snapshot in snapshots:
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
 
         subvolsnapshotls = json.loads(self._fs_cmd('subvolume', 'snapshot', 'ls', self.volname, subvolume))
         if len(subvolsnapshotls) == 0:
@@ -1055,10 +1058,9 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "create", self.volname, group)
 
         # create subvolumegroup snapshots
-        for i in range(3):
-            sname = self._generate_random_snapshot_name()
-            self._fs_cmd("subvolumegroup", "snapshot", "create", self.volname, group, sname)
-            snapshots.append(sname)
+        snapshots = self._generate_random_snapshot_name(3)
+        for snapshot in snapshots:
+            self._fs_cmd("subvolumegroup", "snapshot", "create", self.volname, group, snapshot)
 
         subvolgrpsnapshotls = json.loads(self._fs_cmd('subvolumegroup', 'snapshot', 'ls', self.volname, group))
         if len(subvolgrpsnapshotls) == 0:
