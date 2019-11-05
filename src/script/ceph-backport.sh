@@ -373,9 +373,16 @@ function existing_pr_routine {
     redmine_url_without_scheme="${redmine_url//http?:\/\//}"
     verbose "Redmine URL without scheme: $redmine_url_without_scheme"
     if [[ "$clipped_pr_body" =~ $redmine_url_without_scheme ]] ; then
-        verbose "Existing backport PR ${backport_pr_number} mentions $redmine_url"
+        info "Existing backport PR ${backport_pr_number} already mentions $redmine_url"
+        if [ "$FORCE" ] ; then
+            warning "--force was given, so updating the PR body anyway"
+            update_pr_body="yes"
+        fi
     else
         warning "Existing backport PR ${backport_pr_number} does NOT mention $redmine_url - adding it"
+        update_pr_body="yes"
+    fi
+    if [ "$update_pr_body" ] ; then
         new_pr_body="backport tracker: ${redmine_url}"
         if [ "${original_pr_url}" ] ; then
             new_pr_body="${new_pr_body}
