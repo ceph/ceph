@@ -4994,11 +4994,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
-    osdmap.print_summary(f.get(), ds, "", true);
-    if (f)
+    if (f) {
+      f->open_object_section("osdmap");
+      osdmap.print_summary(f.get(), ds, "", true);
+      f->close_section();
       f->flush(rdata);
-    else
+    } else {
+      osdmap.print_summary(nullptr, ds, "", true);
       rdata.append(ds);
+    }
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
