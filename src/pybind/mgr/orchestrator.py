@@ -758,6 +758,12 @@ class ServiceDescription(object):
         return "<ServiceDescription>({n_name}:{s_type})".format(n_name=self.nodename,
                                                                   s_type=self.name())
 
+    def entity_name(self):
+        if self.service_type in ['osd','mon','mgr','mds']:
+            return self.name()
+        else:
+            return 'client.' + self.name()
+
     def to_json(self):
         out = {
             'nodename': self.nodename,
