@@ -91,10 +91,10 @@ class Module(MgrModule):
         else:
             return formatted
 
-    def format_dimless(self, n, width, colored=True):
+    def format_dimless(self, n, width, colored=False):
         return self.format_units(n, width, colored, decimal=True)
     
-    def format_bytes(self, n, width, colored=True):
+    def format_bytes(self, n, width, colored=False):
         return self.format_units(n, width, colored, decimal=False)
         
     def get_latest(self, daemon_type, daemon_name, stat):
