@@ -3,6 +3,8 @@
 
 * Nautilus-based librbd clients can now open images on Jewel clusters.
 
+* The format of MDSs in `ceph fs dump` has changed.
+
 * The RGW "num_rados_handles" has been removed.
   If you were using a value of "num_rados_handles" greater than 1
   multiply your current "objecter_inflight_ops" and

@@ -111,9 +111,8 @@ void FSMap::print(ostream& out) const
     out << "Standby daemons:" << std::endl << " " << std::endl;
   }
 
-  for (const auto &p : standby_daemons) {
-    p.second.print_summary(out);
-    out << std::endl;
+  for (const auto& p : standby_daemons) {
+    out << p.second << std::endl;
   }
 }
 
