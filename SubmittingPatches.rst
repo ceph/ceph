@@ -2,32 +2,36 @@
 Submitting Patches to Ceph
 ==========================
 
-This is based on Documentation/SubmittingPatches from the Linux kernel,
-but has pared down significantly and updated based on the Ceph project's
-best practices.
+Patches to Ceph can be divided into three categories:
 
-The patch signing procedures and definitions are unmodified.
+    1. patches targeting Ceph kernel code
+    2. patches targeting the "master" branch
+    3. patches targeting stable branches (e.g.: "nautilus")
+
+Some parts of Ceph - notably the RBD and CephFS kernel clients - are maintained
+within the Linux Kernel. For patches targeting this code, please refer to the
+file ``SubmittingPatches-kernel.rst``.
+
+The rest of this document assumes that your patch relates to Ceph code that is
+maintained in the GitHub repository https://github.com/ceph/ceph
+
+If you have a patch that fixes an issue, feel free to open a GitHub pull request
+("PR") targeting the "master" branch, but do read this document first, as it
+contains important information for ensuring that your PR passes code review
+smoothly.
+
+For patches targeting stable branches (e.g. "nautilus"), please also see
+the file ``SubmittingPatches-backports.rst``.
+
+.. contents::
+   :depth: 3
 
 
-SIGNING CONTRIBUTIONS
-=====================
-
-In order to keep the record of code attribution clean within the source
-repository, follow these guidelines for signing patches submitted to the
-project. These definitions are taken from those used by the Linux kernel
-and many other open source projects.
-
-
-1. Sign your work
------------------
-
-To improve tracking of who did what, especially with patches that can
-percolate to their final resting place in the kernel through several
-layers of maintainers, we've introduced a "sign-off" procedure on
-patches that are being emailed around.
+Sign your work
+--------------
 
 The sign-off is a simple line at the end of the explanation for the
-patch, which certifies that you wrote it or otherwise have the right to
+commit, which certifies that you wrote it or otherwise have the right to
 pass it on as a open-source patch. The rules are pretty simple: if you
 can certify the below:
 
@@ -62,468 +66,238 @@ then you just add a line saying ::
 
         Signed-off-by: Random J Developer <random@developer.example.org>
 
-
 using your real name (sorry, no pseudonyms or anonymous contributions.)
 
-Some people also put extra tags at the end. They'll just be ignored for
-now, but you can do this to mark internal company procedures or just
-point out some special detail about the sign-off. 
+Git can sign off on your behalf
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If you are a subsystem or branch maintainer, sometimes you need to slightly
-modify patches you receive in order to merge them, because the code is not
-exactly the same in your tree and the submitters'. If you stick strictly to
-rule (c), you should ask the submitter to rediff, but this is a totally
-counter-productive waste of time and energy. Rule (b) allows you to adjust
-the code, but then it is very impolite to change one submitter's code and
-make them endorse your bugs. To solve this problem, it is recommended that
-you add a line between the last Signed-off-by header and yours, indicating
-the nature of your changes. While there is nothing mandatory about this, it
-seems like prepending the description with your mail and/or name, all
-enclosed in square brackets, is noticeable enough to make it obvious that
-you are responsible for last-minute changes. Example ::
+Please note that git makes it trivially easy to sign commits. First, set the
+following config options::
 
-        Signed-off-by: Random J Developer <random@developer.example.org>
-        [lucky@maintainer.example.org: struct foo moved from foo.c to foo.h]
-        Signed-off-by: Lucky K Maintainer <lucky@maintainer.example.org>
+    $ git config --list | grep user
+    user.email=my_real_email_address@example.com
+    user.name=My Real Name
 
-This practise is particularly helpful if you maintain a stable branch and
-want at the same time to credit the author, track changes, merge the fix,
-and protect the submitter from complaints. Note that under no circumstances
-can you change the author's identity (the From header), as it is the one
-which appears in the changelog.
+Then just remember to use ``git commit -s``. Git will add the ``Signed-off-by``
+line automatically.
 
-Special note to back-porters: It seems to be a common and useful practise
-to insert an indication of the origin of a patch at the top of the commit
-message (just after the subject line) to facilitate tracking. For instance,
-here's what we see in 2.6-stable ::
 
-        Date:   Tue May 13 19:10:30 2008 +0000
+Separate your changes
+---------------------
 
-        SCSI: libiscsi regression in 2.6.25: fix nop timer handling
+Group *logical changes* into individual commits.
 
-        commit 4cf1043593db6a337f10e006c23c69e5fc93e722 upstream
+If you have a series of bulleted modifications, consider separating each of
+those into its own commit.
 
-And here's what appears in 2.4 ::
+For example, if your changes include both bug fixes and performance enhancements
+for a single component, separate those changes into two or more commits. If your
+changes include an API update, and a new feature which uses that new API,
+separate those into two patches.
 
-        Date:   Tue May 13 22:12:27 2008 +0200
+On the other hand, if you make a single change that affects numerous
+files, group those changes into a single commit. Thus a single logical change is
+contained within a single patch. (If the change needs to be backported, that
+might change the calculus, because smaller commits are easier to backport.)
 
-        wireless, airo: waitbusy() won't delay
 
-        [backport of 2.6 commit b7acbdfbd1f277c1eb23f344f899cfa4cd0bf36a]
+Describe your changes
+---------------------
 
-Whatever the format, this information provides a valuable help to people
-tracking your trees, and to people trying to trouble-shoot bugs in your
-tree.
+Each commit has an associated commit message that is stored in git. The first
+line of the commit message is the `commit title`_. The second line should be
+left blank. The lines that follow constitute the `commit message`_.
 
+A commit and its message should be focused around a particular change.
 
-2. When to use ``Acked-by:`` and ``Cc:``
-----------------------------------------
-
-The ``Signed-off-by:`` tag indicates that the signer was involved in the
-development of the patch, or that he/she was in the patch's delivery path.
-
-If a person was not directly involved in the preparation or handling of a
-patch but wishes to signify and record their approval of it then they can
-arrange to have an ``Acked-by:`` line added to the patch's changelog.
-
-``Acked-by:`` is often used by the maintainer of the affected code when that
-maintainer neither contributed to nor forwarded the patch.
-
-``Acked-by:`` is not as formal as ``Signed-off-by:``. It is a record that the acker
-has at least reviewed the patch and has indicated acceptance. Hence patch
-mergers will sometimes manually convert an acker's "yep, looks good to me"
-into an ``Acked-by:``.
-
-``Acked-by:`` does not necessarily indicate acknowledgement of the entire patch.
-For example, if a patch affects multiple subsystems and has an ``Acked-by:`` from
-one subsystem maintainer then this usually indicates acknowledgement of just
-the part which affects that maintainer's code. Judgement should be used here.
-When in doubt people should refer to the original discussion in the mailing
-list archives.
-
-If a person has had the opportunity to comment on a patch, but has not
-provided such comments, you may optionally add a "Cc:" tag to the patch.
-This is the only tag which might be added without an explicit action by the
-person it names. This tag documents that potentially interested parties
-have been included in the discussion
-
-
-3. Using ``Reported-by:``, ``Tested-by:`` and ``Reviewed-by:``
---------------------------------------------------------------
-
-If this patch fixes a problem reported by somebody else, consider adding a
-``Reported-by:`` tag to credit the reporter for their contribution. This tag should
-not be added without the reporter's permission, especially if the problem was
-not reported in a public forum. That said, if we diligently credit our bug
-reporters, they will, hopefully, be inspired to help us again in the future.
-
-A ``Tested-by:`` tag indicates that the patch has been successfully tested (in
-some environment) by the person named. This tag informs maintainers that
-some testing has been performed, provides a means to locate testers for
-future patches, and ensures credit for the testers.
-
-``Reviewed-by:``, instead, indicates that the patch has been reviewed and found
-acceptable according to the Reviewer's Statement:
-
-Reviewer's statement of oversight
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-By offering my ``Reviewed-by:`` tag, I state that:
-
-   (a) I have carried out a technical review of this patch to
-       evaluate its appropriateness and readiness for inclusion into
-       the mainline kernel.
-
-   (b) Any problems, concerns, or questions relating to the patch
-       have been communicated back to the submitter. I am satisfied
-       with the submitter's response to my comments.
-
-   (c) While there may be things that could be improved with this
-       submission, I believe that it is, at this time, (1) a
-       worthwhile modification to the kernel, and (2) free of known
-       issues which would argue against its inclusion.
-
-   (d) While I have reviewed the patch and believe it to be sound, I
-       do not (unless explicitly stated elsewhere) make any
-       warranties or guarantees that it will achieve its stated
-       purpose or function properly in any given situation.
-
-A ``Reviewed-by`` tag is a statement of opinion that the patch is an
-appropriate modification of the kernel without any remaining serious
-technical issues. Any interested reviewer (who has done the work) can
-offer a ``Reviewed-by`` tag for a patch. This tag serves to give credit to
-reviewers and to inform maintainers of the degree of review which has been
-done on the patch. ``Reviewed-by:`` tags, when supplied by reviewers known to
-understand the subject area and to perform thorough reviews, will normally
-increase the likelihood of your patch getting into the kernel.
-
-
-PREPARING AND SENDING PATCHES
-=============================
-
-The upstream repository is managed by Git. You will find that it
-is easiest to work on the project and submit changes by using the
-git tools, both for managing your own code and for preparing and
-sending patches.
-
-The project will generally accept code either by pulling code directly from
-a published git tree (usually on github), or via patches emailed directly
-to the email list (ceph-devel@vger.kernel.org). For the kernel client,
-patches are expected to be reviewed in the email list. And for everything
-else, github is preferred due to the convenience of the 'pull request'
-feature.
-
-
-1. Github pull request
-----------------------
-
-The preferred way to submit code is by publishing your patches in a branch
-in your github fork of the ceph repository and then submitting a github
-pull request.
-
-For example, prepare your changes
-
-.. code-block:: bash
-
-   # ...code furiously...
-   $ git commit     # git gui is also quite convenient
-   $ git push origin mything
-
-Then submit a pull request at
-
-    https://github.com/ceph/ceph/pulls
-
-and click 'New pull request'. See :ref:`_title_of_commit` for our naming
-convention of pull requests. The 'hub' command-line tool, available from
-
-    https://github.com/github/hub
-
-allows you to submit pull requests directly from the command line
-
-.. code-block:: bash
-
-   $ hub pull-request -b ceph:master -h you:mything
-
-Pull requests appear in the review queue at
-
-    https://github.com/organizations/ceph/dashboard/pulls
-
-You may want to ping a developer in #ceph-devel on irc.oftc.net or on the
-email list to ensure your submission is noticed.
-
-When addressing review comments, can should either add additional patches to
-your branch or (better yet) squash those changes into the relevant commits so
-that the sequence of changes is "clean" and gets things right the first time.
-The ``git rebase -i`` command is very helpful in this process. Once you have
-updated your local branch, you can simply force-push to the existing branch
-in your public repository that is referenced by the pull request with
-
-.. code-block:: bash
-
-   $ git push -f origin mything
-
-and your changes will be visible from the existing pull-request. You may want
-to ping the reviewer again or comment on the pull request to ensure the updates
-are noticed.
-
-Sometimes your change could be based on an outdated parent commit and has
-conflicts with the latest target branch, then you need to fetch the updates
-from the remote branch, rebase your change onto it, and resolve the conflicts
-before doing the force-push
-
-.. code-block:: bash
-
-   $ git pull --rebase origin target-branch
-
-So that the pull request does not contain any "merge" commit. Instead of "merging"
-the target branch, we expect a linear history in a pull request where you
-commit on top of the remote branch.
-
-Q: Which branch should I target in my pull request?
-
-A: The target branch depends on the nature of your change:
-
-   If you are adding a feature, target the "master" branch in your pull
-   request.
-
-   If you are fixing a bug, target the named branch corresponding to the
-   major version that is currently in development. For example, if
-   Infernalis is the latest stable release and Jewel is development, target
-   the "jewel" branch for bugfixes. The Ceph core developers will
-   periodically merge this named branch into "master". When this happens,
-   the master branch will contain your fix as well.
-
-   If you are fixing a bug (see above) *and* the bug exists in older stable
-   branches (for example, the "hammer" or "infernalis" branches), then you
-   should file a Redmine ticket describing your issue and fill out the
-   "Backport: <branchname>" form field. This will notify other developers that
-   your commit should be cherry-picked to one or more stable branches. Then,
-   target the "master" branch in your pull request.
-
-   For example, you should set "Backport: jewel, kraken" in your Redmine ticket
-   to indicate that you are fixing a bug that exists on the "jewel" and
-   "kraken" branches and that you desire that your change be cherry-picked to
-   those branches after it is merged into master.
-
-Q: How to include ``Reviewed-by: tag(s)`` in my pull request?
-
-A: You don't. If someone reviews your pull request, they should indicate they
-   have done so by commenting on it with "+1", "looks good to me", "LGTM",
-   and/or the entire "Reviewed-by: ..." line with their name and email address.
-
-   The developer merging the pull request should note positive reviews and
-   include the appropriate Reviewed-by: lines in the merge commit.
-
-
-2. Patch submission via ceph-devel@vger.kernel.org
---------------------------------------------------
-
-The best way to generate a patch for manual submission is to work from
-a Git checkout of the Ceph source code. You can then generate patches
-with the 'git format-patch' command. For example,
-
-.. code-block:: bash
-
-   $ git format-patch HEAD^^ -o mything
-
-will take the last two commits and generate patches in the mything/
-directory. The commit you specify on the command line is the
-'upstream' commit that you are diffing against. Note that it does
-not necessarily have to be an ancestor of your current commit. You
-can do something like
-
-.. code-block:: bash
-
-   $ git checkout -b mything
-   # ... do lots of stuff ...
-   $ git fetch
-   # ...find out that origin/unstable has also moved forward...
-   $ git format-patch origin/unstable -o mything
-
-and the patches will be against origin/unstable.
-
-The ``-o`` dir is optional; if left off, the patch(es) will appear in
-the current directory. This can quickly get messy.
-
-You can also add ``--cover-letter`` and get a '0000' patch in the
-mything/ directory. That can be updated to include any overview
-stuff for a multipart patch series. If it's a single patch, don't
-bother.
-
-Make sure your patch does not include any extra files which do not
-belong in a patch submission. Make sure to review your patch -after-
-generated it with ``diff(1)``, to ensure accuracy.
-
-If your changes produce a lot of deltas, you may want to look into
-splitting them into individual patches which modify things in
-logical stages. This will facilitate easier reviewing by other
-kernel developers, very important if you want your patch accepted.
-There are a number of scripts which can aid in this.
-
-The ``git send-email`` command make it super easy to send patches
-(particularly those prepared with git format patch). It is careful to
-format the emails correctly so that you don't have to worry about your
-email client mangling whitespace or otherwise screwing things up. It
-works like so:
-
-.. code-block:: bash
-
-   $ git send-email --to ceph-devel@vger.kernel.org my.patch
-
-for a single patch, or
-
-.. code-block:: bash
-
-   $ git send-email --to ceph-devel@vger.kernel.org mything
-
-to send a whole patch series (prepared with, say, git format-patch).
-
-
-3. Describe your changes
-------------------------
-
-Describe the technical detail of the change(s) your patch includes.
-
-.. _title_of_commit:
-
-Title of pull requests and title of commits
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Commit title
+^^^^^^^^^^^^
 
 The text up to the first empty line in a commit message is the commit
-title. Ideally it is a single short line of at most 72 characters,
-summarizing the change. It is required to prefix it with the
-subsystem or module you are changing. For instance, the prefix
-could be "doc:", "osd:", or "common:". One can use::
+title. It should be a single short line of at most 72 characters,
+summarizing the change, and prefixed with the
+subsystem or module you are changing. Also, it is conventional to use the
+imperative mood in the commit title. Positive examples include::
+
+     mds: add perf counter for finisher of MDSRank
+     osd: make the ClassHandler::mutex private
+
+More positive examples can be obtained from the git history of the ``master``
+branch::
 
      git log
 
-for more examples. It is also conventional to use the imperative mood in the
-commit title. For example::
+Some negative examples (how *not* to title a commit message)::
 
-     mds: add perf counter for finisher of MDSRank
+     update driver X
+     bug fix for driver X
+     fix issue 99999
 
-or::
-
-     osd: make the ClassHandler::mutex private
-
-For GitHub, please use this "subsystem: short description" convention for
-naming pull requests (PRs). These titles feed directly into the script that
-generates release notes and it is tedious to clean up non-conformant PR titles
-at release time.  This document places no limit on the length of PR titles, but
-be aware that they are subject to editing as part of the release process.
+Further to the last negative example ("fix issue 99999"), see `Fixes line`_.
 
 Commit message
 ^^^^^^^^^^^^^^
 
-Be as specific as possible. The WORST descriptions possible include
-things like "update driver X", "bug fix for driver X", or "this patch
-includes updates for subsystem X. Please apply."
+(This section is about the body of the commit message. Please also see
+the preceding section, `Commit title`_, for advice on titling commit messages.)
 
-If your description starts to get long, that's a sign that you probably
-need to split up your patch. See :ref:`split_changes`.
+In the body of your commit message, be as specific as possible. If the commit
+message title was too short to fully state what the commit is doing, use the
+body to explain not just the "what", but also the "why".
 
-When you submit or resubmit a patch or patch series, include the
-complete patch description and justification for it. Don't just
-say that this is version N of the patch (series). Don't expect the
-patch merger to refer back to earlier patch versions or referenced
-URLs to find the patch description and put that into the patch.
-I.e., the patch (series) and its description should be self-contained.
-This benefits both the patch merger(s) and reviewers. Some reviewers
-probably didn't even receive earlier versions of the patch.
+For positive examples, peruse ``git log`` in the ``master`` branch. A negative
+example would be a commit message that merely states the obvious. For example:
+"this patch includes updates for subsystem X. Please apply."
 
-Tag the commit
-^^^^^^^^^^^^^^
+.. _`fixes line`:
 
-If the patch fixes a logged bug entry, refer to that bug entry by
-URL. In particular, if this patch fixes one or more issues
-tracked by http://tracker.ceph.com, consider adding a ``Fixes:`` tag to
-connect this change to addressed issue(s). So a line saying ::
+Fixes line(s)
+^^^^^^^^^^^^^
+
+If the commit fixes one or more issues tracked by http://tracker.ceph.com,
+add a ``Fixes:`` line (or lines) to the commit message, to connect this change
+to addressed issue(s) - for example::
 
      Fixes: http://tracker.ceph.com/issues/12345
 
-is added before the ``Signed-off-by:`` line stating that this commit
-addresses http://tracker.ceph.com/issues/12345. It helps the reviewer to
-get more context of this bug, so she/he can hence update the issue on
-the bug tracker accordingly.
+This line should be added just before the ``Signed-off-by:`` line (see `Sign
+your work`_).
 
-So a typical commit message for revising the document could look like::
+It helps reviewers to get more context of this bug and facilitates updating of
+the bug tracker. Also, anyone perusing the git history will see this line and be
+able to refer to the bug tracker easily.
+
+Here is an example showing a properly-formed commit message::
 
      doc: add "--foo" option to bar
 
-     * update the man page for bar with the newly added "--foo" option.
-     * fix a typo
+     This commit updates the man page for bar with the newly added "--foo"
+     option.
 
      Fixes: http://tracker.ceph.com/issues/12345
      Signed-off-by: Random J Developer <random@developer.example.org>
 
-.. _split_changes:
+If a commit fixes a regression introduced by a different commit, please also
+(in addition to the above) add a line referencing the SHA1 of the commit that
+introduced the regression. For example::
 
-4. Separate your changes
-------------------------
+     Fixes: 9dbe7a003989f8bb45fe14aaa587e9d60a392727
 
-Separate *logical changes* into a single patch file.
 
-For example, if your changes include both bug fixes and performance
-enhancements for a single driver, separate those changes into two
-or more patches. If your changes include an API update, and a new
-driver which uses that new API, separate those into two patches.
+PR best practices
+-----------------
 
-On the other hand, if you make a single change to numerous files,
-group those changes into a single patch. Thus a single logical change
-is contained within a single patch.
+PRs should be opened on branches contained in your fork of
+https://github.com/ceph/ceph.git - do not push branches directly to
+``ceph/ceph.git``.
 
-If one patch depends on another patch in order for a change to be
-complete, that is OK. Simply note "this patch depends on patch X"
-in your patch description.
+PRs should target "master". If you need to add a patch to a stable branch, such
+as "nautilus", see the file ``SubmittingPatches-backports.rst``.
 
-If you cannot condense your patch set into a smaller set of patches,
-then only post say 15 or so at a time and wait for review and integration.
+In addition to a base, or "target" branch, PRs have several other components:
+the `PR title`_, the `PR description`_, labels, comments, etc. Of these, the PR
+title and description are relevant for new contributors.
 
-5. Document your changes
-------------------------
+PR title
+^^^^^^^^
 
-If you have added or modified any user-facing functionality, such
-as CLI commands or their output, then the patch series or pull request
-must include appropriate updates to documentation.
+If your PR has only one commit, the PR title can be the same as the commit title
+(and GitHub will suggest this). If the PR has multiple commits, do not accept
+the title GitHub suggest. Either use the title of the most relevant commit, or
+write your own title. In the latter case, use the same "subsystem: short
+description" convention described in `Commit title`_ for the PR title, with
+the following difference: the PR title describes the entire set of changes,
+while the `Commit title`_ describes only the changes in a particular commit. 
+
+Keep in mind that the PR titles feed directly into the script that generates
+release notes and it is tedious to clean up non-conformant PR titles at release
+time. This document places no limit on the length of PR titles, but be aware
+that they are subject to editing as part of the release process.
+
+PR description
+^^^^^^^^^^^^^^
+
+In addition to a title, the PR also has a description field, or "body". 
+
+The PR description is a place for summarizing the PR as a whole. It need not
+duplicate information that is already in the commit messages. It can contain
+notices to maintainers, links to tracker issues and other related information,
+to-do lists, etc. The PR title and description should give readers a high-level
+notion of what the PR is about, quickly enabling them to decide whether they
+should take a closer look.
+
+
+Flag your changes for backport
+------------------------------
+
+If you believe your changes should be backported to stable branches after the PR
+is merged, open a tracker issue at https://tracker.ceph.com explaining:
+
+1. what bug is fixed
+2. why does the bug need to be fixed in <release>
+
+and fill out the Backport field in the tracker issue. For example::
+
+    Backport: mimic, nautilus
+
+For information on how backports are done in the Ceph project, refer to the
+document ``SubmittingPatches-backports.rst``.
+
+
+Test your changes
+-----------------
+
+Before opening your PR, it's a good idea to run tests on your patchset. Doing
+that is simple, though the process can take a long time to complete, especially
+on older machines with less memory and spinning disks.
+
+The most simple test is to verify that your patchset builds, at least in your
+own development environment. The commands for this are::
+
+    ./install-deps.sh
+    ./do_cmake.sh
+    make
+
+Ceph comes with a battery of tests that can be run on a single machine. These
+are collectively referred to as "make check", and can be run by executing the
+following command::
+
+    ./run-make-check.sh
+
+If your patchset does not build, or if one or more of the "make check" tests
+fails, but the error shown is not obviously related to your patchset, don't let
+that dissuade you from opening a PR. The Ceph project has a Jenkins instance
+which will build your PR branch and run "make check" on it in a controlled
+environment.
+
+Once your patchset builds and passes "make check", you can run even more tests
+on it by issuing the following commands::
+
+    cd build
+    ../qa/run-standalone.sh
+
+Like "make check", the standalone tests take a long time to run. They also
+produce voluminous output. If one or more of the standalone tests fails, it's
+likely the relevant part of the output will have scrolled off your screen or
+gotten swapped out of your buffer. Therefore, it makes sense to capture the
+output in a file for later analysis.
+
+
+Document your changes
+---------------------
+
+If you have added or modified any user-facing functionality, such as CLI
+commands or their output, then the pull request must include appropriate updates
+to documentation.
 
 It is the submitter's responsibility to make the changes, and the reviewer's
 responsibility to make sure they are not merging changes that do not 
 have the needed updates to documentation.
 
-Where there are areas that have absent documentation, or there is no
-clear place to note the change that is being made, the reviewer should
-contact the component lead, who should arrange for the missing section
-to be created with sufficient detail for the patch submitter to
-document their changes.
+Where there are areas that have absent documentation, or there is no clear place
+to note the change that is being made, the reviewer should contact the component
+lead, who should arrange for the missing section to be created with sufficient
+detail for the PR submitter to document their changes.
 
 When writing and/or editing documentation, follow the Google Developer
 Documentation Style Guide: https://developers.google.com/style/
-
-6. Style check your changes
----------------------------
-
-Check your patch for basic style violations, details of which can be
-found in CodingStyle.
-
-
-7. No MIME, no links, no compression, no attachments. Just plain text
-----------------------------------------------------------------------
-
-Developers need to be able to read and comment on the changes you are
-submitting. It is important for a kernel developer to be able to
-"quote" your changes, using standard e-mail tools, so that they may
-comment on specific portions of your code.
-
-For this reason, all patches should be submitting e-mail "inline".
-WARNING: Be wary of your editor's word-wrap corrupting your patch,
-if you choose to cut-n-paste your patch.
-
-Do not attach the patch as a MIME attachment, compressed or not.
-Many popular e-mail applications will not always transmit a MIME
-attachment as plain text, making it impossible to comment on your
-code. A MIME attachment also takes Linus a bit more time to process,
-decreasing the likelihood of your MIME-attached change being accepted.
-
-Exception: If your mailer is mangling patches then someone may ask
-you to re-send them using MIME.
-

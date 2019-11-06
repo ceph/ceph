@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSFragmentNotify : public Message {
+class MMDSFragmentNotify : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -38,9 +38,9 @@ private:
 
 protected:
   MMDSFragmentNotify() :
-    Message{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
+    SafeMessage{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
-    Message{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
+    SafeMessage{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }

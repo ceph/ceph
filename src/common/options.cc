@@ -2802,10 +2802,13 @@ std::vector<Option> get_global_options() {
 
     Option("osd_op_queue", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("wpq")
-    .set_enum_allowed( { "wpq", "prioritized", "mclock_opclass", "mclock_client", "debug_random" } )
-    .set_description("which operation queue algorithm to use")
-    .set_long_description("which operation queue algorithm to use; mclock_opclass and mclock_client are currently experimental")
-    .set_flag(Option::FLAG_STARTUP)
+    .set_enum_allowed( { "wpq", "prioritized",
+	  "mclock_opclass", "mclock_client", "mclock_scheduler",
+	  "debug_random" } )
+    .set_description("which operation priority queue algorithm to use")
+    .set_long_description("which operation priority queue algorithm to use; "
+			  "mclock_opclass mclock_client, and "
+			  "mclock_client_profile are currently experimental")
     .add_see_also("osd_op_queue_cut_off"),
 
     Option("osd_op_queue_cut_off", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -2815,461 +2818,64 @@ std::vector<Option> get_global_options() {
     .set_long_description("the threshold between high priority ops that use strict priority ordering and low priority ops that use a fairness algorithm that may or may not incorporate priority")
     .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_client_op_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1000.0)
-    .set_description("mclock reservation of client operator requests")
-    .set_long_description("mclock reservation of client operator requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_client_res", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("IO proportion reserved for each client (default)")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_client_op_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(500.0)
-    .set_description("mclock weight of client operator requests")
-    .set_long_description("mclock weight of client operator requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_client_wgt", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("IO share for each client (default) over reservation")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_client_op_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.0)
-    .set_description("mclock limit of client operator requests")
-    .set_long_description("mclock limit of client operator requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_client_lim", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(999999)
+    .set_description("IO limit for each client (default) over reservation")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_osd_rep_op_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1000.0)
-    .set_description("mclock reservation of osd replication operation requests and replies")
-    .set_long_description("mclock reservation of replication operation requests and replies when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_background_recovery_res", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("IO proportion reserved for background recovery (default)")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_osd_rep_op_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(500.0)
-    .set_description("mclock weight of osd replication operation requests and replies")
-    .set_long_description("mclock weight of osd replication operation requests and replies when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_background_recovery_wgt", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("IO share for each background recovery over reservation")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_osd_rep_op_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.0)
-    .set_description("mclock limit of osd replication operation requests and replies")
-    .set_long_description("mclock limit of osd sub-operation requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_background_recovery_lim", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(999999)
+    .set_description("IO limit for background recovery over reservation")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_snap_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.0)
-    .set_description("mclock reservation of snaptrim requests")
-    .set_long_description("mclock reservation of snaptrim requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_background_best_effort_res", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("IO proportion reserved for background best_effort (default)")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_snap_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.0)
-    .set_description("mclock weight of snaptrim requests")
-    .set_long_description("mclock weight of snaptrim requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_background_best_effort_wgt", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("IO share for each background best_effort over reservation")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_snap_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.001)
-    .set_description("")
-    .set_description("mclock limit of snaptrim requests")
-    .set_long_description("mclock limit of snaptrim requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
+    Option("osd_mclock_scheduler_background_best_effort_lim", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(999999)
+    .set_description("IO limit for background best_effort over reservation")
+    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .add_see_also("osd_op_queue"),
 
-    Option("osd_op_queue_mclock_recov_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.0)
-    .set_description("mclock reservation of recovery requests")
-    .set_long_description("mclock reservation of recovery requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
-
-    Option("osd_op_queue_mclock_recov_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.0)
-    .set_description("mclock weight of recovery requests")
-    .set_long_description("mclock weight of recovery requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
-
-    Option("osd_op_queue_mclock_recov_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.001)
-    .set_description("mclock limit of recovery requests")
-    .set_long_description("mclock limit of recovery requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
-
-    Option("osd_op_queue_mclock_scrub_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.0)
-    .set_description("mclock reservation of scrub requests")
-    .set_long_description("mclock reservation of scrub requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
-
-    Option("osd_op_queue_mclock_scrub_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.0)
-    .set_description("mclock weight of scrub requests")
-    .set_long_description("mclock weight of scrub requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_lim")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
-
-    Option("osd_op_queue_mclock_scrub_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.001)
-    .set_description("mclock weight of limit requests")
-    .set_long_description("mclock weight of limit requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_anticipation_timeout"),
-
-    Option("osd_op_queue_mclock_anticipation_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("osd_mclock_scheduler_anticipation_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.0)
     .set_description("mclock anticipation timeout in seconds")
-    .set_long_description("the amount of time that mclock waits until the unused resource is forfeited")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim"),
-
-    Option("osd_op_queue_mclock_pg_delete_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.0)
-    .set_description("mclock reservation of pg delete work")
-    .set_long_description("mclock reservation of pg delete work when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim"),
-
-    Option("osd_op_queue_mclock_pg_delete_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.0)
-    .set_description("mclock weight of pg delete work")
-    .set_long_description("mclock weight of pg delete work when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_lim"),
-
-    Option("osd_op_queue_mclock_pg_delete_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.001)
-    .set_description("mclock weight of pg delete work limit requests")
-    .set_long_description("mclock weight of limit pg delete work when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt"),
-
-    Option("osd_op_queue_mclock_peering_event_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.0)
-    .set_description("mclock reservation of peering events")
-    .set_long_description("mclock reservation of scrub requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt")
-    .add_see_also("osd_op_queue_mclock_scrub_lim"),
-
-    Option("osd_op_queue_mclock_peering_event_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.0)
-    .set_description("mclock weight of peering events")
-    .set_long_description("mclock weight of scrub requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_lim"),
-
-    Option("osd_op_queue_mclock_peering_event_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0.001)
-    .set_description("mclock weight of limit peering events")
-    .set_long_description("mclock weight of limit requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
-    .add_see_also("osd_op_queue")
-    .add_see_also("osd_op_queue_mclock_client_op_res")
-    .add_see_also("osd_op_queue_mclock_client_op_wgt")
-    .add_see_also("osd_op_queue_mclock_client_op_lim")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
-    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
-    .add_see_also("osd_op_queue_mclock_snap_res")
-    .add_see_also("osd_op_queue_mclock_snap_wgt")
-    .add_see_also("osd_op_queue_mclock_snap_lim")
-    .add_see_also("osd_op_queue_mclock_recov_res")
-    .add_see_also("osd_op_queue_mclock_recov_wgt")
-    .add_see_also("osd_op_queue_mclock_recov_lim")
-    .add_see_also("osd_op_queue_mclock_scrub_res")
-    .add_see_also("osd_op_queue_mclock_scrub_wgt"),
+    .set_long_description("the amount of time that mclock waits until the unused resource is forfeited"),
 
     Option("osd_ignore_stale_divergent_priors", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -3625,11 +3231,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_class_load_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
     .set_description(""),
 
     Option("osd_class_default_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
     .set_description(""),
 
     Option("osd_check_for_log_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4343,7 +3949,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description("Preextent rocksdb wal files on mkfs to avoid performance penalty for young stores"),
+    .set_description("Preextent rocksdb wal files on mkfs to avoid performance penalty"),
 
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
@@ -4698,7 +4304,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("bitmap")
-    .set_enum_allowed({"bitmap", "stupid"})
+    .set_enum_allowed({"bitmap", "stupid", "avl"})
     .set_description("Allocator policy")
     .set_long_description("Allocator to use for bluestore.  Stupid should only be used for testing."),
 
@@ -4944,6 +4550,13 @@ std::vector<Option> get_global_options() {
     .set_description("Enforces specific hw profile settings")
     .set_long_description("'hdd' enforces settings intended for BlueStore above a rotational drive. 'ssd' enforces settings intended for BlueStore above a solid drive. 'default' - using settings for the actual hardware."),
 
+    Option("bluestore_avl_alloc_bf_threshold", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(131072)
+    .set_description(""),
+
+    Option("bluestore_avl_alloc_bf_free_pct", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(4)
+    .set_description(""),
 
     // -----------------------------------------
     // kstore
@@ -6425,7 +6038,7 @@ std::vector<Option> get_rgw_options() {
        "The length of time (in seconds) that the RGW collector will wait before purging "
        "a deleted object's data. RGW will not remove object immediately, as object could "
        "still have readers. A mechanism exists to increase the object's expiration time "
-       "when it's being read.")
+       "when it's being read. The recommended value of its lower limit is 30 minutes")
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -6461,6 +6074,22 @@ std::vector<Option> get_rgw_options() {
     .set_default(16)
     .set_description("Max number of keys to remove from garbage collector log in a single operation")
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_concurrent_io"}),
+
+    Option("rgw_gc_max_deferred_entries_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3072)
+    .set_description("maximum allowed size of deferred entries in queue head for gc"),
+
+    Option("rgw_gc_max_queue_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(134213632)
+    .set_description("Maximum allowed queue size for gc")
+    .set_long_description(
+        "The maximum allowed size of each gc queue, and its value should not "
+        "be greater than (osd_max_object_size - rgw_gc_max_deferred_entries_size - 1K).")
+    .add_see_also({"osd_max_object_size", "rgw_gc_max_deferred_entries_size"}),
+
+    Option("rgw_gc_max_deferred", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_description("Number of maximum deferred data entries to be stored in queue for gc"),
 
     Option("rgw_s3_success_create_obj_status", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -7021,7 +6650,8 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "If true, RGW will dynamicall increase the number of shards in buckets that have "
         "a high number of objects per shard.")
-    .add_see_also("rgw_max_objs_per_shard"),
+    .add_see_also("rgw_max_objs_per_shard")
+    .add_see_also("rgw_max_dynamic_shards"),
 
     Option("rgw_max_objs_per_shard", Option::TYPE_UINT, Option::LEVEL_BASIC)
     .set_default(100000)
@@ -7030,7 +6660,19 @@ std::vector<Option> get_rgw_options() {
         "This is the max number of objects per bucket index shard that RGW will "
         "allow with dynamic resharding. RGW will trigger an automatic reshard operation "
         "on the bucket if it exceeds this number.")
-    .add_see_also("rgw_dynamic_resharding"),
+    .add_see_also("rgw_dynamic_resharding")
+    .add_see_also("rgw_max_dynamic_shards"),
+
+    Option("rgw_max_dynamic_shards", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1999)
+    .set_min(1)
+    .set_description("Max shards that dynamic resharding can create")
+    .set_long_description(
+        "This is the maximum number of bucket index shards that dynamic "
+	"sharding is able to create on its own. This does not limit user "
+	"requested resharding. Ideally this value is a prime number.")
+    .add_see_also("rgw_dynamic_resharding")
+    .add_see_also("rgw_max_objs_per_shard"),
 
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
@@ -7216,7 +6858,6 @@ std::vector<Option> get_rgw_options() {
     .set_description("mclock limit for metadata requests")
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
-
   });
 }
 
@@ -8285,6 +7926,13 @@ std::vector<Option> get_mds_options() {
      .set_default(2.0)
      .set_description("task status update interval to manager")
      .set_long_description("interval (in seconds) for sending mds task status to ceph manager"),
+
+    Option("mds_max_snaps_per_dir", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(100)
+     .set_min_max(0, 4096)
+     .set_flag(Option::FLAG_RUNTIME)
+     .set_description("max snapshots per directory")
+     .set_long_description("maximum number of snapshots that can be created per directory"),
   });
 }
 

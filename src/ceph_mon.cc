@@ -811,9 +811,11 @@ int main(int argc, const char **argv)
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
     ostringstream oss;
-    mon->sync_force(NULL, oss);
-    if (oss.tellp())
-      derr << oss.str() << dendl;
+    JSONFormatter jf(true);
+    mon->sync_force(&jf);
+    derr << "out:\n";
+    jf.flush(*_dout);
+    *_dout << dendl;
   }
 
   err = mon->preinit();

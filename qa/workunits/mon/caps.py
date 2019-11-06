@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+from __future__ import print_function
+
 import json
 import subprocess
 import shlex
@@ -41,7 +43,7 @@ def call(cmd):
   else:
     assert False, 'cmd is not a string/unicode nor a list!'
 
-  print 'call: {0}'.format(args)
+  print('call: {0}'.format(args))
   proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   ret = proc.wait()
 
@@ -52,8 +54,8 @@ def expect(cmd, expected_ret):
   try:
     (r, p) = call(cmd)
   except ValueError as e:
-    print >> sys.stderr, \
-             'unable to run {c}: {err}'.format(c=repr(cmd), err=e.message)
+    print('unable to run {c}: {err}'.format(c=repr(cmd), err=e.message),
+          file=sys.stderr)
     return errno.EINVAL
 
   assert r == p.returncode, \
@@ -271,7 +273,7 @@ def test_all():
           ]
       }
 
-  for (module,cmd_lst) in cmds.iteritems():
+  for (module,cmd_lst) in cmds.items():
     k = keyring_base + '.' + module
     for cmd in cmd_lst:
 
@@ -281,10 +283,10 @@ def test_all():
       if len(cmd_args) > 0:
         (cmd_args_key, cmd_args_val) = cmd_args.split('=')
 
-      print 'generating keyring for {m}/{c}'.format(m=module,c=cmd_cmd)
+      print('generating keyring for {m}/{c}'.format(m=module,c=cmd_cmd))
       # gen keyring
-      for (good_or_bad,kind_map) in perms.iteritems():
-        for (kind,lst) in kind_map.iteritems():
+      for (good_or_bad,kind_map) in perms.items():
+        for (kind,lst) in kind_map.items():
           for (perm, cap) in lst:
             cap_formatted = cap.format(
                 s=module,
@@ -304,11 +306,11 @@ def test_all():
                 'ceph auth get-or-create {n} {c}'.format(
                   n=cname,c=run_cap), 0, k)
       # keyring generated
-      print 'testing {m}/{c}'.format(m=module,c=cmd_cmd)
+      print('testing {m}/{c}'.format(m=module,c=cmd_cmd))
 
       # test
       for good_bad in perms.keys():
-        for (kind,lst) in perms[good_bad].iteritems():
+        for (kind,lst) in perms[good_bad].items():
           for (perm,_) in lst:
             cname = 'client.{gb}-{k}-{p}'.format(gb=good_bad,k=kind,p=perm)
 
@@ -343,9 +345,9 @@ def test_misc():
   expect_to_file(
       'ceph auth get-or-create client.caps mon \'allow command "auth caps"' \
           ' with entity="client.caps"\'', 0, k)
-  expect('ceph -n client.caps -k {kf} mon_status'.format(kf=k), errno.EACCES)
+  expect('ceph -n client.caps -k {kf} quorum_status'.format(kf=k), errno.EACCES)
   expect('ceph -n client.caps -k {kf} auth caps client.caps mon \'allow *\''.format(kf=k), 0)
-  expect('ceph -n client.caps -k {kf} mon_status'.format(kf=k), 0)
+  expect('ceph -n client.caps -k {kf} quorum_status'.format(kf=k), 0)
   destroy_keyring(k)
 
 def main():
@@ -354,7 +356,7 @@ def main():
   test_all()
   test_misc()
 
-  print 'OK'
+  print('OK')
 
   return 0
 

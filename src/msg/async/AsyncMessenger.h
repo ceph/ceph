@@ -200,20 +200,6 @@ private:
   AsyncConnectionRef create_connect(const entity_addrvec_t& addrs, int type,
 				    bool anon);
 
-  /**
-   * Queue up a Message for delivery to the entity specified
-   * by addr and dest_type.
-   * submit_message() is responsible for creating
-   * new AsyncConnection (and closing old ones) as necessary.
-   *
-   * @param m The Message to queue up. This function eats a reference.
-   * @param con The existing Connection to use, or NULL if you don't know of one.
-   * @param dest_addr The address to send the Message to.
-   * @param dest_type The peer type of the address we're sending to
-   * just drop silently under failure.
-   */
-  void submit_message(Message *m, const AsyncConnectionRef& con,
-                      const entity_addrvec_t& dest_addrs, int dest_type);
 
   void _finish_bind(const entity_addrvec_t& bind_addrs,
 		    const entity_addrvec_t& listen_addrs);
@@ -408,7 +394,8 @@ public:
    */
   void unregister_conn(const AsyncConnectionRef& conn) {
     std::lock_guard l{deleted_lock};
-    conn->get_perf_counter()->dec(l_msgr_active_connections);
+    if (!accepting_conns.count(conn))
+      conn->get_perf_counter()->dec(l_msgr_active_connections);
     deleted_conns.emplace(std::move(conn));
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
@@ -423,7 +410,7 @@ public:
    *
    * See "deleted_conns"
    */
-  int reap_dead();
+  void reap_dead();
 
   /**
    * @} // AsyncMessenger Internals

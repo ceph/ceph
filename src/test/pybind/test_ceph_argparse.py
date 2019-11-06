@@ -314,44 +314,6 @@ class TestMonitor(TestArgparse):
     def test_quorum_status(self):
         self.assert_valid_command(['quorum_status'])
 
-    def test_mon_status(self):
-        self.assert_valid_command(['mon_status'])
-
-    def test_sync_force(self):
-        self.assert_valid_command(['sync',
-                                   'force',
-                                   '--yes-i-really-mean-it',
-                                   '--i-know-what-i-am-doing'])
-        self.assert_valid_command(['sync',
-                                   'force',
-                                   '--yes-i-really-mean-it'])
-        self.assert_valid_command(['sync',
-                                   'force'])
-        assert_equal({}, validate_command(sigdict, ['sync']))
-        assert_equal({}, validate_command(sigdict, ['sync',
-                                                    'force',
-                                                    '--yes-i-really-mean-it',
-                                                    '--i-know-what-i-am-doing',
-                                                    'toomany']))
-
-    def test_heap(self):
-        assert_equal({}, validate_command(sigdict, ['heap']))
-        assert_equal({}, validate_command(sigdict, ['heap', 'invalid']))
-        self.assert_valid_command(['heap', 'dump'])
-        self.assert_valid_command(['heap', 'start_profiler'])
-        self.assert_valid_command(['heap', 'stop_profiler'])
-        self.assert_valid_command(['heap', 'release'])
-        self.assert_valid_command(['heap', 'stats'])
-
-    def test_quorum(self):
-        assert_equal({}, validate_command(sigdict, ['quorum']))
-        assert_equal({}, validate_command(sigdict, ['quorum', 'invalid']))
-        self.assert_valid_command(['quorum', 'enter'])
-        self.assert_valid_command(['quorum', 'exit'])
-        assert_equal({}, validate_command(sigdict, ['quorum',
-                                                    'enter',
-                                                    'toomany']))
-
     def test_tell(self):
         assert_equal({}, validate_command(sigdict, ['tell']))
         assert_equal({}, validate_command(sigdict, ['tell', 'invalid']))

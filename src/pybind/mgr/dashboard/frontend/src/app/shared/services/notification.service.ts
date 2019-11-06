@@ -56,13 +56,24 @@ export class NotificationService {
   }
 
   /**
+   * Removes a single saved notifications
+   */
+  remove(index: number) {
+    const recent = this.dataSource.getValue();
+    recent.splice(index, 1);
+    this.dataSource.next(recent);
+    localStorage.setItem(this.KEY, JSON.stringify(recent));
+  }
+
+  /**
    * Method used for saving a shown notification (check show() method).
    */
   save(notification: CdNotification) {
     const recent = this.dataSource.getValue();
     recent.push(notification);
+    recent.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
     while (recent.length > 10) {
-      recent.shift();
+      recent.pop();
     }
     this.dataSource.next(recent);
     localStorage.setItem(this.KEY, JSON.stringify(recent));

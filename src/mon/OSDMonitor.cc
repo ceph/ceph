@@ -258,8 +258,7 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
   typedef std::map<std::string, std::string> CommandArgs;
 
   if (mon_caps.is_capable(
-	cct, CEPH_ENTITY_TYPE_MON,
-	entity_name, "osd",
+	cct, entity_name, "osd",
 	"osd pool op unmanaged-snap",
 	(pool_name == nullptr ?
 	 CommandArgs{} /* pool DNE, require unrestricted cap */ :
@@ -4053,7 +4052,6 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
     goto ignore;
   if (!session->caps.is_capable(
 	cct,
-	CEPH_ENTITY_TYPE_MON,
 	session->entity_name,
         "osd", "osd pool rmsnap", {}, true, true, false,
 	session->get_peer_socket_addr())) {
@@ -7860,10 +7858,27 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   int64_t uf = 0;  // micro-f
   cmd_getval(cct, cmdmap, "val", val);
 
-  // parse string as both int and float; different fields use different types.
-  n = strict_strtoll(val.c_str(), 10, &interr);
-  f = strict_strtod(val.c_str(), &floaterr);
-  uf = llrintl(f * (double)1000000.0);
+  auto si_options = {
+    "target_max_objects"
+  };
+  auto iec_options = {
+    "target_max_bytes",
+    "target_size_bytes",
+    "compression_max_blob_size",
+    "compression_min_blob_size",
+    "csum_max_block",
+    "csum_min_block",
+  };
+  if (count(begin(si_options), end(si_options), var)) {
+    n = strict_si_cast<int64_t>(val.c_str(), &interr);
+  } else if (count(begin(iec_options), end(iec_options), var)) {
+    n = strict_iec_cast<int64_t>(val.c_str(), &interr);
+  } else {
+    // parse string as both int and float; different fields use different types.
+    n = strict_strtoll(val.c_str(), 10, &interr);
+    f = strict_strtod(val.c_str(), &floaterr);
+    uf = llrintl(f * (double)1000000.0);
+  }
 
   if (!p.is_tier() &&
       (var == "hit_set_type" || var == "hit_set_period" ||
@@ -8373,6 +8388,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           ss << "unrecognized fingerprint_algorithm '" << val << "'";
 	  return -EINVAL;
         }
+      }
+    } else if (var == "target_size_bytes") {
+      if (interr.length()) {
+        ss << "error parsing unit value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+        ss << "must set require_osd_release to nautilus or "
+           << "later before setting target_size_bytes";
+        return -EINVAL;
       }
     } else if (var == "pg_num_min") {
       if (interr.length()) {

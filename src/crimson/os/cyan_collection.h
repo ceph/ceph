@@ -13,7 +13,7 @@
 
 #include "futurized_collection.h"
 
-namespace ceph::os {
+namespace crimson::os {
 
 class Object;
 /**

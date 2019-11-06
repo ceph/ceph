@@ -621,30 +621,6 @@ OPTION(osd_op_queue, OPT_STR)
 
 OPTION(osd_op_queue_cut_off, OPT_STR) // Min priority to go to strict queue. (low, high)
 
-// mClock priority queue parameters for five types of ops
-OPTION(osd_op_queue_mclock_client_op_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_client_op_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_client_op_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_pg_delete_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_pg_delete_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_pg_delete_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_peering_event_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_peering_event_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_peering_event_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_anticipation_timeout, OPT_DOUBLE)
-
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
 // Set to true for testing.  Users should NOT set this.
@@ -1434,7 +1410,7 @@ OPTION(rgw_usage_log_tick_interval, OPT_INT) // flush pending log data every X s
 OPTION(rgw_init_timeout, OPT_INT) // time in seconds
 OPTION(rgw_mime_types_file, OPT_STR)
 OPTION(rgw_gc_max_objs, OPT_INT)
-OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc
+OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc, recommended lower limit is 30 mins
 OPTION(rgw_gc_processor_max_time, OPT_INT)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT)  // gc processor cycle time
 OPTION(rgw_gc_max_concurrent_io, OPT_INT)  // gc processor cycle time
@@ -1583,7 +1559,6 @@ OPTION(debug_allow_any_pool_priority, OPT_BOOL)
 OPTION(rgw_gc_max_deferred_entries_size, OPT_U64) // GC deferred entries size in queue head
 OPTION(rgw_gc_max_queue_size, OPT_U64) // GC max queue size
 OPTION(rgw_gc_max_deferred, OPT_U64) // GC max number of deferred entries
-
 OPTION(rgw_rados_pool_autoscale_bias, OPT_DOUBLE) // pg_autoscale_bias value for RGW metadata pools.
 OPTION(rgw_rados_pool_pg_num_min, OPT_U64) // pg_num_min value for RGW metadata pools.
 OPTION(rgw_rados_pool_recovery_priority, OPT_U64) // recovery_priority value for RGW metadata pools.
@@ -1591,5 +1566,3 @@ OPTION(rgw_rados_pool_recovery_priority, OPT_U64) // recovery_priority value for
 OPTION(rgw_user_unique_email, OPT_BOOL) //require local RGW users to have unique email addresses
 
 OPTION(rgw_inject_notify_timeout_probability, OPT_DOUBLE) //likelihood of ignoring a notify
-
-

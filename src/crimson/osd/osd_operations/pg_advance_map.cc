@@ -1,22 +1,23 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <seastar/core/future.hh>
+#include "crimson/osd/osd_operations/pg_advance_map.h"
 
 #include <boost/smart_ptr/local_shared_ptr.hpp>
+#include <seastar/core/future.hh>
+
 #include "include/types.h"
-#include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
-#include "common/Formatter.h"
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
   OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to,

@@ -1,26 +1,10 @@
-from threading import Event
 import errno
 import json
-try:
-    import queue as Queue
-except ImportError:
-    import Queue
 
 from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
-
-class PurgeJob(object):
-    def __init__(self, volume_fscid, subvolume_path):
-        """
-        Purge tasks work in terms of FSCIDs, so that if we process
-        a task later when a volume was deleted and recreated with
-        the same name, we can correctly drop the task that was
-        operating on the original volume.
-        """
-        self.fscid = volume_fscid
-        self.subvolume_path = subvolume_path
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -165,6 +149,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     "and optionally, in a specific subvolume group",
             'perm': 'rw'
         },
+        {
+            'cmd': 'fs subvolume resize '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=new_size,type=CephInt,req=true '
+                   'name=group_name,type=CephString,req=false '
+                   'name=no_shrink,type=CephBool,req=false ',
+            'desc': "Resize a CephFS subvolume",
+            'perm': 'rw'
+        },
 
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -185,28 +179,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        self._initialized = Event()
         self.vc = VolumeClient(self)
 
-        self._background_jobs = Queue.Queue()
-
-    def serve(self):
-        # TODO: discover any subvolumes pending purge, and enqueue
-        # them in background_jobs at startup
-
-        # TODO: consume background_jobs
-        #   skip purge jobs if their fscid no longer exists
-
-        # TODO: on volume delete, cancel out any background jobs that
-        # affect subvolumes within that volume.
-
-        # ... any background init needed?  Can get rid of this
-        # and _initialized if not
-        self._initialized.set()
-
     def handle_command(self, inbuf, cmd):
-        self._initialized.wait()
-
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
         try:
             handler = getattr(self, handler_name)
@@ -314,3 +289,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.list_subvolume_snapshots(None, vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
                                                 group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_subvolume_resize(self, inbuf, cmd):
+        return self.vc.resize_subvolume(None, vol_name=cmd['vol_name'],
+                                        sub_name=cmd['sub_name'],
+                                        new_size=cmd['new_size'],
+                                        group_name=cmd.get('group_name', None),
+                                        no_shrink=cmd.get('no_shrink', False))

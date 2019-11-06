@@ -76,49 +76,49 @@ public:
     return new ImageDispatchSpec(image_ctx, aio_comp,
                                  std::move(image_extents),
                                  Read{std::move(read_result)},
-                                 op_flags, parent_trace);
+                                 op_flags, parent_trace, 0);
   }
 
   static ImageDispatchSpec* create_discard_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace) {
+      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace, uint64_t tid) {
     return new ImageDispatchSpec(image_ctx, aio_comp, {{off, len}},
                                  Discard{discard_granularity_bytes},
-                                 0, parent_trace);
+                                 0, parent_trace, tid);
   }
 
   static ImageDispatchSpec* create_write_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, Extents &&image_extents,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
+      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid) {
     return new ImageDispatchSpec(image_ctx, aio_comp, std::move(image_extents),
-                                 Write{std::move(bl)}, op_flags, parent_trace);
+                                 Write{std::move(bl)}, op_flags, parent_trace, tid);
   }
 
   static ImageDispatchSpec* create_write_same_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
+      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid) {
     return new ImageDispatchSpec(image_ctx, aio_comp, {{off, len}},
                                  WriteSame{std::move(bl)}, op_flags,
-                                 parent_trace);
+                                 parent_trace, tid);
   }
 
   static ImageDispatchSpec* create_compare_and_write_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, Extents &&image_extents,
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-      int op_flags, const ZTracer::Trace &parent_trace) {
+      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid) {
     return new ImageDispatchSpec(image_ctx, aio_comp,
                                  std::move(image_extents),
                                  CompareAndWrite{std::move(cmp_bl),
                                                  std::move(bl),
                                                  mismatch_offset},
-                                 op_flags, parent_trace);
+                                 op_flags, parent_trace, tid);
   }
 
   static ImageDispatchSpec* create_flush_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp,
       FlushSource flush_source, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp, {}, Flush{flush_source},
-                                 0, parent_trace);
+                                 0, parent_trace, 0);
   }
 
   ~ImageDispatchSpec() {
@@ -146,6 +146,14 @@ public:
     return (m_throttled_flag & RBD_QOS_MASK) == RBD_QOS_MASK;
   }
 
+  const Extents& get_image_extents() const;
+
+  AioCompletion* get_aio_completion() const {
+    return m_aio_comp;
+  }
+
+  uint64_t get_tid();
+
 private:
   typedef boost::variant<Read,
                          Discard,
@@ -160,10 +168,10 @@ private:
 
   ImageDispatchSpec(ImageCtxT& image_ctx, AioCompletion* aio_comp,
                      Extents&& image_extents, Request&& request,
-                     int op_flags, const ZTracer::Trace& parent_trace)
+                     int op_flags, const ZTracer::Trace& parent_trace, uint64_t tid)
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
       m_image_extents(std::move(image_extents)), m_request(std::move(request)),
-      m_op_flags(op_flags), m_parent_trace(parent_trace) {
+      m_op_flags(op_flags), m_parent_trace(parent_trace), m_tid(tid) {
     m_aio_comp->get();
   }
 
@@ -173,6 +181,7 @@ private:
   Request m_request;
   int m_op_flags;
   ZTracer::Trace m_parent_trace;
+  uint64_t m_tid;
   std::atomic<uint64_t> m_throttled_flag = 0;
 
   uint64_t extents_length();

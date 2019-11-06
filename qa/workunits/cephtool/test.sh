@@ -1169,8 +1169,10 @@ function test_mon_mon()
   ceph mon dump
   ceph mon getmap -o $TEMP_DIR/monmap.$$
   [ -s $TEMP_DIR/monmap.$$ ]
+
   # ceph mon tell
-  ceph mon_status
+  first=$(ceph mon dump -f json | jq -r '.mons[0].name')
+  ceph tell mon.$first mon_status
 
   # test mon features
   ceph mon feature ls
@@ -2119,7 +2121,8 @@ function test_mon_pg()
   ceph pg stat | grep 'pgs:'
   ceph pg 1.0 query
   ceph tell 1.0 query
-  ceph quorum enter
+  first=$(ceph mon dump -f json | jq -r '.mons[0].name')
+  ceph tell mon.$first quorum enter
   ceph quorum_status
   ceph report | grep osd_stats
   ceph status
@@ -2271,6 +2274,18 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET hashpspool 1 --yes-i-really-mean-it
 
   ceph osd pool get rbd crush_rule | grep 'crush_rule: '
+
+  # iec vs si units
+  ceph osd pool set $TEST_POOLGETSET target_max_objects 1K
+  ceph osd pool get $TEST_POOLGETSET target_max_objects | grep 1000
+  for o in target_max_bytes target_size_bytes compression_max_blob_size compression_min_blob_size csum_max_block csum_min_block; do
+    ceph osd pool set $TEST_POOLGETSET $o 1Ki  # no i suffix
+    val=$(ceph osd pool get $TEST_POOLGETSET $o --format=json | jq -c ".$o")
+    [[ $val  == 1024 ]]
+    ceph osd pool set $TEST_POOLGETSET $o 1M   # with i suffix
+    val=$(ceph osd pool get $TEST_POOLGETSET $o --format=json | jq -c ".$o")
+    [[ $val  == 1048576 ]]
+  done
 
   ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET compression_mode aggressive
@@ -2595,7 +2610,6 @@ function test_mon_deprecated_commands()
   # current DEPRECATED commands are:
   #  ceph compact
   #  ceph scrub
-  #  ceph sync force
   #
   # Testing should be accomplished by setting
   # 'mon_debug_deprecated_as_obsolete = true' and expecting ENOTSUP for
@@ -2606,9 +2620,6 @@ function test_mon_deprecated_commands()
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
   expect_false ceph tell mon.a scrub 2> $TMPFILE
-  check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
-
-  expect_false ceph tell mon.a sync force 2> $TMPFILE
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
   ceph tell mon.a injectargs '--no-mon-debug-deprecated-as-obsolete'
@@ -2740,6 +2751,13 @@ function test_mgr_tell()
   ceph tell mgr version
 }
 
+function test_mgr_devices()
+{
+  ceph device ls
+  expect_false ceph device info doesnotexist
+  expect_false ceph device get-health-metrics doesnotexist
+}
+
 function test_per_pool_scrub_status()
 {
   ceph osd pool create noscrub_pool 12
@@ -2842,6 +2860,7 @@ MDS_TESTS+=" mon_mds_metadata"
 MDS_TESTS+=" mds_tell_help_command"
 
 MGR_TESTS+=" mgr_tell"
+MGR_TESTS+=" mgr_devices"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS

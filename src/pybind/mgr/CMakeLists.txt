@@ -1,4 +1,6 @@
-add_subdirectory(dashboard)
+if(WITH_MGR_DASHBOARD_FRONTEND)
+  add_subdirectory(dashboard)
+endif()
 add_subdirectory(insights)
 add_subdirectory(ansible)
 add_subdirectory(orchestrator_cli)

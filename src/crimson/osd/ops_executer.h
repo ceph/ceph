@@ -34,7 +34,7 @@
 class PGLSFilter;
 class OSDOp;
 
-namespace ceph::osd {
+namespace crimson::osd {
 class OpsExecuter {
   // an operation can be divided into two stages: main and effect-exposing
   // one. The former is performed immediately on call to `do_osd_op()` while
@@ -93,7 +93,7 @@ class OpsExecuter {
   }
 
   seastar::future<> dont_do_legacy_op() {
-    throw ceph::osd::operation_not_supported();
+    throw crimson::osd::operation_not_supported();
   }
 
 public:
@@ -162,4 +162,4 @@ seastar::future<> OpsExecuter::submit_changes(Func&& f) && {
     });
 }
 
-} // namespace ceph::osd
+} // namespace crimson::osd

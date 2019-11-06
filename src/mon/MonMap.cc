@@ -707,7 +707,7 @@ future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& name)
   });
 }
 
-seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf,
+seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 				       bool for_mkfs)
 {
   // -m foo?
@@ -741,7 +741,7 @@ seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf,
   });
 }
 
-future<> MonMap::build_initial(const ceph::common::ConfigProxy& conf, bool for_mkfs)
+future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
   // file?
   if (const auto monmap = conf.get_val<std::string>("monmap");

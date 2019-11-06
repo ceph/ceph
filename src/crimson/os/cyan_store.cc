@@ -17,13 +17,13 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_filestore);
   }
 }
 
-using ceph::common::local_conf;
+using crimson::common::local_conf;
 
-namespace ceph::os {
+namespace crimson::os {
 
 using ObjectRef = boost::intrusive_ptr<Object>;
 
@@ -119,7 +119,7 @@ store_statfs_t CyanStore::stat() const
 {
   logger().debug("{}", __func__);
   store_statfs_t st;
-  st.total = ceph::common::local_conf().get_val<Option::size_t>("memstore_device_bytes");
+  st.total = crimson::common::local_conf().get_val<Option::size_t>("memstore_device_bytes");
   st.available = st.total - used_bytes;
   return st;
 }
@@ -277,15 +277,15 @@ CyanStore::omap_get_values(
 }
 
 seastar::future<> CyanStore::do_transaction(CollectionRef ch,
-                                            Transaction&& t)
+                                            ceph::os::Transaction&& t)
 {
+  using ceph::os::Transaction;
   int r = 0;
   try {
     auto i = t.begin();
     while (i.have_op()) {
-      Transaction::Op* op = i.decode_op();
       r = 0;
-      switch (op->op) {
+      switch (auto op = i.decode_op(); op->op) {
       case Transaction::OP_NOP:
 	break;
       case Transaction::OP_REMOVE:

@@ -2240,6 +2240,20 @@ extern "C" int _rados_aio_create_completion(void *cb_arg,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_aio_create_completion);
 
+extern "C" int _rados_aio_create_completion2(void *cb_arg,
+					     rados_callback_t cb_complete,
+					     rados_completion_t *pc)
+{
+  tracepoint(librados, rados_aio_create_completion2_enter, cb_arg, cb_complete);
+  librados::AioCompletionImpl *c = new librados::AioCompletionImpl;
+  if (cb_complete)
+    c->set_complete_callback(cb_arg, cb_complete);
+  *pc = c;
+  tracepoint(librados, rados_aio_create_completion2_exit, 0, *pc);
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_aio_create_completion2);
+
 extern "C" int _rados_aio_wait_for_complete(rados_completion_t c)
 {
   tracepoint(librados, rados_aio_wait_for_complete_enter, c);
@@ -2252,7 +2266,7 @@ LIBRADOS_C_API_BASE_DEFAULT(rados_aio_wait_for_complete);
 extern "C" int _rados_aio_wait_for_safe(rados_completion_t c)
 {
   tracepoint(librados, rados_aio_wait_for_safe_enter, c);
-  int retval = ((librados::AioCompletionImpl*)c)->wait_for_safe();
+  int retval = ((librados::AioCompletionImpl*)c)->wait_for_complete();
   tracepoint(librados, rados_aio_wait_for_safe_exit, retval);
   return retval;
 }

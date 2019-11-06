@@ -2,7 +2,7 @@
 
 #include "config_proxy.h"
 
-namespace ceph::common {
+namespace crimson::common {
 
 ConfigProxy::ConfigProxy(const EntityName& name, std::string_view cluster)
 {

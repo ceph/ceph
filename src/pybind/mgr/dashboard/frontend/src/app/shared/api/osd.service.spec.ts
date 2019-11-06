@@ -108,7 +108,7 @@ describe('OsdService', () => {
 
   it('should return if it is safe to destroy an OSD', () => {
     service.safeToDestroy('[0,1]').subscribe();
-    const req = httpTesting.expectOne('api/osd/[0,1]/safe_to_destroy');
+    const req = httpTesting.expectOne('api/osd/safe_to_destroy?ids=[0,1]');
     expect(req.request.method).toBe('GET');
   });
 });

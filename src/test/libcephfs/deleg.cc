@@ -15,11 +15,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <sys/xattr.h>
 #include <sys/uio.h>
 
 #ifdef __linux__
 #include <limits.h>
+#include <sys/xattr.h>
 #endif
 
 #include <map>

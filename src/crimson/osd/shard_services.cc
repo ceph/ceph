@@ -20,19 +20,19 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 ShardServices::ShardServices(
   OSDMapService &osdmap_service,
-  ceph::net::Messenger &cluster_msgr,
-  ceph::net::Messenger &public_msgr,
-  ceph::mon::Client &monc,
-  ceph::mgr::Client &mgrc,
-  ceph::os::FuturizedStore &store)
+  crimson::net::Messenger &cluster_msgr,
+  crimson::net::Messenger &public_msgr,
+  crimson::mon::Client &monc,
+  crimson::mgr::Client &mgrc,
+  crimson::os::FuturizedStore &store)
     : osdmap_service(osdmap_service),
       cluster_msgr(cluster_msgr),
       public_msgr(public_msgr),
@@ -66,7 +66,7 @@ seastar::future<> ShardServices::send_to_osd(
 }
 
 seastar::future<> ShardServices::dispatch_context_transaction(
-  ceph::os::CollectionRef col, PeeringCtx &ctx) {
+  crimson::os::CollectionRef col, PeeringCtx &ctx) {
   auto ret = store.do_transaction(
     col,
     std::move(ctx.transaction));
@@ -90,7 +90,7 @@ seastar::future<> ShardServices::dispatch_context_messages(
 }
 
 seastar::future<> ShardServices::dispatch_context(
-  ceph::os::CollectionRef col,
+  crimson::os::CollectionRef col,
   PeeringCtx &&ctx)
 {
   ceph_assert(col || ctx.transaction.empty());

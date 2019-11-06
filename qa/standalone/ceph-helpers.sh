@@ -996,7 +996,7 @@ function wait_for_quorum() {
     fi
 
     if [[ -z "$quorumsize" ]]; then
-      timeout $timeout ceph mon_status --format=json >&/dev/null || return 1
+      timeout $timeout ceph quorum_status --format=json >&/dev/null || return 1
       return 0
     fi
 
@@ -1004,7 +1004,7 @@ function wait_for_quorum() {
     wait_until=$((`date +%s` + $timeout))
     while [[ $(date +%s) -lt $wait_until ]]; do
         jqfilter='.quorum | length == '$quorumsize
-        jqinput="$(timeout $timeout ceph mon_status --format=json 2>/dev/null)"
+        jqinput="$(timeout $timeout ceph quorum_status --format=json 2>/dev/null)"
         res=$(echo $jqinput | jq "$jqfilter")
         if [[ "$res" == "true" ]]; then
           no_quorum=0

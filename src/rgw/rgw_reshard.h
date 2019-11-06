@@ -5,7 +5,10 @@
 #define RGW_RESHARD_H
 
 #include <vector>
+#include <initializer_list>
 #include <functional>
+#include <iterator>
+#include <algorithm>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -77,6 +80,10 @@ private:
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
 
+  // using an initializer_list as an array in contiguous memory
+  // allocated in at once
+  static const std::initializer_list<uint16_t> reshard_primes;
+
   int create_new_bucket_instance(int new_num_shards,
 				 RGWBucketInfo& new_bucket_info);
   int do_reshard(int num_shards,
@@ -89,7 +96,8 @@ public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
   // manage
-  RGWBucketReshard(rgw::sal::RGWRadosStore *_store, const RGWBucketInfo& _bucket_info,
+  RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
+		   const RGWBucketInfo& _bucket_info,
                    const std::map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
@@ -119,7 +127,64 @@ public:
     return set_resharding_status(store, bucket_info,
 				 new_instance_id, num_shards, status);
   }
+
+  static uint32_t get_max_prime_shards() {
+    return *std::crbegin(reshard_primes);
+  }
+
+  // returns the prime in our list less than or equal to the
+  // parameter; the lowest value that can be returned is 1
+  static uint32_t get_prime_shards_less_or_equal(uint32_t requested_shards) {
+    auto it = std::upper_bound(reshard_primes.begin(), reshard_primes.end(),
+			       requested_shards);
+    if (it == reshard_primes.begin()) {
+      return 1;
+    } else {
+      return *(--it);
+    }
+  }
+
+  // returns the prime in our list greater than or equal to the
+  // parameter; if we do not have such a prime, 0 is returned
+  static uint32_t get_prime_shards_greater_or_equal(
+    uint32_t requested_shards)
+  {
+    auto it = std::lower_bound(reshard_primes.begin(), reshard_primes.end(),
+			       requested_shards);
+    if (it == reshard_primes.end()) {
+      return 0;
+    } else {
+      return *it;
+    }
+  }
+
+  // returns a preferred number of shards given a calculated number of
+  // shards based on max_dynamic_shards and the list of prime values
+  static uint32_t get_preferred_shards(uint32_t suggested_shards,
+				       uint32_t max_dynamic_shards) {
+
+    // use a prime if max is within our prime range, otherwise use
+    // specified max
+    const uint32_t absolute_max =
+      max_dynamic_shards >= get_max_prime_shards() ?
+      max_dynamic_shards :
+      get_prime_shards_less_or_equal(max_dynamic_shards);
+
+    // if we can use a prime number, use it, otherwise use suggested;
+    // note get_prime_shards_greater_or_equal will return 0 if no prime in
+    // prime range
+    const uint32_t prime_ish_num_shards =
+      std::max(get_prime_shards_greater_or_equal(suggested_shards),
+	       suggested_shards);
+
+    // dynamic sharding cannot reshard more than defined maximum
+    const uint32_t final_num_shards =
+      std::min(prime_ish_num_shards, absolute_max);
+
+    return final_num_shards;
+  }
 }; // RGWBucketReshard
+
 
 class RGWReshard {
 public:

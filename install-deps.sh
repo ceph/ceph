@@ -391,6 +391,9 @@ else
                     dts_ver=8
                 elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     $SUDO dnf config-manager --set-enabled PowerTools
+		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
+		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
+		    $SUDO dnf config-manager --setopt gpgcheck=0 apt-mirror.front.sepia.ceph.com_lab-extras_8_ --save
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     $SUDO subscription-manager repos --enable "codeready-builder-for-rhel-8-*-rpms"
                 fi

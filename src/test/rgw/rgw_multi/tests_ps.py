@@ -38,7 +38,7 @@ def set_contents_from_string(key, content):
     try:
         key.set_contents_from_string(content)
     except Exception as e:
-        print 'Error: ' + str(e) 
+        print('Error: ' + str(e))
 
 
 # HTTP endpoint functions
@@ -159,7 +159,8 @@ class AMQPReceiver(object):
                 break
             except Exception as error:
                 remaining_retries -= 1
-                print 'failed to connect to rabbitmq (remaining retries ' + str(remaining_retries) + '): ' + str(error)
+                print('failed to connect to rabbitmq (remaining retries '
+                    + str(remaining_retries) + '): ' + str(error))
 
         if remaining_retries == 0:
             raise Exception('failed to connect to rabbitmq - no retries left')
@@ -320,7 +321,7 @@ def init_rabbitmq():
         proc = subprocess.Popen('rabbitmq-server')
     except Exception as error:
         log.info('failed to execute rabbitmq-server: %s', str(error))
-        print 'failed to execute rabbitmq-server: %s' % str(error)
+        print('failed to execute rabbitmq-server: %s' % str(error))
         return None
     # TODO add rabbitmq checkpoint instead of sleep
     time.sleep(5)
@@ -405,14 +406,14 @@ def test_ps_info():
     for i in range(number_of_objects):
         key = bucket.new_key(str(i))
         key.set_contents_from_string('bar')
-    print 'Zonegroup: ' + zonegroup.name
-    print 'user: ' + get_user()
-    print 'tenant: ' + get_tenant()
-    print 'Master Zone'
+    print('Zonegroup: ' + zonegroup.name)
+    print('user: ' + get_user())
+    print('tenant: ' + get_tenant())
+    print('Master Zone')
     print_connection_info(zones[0].conn)
-    print 'PubSub Zone'
+    print('PubSub Zone')
     print_connection_info(ps_zones[0].conn)
-    print 'Bucket: ' + bucket_name
+    print('Bucket: ' + bucket_name)
 
 
 def test_ps_s3_notification_low_level():
@@ -830,10 +831,10 @@ def ps_s3_notification_filter(on_master):
             assert_equal(status/100, 2)
             skip_notif4 = False
         except Exception as error:
-            print 'note: metadata filter is not supported by boto3 - skipping test'
+            print('note: metadata filter is not supported by boto3 - skipping test')
             skip_notif4 = True
     else:
-        print 'filtering by attributes only supported on master zone'
+        print('filtering by attributes only supported on master zone')
         skip_notif4 = True
 
 
@@ -884,7 +885,7 @@ def ps_s3_notification_filter(on_master):
         key.set_contents_from_string('bar')
 
     if on_master:
-        print 'wait for 5sec for the messages...'
+        print('wait for 5sec for the messages...')
         time.sleep(5)
     else:
         zone_bucket_checkpoint(ps_zone.zone, zones[0].zone, bucket_name)
@@ -960,7 +961,7 @@ def test_ps_s3_notification_errors_on_master():
     try:
       result, status = s3_notification_conf.set_config()
     except Exception as error:
-      print str(error) + ' - is expected'
+      print(str(error) + ' - is expected')
     else:
       assert False, 'invalid event name is expected to fail'
 
@@ -973,7 +974,7 @@ def test_ps_s3_notification_errors_on_master():
     try:
       _, _ = s3_notification_conf.set_config()
     except Exception as error:
-      print str(error) + ' - is expected'
+      print(str(error) + ' - is expected')
     else:
       assert False, 'missing notification name is expected to fail'
 
@@ -987,7 +988,7 @@ def test_ps_s3_notification_errors_on_master():
     try:
       _, _ = s3_notification_conf.set_config()
     except Exception as error:
-      print str(error) + ' - is expected'
+      print(str(error) + ' - is expected')
     else:
       assert False, 'invalid ARN is expected to fail'
 
@@ -1001,7 +1002,7 @@ def test_ps_s3_notification_errors_on_master():
     try:
       _, _ = s3_notification_conf.set_config()
     except Exception as error:
-      print str(error) + ' - is expected'
+      print(str(error) + ' - is expected')
     else:
       assert False, 'unknown topic is expected to fail'
 
@@ -1014,7 +1015,7 @@ def test_ps_s3_notification_errors_on_master():
     try:
       _, _ = s3_notification_conf.set_config()
     except Exception as error:
-      print str(error) + ' - is expected'
+      print(str(error) + ' - is expected')
     else:
       assert False, 'unknown bucket is expected to fail'
 
@@ -1040,7 +1041,7 @@ def test_objcet_timing():
     bucket_name = gen_bucket_name()
     bucket = zones[0].create_bucket(bucket_name)
     # create objects in the bucket (async)
-    print 'creating objects...'
+    print('creating objects...')
     number_of_objects = 1000
     client_threads = []
     start_time = time.time()
@@ -1053,11 +1054,11 @@ def test_objcet_timing():
     [thr.join() for thr in client_threads] 
 
     time_diff = time.time() - start_time
-    print 'average time for object creation: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for object creation: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
     
-    print 'total number of objects: ' + str(len(list(bucket.list())))
+    print('total number of objects: ' + str(len(list(bucket.list()))))
 
-    print 'deleting objects...'
+    print('deleting objects...')
     client_threads = []
     start_time = time.time()
     for key in bucket.list():
@@ -1067,7 +1068,7 @@ def test_objcet_timing():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print 'average time for object deletion: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for object deletion: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
     
     # cleanup
     zones[0].delete_bucket(bucket_name)
@@ -1134,14 +1135,14 @@ def test_ps_s3_notification_push_amqp_on_master():
     [thr.join() for thr in client_threads] 
 
     time_diff = time.time() - start_time
-    print 'average time for creation + qmqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for creation + qmqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
 
     # check amqp receiver
     keys = list(bucket.list())
-    print 'total number of objects: ' + str(len(keys))
+    print('total number of objects: ' + str(len(keys)))
     receiver1.verify_s3_events(keys, exact_match=True)
     receiver2.verify_s3_events(keys, exact_match=True)
     
@@ -1155,9 +1156,9 @@ def test_ps_s3_notification_push_amqp_on_master():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print 'average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
     
     # check amqp receiver 1 for deletions
@@ -1231,14 +1232,14 @@ def test_ps_s3_notification_push_http_on_master():
     [thr.join() for thr in client_threads] 
 
     time_diff = time.time() - start_time
-    print 'average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
     
     # check http receiver
     keys = list(bucket.list())
-    print 'total number of objects: ' + str(len(keys))
+    print('total number of objects: ' + str(len(keys)))
     http_server.verify_s3_events(keys, exact_match=True)
     
     # delete objects from the bucket
@@ -1251,9 +1252,9 @@ def test_ps_s3_notification_push_http_on_master():
     [thr.join() for thr in client_threads] 
     
     time_diff = time.time() - start_time
-    print 'average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
     
     # check http receiver
@@ -1840,7 +1841,7 @@ def test_ps_s3_creation_triggers_on_master():
     uploader.complete_upload()
     fp.close()
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
 
     # check amqp receiver
@@ -1920,7 +1921,7 @@ def test_ps_s3_multipart_on_master():
     uploader.complete_upload()
     fp.close()
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
 
     # check amqp receiver
@@ -2092,7 +2093,7 @@ def test_ps_s3_metadata_on_master():
     key.set_metadata('meta1', 'This is my metadata value')
     key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     keys = list(bucket.list())
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
     receiver.verify_s3_events(keys, exact_match=True)
@@ -2168,7 +2169,7 @@ def test_ps_s3_versioned_deletion_on_master():
     bucket.delete_key(key.name, version_id=v1)
     delete_marker_key.delete()
 
-    print 'wait for 5sec for the messages...'
+    print('wait for 5sec for the messages...')
     time.sleep(5)
 
     # check amqp receiver

@@ -27,6 +27,10 @@
     background-color: $color-popover-seperator-bg;
     font-size: 12px;
   }
+
+  .btn-link .fa-trash-o {
+    color: $color-black;
+  }
 }
 
 table {

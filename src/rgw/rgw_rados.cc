@@ -971,7 +971,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
 
   *result = entry;
 
-  entry->rados_completion = librados::Rados::aio_create_completion(entry, NULL, obj_complete_cb);
+  entry->rados_completion = librados::Rados::aio_create_completion(entry, obj_complete_cb);
 
   std::lock_guard l{locks[shard_id]};
   completions[shard_id].insert(entry);
@@ -4487,7 +4487,12 @@ int RGWRados::Object::complete_atomic_modification()
   }
 
   string tag = (state->tail_tag.length() > 0 ? state->tail_tag.to_str() : state->obj_tag.to_str());
-  return store->gc->send_chain(chain, tag, false);  // do it async
+  auto ret = store->gc->send_chain(chain, tag); // do it synchronously
+  if (ret < 0) {
+    //Delete objects inline if send chain to gc fails
+    store->delete_objs_inline(chain, tag);
+  }
+  return 0;
 }
 
 void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain)
@@ -4504,9 +4509,40 @@ void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_
   }
 }
 
-int RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync)
+int RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag)
 {
-  return gc->send_chain(chain, tag, sync);
+  return gc->send_chain(chain, tag);
+}
+
+void RGWRados::delete_objs_inline(cls_rgw_obj_chain& chain, const string& tag)
+{
+  string last_pool;
+  std::unique_ptr<IoCtx> ctx(new IoCtx);
+  int ret = 0;
+  for (auto liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
+    cls_rgw_obj& obj = *liter;
+    if (obj.pool != last_pool) {
+      ctx.reset(new IoCtx);
+      ret = rgw_init_ioctx(get_rados_handle(), obj.pool, *ctx);
+      if (ret < 0) {
+        last_pool = "";
+        ldout(cct, 0) << "ERROR: failed to create ioctx pool=" <<
+        obj.pool << dendl;
+        continue;
+      }
+      last_pool = obj.pool;
+    }
+    ctx->locator_set_key(obj.loc);
+    const string& oid = obj.key.name; /* just stored raw oid there */
+    ldout(cct, 5) << "delete_objs_inline: removing " << obj.pool <<
+    ":" << obj.key.name << dendl;
+    ObjectWriteOperation op;
+    cls_refcount_put(op, tag, true);
+    ret = ctx->operate(oid, &op);
+    if (ret < 0) {
+      ldout(cct, 5) << "delete_objs_inline: refcount put returned error " << ret << dendl;
+    }
+  }
 }
 
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
@@ -4618,7 +4654,9 @@ int RGWRados::defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_ob
 
   ldout(cct, 0) << "defer chain tag=" << tag << dendl;
 
-  return gc->defer_chain(tag, false);
+  cls_rgw_obj_chain chain;
+  update_gc_chain(state->obj, *state->manifest, &chain);
+  return gc->async_defer_chain(tag, chain);
 }
 
 void RGWRados::remove_rgw_head_obj(ObjectWriteOperation& op)
@@ -5214,7 +5252,7 @@ int RGWRados::Object::Stat::stat_async()
   librados::ObjectReadOperation op;
   op.stat2(&result.size, &result.mtime, NULL);
   op.getxattrs(&result.attrs, NULL);
-  state.completion = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  state.completion = librados::Rados::aio_create_completion(nullptr, nullptr);
   state.io_ctx.locator_set_key(loc);
   r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
   if (r < 0) {
@@ -5234,7 +5272,7 @@ int RGWRados::Object::Stat::wait()
     return state.ret;
   }
 
-  state.completion->wait_for_safe();
+  state.completion->wait_for_complete();
   state.ret = state.completion->get_return_value();
   state.completion->release();
 
@@ -7459,7 +7497,7 @@ int RGWRados::append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl)
     return r;
   }
   librados::Rados *rad = get_rados_handle();
-  librados::AioCompletion *completion = rad->aio_create_completion(NULL, NULL, NULL);
+  librados::AioCompletion *completion = rad->aio_create_completion(nullptr, nullptr);
 
   r = ref.pool.ioctx().aio_append(ref.obj.oid, completion, bl, size);
   completion->release();
@@ -7773,16 +7811,10 @@ int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
   return rgw_rados_operate(gc_pool_ctx, oid, op, null_yield);
 }
 
-int RGWRados::gc_aio_operate(string& oid, librados::ObjectWriteOperation *op, AioCompletion **pc)
+int RGWRados::gc_aio_operate(const string& oid, librados::AioCompletion *c,
+                             librados::ObjectWriteOperation *op)
 {
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-  int r = gc_pool_ctx.aio_operate(oid, c, op);
-  if (!pc) {
-    c->release();
-  } else {
-    *pc = c;
-  }
-  return r;
+  return gc_pool_ctx.aio_operate(oid, c, op);
 }
 
 int RGWRados::gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl)
@@ -8018,7 +8050,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
       ObjectWriteOperation o;
       cls_rgw_suggest_changes(o, miter->second);
       // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+      AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
       ioctx.aio_operate(miter->first, c, &o);
       c->release();
     }
@@ -8179,7 +8211,7 @@ check_updates:
       ObjectWriteOperation o;
       cls_rgw_suggest_changes(o, miter->second);
       // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+      AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
       ioctx.aio_operate(miter->first, c, &o);
       c->release();
     }
@@ -8467,8 +8499,8 @@ int RGWRados::cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_
 }
 
 int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
-          const rgw_bucket& bucket,
-          uint64_t num_objs)
+				  const rgw_bucket& bucket,
+				  uint64_t num_objs)
 {
   if (! cct->_conf->rgw_dynamic_resharding) {
       return 0;
@@ -8479,7 +8511,6 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
     (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
   const uint32_t max_dynamic_shards =
     uint32_t(cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards"));
-
   if (num_source_shards >= max_dynamic_shards) {
     return 0;
   }
@@ -8495,6 +8526,7 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
   const uint32_t final_num_shards =
     RGWBucketReshard::get_preferred_shards(suggested_num_shards,
              max_dynamic_shards);
+
   // final verification, so we don't reduce number of shards
   if (final_num_shards <= num_source_shards) {
     return 0;
@@ -8593,7 +8625,7 @@ int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompl
   list<string> prefixes;
   cls_rgw_remove_obj(op, prefixes);
 
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.pool.ioctx().aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;
@@ -8633,7 +8665,7 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   list<string> prefixes;
   cls_rgw_remove_obj(op, prefixes);
 
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.pool.ioctx().aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;

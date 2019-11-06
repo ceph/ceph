@@ -143,6 +143,35 @@ class SubVolume(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def resize_subvolume(self, subvolpath, newsize, noshrink):
+        """
+        :param subvolpath: subvolume path
+        :param newsize: new size In bytes
+        :return: new quota size and used bytes as a tuple
+        """
+        if newsize <= 0:
+            raise VolumeException(-errno.EINVAL, "Provide a valid size")
+
+        try:
+            maxbytes = int(self.fs.getxattr(subvolpath, 'ceph.quota.max_bytes').decode('utf-8'))
+        except cephfs.NoData:
+            maxbytes = 0
+
+        subvolstat = self.fs.stat(subvolpath)
+        if newsize > 0 and newsize < subvolstat.st_size:
+            if noshrink:
+                raise VolumeException(-errno.EINVAL, "Can't resize the subvolume. The new size '{0}' would be lesser than the current "
+                                      "used size '{1}'".format(newsize, subvolstat.st_size))
+
+        if newsize == maxbytes:
+            return newsize, subvolstat.st_size
+
+        try:
+            self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(newsize).encode('utf-8'), 0)
+        except Exception as e:
+            raise VolumeException(-e.args[0], "Cannot set new size for the subvolume. '{0}'".format(e.args[1]))
+        return newsize, subvolstat.st_size
+
     def purge_subvolume(self, spec, should_cancel):
         """
         Finish clearing up a subvolume from the trash directory.
@@ -151,22 +180,20 @@ class SubVolume(object):
         def rmtree(root_path):
             log.debug("rmtree {0}".format(root_path))
             try:
-                dir_handle = self.fs.opendir(root_path)
+                with self.fs.opendir(root_path) as dir_handle:
+                    d = self.fs.readdir(dir_handle)
+                    while d and not should_cancel():
+                        if d.d_name not in (b".", b".."):
+                            d_full = os.path.join(root_path, d.d_name)
+                            if d.is_dir():
+                                rmtree(d_full)
+                            else:
+                                self.fs.unlink(d_full)
+                        d = self.fs.readdir(dir_handle)
             except cephfs.ObjectNotFound:
                 return
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
-            d = self.fs.readdir(dir_handle)
-            while d and not should_cancel():
-                if d.d_name not in (b".", b".."):
-                    d_full = os.path.join(root_path, d.d_name)
-                    if d.is_dir():
-                        rmtree(d_full)
-                    else:
-                        self.fs.unlink(d_full)
-
-                d = self.fs.readdir(dir_handle)
-            self.fs.closedir(dir_handle)
             # remove the directory only if we were not asked to cancel
             # (else we would fail to remove this anyway)
             if not should_cancel():

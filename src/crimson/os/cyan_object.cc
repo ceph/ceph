@@ -1,7 +1,7 @@
 #include "cyan_object.h"
 #include "include/encoding.h"
 
-namespace ceph::os {
+namespace crimson::os {
 
 size_t Object::get_size() const {
   return data.length();

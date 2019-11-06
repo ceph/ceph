@@ -203,10 +203,6 @@ COMMAND("log last "
         "name=channel,type=CephChoices,strings=*|cluster|audit,req=false", \
 	"print last few lines of the cluster log", \
 	"mon", "r")
-COMMAND_WITH_FLAG("injectargs " \
-	     "name=injected_args,type=CephString,n=N",			\
-	     "inject config arguments into monitor", "mon", "rw",
-	     FLAG(NOFORWARD))
 
 COMMAND("status", "show cluster status", "mon", "r")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
@@ -242,20 +238,6 @@ COMMAND("mon ok-to-rm " \
 	"check whether removing the specified mon would break quorum",
 	"mon", "r")
 
-COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
-	     FLAG(NOFORWARD))
-COMMAND_WITH_FLAG("sync force " \
-	"name=yes_i_really_mean_it,type=CephBool,req=false " \
-	"name=i_know_what_i_am_doing,type=CephBool,req=false", \
-	"force sync of and clear monitor store", \
-        "mon", "rw", \
-        FLAG(NOFORWARD)|FLAG(DEPRECATED))
-COMMAND_WITH_FLAG("heap " \
-	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
-	     "show heap usage info (available only if compiled with tcmalloc)", \
-	     "mon", "rw", FLAG(NOFORWARD))
-COMMAND("quorum name=quorumcmd,type=CephChoices,strings=enter|exit,n=1", \
-	"enter or exit quorum", "mon", "rw")
 COMMAND("tell " \
 	"name=target,type=CephName " \
 	"name=args,type=CephString,n=N", \
@@ -277,12 +259,6 @@ COMMAND_WITH_FLAG("mon scrub",
     "scrub the monitor stores", \
     "mon", "rw", \
     FLAG(NONE))
-COMMAND_WITH_FLAG("mon sync force " \
-    "name=yes_i_really_mean_it,type=CephBool,req=false " \
-    "name=i_know_what_i_am_doing,type=CephBool,req=false", \
-    "force sync of and clear monitor store", \
-    "mon", "rw", \
-    FLAG(NOFORWARD))
 COMMAND("mon metadata name=id,type=CephString,req=false",
 	"fetch metadata for mon <id>",
 	"mon", "r")
@@ -1253,6 +1229,28 @@ COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",
 	"config", "r")
 
+
+
+
+// these are tell commands that were implemented as CLI commands in
+// the broken pre-octopus way that we want to allow to work when a
+// monitor has upgraded to octopus+ but the monmap min_mon_release is
+// still < octopus.  we exclude things that weren't well supported
+// before and that aren't implemented by the octopus mon anymore.
+//
+// the command set below matches the kludge in Monitor::handle_command
+// that shunts these off to the asok machinery.
+
+COMMAND_WITH_FLAG("injectargs " \
+	     "name=injected_args,type=CephString,n=N",			\
+	     "inject config arguments into monitor", "mon", "rw",
+		  FLAG(NOFORWARD)|FLAG(HIDDEN))
 COMMAND_WITH_FLAG("smart name=devid,type=CephString,req=false",
-		  "Query health metrics for underlying device",
-		  "mon", "rw", FLAG(HIDDEN))
+                 "Query health metrics for underlying device",
+		  "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
+		  FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("heap "						\
+            "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
+            "show heap usage info (available only if compiled with tcmalloc)", \
+		  "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))

@@ -4,7 +4,7 @@
 #include "AuthClient.h"
 #include "AuthServer.h"
 
-namespace ceph::auth {
+namespace crimson::auth {
 
 class DummyAuthClientServer : public AuthClient,
                               public AuthServer {
@@ -32,20 +32,20 @@ public:
   }
 
   AuthClient::auth_request_t get_auth_request(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta) override {
     return {CEPH_AUTH_NONE, {CEPH_CON_MODE_CRC}, {}};
   }
 
   ceph::bufferlist handle_auth_reply_more(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     const bufferlist& bl) override {
     ceph_abort();
   }
 
   int handle_auth_done(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     uint64_t global_id,
     uint32_t con_mode,
@@ -54,7 +54,7 @@ public:
   }
 
   int handle_auth_bad_method(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     uint32_t old_auth_method,
     int result,
@@ -65,7 +65,7 @@ public:
 
   // server
   int handle_auth_request(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     bool more,
     uint32_t auth_method,
@@ -75,4 +75,4 @@ public:
   }
 };
 
-} // namespace ceph::auth
+} // namespace crimson::auth

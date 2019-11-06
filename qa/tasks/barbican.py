@@ -105,7 +105,7 @@ def assign_ports(ctx, config, initial_port):
     """
     port = initial_port
     role_endpoints = {}
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for remote, roles_for_host in ctx.cluster.remotes.items():
         for role in roles_for_host:
             if role in config:
                 role_endpoints[role] = (remote.name.split('@')[1], port)
@@ -245,11 +245,6 @@ def create_secrets(ctx, config):
     (cclient, cconfig) = config.items()[0]
 
     rgw_user = cconfig['rgw_user']
-    ctx.barbican.token[cclient] = {
-        "username": rgw_user["username"],
-        "password": rgw_user["password"],
-        "tenant": rgw_user["tenantName"]
-    }
 
     keystone_role = cconfig.get('use-keystone-role', None)
     keystone_host, keystone_port = ctx.keystone.public_endpoints[keystone_role]
@@ -504,7 +499,6 @@ def task(ctx, config):
 
     ctx.barbican = argparse.Namespace()
     ctx.barbican.endpoints = assign_ports(ctx, config, 9311)
-    ctx.barbican.token = {}
     ctx.barbican.keys = {}
     
     with contextutil.nested(

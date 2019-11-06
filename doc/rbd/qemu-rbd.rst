@@ -171,7 +171,7 @@ edit`` to include the ``xmlns:qemu`` value. Then, add a ``qemu:commandline``
 block as a child of that domain. The following example shows how to set two
 devices with ``qemu id=`` to different ``discard_granularity`` values.
 
-.. code-block:: guess
+.. code-block:: xml
 
 	<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
 		<qemu:commandline>

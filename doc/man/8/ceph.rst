@@ -53,8 +53,6 @@ Synopsis
 
 | **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *stat* ] ...
 
-| **ceph** **quorum** [ *enter* \| *exit* ]
-
 | **ceph** **quorum_status**
 
 | **ceph** **report** { *<tags>* [ *<tags>...* ] }
@@ -1464,14 +1462,9 @@ Usage::
 quorum
 ------
 
-Cause MON to enter or exit quorum.
+Cause a specific MON to enter or exit quorum.
 
 Usage::
-
-	ceph quorum enter|exit
-
-Note: this only works on the MON to which the ``ceph`` command is connected.
-If you want a specific MON to enter or exit quorum, use this syntax::
 
 	ceph tell mon.<id> quorum enter|exit
 
@@ -1513,16 +1506,6 @@ Shows cluster status.
 Usage::
 
 	ceph status
-
-
-sync force
-----------
-
-Forces sync of and clear monitor store.
-
-Usage::
-
-	ceph sync force {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
 
 
 tell

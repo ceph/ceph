@@ -433,7 +433,6 @@ def get_mons(roles, ips, cluster_name,
     mons = {}
     v1_ports = {}
     v2_ports = {}
-    mon_id = 0
     is_mon = teuthology.is_type('mon', cluster_name)
     for idx, roles in enumerate(roles):
         for role in roles:
@@ -465,7 +464,6 @@ def get_mons(roles, ips, cluster_name,
                     ip=ips[idx],
                     port=v1_ports[ips[idx]],
                 )
-            mon_id += 1
             mons[role] = addr
     assert mons
     return mons
@@ -479,9 +477,7 @@ def skeleton_config(ctx, roles, ips, mons, cluster='ceph'):
     Use conf.write to write it out, override .filename first if you want.
     """
     path = os.path.join(os.path.dirname(__file__), 'ceph.conf.template')
-    t = open(path, 'r')
-    skconf = t.read().format(testdir=teuthology.get_testdir(ctx))
-    conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
+    conf = configobj.ConfigObj(path, file_error=True)
     mon_hosts = []
     for role, addr in mons.items():
         mon_cluster, _, _ = teuthology.split_role(role)
@@ -1266,7 +1262,11 @@ def osd_scrub_pgs(ctx, config):
         unclean = [stat['pgid'] for stat in stats if 'active+clean' not in stat['state']]
         split_merge = []
         osd_dump = manager.get_osd_dump_json()
-        split_merge = [i['pool_name'] for i in osd_dump['pools'] if i['pg_num'] != i['pg_num_target']]
+        try:
+            split_merge = [i['pool_name'] for i in osd_dump['pools'] if i['pg_num'] != i['pg_num_target']]
+        except KeyError:
+            # we don't support pg_num_target before nautilus
+            pass
         if not unclean and not split_merge:
             all_clean = True
             break
@@ -1298,8 +1298,7 @@ def osd_scrub_pgs(ctx, config):
         loop = False
         thiscnt = 0
         for (pgid, tmval) in timez:
-            t = tmval[0:tmval.find('.')]
-            t.replace(' ', 'T')
+            t = tmval[0:tmval.find('.')].replace(' ', 'T')
             pgtm = time.strptime(t, '%Y-%m-%dT%H:%M:%S')
             if pgtm > check_time_now:
                 thiscnt += 1

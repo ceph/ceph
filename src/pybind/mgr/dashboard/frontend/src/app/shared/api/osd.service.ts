@@ -6,7 +6,16 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { ApiModule } from './api.module';
 
 export interface SmartAttribute {
-  flags: object;
+  flags: {
+    auto_keep: boolean;
+    error_rate: boolean;
+    event_count: boolean;
+    performance: boolean;
+    prefailure: boolean;
+    string: string;
+    updated_online: boolean;
+    value: number;
+  };
   id: number;
   name: string;
   raw: { string: string; value: number };
@@ -27,7 +36,12 @@ export interface SmartError {
 }
 
 export interface SmartDataV1 {
-  ata_sct_capabilities: object;
+  ata_sct_capabilities: {
+    data_table_supported: boolean;
+    error_recovery_control_supported: boolean;
+    feature_control_supported: boolean;
+    value: number;
+  };
   ata_smart_attributes: {
     revision: number;
     table: SmartAttribute[];
@@ -43,43 +57,49 @@ export interface SmartDataV1 {
       offline_surface_scan_supported: boolean;
       selective_self_test_supported: boolean;
       self_tests_supported: boolean;
-      values: boolean;
+      values: number[];
     };
     offline_data_collection: {
       completion_seconds: number;
-      status: {
-        string: string;
-        value: number;
-      };
+      status: { string: string; value: number };
     };
     self_test: {
-      polling_minutes: {
-        conveyance: number;
-        extended: number;
-        short: number;
-      };
-      status: {
-        passed: boolean;
-        string: string;
-        value: number;
-      };
+      polling_minutes: { conveyance: number; extended: number; short: number };
+      status: { passed: boolean; string: string; value: number };
     };
   };
-  ata_smart_error_log: object;
-  ata_smart_selective_self_test_log: object;
-  ata_smart_self_test_log: object;
-  ata_version: object;
-  device: {
-    name: string;
-    info_name: string;
-    type: string;
-    protocol: string;
+  ata_smart_error_log: { summary: { count: number; revision: number } };
+  ata_smart_selective_self_test_log: {
+    flags: { remainder_scan_enabled: boolean; value: number };
+    power_up_scan_resume_minutes: number;
+    revision: number;
+    table: {
+      lba_max: number;
+      lba_min: number;
+      status: { string: string; value: number };
+    }[];
   };
+  ata_smart_self_test_log: { standard: { count: number; revision: number } };
+  ata_version: { major_value: number; minor_value: number; string: string };
+  device: { info_name: string; name: string; protocol: string; type: string };
   firmware_version: string;
   in_smartctl_database: boolean;
-  interface_speed: object;
+  interface_speed: {
+    current: {
+      bits_per_unit: number;
+      sata_value: number;
+      string: string;
+      units_per_second: number;
+    };
+    max: {
+      bits_per_unit: number;
+      sata_value: number;
+      string: string;
+      units_per_second: number;
+    };
+  };
   json_format_version: number[];
-  local_time: object;
+  local_time: { asctime: string; time_t: number };
   logical_block_size: number;
   model_family: string;
   model_name: string;
@@ -88,15 +108,23 @@ export interface SmartDataV1 {
   nvme_vendor: string;
   physical_block_size: number;
   power_cycle_count: number;
-  power_on_time: object;
+  power_on_time: { hours: number };
   rotation_rate: number;
-  sata_version: object;
+  sata_version: { string: string; value: number };
   serial_number: string;
-  smart_status: object;
-  smartctl: object;
-  temperature: object;
-  user_capacity: object;
-  wwn: object;
+  smart_status: { passed: boolean };
+  smartctl: {
+    argv: string[];
+    build_info: string;
+    exit_status: number;
+    output: string[];
+    platform_info: string;
+    svn_revision: string;
+    version: number[];
+  };
+  temperature: { current: number };
+  user_capacity: { blocks: number; bytes: number };
+  wwn: { id: number; naa: number; oui: number };
 }
 
 @Injectable({
@@ -220,6 +248,6 @@ export class OsdService {
       'safe-to-destroy': boolean;
       message?: string;
     }
-    return this.http.get<SafeToDestroyResponse>(`${this.path}/${ids}/safe_to_destroy`);
+    return this.http.get<SafeToDestroyResponse>(`${this.path}/safe_to_destroy?ids=${ids}`);
   }
 }
