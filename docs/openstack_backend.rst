@@ -31,6 +31,10 @@ Setup
     $ cd teuthology ; ./bootstrap install
     $ source virtualenv/bin/activate
 
+* Setup the teuthology node::
+
+    $ teuthology-openstack --key-filename myself.pem --key-name myself --setup
+
 Get OpenStack credentials and test it
 -------------------------------------
 
@@ -57,11 +61,6 @@ Get OpenStack credentials and test it
 
 Usage
 -----
-
-* Create a passwordless ssh public key::
-
-    $ openstack keypair create myself > myself.pem
-    $ chmod 600 myself.pem
 
 * Run the dummy suite. It does nothing useful but shows all works as
   expected. Note that the first time it is run, it can take a long
