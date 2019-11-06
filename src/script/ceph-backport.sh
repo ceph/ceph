@@ -217,10 +217,15 @@ function cherry_pick_phase {
     if [ "$base_branch" = "ceph:master" ] ; then
         true
     else
-        error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
-        info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
-        info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
-        false
+        if [ "$FORCE" ] ; then
+            warning "base_branch ->$base_branch<- is something other than \"ceph:master\""
+            info "--force was given, so continuing anyway"
+        else
+            error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
+            info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
+            info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
+            false
+        fi
     fi
     merged=$(echo "${remote_api_output}" | jq -r '.merged')
     if [ "$merged" = "true" ] ; then
