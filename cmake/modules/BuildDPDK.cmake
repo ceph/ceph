@@ -108,17 +108,38 @@ function(do_export_dpdk dpdk_dir)
     endif()
   endif()
 
-  foreach(c
-      bus_pci
-      cmdline
-      eal
-      ethdev
-      kvargs
-      mbuf
-      mempool
-      mempool_ring
-      pci
-      ring)
+  list(APPEND dpdk_components
+    bus_pci
+    cmdline
+    eal
+    ethdev
+    kvargs
+    mbuf
+    mempool
+    mempool_ring
+    pci
+    ring)
+  if(Seastar_DPDK)
+    list(APPEND dpdk_components
+      bus_vdev
+      cfgfile
+      hash
+      net
+      pmd_bnxt
+      pmd_cxgbe
+      pmd_e1000
+      pmd_ena
+      pmd_enic
+      pmd_i40e
+      pmd_ixgbe
+      pmd_nfp
+      pmd_qede
+      pmd_ring
+      pmd_sfc_efx
+      timer)
+  endif()
+
+  foreach(c ${dpdk_components})
     add_library(dpdk::${c} STATIC IMPORTED)
     add_dependencies(dpdk::${c} dpdk-ext)
     set(dpdk_${c}_LIBRARY
