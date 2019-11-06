@@ -2,3 +2,4 @@ mock; python_version <= '3.3'
 pytest<4
 pytest-cov
 pytest-instafail
+pyfakefs
