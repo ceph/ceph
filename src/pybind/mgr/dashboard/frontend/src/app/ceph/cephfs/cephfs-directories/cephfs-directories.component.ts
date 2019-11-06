@@ -1,25 +1,49 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Validators } from '@angular/forms';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import * as moment from 'moment';
 import { NodeEvent, Tree, TreeComponent, TreeModel } from 'ng2-tree';
-
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+
 import { CephfsService } from '../../../shared/api/cephfs.service';
+import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '../../../shared/components/form-modal/form-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdValidators } from '../../../shared/forms/cd-validators';
+import { CdFormModalFieldConfig } from '../../../shared/models/cd-form-modal-field-config';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { CephfsDir, CephfsSnapshot } from '../../../shared/models/cephfs-directory-models';
+import {
+  CephfsDir,
+  CephfsQuotas,
+  CephfsSnapshot
+} from '../../../shared/models/cephfs-directory-models';
 import { Permission } from '../../../shared/models/permissions';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+
+class QuotaSetting {
+  row: {
+    // Shows quota that is used for current directory
+    name: string;
+    value: number | string;
+    originPath: string;
+  };
+  quotaKey: string;
+  dirValue: number;
+  nextTreeMaximum: {
+    value: number;
+    path: string;
+  };
+}
 
 @Component({
   selector: 'cd-cephfs-directories',
@@ -43,12 +67,13 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   permission: Permission;
   selectedDir: CephfsDir;
-  settings: {
-    name: string;
-    value: number | string;
-    origin: string;
-  }[];
-  settingsColumns: CdTableColumn[];
+  settings: QuotaSetting[];
+  quota: {
+    columns: CdTableColumn[];
+    selection: CdTableSelection;
+    tableActions: CdTableAction[];
+    updateSelection: Function;
+  };
   snapshot: {
     columns: CdTableColumn[];
     selection: CdTableSelection;
@@ -63,32 +88,64 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     private cephfsService: CephfsService,
     private cdDatePipe: CdDatePipe,
     private i18n: I18n,
+    private actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
     private dimlessBinaryPipe: DimlessBinaryPipe
   ) {}
 
   ngOnInit() {
     this.permission = this.authStorageService.getPermissions().cephfs;
-    this.settingsColumns = [
-      {
-        prop: 'name',
-        name: this.i18n('Name'),
-        flexGrow: 1
+    this.quota = {
+      columns: [
+        {
+          prop: 'row.name',
+          name: this.i18n('Name'),
+          flexGrow: 1
+        },
+        {
+          prop: 'row.value',
+          name: this.i18n('Value'),
+          sortable: false,
+          flexGrow: 1
+        },
+        {
+          prop: 'row.originPath',
+          name: this.i18n('Origin'),
+          sortable: false,
+          cellTemplate: this.originTmpl,
+          flexGrow: 1
+        }
+      ],
+      selection: new CdTableSelection(),
+      updateSelection: (selection: CdTableSelection) => {
+        this.quota.selection = selection;
       },
-      {
-        prop: 'value',
-        name: this.i18n('Value'),
-        sortable: false,
-        flexGrow: 1
-      },
-      {
-        prop: 'origin',
-        name: this.i18n('Origin'),
-        sortable: false,
-        cellTemplate: this.originTmpl,
-        flexGrow: 1
-      }
-    ];
+      tableActions: [
+        {
+          name: this.actionLabels.SET,
+          icon: Icons.edit,
+          permission: 'update',
+          visible: (selection) =>
+            !selection.hasSelection || (selection.first() && selection.first().dirValue === 0),
+          click: () => this.updateQuotaModal()
+        },
+        {
+          name: this.actionLabels.UPDATE,
+          icon: Icons.edit,
+          permission: 'update',
+          visible: (selection) => selection.first() && selection.first().dirValue > 0,
+          click: () => this.updateQuotaModal()
+        },
+        {
+          name: this.actionLabels.UNSET,
+          icon: Icons.destroy,
+          permission: 'update',
+          disable: (selection) =>
+            !selection.hasSelection || (selection.first() && selection.first().dirValue === 0),
+          click: () => this.unsetQuotaModal()
+        }
+      ]
+    };
     this.snapshot = {
       columns: [
         {
@@ -115,14 +172,14 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       },
       tableActions: [
         {
-          name: this.i18n('Create'),
+          name: this.actionLabels.CREATE,
           icon: Icons.add,
           permission: 'create',
           canBePrimary: (selection) => !selection.hasSelection,
           click: () => this.createSnapshot()
         },
         {
-          name: this.i18n('Delete'),
+          name: this.actionLabels.DELETE,
           icon: Icons.destroy,
           permission: 'delete',
           click: () => this.deleteSnapshotModal(),
@@ -227,29 +284,53 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   }
 
   private setSettings(node: Tree) {
-    const files = this.getQuota(node, 'max_files');
-    const size = this.getQuota(node, 'max_bytes');
+    const readable = (value: number, fn?: (number) => number | string): number | string =>
+      value ? (fn ? fn(value) : value) : '';
+
     this.settings = [
-      {
-        name: 'Max files',
-        value: files.value,
-        origin: files.origin
-      },
-      {
-        name: 'Max size',
-        value: size.value !== '' ? this.dimlessBinaryPipe.transform(size.value) : '',
-        origin: size.origin
-      }
+      this.getQuota(node, 'max_files', readable),
+      this.getQuota(node, 'max_bytes', (value) =>
+        readable(value, (v) => this.dimlessBinaryPipe.transform(v))
+      )
     ];
   }
 
-  private getQuota(tree: Tree, quotaSetting: string): { value: string; origin: string } {
-    tree = this.getOrigin(tree, quotaSetting);
+  private getQuota(
+    tree: Tree,
+    quotaKey: string,
+    valueConvertFn: (number) => number | string
+  ): QuotaSetting {
+    // Get current maximum
+    const currentPath = tree.id;
+    tree = this.getOrigin(tree, quotaKey);
     const dir = this.getDirectory(tree);
-    const value = dir.quotas[quotaSetting];
+    const value = dir.quotas[quotaKey];
+    // Get next tree maximum
+    // => The value that isn't changeable through a change of the current directories quota value
+    let nextMaxValue = value;
+    let nextMaxPath = dir.path;
+    if (tree.id === currentPath) {
+      if (tree.parent.value === '/') {
+        // The value will never inherit any other value, so it has no maximum.
+        nextMaxValue = 0;
+      } else {
+        const nextMaxDir = this.getDirectory(this.getOrigin(tree.parent, quotaKey));
+        nextMaxValue = nextMaxDir.quotas[quotaKey];
+        nextMaxPath = nextMaxDir.path;
+      }
+    }
     return {
-      value: value ? value : '',
-      origin: value ? dir.path : ''
+      row: {
+        name: quotaKey === 'max_bytes' ? this.i18n('Max size') : this.i18n('Max files'),
+        value: valueConvertFn(value),
+        originPath: value ? dir.path : ''
+      },
+      quotaKey,
+      dirValue: this.nodeIds[currentPath].quotas[quotaKey],
+      nextTreeMaximum: {
+        value: nextMaxValue,
+        path: nextMaxValue ? nextMaxPath : ''
+      }
     };
   }
 
@@ -274,6 +355,133 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     return this.nodeIds[path];
   }
 
+  updateQuotaModal() {
+    const path = this.selectedDir.path;
+    const selection: QuotaSetting = this.quota.selection.first();
+    const nextMax = selection.nextTreeMaximum;
+    const key = selection.quotaKey;
+    const value = selection.dirValue;
+    this.modalService.show(FormModalComponent, {
+      initialState: {
+        titleText: this.getModalQuotaTitle(
+          value === 0 ? this.actionLabels.SET : this.actionLabels.UPDATE,
+          path
+        ),
+        message: nextMax.value
+          ? this.i18n('The inherited {{quotaValue}} is the maximum value to be used.', {
+              quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
+            })
+          : undefined,
+        fields: [this.getQuotaFormField(selection.row.name, key, value, nextMax.value)],
+        submitButtonText: 'Save',
+        onSubmit: (values) => this.updateQuota(values)
+      }
+    });
+  }
+
+  private getModalQuotaTitle(action: string, path: string): string {
+    return this.i18n("{{action}} CephFS {{quotaName}} quota for '{{path}}'", {
+      action,
+      quotaName: this.getQuotaName(),
+      path
+    });
+  }
+
+  private getQuotaName(): string {
+    return this.isBytesQuotaSelected() ? this.i18n('size') : this.i18n('files');
+  }
+
+  private isBytesQuotaSelected(): boolean {
+    return this.quota.selection.first().quotaKey === 'max_bytes';
+  }
+
+  private getQuotaValueFromPathMsg(value: number, path: string): string {
+    return this.i18n("{{quotaName}} quota {{value}} from '{{path}}'", {
+      value: this.isBytesQuotaSelected() ? this.dimlessBinaryPipe.transform(value) : value,
+      quotaName: this.getQuotaName(),
+      path
+    });
+  }
+
+  private getQuotaFormField(
+    label: string,
+    name: string,
+    value: number,
+    maxValue: number
+  ): CdFormModalFieldConfig {
+    const isBinary = name === 'max_bytes';
+    const formValidators = [isBinary ? CdValidators.binaryMin(0) : Validators.min(0)];
+    if (maxValue) {
+      formValidators.push(isBinary ? CdValidators.binaryMax(maxValue) : Validators.max(maxValue));
+    }
+    const field: CdFormModalFieldConfig = {
+      type: isBinary ? 'binary' : 'number',
+      label,
+      name,
+      value,
+      validators: formValidators,
+      required: true
+    };
+    if (!isBinary) {
+      field.errors = {
+        min: this.i18n(`Value has to be at least {{value}} or more`, { value: 0 }),
+        max: this.i18n(`Value has to be at most {{value}} or less`, { value: maxValue })
+      };
+    }
+    return field;
+  }
+
+  private updateQuota(values: CephfsQuotas, onSuccess?: Function) {
+    const path = this.selectedDir.path;
+    const key = this.quota.selection.first().quotaKey;
+    const action =
+      this.selectedDir.quotas[key] === 0
+        ? this.actionLabels.SET
+        : values[key] === 0
+        ? this.actionLabels.UNSET
+        : this.i18n('Updated');
+    this.cephfsService.updateQuota(this.id, path, values).subscribe(() => {
+      if (onSuccess) {
+        onSuccess();
+      }
+      this.notificationService.show(
+        NotificationType.success,
+        this.getModalQuotaTitle(action, path)
+      );
+      this.forceDirRefresh();
+    });
+  }
+
+  unsetQuotaModal() {
+    const path = this.selectedDir.path;
+    const selection: QuotaSetting = this.quota.selection.first();
+    const key = selection.quotaKey;
+    const nextMax = selection.nextTreeMaximum;
+    const dirValue = selection.dirValue;
+
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, {
+      initialState: {
+        titleText: this.getModalQuotaTitle(this.actionLabels.UNSET, path),
+        buttonText: this.actionLabels.UNSET,
+        description: this.i18n(`{{action}} {{quotaValue}} {{conclusion}}.`, {
+          action: this.actionLabels.UNSET,
+          quotaValue: this.getQuotaValueFromPathMsg(dirValue, path),
+          conclusion:
+            nextMax.value > 0
+              ? nextMax.value > dirValue
+                ? this.i18n('in order to inherit {{quotaValue}}', {
+                    quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
+                  })
+                : this.i18n("which isn't used because of the inheritance of {{quotaValue}}", {
+                    quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
+                  })
+              : this.i18n('in order to have no quota on the directory')
+        }),
+        onSubmit: () => this.updateQuota({ [key]: 0 }, () => this.modalRef.hide())
+      }
+    });
+  }
+
   createSnapshot() {
     // Create a snapshot. Auto-generate a snapshot name by default.
     const path = this.selectedDir.path;
@@ -283,7 +491,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         message: this.i18n('Please enter the name of the snapshot.'),
         fields: [
           {
-            type: 'inputText',
+            type: 'text',
             name: 'name',
             value: `${moment().toISOString(true)}`,
             required: true
@@ -314,17 +522,19 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
    */
   private forceDirRefresh() {
     const path = this.selectedNode.parent.id as string;
-    this.cephfsService.lsDir(this.id, path).subscribe((data) =>
+    this.cephfsService.lsDir(this.id, path).subscribe((data) => {
       data.forEach((d) => {
         Object.assign(this.dirs.find((sub) => sub.path === d.path), d);
-      })
-    );
+      });
+      // Now update quotas
+      this.setSettings(this.selectedNode);
+    });
   }
 
   deleteSnapshotModal() {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
-        itemDescription: 'CephFs Snapshot',
+        itemDescription: this.i18n('CephFs Snapshot'),
         itemNames: this.snapshot.selection.selected.map(
           (snapshot: CephfsSnapshot) => snapshot.name
         ),

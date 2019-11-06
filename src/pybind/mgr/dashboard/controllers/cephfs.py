@@ -414,7 +414,7 @@ class CephFS(RESTController):
         return cfs.get_quotas(path)
 
     @RESTController.Resource('POST')
-    def set_quotas(self, fs_id, path, max_bytes, max_files):
+    def set_quotas(self, fs_id, path, max_bytes=None, max_files=None):
         """
         Set the quotas of the specified path.
         :param fs_id: The filesystem identifier.

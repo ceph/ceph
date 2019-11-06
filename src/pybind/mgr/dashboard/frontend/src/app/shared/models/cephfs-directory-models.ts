@@ -7,8 +7,8 @@ export class CephfsSnapshot {
 }
 
 export class CephfsQuotas {
-  max_bytes: number;
-  max_files: number;
+  max_bytes?: number;
+  max_files?: number;
 }
 
 export class CephfsDir {

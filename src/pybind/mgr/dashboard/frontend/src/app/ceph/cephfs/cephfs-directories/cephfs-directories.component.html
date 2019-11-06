@@ -18,10 +18,20 @@
       <div class="card-body">
         <legend i18n>Quotas</legend>
         <cd-table [data]="settings"
-                  [columns]="settingsColumns"
+                  [columns]="quota.columns"
                   [limit]="0"
                   [footer]="false"
+                  selectionType="single"
+                  (updateSelection)="quota.updateSelection($event)"
+                  [onlyActionHeader]="true"
+                  identifier="quotaKey"
+                  [forceIdentifier]="true"
                   [toolHeader]="false">
+          <cd-table-actions class="only-table-actions"
+                            [permission]="permission"
+                            [selection]="quota.selection"
+                            [tableActions]="quota.tableActions">
+          </cd-table-actions>
         </cd-table>
 
         <legend i18n>Snapshots</legend>

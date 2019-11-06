@@ -68,6 +68,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Method used for setting column widths.
   @Input()
   columnMode? = 'flex';
+  // Display only actions in header (make sure to disable toolHeader) and use ".only-table-actions"
+  @Input()
+  onlyActionHeader? = false;
   // Display the tool header, including reload button, pagination and search fields?
   @Input()
   toolHeader? = true;
