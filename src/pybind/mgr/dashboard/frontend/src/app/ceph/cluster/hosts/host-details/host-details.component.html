@@ -1,16 +1,18 @@
 <tabset *ngIf="selection.hasSingleSelection">
   <tab i18n-heading
+       heading="Devices">
+    <cd-device-list [hostname]="selection.first()['hostname']"></cd-device-list>
+  </tab>
+  <tab i18n-heading
        heading="Inventory"
        *ngIf="permissions.hosts.read">
-    <cd-inventory
-      [hostname]="selection.first()['hostname']">
+    <cd-inventory [hostname]="selection.first()['hostname']">
     </cd-inventory>
   </tab>
   <tab i18n-heading
        heading="Services"
        *ngIf="permissions.hosts.read">
-    <cd-services
-      [hostname]="selection.first()['hostname']">
+    <cd-services [hostname]="selection.first()['hostname']">
     </cd-services>
   </tab>
   <tab i18n-heading

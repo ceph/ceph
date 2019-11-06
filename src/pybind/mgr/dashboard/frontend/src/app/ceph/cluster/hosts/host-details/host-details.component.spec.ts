@@ -7,12 +7,11 @@ import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
 
 import { RouterTestingModule } from '@angular/router/testing';
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { CoreModule } from '../../../../core/core.module';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
-import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryComponent } from '../../inventory/inventory.component';
-import { ServicesComponent } from '../../services/services.component';
+import { CephModule } from '../../../ceph.module';
 import { HostDetailsComponent } from './host-details.component';
 
 describe('HostDetailsComponent', () => {
@@ -25,9 +24,10 @@ describe('HostDetailsComponent', () => {
       TabsModule.forRoot(),
       BsDropdownModule.forRoot(),
       RouterTestingModule,
-      SharedModule
+      CephModule,
+      CoreModule
     ],
-    declarations: [HostDetailsComponent, InventoryComponent, ServicesComponent],
+    declarations: [],
     providers: [i18nProviders]
   });
 
@@ -68,11 +68,8 @@ describe('HostDetailsComponent', () => {
 
     it('should show tabs', () => {
       fixture.detectChanges();
-      const tabs = component.tabsetChild.tabs;
-      expect(tabs.length).toBe(3);
-      expect(tabs[0].heading).toBe('Inventory');
-      expect(tabs[1].heading).toBe('Services');
-      expect(tabs[2].heading).toBe('Performance Details');
+      const tabs = component.tabsetChild.tabs.map((tab) => tab.heading);
+      expect(tabs).toEqual(['Devices', 'Inventory', 'Services', 'Performance Details']);
     });
   });
 });

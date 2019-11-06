@@ -2,7 +2,10 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import { map } from 'rxjs/operators';
 
+import { CdDevice } from '../models/devices';
+import { DeviceService } from '../services/device.service';
 import { ApiModule } from './api.module';
 
 export interface SmartAttribute {
@@ -178,7 +181,7 @@ export class OsdService {
     ]
   };
 
-  constructor(private http: HttpClient, private i18n: I18n) {}
+  constructor(private http: HttpClient, private i18n: I18n, private deviceService: DeviceService) {}
 
   getList() {
     return this.http.get(`${this.path}`);
@@ -249,5 +252,11 @@ export class OsdService {
       message?: string;
     }
     return this.http.get<SafeToDestroyResponse>(`${this.path}/safe_to_destroy?ids=${ids}`);
+  }
+
+  getDevices(osdId: number) {
+    return this.http
+      .get<CdDevice[]>(`${this.path}/${osdId}/devices`)
+      .pipe(map((devices) => devices.map((device) => this.deviceService.prepareDevice(device))));
   }
 }

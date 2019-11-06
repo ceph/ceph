@@ -16,6 +16,7 @@ import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
+import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
 import { ConfigurationFormComponent } from './configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
@@ -72,7 +73,8 @@ import { ServicesComponent } from './services/services.component';
     TypeaheadModule.forRoot(),
     TimepickerModule.forRoot(),
     BsDatepickerModule.forRoot(),
-    NgBootstrapFormValidationModule
+    NgBootstrapFormValidationModule,
+    CephSharedModule
   ],
   declarations: [
     HostsComponent,
