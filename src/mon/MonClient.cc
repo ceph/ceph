@@ -1001,6 +1001,8 @@ int MonClient::wait_auth_rotating(double timeout)
 
 void MonClient::_send_command(MonCommand *r)
 {
+  ++r->send_attempts;
+
   entity_addr_t peer;
   if (active_con) {
     peer = active_con->get_con()->get_peer_addr();
@@ -1008,6 +1010,10 @@ void MonClient::_send_command(MonCommand *r)
 
   if (r->target_rank >= 0 &&
       r->target_rank != monmap.get_rank(peer)) {
+    if (r->send_attempts > cct->_conf->mon_client_directed_command_retry) {
+      _finish_command(r, -ENXIO, "mon unavailable");
+      return;
+    }
     ldout(cct, 10) << __func__ << " " << r->tid << " " << r->cmd
 		   << " wants rank " << r->target_rank
 		   << ", reopening session"
@@ -1023,6 +1029,10 @@ void MonClient::_send_command(MonCommand *r)
 
   if (r->target_name.length() &&
       r->target_name != monmap.get_name(peer)) {
+    if (r->send_attempts > cct->_conf->mon_client_directed_command_retry) {
+      _finish_command(r, -ENXIO, "mon unavailable");
+      return;
+    }
     ldout(cct, 10) << __func__ << " " << r->tid << " " << r->cmd
 		   << " wants mon " << r->target_name
 		   << ", reopening session"
@@ -1048,10 +1058,11 @@ void MonClient::_send_command(MonCommand *r)
 void MonClient::_resend_mon_commands()
 {
   // resend any requests
-  for (map<uint64_t,MonCommand*>::iterator p = mon_commands.begin();
-       p != mon_commands.end();
-       ++p) {
-    _send_command(p->second);
+  map<uint64_t,MonCommand*>::iterator p = mon_commands.begin();
+  while (p != mon_commands.end()) {
+    auto cmd = p->second;
+    ++p;
+    _send_command(cmd); // might remove cmd from mon_commands
   }
 }
 
@@ -1115,9 +1126,12 @@ void MonClient::start_mon_command(const vector<string>& cmd,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
 {
+  ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
   std::lock_guard l(monc_lock);
   if (!initialized || stopping) {
-    onfinish->complete(-ECANCELED);
+    if (onfinish) {
+      onfinish->complete(-ECANCELED);
+    }
     return;
   }
   MonCommand *r = new MonCommand(++last_mon_command_tid);
@@ -1150,9 +1164,12 @@ void MonClient::start_mon_command(const string &mon_name,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
 {
+  ldout(cct,10) << __func__ << " mon." << mon_name << " cmd=" << cmd << dendl;
   std::lock_guard l(monc_lock);
   if (!initialized || stopping) {
-    onfinish->complete(-ECANCELED);
+    if (onfinish) {
+      onfinish->complete(-ECANCELED);
+    }
     return;
   }
   MonCommand *r = new MonCommand(++last_mon_command_tid);
@@ -1172,9 +1189,12 @@ void MonClient::start_mon_command(int rank,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
 {
+  ldout(cct,10) << __func__ << " rank " << rank << " cmd=" << cmd << dendl;
   std::lock_guard l(monc_lock);
   if (!initialized || stopping) {
-    onfinish->complete(-ECANCELED);
+    if (onfinish) {
+      onfinish->complete(-ECANCELED);
+    }
     return;
   }
   MonCommand *r = new MonCommand(++last_mon_command_tid);

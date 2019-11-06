@@ -1938,11 +1938,13 @@ def task(ctx, config):
             # a bunch of scary messages unrelated to our actual run.
             firstmon = teuthology.get_first_mon(ctx, config, config['cluster'])
             (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
+            # try this several times, since tell to mons is lossy.
             mon0_remote.run(
                 args=[
                     'sudo',
                     'ceph',
                     '--cluster', config['cluster'],
+                    '--mon-client-directed-command-retry', '5',
                     'tell',
                     'mon.*',
                     'injectargs',
