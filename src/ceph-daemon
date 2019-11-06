@@ -1401,12 +1401,14 @@ def command_adopt():
 
         # data
         logger.info('Moving data...')
-        data_dir_src = ('/var/lib/ceph/%s/%s-%s/*' %
+        data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
                         (daemon_type, args.cluster, daemon_id))
         data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id)
-        for data_file in glob(data_dir_src):
+        for data_file in glob(os.path.join(data_dir_src, '*')):
             logger.debug('Move \'%s\' -> \'%s\'' % (data_file, data_dir_dst))
             shutil.move(data_file, data_dir_dst)
+        logger.debug('Remove dir \'%s\'' % (data_dir_src))
+        os.rmdir(data_dir_src)
 
         # config
         config_src = '/etc/ceph/%s.conf' % (args.cluster)
