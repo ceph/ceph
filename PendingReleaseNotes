@@ -262,6 +262,8 @@
 
     ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
 
+* The format of MDSs in `ceph fs dump` has changed.
+
 * The ``pg_autoscale_mode`` is now set to ``on`` by default for newly
   created pools, which means that Ceph will automatically manage the
   number of PGs.  To change this behavior, or to learn more about PG
