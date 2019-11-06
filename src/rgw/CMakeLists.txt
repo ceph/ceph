@@ -157,6 +157,10 @@ target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
 
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(rgw_common PUBLIC spawn)
+endif()
+
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
   # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
@@ -233,7 +237,7 @@ if(WITH_CURL_OPENSSL)
 endif()
 
 if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_a PRIVATE spawn)
+  target_link_libraries(rgw_a PUBLIC spawn)
 endif()
 
 set(rgw_libs rgw_a)
@@ -266,6 +270,10 @@ if(WITH_RADOSGW_BEAST_FRONTEND)
     rgw_dmclock_async_scheduler.cc)
 endif()
 
+add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
+target_link_libraries(rgw_schedulers
+  PUBLIC dmclock::dmclock)
+
 add_library(radosgw SHARED ${radosgw_srcs} ${rgw_a_srcs} rgw_main.cc
   $<TARGET_OBJECTS:civetweb_common_objs>)
 
@@ -279,18 +287,16 @@ target_link_libraries(radosgw
   PRIVATE ${rgw_libs} rgw_schedulers
   PUBLIC dmclock::dmclock
 )
-if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
-target_link_libraries(radosgw
-  # used by rgw_asio_frontend.cc
-  PRIVATE OpenSSL::SSL)
+if(WITH_RADOSGW_BEAST_FRONTEND)
+  target_link_libraries(rgw_schedulers PUBLIC spawn)
+  if(WITH_RADOSGW_BEAST_OPENSSL)
+    # used by rgw_asio_frontend.cc
+    target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
+  endif()
 endif()
 set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
-target_link_libraries(rgw_schedulers
-  PUBLIC dmclock::dmclock)
 
 add_executable(radosgwd radosgw.cc)
 target_link_libraries(radosgwd radosgw librados
@@ -414,9 +420,6 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw_admin_user PRIVATE RDKafka::RDKafka)
-endif()
-if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)
 endif()
 
 if(WITH_TESTS)

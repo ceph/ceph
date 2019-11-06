@@ -6,11 +6,9 @@
 #include <vector>
 
 #include <boost/asio.hpp>
-#define BOOST_COROUTINES_NO_DEPRECATION_WARNING
-#include <boost/range/begin.hpp>
-#include <boost/range/end.hpp>
-#include <boost/asio/spawn.hpp>
 #include <boost/intrusive/list.hpp>
+
+#include <spawn/spawn.hpp>
 
 #include "common/async/shared_mutex.h"
 #include "common/errno.h"
@@ -40,11 +38,11 @@ template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
-  boost::asio::yield_context yield;
+  spawn::yield_context yield;
   parse_buffer& buffer;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
-           boost::asio::yield_context yield,
+           spawn::yield_context yield,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
@@ -94,7 +92,7 @@ void handle_connection(boost::asio::io_context& context,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
                        boost::system::error_code& ec,
-                       boost::asio::yield_context yield)
+                       spawn::yield_context yield)
 {
   // limit header to 4k, since we read it all into a single flat_buffer
   static constexpr size_t header_limit = 4096;
@@ -594,8 +592,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
-    boost::asio::spawn(context,
-      [this, s=std::move(socket)] (boost::asio::yield_context yield) mutable {
+    spawn::spawn(context,
+      [this, s=std::move(socket)] (spawn::yield_context yield) mutable {
         Connection conn{s};
         auto c = connections.add(conn);
         // wrap the socket in an ssl stream
@@ -622,8 +620,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
 #else
   {
 #endif // WITH_RADOSGW_BEAST_OPENSSL
-    boost::asio::spawn(context,
-      [this, s=std::move(socket)] (boost::asio::yield_context yield) mutable {
+    spawn::spawn(context,
+      [this, s=std::move(socket)] (spawn::yield_context yield) mutable {
         Connection conn{s};
         auto c = connections.add(conn);
         auto buffer = std::make_unique<parse_buffer>();
