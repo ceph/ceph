@@ -11,6 +11,12 @@ if [ -z "$CEPH_DAEMON" ]; then
     which ceph-daemon && CEPH_DAEMON=$(which ceph-daemon)
 fi
 
+# at this point, we need $CEPH_DAEMON set
+if [ -z "$CEPH_DAEMON" ]; then
+    echo "ceph-daemon not found.Please set \$CEPH_DAEMON"
+    exit 1
+fi
+
 # respawn ourselves with a shebang
 PYTHONS="python3 python2"  # which pythons we test
 if [ -z "$PYTHON_KLUDGE" ]; then
