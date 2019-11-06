@@ -33,3 +33,4 @@ tox==2.9.1
 virtualenv==15.1.0
 werkzeug==0.14.1
 wrapt==1.10.11
+pyfakefs
