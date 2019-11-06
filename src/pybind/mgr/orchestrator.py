@@ -1066,7 +1066,7 @@ class OrchestratorClientMixin(Orchestrator):
             self._update_completion_progress(c)
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
-                time.sleep(5)
+                time.sleep(1)
             else:
                 break
         for c in completions:
@@ -1115,13 +1115,13 @@ class OutdatableData(object):
     def from_json(cls, data):
         return cls(data['data'], cls.time_from_string(data['last_refresh']))
 
-    def outdated(self, timeout_min=None):
-        if timeout_min is None:
-            timeout_min = 10
+    def outdated(self, timeout=None):
+        if timeout is None:
+            timeout = 600
         if self.last_refresh is None:
             return True
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-            minutes=timeout_min)
+            seconds=timeout)
         return self.last_refresh < cutoff
 
     def __repr__(self):
@@ -1165,6 +1165,10 @@ class OutdatableDictMixin(object):
         outdated = [item[0] for item in self.items() if item[1].outdated()]
         for o in outdated:
             del self[o]
+
+    def invalidate(self, key):
+        self[key] = OutdatableData(self[key].data,
+                                   datetime.datetime.fromtimestamp(0))
 
 class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
     pass
