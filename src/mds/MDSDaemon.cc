@@ -513,9 +513,6 @@ int MDSDaemon::init()
     return -ETIMEDOUT;
   }
 
-  mgrc.init();
-  messenger->add_dispatcher_head(&mgrc);
-
   mds_lock.Lock();
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
@@ -524,7 +521,6 @@ int MDSDaemon::init()
   }
 
   monc->sub_want("mdsmap", 0, 0);
-  monc->sub_want("mgrmap", 0, 0);
   monc->renew_subs();
 
   mds_lock.Unlock();
@@ -926,6 +922,14 @@ void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
     respawn();
   }
 
+  if (old_state == DS::STATE_NULL && new_state != DS::STATE_NULL) {
+    /* The MDS has been added to the FSMap, now we can init the MgrClient */
+    mgrc.init();
+    messenger->add_dispatcher_tail(&mgrc);
+    monc->sub_want("mgrmap", 0, 0);
+    monc->renew_subs(); /* MgrMap receipt drives connection to ceph-mgr */
+  }
+
   // mark down any failed peers
   for (const auto& [gid, info] : oldmap->get_mds_info()) {
     if (mdsmap->get_mds_info().count(gid) == 0) {
@@ -1035,7 +1039,8 @@ void MDSDaemon::suicide()
   }
   beacon.shutdown();
 
-  mgrc.shutdown();
+  if (mgrc.is_initialized())
+    mgrc.shutdown();
 
   if (mds_rank) {
     mds_rank->shutdown();
