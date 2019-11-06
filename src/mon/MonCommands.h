@@ -1232,4 +1232,4 @@ COMMAND("config generate-minimal-conf",
 
 COMMAND_WITH_FLAG("smart name=devid,type=CephString,req=false",
 		  "Query health metrics for underlying device",
-		  "mon", "rw", FLAG(HIDDEN))
+		  "mon", "r", FLAG(HIDDEN))
