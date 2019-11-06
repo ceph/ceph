@@ -921,25 +921,8 @@ void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
   using DS = MDSMap::DaemonState;
   if (old_state != DS::STATE_NULL && new_state == DS::STATE_NULL) {
     const auto& oldinfo = oldmap->get_info_gid(mygid);
-    const auto existing = mdsmap->find_mds_gid_by_name(name);
-    if (g_conf()->mds_enforce_unique_name && existing != MDS_GID_NONE) {
-      const auto& info = mdsmap->get_info_gid(existing);
-      dout(1) << "Map replaced me " << oldinfo
-              << " with another MDS of the same name: " << info
-              << "; quitting!" << dendl;
-
-      /* Monitors should never go backwards! */
-      ceph_assert(info.global_id > myid);
-
-      // Call suicide() rather than respawn() because if someone else has
-      // taken our ID, we don't want to keep restarting and fighting them for
-      // the ID.
-      suicide();
-      return;
-    }
-
     dout(1) << "Map removed me " << oldinfo
-            << " from cluster due to lost contact; respawning" << dendl;
+            << " from cluster; respawning! See cluster/monitor logs for details." << dendl;
     respawn();
   }
 
