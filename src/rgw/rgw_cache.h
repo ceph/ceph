@@ -10,18 +10,18 @@
 #include <curl/curl.h>
 #include <unordered_map>
 
-#include <unistd.h> /*engage1*/
-#include <signal.h> /*engage1*/
-#include "include/Context.h" /*engage1*/
 
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_mutex.h"
-
-#include "cls/version/cls_version_types.h"
 #include "rgw_common.h"
 
+#include "cls/version/cls_version_types.h"
+
+#include <unistd.h> /*engage1*/
+#include <signal.h> /*engage1*/
+#include "include/Context.h" /*engage1*/
 #include "include/lru.h" /*engage1*/
 #include "rgw_threadpool.h"
 
@@ -359,6 +359,8 @@ public:
   void invalidate_all();
 };
 
+// FIXME: #CACHEREBASE // : public RGWSI_SysObj_Cache
+/*
 template <class T>
 class RGWDataCache  : public RGWCache<T>
 {
@@ -442,7 +444,7 @@ int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
   int r;
 
   if (is_head_obj) {
-    /* only when reading from the head object do we need to do the atomic test */
+    // only when reading from the head object do we need to do the atomic test
     r = T::append_atomic_test(rctx, bucket_info, obj, op, &astate);
     if (r < 0)
       return r;
@@ -472,9 +474,8 @@ int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
     return d->get_err_code();
   }
 
-  /* add io after we check that we're not cancelled, otherwise we're going to have trouble
-   * cleaning up
-   */
+  // add io after we check that we're not cancelled, otherwise we're going to have trouble
+  // cleaning up
   d->add_io(obj_ofs, len, &pbl, &c);
 
   mydout(20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
@@ -523,7 +524,7 @@ done_err:
 
   return r;
 }
-
+*/
 class L2CacheThreadPool {
 public:
   L2CacheThreadPool(int n) {

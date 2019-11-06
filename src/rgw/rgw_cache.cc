@@ -405,7 +405,7 @@ int DataCache::io_write(bufferlist& bl ,unsigned int len, std::string oid) {
   int r = 0;
 
   cache_file = fopen(location.c_str(),"w+");
-  if (cache_file <= 0)
+  if (cache_file != nullptr)
   {
     ldout(cct, 0) << "ERROR: DataCache::open file has return error " << r << dendl;
     return -1;
@@ -419,12 +419,12 @@ int DataCache::io_write(bufferlist& bl ,unsigned int len, std::string oid) {
   fclose(cache_file);
 
   /*update cahce_map entries for new chunk in cache*/
-  cache_lock.Lock();
+  cache_lock.lock();
   chunk_info->oid = oid;
   chunk_info->set_ctx(cct);
   chunk_info->size = len;
   cache_map.insert(pair<string, ChunkDataInfo*>(oid, chunk_info));
-  cache_lock.Unlock();
+  cache_lock.unlock();
 
   return r;
 }
@@ -443,21 +443,21 @@ void DataCache::cache_aio_write_completion_cb(cacheAioWriteRequest *c){
   ldout(cct, 0) << "engage: cache_aio_write_completion_cb oid:" << c->oid <<dendl;
 
   /*update cahce_map entries for new chunk in cache*/
-  cache_lock.Lock();
+  cache_lock.lock();
   outstanding_write_list.remove(c->oid);
   chunk_info = new ChunkDataInfo;
   chunk_info->oid = c->oid;
   chunk_info->set_ctx(cct);
   chunk_info->size = c->cb->aio_nbytes;
   cache_map.insert(pair<string, ChunkDataInfo*>(c->oid, chunk_info));
-  cache_lock.Unlock();
+  cache_lock.unlock();
 
   /*update free size*/
-  eviction_lock.Lock();
+  eviction_lock.lock();
   free_data_cache_size -= c->cb->aio_nbytes;
   outstanding_write_size -=  c->cb->aio_nbytes;
   lru_insert_head(chunk_info);
-  eviction_lock.Unlock();
+  eviction_lock.unlock();
   c->release();
 }
 
@@ -494,26 +494,26 @@ void DataCache::put(bufferlist& bl, unsigned int len, std::string oid){
   long long freed_size = 0, _free_data_cache_size = 0, _outstanding_write_size = 0;
 
   ldout(cct, 20) << "Engage1: We are in DataCache::put() and oid is: " << oid <<dendl;
-  cache_lock.Lock();
+  cache_lock.lock();
   map<string, ChunkDataInfo *>::iterator iter = cache_map.find(oid);
   if (iter != cache_map.end()) {
-    cache_lock.Unlock();
+    cache_lock.unlock();
     ldout(cct, 10) << "Engage1: Warning: data already cached, no rewirte" << dendl;
     return;
   }
   std::list<std::string>::iterator it = std::find(outstanding_write_list.begin(), outstanding_write_list.end(),oid);
   if (it != outstanding_write_list.end()) {
-    cache_lock.Unlock();
+    cache_lock.unlock();
     ldout(cct, 10) << "Engage1: Warning: data put in cache already issued, no rewrite" << dendl;
     return;
   }
   outstanding_write_list.push_back(oid);
-  cache_lock.Unlock();
+  cache_lock.unlock();
 
-  eviction_lock.Lock();
+  eviction_lock.lock();
   _free_data_cache_size = free_data_cache_size;
   _outstanding_write_size = outstanding_write_size;
-  eviction_lock.Unlock();
+  eviction_lock.unlock();
 
   ldout(cct, 20) << "Engage1: Before eviction _free_data_cache_size:" << _free_data_cache_size << ", _outstanding_write_size:" << _outstanding_write_size << "freed_size:" << freed_size << dendl;
   while (len >= (_free_data_cache_size - _outstanding_write_size + freed_size)){
@@ -525,24 +525,24 @@ void DataCache::put(bufferlist& bl, unsigned int len, std::string oid){
   }
   r = create_aio_write_request(bl, len, oid);
   if (r < 0) {
-    cache_lock.Lock();
+    cache_lock.lock();
     outstanding_write_list.remove(oid);
-    cache_lock.Unlock();
+    cache_lock.unlock();
     ldout(cct, 1) << "Engage1: create_aio_wirte_request fail, r=" << r << dendl;
     return;
   }
 
-  eviction_lock.Lock();
+  eviction_lock.lock();
   free_data_cache_size += freed_size;
   outstanding_write_size += len;
-  eviction_lock.Unlock();
+  eviction_lock.unlock();
 }
 
 bool DataCache::get(string oid) { 
 
   bool exist = false;
   string location = cct->_conf->rgw_datacache_persistent_path + oid; 
-  cache_lock.Lock();
+  cache_lock.lock();
   map<string, ChunkDataInfo*>::iterator iter = cache_map.find(oid);
   if (!(iter == cache_map.end())){
     // check inside cache whether file exists or not!!!! then make exist true;
@@ -552,10 +552,10 @@ bool DataCache::get(string oid) {
       { /*LRU*/
 
 	/*get ChunkDataInfo*/
-	eviction_lock.Lock();
+	eviction_lock.lock();
 	lru_remove(chdo);
 	lru_insert_head(chdo);
-	eviction_lock.Unlock();
+	eviction_lock.unlock();
       }
     } else {	
       cache_map.erase(oid);
@@ -563,7 +563,7 @@ bool DataCache::get(string oid) {
       exist = false;
     }
   }
-  cache_lock.Unlock();
+  cache_lock.unlock();
   return exist;
 }
 
@@ -575,10 +575,10 @@ size_t DataCache::random_eviction(){
   ChunkDataInfo *del_entry;
   string del_oid, location;
 
-  cache_lock.Lock();
+  cache_lock.lock();
   n_entries = cache_map.size();
   if (n_entries <= 0){
-    cache_lock.Unlock();
+    cache_lock.unlock();
     return -1;
   }
   srand (time(NULL));
@@ -592,7 +592,7 @@ size_t DataCache::random_eviction(){
   free(del_entry);
   del_entry = NULL;
   cache_map.erase(del_oid); // oid
-  cache_lock.Unlock();
+  cache_lock.unlock();
 
   location = cct->_conf->rgw_datacache_persistent_path + del_oid; /*replace tmp with the correct path from config file*/
   remove(location.c_str());
@@ -607,15 +607,15 @@ size_t DataCache::lru_eviction(){
   ChunkDataInfo *del_entry;
   string del_oid, location;
 
-  eviction_lock.Lock();
+  eviction_lock.lock();
   del_entry = tail;
   lru_remove(del_entry);
-  eviction_lock.Unlock();
+  eviction_lock.unlock();
 
-  cache_lock.Lock();
+  cache_lock.lock();
   n_entries = cache_map.size();
   if (n_entries <= 0){
-    cache_lock.Unlock();
+    cache_lock.unlock();
     return -1;
     }
   del_oid = del_entry->oid;
@@ -624,7 +624,7 @@ size_t DataCache::lru_eviction(){
   if (iter != cache_map.end()) {
     cache_map.erase(del_oid); // oid
   }
-  cache_lock.Unlock();
+  cache_lock.unlock();
   freed_size = del_entry->size;
   free(del_entry);
   location = cct->_conf->rgw_datacache_persistent_path + del_oid; /*replace tmp with the correct path from config file*/
@@ -667,7 +667,8 @@ void HttpL2Request::run() {
   
   for (int i=0; i<n_retries; i++ ){
     if(!(r = submit_http_request())){
-      d->cache_aio_completion_cb(req);
+      // FIXME: #CACHEREBASE
+      //d->cache_aio_completion_cb(req);
       return;
     }
     if (r == ECANCELED) {
@@ -687,7 +688,8 @@ int HttpL2Request::submit_http_request () {
   
   string req_uri;
   string uri,dest;
-  ((RGWGetObj_CB *)(d->client_cb))->get_req_info(dest, req_uri, auth_token);
+  // FIXME: #CACHEREBASE
+  //((RGWGetObj_CB *)(d->client_cb))->get_req_info(dest, req_uri, auth_token);
   uri = "http://" + req->dest + req_uri;
 
   /*struct req_state *s;

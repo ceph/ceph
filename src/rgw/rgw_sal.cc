@@ -297,6 +297,8 @@ int RGWRadosStore::get_bucket(RGWUser& u, const rgw_bucket& b, RGWBucket** bucke
 
 rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
 {
+  // FIXME: #CACHEREBASE: continue - pass down "use_datacache"
+
   RGWRados *rados = new RGWRados;
   rgw::sal::RGWRadosStore *store = new rgw::sal::RGWRadosStore();
 
