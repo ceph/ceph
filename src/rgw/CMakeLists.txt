@@ -151,6 +151,10 @@ add_library(rgw_common OBJECT ${librgw_common_srcs})
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(rgw_common PUBLIC spawn)
+endif()
+
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
   # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
@@ -219,7 +223,7 @@ if(WITH_CURL_OPENSSL)
 endif()
 
 if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_a PRIVATE spawn)
+  target_link_libraries(rgw_a PUBLIC spawn)
 endif()
 
 set(rgw_libs rgw_a)
@@ -257,6 +261,9 @@ target_link_libraries(radosgw_a PRIVATE ${rgw_libs})
 if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
+endif()
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(radosgw_a PUBLIC spawn)
 endif()
 
 add_executable(radosgw rgw_main.cc)
@@ -379,9 +386,6 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw_admin_user PRIVATE RDKafka::RDKafka)
-endif()
-if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)
 endif()
 
 if(WITH_TESTS)
