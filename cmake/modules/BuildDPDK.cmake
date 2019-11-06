@@ -79,9 +79,18 @@ function(do_build_dpdk dpdk_dir)
     set(make_cmd "${MAKE_EXECUTABLE}")
   endif()
 
+  if(Seastar_DPDK AND WITH_SPDK)
+    message(FATAL_ERROR "not able to build DPDK with "
+      "both Seastar_DPDK and WITH_SPDK enabled")
+  elseif(Seastar_DPDK)
+    set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/seastar/dpdk)
+  else() # WITH_SPDK or WITH_DPDK is enabled
+    set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/spdk/dpdk)
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(dpdk-ext
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
+    SOURCE_DIR ${dpdk_source_dir}
     CONFIGURE_COMMAND ${make_cmd} config O=${dpdk_dir} T=${target}
     BUILD_COMMAND ${make_cmd} O=${dpdk_dir} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=-fPIC
     BUILD_IN_SOURCE 1
