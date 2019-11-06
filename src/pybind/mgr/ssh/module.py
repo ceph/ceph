@@ -69,6 +69,15 @@ except ImportError:
 #  - bring over some of the protections from ceph-deploy that guard against
 #    multiple bootstrapping / initialization
 
+def _name_to_entity_name(name):
+    """
+    Map from service names to ceph entity names (as seen in config)
+    """
+    if name.startswith('rgw.') or name.startswith('rbd-mirror'):
+        return 'client.' + name
+    else:
+        return name
+
 
 class AsyncCompletion(orchestrator.Completion):
     def __init__(self,
@@ -563,11 +572,9 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         try:
             # get container image
-            if entity.startswith('rgw.') or entity.startswith('rbd-mirror'):
-                entity = 'client.' + entity
             ret, image, err = self.mon_command({
                 'prefix': 'config get',
-                'who': entity,
+                'who': _name_to_entity_name(entity),
                 'key': 'container_image',
             })
             image = image.strip()
