@@ -443,8 +443,7 @@ def skeleton_config(ctx, roles, ips, mons, cluster='ceph'):
     return conf
 
 def create_simple_monmap(ctx, remote, conf, mons,
-                         path=None,
-                         mon_bind_addrvec=False):
+                         path=None):
     """
     Writes a simple monmap based on current ceph.conf into path, or
     <testdir>/monmap by default.
@@ -469,12 +468,9 @@ def create_simple_monmap(ctx, remote, conf, mons,
         '--create',
         '--clobber',
     ]
-    for (name, addr) in addresses:
-        n = name[4:]
-        if mon_bind_addrvec:
-            args.extend(('--addv', n, addr))
-        else:
-            args.extend(('--add', n, addr))
+    for (role, addr) in addresses:
+        _, _, n = teuthology.split_role(role)
+        args.extend(('--add', n, addr))
     if not path:
         path = '{tdir}/monmap'.format(tdir=testdir)
     args.extend([
