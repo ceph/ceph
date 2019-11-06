@@ -22,7 +22,7 @@ from tasks.thrasher import Thrasher
 log = logging.getLogger(__name__)
 
 
-class RBDMirrorThrasher(Greenlet, Thrasher):
+class RBDMirrorThrasher(Thrasher, Greenlet):
     """
     RBDMirrorThrasher::
 
@@ -64,8 +64,7 @@ class RBDMirrorThrasher(Greenlet, Thrasher):
     """
 
     def __init__(self, ctx, config, cluster, daemons):
-        Greenlet.__init__(self)
-        Thrasher.__init__(self, "RBDMirrorThrasher")
+        super(RBDMirrorThrasher, self).__init__()
 
         self.ctx = ctx
         self.config = config

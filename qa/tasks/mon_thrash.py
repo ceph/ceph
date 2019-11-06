@@ -85,8 +85,8 @@ class MonitorThrasher(Thrasher):
           all:
             - mon/workloadgen.sh
     """
-    def __init__(self, ctx, manager, config, logger):
-        Thrasher.__init__(self, "MonitorThrasher")
+    def __init__(self, ctx, manager, config, name, logger):
+        super(MonitorThrasher, self).__init__()
 
         self.ctx = ctx
         self.manager = manager
@@ -95,6 +95,7 @@ class MonitorThrasher(Thrasher):
         self.stopping = False
         self.logger = logger
         self.config = config
+        self.name = name
 
         if self.config is None:
             self.config = dict()
@@ -372,7 +373,7 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
     thrash_proc = MonitorThrasher(ctx,
-        manager, config,
+        manager, config, "MonitorThrasher",
         logger=log.getChild('mon_thrasher'))
     ctx.ceph[config['cluster']].thrashers.append(thrash_proc)
     try:
