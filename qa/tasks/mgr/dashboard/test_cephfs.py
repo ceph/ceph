@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 import six
+from contextlib import contextmanager
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
 
@@ -10,6 +11,8 @@ class CephfsTest(DashboardTestCase):
     CEPHFS = True
 
     AUTH_ROLES = ['cephfs-manager']
+
+    QUOTA_PATH = '/quotas'
 
     def assertToHave(self, data, key):
         self.assertIn(key, data)
@@ -39,6 +42,26 @@ class CephfsTest(DashboardTestCase):
         self.assertEqual(len(data), expectedLength)
         return data
 
+    def setQuotas(self, bytes=None, files=None):
+        quotas = {
+            'max_bytes': bytes,
+            'max_files': files
+        }
+        self._post("/api/cephfs/{}/set_quotas".format(self.get_fs_id()), data=quotas,
+                   params={'path': self.QUOTA_PATH})
+        self.assertStatus(200)
+
+    def assertQuotas(self, bytes, files):
+        data = self.ls_dir('/', 1)[0]
+        self.assertEqual(data['quotas']['max_bytes'], bytes)
+        self.assertEqual(data['quotas']['max_files'], files)
+
+    @contextmanager
+    def new_quota_dir(self):
+        self.mk_dirs(self.QUOTA_PATH)
+        self.setQuotas(1024**3, 1024)
+        yield 1
+        self.rm_dir(self.QUOTA_PATH)
 
     @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
     def test_access_permissions(self):
@@ -199,3 +222,28 @@ class CephfsTest(DashboardTestCase):
         self.rm_dir('/movies/dune/extended_version')
         self.rm_dir('/movies/dune')
         self.rm_dir('/movies')
+
+    def test_quotas_default(self):
+        self.mk_dirs(self.QUOTA_PATH)
+        self.assertQuotas(0, 0)
+        self.rm_dir(self.QUOTA_PATH)
+
+    def test_quotas_set_both(self):
+        with self.new_quota_dir():
+            self.assertQuotas(1024**3, 1024)
+
+    def test_quotas_set_only_bytes(self):
+        with self.new_quota_dir():
+            self.setQuotas(2048**3)
+            self.assertQuotas(2048**3, 1024)
+
+    def test_quotas_set_only_files(self):
+        with self.new_quota_dir():
+            self.setQuotas(None, 2048)
+            self.assertQuotas(1024**3, 2048)
+
+    def test_quotas_unset_both(self):
+        with self.new_quota_dir():
+            self.setQuotas(0, 0)
+            self.assertQuotas(0, 0)
+
