@@ -310,6 +310,8 @@ class Module(MgrModule):
 
     def scrape_daemon(self, daemon_type, daemon_id):
         ioctx = self.open_connection()
+        if daemon_type != 'osd':
+            return -errno.EINVAL, '', 'scraping non-OSDs not currently supported'
         raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
@@ -326,9 +328,6 @@ class Module(MgrModule):
         ids = []
         for osd in osdmap['osds']:
             ids.append(('osd', str(osd['osd'])))
-        monmap = self.get("mon_map")
-        for mon in monmap['mons']:
-            ids.append(('mon', mon['name']))
         for daemon_type, daemon_id in ids:
             raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
             if not raw_smart_data:
@@ -347,10 +346,10 @@ class Module(MgrModule):
         r = self.get("device " + devid)
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
-        daemons = r['device'].get('daemons', [])
+        daemons = [d for d in r['device'].get('daemons', []) if not d.startswith('osd.')]
         if not daemons:
             return (-errno.EAGAIN, '',
-                    'device ' + devid + ' not claimed by any active daemons')
+                    'device ' + devid + ' not claimed by any active OSD daemons')
         (daemon_type, daemon_id) = daemons[0].split('.')
         ioctx = self.open_connection()
         raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id,
