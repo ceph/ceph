@@ -39,6 +39,7 @@ tasks:
         - tasks.mgr.dashboard.test_logs
         - tasks.mgr.dashboard.test_mgr_module
         - tasks.mgr.dashboard.test_monitor
+        - tasks.mgr.dashboard.test_orchestrator
         - tasks.mgr.dashboard.test_osd
         # - tasks.mgr.dashboard.test_perf_counters
         - tasks.mgr.dashboard.test_pool

@@ -121,7 +121,7 @@ class OrchestratorControllerTest(DashboardTestCase):
         data = self._get(self.URL_STATUS)
         self.assertTrue(data['available'])
 
-    def test_iventory_list(self):
+    def test_inventory_list(self):
         # get all inventory
         data = self._get(self.URL_INVENTORY)
         self.assertStatus(200)
