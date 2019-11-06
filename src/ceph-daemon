@@ -1297,11 +1297,11 @@ def command_unit():
 ##################################
 
 def command_ls():
-    host_version = None
     ls = list_daemons()
     print(json.dumps(ls, indent=4))
 
 def list_daemons():
+    host_version = None
     ls = []
 
     # /var/lib/ceph
