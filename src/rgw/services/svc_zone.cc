@@ -23,11 +23,13 @@ RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
 
 void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
                       RGWSI_RADOS * _rados_svc,
-                      RGWSI_SyncModules * _sync_modules_svc)
+                      RGWSI_SyncModules * _sync_modules_svc,
+		      RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
   sysobj_svc = _sysobj_svc;
   rados_svc = _rados_svc;
   sync_modules_svc = _sync_modules_svc;
+  bucket_sync_svc = _bucket_sync_svc;
 
   realm = new RGWRealm();
   zonegroup = new RGWZoneGroup();
@@ -164,7 +166,13 @@ int RGWSI_Zone::do_start()
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
   for (auto ziter : zonegroup->zones) {
-    sync_policy_handlers[ziter.second.id].reset(new RGWBucketSyncPolicyHandler(this, sync_modules_svc, ziter.second.name));
+    auto zone_handler = new RGWBucketSyncPolicyHandler(this, sync_modules_svc, bucket_sync_svc, ziter.second.name);
+    ret = zone_handler->init(null_yield);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;
+      return ret;
+      }
+    sync_policy_handlers[ziter.second.id].reset(zone_handler);
   }
 
   sync_policy_handler = sync_policy_handlers[zone_id()]; /* we made sure earlier that zonegroup->zones has our zone */

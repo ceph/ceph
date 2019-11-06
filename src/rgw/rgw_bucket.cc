@@ -2926,7 +2926,7 @@ public:
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    return svc.bucket->remove_bucket_instance_info(ctx, entry, &bci.info.objv_tracker, y);
+    return svc.bucket->remove_bucket_instance_info(ctx, entry, bci.info, &bci.info.objv_tracker, y);
   }
 
   int call(std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
@@ -3267,6 +3267,7 @@ int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
     return svc.bucket->remove_bucket_instance_info(ctx,
                                                    RGWSI_Bucket::get_bi_meta_key(bucket),
+                                                   info,
                                                    &info.objv_tracker,
                                                    y);
   });

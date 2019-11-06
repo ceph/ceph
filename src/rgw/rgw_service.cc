@@ -82,7 +82,9 @@ int RGWServices_Def::init(CephContext *cct,
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
                     sync_modules.get(), bucket_sync_sobj.get());
-  bucket_sync_sobj->init(zone.get(), sysobj_cache.get(),
+  bucket_sync_sobj->init(zone.get(),
+                         sysobj.get(),
+                         sysobj_cache.get(),
                          bucket_sobj.get());
   cls->init(zone.get(), rados.get());
   datalog_rados->init(zone.get(), cls.get());
@@ -93,7 +95,7 @@ int RGWServices_Def::init(CephContext *cct,
   notify->init(zone.get(), rados.get(), finisher.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
-  zone->init(sysobj.get(), rados.get(), sync_modules.get());
+  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());

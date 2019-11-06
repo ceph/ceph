@@ -86,6 +86,7 @@ public:
 
   virtual int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                   const string& key,
+				  const RGWBucketInfo& bucket_info,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y) = 0;
 

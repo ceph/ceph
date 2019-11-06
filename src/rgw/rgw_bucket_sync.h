@@ -21,6 +21,7 @@
 
 class RGWSI_Zone;
 class RGWSI_SyncModules;
+class RGWSI_Bucket_Sync;
 
 struct rgw_sync_group_pipe_map;
 struct rgw_sync_bucket_pipes;
@@ -167,6 +168,7 @@ public:
   void reflect(std::optional<rgw_bucket> effective_bucket,
                pipe_set *flow_by_source,
                pipe_set *flow_by_dest,  
+	       std::optional<rgw_bucket> filter_peer_bucket,
                bool only_enabled) const;
 
 };
@@ -174,6 +176,7 @@ public:
 class RGWBucketSyncPolicyHandler {
   const RGWBucketSyncPolicyHandler *parent{nullptr};
   RGWSI_Zone *zone_svc;
+  RGWSI_Bucket_Sync *bucket_sync_svc;
   string zone_name;
   std::optional<RGWBucketInfo> bucket_info;
   std::optional<rgw_bucket> bucket;
@@ -189,6 +192,9 @@ class RGWBucketSyncPolicyHandler {
   std::set<string> source_zones; /* source zones by name */
   std::set<string> target_zones; /* target zones by name */
 
+  std::set<rgw_bucket> source_hints;
+  std::set<rgw_bucket> target_hints;
+
   bool bucket_is_sync_source() const {
     return !targets.empty();
   }
@@ -196,8 +202,6 @@ class RGWBucketSyncPolicyHandler {
   bool bucket_is_sync_target() const {
     return !sources.empty();
   }
-
-  void init();
 
   RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
                              const RGWBucketInfo& _bucket_info);
@@ -208,11 +212,14 @@ class RGWBucketSyncPolicyHandler {
 public:
   RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                              RGWSI_SyncModules *sync_modules_svc,
+			     RGWSI_Bucket_Sync *bucket_sync_svc,
                              std::optional<string> effective_zone = std::nullopt);
 
   RGWBucketSyncPolicyHandler *alloc_child(const RGWBucketInfo& bucket_info) const;
   RGWBucketSyncPolicyHandler *alloc_child(const rgw_bucket& bucket,
                                           std::optional<rgw_sync_policy_info> sync_policy) const;
+
+  int init(std::optional<rgw_bucket> filter_peer_bucket, optional_yield y);
 
   void reflect(RGWBucketSyncFlowManager::pipe_set *psources_by_name,
                RGWBucketSyncFlowManager::pipe_set *ptargets_by_name,
@@ -220,6 +227,7 @@ public:
                map<string, RGWBucketSyncFlowManager::pipe_set> *ptargets,
                std::set<string> *psource_zones,
                std::set<string> *ptarget_zones,
+	       std::optional<rgw_bucket> filter_peer_bucket,
                bool only_enabled) const;
 
   const std::set<string>& get_source_zones() const {
@@ -245,6 +253,14 @@ public:
   void get_pipes(RGWBucketSyncFlowManager::pipe_set **sources, RGWBucketSyncFlowManager::pipe_set **targets) { /* return raw pipes (with zone name) */
     *sources = &sources_by_name;
     *targets = &targets_by_name;
+  }
+
+  const std::set<rgw_bucket>& get_source_hints() const {
+    return source_hints;
+  }
+
+  const std::set<rgw_bucket>& get_target_hints() const {
+    return target_hints;
   }
 
   bool bucket_exports_data() const;

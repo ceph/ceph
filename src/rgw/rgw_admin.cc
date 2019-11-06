@@ -2331,6 +2331,16 @@ void encode_json(const char *name, const RGWBucketSyncFlowManager::pipe_set& pse
   }
 }
 
+static std::vector<string> convert_bucket_set_to_str_vec(const std::set<rgw_bucket>& bs)
+{
+  std::vector<string> result;
+  result.reserve(bs.size());
+  for (auto& b : bs) {
+    result.push_back(b.get_key());
+  }
+  return std::move(result);
+}
+
 static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bucket> opt_bucket, Formatter *formatter)
 {
   std::optional<string> zone_id;
@@ -2369,6 +2379,12 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
       bucket_handler.reset(handler->alloc_child(*eff_bucket, nullopt));
     }
 
+    ret = bucket_handler->init(null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: failed to init bucket sync policy handler: " << cpp_strerror(-ret) << " (ret=" << ret << ")" << std::endl;
+      return ret;
+    }
+
     handler = bucket_handler;
   }
 
@@ -2377,10 +2393,40 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
 
   handler->get_pipes(&sources, &dests);
 
+  auto source_hints_vec = convert_bucket_set_to_str_vec(handler->get_source_hints());
+  auto target_hints_vec = convert_bucket_set_to_str_vec(handler->get_target_hints());
+
+  RGWBucketSyncFlowManager::pipe_set *resolved_sources;
+  RGWBucketSyncFlowManager::pipe_set *resolved_dests;
+
+  for (auto& b : handler->get_source_hints()) {
+    RGWBucketInfo hint_bucket_info;
+    rgw_bucket hint_bucket;
+    int ret = init_bucket(b, hint_bucket_info, hint_bucket);
+    if (ret < 0) {
+      ldout(cct, 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+      continue;
+    }
+
+    RGWBucketSyncPolicyHandlerRef hint_bucket_handler;
+    hint_bucket_handler.reset(handler->alloc_child(hint_bucket_indo));
+
+  }
+
   {
     Formatter::ObjectSection os(*formatter, "result");
     encode_json("sources", *sources, formatter);
     encode_json("dests", *dests, formatter);
+    {
+      Formatter::ObjectSection hints_section(*formatter, "hints");
+      encode_json("sources", source_hints_vec, formatter);
+      encode_json("dests", target_hints_vec, formatter);
+    }
+    {
+      Formatter::ObjectSection resolved_hints_section(*formatter, "resolved-hints");
+      encode_json("resolved-hints", *sources, formatter);
+      encode_json("dests", *dests, formatter);
+    }
   }
 
   formatter->flush(cout);

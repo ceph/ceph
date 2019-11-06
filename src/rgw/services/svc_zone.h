@@ -9,6 +9,7 @@
 class RGWSI_RADOS;
 class RGWSI_SysObj;
 class RGWSI_SyncModules;
+class RGWSI_Bucket_Sync;
 
 class RGWRealm;
 class RGWZoneGroup;
@@ -30,6 +31,7 @@ class RGWSI_Zone : public RGWServiceInstance
   RGWSI_SysObj *sysobj_svc{nullptr};
   RGWSI_RADOS *rados_svc{nullptr};
   RGWSI_SyncModules *sync_modules_svc{nullptr};
+  RGWSI_Bucket_Sync *bucket_sync_svc{nullptr};
 
   RGWRealm *realm{nullptr};
   RGWZoneGroup *zonegroup{nullptr};
@@ -55,7 +57,8 @@ class RGWSI_Zone : public RGWServiceInstance
 
   void init(RGWSI_SysObj *_sysobj_svc,
            RGWSI_RADOS *_rados_svc,
-           RGWSI_SyncModules *_sync_modules_svc);
+           RGWSI_SyncModules *_sync_modules_svc,
+	   RGWSI_Bucket_Sync *_bucket_sync_svc);
   int do_start() override;
   void shutdown() override;
 
