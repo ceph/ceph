@@ -14,8 +14,11 @@ log = logging.getLogger(__name__)
 class TestOrchestratorCli(MgrTestCase):
     MGRS_REQUIRED = 1
 
+    def _cmd(self, module, *args):
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd(module, *args)
+
     def _orch_cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("orchestrator", *args)
+        return self._cmd("orchestrator", *args)
 
     def _progress_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", *args)
@@ -92,6 +95,30 @@ class TestOrchestratorCli(MgrTestCase):
 
         with self.assertRaises(CommandFailedError):
             self._orch_cmd("osd", "create", "notfound:device")
+
+    def test_blink_device_light(self):
+        def _ls_lights(what):
+            return json.loads(self._cmd("device", "ls-lights"))[what]
+
+        metadata = json.loads(self._cmd("osd", "metadata"))
+        dev_name_ids = [osd["device_ids"] for osd in metadata]
+        _, dev_id = [d.split('=') for d in dev_name_ids if len(d.split('=')) == 2][0]
+
+        for t in ["ident", "fault"]:
+            self.assertNotIn(dev_id, _ls_lights(t))
+            self._cmd("device", "light", "on", dev_id, t)
+            self.assertIn(dev_id, _ls_lights(t))
+
+            health = {
+                'ident': 'DEVICE_IDENT_ON',
+                'fault': 'DEVICE_FAULT_ON',
+            }[t]
+            self.wait_for_health(health, 30)
+
+            self._cmd("device", "light", "off", dev_id, t)
+            self.assertNotIn(dev_id, _ls_lights(t))
+
+        self.wait_for_health_clear(30)
 
     def test_mds_add(self):
         self._orch_cmd("mds", "add", "service_name")

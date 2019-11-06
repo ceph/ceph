@@ -260,6 +260,9 @@ OSD management
 
 .. py:currentmodule:: orchestrator
 
+.. automethod:: Orchestrator.blink_device_light
+.. autoclass:: DeviceLightLoc
+
 .. _orchestrator-osd-replace:
 
 OSD Replacement
