@@ -414,6 +414,8 @@ else
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros
+        # python header files are needed to install inside the virtualenv (eg. xmlsec needs the header files)
+        $SUDO $zypp_install python-devel python3-devel
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
