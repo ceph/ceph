@@ -153,10 +153,14 @@ public:
     std::map<std::string,std::string> &&task_status);
   void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
+  bool is_initialized() const { return initialized; }
+
 private:
   void _send_stats();
   void _send_pgstats();
   void _send_report();
+
+  bool initialized = false;
 };
 
 #endif
