@@ -92,24 +92,21 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->dump_unsigned("flags", flags);
 }
 
-void MDSMap::mds_info_t::print_summary(ostream &out) const
+void MDSMap::mds_info_t::dump(std::ostream& o) const
 {
-  out << global_id << ":\t"
-      << addrs
-      << " '" << name << "'"
-      << " mds." << rank
-      << "." << inc
-      << " " << ceph_mds_state_name(state)
-      << " seq " << state_seq;
+  o << "[mds." << name << "{" <<  rank << ":" << global_id << "}"
+       << " state " << ceph_mds_state_name(state)
+       << " seq " << state_seq;
   if (laggy()) {
-    out << " laggy since " << laggy_since;
+    o << " laggy since " << laggy_since;
   }
   if (!export_targets.empty()) {
-    out << " export_targets=" << export_targets;
+    o << " export targets " << export_targets;
   }
   if (is_frozen()) {
-    out << " frozen";
+    o << " frozen";
   }
+  o << " addr " << addrs << "]";
 }
 
 void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
@@ -239,13 +236,9 @@ void MDSMap::print(ostream& out) const
   }
 
   for (const auto &p : foo) {
-    const mds_info_t& info = mds_info.at(p.second);
-    info.print_summary(out);
-    out << "\n";
+    out << mds_info.at(p.second) << "\n";
   }
 }
-
-
 
 void MDSMap::print_summary(Formatter *f, ostream *out) const
 {

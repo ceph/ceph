@@ -138,7 +138,7 @@ public:
     }
     void decode(bufferlist::const_iterator& p);
     void dump(Formatter *f) const;
-    void print_summary(ostream &out) const;
+    void dump(std::ostream&) const;
 
     // The long form name for use in cluster log messages`
     std::string human_name() const;
@@ -678,6 +678,11 @@ WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 inline ostream& operator<<(ostream &out, const MDSMap &m) {
   m.print_summary(NULL, &out);
   return out;
+}
+
+inline std::ostream& operator<<(std::ostream& o, const MDSMap::mds_info_t& info) {
+  info.dump(o);
+  return o;
 }
 
 #endif
