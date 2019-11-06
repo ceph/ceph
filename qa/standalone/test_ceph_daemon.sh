@@ -6,6 +6,7 @@ IMAGE='ceph/daemon-base:latest-master-devel'
 [ -z "$SUDO" ] && SUDO=sudo
 
 if [ -z "$CEPH_DAEMON" ]; then
+    [ -x src/ceph-daemon ] && CEPH_DAEMON=src/ceph-daemon
     [ -x ../src/ceph-daemon ] && CEPH_DAEMON=../src/ceph-daemon
     [ -x ./ceph-daemon ] && CEPH_DAEMON=.ceph-daemon
     which ceph-daemon && CEPH_DAEMON=$(which ceph-daemon)
