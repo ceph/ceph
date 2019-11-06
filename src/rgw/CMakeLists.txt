@@ -233,7 +233,7 @@ if(WITH_CURL_OPENSSL)
 endif()
 
 if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_a PRIVATE Boost::coroutine Boost::context)
+  target_link_libraries(rgw_a PRIVATE spawn)
 endif()
 
 set(rgw_libs rgw_a)
