@@ -11,6 +11,5 @@ class Thrasher(object):
     def exception(self):
         return self._exception
 
-    @exception.setter
-    def exception(self, e):
+    def set_thrasher_exception(self, e):
         self._exception = e

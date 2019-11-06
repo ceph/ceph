@@ -967,7 +967,7 @@ class OSDThrasher(Thrasher):
             self._do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
-            self.exception = e
+            self.set_thrasher_exception(e)
             self.logger.exception("exception:")
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.
