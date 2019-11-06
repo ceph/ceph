@@ -165,16 +165,16 @@ void MDSMap::dump(Formatter *f) const
     f->dump_int("mds", *p);
   f->close_section();
   f->open_object_section("info");
-  for (map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin(); p != mds_info.end(); ++p) {
+  for (const auto& [gid, info] : mds_info) {
     char s[25]; // 'gid_' + len(str(ULLONG_MAX)) + '\0'
-    sprintf(s, "gid_%llu", (long long unsigned)p->first);
+    sprintf(s, "gid_%llu", (long long unsigned)gid);
     f->open_object_section(s);
-    p->second.dump(f);
+    info.dump(f);
     f->close_section();
   }
   f->close_section();
   f->open_array_section("data_pools");
-  for (const auto p: data_pools)
+  for (const auto& p: data_pools)
     f->dump_int("pool", p);
   f->close_section();
   f->dump_int("metadata_pool", metadata_pool);
@@ -354,19 +354,19 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 	if (!is_up(i))
 	  continue;
 	mds_gid_t gid = up.find(i)->second;
-	map<mds_gid_t,mds_info_t>::const_iterator info = mds_info.find(gid);
+	const auto& info = mds_info.at(gid);
 	stringstream ss;
 	if (is_resolve(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	  ss << "mds." << info.name << " at " << info.addrs
 	     << " rank " << i << " is resolving";
 	if (is_replay(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	  ss << "mds." << info.name << " at " << info.addrs
 	     << " rank " << i << " is replaying journal";
 	if (is_rejoin(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	  ss << "mds." << info.name << " at " << info.addrs
 	     << " rank " << i << " is rejoining";
 	if (is_reconnect(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	  ss << "mds." << info.name << " at " << info.addrs
 	     << " rank " << i << " is reconnecting to clients";
 	if (ss.str().length())
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
@@ -387,20 +387,14 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     summary.push_back(make_pair(HEALTH_WARN, ss.str()));
   }
 
-  map<mds_gid_t, mds_info_t>::const_iterator m_end = mds_info.end();
   set<string> laggy;
   for (const auto &u : up) {
-    map<mds_gid_t, mds_info_t>::const_iterator m = mds_info.find(u.second);
-    if (m == m_end) {
-      std::cerr << "Up rank " << u.first << " GID " << u.second << " not found!" << std::endl;
-    }
-    ceph_assert(m != m_end);
-    const mds_info_t &mds_info(m->second);
-    if (mds_info.laggy()) {
-      laggy.insert(mds_info.name);
+    const auto& info = mds_info.at(u.second);
+    if (info.laggy()) {
+      laggy.insert(info.name);
       if (detail) {
 	std::ostringstream oss;
-	oss << "mds." << mds_info.name << " at " << mds_info.addrs
+	oss << "mds." << info.name << " at " << info.addrs
 	    << " is laggy/unresponsive";
 	detail->push_back(make_pair(HEALTH_WARN, oss.str()));
       }
@@ -450,10 +444,10 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
       if (!is_up(i))
 	continue;
       mds_gid_t gid = up.find(i)->second;
-      map<mds_gid_t,mds_info_t>::const_iterator info = mds_info.find(gid);
+      const auto& info = mds_info.at(gid);
       stringstream ss;
-      ss << "fs " << fs_name << " mds." << info->second.name << " at "
-	 << info->second.addrs << " rank " << i;
+      ss << "fs " << fs_name << " mds." << info.name << " at "
+	 << info.addrs << " rank " << i;
       if (is_resolve(i))
 	ss << " is resolving";
       if (is_replay(i))
