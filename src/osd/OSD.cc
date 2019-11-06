@@ -1370,8 +1370,7 @@ bool OSDService::can_inc_scrubs()
 bool OSDService::inc_scrubs_local()
 {
   bool result = false;
-
-  sched_scrub_lock.Lock();
+  std::lock_guard l{sched_scrub_lock};
   if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
     dout(20) << __func__ << " " << scrubs_local << " -> " << (scrubs_local+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", remote " << scrubs_remote << ")" << dendl;
@@ -1380,25 +1379,22 @@ bool OSDService::inc_scrubs_local()
   } else {
     dout(20) << __func__ << " " << scrubs_local << " local + " << scrubs_remote << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
-  sched_scrub_lock.Unlock();
-
   return result;
 }
 
 void OSDService::dec_scrubs_local()
 {
-  sched_scrub_lock.Lock();
+  std::lock_guard l{sched_scrub_lock};
   dout(20) << __func__ << " " << scrubs_local << " -> " << (scrubs_local-1)
 	   << " (max " << cct->_conf->osd_max_scrubs << ", remote " << scrubs_remote << ")" << dendl;
   --scrubs_local;
   ceph_assert(scrubs_local >= 0);
-  sched_scrub_lock.Unlock();
 }
 
 bool OSDService::inc_scrubs_remote()
 {
   bool result = false;
-  sched_scrub_lock.Lock();
+  std::lock_guard l{sched_scrub_lock};
   if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
     dout(20) << __func__ << " " << scrubs_remote << " -> " << (scrubs_remote+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", local " << scrubs_local << ")" << dendl;
@@ -1407,18 +1403,16 @@ bool OSDService::inc_scrubs_remote()
   } else {
     dout(20) << __func__ << " " << scrubs_local << " local + " << scrubs_remote << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
-  sched_scrub_lock.Unlock();
   return result;
 }
 
 void OSDService::dec_scrubs_remote()
 {
-  sched_scrub_lock.Lock();
+  std::lock_guard l{sched_scrub_lock};
   dout(20) << __func__ << " " << scrubs_remote << " -> " << (scrubs_remote-1)
 	   << " (max " << cct->_conf->osd_max_scrubs << ", local " << scrubs_local << ")" << dendl;
   --scrubs_remote;
   ceph_assert(scrubs_remote >= 0);
-  sched_scrub_lock.Unlock();
 }
 
 void OSDService::dump_scrub_reservations(Formatter *f)
