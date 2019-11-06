@@ -96,6 +96,15 @@ def _zypper_removerepo(remote, repo_list):
             'sudo', 'zypper', '-n', 'removerepo', repo['name'],
         ])
 
+def _zypper_wipe_all_repos(remote):
+    """
+    Completely "wipe" (remove) all zypper repos
+
+    :param remote: remote node where to wipe zypper repos
+    :return:
+    """
+    log.info("Wiping zypper repos (if any)")
+    remote.sh('sudo zypper repos -upEP && sudo rm -f /etc/zypp/repos.d/*')
 
 def _downgrade_packages(ctx, remote, pkgs, pkg_version, config):
     """
@@ -160,6 +169,7 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
     if repos:
         log.debug("Adding repos: %s" % repos)
         if dist_release in ['opensuse', 'sle']:
+            _zypper_wipe_all_repos(remote)
             _zypper_addrepo(remote, repos)
         else:
             raise Exception('Custom repos were specified for %s ' % remote_os +
