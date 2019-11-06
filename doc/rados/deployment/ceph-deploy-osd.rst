@@ -32,8 +32,8 @@ Zap Disks
 To zap a disk (delete its partition table) in preparation for use with Ceph,
 execute the following::
 
-	ceph-deploy disk zap {osd-server-name}:{disk-name}
-	ceph-deploy disk zap osdserver1:sdb
+	ceph-deploy disk zap {osd-server-name} {disk-name}
+	ceph-deploy disk zap osdserver1 /dev/sdb /dev/sdc
 
 .. important:: This will delete all data.
 

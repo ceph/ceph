@@ -4,17 +4,15 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
-import copy
 import sys
 import time
-import fnmatch
+from collections import namedtuple
 from functools import wraps
 import uuid
 import string
 import random
 import datetime
-
-import six
+import copy
 
 from mgr_module import MgrModule, PersistentStoreDict
 from mgr_util import format_bytes
@@ -119,11 +117,15 @@ def raise_if_exception(c):
         # This is something like `return pickle.loads(pickle.dumps(r_obj))`
         # Without importing anything.
         r_cls = r_obj.__class__
-        if r_cls.__module__ == '__builtin__':
+        if r_cls.__module__ in ('__builtin__', 'builtins'):
             return r_obj
         my_cls = getattr(sys.modules[r_cls.__module__], r_cls.__name__)
         if id(my_cls) == id(r_cls):
             return r_obj
+        if hasattr(r_obj, '__reduce__'):
+            reduce_tuple = r_obj.__reduce__()
+            if len(reduce_tuple) >= 2:
+                return my_cls(*[copy_to_this_subinterpreter(a) for a in reduce_tuple[1]])
         my_obj = my_cls.__new__(my_cls)
         for k,v in r_obj.__dict__.items():
             setattr(my_obj, k, copy_to_this_subinterpreter(v))
@@ -405,7 +407,7 @@ class Orchestrator(object):
         * If using service_id, perform the action on a single specific daemon
           instance.
 
-        :param action: one of "start", "stop", "reload"
+        :param action: one of "start", "stop", "reload", "restart", "redeploy"
         :param service_type: e.g. "mds", "rgw", ...
         :param service_name: name of logical service ("cephfs", "us-east", ...)
         :param service_id: service daemon instance (usually a short hostname)
@@ -442,6 +444,17 @@ class Orchestrator(object):
 
         Note that this can only remove OSDs that were successfully
         created (i.e. got an OSD ID).
+        """
+        raise NotImplementedError()
+
+    def blink_device_light(self, ident_fault, on, locations):
+        # type: (str, bool, List[DeviceLightLoc]) -> WriteCompletion
+        """
+        Instructs the orchestrator to enable or disable either the ident or the fault LED.
+
+        :param ident_fault: either ``"ident"`` or ``"fault"``
+        :param on: ``True`` = on.
+        :param locations: See :class:`orchestrator.DeviceLightLoc`
         """
         raise NotImplementedError()
 
@@ -564,8 +577,9 @@ class PlacementSpec(object):
     """
     For APIs that need to specify a node subset
     """
-    def __init__(self):
-        self.label = None
+    def __init__(self, label=None, nodes=[]):
+        self.label = label
+        self.nodes = nodes
 
 
 def handle_type_error(method):
@@ -712,6 +726,7 @@ class RGWSpec(StatelessServiceSpec):
     """
     def __init__(self,
                  rgw_zone,  # type: str
+                 placement=None,
                  hosts=None,  # type: Optional[List[str]]
                  rgw_multisite=None,  # type: Optional[bool]
                  rgw_zonemaster=None,  # type: Optional[bool]
@@ -729,10 +744,12 @@ class RGWSpec(StatelessServiceSpec):
         # default values that makes sense for Ansible. Rook has default values implemented
         # in Rook itself. Thus we don't set any defaults here in this class.
 
-        super(RGWSpec, self).__init__(name=rgw_zone, count=count)
+        super(RGWSpec, self).__init__(name=rgw_zone, count=count,
+                                      placement=placement)
 
         #: List of hosts where RGWs should run. Not for Rook.
-        self.hosts = hosts
+        if hosts:
+            self.placement.hosts = hosts
 
         #: is multisite
         self.rgw_multisite = rgw_multisite
@@ -939,6 +956,19 @@ class InventoryNode(object):
         return [cls(item[0], devs(item[1].data)) for item in hosts]
 
 
+class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev'])):
+    """
+    Describes a specific device on a specific host. Used for enabling or disabling LEDs
+    on devices.
+
+    hostname as in :func:`orchestrator.Orchestrator.get_hosts`
+
+    device_id: e.g. ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+       See ``ceph osd metadata | jq '.[].device_ids'``
+    """
+    __slots__ = ()
+
+
 def _mk_orch_methods(cls):
     # Needs to be defined outside of for.
     # Otherwise meth is always bound to last key
@@ -1036,7 +1066,7 @@ class OrchestratorClientMixin(Orchestrator):
             self._update_completion_progress(c)
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
-                time.sleep(5)
+                time.sleep(1)
             else:
                 break
         for c in completions:
@@ -1085,13 +1115,13 @@ class OutdatableData(object):
     def from_json(cls, data):
         return cls(data['data'], cls.time_from_string(data['last_refresh']))
 
-    def outdated(self, timeout_min=None):
-        if timeout_min is None:
-            timeout_min = 10
+    def outdated(self, timeout=None):
+        if timeout is None:
+            timeout = 600
         if self.last_refresh is None:
             return True
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-            minutes=timeout_min)
+            seconds=timeout)
         return self.last_refresh < cutoff
 
     def __repr__(self):
@@ -1135,6 +1165,10 @@ class OutdatableDictMixin(object):
         outdated = [item[0] for item in self.items() if item[1].outdated()]
         for o in outdated:
             del self[o]
+
+    def invalidate(self, key):
+        self[key] = OutdatableData(self[key].data,
+                                   datetime.datetime.fromtimestamp(0))
 
 class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
     pass

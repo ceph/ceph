@@ -91,16 +91,13 @@ def pool_update_commands(pool_name, args):
 def crush_rule_osds(node_buckets, rule):
     nodes_by_id = dict((b['id'], b) for b in node_buckets)
 
-    def _gather_leaf_ids(node):
-        if node['id'] >= 0:
-            return set([node['id']])
+    def _gather_leaf_ids(node_id):
+        if node_id >= 0:
+            return set([node_id])
 
         result = set()
-        for item in node['items']:
-            if item['id'] >= 0:
-                result.add(item['id'])
-            else:
-                result |= _gather_leaf_ids(nodes_by_id[item['id']])
+        for item in nodes_by_id[node_id]['items']:
+            result |= _gather_leaf_ids(item['id'])
 
         return result
 
@@ -146,7 +143,7 @@ def crush_rule_osds(node_buckets, rule):
                         # Short circuit another iteration to find the emit
                         # and assume anything we've done a chooseleaf on
                         # is going to be part of the selected set of osds
-                        osds |= _gather_leaf_ids(desc_node)
+                        osds |= _gather_leaf_ids(desc_node['id'])
         elif step['op'] == 'emit':
             if root['id'] >= 0:
                 osds |= root['id']

@@ -62,7 +62,8 @@ export class RgwBucketListComponent {
       permission: 'create',
       icon: Icons.add,
       routerLink: () => this.urlBuilder.getCreate(),
-      name: this.actionLabels.CREATE
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const editAction: CdTableAction = {
       permission: 'update',
@@ -74,7 +75,9 @@ export class RgwBucketListComponent {
       permission: 'delete',
       icon: Icons.destroy,
       click: () => this.deleteAction(),
-      name: this.actionLabels.DELETE
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.DELETE,
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }

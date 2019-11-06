@@ -108,5 +108,6 @@ about Ceph, see our `Architecture`_ section.
    dev/internals
    governance
    ceph-volume/index
+   releases/general
    releases/index
    Glossary <glossary>

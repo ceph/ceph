@@ -27,6 +27,8 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
+class MgrSession;
+
 /**
  * This class is responsible for setting up the python runtime environment
  * and importing the python modules.
@@ -138,7 +140,8 @@ public:
    * return EAGAIN.
    */
   int handle_command(
-    std::string const &module_name,
+    const ModuleCommand& module_command,
+    const MgrSession& session,
     const cmdmap_t &cmdmap,
     const bufferlist &inbuf,
     std::stringstream *ds,

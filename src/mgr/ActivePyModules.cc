@@ -250,6 +250,20 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       f.close_section();
     }
     return f.get();
+  } else if (what == "mds_metadata") {
+    auto dmc = daemon_state.get_by_service("mds");
+    PyEval_RestoreThread(tstate);
+
+    for (const auto &[key, state] : dmc) {
+      std::lock_guard l(state->lock);
+      f.open_object_section(key.name.c_str());
+      f.dump_string("hostname", state->hostname);
+      for (const auto &[name, val] : state->metadata) {
+        f.dump_string(name.c_str(), val);
+      }
+      f.close_section();
+    }
+    return f.get();
   } else if (what == "pg_summary") {
     cluster_state.with_pgmap(
         [&f, &tstate](const PGMap &pg_map) {
@@ -327,10 +341,15 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what.size() > 7 &&
 	     what.substr(0, 7) == "device ") {
     string devid = what.substr(7);
-    daemon_state.with_device(devid, [&f, &tstate] (const DeviceState& dev) {
-        PyEval_RestoreThread(tstate);
-	f.dump_object("device", dev);
-      });
+    if (!daemon_state.with_device(
+	  devid,
+	  [&f, &tstate] (const DeviceState& dev) {
+	    PyEval_RestoreThread(tstate);
+	    f.dump_object("device", dev);
+	  })) {
+      // device not found
+      PyEval_RestoreThread(tstate);
+    }
     return f.get();
   } else if (what == "io_rate") {
     cluster_state.with_pgmap(
@@ -911,22 +930,24 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
 }
 
 int ActivePyModules::handle_command(
-  std::string const &module_name,
+  const ModuleCommand& module_command,
+  const MgrSession& session,
   const cmdmap_t &cmdmap,
   const bufferlist &inbuf,
   std::stringstream *ds,
   std::stringstream *ss)
 {
   lock.lock();
-  auto mod_iter = modules.find(module_name);
+  auto mod_iter = modules.find(module_command.module_name);
   if (mod_iter == modules.end()) {
-    *ss << "Module '" << module_name << "' is not available";
+    *ss << "Module '" << module_command.module_name << "' is not available";
     lock.unlock();
     return -ENOENT;
   }
 
   lock.unlock();
-  return mod_iter->second->handle_command(cmdmap, inbuf, ds, ss);
+  return mod_iter->second->handle_command(module_command, session, cmdmap,
+                                          inbuf, ds, ss);
 }
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)

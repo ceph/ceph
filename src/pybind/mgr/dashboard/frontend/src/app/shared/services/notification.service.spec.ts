@@ -69,6 +69,13 @@ describe('NotificationService', () => {
       });
     };
 
+    const addNotifications = (quantity) => {
+      for (let index = 0; index < quantity; index++) {
+        service.show(NotificationType.info, `${index}`);
+        tick(510);
+      }
+    };
+
     beforeEach(() => {
       spyOn(service, 'show').and.callThrough();
       service.cancel(service['justShownTimeoutId']);
@@ -94,10 +101,7 @@ describe('NotificationService', () => {
     }));
 
     it('should never have more then 10 notifications', fakeAsync(() => {
-      for (let index = 0; index < 15; index++) {
-        service.show(NotificationType.info, 'Simple test');
-        tick(510);
-      }
+      addNotifications(15);
       expect(service['dataSource'].getValue().length).toBe(10);
     }));
 
@@ -155,6 +159,22 @@ describe('NotificationService', () => {
         title: '502 - Bad Gateway',
         message: '<ul><li>Error occurred in path a</li><li>Error occurred in path b</li></ul>'
       });
+    }));
+
+    it('should remove a single notification', fakeAsync(() => {
+      addNotifications(5);
+      let messages = service['dataSource'].getValue().map((notification) => notification.title);
+      expect(messages).toEqual(['4', '3', '2', '1', '0']);
+      service.remove(2);
+      messages = service['dataSource'].getValue().map((notification) => notification.title);
+      expect(messages).toEqual(['4', '3', '1', '0']);
+    }));
+
+    it('should remove all notifications', fakeAsync(() => {
+      addNotifications(5);
+      expect(service['dataSource'].getValue().length).toBe(5);
+      service.removeAll();
+      expect(service['dataSource'].getValue().length).toBe(0);
     }));
   });
 

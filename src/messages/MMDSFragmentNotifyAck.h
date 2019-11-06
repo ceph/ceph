@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSFragmentNotifyAck : public Message {
+class MMDSFragmentNotifyAck : public SafeMessage {
 private:
   dirfrag_t base_dirfrag;
   int8_t bits = 0;
@@ -29,9 +29,9 @@ private:
   bufferlist basebl;
 
 protected:
-  MMDSFragmentNotifyAck() : Message{MSG_MDS_FRAGMENTNOTIFYACK} {}
+  MMDSFragmentNotifyAck() : SafeMessage{MSG_MDS_FRAGMENTNOTIFYACK} {}
   MMDSFragmentNotifyAck(dirfrag_t df, int b, uint64_t tid) :
-    Message{MSG_MDS_FRAGMENTNOTIFYACK},
+    SafeMessage{MSG_MDS_FRAGMENTNOTIFYACK},
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }

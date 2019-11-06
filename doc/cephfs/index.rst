@@ -143,6 +143,7 @@ Additional Details
     Distributed Metadata Cache <mdcache>
     FS volume and subvolumes <fs-volumes>
     Dynamic Metadata Management in CephFS <dynamic-metadata-management>
+    CephFS IO Path <cephfs-io-path>
 
 .. raw:: html
 

@@ -1,12 +1,47 @@
 #!/bin/bash -ex
 
-[ -z "$SUDO" ] && SUDO=sudo
-[ -x ../src/ceph-daemon ] && CEPH_DAEMON=../src/ceph-daemon
-[ -x ./ceph-daemon ] && CEPH_DAEMON=.ceph-daemon
-which ceph-daemon && CEPH_DAEMON=$(which ceph-daemon)
-
 FSID='00000000-0000-0000-0000-0000deadbeef'
-IMAGE='ceph/daemon-base:latest-master'
+# images that are used
+IMAGE_MASTER=${IMAGE_MASTER:-'ceph/daemon-base:latest-master-devel'}
+IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'ceph/daemon-base:latest-nautilus'}
+IMAGE_MIMIC=${IMAGE_MIMIC:-'ceph/daemon-base:latest-mimic'}
+
+[ -z "$SUDO" ] && SUDO=sudo
+
+if [ -z "$CEPH_DAEMON" ]; then
+    [ -x src/ceph-daemon ] && CEPH_DAEMON=src/ceph-daemon
+    [ -x ../src/ceph-daemon ] && CEPH_DAEMON=../src/ceph-daemon
+    [ -x ./ceph-daemon ] && CEPH_DAEMON=.ceph-daemon
+    which ceph-daemon && CEPH_DAEMON=$(which ceph-daemon)
+fi
+
+# at this point, we need $CEPH_DAEMON set
+if [ -z "$CEPH_DAEMON" ]; then
+    echo "ceph-daemon not found.Please set \$CEPH_DAEMON"
+    exit 1
+fi
+
+# respawn ourselves with a shebang
+PYTHONS="python3 python2"  # which pythons we test
+if [ -z "$PYTHON_KLUDGE" ]; then
+   TMPBINDIR=`mktemp -d $TMPDIR`
+   trap "rm -rf $TMPBINDIR" TERM HUP INT
+   ORIG_CEPH_DAEMON="$CEPH_DAEMON"
+   CEPH_DAEMON="$TMPBINDIR/ceph-daemon"
+   for p in $PYTHONS; do
+       echo "=== re-running with $p ==="
+       ln -s `which $p` $TMPBINDIR/python
+       echo "#!$TMPBINDIR/python" > $CEPH_DAEMON
+       cat $ORIG_CEPH_DAEMON >> $CEPH_DAEMON
+       chmod 700 $CEPH_DAEMON
+       $TMPBINDIR/python --version
+       PYTHON_KLUDGE=1 CEPH_DAEMON=$CEPH_DAEMON $0
+       rm $TMPBINDIR/python
+   done
+   rm -rf $TMPBINDIR
+   echo "PASS with all of: $PYTHONS"
+   exit 0
+fi
 
 # clean up previous run(s)?
 $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID --force
@@ -21,11 +56,11 @@ function expect_false()
 }
 
 ## version + --image
-$SUDO $CEPH_DAEMON --image ceph/daemon-base:latest-nautilus version \
+$SUDO $CEPH_DAEMON --image $IMAGE_NAUTILUS version \
     | grep 'ceph version 14'
-$SUDO $CEPH_DAEMON --image ceph/daemon-base:latest-mimic version \
+$SUDO $CEPH_DAEMON --image $IMAGE_MIMIC version \
     | grep 'ceph version 13'
-$SUDO $CEPH_DAEMON --image $IMAGE version | grep 'ceph version'
+$SUDO $CEPH_DAEMON --image $IMAGE_MASTER version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
 which docker && ( $SUDO $CEPH_DAEMON --docker version | grep 'ceph version' )
@@ -43,15 +78,14 @@ cat <<EOF > $ORIG_CONFIG
 [global]
 log to file = true
 EOF
-$SUDO $CEPH_DAEMON --image $IMAGE bootstrap \
+$SUDO $CEPH_DAEMON --image $IMAGE_MASTER bootstrap \
       --mon-id a \
       --mgr-id x \
       --mon-ip $IP \
       --fsid $FSID \
       --config $ORIG_CONFIG \
       --output-config $CONFIG \
-      --output-keyring $KEYRING \
-      --skip-ssh
+      --output-keyring $KEYRING
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
@@ -80,7 +114,7 @@ $SUDO $CEPH_DAEMON ls | jq '.[]' | jq 'select(.name == "mgr.x").fsid' \
 
 ## deploy
 # add mon.b
-$SUDO $CEPH_DAEMON --image $IMAGE deploy --name mon.b \
+$SUDO $CEPH_DAEMON --image $IMAGE_MASTER deploy --name mon.b \
       --fsid $FSID \
       --mon-ip $IP:3301 \
       --keyring /var/lib/ceph/$FSID/mon.a/keyring \
@@ -96,7 +130,7 @@ $SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       mon 'allow profile mgr' \
       osd 'allow *' \
       mds 'allow *' > $TMPDIR/keyring.mgr.y
-$SUDO $CEPH_DAEMON --image $IMAGE deploy --name mgr.y \
+$SUDO $CEPH_DAEMON --image $IMAGE_MASTER deploy --name mgr.y \
       --fsid $FSID \
       --keyring $TMPDIR/keyring.mgr.y \
       --config $CONFIG
@@ -131,8 +165,8 @@ $SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- enable
 $SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- is-enabled
 
 ## shell
-$SUDO $CEPH_DAEMON --image $IMAGE shell -- true
-$SUDO $CEPH_DAEMON --image $IMAGE shell --fsid $FSID -- test -d /var/log/ceph
+$SUDO $CEPH_DAEMON --image $IMAGE_MASTER shell -- true
+$SUDO $CEPH_DAEMON --image $IMAGE_MASTER shell --fsid $FSID -- test -d /var/log/ceph
 
 ## enter
 expect_false $SUDO $CEPH_DAEMON enter
@@ -143,7 +177,7 @@ expect_false $SUDO $CEPH_DAEMON enter --fsid $FSID --name mgr.x -- pidof ceph-mo
 $SUDO $CEPH_DAEMON enter --fsid $FSID --name mgr.x -- pidof ceph-mgr
 
 ## ceph-volume
-$SUDO $CEPH_DAEMON --image $IMAGE ceph-volume --fsid $FSID -- inventory --format=json \
+$SUDO $CEPH_DAEMON --image $IMAGE_MASTER ceph-volume --fsid $FSID -- inventory --format=json \
       | jq '.[]'
 
 ## rm-daemon
