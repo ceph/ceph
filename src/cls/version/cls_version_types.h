@@ -36,13 +36,18 @@ struct obj_version {
     tag.clear();
   }
 
-  bool empty() {
+  bool empty() const {
     return tag.empty();
   }
 
-  bool compare(struct obj_version *v) {
+  bool compare(struct obj_version *v) const {
     return (ver == v->ver &&
             tag.compare(v->tag) == 0);
+  }
+
+  bool operator==(const struct obj_version& v) const {
+    return (ver == v.ver &&
+            tag.compare(v.tag) == 0);
   }
 
   void dump(Formatter *f) const;

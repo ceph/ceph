@@ -6,6 +6,7 @@
 #include "rgw_zone.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_bucket_sync.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -344,6 +345,7 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
 void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucket,
                                        RGWBucketSyncFlowManager::pipe_set *source_pipes,
                                        RGWBucketSyncFlowManager::pipe_set *dest_pipes,
+				       std::optional<rgw_bucket> filter_peer_bucket,
                                        bool only_enabled) const
 
 {
@@ -352,7 +354,7 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
   entity.bucket = effective_bucket.value_or(rgw_bucket());
 
   if (parent) {
-    parent->reflect(effective_bucket, source_pipes, dest_pipes, only_enabled);
+    parent->reflect(effective_bucket, source_pipes, dest_pipes, filter_peer_bucket, only_enabled);
   }
 
   for (auto& item : flow_groups) {
@@ -369,6 +371,9 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       if (!pipe.dest.match_bucket(effective_bucket)) {
         continue;
       }
+      if (!pipe.source.match_bucket(filter_peer_bucket)) {
+	continue;
+      }
 
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
@@ -381,6 +386,9 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
 
       if (!pipe.source.match_bucket(effective_bucket)) {
         continue;
+      }
+      if (!pipe.dest.match_bucket(filter_peer_bucket)) {
+	continue;
       }
 
       pipe.source.apply_bucket(effective_bucket);
@@ -449,7 +457,9 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
 
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                                                        RGWSI_SyncModules *sync_modules_svc,
-                                                       std::optional<string> effective_zone) : zone_svc(_zone_svc) {
+						       RGWSI_Bucket_Sync *_bucket_sync_svc,
+                                                       std::optional<string> effective_zone) : zone_svc(_zone_svc) ,
+                                                                                               bucket_sync_svc(_bucket_sync_svc) {
   zone_name = effective_zone.value_or(zone_svc->zone_name());
   flow_mgr.reset(new RGWBucketSyncFlowManager(zone_name,
                                               nullopt,
@@ -459,8 +469,6 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
   if (sync_policy.empty()) {
     RGWSyncPolicyCompat::convert_old_sync_config(zone_svc, sync_modules_svc, &sync_policy);
   }
-
-  init();
 }
 
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
@@ -471,10 +479,10 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicy
   }
   bucket = _bucket_info.bucket;
   zone_svc = parent->zone_svc;
+  bucket_sync_svc = parent->bucket_sync_svc;
   flow_mgr.reset(new RGWBucketSyncFlowManager(parent->zone_name,
                                               _bucket_info.bucket,
                                               parent->flow_mgr.get()));
-  init();
 }
 
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
@@ -485,10 +493,10 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicy
   }
   bucket = _bucket;
   zone_svc = parent->zone_svc;
+  bucket_sync_svc = parent->bucket_sync_svc;
   flow_mgr.reset(new RGWBucketSyncFlowManager(parent->zone_name,
                                               _bucket,
                                               parent->flow_mgr.get()));
-  init();
 }
 
 RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const RGWBucketInfo& bucket_info) const
@@ -502,8 +510,19 @@ RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const rgw_bu
   return new RGWBucketSyncPolicyHandler(this, bucket, sync_policy);
 }
 
-void RGWBucketSyncPolicyHandler::init()
+int RGWBucketSyncPolicyHandler::init(std::optional<rgw_bucket> filter_peer_bucket,
+				     optional_yield y)
 {
+  int r = bucket_sync_svc->get_bucket_sync_hints(bucket.value_or(rgw_bucket()),
+						 &source_hints,
+						 &target_hints,
+						 y);
+  if (r < 0) {
+    ldout(bucket_sync_svc->ctx(), 0) << "ERROR: failed to initialize bucket sync policy handler: get_bucket_sync_hints() on bucket="
+      << bucket << " returned r=" << r << dendl;
+    return r;
+  }
+
   flow_mgr->init(sync_policy);
 
   reflect(&sources_by_name,
@@ -512,7 +531,10 @@ void RGWBucketSyncPolicyHandler::init()
           &targets,
           &source_zones,
           &target_zones,
+	  filter_peer_bucket,
           true);
+
+  return 0;
 }
 
 void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *psources_by_name,
@@ -521,6 +543,7 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
                                          map<string, RGWBucketSyncFlowManager::pipe_set> *ptargets,
                                          std::set<string> *psource_zones,
                                          std::set<string> *ptarget_zones,
+					 std::optional<rgw_bucket> filter_peer_bucket,
                                          bool only_enabled) const
 {
   RGWBucketSyncFlowManager::pipe_set _sources_by_name;
@@ -530,7 +553,7 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
   std::set<string> _source_zones;
   std::set<string> _target_zones;
 
-  flow_mgr->reflect(bucket, &_sources_by_name, &_targets_by_name, only_enabled);
+  flow_mgr->reflect(bucket, &_sources_by_name, &_targets_by_name, filter_peer_bucket, only_enabled);
 
   for (auto& pipe : _sources_by_name.pipes) {
     if (!pipe.source.zone) {
