@@ -225,6 +225,11 @@ class Osd(RESTController):
                 'is_safe_to_destroy': False,
             }
 
+    @RESTController.Resource('GET')
+    def devices(self, svc_id):
+        # (str) -> dict
+        return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+
 
 @ApiController('/osd/flags', Scope.OSD)
 class OsdFlagsController(RESTController):
