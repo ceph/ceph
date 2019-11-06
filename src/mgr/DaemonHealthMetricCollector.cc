@@ -11,6 +11,23 @@ ostream& operator<<(ostream& os,
   return os << daemon.first << "." << daemon.second;
 }
 
+// define operator<<(ostream&, const vector<DaemonKey>&) after
+// ostream& operator<<(ostream&, const DaemonKey&), so that C++'s
+// ADL can use the former instead of using the generic one:
+// operator<<(ostream&, const std::pair<A,B>&)
+ostream& operator<<(
+   ostream& os,
+   const vector<DaemonHealthMetricCollector::DaemonKey>& daemons)
+{
+  os << "[";
+  for (auto d = daemons.begin(); d != daemons.end(); ++d) {
+    if (d != daemons.begin()) os << ",";
+    os << *d;
+  }
+  os << "]";
+  return os;
+}
+
 namespace {
 
 class SlowOps final : public DaemonHealthMetricCollector {
