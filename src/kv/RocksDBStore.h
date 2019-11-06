@@ -120,6 +120,7 @@ public:
   /// compact the underlying rocksdb store
   bool compact_on_mount;
   bool disableWAL;
+  const uint64_t delete_range_threshold;
   void compact() override;
 
   void compact_async() override {
@@ -157,7 +158,8 @@ public:
     compact_queue_stop(false),
     compact_thread(this),
     compact_on_mount(false),
-    disableWAL(false)
+    disableWAL(false),
+    delete_range_threshold(cct->_conf.get_val<uint64_t>("rocksdb_delete_range_threshold"))
   {}
 
   ~RocksDBStore() override;
