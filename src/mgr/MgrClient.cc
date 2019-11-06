@@ -55,6 +55,7 @@ void MgrClient::init()
   ceph_assert(msgr != nullptr);
 
   timer.init();
+  initialized = true;
 }
 
 void MgrClient::shutdown()
