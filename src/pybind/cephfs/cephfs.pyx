@@ -21,6 +21,24 @@ if sys.version_info[0] < 3:
 else:
     str_type = str
 
+AT_NO_ATTR_SYNC = 0x4000
+AT_SYMLINK_NOFOLLOW = 0x100
+cdef int AT_SYMLINK_NOFOLLOW_CDEF = AT_SYMLINK_NOFOLLOW
+CEPH_STATX_BASIC_STATS = 0x7ff
+cdef int CEPH_STATX_BASIC_STATS_CDEF = CEPH_STATX_BASIC_STATS
+CEPH_STATX_MODE = 0x1
+CEPH_STATX_NLINK = 0x2
+CEPH_STATX_UID = 0x4
+CEPH_STATX_GID = 0x8
+CEPH_STATX_RDEV = 0x10
+CEPH_STATX_ATIME = 0x20
+CEPH_STATX_MTIME = 0x40
+CEPH_STATX_CTIME = 0x80
+CEPH_STATX_INO = 0x100
+CEPH_STATX_SIZE = 0x200
+CEPH_STATX_BLOCKS = 0x400
+CEPH_STATX_BTIME = 0x800
+CEPH_STATX_VERSION = 0x1000
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -49,13 +67,21 @@ cdef extern from "sys/statvfs.h":
         unsigned long int f_padding[32]
 
 
-cdef extern from "dirent.h":
-    cdef struct dirent:
-        long int d_ino
-        unsigned long int d_off
-        unsigned short int d_reclen
-        unsigned char d_type
-        char d_name[256]
+IF UNAME_SYSNAME == "FreeBSD":
+    cdef extern from "dirent.h":
+        cdef struct dirent:
+            long int d_ino
+            unsigned short int d_reclen
+            unsigned char d_type
+            char d_name[256]
+ELSE:
+    cdef extern from "dirent.h":
+        cdef struct dirent:
+            long int d_ino
+            unsigned long int d_off
+            unsigned short int d_reclen
+            unsigned char d_type
+            char d_name[256]
 
 
 cdef extern from "time.h":
@@ -130,6 +156,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                       const void *value, size_t size, int flags)
     int ceph_getxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       void *value, size_t size)
+    int ceph_removexattr(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
@@ -161,10 +188,10 @@ class OSError(Error):
     def __init__(self, errno, strerror):
         super(OSError, self).__init__(errno, strerror)
         self.errno = errno
-        self.strerror = strerror
+        self.strerror = "%s: %s" % (strerror, os.strerror(errno))
 
     def __str__(self):
-        return '{0}: {1} [Errno {2}]'.format(self.strerror, os.strerror(self.errno), self.errno)
+        return '{} [Errno {}]'.format(self.strerror, self.errno)
 
 
 class PermissionError(OSError):
@@ -214,6 +241,8 @@ class OutOfRange(OSError):
 class ObjectNotEmpty(OSError):
     pass
 
+class NotDirectory(OSError):
+    pass
 
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
@@ -242,6 +271,7 @@ ELSE:
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
         errno.ENOTEMPTY  : ObjectNotEmpty,
+        errno.ENOTDIR    : NotDirectory
     }
 
 
@@ -316,11 +346,18 @@ cdef class DirResult(object):
         if not dirent:
             return None
 
-        return DirEntry(d_ino=dirent.d_ino,
-                        d_off=dirent.d_off,
-                        d_reclen=dirent.d_reclen,
-                        d_type=dirent.d_type,
-                        d_name=dirent.d_name)
+        IF UNAME_SYSNAME == "FreeBSD":
+            return DirEntry(d_ino=dirent.d_ino,
+                            d_off=0,
+                            d_reclen=dirent.d_reclen,
+                            d_type=dirent.d_type,
+                            d_name=dirent.d_name)
+        ELSE:
+             return DirEntry(d_ino=dirent.d_ino,
+                            d_off=dirent.d_off,
+                            d_reclen=dirent.d_reclen,
+                            d_type=dirent.d_type,
+                            d_name=dirent.d_name)
 
     def close(self):
         if self.handle:
@@ -607,6 +644,8 @@ cdef class LibCephFS(object):
         # Configure which filesystem to mount if one was specified
         if filesystem_name is None:
             filesystem_name = b""
+        else:
+            filesystem_name = cstr(filesystem_name, 'filesystem_name')
         cdef:
             char *_filesystem_name = filesystem_name
         if filesystem_name:
@@ -1092,8 +1131,28 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
+    def removexattr(self, path, name):
+        """
+        Remove an extended attribute of a file.
 
-    def stat(self, path):
+        :param path: path of the file.
+        :param name: name of the extended attribute to remove.
+        """
+        self.require_state("mounted")
+
+        name = cstr(name, 'name')
+        path = cstr(path, 'path')
+
+        cdef:
+            char *_path = path
+            char *_name = name
+
+        with nogil:
+            ret = ceph_removexattr(self.cluster, _path, _name)
+        if ret < 0:
+            raise make_ex(ret, "error in removexattr")
+
+    def stat(self, path, follow_symlink=True):
         """
         Get a file's extended statistics and attributes.
         
@@ -1106,9 +1165,15 @@ cdef class LibCephFS(object):
             char* _path = path
             statx stx
 
-        with nogil:
-            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
-            ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu, 0)
+        if follow_symlink:
+            with nogil:
+                ret = ceph_statx(self.cluster, _path, &stx,
+                                 CEPH_STATX_BASIC_STATS_CDEF, 0)
+        else:
+            with nogil:
+                ret = ceph_statx(self.cluster, _path, &stx,
+                                 CEPH_STATX_BASIC_STATS_CDEF, AT_SYMLINK_NOFOLLOW_CDEF)
+
         if ret < 0:
             raise make_ex(ret, "error in stat: {}".format(path.decode('utf-8')))
         return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
@@ -1120,6 +1185,16 @@ cdef class LibCephFS(object):
                           st_atime=datetime.fromtimestamp(stx.stx_atime.tv_sec),
                           st_mtime=datetime.fromtimestamp(stx.stx_mtime.tv_sec),
                           st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
+
+    def lstat(self, path):
+        """
+        Get a file's extended statistics and attributes. When file's a
+        symbolic link, return the informaion of the link itself rather
+        than that of the file it points too.
+
+        :param path: the file or directory to get the statistics of.
+        """
+        return self.stat(path, follow_symlink=False)
 
     def fstat(self, fd):
         """
@@ -1136,8 +1211,8 @@ cdef class LibCephFS(object):
             statx stx
 
         with nogil:
-            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
-            ret = ceph_fstatx(self.cluster, _fd, &stx, 0x7ffu, 0)
+            ret = ceph_fstatx(self.cluster, _fd, &stx,
+                              CEPH_STATX_BASIC_STATS_CDEF, 0)
         if ret < 0:
             raise make_ex(ret, "error in fsat")
         return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
@@ -1149,6 +1224,63 @@ cdef class LibCephFS(object):
                           st_atime=datetime.fromtimestamp(stx.stx_atime.tv_sec),
                           st_mtime=datetime.fromtimestamp(stx.stx_mtime.tv_sec),
                           st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
+    
+    def statx(self, path, mask, flag):
+        """
+        Get a file's extended statistics and attributes.
+
+        :param path: the file or directory to get the statistics of.
+        :param mask: want bitfield of CEPH_STATX_* flags showing designed attributes.
+        :param flag: bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if not isinstance(mask, int):
+            raise TypeError('flag must be a int')
+        if not isinstance(flag, int):
+            raise TypeError('flag must be a int')
+
+        cdef:
+            char* _path = path
+            statx stx
+            int _mask = mask
+            int _flag = flag
+            dict_result = dict()
+
+        with nogil:
+            ret = ceph_statx(self.cluster, _path, &stx, _mask, _flag)
+        if ret < 0:
+            raise make_ex(ret, "error in stat: %s" % path)
+
+        if (_mask & CEPH_STATX_MODE):
+            dict_result["mode"] = stx.stx_mode
+        if (_mask & CEPH_STATX_NLINK):
+            dict_result["nlink"] = stx.stx_nlink
+        if (_mask & CEPH_STATX_UID):
+            dict_result["uid"] = stx.stx_uid
+        if (_mask & CEPH_STATX_GID):
+            dict_result["gid"] = stx.stx_gid
+        if (_mask & CEPH_STATX_RDEV):
+            dict_result["rdev"] = stx.stx_rdev
+        if (_mask & CEPH_STATX_ATIME):
+            dict_result["atime"] = datetime.fromtimestamp(stx.stx_atime.tv_sec)
+        if (_mask & CEPH_STATX_MTIME):
+            dict_result["mtime"] = datetime.fromtimestamp(stx.stx_mtime.tv_sec)
+        if (_mask & CEPH_STATX_CTIME):
+            dict_result["ctime"] = datetime.fromtimestamp(stx.stx_ctime.tv_sec)
+        if (_mask & CEPH_STATX_INO):
+            dict_result["ino"] = stx.stx_ino
+        if (_mask & CEPH_STATX_SIZE):
+            dict_result["size"] = stx.stx_size
+        if (_mask & CEPH_STATX_BLOCKS):
+            dict_result["blocks"] = stx.stx_blocks
+        if (_mask & CEPH_STATX_BTIME):
+            dict_result["btime"] = datetime.fromtimestamp(stx.stx_btime.tv_sec)
+        if (_mask & CEPH_STATX_VERSION):
+            dict_result["version"] = stx.stx_version
+
+        return dict_result
 
     def symlink(self, existing, newname):
         """

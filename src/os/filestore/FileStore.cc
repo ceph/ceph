@@ -1374,7 +1374,7 @@ int FileStore::write_superblock()
   bufferlist bl;
   encode(superblock, bl);
   return safe_write_file(basedir.c_str(), "superblock",
-      bl.c_str(), bl.length());
+			 bl.c_str(), bl.length(), 0600);
 }
 
 int FileStore::read_superblock()
@@ -1459,7 +1459,7 @@ int FileStore::write_version_stamp()
   encode(target_version, bl);
 
   return safe_write_file(basedir.c_str(), "store_version",
-      bl.c_str(), bl.length());
+			 bl.c_str(), bl.length(), 0600);
 }
 
 int FileStore::upgrade()
@@ -2016,7 +2016,7 @@ void FileStore::init_temp_collections()
   for (vector<coll_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
     if (p->is_temp())
       continue;
-    coll_map[*p] = new OpSequencer(cct, ++next_osr_id, *p);
+    coll_map[*p] = ceph::make_ref<OpSequencer>(cct, ++next_osr_id, *p);
     if (p->is_meta())
       continue;
     coll_t temp = p->get_temp();
@@ -2130,7 +2130,7 @@ ObjectStore::CollectionHandle FileStore::create_new_collection(const coll_t& c)
   std::lock_guard l{coll_lock};
   auto p = coll_map.find(c);
   if (p == coll_map.end()) {
-    auto *r = new OpSequencer(cct, ++next_osr_id, c);
+    auto r = ceph::make_ref<OpSequencer>(cct, ++next_osr_id, c);
     coll_map[c] = r;
     return r;
   } else {
@@ -3953,7 +3953,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 #ifdef CEPH_HAVE_SPLICE
   if (backend->has_splice()) {
     int pipefd[2];
-    if (pipe_cloexec(pipefd) < 0) {
+    if (pipe_cloexec(pipefd, 0) < 0) {
       int e = errno;
       derr << " pipe " << " got " << cpp_strerror(e) << dendl;
       return -e;

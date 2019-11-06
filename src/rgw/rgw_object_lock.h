@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 #ifndef CEPH_RGW_OBJECT_LOCK_H
 #define CEPH_RGW_OBJECT_LOCK_H
 
@@ -106,7 +109,10 @@ public:
   }
 
   bool retention_period_valid() const {
-    return (get_years() > 0 || get_days() > 0);
+    // DefaultRetention requires either Days or Years.
+    // You can't specify both at the same time.
+    // see https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTObjectLockConfiguration.html
+    return (get_years() > 0) != (get_days() > 0);
   }
 
   bool has_rule() const {

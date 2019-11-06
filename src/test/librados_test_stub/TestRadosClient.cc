@@ -71,7 +71,7 @@ public:
     int ret = m_callback();
     if (m_comp != NULL) {
       if (m_finisher != NULL) {
-        m_finisher->queue(new FunctionContext(boost::bind(
+        m_finisher->queue(new LambdaContext(boost::bind(
           &finish_aio_completion, m_comp, ret)));
       } else {
         finish_aio_completion(m_comp, ret);
@@ -203,7 +203,7 @@ void TestRadosClient::add_aio_operation(const std::string& oid,
 struct WaitForFlush {
   int flushed() {
     if (--count == 0) {
-      aio_finisher->queue(new FunctionContext(boost::bind(
+      aio_finisher->queue(new LambdaContext(boost::bind(
         &finish_aio_completion, c, 0)));
       delete this;
     }
@@ -218,7 +218,7 @@ struct WaitForFlush {
 void TestRadosClient::flush_aio_operations() {
   AioCompletionImpl *comp = new AioCompletionImpl();
   flush_aio_operations(comp);
-  comp->wait_for_safe();
+  comp->wait_for_complete();
   comp->put();
 }
 
@@ -240,7 +240,7 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
 
 int TestRadosClient::aio_watch_flush(AioCompletionImpl *c) {
   c->get();
-  Context *ctx = new FunctionContext(boost::bind(
+  Context *ctx = new LambdaContext(boost::bind(
     &TestRadosClient::finish_aio_completion, this, c, _1));
   get_watch_notify()->aio_flush(this, ctx);
   return 0;

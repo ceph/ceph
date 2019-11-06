@@ -64,7 +64,8 @@ class RBDMirrorThrasher(Greenlet, Thrasher):
     """
 
     def __init__(self, ctx, config, cluster, daemons):
-        super(RBDMirrorThrasher, self).__init__()
+        Greenlet.__init__(self)
+        Thrasher.__init__(self, "RBDMirrorThrasher")
 
         self.ctx = ctx
         self.config = config

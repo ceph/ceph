@@ -21,6 +21,7 @@ namespace mirror {
 
 template <typename> class ImageReplayer;
 template <typename> class InstanceWatcher;
+template <typename> class MirrorStatusUpdater;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
@@ -28,23 +29,24 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class InstanceReplayer {
 public:
   static InstanceReplayer* create(
-      Threads<ImageCtxT> *threads,
-      ServiceDaemon<ImageCtxT> *service_daemon,
-      journal::CacheManagerHandler *cache_manager_handler,
-      RadosRef local_rados, const std::string &local_mirror_uuid,
-      int64_t local_pool_id) {
-    return new InstanceReplayer(threads, service_daemon, cache_manager_handler,
-                                local_rados, local_mirror_uuid, local_pool_id);
+      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      Threads<ImageCtxT> *threads, ServiceDaemon<ImageCtxT> *service_daemon,
+      MirrorStatusUpdater<ImageCtxT>* local_status_updater,
+      journal::CacheManagerHandler *cache_manager_handler) {
+    return new InstanceReplayer(local_io_ctx, local_mirror_uuid, threads,
+                                service_daemon, local_status_updater,
+                                cache_manager_handler);
   }
   void destroy() {
     delete this;
   }
 
-  InstanceReplayer(Threads<ImageCtxT> *threads,
+  InstanceReplayer(librados::IoCtx &local_io_ctx,
+                   const std::string &local_mirror_uuid,
+                   Threads<ImageCtxT> *threads,
                    ServiceDaemon<ImageCtxT> *service_daemon,
-                   journal::CacheManagerHandler *cache_manager_handler,
-		   RadosRef local_rados, const std::string &local_mirror_uuid,
-		   int64_t local_pool_id);
+                   MirrorStatusUpdater<ImageCtxT>* local_status_updater,
+                   journal::CacheManagerHandler *cache_manager_handler);
   ~InstanceReplayer();
 
   int init();
@@ -53,7 +55,8 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  void add_peer(std::string peer_uuid, librados::IoCtx io_ctx);
+  void add_peer(std::string peer_uuid, librados::IoCtx io_ctx,
+                MirrorStatusUpdater<ImageCtxT>* remote_status_updater);
 
   void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
                      const std::string &global_image_id, Context *on_finish);
@@ -64,11 +67,13 @@ public:
 
   void release_all(Context *on_finish);
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
   void start();
   void stop();
   void restart();
   void flush();
+
+  void stop(Context *on_finish);
 
 private:
   /**
@@ -85,12 +90,14 @@ private:
    * @endverbatim
    */
 
+  typedef std::set<Peer<ImageCtxT>> Peers;
+
+  librados::IoCtx &m_local_io_ctx;
+  std::string m_local_mirror_uuid;
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
+  MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
-  RadosRef m_local_rados;
-  std::string m_local_mirror_uuid;
-  int64_t m_local_pool_id;
 
   ceph::mutex m_lock;
   AsyncOpTracker m_async_op_tracker;

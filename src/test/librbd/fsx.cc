@@ -277,11 +277,6 @@ struct ReplayHandler : public journal::ReplayHandler {
                   on_finish(on_finish) {
         }
 
-        void get() override {
-        }
-        void put() override {
-        }
-
         void handle_entries_available() override {
                 while (true) {
                         journal::ReplayEntry replay_entry;
@@ -1230,6 +1225,7 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE,
 			   SubProcess::KEEP);
 	process.add_cmd_arg("map");
+	process.add_cmd_arg("--timeout=600");
 	std::string img;
 	img.append(pool);
 	img.append("/");

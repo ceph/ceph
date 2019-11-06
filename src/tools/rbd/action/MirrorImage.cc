@@ -52,7 +52,7 @@ int validate_mirroring_enabled(librbd::Image& image) {
 } // anonymous namespace
 
 void get_arguments(po::options_description *positional,
-                           po::options_description *options) {
+                   po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
@@ -67,22 +67,22 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
                            bool force) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
       &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
       utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
-  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -119,10 +119,11 @@ int execute_promote(const po::variables_map &vm,
                     const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
       &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
       utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
@@ -131,12 +132,11 @@ int execute_promote(const po::variables_map &vm,
 
   bool force = vm["force"].as<bool>();
 
-  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -160,22 +160,22 @@ int execute_demote(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
       &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
       utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
-  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -199,22 +199,22 @@ int execute_resync(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
       &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
       utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
-  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -250,22 +250,22 @@ int execute_status(const po::variables_map &vm,
 
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
       &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
       utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
-  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -275,18 +275,37 @@ int execute_status(const po::variables_map &vm,
     return r;
   }
 
-  librbd::mirror_image_status_t status;
-  r = image.mirror_image_get_status(&status, sizeof(status));
+  std::vector<librbd::mirror_peer_site_t> mirror_peers;
+  utils::get_mirror_peer_sites(io_ctx, &mirror_peers);
+
+  std::map<std::string, std::string> peer_fsid_to_name;
+  utils::get_mirror_peer_fsid_to_names(mirror_peers, &peer_fsid_to_name);
+
+  librbd::mirror_image_global_status_t status;
+  r = image.mirror_image_get_global_status(&status, sizeof(status));
   if (r < 0) {
     std::cerr << "rbd: failed to get status for image " << image_name << ": "
 	      << cpp_strerror(r) << std::endl;
     return r;
   }
 
+  utils::populate_unknown_mirror_image_site_statuses(mirror_peers, &status);
+
   std::string instance_id;
   MirrorDaemonServiceInfo daemon_service_info(io_ctx);
 
-  if (status.up) {
+  librbd::mirror_image_site_status_t local_status;
+  int local_site_r = utils::get_local_mirror_image_status(
+    status, &local_status);
+  status.site_statuses.erase(
+    std::remove_if(status.site_statuses.begin(),
+                   status.site_statuses.end(),
+                   [](auto& status) {
+        return (status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+      }),
+    status.site_statuses.end());
+
+  if (local_site_r >= 0 && local_status.up) {
     r = image.mirror_image_get_instance_id(&instance_id);
     if (r == -EOPNOTSUPP) {
       std::cerr << "rbd: newer release of Ceph OSDs required to map image "
@@ -301,30 +320,75 @@ int execute_status(const po::variables_map &vm,
     }
   }
 
-  std::string state = utils::mirror_image_status_state(status);
-  std::string last_update = (
-    status.last_update == 0 ? "" : utils::timestr(status.last_update));
-
   if (formatter != nullptr) {
     formatter->open_object_section("image");
     formatter->dump_string("name", image_name);
     formatter->dump_string("global_id", status.info.global_id);
-    formatter->dump_string("state", state);
-    formatter->dump_string("description", status.description);
-    daemon_service_info.dump(instance_id, formatter);
-    formatter->dump_string("last_update", last_update);
+    if (local_site_r >= 0) {
+      formatter->dump_string("state", utils::mirror_image_site_status_state(
+        local_status));
+      formatter->dump_string("description", local_status.description);
+      daemon_service_info.dump(instance_id, formatter);
+      formatter->dump_string("last_update", utils::timestr(
+        local_status.last_update));
+    }
+    if (!status.site_statuses.empty()) {
+      formatter->open_array_section("peer_sites");
+      for (auto& status : status.site_statuses) {
+        formatter->open_object_section("peer_site");
+
+        auto name_it = peer_fsid_to_name.find(status.fsid);
+        formatter->dump_string("site_name",
+          (name_it != peer_fsid_to_name.end() ? name_it->second : ""));
+        formatter->dump_string("fsid", status.fsid);
+
+        formatter->dump_string("state", utils::mirror_image_site_status_state(
+          status));
+        formatter->dump_string("description", status.description);
+        formatter->dump_string("last_update", utils::timestr(
+          status.last_update));
+        formatter->close_section(); // peer_site
+      }
+      formatter->close_section(); // peer_sites
+    }
     formatter->close_section(); // image
     formatter->flush(std::cout);
   } else {
     std::cout << image_name << ":\n"
-	      << "  global_id:   " << status.info.global_id << "\n"
-	      << "  state:       " << state << "\n"
-              << "  description: " << status.description << "\n";
-    if (!instance_id.empty()) {
-      std::cout << "  service:     " <<
-        daemon_service_info.get_description(instance_id) << "\n";
+	      << "  global_id:   " << status.info.global_id << "\n";
+    if (local_site_r >= 0) {
+      std::cout << "  state:       " << utils::mirror_image_site_status_state(
+                  local_status) << "\n"
+                << "  description: " << local_status.description << "\n";
+      if (!instance_id.empty()) {
+        std::cout << "  service:     " <<
+          daemon_service_info.get_description(instance_id) << "\n";
+      }
+      std::cout << "  last_update: " << utils::timestr(
+        local_status.last_update) << std::endl;
     }
-    std::cout << "  last_update: " << last_update << std::endl;
+    if (!status.site_statuses.empty()) {
+      std::cout << "  peer_sites:" << std::endl;
+
+      bool first_site = true;
+      for (auto& site : status.site_statuses) {
+        if (!first_site) {
+          std::cout << std::endl;
+        }
+        first_site = false;
+
+        auto name_it = peer_fsid_to_name.find(site.fsid);
+        std::cout << "    name: "
+                  << (name_it != peer_fsid_to_name.end() ? name_it->second :
+                                                           site.fsid)
+                  << std::endl
+                  << "    state: " << utils::mirror_image_site_status_state(
+                    site) << std::endl
+                  << "    description: " << site.description << std::endl
+                  << "    last_update: " << utils::timestr(
+                    site.last_update) << std::endl;
+      }
+    }
   }
 
   return 0;

@@ -113,11 +113,10 @@ class RESTControllerTest(ControllerTestCase):
     def test_not_implemented(self):
         self._put("/foo")
         self.assertStatus(404)
-        body = self.jsonBody()
+        body = self.json_body()
         self.assertIsInstance(body, dict)
         assert body['detail'] == "The path '/foo' was not found."
         assert '404' in body['status']
-        assert 'traceback' in body
 
     def test_args_from_json(self):
         self._put("/api/fooargs/hello", {'name': 'world'})

@@ -88,11 +88,11 @@ fsync() and error reporting
 POSIX is somewhat vague about the state of an inode after fsync reports
 an error. In general, CephFS uses the standard error-reporting
 mechanisms in the client's kernel, and therefore follows the same
-conventions as other filesystems.
+conventions as other file systems.
 
 In modern Linux kernels (v4.17 or later), writeback errors are reported
 once to every file description that is open at the time of the error. In
-addition, unreported errors that occured before the file description was
+addition, unreported errors that occurred before the file description was
 opened will also be returned on fsync.
 
 See `PostgreSQL's summary of fsync() error reporting across operating systems

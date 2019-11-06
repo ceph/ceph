@@ -105,6 +105,15 @@ target_link_libraries(unittest_rgw_crypto
   ${CRYPTO_LIBS}
   )
 
+set(test_rgw_reshard_srcs test_rgw_reshard.cc)
+add_executable(unittest_rgw_reshard
+  ${test_rgw_reshard_srcs}
+  )
+add_ceph_unittest(unittest_rgw_reshard)
+target_link_libraries(unittest_rgw_reshard
+  ${rgw_libs}
+  )
+
 add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
 add_ceph_unittest(unittest_rgw_putobj)
 target_link_libraries(unittest_rgw_putobj ${rgw_libs} ${UNITTEST_LIBS})
@@ -165,3 +174,12 @@ add_ceph_unittest(unittest_rgw_arn)
 
 target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
+# unittest_rgw_kms
+add_executable(unittest_rgw_kms test_rgw_kms.cc)
+add_ceph_unittest(unittest_rgw_kms)
+
+target_link_libraries(unittest_rgw_kms ${rgw_libs})
+
+add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
+install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})

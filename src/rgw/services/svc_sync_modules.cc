@@ -1,11 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_sync_modules.h"
 #include "svc_zone.h"
 
 #include "rgw/rgw_sync_module.h"
 #include "rgw/rgw_zone.h"
+
+#define dout_subsys ceph_subsys_rgw
 
 void RGWSI_SyncModules::init(RGWSI_Zone *zone_svc)
 {
@@ -29,6 +31,8 @@ int RGWSI_SyncModules::do_start()
     }
     return ret;
   }
+
+  ldout(cct, 20) << "started sync module instance, tier type = " << zone_public_config.tier_type << dendl;
 
   return 0;
 }

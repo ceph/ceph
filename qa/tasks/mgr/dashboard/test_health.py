@@ -207,6 +207,7 @@ class HealthTest(DashboardTestCase):
                     }))
                 }),
                 'active_change': str,  # timestamp
+                'active_mgr_features': int,
                 'active_gid': int,
                 'active_name': str,
                 'always_on_modules': JObj(
@@ -224,9 +225,10 @@ class HealthTest(DashboardTestCase):
                 'standbys': JList(JObj({
                     'available_modules': JList(module_info_schema),
                     'gid': int,
-                    'name': str
-                }))
-            }),
+                    'name': str,
+                    'mgr_features': int
+                }, allow_unknown=True))
+            }, allow_unknown=True),
             'mon_status': JObj({
                 'election_epoch': int,
                 'extra_probe_peers': JList(JAny(none=True)),

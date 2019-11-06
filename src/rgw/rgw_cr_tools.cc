@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 #include "common/errno.h"
 
 #include "rgw_cr_tools.h"
@@ -95,8 +98,7 @@ int RGWGetUserInfoCR::Request::_send_request()
 template<>
 int RGWGetBucketInfoCR::Request::_send_request()
 {
-  RGWSysObjectCtx obj_ctx(store->svc()->sysobj->init_obj_ctx());
-  return store->getRados()->get_bucket_info(obj_ctx, params.tenant, params.bucket_name,
+  return store->getRados()->get_bucket_info(store->svc(), params.tenant, params.bucket_name,
                                 result->bucket_info, &result->mtime, null_yield, &result->attrs);
 }
 
@@ -105,7 +107,6 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 {
   CephContext *cct = store->ctx();
   auto& zone_svc = store->svc()->zone;
-  auto& sysobj_svc = store->svc()->sysobj;
 
   const auto& user_info = params.user_info.get();
   const auto& user = user_info->user_id;
@@ -122,11 +123,10 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
-  RGWSysObjectCtx sysobj_ctx(sysobj_svc->init_obj_ctx());
   RGWBucketInfo bucket_info;
   map<string, bufferlist> bucket_attrs;
 
-  int ret = store->getRados()->get_bucket_info(sysobj_ctx, user.tenant, bucket_name,
+  int ret = store->getRados()->get_bucket_info(store->svc(), user.tenant, bucket_name,
 				  bucket_info, nullptr, null_yield, &bucket_attrs);
   if (ret < 0 && ret != -ENOENT)
     return ret;

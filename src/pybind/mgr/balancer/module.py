@@ -141,6 +141,8 @@ class Eval:
         for t in ('pgs', 'objects', 'bytes'):
             if total[t] == 0:
                 r[t] = {
+                    'max': 0,
+                    'min': 0,
                     'avg': 0,
                     'stddev': 0,
                     'sum_weight': 0,
@@ -189,6 +191,8 @@ class Eval:
             stddev = math.sqrt(dev / float(max(num - 1, 1)))
             score = score / max(sum_weight, 1)
             r[t] = {
+                'max': max(count[t].values()),
+                'min': min(count[t].values()),
                 'avg': avg,
                 'stddev': stddev,
                 'sum_weight': sum_weight,
@@ -290,10 +294,10 @@ class Module(MgrModule):
             'runtime': True,
         },
         {
-            'name': 'upmap_max_iterations',
+            'name': 'upmap_max_optimizations',
             'type': 'uint',
             'default': 10,
-            'desc': 'maximum upmap optimization iterations',
+            'desc': 'maximum upmap optimizations to make per attempt',
             'runtime': True,
         },
         {
@@ -856,7 +860,7 @@ class Module(MgrModule):
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
         plan.mode = self.get_module_option('mode')
-        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
+        max_misplaced = self.get_ceph_option('target_max_misplaced_ratio')
         self.log.info('Mode %s, max misplaced %f' %
                       (plan.mode, max_misplaced))
 
@@ -897,11 +901,10 @@ class Module(MgrModule):
                 detail = 'Unrecognized mode %s' % plan.mode
                 self.log.info(detail)
                 return -errno.EINVAL, detail
-        ##
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = self.get_module_option('upmap_max_iterations')
+        max_optimizations = self.get_module_option('upmap_max_optimizations')
         max_deviation = self.get_module_option('upmap_max_deviation')
 
         ms = plan.initial
@@ -916,7 +919,7 @@ class Module(MgrModule):
 
         inc = plan.inc
         total_did = 0
-        left = max_iterations
+        left = max_optimizations
         osdmap_dump = self.get_osdmap().dump()
         pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
                                if p['pg_num'] > p['pg_num_target']]
@@ -937,12 +940,29 @@ class Module(MgrModule):
         # shuffle so all pools get equal (in)attention
         random.shuffle(classified_pools)
         for it in classified_pools:
-            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, left, it)
+            pool_dump = osdmap_dump.get('pools', [])
+            num_pg = 0
+            for p in pool_dump:
+                if p['pool_name'] in it:
+                    num_pg += p['pg_num']
+
+            # note that here we deliberately exclude any scrubbing pgs too
+            # since scrubbing activities have significant impacts on performance
+            pool_ids = list(p['pool'] for p in pool_dump if p['pool_name'] in it)
+            num_pg_active_clean = 0
+            pg_dump = self.get('pg_dump')
+            for p in pg_dump['pg_stats']:
+                pg_pool = p['pgid'].split('.')[0]
+                if len(pool_ids) and int(pg_pool) not in pool_ids:
+                    continue
+                if p['state'] == 'active+clean':
+                    num_pg_active_clean += 1
+
+            available = max_optimizations - (num_pg - num_pg_active_clean)
+            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, available, it)
+            self.log.info('prepared %d changes for pool(s) %s' % (did, it))
             total_did += did
-            left -= did
-            if left <= 0:
-                break
-        self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
+        self.log.info('prepared %d changes in total' % total_did)
         if total_did == 0:
             return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or pool(s)\' pg_num is decreasing, ' \
@@ -957,7 +977,7 @@ class Module(MgrModule):
         step = self.get_module_option('crush_compat_step')
         if step <= 0 or step >= 1.0:
             return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
-        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
+        max_misplaced = self.get_ceph_option('target_max_misplaced_ratio')
         min_pg_per_osd = 2
 
         ms = plan.initial
@@ -988,7 +1008,7 @@ class Module(MgrModule):
 
         # Make sure roots don't overlap their devices.  If so, we
         # can't proceed.
-        roots = pe.target_by_root.keys()
+        roots = list(pe.target_by_root.keys())
         self.log.debug('roots %s', roots)
         visited = {}
         overlap = {}
@@ -1246,11 +1266,23 @@ class Module(MgrModule):
 
         # upmap
         incdump = plan.inc.dump()
-        for pgid in incdump.get('old_pg_upmap_items', []):
-            self.log.info('ceph osd rm-pg-upmap-items %s', pgid)
+        for item in incdump.get('new_pg_upmap', []):
+            self.log.info('ceph osd pg-upmap %s mappings %s', item['pgid'],
+                          item['osds'])
             result = CommandResult('foo')
             self.send_command(result, 'mon', '', json.dumps({
-                'prefix': 'osd rm-pg-upmap-items',
+                'prefix': 'osd pg-upmap',
+                'format': 'json',
+                'pgid': item['pgid'],
+                'id': item['osds'],
+            }), 'foo')
+            commands.append(result)
+
+        for pgid in incdump.get('old_pg_upmap', []):
+            self.log.info('ceph osd rm-pg-upmap %s', pgid)
+            result = CommandResult('foo')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd rm-pg-upmap',
                 'format': 'json',
                 'pgid': pgid,
             }), 'foo')
@@ -1271,6 +1303,16 @@ class Module(MgrModule):
             }), 'foo')
             commands.append(result)
 
+        for pgid in incdump.get('old_pg_upmap_items', []):
+            self.log.info('ceph osd rm-pg-upmap-items %s', pgid)
+            result = CommandResult('foo')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd rm-pg-upmap-items',
+                'format': 'json',
+                'pgid': pgid,
+            }), 'foo')
+            commands.append(result)
+
         # wait for commands
         self.log.debug('commands %s' % commands)
         for result in commands:
@@ -1280,3 +1322,9 @@ class Module(MgrModule):
                 return r, outs
         self.log.debug('done')
         return 0, ''
+
+    def gather_telemetry(self):
+        return {
+            'active': self.active,
+            'mode': self.mode,
+        }

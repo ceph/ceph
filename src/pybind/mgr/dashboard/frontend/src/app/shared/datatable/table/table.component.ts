@@ -179,7 +179,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   ngOnInit() {
     // ngx-datatable triggers calculations each time mouse enters a row,
     // this will prevent that.
-    window.addEventListener('mouseenter', (event) => event.stopPropagation(), true);
+    this.table.element.addEventListener('mouseenter', (e) => e.stopPropagation(), true);
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
@@ -207,6 +207,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         c.resizeable = false;
       }
     });
+
+    this.initCheckboxColumn();
     this.filterHiddenColumns();
     // Load the data table content every N ms or at least once.
     // Force showing the loading indicator if there are subscribers to the fetchData
@@ -303,6 +305,24 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }));
   }
 
+  /**
+   * Add a column containing a checkbox if selectionType is 'multiClick'.
+   */
+  initCheckboxColumn() {
+    if (this.selectionType === 'multiClick') {
+      this.columns.unshift({
+        prop: undefined,
+        resizeable: false,
+        sortable: false,
+        draggable: false,
+        checkboxable: true,
+        canAutoResize: false,
+        cellClass: 'cd-datatable-checkbox',
+        width: 30
+      });
+    }
+  }
+
   filterHiddenColumns() {
     this.tableColumns = this.columns.filter((c) => !c.isHidden);
   }
@@ -324,7 +344,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     // https://github.com/swimlane/ngx-datatable/issues/193#issuecomment-329144543
     if (this.table && this.table.element.clientWidth !== this.currentWidth) {
       this.currentWidth = this.table.element.clientWidth;
+      // Recalculate the sizes of the grid.
       this.table.recalculate();
+      // Mark the datatable as changed, Angular's change-detection will
+      // do the rest for us => the grid will be redrawn.
+      // Note, the ChangeDetectorRef variable is private, so we need to
+      // use this workaround to access it and make TypeScript happy.
+      const cdRef = _.get(this.table, 'cd');
+      cdRef.markForCheck();
     }
   }
 
@@ -467,7 +494,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     const sortProp = this.userConfig.sorts[0].prop;
     if (!_.find(this.tableColumns, (c: CdTableColumn) => c.prop === sortProp)) {
       this.userConfig.sorts = this.createSortingDefinition(this.tableColumns[0].prop);
-      this.table.onColumnSort({ sorts: this.userConfig.sorts });
     }
     this.table.recalculate();
     this.cdRef.detectChanges();

@@ -9,13 +9,13 @@
 
 class MOSDOp;
 
-namespace ceph::osd {
+namespace crimson::osd {
 class PG;
 class OSD;
 
 class ClientRequest final : public OperationT<ClientRequest> {
   OSD &osd;
-  ceph::net::ConnectionRef conn;
+  crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
   OrderedPipelinePhase::Handle handle;
 
@@ -41,7 +41,7 @@ public:
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
 
-  ClientRequest(OSD &osd, ceph::net::ConnectionRef, Ref<MOSDOp> &&m);
+  ClientRequest(OSD &osd, crimson::net::ConnectionRef, Ref<MOSDOp> &&m);
 
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;

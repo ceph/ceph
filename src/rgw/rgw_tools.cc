@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
 
@@ -424,7 +424,7 @@ int RGWDataAccess::Bucket::finish_init()
 
 int RGWDataAccess::Bucket::init()
 {
-  int ret = sd->store->getRados()->get_bucket_info(*sd->sysobj_ctx,
+  int ret = sd->store->getRados()->get_bucket_info(sd->store->svc(),
 				       tenant, name,
 				       bucket_info,
 				       &mtime,

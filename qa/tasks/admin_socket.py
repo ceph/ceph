@@ -68,7 +68,7 @@ def task(ctx, config):
     teuthology.replace_all_with_clients(ctx.cluster, config)
 
     with parallel() as ptask:
-        for client, tests in config.iteritems():
+        for client, tests in config.items():
             ptask.spawn(_run_tests, ctx, client, tests)
 
 
@@ -124,7 +124,7 @@ def _run_tests(ctx, client, tests):
     """
     testdir = teuthology.get_testdir(ctx)
     log.debug('Running admin socket tests on %s', client)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(client).remotes.keys()
     socket_path = '/var/run/ceph/ceph-{name}.asok'.format(name=client)
     overrides = ctx.config.get('overrides', {}).get('admin_socket', {})
 
@@ -145,7 +145,7 @@ def _run_tests(ctx, client, tests):
                 ],
             )
 
-        for command, config in tests.iteritems():
+        for command, config in tests.items():
             if config is None:
                 config = {}
             teuthology.deep_merge(config, overrides)

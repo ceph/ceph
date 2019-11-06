@@ -142,6 +142,11 @@ set(librbd_internal_srcs
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
+if(WITH_EVENTTRACE)
+  list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
+endif()
+
+
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
@@ -152,7 +157,7 @@ if(WITH_LTTNG)
   # io/AioCompletion.cc includes tracing/librbd.h
   add_dependencies(rbd_internal librbd-tp)
 endif()
-if(WITH_LTTNG AND WITH_EVENTTRACE)
+if(WITH_EVENTTRACE)
   add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE

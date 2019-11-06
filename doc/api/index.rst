@@ -11,8 +11,8 @@ See `Ceph Storage Cluster APIs`_.
 .. _Ceph Storage Cluster APIs: ../rados/api/
 
 
-Ceph Filesystem APIs
-====================
+Ceph File System APIs
+=====================
 
 See `libcephfs (javadoc)`_.
 

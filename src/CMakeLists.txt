@@ -74,7 +74,13 @@ endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    set(default_build_type "Debug")
+  else()
+    set(default_build_type "RelWithDebInfo")
+  endif()
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
 endif()
 
 if(WITH_CEPH_DEBUG_MUTEX OR CMAKE_BUILD_TYPE STREQUAL Debug)
@@ -299,6 +305,13 @@ if(WITH_SEASTAR)
   endmacro ()
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
+  if(Seastar_DPDK)
+    find_package(dpdk QUIET)
+    if(NOT DPDK_FOUND)
+      include(BuildDPDK)
+      build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
+    endif()
+  endif()
   set(Seastar_CXX_FLAGS "-Wno-error;-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
@@ -410,7 +423,7 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
-  INSTALL_RPATH "")
+  SKIP_RPATH TRUE)
 if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
@@ -460,9 +473,7 @@ if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
-if(WITH_MGR)
-  add_subdirectory(mgr)
-endif()
+add_subdirectory(mgr)
 
 set(librados_config_srcs
   librados-config.cc)
@@ -666,7 +677,9 @@ if(WITH_LIBCEPHFS)
   add_executable(ceph-syn ${ceph_syn_srcs})
   target_link_libraries(ceph-syn client global-static ceph-common)
   install(TARGETS ceph-syn DESTINATION bin)
-  add_subdirectory(mount)
+  if(LINUX)
+    add_subdirectory(mount)
+  endif()
 endif(WITH_LIBCEPHFS)
 
 if(WITH_FUSE)

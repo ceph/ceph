@@ -94,9 +94,10 @@ Response::
 Configure the Ceph Object Gateway
 =================================
 
-Edit the Ceph configuration file to add information about the Barbican server
-and Keystone user::
+Edit the Ceph configuration file to enable Barbican as a KMS and add information
+about the Barbican server and Keystone user::
 
+   rgw crypt s3 kms backend = barbican
    rgw barbican url = http://barbican.example.com:9311
    rgw keystone barbican user = rgwcrypt-user
    rgw keystone barbican password = rgwcrypt-password

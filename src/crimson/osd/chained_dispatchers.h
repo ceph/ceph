@@ -13,7 +13,7 @@
 // it requires changing the ms_ methods to return a bool. so as an intermediate 
 // solution, we are using an observer dispatcher to notify all the interested
 // or unintersted parties.
-class ChainedDispatchers : public ceph::net::Dispatcher {
+class ChainedDispatchers : public crimson::net::Dispatcher {
   std::deque<Dispatcher*> dispatchers;
 public:
   void push_front(Dispatcher* dispatcher) {
@@ -22,9 +22,9 @@ public:
   void push_back(Dispatcher* dispatcher) {
     dispatchers.push_back(dispatcher);
   }
-  seastar::future<> ms_dispatch(ceph::net::Connection* conn, MessageRef m) override;
-  seastar::future<> ms_handle_accept(ceph::net::ConnectionRef conn) override;
-  seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override;
-  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
-  seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) override;
+  seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m) override;
+  seastar::future<> ms_handle_accept(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_remote_reset(crimson::net::ConnectionRef conn) override;
 };

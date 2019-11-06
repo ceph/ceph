@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/random.h"
 #include "include/Context.h"
@@ -111,7 +111,7 @@ public:
     if (!register_completion) {
       return -EINVAL;
     }
-    register_completion->wait_for_safe();
+    register_completion->wait_for_complete();
     int r = register_completion->get_return_value();
     register_completion->release();
     register_completion = nullptr;

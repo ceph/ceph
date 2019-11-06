@@ -7,6 +7,7 @@ overrides:
         ms inject delay type: osd
         ms inject internal delays: 0.002
         ms inject socket failures: 2500
+        mon client directed command retry: 5
 tasks:
 - install: null
 - ceph:
@@ -22,6 +23,7 @@ tasks:
       - \(OBJECT_
       - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
+      - \(OSD_SLOW_PING_TIME
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgnum_shrink: 2

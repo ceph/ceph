@@ -243,8 +243,14 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         drive_group.validate(all_hosts)
 
     @deferred_write("remove_osds")
-    def remove_osds(self, osd_ids):
+    def remove_osds(self, osd_ids, destroy=False):
         assert isinstance(osd_ids, list)
+
+    @deferred_write("blink_device_light")
+    def blink_device_light(self, ident_fault, on, locations):
+        assert ident_fault in ("ident", "fault")
+        assert len(locations)
+        return ''
 
     @deferred_write("service_action")
     def service_action(self, action, service_type, service_name=None, service_id=None):

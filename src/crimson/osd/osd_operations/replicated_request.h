@@ -9,7 +9,11 @@
 
 class MOSDRepOp;
 
-namespace ceph::osd {
+namespace ceph {
+  class Formatter;
+}
+
+namespace crimson::osd {
 
 class OSD;
 class PG;
@@ -35,10 +39,10 @@ public:
     friend RepRequest;
   };
   static constexpr OperationTypeCode type = OperationTypeCode::replicated_request;
-  RepRequest(OSD&, ceph::net::ConnectionRef&&, Ref<MOSDRepOp>&&);
+  RepRequest(OSD&, crimson::net::ConnectionRef&&, Ref<MOSDRepOp>&&);
 
   void print(std::ostream &) const final;
-  void dump_detail(Formatter *f) const final;
+  void dump_detail(ceph::Formatter* f) const final;
   seastar::future<> start();
 
 private:
@@ -46,7 +50,7 @@ private:
   PGPipeline &pp(PG &pg);
 
   OSD &osd;
-  ceph::net::ConnectionRef conn;
+  crimson::net::ConnectionRef conn;
   Ref<MOSDRepOp> req;
   OrderedPipelinePhase::Handle handle;
 };

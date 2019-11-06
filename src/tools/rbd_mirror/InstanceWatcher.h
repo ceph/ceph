@@ -25,8 +25,8 @@ template <typename> class ManagedLock;
 namespace rbd {
 namespace mirror {
 
-template <typename> class ImageSyncThrottler;
 template <typename> class InstanceReplayer;
+template <typename> class Throttler;
 template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -43,13 +43,15 @@ public:
 
   static InstanceWatcher *create(
     librados::IoCtx &io_ctx, ContextWQ *work_queue,
-    InstanceReplayer<ImageCtxT> *instance_replayer);
+    InstanceReplayer<ImageCtxT> *instance_replayer,
+    Throttler<ImageCtxT> *image_sync_throttler);
   void destroy() {
     delete this;
   }
 
   InstanceWatcher(librados::IoCtx &io_ctx, ContextWQ *work_queue,
                   InstanceReplayer<ImageCtxT> *instance_replayer,
+                  Throttler<ImageCtxT> *image_sync_throttler,
                   const std::string &instance_id);
   ~InstanceWatcher() override;
 
@@ -78,8 +80,6 @@ public:
   void notify_sync_request(const std::string &sync_id, Context *on_sync_start);
   bool cancel_sync_request(const std::string &sync_id);
   void notify_sync_complete(const std::string &sync_id);
-
-  void print_sync_status(Formatter *f, stringstream *ss);
 
   void cancel_notify_requests(const std::string &instance_id);
 
@@ -157,6 +157,7 @@ private:
 
   Threads<ImageCtxT> *m_threads;
   InstanceReplayer<ImageCtxT> *m_instance_replayer;
+  Throttler<ImageCtxT> *m_image_sync_throttler;
   std::string m_instance_id;
 
   mutable ceph::mutex m_lock;
@@ -171,7 +172,10 @@ private:
   std::set<Request> m_requests;
   std::set<C_NotifyInstanceRequest *> m_suspended_ops;
   std::map<std::string, C_SyncRequest *> m_inflight_sync_reqs;
-  ImageSyncThrottler<ImageCtxT> *m_image_sync_throttler = nullptr;
+
+  inline bool is_leader() const {
+    return m_leader_instance_id == m_instance_id;
+  }
 
   void register_instance();
   void handle_register_instance(int r);

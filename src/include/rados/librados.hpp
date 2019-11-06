@@ -192,15 +192,16 @@ inline namespace v14_2_0 {
   struct CEPH_RADOS_API AioCompletion {
     AioCompletion(AioCompletionImpl *pc_) : pc(pc_) {}
     int set_complete_callback(void *cb_arg, callback_t cb);
-    int set_safe_callback(void *cb_arg, callback_t cb);
+    int set_safe_callback(void *cb_arg, callback_t cb)
+      __attribute__ ((deprecated));
     int wait_for_complete();
-    int wait_for_safe();
+    int wait_for_safe() __attribute__ ((deprecated));
     int wait_for_complete_and_cb();
-    int wait_for_safe_and_cb();
+    int wait_for_safe_and_cb() __attribute__ ((deprecated));
     bool is_complete();
-    bool is_safe();
+    bool is_safe() __attribute__ ((deprecated));
     bool is_complete_and_cb();
-    bool is_safe_and_cb();
+    bool is_safe_and_cb() __attribute__ ((deprecated));
     int get_return_value();
     int get_version() __attribute__ ((deprecated));
     uint64_t get_version64();
@@ -270,10 +271,12 @@ inline namespace v14_2_0 {
     // marked full; ops will either succeed (e.g., delete) or return
     // EDQUOT or ENOSPC
     OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,
-    //mainly for delete
+    // mainly for delete
     OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
     OPERATION_IGNORE_REDIRECT	 = LIBRADOS_OPERATION_IGNORE_REDIRECT,
     OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,
+    // enable/allow return value and per-op return code/buffers
+    OPERATION_RETURNVEC          = LIBRADOS_OPERATION_RETURNVEC,
   };
 
   /*
@@ -735,6 +738,8 @@ inline namespace v14_2_0 {
     IoCtx& operator=(IoCtx&& rhs) noexcept;
 
     ~IoCtx();
+
+    bool is_valid() const;
 
     // Close our pool handle
     void close();
@@ -1274,8 +1279,13 @@ inline namespace v14_2_0 {
 
     config_t cct();
 
-    void set_osdmap_full_try();
-    void unset_osdmap_full_try();
+    void set_osdmap_full_try()
+      __attribute__ ((deprecated));
+    void unset_osdmap_full_try()
+      __attribute__ ((deprecated));
+
+    void set_pool_full_try();
+    void unset_pool_full_try();
 
     int application_enable(const std::string& app_name, bool force);
     int application_enable_async(const std::string& app_name,
@@ -1321,6 +1331,7 @@ inline namespace v14_2_0 {
     Rados();
     explicit Rados(IoCtx& ioctx);
     ~Rados();
+    static void from_rados_t(rados_t cluster, Rados &rados);
 
     int init(const char * const id);
     int init2(const char * const name, const char * const clustername,
@@ -1465,7 +1476,9 @@ inline namespace v14_2_0 {
    // -- aio --
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
-						callback_t cb_safe);
+						callback_t cb_safe)
+      __attribute__ ((deprecated));
+    static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
     
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:

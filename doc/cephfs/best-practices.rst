@@ -25,7 +25,7 @@ Most stable configuration
 Some features in CephFS are still experimental.  See
 :doc:`/cephfs/experimental-features` for guidance on these.
 
-For the best chance of a happy healthy filesystem, use a **single active MDS** 
+For the best chance of a happy healthy file system, use a **single active MDS** 
 and **do not use snapshots**.  Both of these are the default.
 
 Note that creating multiple MDS daemons is fine, as these will simply be

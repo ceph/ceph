@@ -113,20 +113,11 @@ add_executable(unittest_ec_transaction
 add_ceph_unittest(unittest_ec_transaction)
 target_link_libraries(unittest_ec_transaction osd global ${BLKID_LIBRARIES})
 
-# unittest_mclock_op_class_queue
-add_executable(unittest_mclock_op_class_queue
-  TestMClockOpClassQueue.cc
+# unittest_mclock_scheduler
+add_executable(unittest_mclock_scheduler
+  TestMClockScheduler.cc
 )
-add_ceph_unittest(unittest_mclock_op_class_queue)
-target_link_libraries(unittest_mclock_op_class_queue
-  global osd dmclock os
-)
-
-# unittest_mclock_client_queue
-add_executable(unittest_mclock_client_queue
-  TestMClockClientQueue.cc
-)
-add_ceph_unittest(unittest_mclock_client_queue)
-target_link_libraries(unittest_mclock_client_queue
+add_ceph_unittest(unittest_mclock_scheduler)
+target_link_libraries(unittest_mclock_scheduler
   global osd dmclock os
 )

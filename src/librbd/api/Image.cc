@@ -77,6 +77,23 @@ int pre_remove_image(librados::IoCtx& io_ctx, const std::string& image_id) {
 } // anonymous namespace
 
 template <typename I>
+int64_t Image<I>::get_data_pool_id(I *ictx) {
+  if (ictx->data_ctx.is_valid()) {
+    return ictx->data_ctx.get_id();
+  }
+
+  int64_t pool_id;
+  int r = cls_client::get_data_pool(&ictx->md_ctx, ictx->header_oid, &pool_id);
+  if (r < 0) {
+    CephContext *cct = ictx->cct;
+    lderr(cct) << "error getting data pool ID: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return pool_id;
+}
+
+template <typename I>
 int Image<I>::get_op_features(I *ictx, uint64_t *op_features) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "image_ctx=" << ictx << dendl;
@@ -394,7 +411,7 @@ int Image<I>::list_descendants(
     for (auto& image_id : image_ids) {
       images->push_back({
         it.first, "", ictx->md_ctx.get_namespace(), image_id, "", false});
-      r = list_descendants(ictx->md_ctx, image_id, child_max_level, images);
+      r = list_descendants(ioctx, image_id, child_max_level, images);
       if (r < 0) {
         return r;
       }
@@ -450,7 +467,11 @@ int Image<I>::list_descendants(
         child_io_ctx.get_namespace() != image.pool_namespace) {
       r = util::create_ioctx(ictx->md_ctx, "child image", image.pool_id,
                              image.pool_namespace, &child_io_ctx);
-      if (r < 0) {
+      if (r == -ENOENT) {
+        image.pool_name = "";
+        image.image_name = "";
+        continue;
+      } else if (r < 0) {
         return r;
       }
       child_pool_id = image.pool_id;
@@ -786,7 +807,8 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
         if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK) {
           // best-effort try to restore the image if the removal
           // failed for possible expected reasons
-          Trash<I>::restore(io_ctx, trash_image_source, image_id, image_name);
+          Trash<I>::restore(io_ctx, {cls::rbd::TRASH_IMAGE_SOURCE_REMOVING},
+                            image_id, image_name);
         }
       }
       return r;

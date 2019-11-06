@@ -106,6 +106,16 @@ public:
     o.swap(ops);
     bdata_encode = false;
   }
+  void set_op_returns(const vector<pg_log_op_return_item_t>& op_returns) {
+    if (op_returns.size()) {
+      ceph_assert(ops.empty() || ops.size() == op_returns.size());
+      ops.resize(op_returns.size());
+      for (unsigned i = 0; i < op_returns.size(); ++i) {
+	ops[i].rval = op_returns[i].rval;
+	ops[i].outdata = op_returns[i].bl;
+      }
+    }
+  }
 
   /**
    * get retry attempt
@@ -145,11 +155,13 @@ public:
     retry_attempt = req->get_retry_attempt();
     do_redirect = false;
 
-    // zero out ops payload_len and possibly out data
     for (unsigned i = 0; i < ops.size(); i++) {
-      ops[i].op.payload_len = 0;
-      if (ignore_out_data)
+      // zero out input data
+      ops[i].indata.clear();
+      if (ignore_out_data) {
+	// original request didn't set the RETURNVEC flag
 	ops[i].outdata.clear();
+      }
     }
   }
 private:

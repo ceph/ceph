@@ -15,6 +15,7 @@
 
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
+#include <boost/range/adaptor/reversed.hpp>
 
 #define dout_context g_ceph_context
 
@@ -830,8 +831,7 @@ void PGMapDigest::dump_pool_stats_full(
     f->close_section();
   else {
     ceph_assert(ss != nullptr);
-    *ss << "POOLS:\n";
-    tbl.set_indent(4);
+    *ss << "--- POOLS ---\n";
     *ss << tbl;
   }
 }
@@ -891,8 +891,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
 	<< percentify(osd_sum.statfs.get_used_raw_ratio()*100.0)
 	<< TextTable::endrow;
 
-    *ss << "RAW STORAGE:\n";
-    tbl.set_indent(4);
+    *ss << "--- RAW STORAGE ---\n";
     *ss << tbl;
   }
 }
@@ -2760,6 +2759,121 @@ void PGMap::get_health_checks(
 		osd_pool_default_size - osdmap.get_num_osds());
   }
 
+  // SLOW_PING_TIME
+  // Convert milliseconds to microseconds
+  auto warn_slow_ping_time = cct->_conf.get_val<double>("mon_warn_on_slow_ping_time") * 1000;
+  auto grace = cct->_conf.get_val<int64_t>("osd_heartbeat_grace");
+  if (warn_slow_ping_time == 0) {
+    double ratio = cct->_conf.get_val<double>("mon_warn_on_slow_ping_ratio");
+    warn_slow_ping_time = grace;
+    warn_slow_ping_time *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
+  }
+  if (warn_slow_ping_time > 0) {
+
+    struct mon_ping_item_t {
+      uint32_t pingtime;
+      int from;
+      int to;
+      bool improving;
+
+      bool operator<(const mon_ping_item_t& rhs) const {
+        if (pingtime < rhs.pingtime)
+          return true;
+        if (pingtime > rhs.pingtime)
+          return false;
+        if (from < rhs.from)
+          return true;
+        if (from > rhs.from)
+          return false;
+        return to < rhs.to;
+      }
+    };
+
+    list<string> detail_back;
+    list<string> detail_front;
+    set<mon_ping_item_t> back_sorted, front_sorted;
+    for (auto i : osd_stat) {
+      for (auto j : i.second.hb_pingtime) {
+
+	// Maybe source info is old
+	if (now.sec() - j.second.last_update > grace * 60)
+	  continue;
+
+	mon_ping_item_t back;
+	back.pingtime = std::max(j.second.back_pingtime[0], j.second.back_pingtime[1]);
+	back.pingtime = std::max(back.pingtime, j.second.back_pingtime[2]);
+	back.from = i.first;
+	back.to = j.first;
+	if (back.pingtime > warn_slow_ping_time) {
+	  back.improving = (j.second.back_pingtime[0] < j.second.back_pingtime[1]
+			    && j.second.back_pingtime[1] < j.second.back_pingtime[2]);
+	  back_sorted.emplace(back);
+	}
+
+	mon_ping_item_t front;
+	front.pingtime = std::max(j.second.front_pingtime[0], j.second.front_pingtime[1]);
+	front.pingtime = std::max(front.pingtime, j.second.front_pingtime[2]);
+	front.from = i.first;
+	front.to = j.first;
+	if (front.pingtime > warn_slow_ping_time) {
+	  front.improving = (j.second.front_pingtime[0] < j.second.front_pingtime[1]
+			     && j.second.front_pingtime[1] < j.second.back_pingtime[2]);
+	  front_sorted.emplace(front);
+	}
+      }
+    }
+    int max_detail = 10;
+    for (auto &sback : boost::adaptors::reverse(back_sorted)) {
+      ostringstream ss;
+      if (max_detail == 0) {
+	ss << "Truncated long network list.  Use ceph daemon mgr.# dump_osd_network for more information";
+        detail_back.push_back(ss.str());
+        break;
+      }
+      max_detail--;
+      ss << "Slow heartbeat ping on back interface from osd." << sback.from
+         << (osdmap.is_down(sback.from) ? " (down)" : "")
+	 << " to osd." << sback.to
+         << (osdmap.is_down(sback.to) ? " (down)" : "")
+	 << " " << fixed_u_to_string(sback.pingtime, 3) << " msec"
+	 << (sback.improving ? " possibly improving" : "");
+      detail_back.push_back(ss.str());
+    }
+    max_detail = 10;
+    for (auto &sfront : boost::adaptors::reverse(front_sorted)) {
+      ostringstream ss;
+      if (max_detail == 0) {
+	ss << "Truncated long network list.  Use ceph daemon mgr.# dump_osd_network for more information";
+        detail_front.push_back(ss.str());
+        break;
+      }
+      max_detail--;
+      ss << "Slow heartbeat ping on front interface from osd." << sfront.from
+         << (osdmap.is_down(sfront.from) ? " (down)" : "")
+         << " to osd." << sfront.to
+         << (osdmap.is_down(sfront.to) ? " (down)" : "")
+	 << " " << fixed_u_to_string(sfront.pingtime, 3) << " msec"
+	 << (sfront.improving ? " possibly improving" : "");
+      detail_front.push_back(ss.str());
+    }
+    if (detail_back.size() != 0) {
+      ostringstream ss;
+      ss << "Long heartbeat ping times on back interface seen, longest is "
+	 << fixed_u_to_string(back_sorted.rbegin()->pingtime, 3) << " msec";
+      auto& d = checks->add("OSD_SLOW_PING_TIME_BACK", HEALTH_WARN, ss.str(),
+		      back_sorted.size());
+      d.detail.swap(detail_back);
+    }
+    if (detail_front.size() != 0) {
+      ostringstream ss;
+      ss << "Long heartbeat ping times on front interface seen, longest is "
+	 << fixed_u_to_string(front_sorted.rbegin()->pingtime, 3) << " msec";
+      auto& d = checks->add("OSD_SLOW_PING_TIME_FRONT", HEALTH_WARN, ss.str(),
+		      front_sorted.size());
+      d.detail.swap(detail_front);
+    }
+  }
+
   // SMALLER_PGP_NUM
   // MANY_OBJECTS_PER_PG
   if (!pg_stat.empty()) {
@@ -3074,13 +3188,13 @@ void PGMap::get_health_checks(
       if (asum.first == "BLUEFS_SPILLOVER") {
 	summary += " experiencing BlueFS spillover";
       } else if (asum.first == "BLUESTORE_NO_COMPRESSION") {
-	summary = " have broken BlueStore compression";
+	summary += " have broken BlueStore compression";
       } else if (asum.first == "BLUESTORE_LEGACY_STATFS") {
-	summary = " reporting legacy (not per-pool) BlueStore stats";
+	summary += " reporting legacy (not per-pool) BlueStore stats";
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
-	summary = " have dangerous mismatch between BlueStore block device and free list sizes";
+	summary += " have dangerous mismatch between BlueStore block device and free list sizes";
       } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
-	summary = " reporting legacy (not per-pool) BlueStore omap usage stats";
+	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
       }
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);
       for (auto& s : asum.second.second) {

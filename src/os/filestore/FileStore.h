@@ -359,8 +359,10 @@ private:
       }
     }
 
+  private:
+    FRIEND_MAKE_REF(OpSequencer);
     OpSequencer(CephContext* cct, int i, coll_t cid)
-      : CollectionImpl(cid),
+      : CollectionImpl(cct, cid),
 	cct(cct),
 	osr_name_str(stringify(cid)),
         id(i),

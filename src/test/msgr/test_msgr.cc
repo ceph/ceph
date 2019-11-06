@@ -109,6 +109,7 @@ class FakeDispatcher : public Dispatcher {
   bool got_connect;
   bool loopback;
   entity_addrvec_t last_accept;
+  ConnectionRef *last_accept_con_ptr = nullptr;
 
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context),
                           is_server(s), got_new(false), got_remote_reset(false),
@@ -139,6 +140,9 @@ class FakeDispatcher : public Dispatcher {
   }
   void ms_handle_fast_accept(Connection *con) override {
     last_accept = con->get_peer_addrs();
+    if (last_accept_con_ptr) {
+      *last_accept_con_ptr = con;
+    }
     if (!con->get_priv()) {
       con->set_priv(RefCountedPtr{new Session(con), false});
     }
@@ -943,39 +947,6 @@ TEST_P(MessengerTest, SimpleMsgr2Test) {
   server_msgr->wait();
 }
 
-TEST_P(MessengerTest, NameAddrTest) {
-  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
-  entity_addr_t bind_addr;
-  bind_addr.parse("v2:127.0.0.1");
-  server_msgr->bind(bind_addr);
-  server_msgr->add_dispatcher_head(&srv_dispatcher);
-  server_msgr->start();
-
-  client_msgr->add_dispatcher_head(&cli_dispatcher);
-  client_msgr->start();
-
-  MPing *m = new MPing();
-  ConnectionRef conn = client_msgr->connect_to(server_msgr->get_mytype(),
-					       server_msgr->get_myaddrs());
-  {
-    ASSERT_EQ(conn->send_message(m), 0);
-    std::unique_lock l{cli_dispatcher.lock};
-    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
-    cli_dispatcher.got_new = false;
-  }
-  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
-  ASSERT_TRUE(conn->get_peer_addrs() == server_msgr->get_myaddrs());
-  ConnectionRef server_conn = server_msgr->connect_to(
-    client_msgr->get_mytype(), srv_dispatcher.last_accept);
-  // Verify that server_conn is the one we already accepted from client,
-  // so it means the session counter in server_conn is also incremented.
-  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv().get())->get_count());
-  server_msgr->shutdown();
-  client_msgr->shutdown();
-  server_msgr->wait();
-  client_msgr->wait();
-}
-
 TEST_P(MessengerTest, FeatureTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
@@ -1199,6 +1170,8 @@ TEST_P(MessengerTest, StatelessTest) {
   ASSERT_FALSE(conn->is_connected());
 
   srv_dispatcher.got_new = false;
+  ConnectionRef server_conn;
+  srv_dispatcher.last_accept_con_ptr = &server_conn;
   conn = client_msgr->connect_to(server_msgr->get_mytype(),
 				      server_msgr->get_myaddrs());
   {
@@ -1209,8 +1182,8 @@ TEST_P(MessengerTest, StatelessTest) {
     cli_dispatcher.got_new = false;
   }
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
-  ConnectionRef server_conn = server_msgr->connect_to(client_msgr->get_mytype(),
-						      srv_dispatcher.last_accept);
+  ASSERT_TRUE(server_conn);
+
   // server lose state
   {
     std::unique_lock l{srv_dispatcher.lock};
@@ -1234,6 +1207,84 @@ TEST_P(MessengerTest, StatelessTest) {
     cli_dispatcher.got_new = false;
   }
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+
+  server_msgr->shutdown();
+  client_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->wait();
+}
+
+TEST_P(MessengerTest, AnonTest) {
+  Message *m;
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("v2:127.0.0.1");
+  Messenger::Policy p = Messenger::Policy::stateless_server(0);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
+  p = Messenger::Policy::lossy_client(0);
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
+
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef server_con_a, server_con_b;
+
+  // a
+  srv_dispatcher.last_accept_con_ptr = &server_con_a;
+  ConnectionRef con_a = client_msgr->connect_to(server_msgr->get_mytype(),
+					    server_msgr->get_myaddrs(),
+					    true);
+  {
+    m = new MPing();
+    ASSERT_EQ(con_a->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_EQ(1U, static_cast<Session*>(con_a->get_priv().get())->get_count());
+
+  // b
+  srv_dispatcher.last_accept_con_ptr = &server_con_b;
+  ConnectionRef con_b = client_msgr->connect_to(server_msgr->get_mytype(),
+					    server_msgr->get_myaddrs(),
+					    true);
+  {
+    m = new MPing();
+    ASSERT_EQ(con_b->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_EQ(1U, static_cast<Session*>(con_b->get_priv().get())->get_count());
+
+  // these should be distinct
+  ASSERT_NE(con_a, con_b);
+  ASSERT_NE(server_con_a, server_con_b);
+
+  // and both connected
+  {
+    m = new MPing();
+    ASSERT_EQ(con_a->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+  {
+    m = new MPing();
+    ASSERT_EQ(con_b->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+
+  // clean up
+  con_a->mark_down();
+  ASSERT_FALSE(con_a->is_connected());
+  con_b->mark_down();
+  ASSERT_FALSE(con_b->is_connected());
 
   server_msgr->shutdown();
   client_msgr->shutdown();

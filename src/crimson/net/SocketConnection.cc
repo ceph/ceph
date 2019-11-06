@@ -19,7 +19,11 @@
 #include "ProtocolV2.h"
 #include "SocketMessenger.h"
 
-using namespace ceph::net;
+#ifdef UNIT_TESTS_BUILT
+#include "Interceptor.h"
+#endif
+
+using namespace crimson::net;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    Dispatcher& dispatcher,
@@ -32,20 +36,38 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
   } else {
     protocol = std::make_unique<ProtocolV1>(dispatcher, *this, messenger);
   }
+#ifdef UNIT_TESTS_BUILT
+  if (messenger.interceptor) {
+    interceptor = messenger.interceptor;
+    interceptor->register_conn(*this);
+  }
+#endif
 }
 
 SocketConnection::~SocketConnection() {}
 
-ceph::net::Messenger*
+crimson::net::Messenger*
 SocketConnection::get_messenger() const {
   return &messenger;
 }
 
-seastar::future<bool> SocketConnection::is_connected()
+bool SocketConnection::is_connected() const
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-      return protocol->is_connected();
-    });
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_connected();
+}
+
+#ifdef UNIT_TESTS_BUILT
+bool SocketConnection::is_closed() const
+{
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_closed();
+}
+
+#endif
+bool SocketConnection::peer_wins() const
+{
+  return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
 seastar::future<> SocketConnection::send(MessageRef msg)
@@ -66,9 +88,8 @@ seastar::future<> SocketConnection::keepalive()
 
 seastar::future<> SocketConnection::close()
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-      return protocol->close();
-    });
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->close();
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)

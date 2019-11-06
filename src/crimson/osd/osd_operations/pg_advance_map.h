@@ -11,7 +11,11 @@
 #include "crimson/common/type_helpers.h"
 #include "osd/PeeringState.h"
 
-namespace ceph::osd {
+namespace ceph {
+  class Formatter;
+}
+
+namespace crimson::osd {
 
 class OSD;
 class PG;
@@ -34,14 +38,12 @@ protected:
 
 public:
   PGAdvanceMap(
-    OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to);
-  PGAdvanceMap(
     OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to,
     PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
 
   void print(std::ostream &) const final;
-  void dump_detail(Formatter *f) const final;
+  void dump_detail(ceph::Formatter *f) const final;
   seastar::future<> start();
 };
 

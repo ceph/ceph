@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import re
 import ipaddress
 from distutils.util import strtobool
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # noqa: N814
 import six
 from ..awsauth import S3Auth
 from ..settings import Settings, Options
@@ -482,3 +482,34 @@ class RgwClient(RestClient):
             )
 
         return {'zonegroup': zonegroup_name, 'placement_targets': placement_targets}
+
+    @RestClient.api_get('/{bucket_name}?versioning')
+    def get_bucket_versioning(self, bucket_name, request=None):
+        """
+        Get bucket versioning.
+        :param str bucket_name: the name of the bucket.
+        :return: versioning state
+        :rtype: str
+        """
+        # pylint: disable=unused-argument
+        result = request()
+        if 'Status' not in result:
+            result['Status'] = 'Suspended'
+        return result['Status']
+
+    @RestClient.api_put('/{bucket_name}?versioning')
+    def set_bucket_versioning(self, bucket_name, versioning_state, request=None):
+        """
+        Set bucket versioning.
+        :param str bucket_name: the name of the bucket.
+        :param str versioning_state:
+            https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html
+        :return: None
+        """
+        # pylint: disable=unused-argument
+        versioning_configuration = ET.Element('VersioningConfiguration')
+        status = ET.SubElement(versioning_configuration, 'Status')
+        status.text = versioning_state
+        data = ET.tostring(versioning_configuration, encoding='utf-8')
+
+        return request(data=data)

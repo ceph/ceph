@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/compat.h"
 #include "rgw_sal.h"
@@ -589,7 +589,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   std::optional<uint64_t> bytes_transferred;
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
-                       user_id,
+                       rgw_user(user_id),
                        NULL, /* req_info */
                        source_zone,
                        dest_obj,
@@ -646,7 +646,7 @@ int RGWAsyncStatRemoteObj::_send_request()
   rgw_obj dest_obj(src_obj);
 
   int r = store->getRados()->stat_remote_obj(obj_ctx,
-                       user_id,
+                       rgw_user(user_id),
                        nullptr, /* req_info */
                        source_zone,
                        src_obj,
@@ -722,7 +722,7 @@ int RGWAsyncRemoveObj::_send_request()
   }
   del_op.params.olh_epoch = versioned_epoch;
   del_op.params.marker_version_id = marker_version_id;
-  del_op.params.obj_owner.set_id(owner);
+  del_op.params.obj_owner.set_id(rgw_user(owner));
   del_op.params.obj_owner.set_name(owner_display_name);
   del_op.params.mtime = timestamp;
   del_op.params.high_precision_time = true;

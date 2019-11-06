@@ -75,8 +75,8 @@ public:
   }
   CryptoRandom* random() const;
   PerfCountersCollectionImpl* get_perfcounters_collection();
-  ceph::common::ConfigProxy& _conf;
-  ceph::common::PerfCountersCollection& _perf_counters_collection;
+  crimson::common::ConfigProxy& _conf;
+  crimson::common::PerfCountersCollection& _perf_counters_collection;
   CephContext* get();
   void put();
 private:
@@ -161,8 +161,14 @@ public:
   /**
    * process an admin socket command
    */
-  void do_command(std::string_view command, const cmdmap_t& cmdmap,
-		  std::string_view format, ceph::bufferlist *out);
+  int do_command(std::string_view command, const cmdmap_t& cmdmap,
+		 Formatter *f,
+		 std::ostream& errss,
+		 ceph::bufferlist *out);
+  int _do_command(std::string_view command, const cmdmap_t& cmdmap,
+		  Formatter *f,
+		  std::ostream& errss,
+		  ceph::bufferlist *out);
 
   static constexpr std::size_t largest_singleton = 8 * 72;
 

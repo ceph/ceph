@@ -1,23 +1,23 @@
-import { Helper } from '../helper.po';
+import { AlertsPageHelper } from './alerts.po';
 
 describe('Alerts page', () => {
-  let alerts: Helper['alerts'];
+  let alerts: AlertsPageHelper;
 
   beforeAll(() => {
-    alerts = new Helper().alerts;
+    alerts = new AlertsPageHelper();
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await AlertsPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      alerts.navigateTo();
+    beforeAll(async () => {
+      await alerts.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(alerts.getBreadcrumbText()).toEqual('Alerts');
+    it('should open and show breadcrumb', async () => {
+      await alerts.waitTextToBePresent(alerts.getBreadcrumb(), 'Alerts');
     });
   });
 });

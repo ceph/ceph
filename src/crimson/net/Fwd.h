@@ -17,15 +17,16 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sharded.hh>
 
+#include "msg/Connection.h"
+#include "msg/MessageRef.h"
 #include "msg/msg_types.h"
-#include "msg/Message.h"
 
 using auth_proto_t = int;
 
 class AuthConnectionMeta;
 using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
 
-namespace ceph::net {
+namespace crimson::net {
 
 using msgr_tag_t = uint8_t;
 using stop_t = seastar::stop_iteration;
@@ -57,4 +58,4 @@ seastar::future<T*> create_sharded(Args... args) {
   });
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

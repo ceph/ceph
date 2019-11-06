@@ -1,9 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/compat.h"
 #include "rgw_amqp.h"
-#include <atomic>
 #include <amqp.h>
 #include <amqp_tcp_socket.h>
 #include <amqp_framing.h>
@@ -72,6 +71,10 @@ struct connection_id_t {
     }
   };
 };
+
+std::string to_string(const connection_id_t& id) {
+    return id.host+":"+"/"+id.vhost;
+}
 
 // connection_t state cleaner
 // could be used for automatic cleanup when getting out of scope
@@ -145,9 +148,11 @@ struct connection_t {
     amqp_bytes_free(reply_to_queue);
     reply_to_queue = amqp_empty_bytes;
     // fire all remaining callbacks
-    std::for_each(callbacks.begin(), callbacks.end(), [s](auto& cb_tag) {
-        cb_tag.cb(s);
+    std::for_each(callbacks.begin(), callbacks.end(), [this](auto& cb_tag) {
+        cb_tag.cb(status);
+        ldout(cct, 20) << "AMQP destroy: invoking callback with tag=" << cb_tag.tag << dendl;
       });
+    callbacks.clear();
     delivery_tag = 1;
   }
 
@@ -593,17 +598,17 @@ private:
     if (rc == AMQP_STATUS_OK) {
       auto const q_len = conn->callbacks.size();
       if (q_len < max_inflight) {
+        ldout(conn->cct, 20) << "AMQP publish (with callback, tag=" << conn->delivery_tag << "): OK. Queue has: " << q_len << " callbacks" << dendl;
         conn->callbacks.emplace_back(conn->delivery_tag++, message->cb);
-        ldout(conn->cct, 20) << "AMQP publish (" << reinterpret_cast<unsigned char*>(&message->cb) << "): OK. Queue has: " << q_len << " callbacks" << dendl;
       } else {
         // immediately invoke callback with error
-        ldout(conn->cct, 1) << "AMQP publish (" << reinterpret_cast<unsigned char*>(&message->cb) << "): failed with error: callback queue full" << dendl;
+        ldout(conn->cct, 1) << "AMQP publish (with callback): failed with error: callback queue full" << dendl;
         message->cb(RGW_AMQP_STATUS_MAX_INFLIGHT);
       }
     } else {
       // an error occurred, close connection
       // it will be retied by the main loop
-      ldout(conn->cct, 1) << "AMQP publish (" << reinterpret_cast<unsigned char*>(&message->cb) << "): failed with error: " << status_to_string(rc) << dendl;
+      ldout(conn->cct, 1) << "AMQP publish (with callback): failed with error: " << status_to_string(rc) << dendl;
       conn->destroy(rc);
       // immediately invoke callback with error
       message->cb(rc);
@@ -657,11 +662,13 @@ private:
           info.vhost = const_cast<char*>(conn_it->first.vhost.c_str());
           info.user = const_cast<char*>(conn->user.c_str());
           info.password = const_cast<char*>(conn->password.c_str());
-          ldout(conn->cct, 10) << "AMQP run: retry connection" << dendl;
+          ldout(conn->cct, 20) << "AMQP run: retry connection" << dendl;
           if (create_connection(conn, info)->is_ok() == false) {
-            ldout(conn->cct, 1) << "AMQP run: connection retry failed" << dendl;
+            ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_it->first) << ") retry failed" << dendl;
             // TODO: add error counter for failed retries
             // TODO: add exponential backoff for retries
+          } else {
+            ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_it->first) << ") retry successfull" << dendl;
           }
           INCREMENT_AND_CONTINUE(conn_it);
         }
@@ -681,7 +688,7 @@ private:
         if (rc != AMQP_STATUS_OK) {
           // an error occurred, close connection
           // it will be retied by the main loop
-          ldout(conn->cct, 1) << "AMQP run: connection read error" << dendl;
+          ldout(conn->cct, 1) << "AMQP run: connection read error: " << status_to_string(rc) << dendl;
           conn->destroy(rc);
           INCREMENT_AND_CONTINUE(conn_it);
         }
@@ -740,24 +747,26 @@ private:
 
         const auto& callbacks_end = conn->callbacks.end();
         const auto& callbacks_begin = conn->callbacks.begin();
-        const auto it = std::find(callbacks_begin, callbacks_end, tag);
-        if (it != callbacks_end) {
+        const auto tag_it = std::find(callbacks_begin, callbacks_end, tag);
+        if (tag_it != callbacks_end) {
           if (multiple) {
             // n/ack all up to (and including) the tag
-            ldout(conn->cct, 20) << "AMQP run: multiple n/acks received" << dendl;
-            for (auto rit = it; rit >= callbacks_begin; --rit) {
-              rit->cb(result);
-              conn->callbacks.erase(rit);
+            ldout(conn->cct, 20) << "AMQP run: multiple n/acks received with tag=" << tag << " and result=" << result << dendl;
+            auto it = callbacks_begin;
+            while (it->tag <= tag && it != conn->callbacks.end()) {
+              ldout(conn->cct, 20) << "AMQP run: invoking callback with tag=" << it->tag << dendl;
+              it->cb(result);
+              it = conn->callbacks.erase(it);
             }
           } else {
             // n/ack a specific tag
-            ldout(conn->cct, 20) << "AMQP run: n/acks received" << dendl;
-            it->cb(result);
-            conn->callbacks.erase(it);
+            ldout(conn->cct, 20) << "AMQP run: n/ack received, invoking callback with tag=" << tag << " and result=" << result << dendl;
+            tag_it->cb(result);
+            conn->callbacks.erase(tag_it);
           }
         } else {
           // TODO add counter for acks with no callback
-          ldout(conn->cct, 10) << "AMQP run: unsolicited n/ack received" << dendl;
+          ldout(conn->cct, 10) << "AMQP run: unsolicited n/ack received with tag=" << tag << dendl;
         }
         // just increment the iterator
         ++conn_it;

@@ -39,12 +39,6 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
   FIND_PACKAGE(Threads)
 endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7)
-    message(FATAL_ERROR "GCC 7+ required due to C++17 requirements")
-  endif()
-endif()
-
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
   find_program(CCACHE_FOUND ccache)
@@ -84,97 +78,13 @@ if(FREEBSD)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
 
-#Check Includes
-include(CheckIncludeFiles)
-include(CheckIncludeFileCXX)
-include(CheckFunctionExists)
 
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-
-CHECK_FUNCTION_EXISTS(fallocate CEPH_HAVE_FALLOCATE)
-CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
-CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
-CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
-CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
-CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
-CHECK_FUNCTION_EXISTS(splice CEPH_HAVE_SPLICE)
-CHECK_FUNCTION_EXISTS(getgrouplist HAVE_GETGROUPLIST)
-if(NOT APPLE)
-  CHECK_FUNCTION_EXISTS(fdatasync HAVE_FDATASYNC)
-endif()
-CHECK_FUNCTION_EXISTS(strerror_r HAVE_Strerror_R)
-CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
-CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
-CHECK_FUNCTION_EXISTS(accept4 HAVE_ACCEPT4)
-
-include(CMakePushCheckState)
-cmake_push_check_state(RESET)
-set(CMAKE_REQUIRED_LIBRARIES pthread)
-CHECK_FUNCTION_EXISTS(pthread_spin_init HAVE_PTHREAD_SPINLOCK)
-CHECK_FUNCTION_EXISTS(pthread_set_name_np HAVE_PTHREAD_SET_NAME_NP)
-CHECK_FUNCTION_EXISTS(pthread_get_name_np HAVE_PTHREAD_GET_NAME_NP)
-CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
-CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
-CHECK_FUNCTION_EXISTS(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
-cmake_pop_check_state()
-
-CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
-CHECK_FUNCTION_EXISTS(getprogname HAVE_GETPROGNAME)
-
-CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
-CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
-CHECK_INCLUDE_FILES("arpa/nameser_compat.h" HAVE_ARPA_NAMESER_COMPAT_H)
-CHECK_INCLUDE_FILES("sys/mount.h" HAVE_SYS_MOUNT_H)
-CHECK_INCLUDE_FILES("sys/param.h" HAVE_SYS_PARAM_H)
-CHECK_INCLUDE_FILES("sys/types.h" HAVE_SYS_TYPES_H)
-CHECK_INCLUDE_FILES("sys/vfs.h" HAVE_SYS_VFS_H)
-CHECK_INCLUDE_FILES("sys/prctl.h" HAVE_SYS_PRCTL_H)
-CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
-if(LINUX)
-  CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
-endif(LINUX)
-CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
-
-include(CheckTypeSize)
-set(CMAKE_EXTRA_INCLUDE_FILES "linux/types.h")
-CHECK_TYPE_SIZE(__be16 __BE16) 
-CHECK_TYPE_SIZE(__be32 __BE32) 
-CHECK_TYPE_SIZE(__be64 __BE64) 
-CHECK_TYPE_SIZE(__le16 __LE16) 
-CHECK_TYPE_SIZE(__le32 __LE32) 
-CHECK_TYPE_SIZE(__le64 __LE64) 
-CHECK_TYPE_SIZE(__u8 __U8) 
-CHECK_TYPE_SIZE(__u16 __U16) 
-CHECK_TYPE_SIZE(__u32 __U32) 
-CHECK_TYPE_SIZE(__u64 __U64) 
-CHECK_TYPE_SIZE(__s8 __S8) 
-CHECK_TYPE_SIZE(__s16 __S16) 
-CHECK_TYPE_SIZE(__s32 __S32) 
-CHECK_TYPE_SIZE(__s64 __S64) 
-unset(CMAKE_EXTRA_INCLUDE_FILES)
-
-include(CheckSymbolExists)
-CHECK_SYMBOL_EXISTS(res_nquery "resolv.h" HAVE_RES_NQUERY)
-CHECK_SYMBOL_EXISTS(F_SETPIPE_SZ "linux/fcntl.h" CEPH_HAVE_SETPIPE_SZ)
-CHECK_SYMBOL_EXISTS(__func__ "" HAVE_FUNC)
-CHECK_SYMBOL_EXISTS(__PRETTY_FUNCTION__ "" HAVE_PRETTY_FUNC)
-CHECK_SYMBOL_EXISTS(getentropy "unistd.h" HAVE_GETENTROPY)
-
-include(CheckCXXSourceCompiles)
-CHECK_CXX_SOURCE_COMPILES("
-  #include <string.h>
-  int main() { char x = *strerror_r(0, &x, sizeof(x)); return 0; }
-  " STRERROR_R_CHAR_P)
-
-include(CheckStructHasMember)
-CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
-  HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
-CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
-  HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
+include(CephChecks)
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
@@ -222,10 +132,13 @@ if(LINUX)
   set(HAVE_UDEV ${UDEV_FOUND})
   find_package(blkid REQUIRED)
   set(HAVE_BLKID ${BLKID_FOUND})
+  find_package(keyutils REQUIRED)
+  set(HAVE_KEYUTILS ${KEYUTILS_FOUND})
 elseif(FREEBSD)
   set(HAVE_UDEV OFF)
   set(HAVE_LIBAIO OFF)
   set(HAVE_BLKID OFF)
+  set(HAVE_KEYUTILS OFF)
 else()
   set(HAVE_UDEV OFF)
   set(HAVE_BLKID OFF)
@@ -321,6 +234,13 @@ option(WITH_KRBD "Enable Linux krbd support of 'rbd' utility" ON)
 if(WITH_KRBD AND NOT WITH_RBD)
   message(FATAL_ERROR "Cannot have WITH_KRBD without WITH_RBD.")
 endif()
+if(LINUX)
+  if(WITH_LIBCEPHFS OR WITH_KRBD)
+    # keyutils is only used when talking to the Linux Kernel key store 
+    find_package(keyutils REQUIRED)
+    set(HAVE_KEYUTILS ${KEYUTILS_FOUND})
+  endif()
+endif()
 
 option(WITH_LEVELDB "LevelDB is here" ON)
 if(WITH_LEVELDB)
@@ -391,10 +311,6 @@ if (HAVE_LIBTCMALLOC AND TCMALLOC_VERSION_STRING VERSION_LESS 2.6.2)
   set(LIBTCMALLOC_MISSING_ALIGNED_ALLOC ON)
 endif()
 
-if(WITH_LIBCEPHFS OR WITH_KRBD)
-  find_package(keyutils REQUIRED)
-endif()
-
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
@@ -406,7 +322,7 @@ set(CRYPTO_LIBS OpenSSL::Crypto)
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
   find_package(dpdk)
-  if(NOT DPDK_FOUND AND NOT TARGET dpdk-ext)
+  if(NOT DPDK_FOUND)
     include(BuildDPDK)
     build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
   endif()
@@ -530,7 +446,9 @@ set(HAVE_LIBROCKSDB 1)
 find_package(ZLIB REQUIRED)
 
 #option for EventTrace
-option(WITH_EVENTTRACE "Event tracing support" OFF)
+CMAKE_DEPENDENT_OPTION(
+  WITH_EVENTTRACE "Event tracing support, requires WITH_LTTNG"
+  OFF "USE_LTTNG" OFF)
 
 #option for LTTng
 option(WITH_LTTNG "LTTng tracing is enabled" ON)
@@ -614,7 +532,7 @@ endif()
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
-  find_package(RocksDB 5.8 REQUIRED)
+  find_package(RocksDB 5.14 REQUIRED)
 endif()
 
 option(WITH_SEASTAR "Build seastar components")
@@ -672,6 +590,9 @@ if(WITH_SYSTEM_NPM)
     message(FATAL_ERROR "Can't find npm.")
   endif()
 endif()
+set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
+  "List of comma separated ceph-dashboard frontend languages to build. \
+  Use value `ALL` to build all languages")
 
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 

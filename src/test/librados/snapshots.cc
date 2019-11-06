@@ -88,7 +88,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
 
   my_snaps.push_back(-2);
   rados_completion_t completion;
-  ASSERT_EQ(0, rados_aio_create_completion(nullptr, nullptr, nullptr,
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr,
                                            &completion));
   rados_aio_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back(), completion);
   ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
@@ -108,7 +108,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
 
-  ASSERT_EQ(0, rados_aio_create_completion(nullptr, nullptr, nullptr,
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr,
                                            &completion));
   rados_aio_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back(), completion);
   ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
@@ -227,7 +227,7 @@ TEST_F(LibRadosSnapshotsSelfManagedEC, Snap) {
 
   my_snaps.push_back(-2);
   rados_completion_t completion;
-  ASSERT_EQ(0, rados_aio_create_completion(nullptr, nullptr, nullptr,
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr,
                                            &completion));
   rados_aio_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back(), completion);
   ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
@@ -247,7 +247,7 @@ TEST_F(LibRadosSnapshotsSelfManagedEC, Snap) {
   ASSERT_EQ(bsize, rados_read(ioctx, "foo", buf3, bsize*2, 0));
   ASSERT_EQ(0, memcmp(buf3, buf, bsize));
 
-  ASSERT_EQ(0, rados_aio_create_completion(nullptr, nullptr, nullptr,
+  ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr,
                                            &completion));
   rados_aio_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back(), completion);
   ASSERT_EQ(0, rados_aio_wait_for_complete(completion));

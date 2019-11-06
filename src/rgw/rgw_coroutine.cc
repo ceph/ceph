@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/Context.h"
 #include "common/ceph_json.h"
@@ -439,8 +439,7 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, const rgw_io_id& _io_id, void *_user_data) : completion_mgr(_mgr),
                                                                          io_id(_io_id),
                                                                          user_data(_user_data), registered(true) {
-  c = librados::Rados::aio_create_completion((void *)this, NULL,
-					     _aio_completion_notifier_cb);
+  c = librados::Rados::aio_create_completion(this, _aio_completion_notifier_cb);
 }
 
 RGWAioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier()
@@ -832,7 +831,7 @@ RGWCoroutinesManagerRegistry::~RGWCoroutinesManagerRegistry()
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   if (!admin_command.empty()) {
-    admin_socket->unregister_command(admin_command);
+    admin_socket->unregister_commands(this);
   }
 }
 
@@ -840,10 +839,10 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   if (!admin_command.empty()) {
-    admin_socket->unregister_command(admin_command);
+    admin_socket->unregister_commands(this);
   }
   admin_command = command;
-  int r = admin_socket->register_command(admin_command, admin_command, this,
+  int r = admin_socket->register_command(admin_command, this,
 				     "dump current coroutines stack state");
   if (r < 0) {
     lderr(cct) << "ERROR: fail to register admin socket command (r=" << r << ")" << dendl;
@@ -852,17 +851,14 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
   return 0;
 }
 
-bool RGWCoroutinesManagerRegistry::call(std::string_view command,
-                                        const cmdmap_t& cmdmap,
-                                        std::string_view format,
-                                        bufferlist& out) {
+int RGWCoroutinesManagerRegistry::call(std::string_view command,
+				       const cmdmap_t& cmdmap,
+				       Formatter *f,
+				       std::ostream& ss,
+				       bufferlist& out) {
   std::shared_lock rl{lock};
-  stringstream ss;
-  JSONFormatter f;
-  ::encode_json("cr_managers", *this, &f);
-  f.flush(ss);
-  out.append(ss);
-  return true;
+  ::encode_json("cr_managers", *this, f);
+  return 0;
 }
 
 void RGWCoroutinesManagerRegistry::dump(Formatter *f) const {
@@ -875,7 +871,12 @@ void RGWCoroutinesManagerRegistry::dump(Formatter *f) const {
 
 void RGWCoroutine::call(RGWCoroutine *op)
 {
-  stack->call(op);
+  if (op) {
+    stack->call(op);
+  } else {
+    // the call()er expects this to set a retcode
+    retcode = 0;
+  }
 }
 
 RGWCoroutinesStack *RGWCoroutine::spawn(RGWCoroutine *op, bool wait)

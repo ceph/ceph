@@ -18,14 +18,16 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-class MMDSFindIno : public Message {
+class MMDSFindIno : public SafeMessage {
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
 public:
   ceph_tid_t tid {0};
   inodeno_t ino;
 
 protected:
-  MMDSFindIno() : Message{MSG_MDS_FINDINO} {}
-  MMDSFindIno(ceph_tid_t t, inodeno_t i) : Message{MSG_MDS_FINDINO}, tid(t), ino(i) {}
+  MMDSFindIno() : SafeMessage{MSG_MDS_FINDINO, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSFindIno(ceph_tid_t t, inodeno_t i) : SafeMessage{MSG_MDS_FINDINO, HEAD_VERSION, COMPAT_VERSION}, tid(t), ino(i) {}
   ~MMDSFindIno() override {}
 
 public:

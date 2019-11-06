@@ -382,6 +382,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
 
+  opt.env->SetAllowNonOwnerAccess(false);
+
   // caches
   if (!set_cache_flag) {
     cache_size = g_conf()->rocksdb_cache_size;
@@ -691,6 +693,13 @@ void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std
     }
 }
 
+bool RocksDBStore::get_property(
+  const std::string &property,
+  uint64_t *out)
+{
+  return db->GetIntProperty(property, out);
+}
+
 int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
 					   const string& key_prefix)
 {
@@ -705,8 +714,8 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
     rocksdb::Range r(start, limit);
     db->GetApproximateSizes(cf, &r, 1, &size, flags);
   } else {
-    string start = prefix + key_prefix;
-    string limit = prefix + key_prefix + "\xff\xff\xff\xff";
+    string start = combine_strings(prefix , key_prefix);
+    string limit = combine_strings(prefix , key_prefix + "\xff\xff\xff\xff");
     rocksdb::Range r(start, limit);
     db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
   }

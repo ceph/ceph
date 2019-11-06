@@ -267,7 +267,8 @@ public:
       const osd_reqid_t &r,
       eversion_t *version,
       version_t *user_version,
-      int *return_code) const
+      int *return_code,
+      vector<pg_log_op_return_item_t> *op_returns) const
     {
       ceph_assert(version);
       ceph_assert(user_version);
@@ -281,6 +282,7 @@ public:
 	*version = p->second->version;
 	*user_version = p->second->user_version;
 	*return_code = p->second->return_code;
+	*op_returns = p->second->op_returns;
 	return true;
       }
 
@@ -299,6 +301,7 @@ public:
 	    *version = p->second->version;
 	    *user_version = i->second;
 	    *return_code = p->second->return_code;
+	    *op_returns = p->second->op_returns;
 	    if (*return_code >= 0) {
 	      auto it = p->second->extra_reqid_return_codes.find(idx);
 	      if (it != p->second->extra_reqid_return_codes.end()) {
@@ -319,6 +322,7 @@ public:
 	*version = q->second->version;
 	*user_version = q->second->user_version;
 	*return_code = q->second->return_code;
+	*op_returns = q->second->op_returns;
 	return true;
       }
 
@@ -1583,8 +1587,8 @@ public:
 
 #ifdef WITH_SEASTAR
   seastar::future<> read_log_and_missing_crimson(
-    ceph::os::FuturizedStore &store,
-    ceph::os::CollectionRef ch,
+    crimson::os::FuturizedStore &store,
+    crimson::os::CollectionRef ch,
     const pg_info_t &info,
     ghobject_t pgmeta_oid
     ) {
@@ -1596,8 +1600,8 @@ public:
 
   template <typename missing_type>
   struct FuturizedStoreLogReader {
-    ceph::os::FuturizedStore &store;
-    ceph::os::CollectionRef ch;
+    crimson::os::FuturizedStore &store;
+    crimson::os::CollectionRef ch;
     const pg_info_t &info;
     IndexedLog &log;
     missing_type &missing;
@@ -1670,7 +1674,7 @@ public:
 	[this]() {
 	  return store.omap_get_values(ch, pgmeta_oid, next).then(
 	    [this](
-	      bool done, ceph::os::FuturizedStore::omap_values_t values) {
+	      bool done, crimson::os::FuturizedStore::omap_values_t values) {
 	      for (auto &&p : values) {
 		process_entry(p);
 	      }
@@ -1692,8 +1696,8 @@ public:
 
   template <typename missing_type>
   static seastar::future<> read_log_and_missing_crimson(
-    ceph::os::FuturizedStore &store,
-    ceph::os::CollectionRef ch,
+    crimson::os::FuturizedStore &store,
+    crimson::os::CollectionRef ch,
     const pg_info_t &info,
     IndexedLog &log,
     missing_type &missing,
@@ -1701,7 +1705,7 @@ public:
     const DoutPrefixProvider *dpp = nullptr
     ) {
     ldpp_dout(dpp, 20) << "read_log_and_missing coll "
-		       << ch->cid
+		       << ch->get_cid()
 		       << " " << pgmeta_oid << dendl;
     return (new FuturizedStoreLogReader<missing_type>{
       store, ch, info, log, missing, pgmeta_oid, dpp})->start();

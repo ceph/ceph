@@ -123,9 +123,9 @@ class RequestLoggingTool(cherrypy.Tool):
                       req.remote.port, req.method, status,
                       "{0:.3f}s".format(lat), user, length, req.path_info)
         else:
-            logger_fn("[%s:%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
+            logger_fn("[%s:%s] [%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
                       req.remote.port, req.method, status,
-                      "{0:.3f}s".format(lat), length, req.path_info)
+                      "{0:.3f}s".format(lat), length, getattr(req, 'unique_id', '-'), req.path_info)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -347,13 +347,13 @@ class NotificationQueue(threading.Thread):
                 raise Exception("n_types param is neither a string nor a list")
             for ev_type in n_types:
                 listeners = cls._listeners[ev_type]
-                toRemove = None
+                to_remove = None
                 for pr, fn in listeners:
                     if fn == func:
-                        toRemove = (pr, fn)
+                        to_remove = (pr, fn)
                         break
-                if toRemove:
-                    listeners.discard(toRemove)
+                if to_remove:
+                    listeners.discard(to_remove)
                     logger.debug("NQ: function %s was deregistered for events "
                                  "of type %s", func, ev_type)
 
@@ -585,6 +585,7 @@ class Task(object):
         return str(self)
 
     def _run(self):
+        NotificationQueue.register(self._handle_task_finished, 'cd_task_finished', 100)
         with self.lock:
             assert not self.running
             self.executor.init(self)
@@ -610,9 +611,13 @@ class Task(object):
             if not self.exception:
                 self.set_progress(100, True)
         NotificationQueue.new_notification('cd_task_finished', self)
-        self.event.set()
         logger.debug("TK: execution of %s finished in: %s s", self,
                      self.duration)
+
+    def _handle_task_finished(self, task):
+        if self == task:
+            NotificationQueue.deregister(self._handle_task_finished)
+            self.event.set()
 
     def wait(self, timeout=None):
         with self.lock:

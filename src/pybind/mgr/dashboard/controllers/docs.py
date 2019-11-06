@@ -27,7 +27,7 @@ class Docs(BaseController):
                 if endpoint.is_api or all_endpoints:
                     list_of_ctrl.add(endpoint.ctrl)
 
-        TAG_MAP = {}
+        tag_map = {}
         for ctrl in list_of_ctrl:
             tag_name = ctrl.__name__
             tag_descr = ""
@@ -35,11 +35,11 @@ class Docs(BaseController):
                 if ctrl.doc_info['tag']:
                     tag_name = ctrl.doc_info['tag']
                 tag_descr = ctrl.doc_info['tag_descr']
-            if tag_name not in TAG_MAP or not TAG_MAP[tag_name]:
-                TAG_MAP[tag_name] = tag_descr
+            if tag_name not in tag_map or not tag_map[tag_name]:
+                tag_map[tag_name] = tag_descr
 
         tags = [{'name': k, 'description': v if v else "*No description available*"}
-                for k, v in TAG_MAP.items()]
+                for k, v in tag_map.items()]
         tags.sort(key=lambda e: e['name'])
         return tags
 
@@ -248,8 +248,8 @@ class Docs(BaseController):
         return parameters
 
     @classmethod
-    def _gen_paths(cls, all_endpoints, baseUrl):
-        METHOD_ORDER = ['get', 'post', 'put', 'delete']
+    def _gen_paths(cls, all_endpoints, base_url):
+        method_order = ['get', 'post', 'put', 'delete']
         paths = {}
         for path, endpoints in sorted(list(ENDPOINT_MAP.items()),
                                       key=lambda p: p[0]):
@@ -257,7 +257,7 @@ class Docs(BaseController):
             skip = False
 
             endpoint_list = sorted(endpoints, key=lambda e:
-                                   METHOD_ORDER.index(e.method.lower()))
+                                   method_order.index(e.method.lower()))
             for endpoint in endpoint_list:
                 if not endpoint.is_api and not all_endpoints:
                     skip = True
@@ -304,7 +304,7 @@ class Docs(BaseController):
                     methods[method.lower()]['security'] = [{'jwt': []}]
 
             if not skip:
-                paths[path[len(baseUrl):]] = methods
+                paths[path[len(base_url):]] = methods
 
         return paths
 
@@ -393,11 +393,8 @@ class Docs(BaseController):
         <head>
             <meta charset="UTF-8">
             <meta name="referrer" content="no-referrer" />
-            <link href="https://fonts.googleapis.com/css?family=Open+Sans:400, \
-                        700|Source+Code+Pro:300,600|Titillium+Web:400,600,700"
-                  rel="stylesheet">
             <link rel="stylesheet" type="text/css"
-                  href="//unpkg.com/swagger-ui-dist@3/swagger-ui.css" >
+                  href="/swagger-ui.css" >
             <style>
                 html
                 {{
@@ -419,7 +416,7 @@ class Docs(BaseController):
         </head>
         <body>
         <div id="swagger-ui"></div>
-        <script src="//unpkg.com/swagger-ui-dist@3/swagger-ui-bundle.js">
+        <script src="/swagger-ui-bundle.js">
         </script>
         <script>
             window.onload = function() {{

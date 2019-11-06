@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_BUCKET_H
 #define CEPH_RGW_BUCKET_H
@@ -26,7 +26,10 @@ class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
-namespace rgw { namespace sal { class RGWRadosStore; } }
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+  class RGWBucketList;
+} }
 
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
@@ -211,16 +214,13 @@ public:
  */
 extern int rgw_read_user_buckets(rgw::sal::RGWRadosStore *store,
                                  const rgw_user& user_id,
-                                 RGWUserBuckets& buckets,
+                                 rgw::sal::RGWBucketList& buckets,
                                  const string& marker,
                                  const string& end_marker,
                                  uint64_t max,
-                                 bool need_stats,
-				 bool* is_truncated,
-                                 uint64_t default_amount = 1000);
+                                 bool need_stats);
 
 extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
 extern int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
 
 extern int rgw_object_get_attr(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,
@@ -243,6 +243,7 @@ struct RGWBucketAdminOpState {
   bool fix_index;
   bool delete_child_objects;
   bool bucket_stored;
+  bool sync_bucket;
   int max_aio = 0;
 
   rgw_bucket bucket;
@@ -260,6 +261,9 @@ struct RGWBucketAdminOpState {
     if (!user_id.empty())
       uid = user_id;
   }
+  void set_tenant(const std::string& tenant_str) {
+    uid.tenant = tenant_str;
+  }
   void set_bucket_name(const std::string& bucket_str) {
     bucket_name = bucket_str; 
   }
@@ -274,10 +278,13 @@ struct RGWBucketAdminOpState {
   }
 
 
+  void set_sync_bucket(bool value) { sync_bucket = value; }
+
   rgw_user& get_user_id() { return uid; }
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
   std::string& get_object_name() { return object_name; }
+  std::string& get_tenant() { return uid.tenant; }
 
   rgw_bucket& get_bucket() { return bucket; }
   void set_bucket(rgw_bucket& _bucket) {
@@ -298,10 +305,11 @@ struct RGWBucketAdminOpState {
   bool is_system_op() { return uid.empty(); }
   bool has_bucket_stored() { return bucket_stored; }
   int get_max_aio() { return max_aio; }
+  bool will_sync_bucket() { return sync_bucket; }
 
   RGWBucketAdminOpState() : list_buckets(false), stat_buckets(false), check_objects(false), 
                             fix_index(false), delete_child_objects(false),
-                            bucket_stored(false)  {}
+                            bucket_stored(false), sync_bucket(true)  {}
 };
 
 /*
@@ -351,6 +359,7 @@ public:
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y);
+  int sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *attrs, std::string *err_msg = NULL);
 
   void clear_failure() { failure = false; }
 
@@ -392,6 +401,8 @@ public:
                            RGWFormatterFlusher& flusher);
   static int fix_obj_expiry(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 			    RGWFormatterFlusher& flusher, bool dry_run = false);
+
+  static int sync_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
 };
 
 
@@ -844,7 +855,8 @@ public:
                         optional_yield y);
 
   /* quota related */
-  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info);
+  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info,
+                      RGWBucketEnt* pent = nullptr);
 
 private:
   int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,

@@ -25,12 +25,11 @@
 
 int EpollDriver::init(EventCenter *c, int nevent)
 {
-  events = (struct epoll_event*)malloc(sizeof(struct epoll_event)*nevent);
+  events = (struct epoll_event*)calloc(nevent, sizeof(struct epoll_event));
   if (!events) {
     lderr(cct) << __func__ << " unable to malloc memory. " << dendl;
     return -ENOMEM;
   }
-  memset(events, 0, sizeof(struct epoll_event)*nevent);
 
   epfd = epoll_create(1024); /* 1024 is just an hint for the kernel */
   if (epfd == -1) {

@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
 
 #define OID_EVENT_TRACE(oid, event) \
   EventTrace::trace_oid_event(oid, event, "", __FILE__, __func__, __LINE__)
@@ -44,7 +44,7 @@
 
 #endif
 
-#define LOG_LEVEL 1
+#define LOG_LEVEL 30
 
 class EventTrace {
 private:

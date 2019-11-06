@@ -41,6 +41,7 @@ https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
 <summary>Show available Jenkins commands</summary>
 
 - `jenkins retest this please`
+- `jenkins test crimson perf`
 - `jenkins test signed`
 - `jenkins test make check`
 - `jenkins test make check arm64`
@@ -49,5 +50,7 @@ https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
 - `jenkins test dashboard backend`
 - `jenkins test docs`
 - `jenkins render docs`
+- `jenkins test ceph-volume all`
+- `jenkins test ceph-volume tox`
 
 </details>

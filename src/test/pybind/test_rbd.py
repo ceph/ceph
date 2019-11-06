@@ -1,6 +1,9 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
+import base64
+import copy
 import errno
 import functools
+import json
 import socket
 import os
 import time
@@ -28,7 +31,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
                  RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
-                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY)
+                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
+                 RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX)
 
 rados = None
 ioctx = None
@@ -404,6 +408,20 @@ def test_config_list():
     for option in rbd.config_list(ioctx):
         eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
+def test_pool_config_set_and_get_and_remove():
+    rbd = RBD()
+
+    for option in rbd.config_list(ioctx):
+        eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+    rbd.config_set(ioctx, "rbd_request_timed_out_seconds", "100")
+    new_value = rbd.config_get(ioctx, "rbd_request_timed_out_seconds")
+    eq(new_value, "100")
+    rbd.config_remove(ioctx, "rbd_request_timed_out_seconds")
+
+    for option in rbd.config_list(ioctx):
+        eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
 def test_namespaces():
     rbd = RBD()
 
@@ -723,6 +741,11 @@ class TestImage(object):
         eq(snap_data, b'\0' * 256)
         self.image.remove_snap('snap1')
 
+    def test_create_snap_exists(self):
+        self.image.create_snap('snap1')
+        assert_raises(ImageExists, self.image.create_snap, 'snap1')
+        self.image.remove_snap('snap1')
+
     def test_list_snaps(self):
         eq([], list(self.image.list_snaps()))
         self.image.create_snap('snap1')
@@ -743,6 +766,15 @@ class TestImage(object):
         eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.remove_snap('snap1')
         eq([], list(self.image.list_snaps()))
+
+    def test_remove_snap_by_id(self):
+	eq([], list(self.image.list_snaps()))
+	self.image.create_snap('snap1')
+	eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+	for snap in self.image.list_snaps():
+	    snap_id = snap["id"]
+	self.image.remove_snap_by_id(snap_id)
+	eq([], list(self.image.list_snaps()))
 
     def test_rename_snap(self):
         eq([], list(self.image.list_snaps()))
@@ -1789,16 +1821,44 @@ class TestMirroring(object):
         remove_image()
         self.rbd.mirror_mode_set(ioctx, self.initial_mirror_mode)
 
+    def test_site_name(self):
+        site_name = "us-west-1"
+        self.rbd.mirror_site_name_set(rados, site_name)
+        eq(site_name, self.rbd.mirror_site_name_get(rados))
+        self.rbd.mirror_site_name_set(rados, "")
+        eq(rados.get_fsid(), self.rbd.mirror_site_name_get(rados))
+
+    def test_mirror_peer_bootstrap(self):
+        eq([], list(self.rbd.mirror_peer_list(ioctx)))
+
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        assert_raises(InvalidArgument, self.rbd.mirror_peer_bootstrap_create,
+                      ioctx);
+
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL)
+        token_b64 = self.rbd.mirror_peer_bootstrap_create(ioctx)
+        token = base64.b64decode(token_b64)
+        token_dict = json.loads(token)
+        eq(sorted(['fsid', 'client_id', 'key', 'mon_host']),
+            sorted(list(token_dict.keys())))
+
+        # requires different cluster
+        assert_raises(InvalidArgument, self.rbd.mirror_peer_bootstrap_import,
+            ioctx, RBD_MIRROR_PEER_DIRECTION_RX, token_b64)
 
     def test_mirror_peer(self):
         eq([], list(self.rbd.mirror_peer_list(ioctx)))
-        cluster_name = "test_cluster"
+        site_name = "test_site"
         client_name = "test_client"
-        uuid = self.rbd.mirror_peer_add(ioctx, cluster_name, client_name)
+        uuid = self.rbd.mirror_peer_add(ioctx, site_name, client_name,
+                                        direction=RBD_MIRROR_PEER_DIRECTION_RX_TX)
         assert(uuid)
         peer = {
             'uuid' : uuid,
-            'cluster_name' : cluster_name,
+            'direction': RBD_MIRROR_PEER_DIRECTION_RX_TX,
+            'site_name' : site_name,
+            'cluster_name' : site_name,
+            'fsid': '',
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
@@ -1808,7 +1868,10 @@ class TestMirroring(object):
         self.rbd.mirror_peer_set_client(ioctx, uuid, client_name)
         peer = {
             'uuid' : uuid,
+            'direction': RBD_MIRROR_PEER_DIRECTION_RX_TX,
+            'site_name' : cluster_name,
             'cluster_name' : cluster_name,
+            'fsid': '',
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
@@ -1881,6 +1944,7 @@ class TestMirroring(object):
         eq(image_name, status['name'])
         eq(False, status['up'])
         eq(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status['state'])
+        eq([], status['remote_statuses'])
         info = status['info']
         self.check_info(info, global_id, state, primary)
 

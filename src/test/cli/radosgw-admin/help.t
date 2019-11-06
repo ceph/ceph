@@ -71,7 +71,7 @@
     zonegroup add              add a zone to a zonegroup
     zonegroup create           create a new zone group info
     zonegroup default          set default zone group
-    zonegroup rm               remove a zone group info
+    zonegroup delete           delete a zone group info
     zonegroup get              show zone group info
     zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
@@ -131,6 +131,7 @@
     mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
+    bilog status               read bucket index log status
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
@@ -184,6 +185,7 @@
      --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
      --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
      --object=<object>         object name
+     --object-version=<version>         object version
      --date=<date>             date in the format yyyy-mm-dd
      --start-date=<date>       start date in the format yyyy-mm-dd
      --end-date=<date>         end date in the format yyyy-mm-dd
@@ -276,6 +278,7 @@
      --min-rewrite-stripe-size min stripe size for object rewrite (default 0)
      --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,
                                the trimming process will sleep the specified msec for every 1000 entries trimmed
+     --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
@@ -288,7 +291,6 @@
      --num-shards              num of shards to use for keeping the temporary scan info
      --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)
-     --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
      --detail                  detailed mode, log and stat head objects as well
   
   Orphans list-jobs options:

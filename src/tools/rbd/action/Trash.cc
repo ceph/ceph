@@ -135,7 +135,7 @@ int execute_remove(const po::variables_map &vm,
     return r;
   }
 
-  io_ctx.set_osdmap_full_try();
+  io_ctx.set_pool_full_try();
   librbd::RBD rbd;
 
   utils::ProgressContext pc("Removing image", vm[at::NO_PROGRESS].as<bool>());
@@ -418,7 +418,7 @@ int execute_purge (const po::variables_map &vm,
     return r;
   }
 
-  io_ctx.set_osdmap_full_try();
+  io_ctx.set_pool_full_try();
 
   float threshold = -1;
   time_t expire_ts = 0;
@@ -491,7 +491,7 @@ int execute_restore(const po::variables_map &vm,
                 << std::endl;
     } else if (r == -EEXIST) {
       std::cerr << "rbd: error: an image with the same name already exists, "
-                << "try again with with a different name"
+                << "try again with a different name"
                 << std::endl;
     } else {
       std::cerr << "rbd: restore error: " << cpp_strerror(r) << std::endl;

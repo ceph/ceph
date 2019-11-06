@@ -44,9 +44,7 @@ class RDMADispatcher {
   Infiniband::CompletionQueue* tx_cq = nullptr;
   Infiniband::CompletionQueue* rx_cq = nullptr;
   Infiniband::CompletionChannel *tx_cc = nullptr, *rx_cc = nullptr;
-  EventCallbackRef async_handler;
   bool done = false;
-  std::atomic<uint64_t> num_dead_queue_pair = {0};
   std::atomic<uint64_t> num_qp_conn = {0};
   // protect `qp_conns`, `dead_queue_pairs`
   ceph::mutex lock = ceph::make_mutex("RDMADispatcher::lock");
@@ -57,9 +55,9 @@ class RDMADispatcher {
   /**
    * 1. Connection call mark_down
    * 2. Move the Queue Pair into the Error state(QueuePair::to_dead)
-   * 3. Wait for the affiliated event IBV_EVENT_QP_LAST_WQE_REACHED(handle_async_event)
-   * 4. Wait for CQ to be empty(handle_tx_event)
-   * 5. Destroy the QP by calling ibv_destroy_qp()(handle_tx_event)
+   * 3. Post a beacon
+   * 4. Wait for beacon which indicates queues are drained
+   * 5. Destroy the QP by calling ibv_destroy_qp()
    *
    * @param qp The qp needed to dead
    */
@@ -78,16 +76,7 @@ class RDMADispatcher {
     ceph::make_mutex("RDMADispatcher::for worker pending list");
   // fixme: lockfree
   std::list<RDMAWorker*> pending_workers;
-
-  class C_handle_cq_async : public EventCallback {
-    RDMADispatcher *dispatcher;
-   public:
-    explicit C_handle_cq_async(RDMADispatcher *w): dispatcher(w) {}
-    void do_request(uint64_t fd) {
-      // worker->handle_tx_event();
-      dispatcher->handle_async_event();
-    }
-  };
+  void enqueue_dead_qp(uint32_t qp);
 
  public:
   PerfCounters *perf_logger;
@@ -109,9 +98,9 @@ class RDMADispatcher {
     ++num_pending_workers;
   }
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
+  QueuePair* get_qp_lockless(uint32_t qp);
   QueuePair* get_qp(uint32_t qp);
-  void erase_qpn_lockless(uint32_t qpn);
-  void erase_qpn(uint32_t qpn);
+  void schedule_qp_destroy(uint32_t qp);
   Infiniband::CompletionQueue* get_tx_cq() const { return tx_cq; }
   Infiniband::CompletionQueue* get_rx_cq() const { return rx_cq; }
   void notify_pending_workers();
@@ -122,7 +111,7 @@ class RDMADispatcher {
   std::atomic<uint64_t> inflight = {0};
 
   void post_chunk_to_pool(Chunk* chunk);
-  int post_chunks_to_rq(int num, ibv_qp *qp=NULL);
+  int post_chunks_to_rq(int num, QueuePair *qp = nullptr);
 };
 
 class RDMAWorker : public Worker {
@@ -185,8 +174,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
  protected:
   CephContext *cct;
   Infiniband::QueuePair *qp;
-  IBSYNMsg peer_msg;
-  IBSYNMsg my_msg;
+  uint32_t peer_qpn = 0;
+  uint32_t local_qpn = 0;
   int connected;
   int error;
   shared_ptr<Infiniband> ib;
@@ -230,6 +219,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int fd() const override { return notify_fd; }
   void fault();
   const char* get_qp_state() { return Infiniband::qp_state_string(qp->get_state()); }
+  uint32_t get_peer_qpn () const { return peer_qpn; }
+  uint32_t get_local_qpn () const { return local_qpn; }
   ssize_t submit(bool more);
   int activate();
   void fin();
@@ -278,22 +269,18 @@ class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
     virtual void close() override;
     virtual void shutdown() override;
     virtual void handle_cm_connection();
-    uint32_t get_local_qpn() const { return local_qpn; }
     void activate();
     int alloc_resource();
     void close_notify();
 
   private:
-    rdma_cm_id *cm_id;
-    rdma_event_channel *cm_channel;
-    uint32_t local_qpn;
-    uint32_t remote_qpn;
+    rdma_cm_id *cm_id = nullptr;
+    rdma_event_channel *cm_channel = nullptr;
     EventCallbackRef cm_con_handler;
-    bool is_server;
     std::mutex close_mtx;
     std::condition_variable close_condition;
-    bool closed;
-    RDMA_CM_STATUS status;
+    bool closed = false;
+    RDMA_CM_STATUS status = IDLE;
 
 
   class C_handle_cm_connection : public EventCallback {
@@ -337,8 +324,8 @@ class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
     virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     virtual void abort_accept() override;
   private:
-    rdma_cm_id *cm_id;
-    rdma_event_channel *cm_channel;
+    rdma_cm_id *cm_id = nullptr;
+    rdma_event_channel *cm_channel = nullptr;
 };
 
 class RDMAStack : public NetworkStack {

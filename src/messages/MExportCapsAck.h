@@ -19,16 +19,19 @@
 #include "msg/Message.h"
 
 
-class MExportCapsAck : public Message {
+class MExportCapsAck : public SafeMessage {
+ static constexpr int HEAD_VERSION = 1;
+ static constexpr int COMPAT_VERSION = 1;
+
 public:  
   inodeno_t ino;
   bufferlist cap_bl;
 
 protected:
   MExportCapsAck() :
-    Message{MSG_MDS_EXPORTCAPSACK} {}
+    SafeMessage{MSG_MDS_EXPORTCAPSACK, HEAD_VERSION, COMPAT_VERSION} {}
   MExportCapsAck(inodeno_t i) :
-    Message{MSG_MDS_EXPORTCAPSACK}, ino(i) {}
+    SafeMessage{MSG_MDS_EXPORTCAPSACK, HEAD_VERSION, COMPAT_VERSION}, ino(i) {}
   ~MExportCapsAck() override {}
 
 public:

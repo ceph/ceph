@@ -27,15 +27,15 @@ example:
 
 following command will run tox with envlist of "py27,py3" using the "tox.ini" in current directory.
 
-  $prog_name --tox-env py27,py3
+  $prog_name --tox-envs py27,py3
 
 following command will run tox with envlist of "py27" using "src/pybind/mgr/ansible/tox.ini"
 
-  $prog_name --tox-env py27 ansible
+  $prog_name --tox-envs py27 ansible
 
 following command will run tox with envlist of "py27" using "/ceph/src/python-common/tox.ini"
 
-  $prog_name --tox-env py27 --tox-path /ceph/src/python-common
+  $prog_name --tox-envs py27 --tox-path /ceph/src/python-common
 EOF
 }
 
@@ -101,12 +101,6 @@ function main() {
         esac
     done
 
-    # normalize options
-    [ "$with_python2" = "ON" ] && with_python2=true || with_python2=false
-    # WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
-    # prevailing on the system - e.g. "3", "36"
-    [[ "$with_python3" =~ (^3|^ON) ]] && with_python3=true || with_python3=false
-
     local test_name
     if [ -z "$tox_path" ]; then
         # try harder
@@ -121,6 +115,11 @@ function main() {
     fi
 
     if [ ! -f ${venv_path}/bin/activate ]; then
+        if [ -d "$venv_path" ]; then
+            cd $venv_path
+            echo "$PWD already exists, but it's not a virtualenv. test_name empty?"
+            exit 1
+        fi
         $source_dir/src/tools/setup-virtualenv.sh ${venv_path}
     fi
     source ${venv_path}/bin/activate
@@ -128,7 +127,8 @@ function main() {
 
     # tox.ini will take care of this.
     export CEPH_BUILD_DIR=$build_dir
-
+    # use the wheelhouse prepared by install-deps.sh
+    export PIP_FIND_LINKS="$tox_path/wheelhouse"
     tox -c $tox_path/tox.ini -e "$tox_envs" "$@"
 }
 

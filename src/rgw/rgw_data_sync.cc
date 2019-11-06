@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <boost/utility/string_ref.hpp>
 
@@ -1122,7 +1122,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   rgw_pool pool;
 
   uint32_t shard_id;
-  rgw_data_sync_marker sync_marker;
+  rgw_data_sync_marker& sync_marker;
 
   RGWRadosGetOmapKeysCR::ResultPtr omapkeys;
   std::set<std::string> entries;
@@ -1179,7 +1179,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 public:
   RGWDataSyncShardCR(RGWDataSyncEnv *_sync_env,
                      rgw_pool& _pool,
-		     uint32_t _shard_id, const rgw_data_sync_marker& _marker,
+                     uint32_t _shard_id, rgw_data_sync_marker& _marker,
                      RGWSyncTraceNodeRef& _tn,
                      bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
@@ -1430,7 +1430,7 @@ public:
         spawned_keys.clear();
         yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, sync_marker.marker,
                                                    &next_marker, &log_entries, &truncated));
-        if (retcode < 0) {
+        if (retcode < 0 && retcode != -ENOENT) {
           tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
           stop_spawned_services();
           drain_all();

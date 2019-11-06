@@ -2,6 +2,8 @@ overrides:
   ceph:
     mon_bind_addrvec: false
     mon_bind_msgr2: false
+    log-whitelist:
+      - \(MON_DOWN\)
     conf:
       global:
         mon warn on msgr2 not enabled: false
@@ -15,6 +17,7 @@ tasks:
       - ceph-mgr-diskprediction-cloud
       - ceph-mgr-rook
       - ceph-mgr-ssh
+      - ceph-daemon
       - ceph-mgr
       - libcephfs2
       - libcephfs-devel

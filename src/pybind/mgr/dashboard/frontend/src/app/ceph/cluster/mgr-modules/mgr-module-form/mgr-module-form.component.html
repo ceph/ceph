@@ -1,7 +1,8 @@
 <cd-loading-panel *ngIf="loading && !error"
                   i18n>Loading configuration...</cd-loading-panel>
-<cd-error-panel *ngIf="loading && error"
-                i18n>The configuration could not be loaded.</cd-error-panel>
+<cd-alert-panel type="error"
+                *ngIf="loading && error"
+                i18n>The configuration could not be loaded.</cd-alert-panel>
 
 <div class="col-sm-12 col-lg-6"
      *ngIf="!loading && !error">

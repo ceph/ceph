@@ -1,10 +1,12 @@
 <tabset *ngIf="selection.hasSingleSelection">
+
   <tab heading="Attributes (OSD map)"
        i18n-heading>
     <cd-table-key-value *ngIf="osd.loaded"
                         [data]="osd.details.osd_map">
     </cd-table-key-value>
   </tab>
+
   <tab heading="Metadata"
        i18n-heading>
     <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
@@ -12,9 +14,15 @@
                         [data]="osd.details.osd_metadata">
     </cd-table-key-value>
     <ng-template #noMetaData>
-      <cd-warning-panel i18n>Metadata not available</cd-warning-panel>
+      <cd-alert-panel type="warning" i18n>Metadata not available</cd-alert-panel>
     </ng-template>
   </tab>
+
+  <tab heading="Device health"
+       i18n-heading>
+    <cd-osd-smart-list [osdId]="osd.id"></cd-osd-smart-list>
+  </tab>
+
   <tab heading="Performance counter"
        i18n-heading>
     <cd-table-performance-counter *ngIf="osd.loaded"
@@ -22,10 +30,12 @@
                                   [serviceId]="osd.id">
     </cd-table-performance-counter>
   </tab>
+
   <tab heading="Histogram"
        i18n-heading>
-    <cd-warning-panel *ngIf="osd.loaded && osd.histogram_failed"
-                      i18n>Histogram not available: {{ osd.histogram_failed }}</cd-warning-panel>
+    <cd-alert-panel *ngIf="osd.loaded && osd.histogram_failed"
+                    type="warning"
+                    i18n>Histogram not available: {{ osd.histogram_failed }}</cd-alert-panel>
 
     <div class="row"
          *ngIf="osd.loaded && osd.details.histogram">
@@ -41,6 +51,7 @@
       </div>
     </div>
   </tab>
+
   <tab i18n-heading
        *ngIf="grafanaPermission.read"
        heading="Performance Details">
@@ -49,4 +60,5 @@
                 grafanaStyle="GrafanaStyles.two">
     </cd-grafana>
   </tab>
+
 </tabset>

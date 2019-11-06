@@ -2,7 +2,7 @@
 Mount CephFS using FUSE
 =======================
 
-Before mounting a Ceph File System in User Space (FUSE), ensure that the client
+Before mounting Ceph via "Filesystem in USErspace" (FUSE), ensure that the client
 host has a copy of the Ceph configuration file and a keyring with CAPS for the
 Ceph metadata server.
 
@@ -29,7 +29,7 @@ For example::
 	sudo mkdir /home/username/cephfs
 	sudo ceph-fuse -m 192.168.0.1:6789 /home/username/cephfs
 
-If you have more than one filesystem, specify which one to mount using
+If you have more than one file system, specify which one to mount using
 the ``--client_mds_namespace`` command line argument, or add a
 ``client_mds_namespace`` setting to your ``ceph.conf``.
 

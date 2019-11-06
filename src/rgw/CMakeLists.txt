@@ -66,6 +66,7 @@ set(librgw_common_srcs
   rgw_es_query.cc
   rgw_formats.cc
   rgw_gc.cc
+  rgw_gc_log.cc
   rgw_http_client.cc
   rgw_json_enc.cc
   rgw_keystone.cc
@@ -87,6 +88,8 @@ set(librgw_common_srcs
   rgw_sync_module_log.cc
   rgw_sync_module_pubsub.cc
   rgw_pubsub_push.cc
+  rgw_notify.cc
+  rgw_notify_event_type.cc
   rgw_sync_module_pubsub_rest.cc
   rgw_sync_trace.cc
   rgw_trim_bilog.cc
@@ -113,6 +116,8 @@ set(librgw_common_srcs
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
+  rgw_rest_pubsub.cc
+  rgw_rest_pubsub_common.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
@@ -136,7 +141,8 @@ set(librgw_common_srcs
   rgw_rest_sts.cc
   rgw_perf_counters.cc
   rgw_rest_iam.cc
-  rgw_object_lock.cc)
+  rgw_object_lock.cc
+  rgw_kms.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -197,6 +203,7 @@ add_library(rgw_a STATIC
 
 add_dependencies(rgw_a civetweb_h)
 
+target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
@@ -208,7 +215,7 @@ target_link_libraries(rgw_a
   PRIVATE
   librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
-  cls_user_client ceph-common common_utf8 global
+  cls_user_client cls_rgw_gc_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
@@ -365,6 +372,7 @@ target_link_libraries(rgw_admin_user PRIVATE
   cls_timeindex_client
   cls_version_client
   cls_user_client
+  cls_rgw_gc_client
   global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}

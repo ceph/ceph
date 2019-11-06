@@ -12,7 +12,7 @@ import cherrypy
 import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
-              DeletePermission, CreatePermission, ReadPermission
+              DeletePermission, CreatePermission
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -23,7 +23,7 @@ from ..services.exception import handle_rados_error, handle_rbd_error, \
 
 
 # pylint: disable=not-callable
-def RbdTask(name, metadata, wait_for):
+def RbdTask(name, metadata, wait_for):  # noqa: N802
     def composed_decorator(func):
         func = handle_rados_error('pool')(func)
         func = handle_rbd_error()(func)
@@ -53,7 +53,7 @@ def _sort_features(features, enable=True):
     journaling depends on exclusive-lock
     fast-diff depends on object-map
     """
-    ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
+    ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']  # noqa: N806
 
     def key_func(feat):
         try:
@@ -349,11 +349,6 @@ class Rbd(RESTController):
         """
         rbd_inst = rbd.RBD()
         return _rbd_call(pool_name, rbd_inst.trash_move, image_name, delay)
-
-    @RESTController.Resource()
-    @ReadPermission
-    def configuration(self, pool_name, image_name):
-        return RbdConfiguration(pool_name, image_name).list()
 
 
 @ApiController('/block/image/{pool_name}/{image_name}/snap', Scope.RBD_IMAGE)

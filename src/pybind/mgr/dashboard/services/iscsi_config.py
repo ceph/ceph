@@ -86,7 +86,7 @@ class IscsiGatewaysConfig(object):
     def _load_config_from_orchestrator():
         config = {'gateways': {}}
         try:
-            instances = OrchClient().list_service_info("iscsi")
+            instances = OrchClient.instance().services.list("iscsi")
             for instance in instances:
                 config['gateways'][instance.nodename] = {
                     'service_url': instance.service_url

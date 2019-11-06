@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_HTTP_CLIENT_H
 #define CEPH_RGW_HTTP_CLIENT_H
@@ -126,6 +126,10 @@ public:
 
   long get_http_status() const {
     return http_status;
+  }
+
+  void set_http_status(long _http_status) {
+    http_status = _http_status;
   }
 
   void set_verify_ssl(bool flag) {
@@ -277,7 +281,7 @@ class RGWHTTPManager {
   bool unregister_request(rgw_http_req_data *req_data);
   void _unlink_request(rgw_http_req_data *req_data);
   void unlink_request(rgw_http_req_data *req_data);
-  void finish_request(rgw_http_req_data *req_data, int r);
+  void finish_request(rgw_http_req_data *req_data, int r, long http_status = -1);
   void _finish_request(rgw_http_req_data *req_data, int r);
   void _set_req_state(set_state& ss);
   int link_request(rgw_http_req_data *req_data);

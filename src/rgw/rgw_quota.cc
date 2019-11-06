@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -440,7 +440,7 @@ void UserAsyncRefreshHandler::handle_response(int r)
 
 class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
   std::atomic<bool> down_flag = { false };
-  RWLock rwlock;
+  ceph::shared_mutex mutex = ceph::make_shared_mutex("RGWUserStatsCache");
   map<rgw_bucket, rgw_user> modified_buckets;
 
   /* thread, sync recent modified buckets info */
@@ -555,9 +555,8 @@ protected:
   void data_modified(const rgw_user& user, rgw_bucket& bucket) override;
 
   void swap_modified_buckets(map<rgw_bucket, rgw_user>& out) {
-    rwlock.get_write();
+    std::unique_lock lock{mutex};
     modified_buckets.swap(out);
-    rwlock.unlock();
   }
 
   template<class T> /* easier doing it as a template, Thread doesn't have ->stop() */
@@ -573,8 +572,9 @@ protected:
   }
 
 public:
-  RGWUserStatsCache(rgw::sal::RGWRadosStore *_store, bool quota_threads) : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size),
-                                        rwlock("RGWUserStatsCache::rwlock") {
+  RGWUserStatsCache(rgw::sal::RGWRadosStore *_store, bool quota_threads)
+    : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size)
+  {
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
       buckets_sync_thread->create("rgw_buck_st_syn");
@@ -606,9 +606,10 @@ public:
 
   void stop() {
     down_flag = true;
-    rwlock.get_write();
-    stop_thread(&buckets_sync_thread);
-    rwlock.unlock();
+    {
+      std::unique_lock lock{mutex};
+      stop_thread(&buckets_sync_thread);
+    }
     stop_thread(&user_sync_thread);
   }
 };
@@ -634,13 +635,14 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
     return r;
   }
 
-  r = store->ctl()->bucket->sync_user_stats(user, bucket_info);
+  RGWBucketEnt ent;
+  r = store->ctl()->bucket->sync_user_stats(user, bucket_info, &ent);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
   }
 
-  return 0;
+  return store->getRados()->check_bucket_shards(bucket_info, bucket, ent.count);
 }
 
 int RGWUserStatsCache::sync_user(const rgw_user& user)
@@ -650,7 +652,7 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
   ceph::real_time last_stats_sync;
   ceph::real_time last_stats_update;
 
-  int ret = store->ctl()->user->read_stats(user_str, &stats, &last_stats_sync, &last_stats_update);
+  int ret = store->ctl()->user->read_stats(rgw_user(user_str), &stats, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
     ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
@@ -722,14 +724,13 @@ done:
 void RGWUserStatsCache::data_modified(const rgw_user& user, rgw_bucket& bucket)
 {
   /* racy, but it's ok */
-  rwlock.get_read();
+  mutex.lock_shared();
   bool need_update = modified_buckets.find(bucket) == modified_buckets.end();
-  rwlock.unlock();
+  mutex.unlock_shared();
 
   if (need_update) {
-    rwlock.get_write();
+    std::unique_lock lock{mutex};
     modified_buckets[bucket] = user;
-    rwlock.unlock();
   }
 }
 
@@ -971,31 +972,21 @@ public:
     user_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
   }
 
-  int check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
-			  const rgw_user& user, const rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
+  void check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
+			   const rgw_bucket& bucket, uint64_t num_objs,
+			   bool& need_resharding, uint32_t *suggested_num_shards) override
   {
-    RGWStorageStats bucket_stats;
-    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
-                                           bucket_quota);
-    if (ret < 0) {
-      return ret;
-    }
-
-    if (bucket_stats.num_objects  + num_objs > num_shards * max_objs_per_shard) {
-      ldout(store->ctx(), 0) << __func__ << ": resharding needed: stats.num_objects=" << bucket_stats.num_objects
+    if (num_objs > num_shards * max_objs_per_shard) {
+      ldout(store->ctx(), 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
              << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
       need_resharding = true;
       if (suggested_num_shards) {
-        *suggested_num_shards = (bucket_stats.num_objects  + num_objs) * 2 / max_objs_per_shard;
+        *suggested_num_shards = num_objs * 2 / max_objs_per_shard;
       }
     } else {
       need_resharding = false;
     }
-
-    return 0;
   }
-
 };
 
 

@@ -3,9 +3,11 @@ import { FormGroup } from '@angular/forms';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef } from 'ngx-bootstrap/modal';
+import { forkJoin } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
+import { ListPipe } from '../../../../shared/pipes/list.pipe';
 import { NotificationService } from '../../../../shared/services/notification.service';
 
 @Component({
@@ -15,14 +17,15 @@ import { NotificationService } from '../../../../shared/services/notification.se
 })
 export class OsdScrubModalComponent implements OnInit {
   deep: boolean;
-  selected = [];
   scrubForm: FormGroup;
+  selected = [];
 
   constructor(
     public bsModalRef: BsModalRef,
     private osdService: OsdService,
     private notificationService: NotificationService,
-    private i18n: I18n
+    private i18n: I18n,
+    private listPipe: ListPipe
   ) {}
 
   ngOnInit() {
@@ -30,25 +33,21 @@ export class OsdScrubModalComponent implements OnInit {
   }
 
   scrub() {
-    const id = this.selected[0].id;
-
-    this.osdService.scrub(id, this.deep).subscribe(
+    forkJoin(this.selected.map((id: any) => this.osdService.scrub(id, this.deep))).subscribe(
       () => {
         const operation = this.deep ? 'Deep scrub' : 'Scrub';
 
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('{{operation}} was initialized in the following OSD: {{id}}', {
+          this.i18n('{{operation}} was initialized in the following OSD(s): {{id}}', {
             operation: operation,
-            id: id
+            id: this.listPipe.transform(this.selected)
           })
         );
 
         this.bsModalRef.hide();
       },
-      () => {
-        this.bsModalRef.hide();
-      }
+      () => this.bsModalRef.hide()
     );
   }
 }

@@ -15,7 +15,7 @@
 
 #include "Condition.h"
 
-namespace ceph::thread {
+namespace crimson::thread {
 
 struct WorkItem {
   virtual ~WorkItem() {}
@@ -26,7 +26,7 @@ template<typename Func, typename T = std::invoke_result_t<Func>>
 struct Task final : WorkItem {
   Func func;
   seastar::future_state<T> state;
-  ceph::thread::Condition on_done;
+  crimson::thread::Condition on_done;
 public:
   explicit Task(Func&& f)
     : func(std::move(f))
@@ -84,7 +84,7 @@ public:
    *                 multiple of the number of cores.
    * @param n_threads the number of threads in this thread pool.
    * @param cpu the CPU core to which this thread pool is assigned
-   * @note each @c Task has its own ceph::thread::Condition, which possesses
+   * @note each @c Task has its own crimson::thread::Condition, which possesses
    * possesses an fd, so we should keep the size of queue under a reasonable
    * limit.
    */
@@ -115,4 +115,4 @@ public:
   }
 };
 
-} // namespace ceph::thread
+} // namespace crimson::thread

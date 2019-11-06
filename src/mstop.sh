@@ -4,10 +4,12 @@ set -e
 
 script_root=`dirname $0`
 
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
 if [ -e CMakeCache.txt ]; then
     script_root=$PWD
-elif [ -e $script_root/../build/CMakeCache.txt ]; then
-    script_root=`(cd $script_root/../build; pwd)`
+elif [ -e $script_root/../${BUILD_DIR}/CMakeCache.txt ]; then
+    script_root=`(cd $script_root/../${BUILD_DIR}; pwd)`
 fi
 
 [ "$#" -lt 1 ] && echo "usage: $0 <name> [entity [id]]" && exit 1

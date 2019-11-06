@@ -1014,7 +1014,7 @@ int librados::AioCompletion::AioCompletion::wait_for_complete()
 int librados::AioCompletion::AioCompletion::wait_for_safe()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
-  return c->wait_for_safe();
+  return c->wait_for_complete();
 }
 
 bool librados::AioCompletion::AioCompletion::is_complete()
@@ -1126,6 +1126,10 @@ librados::IoCtx& librados::IoCtx::operator=(IoCtx&& rhs) noexcept
 librados::IoCtx::~IoCtx()
 {
   close();
+}
+
+bool librados::IoCtx::is_valid() const {
+  return io_ctx_impl != nullptr;
 }
 
 void librados::IoCtx::close()
@@ -2236,12 +2240,22 @@ librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
 
 void librados::IoCtx::set_osdmap_full_try()
 {
-  io_ctx_impl->objecter->set_osdmap_full_try();
+  io_ctx_impl->objecter->set_pool_full_try();
 }
 
 void librados::IoCtx::unset_osdmap_full_try()
 {
-  io_ctx_impl->objecter->unset_osdmap_full_try();
+  io_ctx_impl->objecter->unset_pool_full_try();
+}
+
+void librados::IoCtx::set_pool_full_try()
+{
+  io_ctx_impl->objecter->set_pool_full_try();
+}
+
+void librados::IoCtx::unset_pool_full_try()
+{
+  io_ctx_impl->objecter->unset_pool_full_try();
 }
 
 ///////////////////////////// Rados //////////////////////////////
@@ -2264,6 +2278,16 @@ librados::Rados::Rados(IoCtx &ioctx)
 librados::Rados::~Rados()
 {
   shutdown();
+}
+
+void librados::Rados::from_rados_t(rados_t cluster, Rados &rados) {
+  if (rados.client) {
+    rados.client->put();
+  }
+  rados.client = static_cast<RadosClient*>(cluster);
+  if (rados.client) {
+    rados.client->get();
+  }
 }
 
 int librados::Rados::init(const char * const id)
@@ -2770,6 +2794,15 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
 {
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
+  ceph_assert(r == 0);
+  return new AioCompletion(c);
+}
+
+librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
+								callback_t cb_complete)
+{
+  AioCompletionImpl *c;
+  int r = rados_aio_create_completion2(cb_arg, cb_complete, (void**)&c);
   ceph_assert(r == 0);
   return new AioCompletion(c);
 }

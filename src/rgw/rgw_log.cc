@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "common/Clock.h"
 #include "common/Timer.h"
@@ -273,6 +273,7 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     }
     formatter->close_section();
   }
+  formatter->dump_string("trans_id", entry.trans_id);
   formatter->close_section();
 }
 
@@ -426,6 +427,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
+  entry.trans_id = s->trans_id;
 
   bufferlist bl;
   encode(entry, bl);

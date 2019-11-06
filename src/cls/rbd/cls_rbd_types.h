@@ -10,6 +10,7 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "include/utime.h"
+#include "msg/msg_types.h"
 #include <iosfwd>
 #include <string>
 #include <set>
@@ -68,22 +69,49 @@ inline void decode(GroupImageLinkState &state, bufferlist::const_iterator& it)
   state = static_cast<GroupImageLinkState>(int_state);
 }
 
+enum MirrorPeerDirection {
+  MIRROR_PEER_DIRECTION_RX    = 0,
+  MIRROR_PEER_DIRECTION_TX    = 1,
+  MIRROR_PEER_DIRECTION_RX_TX = 2
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         MirrorPeerDirection mirror_peer_direction);
+
 struct MirrorPeer {
   MirrorPeer() {
   }
-  MirrorPeer(const std::string &uuid, const std::string &cluster_name,
-             const std::string &client_name, int64_t pool_id)
-    : uuid(uuid), cluster_name(cluster_name), client_name(client_name),
-      pool_id(pool_id) {
+  MirrorPeer(const std::string &uuid,
+             MirrorPeerDirection mirror_peer_direction,
+             const std::string& site_name,
+             const std::string& client_name,
+             const std::string& fsid)
+    : uuid(uuid), mirror_peer_direction(mirror_peer_direction),
+      site_name(site_name), client_name(client_name), fsid(fsid) {
   }
 
   std::string uuid;
-  std::string cluster_name;
-  std::string client_name;
-  int64_t pool_id = -1;
+
+  MirrorPeerDirection mirror_peer_direction = MIRROR_PEER_DIRECTION_RX_TX;
+  std::string site_name;
+  std::string client_name;  // RX property
+  std::string fsid;
+  utime_t last_seen;
 
   inline bool is_valid() const {
-    return (!uuid.empty() && !cluster_name.empty() && !client_name.empty());
+    switch (mirror_peer_direction) {
+    case MIRROR_PEER_DIRECTION_TX:
+      break;
+    case MIRROR_PEER_DIRECTION_RX:
+    case MIRROR_PEER_DIRECTION_RX_TX:
+      if (client_name.empty()) {
+        return false;
+      }
+      break;
+    default:
+      return false;
+    }
+    return (!uuid.empty() && !site_name.empty());
   }
 
   void encode(bufferlist &bl) const;
@@ -93,6 +121,9 @@ struct MirrorPeer {
   static void generate_test_instances(std::list<MirrorPeer*> &o);
 
   bool operator==(const MirrorPeer &rhs) const;
+  bool operator!=(const MirrorPeer &rhs) const {
+    return (!(*this == rhs));
+  }
 };
 
 std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode);
@@ -146,7 +177,8 @@ inline void encode(const MirrorImageStatusState &state, bufferlist& bl,
   encode(static_cast<uint8_t>(state), bl);
 }
 
-inline void decode(MirrorImageStatusState &state, bufferlist::const_iterator& it)
+inline void decode(MirrorImageStatusState &state,
+                   bufferlist::const_iterator& it)
 {
   uint8_t int_state;
   using ceph::decode;
@@ -154,16 +186,26 @@ inline void decode(MirrorImageStatusState &state, bufferlist::const_iterator& it
   state = static_cast<MirrorImageStatusState>(int_state);
 }
 
-struct MirrorImageStatus {
-  MirrorImageStatus() {}
-  MirrorImageStatus(MirrorImageStatusState state,
-		    const std::string &description = "")
-    : state(state), description(description) {}
+std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
+struct MirrorImageSiteStatus {
+  static const std::string LOCAL_FSID;
+
+  MirrorImageSiteStatus() {}
+  MirrorImageSiteStatus(const std::string& fsid,
+                        MirrorImageStatusState state,
+                        const std::string &description)
+    : fsid(fsid), state(state), description(description) {
+  }
+
+  std::string fsid = LOCAL_FSID;
   MirrorImageStatusState state = MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
   std::string description;
   utime_t last_update;
   bool up = false;
+
+  void encode_meta(uint8_t version, bufferlist &bl) const;
+  void decode_meta(uint8_t version, bufferlist::const_iterator &it);
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &it);
@@ -171,15 +213,57 @@ struct MirrorImageStatus {
 
   std::string state_to_string() const;
 
-  static void generate_test_instances(std::list<MirrorImageStatus*> &o);
+  bool operator==(const MirrorImageSiteStatus &rhs) const;
 
-  bool operator==(const MirrorImageStatus &rhs) const;
+  static void generate_test_instances(std::list<MirrorImageSiteStatus*> &o);
 };
+WRITE_CLASS_ENCODER(MirrorImageSiteStatus);
+
+std::ostream& operator<<(std::ostream& os, const MirrorImageSiteStatus& status);
+
+struct MirrorImageSiteStatusOnDisk : cls::rbd::MirrorImageSiteStatus {
+  entity_inst_t origin;
+
+  MirrorImageSiteStatusOnDisk() {
+  }
+  MirrorImageSiteStatusOnDisk(const cls::rbd::MirrorImageSiteStatus &status) :
+    cls::rbd::MirrorImageSiteStatus(status) {
+  }
+
+  void encode_meta(bufferlist &bl, uint64_t features) const;
+  void decode_meta(bufferlist::const_iterator &it);
+
+  void encode(bufferlist &bl, uint64_t features) const;
+  void decode(bufferlist::const_iterator &it);
+
+  static void generate_test_instances(
+      std::list<MirrorImageSiteStatusOnDisk*> &o);
+};
+WRITE_CLASS_ENCODER_FEATURES(MirrorImageSiteStatusOnDisk)
+
+struct MirrorImageStatus {
+  typedef std::list<MirrorImageSiteStatus> MirrorImageSiteStatuses;
+
+  MirrorImageStatus() {}
+  MirrorImageStatus(const MirrorImageSiteStatuses& statuses)
+    : mirror_image_site_statuses(statuses) {
+  }
+
+  MirrorImageSiteStatuses mirror_image_site_statuses;
+
+  int get_local_mirror_image_site_status(MirrorImageSiteStatus* status) const;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator &it);
+  void dump(Formatter *f) const;
+
+  bool operator==(const MirrorImageStatus& rhs) const;
+
+  static void generate_test_instances(std::list<MirrorImageStatus*> &o);
+};
+WRITE_CLASS_ENCODER(MirrorImageStatus);
 
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
-std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
-
-WRITE_CLASS_ENCODER(MirrorImageStatus);
 
 struct ParentImageSpec {
   int64_t pool_id = -1;

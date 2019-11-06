@@ -344,6 +344,10 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       normal.dump(f);
       f->close_section();
     }
+
+    void print(std::ostream &ostream) const final {
+      ostream << "WeightedPriorityQueue";
+    }
 };
 
 #endif

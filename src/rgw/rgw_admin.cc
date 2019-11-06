@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
 #include <iostream>
@@ -25,6 +25,7 @@ extern "C" {
 
 #include "include/util.h"
 
+#include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "global/global_init.h"
@@ -63,6 +64,7 @@ extern "C" {
 #include "services/svc_datalog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"
+#include "services/svc_zone.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -156,7 +158,7 @@ void usage()
   cout << "  zonegroup add              add a zone to a zonegroup\n";
   cout << "  zonegroup create           create a new zone group info\n";
   cout << "  zonegroup default          set default zone group\n";
-  cout << "  zonegroup rm               remove a zone group info\n";
+  cout << "  zonegroup delete           delete a zone group info\n";
   cout << "  zonegroup get              show zone group info\n";
   cout << "  zonegroup modify           modify an existing zonegroup\n";
   cout << "  zonegroup set              set zone group info (requires infile)\n";
@@ -216,6 +218,7 @@ void usage()
   cout << "  mdlog status               read metadata log status\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
+  cout << "  bilog status               read bucket index log status\n";
   cout << "  datalog list               list data log\n";
   cout << "  datalog trim               trim data log\n";
   cout << "  datalog status             read data log status\n";
@@ -269,6 +272,7 @@ void usage()
   cout << "   --bucket=<bucket>         Specify the bucket name. Also used by the quota command.\n";
   cout << "   --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.\n";
   cout << "   --object=<object>         object name\n";
+  cout << "   --object-version=<version>         object version\n";
   cout << "   --date=<date>             date in the format yyyy-mm-dd\n";
   cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
   cout << "   --end-date=<date>         end date in the format yyyy-mm-dd\n";
@@ -361,6 +365,7 @@ void usage()
   cout << "   --min-rewrite-stripe-size min stripe size for object rewrite (default 0)\n";
   cout << "   --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,\n";
   cout << "                             the trimming process will sleep the specified msec for every 1000 entries trimmed\n";
+  cout << "   --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -371,7 +376,6 @@ void usage()
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
   cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
   cout << "   --job-id                  set the job id (for orphans find)\n";
-  cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "   --detail                  detailed mode, log and stat head objects as well\n";
   cout << "\nOrphans list-jobs options:\n";
   cout << "   --extra-info              provide extra info in job list\n";
@@ -891,7 +895,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONE_PLACEMENT_LIST;
   } else if (strcmp(prev_cmd, "zone") == 0) {
-    if (strcmp(cmd, "delete") == 0)
+    if (match_str(cmd, "rm", "delete"))
       return OPT_ZONE_DELETE;
     if (strcmp(cmd, "create") == 0)
       return OPT_ZONE_CREATE;
@@ -1204,7 +1208,7 @@ static int init_bucket(const string& tenant_name, const string& bucket_name, con
     auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
     int r;
     if (bucket_id.empty()) {
-      r = store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, null_yield, pattrs);
+      r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, nullptr, null_yield, pattrs);
     } else {
       string bucket_instance_id = bucket_name + ":" + bucket_id;
       r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs, null_yield);
@@ -1387,8 +1391,7 @@ int set_bucket_quota(rgw::sal::RGWRadosStore *store, int opt_cmd,
 {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  int r = store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
+  int r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1649,59 +1652,6 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   return 0;
 }
-
-int set_bucket_sync_enabled(rgw::sal::RGWRadosStore *store, int opt_cmd, const string& tenant_name, const string& bucket_name)
-{
-  RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-
-  int r = store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
-  if (r < 0) {
-    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  if (opt_cmd == OPT_BUCKET_SYNC_ENABLE) {
-    bucket_info.flags &= ~BUCKET_DATASYNC_DISABLED;
-  } else if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
-    bucket_info.flags |= BUCKET_DATASYNC_DISABLED;
-  }
-
-  r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
-  if (r < 0) {
-    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  int shards_num = bucket_info.num_shards? bucket_info.num_shards : 1;
-  int shard_id = bucket_info.num_shards? 0 : -1;
-
-  if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
-    r = store->svc()->bilog_rados->log_stop(bucket_info, -1);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing stop bilog" << dendl;
-      return r;
-    }
-  } else {
-    r = store->svc()->bilog_rados->log_start(bucket_info, -1);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing resync bilog" << dendl;
-      return r;
-    }
-  }
-
-  for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = store->svc()->datalog_rados->add_entry(bucket_info.bucket, shard_id);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-      return r;
-    }
-  }
-
-  return 0;
-}
-
 
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RGWRadosStore *store,
@@ -2614,10 +2564,22 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
     return -EINVAL;
   }
 
+  if (num_shards < 0) {
+    cerr << "ERROR: num_shards must be non-negative integer" << std::endl;
+    return -EINVAL;
+  }
+
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
+  }
+
+  if (bucket_info.reshard_status != CLS_RGW_RESHARD_NOT_RESHARDING) {
+    // if in_progress or done then we have an old BucketInfo
+    cerr << "ERROR: the bucket is currently undergoing resharding and "
+      "cannot be added to the reshard list at this time" << std::endl;
+    return -EBUSY;
   }
 
   int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
@@ -2911,13 +2873,17 @@ int main(int argc, const char **argv)
   string sub_dest_bucket;
   string sub_push_endpoint;
   string event_id;
-  set<string, ltstr_nocase> event_types;
+  rgw::notify::EventTypeList event_types;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
       user_id.from_str(val);
+      if (user_id.empty()) {
+        cerr << "no value for uid" << std::endl;
+        exit(1);
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--new-uid", (char*)NULL)) {
       new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -3254,7 +3220,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--event-id", (char*)NULL)) {
       event_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--event-type", "--event-types", (char*)NULL)) {
-      get_str_set(val, ",", event_types);
+      rgw::notify::from_string_list(val, event_types);
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -5506,6 +5472,12 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
     if (bucket_name.empty()) {
+      if (!user_id.empty()) {
+        if (!user_op.has_existing_user()) {
+          cerr << "ERROR: could not find user: " << user_id << std::endl;
+          return -ENOENT;
+        }
+      }
       RGWBucketAdminOp::info(store, bucket_op, f);
     } else {
       RGWBucketInfo bucket_info;
@@ -7320,29 +7292,19 @@ next:
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
+    } 
+    if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
+      bucket_op.set_sync_bucket(false);
+    } else {
+      bucket_op.set_sync_bucket(true);
     }
-
+    bucket_op.set_tenant(tenant);
+    string err_msg;
+    ret = RGWBucketAdminOp::sync_bucket(store, bucket_op, &err_msg);
     if (ret < 0) {
-      cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-    RGWPeriod period;
-    ret = period.init(g_ceph_context, store->svc()->sysobj, realm_id, realm_name, true);
-    if (ret < 0) {
-      cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-
-    if (!store->svc()->zone->is_meta_master()) {
-      cerr << "failed to update bucket sync: only allowed on meta master zone "  << std::endl;
-      cerr << period.get_master_zone() << " | " << period.get_realm() << std::endl;
-      return EINVAL;
-    }
-
-    rgw_obj obj(bucket, object);
-    ret = set_bucket_sync_enabled(store, opt_cmd, tenant, bucket_name);
-    if (ret < 0)
+      cerr << err_msg << std::endl;
       return -ret;
+    }
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {

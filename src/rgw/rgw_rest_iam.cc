@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <boost/tokenizer.hpp>
 
@@ -26,12 +26,13 @@ void RGWHandler_REST_IAM::rgw_iam_parse_input()
       for (const auto& t : tokens) {
         auto pos = t.find("=");
         if (pos != string::npos) {
-          std::string key = t.substr(0, pos);
-          std::string value = t.substr(pos + 1, t.size() - 1);
-          if (key == "AssumeRolePolicyDocument" || key == "Path" || key == "PolicyDocument") {
-            value = url_decode(value);
+          const auto key = t.substr(0, pos);
+          if (key == "Action") {
+            s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
+          } else if (key == "AssumeRolePolicyDocument" || key == "Path" || key == "PolicyDocument") {
+            const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
+            s->info.args.append(key, value);
           }
-          s->info.args.append(key, value);
         }
       }
     }

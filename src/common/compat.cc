@@ -13,6 +13,8 @@
  *
  */
 
+#include <cstdio>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -91,10 +93,10 @@ int ceph_posix_fallocate(int fd, off_t offset, off_t len) {
 #endif
 } 
 
-int pipe_cloexec(int pipefd[2])
+int pipe_cloexec(int pipefd[2], int flags)
 {
 #if defined(HAVE_PIPE2)
-  return pipe2(pipefd, O_CLOEXEC);
+  return pipe2(pipefd, O_CLOEXEC | flags);
 #else
   if (pipe(pipefd) == -1)
     return -1;
@@ -193,3 +195,14 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 }
 #endif
 
+char *ceph_strerror_r(int errnum, char *buf, size_t buflen)
+{
+#ifdef STRERROR_R_CHAR_P
+  return strerror_r(errnum, buf, buflen);
+#else
+  if (strerror_r(errnum, buf, buflen)) {
+    snprintf(buf, buflen, "Unknown error %d", errnum);
+  }
+  return buf;
+#endif
+}

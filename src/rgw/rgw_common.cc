@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
 #include <vector>
@@ -957,8 +957,8 @@ void RGWHTTPArgs::append(const string& name, const string& val)
               (name.compare("policy") == 0) ||
               (name.compare("quota") == 0) ||
               (name.compare("list") == 0) ||
-              (name.compare("object") == 0)) {
-
+              (name.compare("object") == 0) ||
+              (name.compare("sync") == 0)) {
     if (!admin_subresource_added) {
       sub_resources[name] = "";
       admin_subresource_added = true;

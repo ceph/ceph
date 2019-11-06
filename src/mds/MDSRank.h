@@ -77,6 +77,9 @@ enum {
   l_mds_openino_dir_fetch,
   l_mds_openino_backtrace_fetch,
   l_mds_openino_peer_discover,
+  l_mds_root_rfiles,
+  l_mds_root_rbytes,
+  l_mds_root_rsnaps,
   l_mds_last,
 };
 
@@ -627,13 +630,13 @@ public:
   void init();
   void tick();
   void shutdown();
-  bool handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
-                           Formatter *f, std::ostream& ss);
+  int handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
+			  Formatter *f, std::ostream& ss);
   void handle_mds_map(const cref_t<MMDSMap> &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
 
-  const char** get_tracked_conf_keys() const final;
+  const char** get_tracked_conf_keys() const override final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
   bool handle_command(

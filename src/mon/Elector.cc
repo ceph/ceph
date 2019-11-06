@@ -151,9 +151,9 @@ void Elector::reset_timer(double plus)
    */
   expire_event = mon->timer.add_event_after(
     g_conf()->mon_election_timeout + plus,
-    new C_MonContext(mon, [this](int) {
+    new C_MonContext{mon, [this](int) {
 	logic.end_election_period();
-      }));
+      }});
 }
 
 
@@ -212,7 +212,7 @@ void Elector::message_victory(const std::set<int>& quorum)
 void Elector::handle_propose(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_propose");
-  MMonElection *m = static_cast<MMonElection*>(op->get_req());
+  auto m = op->get_req<MMonElection>();
   dout(5) << "handle_propose from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
@@ -253,7 +253,7 @@ void Elector::handle_propose(MonOpRequestRef op)
 void Elector::handle_ack(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_ack");
-  MMonElection *m = static_cast<MMonElection*>(op->get_req());
+  auto m = op->get_req<MMonElection>();
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
@@ -302,7 +302,7 @@ void Elector::handle_ack(MonOpRequestRef op)
 void Elector::handle_victory(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_victory");
-  MMonElection *m = static_cast<MMonElection*>(op->get_req());
+  auto m = op->get_req<MMonElection>();
   dout(5) << "handle_victory from " << m->get_source()
           << " quorum_features " << m->quorum_features
           << " " << m->mon_features
@@ -332,7 +332,7 @@ void Elector::handle_victory(MonOpRequestRef op)
 void Elector::nak_old_peer(MonOpRequestRef op)
 {
   op->mark_event("elector:nak_old_peer");
-  MMonElection *m = static_cast<MMonElection*>(op->get_req());
+  auto m = op->get_req<MMonElection>();
   uint64_t supported_features = m->get_connection()->get_features();
   uint64_t required_features = mon->get_required_features();
   mon_feature_t required_mon_features = mon->get_required_mon_features();
@@ -354,7 +354,7 @@ void Elector::nak_old_peer(MonOpRequestRef op)
 void Elector::handle_nak(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_nak");
-  MMonElection *m = static_cast<MMonElection*>(op->get_req());
+  auto m = op->get_req<MMonElection>();
   dout(1) << "handle_nak from " << m->get_source()
 	  << " quorum_features " << m->quorum_features
           << " " << m->mon_features
@@ -399,7 +399,7 @@ void Elector::dispatch(MonOpRequestRef op)
 	return;
       }
 
-      MMonElection *em = static_cast<MMonElection*>(op->get_req());
+      auto em = op->get_req<MMonElection>();
 
       // assume an old message encoding would have matched
       if (em->fsid != mon->monmap->fsid) {

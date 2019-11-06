@@ -36,6 +36,7 @@ class MMgrOpen;
 class MMgrClose;
 class MMonMgrReport;
 class MCommand;
+class MMgrCommand;
 struct MonCommand;
 class CommandContext;
 struct OSDPerfMetricQuery;
@@ -83,8 +84,8 @@ protected:
   static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
                                            const std::vector<MonCommand> &commands);
   bool _allowed_command(
-    MgrSession *s, const string &module, const string &prefix,
-    const cmdmap_t& cmdmap,
+    MgrSession *s, const string &service, const string &module,
+    const string &prefix, const cmdmap_t& cmdmap,
     const map<string,string>& param_str_map,
     const MonCommand *this_cmd);
 
@@ -147,8 +148,8 @@ public:
   bool handle_close(const ceph::ref_t<MMgrClose>& m);
   bool handle_report(const ceph::ref_t<MMgrReport>& m);
   bool handle_command(const ceph::ref_t<MCommand>& m);
-  bool _handle_command(const ceph::ref_t<MCommand>& m,
-		       std::shared_ptr<CommandContext>& cmdctx);
+  bool handle_command(const ceph::ref_t<MMgrCommand>& m);
+  bool _handle_command(std::shared_ptr<CommandContext>& cmdctx);
   void send_report();
   void got_service_map();
   void got_mgr_map();
@@ -168,6 +169,9 @@ public:
                           const std::set <std::string> &changed) override;
 
   void schedule_tick(double delay_sec);
+
+  void log_access_denied(std::shared_ptr<CommandContext>& cmdctx,
+                         MgrSession* session, std::stringstream& ss);
 };
 
 #endif

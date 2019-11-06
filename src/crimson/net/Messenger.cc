@@ -4,7 +4,7 @@
 #include "Messenger.h"
 #include "SocketMessenger.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 seastar::future<Messenger*>
 Messenger::create(const entity_name_t& name,
@@ -18,4 +18,4 @@ Messenger::create(const entity_name_t& name,
     });
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

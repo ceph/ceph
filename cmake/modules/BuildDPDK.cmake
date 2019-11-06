@@ -94,8 +94,7 @@ function(do_build_dpdk dpdk_dir)
   ExternalProject_Add_StepTargets(dpdk-ext configure patch-config build)
 endfunction()
 
-function(build_dpdk dpdk_dir)
-  do_build_dpdk(${dpdk_dir})
+function(do_export_dpdk dpdk_dir)
   set(DPDK_INCLUDE_DIR ${dpdk_dir}/include)
   # create the directory so cmake won't complain when looking at the imported
   # target
@@ -143,5 +142,14 @@ function(build_dpdk dpdk_dir)
   if(dpdk_rte_CFLAGS)
     set_target_properties(dpdk::dpdk PROPERTIES
       INTERFACE_COMPILE_OPTIONS "${dpdk_rte_CFLAGS}")
+  endif()
+endfunction()
+
+function(build_dpdk dpdk_dir)
+  if(NOT TARGET dpdk-ext)
+    do_build_dpdk(${dpdk_dir})
+  endif()
+  if(NOT TARGET dpdk::dpdk)
+    do_export_dpdk(${dpdk_dir})
   endif()
 endfunction()

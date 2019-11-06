@@ -116,7 +116,7 @@ bool PGBackend::handle_message(OpRequestRef op)
 
 void PGBackend::handle_recovery_delete(OpRequestRef op)
 {
-  const MOSDPGRecoveryDelete *m = static_cast<const MOSDPGRecoveryDelete *>(op->get_req());
+  auto m = op->get_req<MOSDPGRecoveryDelete>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE);
   dout(20) << __func__ << " " << op << dendl;
 
@@ -136,7 +136,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
   reply->objects = m->objects;
   ConnectionRef conn = m->get_connection();
 
-  gather.set_finisher(new FunctionContext(
+  gather.set_finisher(new LambdaContext(
     [=](int r) {
       if (r != -EAGAIN) {
 	get_parent()->send_message_osd_cluster(reply, conn.get());
@@ -149,7 +149,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
 
 void PGBackend::handle_recovery_delete_reply(OpRequestRef op)
 {
-  const MOSDPGRecoveryDeleteReply *m = static_cast<const MOSDPGRecoveryDeleteReply *>(op->get_req());
+  auto m = op->get_req<MOSDPGRecoveryDeleteReply>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE_REPLY);
   dout(20) << __func__ << " " << op << dendl;
 
@@ -1270,10 +1270,16 @@ void PGBackend::be_omap_checks(const map<pg_shard_t,ScrubMap*> &maps,
       omap_stats.omap_bytes += obj.object_omap_bytes;
       omap_stats.omap_keys += obj.object_omap_keys;
       if (obj.large_omap_object_found) {
+        pg_t pg;
+        auto osdmap = get_osdmap();
+        osdmap->map_to_pg(k.pool, k.oid.name, k.get_key(), k.nspace, &pg);
+        pg_t mpg = osdmap->raw_pg_to_pg(pg);
         omap_stats.large_omap_objects++;
-        warnstream << "Large omap object found. Object: " << k << " Key count: "
-                   << obj.large_omap_object_key_count << " Size (bytes): "
-                   << obj.large_omap_object_value_size << '\n';
+        warnstream << "Large omap object found. Object: " << k
+                   << " PG: " << pg << " (" << mpg << ")"
+                   << " Key count: " << obj.large_omap_object_key_count
+                   << " Size (bytes): " << obj.large_omap_object_value_size
+                   << '\n';
         break;
       }
     }

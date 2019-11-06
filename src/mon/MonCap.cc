@@ -19,6 +19,7 @@
 #include <boost/spirit/include/phoenix.hpp>
 #include <boost/fusion/adapted/struct/adapt_struct.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "MonCap.h"
 #include "include/stringify.h"
@@ -152,7 +153,7 @@ void MonCapGrant::parse_network()
 				  &network_prefix);
 }
 
-void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
+void MonCapGrant::expand_profile(const EntityName& name) const
 {
   // only generate this list once
   if (!profile_grants.empty())
@@ -172,22 +173,6 @@ void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
     return;
   }
 
-  switch (daemon_type) {
-  case CEPH_ENTITY_TYPE_MON:
-    expand_profile_mon(name);
-    return;
-  case CEPH_ENTITY_TYPE_MGR:
-    expand_profile_mgr(name);
-    return;
-  }
-}
-
-void MonCapGrant::expand_profile_mgr(const EntityName& name) const
-{
-}
-
-void MonCapGrant::expand_profile_mon(const EntityName& name) const
-{
   if (profile == "mon") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_ALL));
@@ -217,6 +202,11 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("config", MON_CAP_R | MON_CAP_W));
+    // ssh orchestrator provisions new daemon keys
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));
+    profile_grants.push_back(MonCapGrant("auth rm"));
+    // tell commands (this is a bit of a kludge)
+    profile_grants.push_back(MonCapGrant("smart"));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {
@@ -297,7 +287,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
-  if (profile == "rbd" || profile == "rbd-mirror") {
+  if (boost::starts_with(profile, "rbd")) {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
@@ -314,8 +304,19 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
                                 "rbd/mirror/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
-  }
+  } else if (profile == "rbd-mirror-peer") {
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_REGEX,
+                                "rbd/mirror/[^/]+");
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
 
+    constraint = StringConstraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                  "rbd/mirror/peer/");
+    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
+  }
+  else if (profile == "crash") {
+    // TODO: we could limit this to getting the monmap and mgrmap...
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+  }
   if (profile == "role-definer") {
     // grants ALL caps to the auth subsystem, read-only on the
     // monitor subsystem and nothing else.
@@ -325,17 +326,16 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
 }
 
 mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
-				    int daemon_type,
 				    EntityName name,
 				    const std::string& s, const std::string& c,
 				    const map<string,string>& c_args) const
 {
   if (profile.length()) {
-    expand_profile(daemon_type, name);
+    expand_profile(name);
     mon_rwxa_t a;
     for (auto p = profile_grants.begin();
 	 p != profile_grants.end(); ++p)
-      a = a | p->get_allowed(cct, daemon_type, name, s, c, c_args);
+      a = a | p->get_allowed(cct, name, s, c, c_args);
     return a;
   }
   if (service.length()) {
@@ -412,7 +412,6 @@ void MonCap::set_allow_all()
 
 bool MonCap::is_capable(
   CephContext *cct,
-  int daemon_type,
   EntityName name,
   const string& service,
   const string& command, const map<string,string>& command_args,
@@ -450,8 +449,7 @@ bool MonCap::is_capable(
     }
 
     // check enumerated caps
-    allow = allow | p->get_allowed(cct, daemon_type, name, service, command,
-				   command_args);
+    allow = allow | p->get_allowed(cct, name, service, command, command_args);
     if ((!op_may_read || (allow & MON_CAP_R)) &&
 	(!op_may_write || (allow & MON_CAP_W)) &&
 	(!op_may_exec || (allow & MON_CAP_X))) {

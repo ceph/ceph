@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
 #include <iostream>
@@ -452,20 +452,21 @@ static bool is_valid_op(const lc_op& op)
 static inline bool has_all_tags(const lc_op& rule_action,
 				const RGWObjTags& object_tags)
 {
+  if(! rule_action.obj_tags)
+    return false;
+  if(object_tags.count() < rule_action.obj_tags->count())
+    return false;
+  size_t tag_count = 0;
   for (const auto& tag : object_tags.get_tags()) {
-
-    if (! rule_action.obj_tags)
-      return false;
-
     const auto& rule_tags = rule_action.obj_tags->get_tags();
     const auto& iter = rule_tags.find(tag.first);
-
-    if ((iter == rule_tags.end()) ||
-	(iter->second != tag.second))
-      return false;
+    if(iter->second == tag.second)
+    {
+      tag_count++;
+    }
+  /* all tags in the rule appear in obj tags */
   }
-  /* all tags matched */
-  return true;
+  return tag_count == rule_action.obj_tags->count();
 }
 
 class LCObjsLister {
@@ -696,7 +697,7 @@ static int check_tags(lc_op_ctx& oc, bool *skip)
     }
 
     if (! has_all_tags(op, dest_obj_tags)) {
-      ldout(oc.cct, 20) << __func__ << "() skipping obj " << oc.obj << " as tags do not match" << dendl;
+      ldout(oc.cct, 20) << __func__ << "() skipping obj " << oc.obj << " as tags do not match in rule: " << op.id << dendl;
       return 0;
     }
   }
@@ -1026,13 +1027,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
   map<string, bufferlist> bucket_attrs;
   string no_ns, list_versions;
   vector<rgw_bucket_dir_entry> objs;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   vector<std::string> result;
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
   string bucket_marker = result[2];
-  int ret = store->getRados()->get_bucket_info(obj_ctx, bucket_tenant, bucket_name, bucket_info, NULL, null_yield, &bucket_attrs);
+  int ret = store->getRados()->get_bucket_info(store->svc(), bucket_tenant, bucket_name, bucket_info, NULL, null_yield, &bucket_attrs);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket_info for " << bucket_name << " failed" << dendl;
     return ret;

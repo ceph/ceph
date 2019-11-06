@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_REST_H
 #define CEPH_RGW_REST_H
@@ -553,10 +553,10 @@ protected:
   virtual RGWOp *op_copy() { return NULL; }
   virtual RGWOp *op_options() { return NULL; }
 
+public:
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
 
-public:
   static constexpr int MAX_BUCKET_NAME_LEN = 255;
   static constexpr int MAX_OBJ_NAME_LEN = 1024;
 

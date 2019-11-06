@@ -176,8 +176,10 @@ class Objecter::RequestStateHook : public AdminSocketHook {
   Objecter *m_objecter;
 public:
   explicit RequestStateHook(Objecter *objecter);
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, ceph::buffer::list& out) override;
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   ceph::buffer::list& out) override;
 };
 
 /**
@@ -384,7 +386,6 @@ void Objecter::init()
   m_request_state_hook = new RequestStateHook(this);
   AdminSocket* admin_socket = cct->get_admin_socket();
   int ret = admin_socket->register_command("objecter_requests",
-					   "objecter_requests",
 					   m_request_state_hook,
 					   "show in-progress osd requests");
 
@@ -532,7 +533,7 @@ void Objecter::shutdown()
   // shutdown() with the ::initialized check at start.
   if (m_request_state_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
-    admin_socket->unregister_command("objecter_requests");
+    admin_socket->unregister_commands(m_request_state_hook);
     delete m_request_state_hook;
     m_request_state_hook = NULL;
   }
@@ -2415,7 +2416,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   ceph_assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
-  if (osdmap_full_try) {
+  if (pool_full_try) {
     op->target.flags |= CEPH_OSD_FLAG_FULL_TRY;
   }
 
@@ -2707,7 +2708,7 @@ bool Objecter::_osdmap_has_pool_full() const
 
 bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
 {
-  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_osdmap_full;
+  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_pool_full;
 }
 
 /**
@@ -2716,7 +2717,7 @@ bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
 bool Objecter::_osdmap_full_flag() const
 {
   // Ignore the FULL flag if the caller does not have honor_osdmap_full
-  return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_osdmap_full;
+  return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_pool_full;
 }
 
 void Objecter::update_pool_full_map(map<int64_t, bool>& pool_full_map)
@@ -3191,7 +3192,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   // pre-luminous osds
   flags |= CEPH_OSD_FLAG_ONDISK;
 
-  if (!honor_osdmap_full)
+  if (!honor_pool_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   op->target.paused = false;
@@ -4539,10 +4540,12 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
        p != s->ops.end();
        ++p) {
     Op *op = p->second;
+    auto age = std::chrono::duration<double>(coarse_mono_clock::now() - op->stamp);
     fmt->open_object_section("op");
     fmt->dump_unsigned("tid", op->tid);
     op->target.dump(fmt);
     fmt->dump_stream("last_sent") << op->stamp;
+    fmt->dump_float("age", age.count());
     fmt->dump_int("attempts", op->attempts);
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("snap_context") << op->snapc;
@@ -4706,17 +4709,15 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 {
 }
 
-bool Objecter::RequestStateHook::call(std::string_view command,
-				      const cmdmap_t& cmdmap,
-				      std::string_view format,
-				      ceph::buffer::list& out)
+int Objecter::RequestStateHook::call(std::string_view command,
+				     const cmdmap_t& cmdmap,
+				     Formatter *f,
+				     std::ostream& ss,
+				     ceph::buffer::list& out)
 {
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   shared_lock rl(m_objecter->rwlock);
   m_objecter->dump_requests(f);
-  f->flush(out);
-  delete f;
-  return true;
+  return 0;
 }
 
 void Objecter::blacklist_self(bool set)
@@ -4780,6 +4781,18 @@ void Objecter::handle_command_reply(MCommandReply *m)
     sl.unlock();
     return;
   }
+  if (m->r == -EAGAIN) {
+    ldout(cct,10) << __func__ << " tid " << m->get_tid()
+		  << " got EAGAIN, requesting map and resending" << dendl;
+    // NOTE: This might resend twice... once now, and once again when
+    // we get an updated osdmap and the PG is found to have moved.
+    _maybe_request_map();
+    _send_command(c);
+    m->put();
+    sl.unlock();
+    return;
+  }
+
   if (c->poutbl) {
     c->poutbl->claim(m->get_data());
   }

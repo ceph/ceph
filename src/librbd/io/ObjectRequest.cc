@@ -103,6 +103,7 @@ ObjectRequest<I>::ObjectRequest(
   : m_ictx(ictx), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
     m_trace(util::create_trace(*ictx, "", trace)) {
+  ceph_assert(m_ictx->data_ctx.is_valid());
   if (m_trace.valid()) {
     m_trace.copy_name(trace_name + std::string(" ") +
                       data_object_name(ictx, objectno));
@@ -199,7 +200,7 @@ void ObjectReadRequest<I>::read_object() {
     std::shared_lock image_locker{image_ctx->image_lock};
     if (image_ctx->object_map != nullptr &&
         !image_ctx->object_map->object_may_exist(this->m_object_no)) {
-      image_ctx->op_work_queue->queue(new FunctionContext([this](int r) {
+      image_ctx->op_work_queue->queue(new LambdaContext([this](int r) {
           read_parent();
         }), 0);
       return;

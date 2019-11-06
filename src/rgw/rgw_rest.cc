@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 
 #include <errno.h>
@@ -241,10 +241,11 @@ static bool str_ends_with_nocase(const string& s, const string& suffix, size_t *
     *pos = p;
   }
 
-  return boost::algorithm::iends_with(suffix, s);
+  return boost::algorithm::iends_with(s, suffix);
 }
 
-static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain, set<string> valid_hostnames_set)
+static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain,
+                                     const set<string>& valid_hostnames_set)
 {
   set<string>::iterator iter;
   /** TODO, Future optimization

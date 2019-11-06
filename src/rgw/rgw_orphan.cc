@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string>
 
@@ -165,7 +165,7 @@ int RGWOrphanStore::store_entries(const string& oid, const map<string, bufferlis
   for (map<string, bufferlist>::const_iterator iter = entries.begin(); iter != entries.end(); ++iter) {
     ldout(store->ctx(), 20) << " > " << iter->first << dendl;
   }
-  int ret = ioctx.operate(oid, &op);
+  int ret = rgw_rados_operate(ioctx, oid, &op, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << dendl;
   }
@@ -500,7 +500,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   }
 
   RGWBucketInfo cur_bucket_info;
-  ret = store->getRados()->get_bucket_info(sysobj_ctx, orphan_bucket.tenant,
+  ret = store->getRados()->get_bucket_info(store->svc(), orphan_bucket.tenant,
 			       orphan_bucket.name, cur_bucket_info, nullptr, null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {

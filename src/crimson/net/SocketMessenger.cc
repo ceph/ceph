@@ -22,13 +22,13 @@
 #include "Dispatcher.h"
 #include "Socket.h"
 
-using namespace ceph::net;
-
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_ms);
+    return crimson::get_logger(ceph_subsys_ms);
   }
 }
+
+namespace crimson::net {
 
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
@@ -109,7 +109,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
     });
 }
 
-seastar::future<ceph::net::ConnectionXRef>
+seastar::future<crimson::net::ConnectionXRef>
 SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
 {
   // make sure we connect to a valid peer_addr
@@ -142,7 +142,8 @@ seastar::future<> SocketMessenger::shutdown()
 
 void SocketMessenger::do_bind(const entity_addrvec_t& addrs)
 {
-  Messenger::set_myaddrs(addrs);
+  // safe to discard an immediate ready future
+  (void) Messenger::set_myaddrs(addrs);
 
   // TODO: v2: listen on multiple addresses
   seastar::socket_address address(addrs.front().in4_addr());
@@ -162,15 +163,16 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
     ceph_assert(get_myaddr().is_legacy() || get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
 
-    seastar::keep_doing([this] {
+    // forwarded to accepting_complete
+    (void) seastar::keep_doing([this] {
         return Socket::accept(*listener)
           .then([this] (SocketFRef socket,
                         entity_addr_t peer_addr) {
             auto shard = locate_shard(peer_addr);
-            // don't wait before accepting another
 #warning fixme
             // we currently do dangerous i/o from a Connection core, different from the Socket core.
-            container().invoke_on(shard, [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
+            return container().invoke_on(shard,
+              [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
                 SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
                     msgr, *msgr.dispatcher, get_myaddr().is_msgr2());
                 conn->start_accept(std::move(sock), peer_addr);
@@ -193,7 +195,7 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
   return seastar::now();
 }
 
-seastar::foreign_ptr<ceph::net::ConnectionRef>
+seastar::foreign_ptr<crimson::net::ConnectionRef>
 SocketMessenger::do_connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
 {
   if (auto found = lookup_conn(peer_addr); found) {
@@ -241,7 +243,7 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
         logger().warn("{} peer_addr_for_me {} type/family/IP doesn't match myaddr {}",
                       conn, peer_addr_for_me, msgr.get_myaddr());
         throw std::system_error(
-            make_error_code(ceph::net::error::bad_peer_address));
+            make_error_code(crimson::net::error::bad_peer_address));
       }
       return seastar::now();
     }
@@ -264,13 +266,13 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
         logger().warn("{} peer_addr_for_me {} type doesn't match myaddr {}",
                       conn, peer_addr_for_me, msgr.get_myaddr());
         throw std::system_error(
-            make_error_code(ceph::net::error::bad_peer_address));
+            make_error_code(crimson::net::error::bad_peer_address));
       }
       if (msgr.get_myaddr().get_family() != peer_addr_for_me.get_family()) {
         logger().warn("{} peer_addr_for_me {} family doesn't match myaddr {}",
                       conn, peer_addr_for_me, msgr.get_myaddr());
         throw std::system_error(
-            make_error_code(ceph::net::error::bad_peer_address));
+            make_error_code(crimson::net::error::bad_peer_address));
       }
       if (msgr.get_myaddr().is_blank_ip()) {
         entity_addr_t addr = peer_addr_for_me;
@@ -285,7 +287,7 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
         logger().warn("{} peer_addr_for_me {} IP doesn't match myaddr {}",
                       conn, peer_addr_for_me, msgr.get_myaddr());
         throw std::system_error(
-            make_error_code(ceph::net::error::bad_peer_address));
+            make_error_code(crimson::net::error::bad_peer_address));
       } else {
         return seastar::now();
       }
@@ -334,7 +336,7 @@ seastar::shard_id SocketMessenger::locate_shard(const entity_addr_t& addr)
   return seed % seastar::smp::count;
 }
 
-ceph::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
+crimson::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
 {
   if (auto found = connections.find(addr);
       found != connections.end()) {
@@ -383,3 +385,5 @@ SocketMessenger::get_global_seq(uint32_t old)
     return ++msgr.global_seq;
   });
 }
+
+} // namespace crimson::net

@@ -115,7 +115,7 @@ public:
                               OSDPerfMetricSubKey *sub_key) {
           ceph_assert(d.is_supported());
 
-          auto m = static_cast<const MOSDOp*>(op.get_req());
+          auto m = op.get_req<MOSDOp>();
           std::string match_string;
           switch(d.type) {
           case OSDPerfMetricSubKeyType::CLIENT_ID:
@@ -169,10 +169,15 @@ public:
   }
 
   void add_to_reports(
-      const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> & limits,
+      const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &limits,
       std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports) {
     for (auto &it : data) {
       auto &query = it.first;
+      auto limit_it = limits.find(query);
+      if (limit_it == limits.end()) {
+        continue;
+      }
+      auto &query_limits = limit_it->second;
       auto &counters = it.second;
       auto &report = (*reports)[query];
 
@@ -182,7 +187,7 @@ public:
       auto &descriptors = report.performance_counter_descriptors;
       ceph_assert(descriptors.size() > 0);
 
-      if (!is_limited(limits.at(query), counters.size())) {
+      if (!is_limited(query_limits, counters.size())) {
         for (auto &it_counters : counters) {
           auto &bl = report.group_packed_performance_counters[it_counters.first];
           query.pack_counters(it_counters.second, &bl);
@@ -190,7 +195,7 @@ public:
         continue;
       }
 
-      for (auto &limit : limits.at(query)) {
+      for (auto &limit : query_limits) {
         size_t index = 0;
         for (; index < descriptors.size(); index++) {
           if (descriptors[index] == limit.order_by) {

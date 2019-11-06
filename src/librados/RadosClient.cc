@@ -62,7 +62,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     conf(cct_->_conf),
     state(DISCONNECTED),
     monclient(cct_),
-    mgrclient(cct_, nullptr),
+    mgrclient(cct_, nullptr, &monclient.monmap),
     messenger(NULL),
     instance_id(0),
     objecter(NULL),
@@ -854,6 +854,30 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
 
   C_SaferCond cond;
   int r = mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  if (r < 0)
+    return r;
+
+  lock.unlock();
+  if (conf->rados_mon_op_timeout) {
+    r = cond.wait_for(conf->rados_mon_op_timeout);
+  } else {
+    r = cond.wait();
+  }
+  lock.lock();
+
+  return r;
+}
+
+int librados::RadosClient::mgr_command(
+  const string& name,
+  const vector<string>& cmd,
+  const bufferlist &inbl,
+  bufferlist *outbl, string *outs)
+{
+  std::lock_guard l(lock);
+
+  C_SaferCond cond;
+  int r = mgrclient.start_tell_command(name, cmd, inbl, outbl, outs, &cond);
   if (r < 0)
     return r;
 

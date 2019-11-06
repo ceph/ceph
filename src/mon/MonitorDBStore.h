@@ -69,11 +69,11 @@ class MonitorDBStore
 
     Op()
       : type(0) { }
-    Op(int t, string p, string k)
+    Op(int t, const string& p, const string& k)
       : type(t), prefix(p), key(k) { }
-    Op(int t, const string& p, string k, bufferlist& b)
+    Op(int t, const string& p, const string& k, const bufferlist& b)
       : type(t), prefix(p), key(k), bl(b) { }
-    Op(int t, const string& p, string start, string end)
+    Op(int t, const string& p, const string& start, const string& end)
       : type(t), prefix(p), key(start), endkey(end) { }
 
     void encode(bufferlist& encode_bl) const {
@@ -101,8 +101,9 @@ class MonitorDBStore
       f->dump_int("type", type);
       f->dump_string("prefix", prefix);
       f->dump_string("key", key);
-      if (endkey.length())
+      if (endkey.length()) {
 	f->dump_string("endkey", endkey);
+      }
     }
 
     static void generate_test_instances(list<Op*>& ls) {
@@ -123,44 +124,53 @@ class MonitorDBStore
       OP_PUT	= 1,
       OP_ERASE	= 2,
       OP_COMPACT = 3,
+      OP_ERASE_RANGE = 4,
     };
 
-    void put(string prefix, string key, bufferlist& bl) {
+    void put(const string& prefix, const string& key, const bufferlist& bl) {
       ops.push_back(Op(OP_PUT, prefix, key, bl));
       ++keys;
       bytes += prefix.length() + key.length() + bl.length();
     }
 
-    void put(string prefix, version_t ver, bufferlist& bl) {
+    void put(const string& prefix, version_t ver, const bufferlist& bl) {
       ostringstream os;
       os << ver;
       put(prefix, os.str(), bl);
     }
 
-    void put(string prefix, string key, version_t ver) {
+    void put(const string& prefix, const string& key, version_t ver) {
       using ceph::encode;
       bufferlist bl;
       encode(ver, bl);
       put(prefix, key, bl);
     }
 
-    void erase(string prefix, string key) {
+    void erase(const string& prefix, const string& key) {
       ops.push_back(Op(OP_ERASE, prefix, key));
       ++keys;
       bytes += prefix.length() + key.length();
     }
 
-    void erase(string prefix, version_t ver) {
+    void erase(const string& prefix, version_t ver) {
       ostringstream os;
       os << ver;
       erase(prefix, os.str());
     }
 
-    void compact_prefix(string prefix) {
+    void erase_range(const string& prefix, const string& begin,
+		     const string& end) {
+      ops.push_back(Op(OP_ERASE_RANGE, prefix, begin, end));
+      ++keys;
+      bytes += prefix.length() + begin.length() + end.length();
+    }
+
+    void compact_prefix(const string& prefix) {
       ops.push_back(Op(OP_COMPACT, prefix, string()));
     }
 
-    void compact_range(string prefix, string start, string end) {
+    void compact_range(const string& prefix, const string& start,
+		       const string& end) {
       ops.push_back(Op(OP_COMPACT, prefix, start, end));
     }
 
@@ -189,6 +199,7 @@ class MonitorDBStore
       bl.append("value");
       ls.back()->put("prefix", "key", bl);
       ls.back()->erase("prefix2", "key2");
+      ls.back()->erase_range("prefix3", "key3", "key4");
       ls.back()->compact_prefix("prefix3");
       ls.back()->compact_range("prefix4", "from", "to");
     }
@@ -250,6 +261,14 @@ class MonitorDBStore
 	    f->dump_string("key", op.key);
 	  }
 	  break;
+	case OP_ERASE_RANGE:
+	  {
+	    f->dump_string("type", "ERASE_RANGE");
+	    f->dump_string("prefix", op.prefix);
+	    f->dump_string("start", op.key);
+	    f->dump_string("end", op.endkey);
+	  }
+	  break;
 	case OP_COMPACT:
 	  {
 	    f->dump_string("type", "COMPACT");
@@ -300,6 +319,9 @@ class MonitorDBStore
 	break;
       case Transaction::OP_ERASE:
 	dbt->rmkey(op.prefix, op.key);
+	break;
+      case Transaction::OP_ERASE_RANGE:
+	dbt->rm_range_keys(op.prefix, op.key, op.endkey);
 	break;
       case Transaction::OP_COMPACT:
 	compact.push_back(make_pair(op.prefix, make_pair(op.key, op.endkey)));
@@ -386,8 +408,8 @@ class MonitorDBStore
     virtual ~StoreIteratorImpl() { }
 
     bool add_chunk_entry(TransactionRef tx,
-			 string &prefix,
-			 string &key,
+			 const string &prefix,
+			 const string &key,
 			 bufferlist &value,
 			 uint64_t max) {
       auto tmp(std::make_shared<Transaction>());
@@ -595,7 +617,7 @@ class MonitorDBStore
     ceph_assert(r >= 0);
   }
 
-  void _open(string kv_type) {
+  void _open(const string& kv_type) {
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
@@ -732,7 +754,8 @@ class MonitorDBStore
     string v = value;
     v += "\n";
     int r = safe_write_file(path.c_str(), key.c_str(),
-			    v.c_str(), v.length());
+			    v.c_str(), v.length(),
+			    0600);
     if (r < 0)
       return r;
     return 0;

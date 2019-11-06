@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_ZONE_H
 #define CEPH_RGW_ZONE_H
@@ -958,7 +958,7 @@ public:
 WRITE_CLASS_ENCODER(RGWRealm)
 
 struct RGWPeriodLatestEpochInfo {
-  epoch_t epoch;
+  epoch_t epoch = 0;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -974,6 +974,7 @@ struct RGWPeriodLatestEpochInfo {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWPeriodLatestEpochInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 

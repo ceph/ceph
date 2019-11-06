@@ -14,15 +14,15 @@ command and many higher level interfaces, including `QEMU`_, `libvirt`_,
 
 .. important:: To use use RBD snapshots, you must have a running Ceph cluster.
 
-.. note:: Because RBD does not know about the filesystem, snapshots are
+.. note:: Because RBD does not know about the file system, snapshots are
 	  `crash-consistent` if they are not coordinated with the mounting
 	  computer. So, we recommend you stop `I/O` before taking a snapshot of
-	  an image. If the image contains a filesystem, the filesystem must be
+	  an image. If the image contains a file system, the file system must be
 	  in a consistent state before taking a snapshot or you may have to run
 	  `fsck`. To stop `I/O` you can use `fsfreeze` command. See
 	  `fsfreeze(8)` man page for more details.
 	  For virtual machines, `qemu-guest-agent` can be used to automatically
-	  freeze filesystems when creating a snapshot.
+	  freeze file systems when creating a snapshot.
 
 .. ditaa:: +------------+         +-------------+
            | {s}        |         | {s} c999    |

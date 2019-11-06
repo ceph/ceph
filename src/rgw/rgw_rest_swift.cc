@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/format.hpp>
@@ -192,7 +192,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets&& buckets)
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::RGWBucketList&& buckets)
 {
   if (wants_reversed) {
     /* Just store in the reversal buffer. Its content will be handled later,
@@ -203,7 +203,7 @@ void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets&& bucket
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& buckets)
 {
   if (! sent_data) {
     return;
@@ -213,22 +213,22 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  const std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+  const std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
   for (auto iter = m.lower_bound(prefix);
        iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
        ++iter) {
-    dump_bucket_entry(iter->second);
+    dump_bucket_entry(*iter->second);
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& obj)
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::RGWSalBucket& obj)
 {
   s->formatter->open_object_section("container");
-  s->formatter->dump_string("name", obj.bucket.name);
+  s->formatter->dump_string("name", obj.get_name());
 
   if (need_stats) {
-    s->formatter->dump_int("count", obj.count);
-    s->formatter->dump_int("bytes", obj.size);
+    s->formatter->dump_int("count", obj.get_count());
+    s->formatter->dump_int("bytes", obj.get_size());
   }
 
   s->formatter->close_section();
@@ -238,7 +238,7 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& obj)
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& buckets)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBucketList& buckets)
 {
   if (! sent_data) {
     return;
@@ -248,7 +248,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& 
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+  std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
 
   auto iter = m.rbegin();
   for (/* initialized above */;
@@ -260,7 +260,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& 
   for (/* iter carried */;
        iter != m.rend() && boost::algorithm::starts_with(iter->first, prefix);
        ++iter) {
-    dump_bucket_entry(iter->second);
+    dump_bucket_entry(*iter->second);
   }
 }
 
@@ -340,7 +340,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
 }
 
 static void dump_container_metadata(struct req_state *,
-                                    const RGWBucketEnt&,
+                                    const rgw::sal::RGWSalBucket*,
                                     const RGWQuotaInfo&,
                                     const RGWBucketWebsiteConf&);
 
@@ -450,16 +450,16 @@ next:
 } // RGWListBucket_ObjStore_SWIFT::send_response
 
 static void dump_container_metadata(struct req_state *s,
-                                    const RGWBucketEnt& bucket,
+                                    const rgw::sal::RGWSalBucket* bucket,
                                     const RGWQuotaInfo& quota,
                                     const RGWBucketWebsiteConf& ws_conf)
 {
   /* Adding X-Timestamp to keep align with Swift API */
   dump_header(s, "X-Timestamp", utime_t(s->bucket_info.creation_time));
 
-  dump_header(s, "X-Container-Object-Count", bucket.count);
-  dump_header(s, "X-Container-Bytes-Used", bucket.size);
-  dump_header(s, "X-Container-Bytes-Used-Actual", bucket.size_rounded);
+  dump_header(s, "X-Container-Object-Count", bucket->get_count());
+  dump_header(s, "X-Container-Bytes-Used", bucket->get_size());
+  dump_header(s, "X-Container-Bytes-Used-Actual", bucket->get_size_rounded());
 
   if (s->object.empty()) {
     auto swift_policy = \
@@ -849,8 +849,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
-    auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-    r = store->getRados()->get_bucket_info(obj_ctx, s->user->user_id.tenant,
+    r = store->getRados()->get_bucket_info(store->svc(), s->user->user_id.tenant,
 			       bucket_name, bucket_info, nullptr,
 			       s->yield, &bucket_attrs);
     if (r < 0) {
@@ -2110,7 +2109,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;
-  int ret = store->getRados()->get_bucket_info(*s->sysobj_ctx,
+  int ret = store->getRados()->get_bucket_info(store->svc(),
                                    bucket_tenant, bucket_name,
                                    bucket_info, nullptr, s->yield);
   if (ret < 0) {

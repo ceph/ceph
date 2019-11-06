@@ -122,10 +122,16 @@ class TestProgress(MgrTestCase):
         self.wait_until_true(lambda: self._is_complete(initial_event['id']),
                              timeout=self.EVENT_CREATION_PERIOD)
 
-            
-        # Wait for progress event marked in to pop up
-        self.wait_until_equal(lambda: len(self._events_in_progress()), 1,
-                              timeout=self.EVENT_CREATION_PERIOD)
+        try:
+            # Wait for progress event marked in to pop up
+            self.wait_until_equal(lambda: len(self._events_in_progress()), 1,
+                                  timeout=self.EVENT_CREATION_PERIOD)
+        except RuntimeError as ex:
+            if not "Timed out after" in str(ex):
+                raise ex
+
+            log.info("There was no PGs affected by osd being marked in")
+            return None
 
         new_event = self._events_in_progress()[0]
         log.info(json.dumps(new_event, indent=1))
@@ -200,10 +206,11 @@ class TestProgress(MgrTestCase):
         ev1 = self._simulate_failure()
 
         ev2 = self._simulate_back_in([0], ev1)
-        
-        # Wait for progress event to ultimately complete
-        self.wait_until_true(lambda: self._is_complete(ev2['id']),
-                             timeout=self.RECOVERY_PERIOD)
+
+        if ev2 is not None:
+            # Wait for progress event to ultimately complete
+            self.wait_until_true(lambda: self._is_complete(ev2['id']),
+                                 timeout=self.RECOVERY_PERIOD)
 
         self.assertTrue(self._is_quiet())
 

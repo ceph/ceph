@@ -32,6 +32,7 @@ if(WITH_BLUESTORE)
     bluestore/FreelistManager.cc
     bluestore/StupidAllocator.cc
     bluestore/BitmapAllocator.cc
+    bluestore/AvlAllocator.cc
   )
 endif(WITH_BLUESTORE)
 
@@ -104,6 +105,7 @@ endif()
 
 if(WITH_LTTNG)
   add_dependencies(os objectstore-tp)
+  add_dependencies(os bluestore-tp)
 endif()
 
 target_link_libraries(os kv)
@@ -125,6 +127,6 @@ if(WITH_BLUESTORE_PMEM)
   target_link_libraries(os pmem::pmem)
 endif()
 
-if(WITH_LTTNG AND WITH_EVENTTRACE)
+if(WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)
 endif()

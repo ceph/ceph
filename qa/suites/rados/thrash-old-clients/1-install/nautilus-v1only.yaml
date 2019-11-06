@@ -2,6 +2,8 @@ overrides:
   ceph:
     mon_bind_msgr2: false
     mon_bind_addrvec: false
+    log-whitelist:
+      - \(MON_DOWN\)
     conf:
       global:
         ms type: async
@@ -9,6 +11,8 @@ overrides:
 tasks:
 - install:
     branch: nautilus
+    exclude_packages:
+      - ceph-daemon
 - install.upgrade:
     mon.a:
     mon.b:

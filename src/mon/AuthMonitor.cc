@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <sstream>
@@ -34,6 +34,7 @@
 #include "include/ceph_assert.h"
 
 #include "mds/MDSAuthCaps.h"
+#include "mgr/MgrCap.h"
 #include "osd/OSDCap.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -464,7 +465,7 @@ version_t AuthMonitor::get_trim_to() const
 
 bool AuthMonitor::preprocess_query(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
@@ -490,7 +491,7 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
 
 bool AuthMonitor::prepare_update(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
@@ -569,7 +570,7 @@ uint64_t AuthMonitor::assign_global_id(bool should_increase_max)
 
 bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 {
-  MAuth *m = static_cast<MAuth*>(op->get_req());
+  auto m = op->get_req<MAuth>();
   dout(10) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
 
   MonSession *s = op->get_session();
@@ -757,7 +758,7 @@ done:
 
 bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   int r = -1;
   bufferlist rdata;
   stringstream ss, ds;
@@ -1241,9 +1242,14 @@ bool AuthMonitor::valid_caps(
     const string& caps,
     ostream *out)
 {
-  if (type == "mon" || type == "mgr") {
-    MonCap tmp;
-    if (!tmp.parse(caps, out)) {
+  if (type == "mon") {
+    MonCap moncap;
+    if (!moncap.parse(caps, out)) {
+      return false;
+    }
+  } else if (type == "mgr") {
+    MgrCap mgrcap;
+    if (!mgrcap.parse(caps, out)) {
       return false;
     }
   } else if (type == "osd") {
@@ -1282,7 +1288,7 @@ bool AuthMonitor::valid_caps(const vector<string>& caps, ostream *out)
 
 bool AuthMonitor::prepare_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   stringstream ss, ds;
   bufferlist rdata;
   string rs;

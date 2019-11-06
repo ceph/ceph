@@ -50,6 +50,8 @@ protected:
   bufferlist health_json;
   bufferlist mon_status_json;
 
+  class ClusterSocketHook *asok_hook;
+
 public:
 
   void load_digest(MMgrDigest *m);
@@ -137,7 +139,12 @@ public:
       pg_map,
       std::forward<Args>(args)...);
   }
-
+  void final_init();
+  void shutdown();
+  bool asok_command(std::string_view admin_command,
+		    const cmdmap_t& cmdmap,
+		    Formatter *f,
+		    ostream& ss);
 };
 
 #endif

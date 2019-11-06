@@ -96,14 +96,18 @@ export class PoolListComponent implements OnInit {
       }
     ];
 
-    this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
-      if (_.has(data, 'value')) {
-        const monSection = _.find(data.value, (v) => {
-          return v.section === 'mon';
-        }) || { value: false };
-        this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
-      }
-    });
+    // Note, we need read permissions to get the 'mon_allow_pool_delete'
+    // configuration option.
+    if (this.permissions.configOpt.read) {
+      this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
+        if (_.has(data, 'value')) {
+          const monSection = _.find(data.value, (v) => {
+            return v.section === 'mon';
+          }) || { value: false };
+          this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
+        }
+      });
+    }
   }
 
   ngOnInit() {
@@ -204,7 +208,7 @@ export class PoolListComponent implements OnInit {
       },
       (task) => task.name.startsWith(`${BASE_URL}/`),
       (pool, task) => task.metadata['pool_name'] === pool.pool_name,
-      { default: (task: ExecutingTask) => new Pool(task.metadata['pool_name']) }
+      { default: (metadata: any) => new Pool(metadata['pool_name']) }
     );
   }
 
@@ -218,6 +222,7 @@ export class PoolListComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'Pool',
+        itemNames: [name],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
@@ -278,7 +283,9 @@ export class PoolListComponent implements OnInit {
   }
 
   getSelectionTiers() {
-    const cacheTierIds = this.selection.hasSingleSelection ? this.selection.first()['tiers'] : [];
+    const cacheTierIds = this.selection.hasSingleSelection
+      ? this.selection.first()['tiers'] || []
+      : [];
     this.selectionCacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
   }
 

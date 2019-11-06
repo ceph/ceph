@@ -8,6 +8,7 @@ import inspect
 import json
 import os
 import pkgutil
+import re
 import sys
 
 import six
@@ -24,7 +25,7 @@ from ..services.auth import AuthManager, JwtManager
 from ..plugins import PLUGIN_MANAGER
 
 
-def EndpointDoc(description="", group="", parameters=None, responses=None):
+def EndpointDoc(description="", group="", parameters=None, responses=None):  # noqa: N802
     if not isinstance(description, str):
         raise Exception("%s has been called with a description that is not a string: %s"
                         % (EndpointDoc.__name__, description))
@@ -185,7 +186,7 @@ class UiApiController(Controller):
                                               secure=secure)
 
 
-def Endpoint(method=None, path=None, path_params=None, query_params=None,
+def Endpoint(method=None, path=None, path_params=None, query_params=None,  # noqa: N802
              json_response=True, proxy=False, xml=False):
 
     if method is None:
@@ -243,7 +244,7 @@ def Endpoint(method=None, path=None, path_params=None, query_params=None,
     return _wrapper
 
 
-def Proxy(path=None):
+def Proxy(path=None):  # noqa: N802
     if path is None:
         path = ""
     elif path == "/":
@@ -292,24 +293,32 @@ ENDPOINT_MAP = collections.defaultdict(list)
 def generate_controller_routes(endpoint, mapper, base_url):
     inst = endpoint.inst
     ctrl_class = endpoint.ctrl
-    endp_base_url = None
 
     if endpoint.proxy:
         conditions = None
     else:
         conditions = dict(method=[endpoint.method])
 
-    endp_url = endpoint.url
-    if base_url == "/":
-        base_url = ""
-    if endp_url == "/" and base_url:
-        endp_url = ""
-    url = "{}{}".format(base_url, endp_url)
+    # base_url can be empty or a URL path that starts with "/"
+    # we will remove the trailing "/" if exists to help with the
+    # concatenation with the endpoint url below
+    if base_url.endswith("/"):
+        base_url = base_url[:-1]
 
-    if '/' in url[len(base_url)+1:]:
-        endp_base_url = url[:len(base_url)+1+endp_url[1:].find('/')]
+    endp_url = endpoint.url
+
+    if endp_url.find("/", 1) == -1:
+        parent_url = "{}{}".format(base_url, endp_url)
     else:
-        endp_base_url = url
+        parent_url = "{}{}".format(base_url, endp_url[:endp_url.find("/", 1)])
+
+    # parent_url might be of the form "/.../{...}" where "{...}" is a path parameter
+    # we need to remove the path parameter definition
+    parent_url = re.sub(r'(?:/\{[^}]+\})$', '', parent_url)
+    if not parent_url:  # root path case
+        parent_url = "/"
+
+    url = "{}{}".format(base_url, endp_url)
 
     logger.debug("Mapped [%s] to %s:%s restricted to %s",
                  url, ctrl_class.__name__, endpoint.action,
@@ -327,7 +336,7 @@ def generate_controller_routes(endpoint, mapper, base_url):
     mapper.connect(name, url, controller=inst, action=endpoint.action,
                    conditions=conditions)
 
-    return endp_base_url
+    return parent_url
 
 
 def generate_routes(url_prefix):
@@ -500,10 +509,13 @@ class BaseController(object):
 
         @property
         def url(self):
+            ctrl_path = self.ctrl.get_path()
+            if ctrl_path == "/":
+                ctrl_path = ""
             if self.config['path'] is not None:
-                url = "{}{}".format(self.ctrl.get_path(), self.config['path'])
+                url = "{}{}".format(ctrl_path, self.config['path'])
             else:
-                url = "{}/{}".format(self.ctrl.get_path(), self.func.__name__)
+                url = "{}/{}".format(ctrl_path, self.func.__name__)
 
             ctrl_path_params = self.ctrl.get_path_param_names(
                 self.config['path'])
@@ -840,7 +852,7 @@ class RESTController(BaseController):
         return wrapper
 
     @staticmethod
-    def Resource(method=None, path=None, status=None, query_params=None):
+    def Resource(method=None, path=None, status=None, query_params=None):  # noqa: N802
         if not method:
             method = 'GET'
 
@@ -858,7 +870,7 @@ class RESTController(BaseController):
         return _wrapper
 
     @staticmethod
-    def Collection(method=None, path=None, status=None, query_params=None):
+    def Collection(method=None, path=None, status=None, query_params=None):  # noqa: N802
         if not method:
             method = 'GET'
 
@@ -896,21 +908,21 @@ def _set_func_permissions(func, permissions):
         func._security_permissions = list(set(permissions))
 
 
-def ReadPermission(func):
+def ReadPermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.READ)
     return func
 
 
-def CreatePermission(func):
+def CreatePermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.CREATE)
     return func
 
 
-def DeletePermission(func):
+def DeletePermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.DELETE)
     return func
 
 
-def UpdatePermission(func):
+def UpdatePermission(func):  # noqa: N802
     _set_func_permissions(func, Permission.UPDATE)
     return func

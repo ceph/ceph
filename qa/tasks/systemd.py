@@ -23,7 +23,7 @@ def task(ctx, config):
     Test ceph systemd services can start, stop and restart and
     check for any failed services and report back errors
     """
-    for remote, roles in ctx.cluster.remotes.iteritems():
+    for remote, roles in ctx.cluster.remotes.items():
         remote.run(args=['sudo', 'ps', '-eaf', run.Raw('|'),
                          'grep', 'ceph'])
         r = remote.run(args=['sudo', 'systemctl', 'list-units', run.Raw('|'),
@@ -137,6 +137,6 @@ def task(ctx, config):
                           'grep', 'ceph'])
     # wait for HEALTH_OK
     mon = get_first_mon(ctx, config)
-    (mon_remote,) = ctx.cluster.only(mon).remotes.iterkeys()
+    (mon_remote,) = ctx.cluster.only(mon).remotes.keys()
     wait_until_healthy(ctx, mon_remote, use_sudo=True)
     yield

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -31,7 +31,7 @@ struct state {
 
   state(Aio* aio, AioResult& r)
     : aio(aio),
-      c(librados::Rados::aio_create_completion(&r, nullptr, &cb)) {}
+      c(librados::Rados::aio_create_completion(&r, &cb)) {}
 };
 
 void cb(librados::completion_t, void* arg) {

@@ -3,9 +3,9 @@
           [data]="users"
           [columns]="columns"
           columnMode="flex"
-          selectionType="multi"
+          selectionType="multiClick"
           (updateSelection)="updateSelection($event)"
-          identifier="user_id"
+          identifier="uid"
           (fetchData)="getUserList($event)">
   <cd-table-actions class="table-actions"
                     [permission]="permission"

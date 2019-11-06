@@ -26,7 +26,6 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
-#include "global/global_context.h"
 #include "include/ceph_features.h"
 #include "include/str_map.h"
 
@@ -1844,45 +1843,6 @@ bool OSDMap::check_pg_upmaps(
     }
     vector<int> raw, up;
     pg_to_raw_upmap(pg, &raw, &up);
-    auto i = pg_upmap.find(pg);
-    if (i != pg_upmap.end() && raw == i->second) {
-      ldout(cct, 10) << " removing redundant pg_upmap "
-                     << i->first << " " << i->second
-                     << dendl;
-      to_cancel->push_back(pg);
-      continue;
-    }
-    auto j = pg_upmap_items.find(pg);
-    if (j != pg_upmap_items.end()) {
-      mempool::osdmap::vector<pair<int,int>> newmap;
-      for (auto& p : j->second) {
-        if (std::find(raw.begin(), raw.end(), p.first) == raw.end()) {
-          // cancel mapping if source osd does not exist anymore
-          continue;
-        }
-        if (p.second != CRUSH_ITEM_NONE && p.second < max_osd &&
-            p.second >= 0 && osd_weight[p.second] == 0) {
-          // cancel mapping if target osd is out
-          continue;
-        }
-        newmap.push_back(p);
-      }
-      if (newmap.empty()) {
-        ldout(cct, 10) << " removing no-op pg_upmap_items "
-                       << j->first << " " << j->second
-                       << dendl;
-        to_cancel->push_back(pg);
-        continue;
-      } else if (newmap != j->second) {
-        ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
-                       << j->first << " " << j->second
-                       << " -> " << newmap
-                       << dendl;
-        to_remap->insert({pg, newmap});
-        any_change = true;
-        continue;
-      }
-    }
     auto crush_rule = get_pg_pool_crush_rule(pg);
     auto r = crush->verify_upmap(cct,
                                  crush_rule,
@@ -1925,6 +1885,47 @@ bool OSDMap::check_pg_upmaps(
         // osd is out/crush-out
         to_cancel->push_back(pg);
         break;
+      }
+    }
+    if (!to_cancel->empty() && to_cancel->back() == pg)
+      continue;
+    // okay, upmap is valid
+    // continue to check if it is still necessary
+    auto i = pg_upmap.find(pg);
+    if (i != pg_upmap.end() && raw == i->second) {
+      ldout(cct, 10) << " removing redundant pg_upmap "
+                     << i->first << " " << i->second
+                     << dendl;
+      to_cancel->push_back(pg);
+      continue;
+    }
+    auto j = pg_upmap_items.find(pg);
+    if (j != pg_upmap_items.end()) {
+      mempool::osdmap::vector<pair<int,int>> newmap;
+      for (auto& p : j->second) {
+        if (std::find(raw.begin(), raw.end(), p.first) == raw.end()) {
+          // cancel mapping if source osd does not exist anymore
+          continue;
+        }
+        if (p.second != CRUSH_ITEM_NONE && p.second < max_osd &&
+            p.second >= 0 && osd_weight[p.second] == 0) {
+          // cancel mapping if target osd is out
+          continue;
+        }
+        newmap.push_back(p);
+      }
+      if (newmap.empty()) {
+        ldout(cct, 10) << " removing no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << dendl;
+        to_cancel->push_back(pg);
+      } else if (newmap != j->second) {
+        ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << " -> " << newmap
+                       << dendl;
+        to_remap->insert({pg, newmap});
+        any_change = true;
       }
     }
   }
@@ -3620,10 +3621,6 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
 string OSDMap::get_flag_string(unsigned f)
 {
   string s;
-  if ( f& CEPH_OSDMAP_NEARFULL)
-    s += ",nearfull";
-  if (f & CEPH_OSDMAP_FULL)
-    s += ",full";
   if (f & CEPH_OSDMAP_PAUSERD)
     s += ",pauserd";
   if (f & CEPH_OSDMAP_PAUSEWR)
@@ -3969,8 +3966,6 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
     f->dump_int("num_osds", get_num_osds());
     f->dump_int("num_up_osds", get_num_up_osds());
     f->dump_int("num_in_osds", get_num_in_osds());
-    f->dump_bool("full", test_flag(CEPH_OSDMAP_FULL) ? true : false);
-    f->dump_bool("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ? true : false);
     f->dump_unsigned("num_remapped_pgs", get_num_pg_temp());
   } else {
     utime_t now = ceph_clock_now();
@@ -4000,10 +3995,6 @@ void OSDMap::print_oneline_summary(ostream& out) const
       << get_num_osds() << " total, "
       << get_num_up_osds() << " up, "
       << get_num_in_osds() << " in";
-  if (test_flag(CEPH_OSDMAP_FULL))
-    out << "; full flag set";
-  else if (test_flag(CEPH_OSDMAP_NEARFULL))
-    out << "; nearfull flag set";
 }
 
 bool OSDMap::crush_rule_in_use(int rule_id) const
@@ -4133,9 +4124,13 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].last_change = epoch;
       pools[pool].application_metadata.insert(
         {pg_pool_t::APPLICATION_NAME_RBD, {}});
-      auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
-        cct->_conf.get_val<string>("osd_pool_default_pg_autoscale_mode"));
-      pools[pool].pg_autoscale_mode = m >= 0 ? m : 0;
+      if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
+            cct->_conf.get_val<string>("osd_pool_default_pg_autoscale_mode"));
+	  m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
+	pools[pool].pg_autoscale_mode = m;
+      } else {
+	pools[pool].pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
+      }
       pool_name[pool] = plname;
       name_pool[plname] = pool;
     }
@@ -5468,7 +5463,8 @@ void print_osd_utilization(const OSDMap& osdmap,
   }
 }
 
-void OSDMap::check_health(health_check_map_t *checks) const
+void OSDMap::check_health(CephContext *cct,
+			  health_check_map_t *checks) const
 {
   int num_osds = get_num_osds();
 
@@ -5513,7 +5509,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
 	    break;
 	  type = crush->get_bucket_type(parent_id);
 	  if (!subtree_type_is_down(
-		g_ceph_context, parent_id, type,
+		cct, parent_id, type,
 		&down_in_osds, &up_in_osds, &subtree_up, &subtree_type_down))
 	    break;
 	  current = parent_id;
@@ -5645,7 +5641,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   {
     // An osd could configure failsafe ratio, to something different
     // but for now assume it is the same here.
-    float fsr = g_conf()->osd_failsafe_full_ratio;
+    float fsr = cct->_conf->osd_failsafe_full_ratio;
     if (fsr > 1.0) fsr /= 100;
     float fr = get_full_ratio();
     float br = get_backfillfull_ratio();
@@ -5725,8 +5721,6 @@ void OSDMap::check_health(health_check_map_t *checks) const
   {
     // warn about flags
     uint64_t warn_flags =
-      CEPH_OSDMAP_NEARFULL |
-      CEPH_OSDMAP_FULL |
       CEPH_OSDMAP_PAUSERD |
       CEPH_OSDMAP_PAUSEWR |
       CEPH_OSDMAP_PAUSEREC |
@@ -5798,19 +5792,19 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // OLD_CRUSH_TUNABLES
-  if (g_conf()->mon_warn_on_legacy_crush_tunables) {
+  if (cct->_conf->mon_warn_on_legacy_crush_tunables) {
     string min = crush->get_min_required_version();
-    if (min < g_conf()->mon_crush_min_required_version) {
+    if (min < cct->_conf->mon_crush_min_required_version) {
       ostringstream ss;
       ss << "crush map has legacy tunables (require " << min
-	 << ", min is " << g_conf()->mon_crush_min_required_version << ")";
+	 << ", min is " << cct->_conf->mon_crush_min_required_version << ")";
       auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str(), 0);
       d.detail.push_back("see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
     }
   }
 
   // OLD_CRUSH_STRAW_CALC_VERSION
-  if (g_conf()->mon_warn_on_crush_straw_calc_version_zero) {
+  if (cct->_conf->mon_warn_on_crush_straw_calc_version_zero) {
     if (crush->get_straw_calc_version() == 0) {
       ostringstream ss;
       ss << "crush map has straw_calc_version=0";
@@ -5821,7 +5815,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // CACHE_POOL_NO_HIT_SET
-  if (g_conf()->mon_warn_on_cache_pools_without_hit_sets) {
+  if (cct->_conf->mon_warn_on_cache_pools_without_hit_sets) {
     list<string> detail;
     for (auto p = pools.cbegin(); p != pools.cend(); ++p) {
       const pg_pool_t& info = p->second;
@@ -5898,6 +5892,27 @@ void OSDMap::check_health(health_check_map_t *checks) const
       auto& d = checks->add("POOL_NEARFULL", HEALTH_WARN, ss.str(),
 			    nearfull_detail.size());
       d.detail.swap(nearfull_detail);
+    }
+  }
+
+  // POOL_PG_NUM_NOT_POWER_OF_TWO
+  if (cct->_conf.get_val<bool>("mon_warn_on_pool_pg_num_not_power_of_two")) {
+    list<string> detail;
+    for (auto it : get_pools()) {
+      if (!isp2(it.second.get_pg_num_target())) {
+	ostringstream ss;
+	ss << "pool '" << get_pool_name(it.first)
+	   << "' pg_num " << it.second.get_pg_num_target()
+	   << " is not a power of two";
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have non-power-of-two pg_num";
+      auto& d = checks->add("POOL_PG_NUM_NOT_POWER_OF_TWO", HEALTH_WARN,
+			    ss.str(), detail.size());
+      d.detail.swap(detail);
     }
   }
 }

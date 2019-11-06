@@ -176,6 +176,12 @@ cdef extern from "rados/librados.h" nogil:
                           const char *inbuf, size_t inbuflen,
                           char **outbuf, size_t *outbuflen,
                           char **outs, size_t *outslen)
+    int rados_mgr_command_target(rados_t cluster,
+                          const char *name,
+			  const char **cmd, size_t cmdlen,
+                          const char *inbuf, size_t inbuflen,
+                          char **outbuf, size_t *outbuflen,
+                          char **outs, size_t *outslen)
     int rados_mon_command_target(rados_t cluster, const char *name, const char **cmd, size_t cmdlen,
                                  const char *inbuf, size_t inbuflen,
                                  char **outbuf, size_t *outbuflen,
@@ -260,7 +266,7 @@ cdef extern from "rados/librados.h" nogil:
     rados_read_op_t rados_create_read_op()
     void rados_release_read_op(rados_read_op_t read_op)
 
-    int rados_aio_create_completion(void * cb_arg, rados_callback_t cb_complete, rados_callback_t cb_safe, rados_completion_t * pc)
+    int rados_aio_create_completion2(void * cb_arg, rados_callback_t cb_complete, rados_completion_t * pc)
     void rados_aio_release(rados_completion_t c)
     int rados_aio_stat(rados_ioctx_t io, const char *oid, rados_completion_t completion, uint64_t *psize, time_t *pmtime)
     int rados_aio_write(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len, uint64_t off)
@@ -272,11 +278,8 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_aio_get_return_value(rados_completion_t c)
     int rados_aio_wait_for_complete_and_cb(rados_completion_t c)
-    int rados_aio_wait_for_safe_and_cb(rados_completion_t c)
     int rados_aio_wait_for_complete(rados_completion_t c)
-    int rados_aio_wait_for_safe(rados_completion_t c)
     int rados_aio_is_complete(rados_completion_t c)
-    int rados_aio_is_safe(rados_completion_t c)
 
     int rados_exec(rados_ioctx_t io, const char * oid, const char * cls, const char * method,
                    const char * in_buf, size_t in_len, char * buf, size_t out_len)
@@ -1403,7 +1406,7 @@ Rados object in state %s." % self.state)
         finally:
             free(_cmd)
 
-    def mgr_command(self, cmd, inbuf, timeout=0):
+    def mgr_command(self, cmd, inbuf, timeout=0, target=None):
         """
         :return: (int ret, string outbuf, string outs)
         """
@@ -1413,8 +1416,11 @@ Rados object in state %s." % self.state)
 
         cmd = cstr_list(cmd, 'cmd')
         inbuf = cstr(inbuf, 'inbuf')
+        target = cstr(target, 'target', opt=True)
 
         cdef:
+            char *_target = opt_str(target)
+
             char **_cmd = to_bytes_array(cmd)
             size_t _cmdlen = len(cmd)
 
@@ -1427,12 +1433,21 @@ Rados object in state %s." % self.state)
             size_t _outs_len
 
         try:
-            with nogil:
-                ret = rados_mgr_command(self.cluster,
-                                        <const char **>_cmd, _cmdlen,
-                                        <const char*>_inbuf, _inbuf_len,
-                                        &_outbuf, &_outbuf_len,
-                                        &_outs, &_outs_len)
+            if target is not None:
+                with nogil:
+                    ret = rados_mgr_command_target(self.cluster,
+		                            <const char*>_target,
+                                            <const char **>_cmd, _cmdlen,
+                                            <const char*>_inbuf, _inbuf_len,
+                                            &_outbuf, &_outbuf_len,
+                                            &_outs, &_outs_len)
+            else:
+                with nogil:
+                    ret = rados_mgr_command(self.cluster,
+                                            <const char **>_cmd, _cmdlen,
+                                            <const char*>_inbuf, _inbuf_len,
+                                            &_outbuf, &_outbuf_len,
+                                            &_outs, &_outs_len)
 
             my_outs = decode_cstr(_outs[:_outs_len])
             my_outbuf = _outbuf[:_outbuf_len]
@@ -1871,9 +1886,7 @@ cdef class Completion(object):
 
         :returns: True if the operation is safe
         """
-        with nogil:
-            ret = rados_aio_is_safe(self.rados_comp)
-        return ret == 1
+        return self.is_complete()
 
     def is_complete(self):
         """
@@ -1891,10 +1904,9 @@ cdef class Completion(object):
         """
         Wait for an asynchronous operation to be marked safe
 
-        This does not imply that the safe callback has finished.
+        wait_for_safe() is an alias of wait_for_complete()  since Luminous
         """
-        with nogil:
-            rados_aio_wait_for_safe(self.rados_comp)
+        self.wait_for_complete()
 
     def wait_for_complete(self):
         """
@@ -1910,8 +1922,7 @@ cdef class Completion(object):
         Wait for an asynchronous operation to be marked safe and for
         the safe callback to have returned
         """
-        with nogil:
-            rados_aio_wait_for_safe_and_cb(self.rados_comp)
+        return self.wait_for_complete_and_cb()
 
     def wait_for_complete_and_cb(self):
         """
@@ -1953,15 +1964,9 @@ cdef class Completion(object):
 
     def _complete(self):
         self.oncomplete(self)
-        with self.ioctx.lock:
-            if self.oncomplete:
-                self.ioctx.complete_completions.remove(self)
-
-    def _safe(self):
-        self.onsafe(self)
-        with self.ioctx.lock:
-            if self.onsafe:
-                self.ioctx.safe_completions.remove(self)
+        if self.onsafe:
+            self.onsafe(self)
+        self._cleanup()
 
     def _cleanup(self):
         with self.ioctx.lock:
@@ -2153,15 +2158,6 @@ class ReadOpCtx(ReadOp, OpCtx):
     """read operation context manager"""
 
 
-cdef int __aio_safe_cb(rados_completion_t completion, void *args) with gil:
-    """
-    Callback to onsafe() for asynchronous operations
-    """
-    cdef object cb = <object>args
-    cb._safe()
-    return 0
-
-
 cdef int __aio_complete_cb(rados_completion_t completion, void *args) with gil:
     """
     Callback to oncomplete() for asynchronous operations
@@ -2222,17 +2218,14 @@ cdef class Ioctx(object):
 
         cdef:
             rados_callback_t complete_cb = NULL
-            rados_callback_t safe_cb = NULL
             rados_completion_t completion
             PyObject* p_completion_obj= <PyObject*>completion_obj
 
         if oncomplete:
             complete_cb = <rados_callback_t>&__aio_complete_cb
-        if onsafe:
-            safe_cb = <rados_callback_t>&__aio_safe_cb
 
         with nogil:
-            ret = rados_aio_create_completion(p_completion_obj, complete_cb, safe_cb,
+            ret = rados_aio_create_completion2(p_completion_obj, complete_cb,
                                               &completion)
         if ret < 0:
             raise make_ex(ret, "error getting a completion")
@@ -3937,6 +3930,44 @@ returned %d, but should return zero on success." % (self.name, ret))
         finally:
             free(apps)
 
+    def application_metadata_get(self, app_name, key):
+        """
+        Gets application metadata on an OSD pool for the given key
+
+        :param app_name: application name
+        :type app_name: str
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+
+        :raises: :class:`Error`
+        """
+
+        app_name =  cstr(app_name, 'app_name')
+        key = cstr(key, 'key')
+        cdef:
+            char *_app_name = app_name
+            char *_key = key
+            size_t size = 129
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rados_application_metadata_get(self.io, _app_name,
+                                                         _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s for application %s' % (key, _app_name))
+            elif ret != 0:
+                raise make_ex(ret, 'error getting metadata %s for application %s' %
+                              (key, _app_name))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
     def application_metadata_set(self, app_name, key, value):
         """
         Sets application metadata on an OSD pool
@@ -4015,7 +4046,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                                 c_keys[:key_length].split(b'\0')]
                     vals = [decode_cstr(val) for val in
                                 c_vals[:val_length].split(b'\0')]
-                    return zip(keys, vals)[:-1]
+                    return list(zip(keys, vals))[:-1]
                 elif ret == -errno.ERANGE:
                     pass
                 else:

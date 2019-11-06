@@ -334,6 +334,7 @@ OPTION(mon_client_ping_timeout, OPT_DOUBLE)   // fail if we don't hear back
 OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE) // each time we reconnect to a monitor, double our timeout
 OPTION(mon_client_hunt_interval_max_multiple, OPT_DOUBLE) // up to a max of 10*default (30 seconds)
 OPTION(mon_client_max_log_entries_per_message, OPT_INT)
+OPTION(mon_client_directed_command_retry, OPT_INT)
 OPTION(client_cache_size, OPT_INT)
 OPTION(client_cache_mid, OPT_FLOAT)
 OPTION(client_use_random_mds, OPT_BOOL)
@@ -577,6 +578,7 @@ OPTION(osd_pool_default_cache_target_full_ratio, OPT_FLOAT)
 OPTION(osd_pool_default_cache_min_flush_age, OPT_INT)  // seconds
 OPTION(osd_pool_default_cache_min_evict_age, OPT_INT)  // seconds
 OPTION(osd_pool_default_cache_max_evict_check_size, OPT_INT)  // max size to check for eviction
+OPTION(osd_pool_default_read_lease_ratio, OPT_FLOAT)
 OPTION(osd_hit_set_min_size, OPT_INT)  // min target size for a HitSet
 OPTION(osd_hit_set_max_size, OPT_INT)  // max target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR) // rados namespace for hit_set tracking
@@ -618,30 +620,6 @@ OPTION(osd_op_num_shards_ssd, OPT_INT)
 OPTION(osd_op_queue, OPT_STR)
 
 OPTION(osd_op_queue_cut_off, OPT_STR) // Min priority to go to strict queue. (low, high)
-
-// mClock priority queue parameters for five types of ops
-OPTION(osd_op_queue_mclock_client_op_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_client_op_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_client_op_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_pg_delete_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_pg_delete_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_pg_delete_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_peering_event_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_peering_event_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_peering_event_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_anticipation_timeout, OPT_DOUBLE)
 
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
@@ -755,7 +733,6 @@ OPTION(osd_op_complaint_time, OPT_FLOAT) // how many seconds old makes an op com
 OPTION(osd_command_max_records, OPT_INT)
 OPTION(osd_max_pg_blocked_by, OPT_U32)    // max peer osds to report that are blocking our progress
 OPTION(osd_op_log_threshold, OPT_INT) // how many op log messages to show in one go
-OPTION(osd_verify_sparse_read_holes, OPT_BOOL)  // read fiemap-reported holes and verify they are zeros
 OPTION(osd_backoff_on_unfound, OPT_BOOL)   // object unfound
 OPTION(osd_backoff_on_degraded, OPT_BOOL) // [mainly for debug?] object unreadable/writeable
 OPTION(osd_backoff_on_peering, OPT_BOOL)  // [debug] pg peering
@@ -815,13 +792,6 @@ OPTION(leveldb_paranoid, OPT_BOOL) // leveldb paranoid flag
 OPTION(leveldb_log, OPT_STR)  // enable leveldb log file
 OPTION(leveldb_compact_on_mount, OPT_BOOL)
 
-OPTION(kinetic_host, OPT_STR) // hostname or ip address of a kinetic drive to use
-OPTION(kinetic_port, OPT_INT) // port number of the kinetic drive
-OPTION(kinetic_user_id, OPT_INT) // kinetic user to authenticate as
-OPTION(kinetic_hmac_key, OPT_STR) // kinetic key to authenticate with
-OPTION(kinetic_use_ssl, OPT_BOOL) // whether to secure kinetic traffic with TLS
-
-
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64)  // rocksdb cache size (unless set by bluestore/etc)
 OPTION(rocksdb_cache_row_ratio, OPT_FLOAT)   // ratio of cache for row (vs block)
@@ -849,7 +819,6 @@ OPTION(mon_rocksdb_options, OPT_STR)
 OPTION(osd_client_op_priority, OPT_U32)
 OPTION(osd_recovery_op_priority, OPT_U32)
 OPTION(osd_peering_op_priority, OPT_U32)
-OPTION(osd_kick_recovery_op_priority, OPT_U32)
 
 OPTION(osd_snap_trim_priority, OPT_U32)
 OPTION(osd_snap_trim_cost, OPT_U32) // set default cost equal to 1MB io
@@ -886,6 +855,7 @@ OPTION(osd_max_attr_size, OPT_U64)
 
 OPTION(osd_max_omap_entries_per_request, OPT_U64)
 OPTION(osd_max_omap_bytes_per_request, OPT_U64)
+OPTION(osd_max_write_op_reply_len, OPT_U64)
 
 OPTION(osd_objectstore, OPT_STR)  // ObjectStore backend type
 OPTION(osd_objectstore_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
@@ -1038,12 +1008,14 @@ OPTION(bluestore_max_defer_interval, OPT_U64)
 OPTION(bluestore_rocksdb_options, OPT_STR)
 OPTION(bluestore_fsck_on_mount, OPT_BOOL)
 OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL)
+OPTION(bluestore_fsck_quick_fix_on_mount, OPT_BOOL)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL)
 OPTION(bluestore_fsck_on_umount_deep, OPT_BOOL)
 OPTION(bluestore_fsck_on_mkfs, OPT_BOOL)
 OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL)
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL) // submit kv txn in queueing thread (not kv_sync_thread)
 OPTION(bluestore_fsck_read_bytes_cap, OPT_U64)
+OPTION(bluestore_fsck_quick_fix_threads, OPT_INT)
 OPTION(bluestore_throttle_bytes, OPT_U64)
 OPTION(bluestore_throttle_deferred_bytes, OPT_U64)
 OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64)
@@ -1073,7 +1045,7 @@ OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL)
 OPTION(bluestore_debug_random_read_err, OPT_DOUBLE)
 OPTION(bluestore_debug_inject_bug21040, OPT_BOOL)
 OPTION(bluestore_debug_inject_csum_err_probability, OPT_FLOAT)
-OPTION(bluestore_no_per_pool_stats_tolerance, OPT_STR)
+OPTION(bluestore_fsck_error_on_no_per_pool_stats, OPT_BOOL)
 OPTION(bluestore_warn_on_bluefs_spillover, OPT_BOOL)
 OPTION(bluestore_warn_on_legacy_statfs, OPT_BOOL)
 OPTION(bluestore_fsck_error_on_no_per_pool_omap, OPT_BOOL)
@@ -1264,6 +1236,10 @@ OPTION(rados_osd_op_timeout, OPT_DOUBLE) // how many seconds to wait for a respo
 OPTION(rados_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
 
+OPTION(rgw_max_attr_name_len, OPT_SIZE)
+OPTION(rgw_max_attr_size, OPT_SIZE)
+OPTION(rgw_max_attrs_num_in_req, OPT_U64)
+
 OPTION(rgw_max_chunk_size, OPT_INT)
 OPTION(rgw_put_obj_min_window_size, OPT_INT)
 OPTION(rgw_put_obj_max_window_size, OPT_INT)
@@ -1432,7 +1408,7 @@ OPTION(rgw_usage_log_tick_interval, OPT_INT) // flush pending log data every X s
 OPTION(rgw_init_timeout, OPT_INT) // time in seconds
 OPTION(rgw_mime_types_file, OPT_STR)
 OPTION(rgw_gc_max_objs, OPT_INT)
-OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc
+OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc, recommended lower limit is 30 mins
 OPTION(rgw_gc_processor_max_time, OPT_INT)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT)  // gc processor cycle time
 OPTION(rgw_gc_max_concurrent_io, OPT_INT)  // gc processor cycle time
@@ -1518,6 +1494,12 @@ OPTION(rgw_swift_versioning_enabled, OPT_BOOL) // whether swift object versionin
 OPTION(rgw_trust_forwarded_https, OPT_BOOL) // trust Forwarded and X-Forwarded-Proto headers for ssl termination
 OPTION(rgw_crypt_require_ssl, OPT_BOOL) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encryption of rgw objects
+
+OPTION(rgw_crypt_s3_kms_backend, OPT_STR) // Where SSE-KMS encryption keys are stored
+OPTION(rgw_crypt_vault_auth, OPT_STR) // Type of authentication method to be used with Vault
+OPTION(rgw_crypt_vault_token_file, OPT_STR) // Path to the token file for Vault authentication
+OPTION(rgw_crypt_vault_addr, OPT_STR) // URL to Vault server endpoint
+
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms
                                                       // defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
 OPTION(rgw_crypt_suppress_logs, OPT_BOOL)   // suppress logs that might print customer key
@@ -1558,3 +1540,6 @@ OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web t
 OPTION(rgw_sts_client_id, OPT_STR) // Client Id
 OPTION(rgw_sts_client_secret, OPT_STR) // Client Secret
 OPTION(debug_allow_any_pool_priority, OPT_BOOL)
+OPTION(rgw_gc_max_deferred_entries_size, OPT_U64) // GC deferred entries size in queue head
+OPTION(rgw_gc_max_queue_size, OPT_U64) // GC max queue size
+OPTION(rgw_gc_max_deferred, OPT_U64) // GC max number of deferred entries

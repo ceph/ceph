@@ -106,7 +106,7 @@ void DPDKWorker::initialize()
     sdev->set_local_queue(i, std::move(qp));
     std::lock_guard l{lock};
     ++queue_init_done;
-    cond.Signal();
+    cond.notify_all();
   } else {
     // auto master = qid % sdev->hw_queues_count();
     // sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
@@ -231,7 +231,7 @@ int DPDKWorker::listen(entity_addr_t &sa,
   // _inet.set_gw_address(ipv4_address(std::get<1>(tuples[idx])));
   // _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[idx])));
   return tcpv4_listen(_impl->_inet.get_tcp(), sa.get_port(), opt, sa.get_type(),
-		      sock);
+		      addr_slot, sock);
 }
 
 int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)

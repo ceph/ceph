@@ -10,7 +10,7 @@
 #include <vector>
 #endif
 
-namespace ceph::osd {
+namespace crimson::osd {
   struct peer_shard_t {
     pg_shard_t shard;
     eversion_t last_complete_ondisk;

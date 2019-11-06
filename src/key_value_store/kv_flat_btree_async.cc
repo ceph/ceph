@@ -659,7 +659,7 @@ int KvFlatBtreeAsync::read_object(const string &obj, object_data * odata) {
   get_obj.omap_get_vals2("", LONG_MAX, &odata->omap, nullptr, &err);
   get_obj.getxattr("unwritable", &unw_bl, &err);
   io_ctx.aio_operate(obj, obj_aioc, &get_obj, NULL);
-  obj_aioc->wait_for_safe();
+  obj_aioc->wait_for_complete();
   err = obj_aioc->get_return_value();
   if (err < 0){
     //possibly -ENOENT, meaning someone else deleted it.
@@ -680,7 +680,7 @@ int KvFlatBtreeAsync::read_object(const string &obj, rebalance_args * args) {
   int err;
   librados::AioCompletion * a = rados.aio_create_completion();
   io_ctx.aio_exec(obj, a, "kvs", "maybe_read_for_balance", inbl, &outbl);
-  a->wait_for_safe();
+  a->wait_for_complete();
   err = a->get_return_value();
   if (err < 0) {
     if (verbose) cout << "\t\t" << client_name
@@ -909,7 +909,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
       if ((int)idata.to_create.size() == count) {
 	cout << "starting aiowrite waiting loop" << std::endl;
 	  for (count -= 1; count >= 0; count--) {
-	    aiocs[count]->wait_for_safe();
+	    aiocs[count]->wait_for_complete();
 	    err = aiocs[count]->get_return_value();
 	    if (err < 0) {
 	      //this can happen if someone else was cleaning up after us.
@@ -1826,7 +1826,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
   encode(keys, inbl);
   librados::AioCompletion * aioc = rados.aio_create_completion();
   io_ctx.aio_exec(index_name, aioc,  "kvs", "read_many", inbl, &outbl);
-  aioc->wait_for_safe();
+  aioc->wait_for_complete();
   err = aioc->get_return_value();
   aioc->release();
   if (err < 0) {
@@ -1947,7 +1947,7 @@ int KvFlatBtreeAsync::remove_all() {
     if (verbose) cout << "getting keys failed with error " << err << std::endl;
     return err;
   }
-  oro_aioc->wait_for_safe();
+  oro_aioc->wait_for_complete();
   oro_aioc->release();
 
   librados::ObjectWriteOperation rm_index;
@@ -2073,7 +2073,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	  bufferlist un;
 	  oro.getxattr("unwritable", &un, &err);
 	  io_ctx.aio_operate(dit->obj, aioc, &oro, NULL);
-	  aioc->wait_for_safe();
+	  aioc->wait_for_complete();
 	  err = aioc->get_return_value();
 	  if (ceph_clock_now() - idata.ts > timeout) {
 	    if (err < 0) {
@@ -2181,7 +2181,7 @@ string KvFlatBtreeAsync::str() {
   librados::AioCompletion * top_aioc = rados.aio_create_completion();
   oro.omap_get_vals2("",LONG_MAX,&index, nullptr, &err);
   io_ctx.aio_operate(index_name, top_aioc, &oro, NULL);
-  top_aioc->wait_for_safe();
+  top_aioc->wait_for_complete();
   err = top_aioc->get_return_value();
   top_aioc->release();
   if (err < 0 && err != -5){
@@ -2238,7 +2238,7 @@ string KvFlatBtreeAsync::str() {
     oro.omap_get_vals2("", LONG_MAX, &all_maps[indexer], nullptr, &err);
     oro.getxattr("unwritable", &all_unwrit[indexer], &err);
     io_ctx.aio_operate(*it, aioc, &oro, NULL);
-    aioc->wait_for_safe();
+    aioc->wait_for_complete();
     if (aioc->get_return_value() < 0) {
       ret << "reading" << *it << "failed: " << err << std::endl;
       //return ret.str();

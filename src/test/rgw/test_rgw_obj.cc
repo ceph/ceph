@@ -12,25 +12,14 @@
  *
  */
 #include <iostream>
-#include "global/global_init.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
 #include "rgw/services/svc_tier_rados.h"
 #include "test_rgw_common.h"
-#define GTEST
-#ifdef GTEST
 #include <gtest/gtest.h>
-#else
-#define TEST(x, y) void y()
-#define ASSERT_EQ(v, s) if(v != s)cout << "Error at " << __LINE__ << "(" << #v << "!= " << #s << "\n"; \
-                                else cout << "(" << #v << "==" << #s << ") PASSED\n";
-#define EXPECT_EQ(v, s) ASSERT_EQ(v, s)
-#define ASSERT_TRUE(c) if(c)cout << "Error at " << __LINE__ << "(" << #c << ")" << "\n"; \
-                          else cout << "(" << #c << ") PASSED\n";
-#define EXPECT_TRUE(c) ASSERT_TRUE(c) 
-#endif
+
 using namespace std;
 
 void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, const string& instance)

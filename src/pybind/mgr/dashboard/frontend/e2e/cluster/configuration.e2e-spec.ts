@@ -1,34 +1,55 @@
-import { Helper } from '../helper.po';
+import { $ } from 'protractor';
+import { ConfigurationPageHelper } from './configuration.po';
 
 describe('Configuration page', () => {
-  let configuration: Helper['configuration'];
+  let configuration: ConfigurationPageHelper;
 
   beforeAll(() => {
-    configuration = new Helper().configuration;
+    configuration = new ConfigurationPageHelper();
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await ConfigurationPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      configuration.navigateTo();
+    beforeAll(async () => {
+      await configuration.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(configuration.getBreadcrumbText()).toEqual('Configuration');
+    it('should open and show breadcrumb', async () => {
+      await configuration.waitTextToBePresent(configuration.getBreadcrumb(), 'Configuration');
     });
   });
-  describe('edit configuration test', () => {
-    beforeAll(() => {
-      configuration.navigateTo();
+
+  describe('fields check', () => {
+    beforeAll(async () => {
+      await configuration.navigateTo();
     });
 
-    it('should click and edit a configuration and results should appear in the table', () => {
+    it('should verify that selected footer increases when an entry is clicked', async () => {
+      await configuration.getFirstCell().click();
+      const selectedCount = await configuration.getTableSelectedCount();
+      await expect(selectedCount).toBe(1);
+    });
+
+    it('should check that details table opens and tab is correct', async () => {
+      await configuration.getFirstCell().click();
+      await expect($('.table.table-striped.table-bordered').isDisplayed());
+      await expect(configuration.getTabsCount()).toEqual(1);
+      await expect(configuration.getTabText(0)).toEqual('Details');
+    });
+  });
+
+  describe('edit configuration test', () => {
+    beforeAll(async () => {
+      await configuration.navigateTo();
+    });
+
+    it('should click and edit a configuration and results should appear in the table', async () => {
       const configName = 'client_cache_size';
 
-      configuration.edit(
+      await configuration.edit(
         configName,
         ['global', '1'],
         ['mon', '2'],
@@ -37,7 +58,7 @@ describe('Configuration page', () => {
         ['mds', '5'],
         ['client', '6']
       );
-      configuration.configClear(configName);
+      await configuration.configClear(configName);
     });
   });
 });

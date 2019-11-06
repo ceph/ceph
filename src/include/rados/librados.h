@@ -130,6 +130,8 @@ enum {
   LIBRADOS_OPERATION_FULL_FORCE		= 128,
   LIBRADOS_OPERATION_IGNORE_REDIRECT	= 256,
   LIBRADOS_OPERATION_ORDERSNAP          = 512,
+  /* enable/allow >0 return values and payloads on write/update */
+  LIBRADOS_OPERATION_RETURNVEC          = 1024,
 };
 /** @} */
 
@@ -1855,7 +1857,7 @@ typedef void (*rados_callback_t)(rados_completion_t cb, void *arg);
  *
  * @param cb_arg application-defined data passed to the callback functions
  * @param cb_complete the function to be called when the operation is
- * in memory on all relpicas
+ * in memory on all replicas
  * @param cb_safe the function to be called when the operation is on
  * stable storage on all replicas
  * @param pc where to store the completion
@@ -1865,6 +1867,23 @@ CEPH_RADOS_API int rados_aio_create_completion(void *cb_arg,
                                                rados_callback_t cb_complete,
                                                rados_callback_t cb_safe,
 				               rados_completion_t *pc);
+
+/**
+ * Constructs a completion to use with asynchronous operations
+ *
+ * The complete callback corresponds to operation being acked.
+ *
+ * @note BUG: this should check for ENOMEM instead of throwing an exception
+ *
+ * @param cb_arg application-defined data passed to the callback functions
+ * @param cb_complete the function to be called when the operation is committed
+ * on all replicas
+ * @param pc where to store the completion
+ * @returns 0
+ */
+CEPH_RADOS_API int rados_aio_create_completion2(void *cb_arg,
+						rados_callback_t cb_complete,
+						rados_completion_t *pc);
 
 /**
  * Block until an operation completes
@@ -1888,7 +1907,8 @@ CEPH_RADOS_API int rados_aio_wait_for_complete(rados_completion_t c);
  * @param c operation to wait for
  * @returns 0
  */
-CEPH_RADOS_API int rados_aio_wait_for_safe(rados_completion_t c);
+CEPH_RADOS_API int rados_aio_wait_for_safe(rados_completion_t c)
+  __attribute__((deprecated));
 
 /**
  * Has an asynchronous operation completed?
@@ -1934,7 +1954,8 @@ CEPH_RADOS_API int rados_aio_wait_for_complete_and_cb(rados_completion_t c);
  * @param c operation to wait for
  * @returns 0
  */
-CEPH_RADOS_API int rados_aio_wait_for_safe_and_cb(rados_completion_t c);
+CEPH_RADOS_API int rados_aio_wait_for_safe_and_cb(rados_completion_t c)
+  __attribute__((deprecated));
 
 /**
  * Has an asynchronous operation and callback completed
@@ -3645,9 +3666,15 @@ CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
 				       char *client_address,
 				       uint32_t expire_seconds);
 
-CEPH_RADOS_API void rados_set_osdmap_full_try(rados_ioctx_t io);
+CEPH_RADOS_API void rados_set_osdmap_full_try(rados_ioctx_t io)
+  __attribute__((deprecated));
 
-CEPH_RADOS_API void rados_unset_osdmap_full_try(rados_ioctx_t io);
+CEPH_RADOS_API void rados_unset_osdmap_full_try(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+CEPH_RADOS_API void rados_set_pool_full_try(rados_ioctx_t io);
+
+CEPH_RADOS_API void rados_unset_pool_full_try(rados_ioctx_t io);
 
 /**
  * Enable an application on a pool
@@ -3805,6 +3832,38 @@ CEPH_RADOS_API int rados_mgr_command(rados_t cluster, const char **cmd,
                                      size_t inbuflen, char **outbuf,
                                      size_t *outbuflen, char **outs,
                                      size_t *outslen);
+
+/**
+ * Send ceph-mgr tell command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param name mgr name to target
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param inbuflen input buffer length
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_mgr_command_target(
+  rados_t cluster,
+  const char *name,
+  const char **cmd,
+  size_t cmdlen, const char *inbuf,
+  size_t inbuflen, char **outbuf,
+  size_t *outbuflen, char **outs,
+  size_t *outslen);
 
 /**
  * Send monitor command to a specific monitor.

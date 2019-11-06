@@ -555,7 +555,10 @@ class CephFSMount(object):
     def get_osd_epoch(self):
         raise NotImplementedError()
 
-    def stat(self, fs_path, wait=True):
+    def lstat(self, fs_path, follow_symlinks=False, wait=True):
+        return self.stat(fs_path, follow_symlinks=False, wait=True)
+
+    def stat(self, fs_path, follow_symlinks=True, wait=True):
         """
         stat a file, and return the result as a dictionary like this:
         {
@@ -574,6 +577,10 @@ class CephFSMount(object):
         Raises exception on absent file.
         """
         abs_path = os.path.join(self.mountpoint, fs_path)
+        if follow_symlinks:
+            stat_call = "os.stat('" + abs_path + "')"
+        else:
+            stat_call = "os.lstat('" + abs_path + "')"
 
         pyscript = dedent("""
             import os
@@ -582,15 +589,15 @@ class CephFSMount(object):
             import sys
 
             try:
-                s = os.stat("{path}")
+                s = {stat_call}
             except OSError as e:
                 sys.exit(e.errno)
 
             attrs = ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"]
-            print json.dumps(
+            print(json.dumps(
                 dict([(a, getattr(s, a)) for a in attrs]),
-                indent=2)
-            """).format(path=abs_path)
+                indent=2))
+            """).format(stat_call=stat_call)
         proc = self._run_python(pyscript)
         if wait:
             proc.wait()
@@ -629,14 +636,14 @@ class CephFSMount(object):
                 import os
                 import stat
 
-                print os.stat("{path}").st_ino
+                print(os.stat("{path}").st_ino)
                 """).format(path=abs_path)
         else:
             pyscript = dedent("""
                 import os
                 import stat
 
-                print os.lstat("{path}").st_ino
+                print(os.lstat("{path}").st_ino)
                 """).format(path=abs_path)
 
         proc = self._run_python(pyscript)
@@ -650,7 +657,7 @@ class CephFSMount(object):
             import os
             import stat
 
-            print os.stat("{path}").st_nlink
+            print(os.stat("{path}").st_nlink)
             """).format(path=abs_path)
 
         proc = self._run_python(pyscript)

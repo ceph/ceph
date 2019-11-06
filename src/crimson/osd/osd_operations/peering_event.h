@@ -11,7 +11,11 @@
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
 
-namespace ceph::osd {
+namespace ceph {
+  class Formatter;
+}
+
+namespace crimson::osd {
 
 class OSD;
 class ShardServices;
@@ -64,6 +68,7 @@ public:
     ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
     Args&&... args) :
     shard_services(shard_services),
+    ctx{ceph_release_t::octopus},
     from(from),
     pgid(pgid),
     evt(std::forward<Args>(args)...)
@@ -71,15 +76,17 @@ public:
 
 
   void print(std::ostream &) const final;
-  void dump_detail(Formatter *f) const final;
+  void dump_detail(ceph::Formatter* f) const final;
   seastar::future<> start();
 };
 
 class RemotePeeringEvent : public PeeringEvent {
 protected:
   OSD &osd;
-  ceph::net::ConnectionRef conn;
+  crimson::net::ConnectionRef conn;
 
+  void on_pg_absent() final;
+  seastar::future<> complete_rctx(Ref<PG> pg) override;
   seastar::future<Ref<PG>> get_pg() final;
 
 public:
@@ -94,7 +101,7 @@ public:
   };
 
   template <typename... Args>
-  RemotePeeringEvent(OSD &osd, ceph::net::ConnectionRef conn, Args&&... args) :
+  RemotePeeringEvent(OSD &osd, crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
     osd(osd),
     conn(conn)

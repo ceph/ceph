@@ -353,7 +353,7 @@ int main(int argc, const char **argv)
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
     dout(10) << "public_network " << g_conf()->public_network << dendl;
-    dout(10) << "public_addr " << g_conf()->public_network << dendl;
+    dout(10) << "public_addr " << g_conf()->public_addr << dendl;
 
     common_init_finish(g_ceph_context);
 
@@ -811,9 +811,11 @@ int main(int argc, const char **argv)
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
     ostringstream oss;
-    mon->sync_force(NULL, oss);
-    if (oss.tellp())
-      derr << oss.str() << dendl;
+    JSONFormatter jf(true);
+    mon->sync_force(&jf);
+    derr << "out:\n";
+    jf.flush(*_dout);
+    *_dout << dendl;
   }
 
   err = mon->preinit();

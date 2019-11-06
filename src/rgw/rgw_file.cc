@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/compat.h"
 #include "include/rados/rgw_file.h"
@@ -1643,12 +1643,6 @@ namespace rgw {
     op_ret = get_store()->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket,
 				      user_quota, bucket_quota, s->obj_size, true);
     /* max_size exceed */
-    if (op_ret < 0) {
-      goto done;
-    }
-
-    op_ret = get_store()->getRados()->check_bucket_shards(s->bucket_info, s->bucket,
-					      bucket_quota);
     if (op_ret < 0) {
       goto done;
     }

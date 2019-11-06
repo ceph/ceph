@@ -202,7 +202,7 @@ def task(ctx, config):
             weights['append'] = weights['append'] / 2
             weights['append_excl'] = weights['append']
 
-    for op, weight in weights.iteritems():
+    for op, weight in weights.items():
         args.extend([
             '--op', op, str(weight)
         ])
@@ -248,7 +248,7 @@ def task(ctx, config):
                         manager.raw_cluster_cmd(
                             'osd', 'pool', 'set', pool, 'min_size', str(min_size))
 
-                (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+                (remote,) = ctx.cluster.only(role).remotes.keys()
                 proc = remote.run(
                     args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args +
                     ["--pool", pool],

@@ -234,7 +234,7 @@ function test_mon_injectargs()
   ceph tell osd.0 config get mon_lease | grep 6
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
-  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1 >& $TMPFILE || return 1
+  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1  2> $TMPFILE || return 1
   check_response "Error EINVAL: Parse error setting osd_scrub_auto_repair_num_errors to '-1' using injectargs"
 
   expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
@@ -259,7 +259,7 @@ function test_mon_injectargs_SI()
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 1G
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 1000000000
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
-  check_response "'10F': (22) Invalid argument"
+  check_response "(22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
@@ -290,7 +290,7 @@ function test_mon_injectargs_IEC()
   $SUDO ceph daemon mon.a config set mon_data_size_warn 16Gi
   expect_config_value "mon.a" "mon_data_size_warn" 17179869184
   $SUDO ceph daemon mon.a config set mon_data_size_warn 10F > $TMPFILE || true
-  check_response "'10F': (22) Invalid argument"
+  check_response "(22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_data_size_warn 15000000000'
   expect_config_value "mon.a" "mon_data_size_warn" 15000000000
@@ -966,10 +966,10 @@ function test_mon_mds()
   expect_false ceph fs set cephfs max_mds 257
   expect_false ceph fs set cephfs max_mds asdf
   expect_false ceph fs set cephfs inline_data true
-  ceph fs set cephfs inline_data true --yes-i-really-mean-it
-  ceph fs set cephfs inline_data yes --yes-i-really-mean-it
-  ceph fs set cephfs inline_data 1 --yes-i-really-mean-it
-  expect_false ceph fs set cephfs inline_data --yes-i-really-mean-it
+  ceph fs set cephfs inline_data true --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data yes --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data 1 --yes-i-really-really-mean-it
+  expect_false ceph fs set cephfs inline_data --yes-i-really-really-mean-it
   ceph fs set cephfs inline_data false
   ceph fs set cephfs inline_data no
   ceph fs set cephfs inline_data 0
@@ -1169,8 +1169,10 @@ function test_mon_mon()
   ceph mon dump
   ceph mon getmap -o $TEMP_DIR/monmap.$$
   [ -s $TEMP_DIR/monmap.$$ ]
+
   # ceph mon tell
-  ceph mon_status
+  first=$(ceph mon dump -f json | jq -r '.mons[0].name')
+  ceph tell mon.$first mon_status
 
   # test mon features
   ceph mon feature ls
@@ -1477,7 +1479,7 @@ function test_mon_osd()
   done
 
   for f in noup nodown noin noout noscrub nodeep-scrub nobackfill \
-	  norebalance norecover notieragent full
+	  norebalance norecover notieragent
   do
     ceph osd set $f
     ceph osd unset $f
@@ -2119,7 +2121,8 @@ function test_mon_pg()
   ceph pg stat | grep 'pgs:'
   ceph pg 1.0 query
   ceph tell 1.0 query
-  ceph quorum enter
+  first=$(ceph mon dump -f json | jq -r '.mons[0].name')
+  ceph tell mon.$first quorum enter
   ceph quorum_status
   ceph report | grep osd_stats
   ceph status
@@ -2271,6 +2274,18 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET hashpspool 1 --yes-i-really-mean-it
 
   ceph osd pool get rbd crush_rule | grep 'crush_rule: '
+
+  # iec vs si units
+  ceph osd pool set $TEST_POOLGETSET target_max_objects 1K
+  ceph osd pool get $TEST_POOLGETSET target_max_objects | grep 1000
+  for o in target_max_bytes target_size_bytes compression_max_blob_size compression_min_blob_size csum_max_block csum_min_block; do
+    ceph osd pool set $TEST_POOLGETSET $o 1Ki  # no i suffix
+    val=$(ceph osd pool get $TEST_POOLGETSET $o --format=json | jq -c ".$o")
+    [[ $val  == 1024 ]]
+    ceph osd pool set $TEST_POOLGETSET $o 1M   # with i suffix
+    val=$(ceph osd pool get $TEST_POOLGETSET $o --format=json | jq -c ".$o")
+    [[ $val  == 1048576 ]]
+  done
 
   ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET compression_mode aggressive
@@ -2595,7 +2610,6 @@ function test_mon_deprecated_commands()
   # current DEPRECATED commands are:
   #  ceph compact
   #  ceph scrub
-  #  ceph sync force
   #
   # Testing should be accomplished by setting
   # 'mon_debug_deprecated_as_obsolete = true' and expecting ENOTSUP for
@@ -2606,9 +2620,6 @@ function test_mon_deprecated_commands()
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
   expect_false ceph tell mon.a scrub 2> $TMPFILE
-  check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
-
-  expect_false ceph tell mon.a sync force 2> $TMPFILE
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
   ceph tell mon.a injectargs '--no-mon-debug-deprecated-as-obsolete'
@@ -2737,9 +2748,14 @@ function test_mds_tell_help_command()
 
 function test_mgr_tell()
 {
-  ceph tell mgr help
-  #ceph tell mgr fs status   # see http://tracker.ceph.com/issues/20761
-  ceph tell mgr osd status
+  ceph tell mgr version
+}
+
+function test_mgr_devices()
+{
+  ceph device ls
+  expect_false ceph device info doesnotexist
+  expect_false ceph device get-health-metrics doesnotexist
 }
 
 function test_per_pool_scrub_status()
@@ -2844,6 +2860,7 @@ MDS_TESTS+=" mon_mds_metadata"
 MDS_TESTS+=" mds_tell_help_command"
 
 MGR_TESTS+=" mgr_tell"
+MGR_TESTS+=" mgr_devices"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS

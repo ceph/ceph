@@ -92,13 +92,18 @@ class Gateway(multisite.Gateway):
     def start(self, args = None):
         """ start the gateway """
         assert(self.cluster)
+        env = os.environ.copy()
+        # to change frontend, set RGW_FRONTEND env variable
+        # e.g. RGW_FRONTEND=civetweb
+        # to run test under valgrind memcheck, set RGW_VALGRIND to 'yes'
+        # e.g. RGW_VALGRIND=yes
         cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port)]
         if self.id:
             cmd += ['-i', self.id]
         cmd += ['--debug-rgw=20', '--debug-ms=1']
         if args:
             cmd += args
-        bash(cmd)
+        bash(cmd, env=env)
 
     def stop(self):
         """ stop the gateway """
@@ -264,7 +269,7 @@ def init(parse_args):
     num_az_zones = cfg.getint(section, 'num_az_zones')
 
     num_ps_zones = args.num_ps_zones if num_ps_zones_from_conf == 0 else num_ps_zones_from_conf 
-    print 'num_ps_zones = ' + str(num_ps_zones)
+    print('num_ps_zones = ' + str(num_ps_zones))
 
     num_zones = args.num_zones + num_es_zones + num_cloud_zones + num_ps_zones + num_az_zones
 

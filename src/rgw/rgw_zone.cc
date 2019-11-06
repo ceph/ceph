@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "common/errno.h"
 
@@ -1755,7 +1755,7 @@ const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& plac
   if (p == placement_pools.end()) {
     return NONE;
   }
-  const auto& type = p->second.get_compression_type(placement_rule.storage_class);
+  const auto& type = p->second.get_compression_type(placement_rule.get_storage_class());
   return !type.empty() ? type : NONE;
 }
 

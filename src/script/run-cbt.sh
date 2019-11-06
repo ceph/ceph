@@ -25,7 +25,8 @@ archive_dir=$PWD/cbt-archive
 build_dir=$PWD
 source_dir=$(dirname $PWD)
 use_existing=false
-opts=$(getopt --options "a:h" --longoptions "archive-dir:,build-dir:,source-dir:,cbt:,help,use-existing" --name $prog_name -- "$@")
+classical=false
+opts=$(getopt --options "a:h" --longoptions "archive-dir:,build-dir:,source-dir:,cbt:,help,use-existing,classical" --name $prog_name -- "$@")
 eval set -- "$opts"
 
 while true; do
@@ -38,7 +39,7 @@ while true; do
             build_dir=$2
             shift 2
             ;;
-        --source_dir)
+        --source-dir)
             source_dir=$2
             shift 2
             ;;
@@ -48,6 +49,10 @@ while true; do
             ;;
         --use-existing)
             use_existing=true
+            shift
+            ;;
+        --classical)
+            classical=true
             shift
             ;;
         -h|--help)
@@ -78,22 +83,32 @@ if test -z "$cbt_dir"; then
     git clone --depth 1 -b master https://github.com/ceph/cbt.git $cbt_dir
 fi
 
+# store absolute path before changing cwd
+source_dir=$(readlink -f $source_dir)
 if ! $use_existing; then
-    MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
-       --without-dashboard --memstore \
-       -o "memstore_device_bytes=34359738368" \
-       --crimson --nodaemon --redirect-output \
-       --osd-args "--memory 4G"
+    cd $build_dir
+    if $classical; then
+        MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
+           --without-dashboard --memstore \
+           -o "memstore_device_bytes=34359738368"
+    else
+        MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
+           --without-dashboard --memstore \
+           -o "memstore_device_bytes=34359738368" \
+           --crimson --nodaemon --redirect-output \
+           --osd-args "--memory 4G"
+    fi
+    cd -
 fi
 
 for config_file in $config_files; do
     echo "testing $config_file"
     cbt_config=$(mktemp $config_file.XXXX.yaml)
-    $source_dir/src/test/crimson/cbt//t2c.py \
+    python3 $source_dir/src/test/crimson/cbt/t2c.py \
         --build-dir $build_dir \
         --input $config_file \
         --output $cbt_config
-    $cbt_dir/cbt.py \
+    python3 $cbt_dir/cbt.py \
         --archive $archive_dir \
         --conf $build_dir/ceph.conf \
         $cbt_config
@@ -101,5 +116,10 @@ for config_file in $config_files; do
 done
 
 if ! $use_existing; then
-    $source_dir/src/stop.sh --crimson
+    cd $build_dir
+    if $classical; then
+      $source_dir/src/stop.sh
+    else
+      $source_dir/src/stop.sh --crimson
+    fi
 fi

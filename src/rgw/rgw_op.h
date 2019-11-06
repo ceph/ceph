@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 /**
  * All operations via the rados gateway are carried out by
@@ -34,6 +34,7 @@
 
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
+#include "rgw_sal.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
@@ -712,15 +713,15 @@ public:
   void execute() override;
 
   virtual int get_params() = 0;
-  virtual void handle_listing_chunk(RGWUserBuckets&& buckets) {
+  virtual void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets) {
     /* The default implementation, used by e.g. S3, just generates a new
      * part of listing and sends it client immediately. Swift can behave
      * differently: when the reverse option is requested, all incoming
-     * instances of RGWUserBuckets are buffered and finally reversed. */
+     * instances of RGWBucketList are buffered and finally reversed. */
     return send_response_data(buckets);
   }
   virtual void send_response_begin(bool has_buckets) = 0;
-  virtual void send_response_data(RGWUserBuckets& buckets) = 0;
+  virtual void send_response_data(rgw::sal::RGWBucketList& buckets) = 0;
   virtual void send_response_end() = 0;
   void send_response() override {}
 
@@ -780,7 +781,7 @@ public:
 
 class RGWListBucket : public RGWOp {
 protected:
-  RGWBucketEnt bucket;
+  rgw::sal::RGWSalBucket* bucket;
   string prefix;
   rgw_obj_key marker; 
   rgw_obj_key next_marker; 
@@ -802,13 +803,19 @@ protected:
   int parse_max_keys();
 
 public:
-  RGWListBucket() : list_versions(false), max(0),
+  RGWListBucket() : bucket(nullptr), list_versions(false), max(0),
                     default_max(0), is_truncated(false),
 		    allow_unordered(false), shard_id(-1) {}
+  ~RGWListBucket() { delete bucket; }
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
 
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
+    RGWOp::init(store, s, h);
+    rgw::sal::RGWRadosUser user(store, s->user->user_id);
+    bucket = new rgw::sal::RGWRadosBucket(store, user, s->bucket);
+  }
   virtual int get_params() = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_bucket"; }
@@ -937,11 +944,11 @@ public:
 
 class RGWStatBucket : public RGWOp {
 protected:
-  RGWBucketEnt bucket;
+  rgw::sal::RGWSalBucket* bucket;
 
 public:
-  RGWStatBucket() {}
-  ~RGWStatBucket() override {}
+  RGWStatBucket() : bucket(nullptr) {}
+  ~RGWStatBucket() override { delete bucket; }
 
   int verify_permission() override;
   void pre_exec() override;
@@ -2014,26 +2021,23 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
        * name. Passing here doesn't guarantee that an OSD will accept that
        * as ObjectStore::get_max_attr_name_length() can set the limit even
        * lower than the "osd_max_attr_name_len" configurable.  */
-      const size_t max_attr_name_len = \
-        cct->_conf.get_val<Option::size_t>("rgw_max_attr_name_len");
+      const auto max_attr_name_len = cct->_conf->rgw_max_attr_name_len;
       if (max_attr_name_len && attr_name.length() > max_attr_name_len) {
         return -ENAMETOOLONG;
       }
 
       /* Similar remarks apply to the check for value size. We're veryfing
        * it early at the RGW's side as it's being claimed in /info. */
-      const size_t max_attr_size = \
-        cct->_conf.get_val<Option::size_t>("rgw_max_attr_size");
+      const auto max_attr_size = cct->_conf->rgw_max_attr_size;
       if (max_attr_size && xattr.length() > max_attr_size) {
         return -EFBIG;
       }
 
       /* Swift allows administrators to limit the number of metadats items
        * send _in a single request_. */
-      const auto rgw_max_attrs_num_in_req = \
-        cct->_conf.get_val<uint64_t>("rgw_max_attrs_num_in_req");
-      if (rgw_max_attrs_num_in_req &&
-          ++valid_meta_count > rgw_max_attrs_num_in_req) {
+      const auto max_attrs_num_in_req = cct->_conf->rgw_max_attrs_num_in_req;
+      if (max_attrs_num_in_req &&
+          ++valid_meta_count > max_attrs_num_in_req) {
         return -E2BIG;
       }
 
@@ -2378,5 +2382,8 @@ static inline int parse_value_and_bound(
 
   return 0;
 }
+
+int forward_request_to_master(struct req_state *s, obj_version *objv, rgw::sal::RGWRadosStore *store,
+                              bufferlist& in_data, JSONParser *jp, req_info *forward_info = nullptr);
 
 #endif /* CEPH_RGW_OP_H */

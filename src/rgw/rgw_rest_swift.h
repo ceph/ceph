@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_REST_SWIFT_H
 #define CEPH_RGW_REST_SWIFT_H
@@ -39,7 +39,7 @@ class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
   bool need_stats;
   bool wants_reversed;
   std::string prefix;
-  std::vector<RGWUserBuckets> reverse_buffer;
+  std::vector<rgw::sal::RGWBucketList> reverse_buffer;
 
   uint64_t get_default_max() const override {
     return 0;
@@ -53,11 +53,11 @@ public:
   ~RGWListBuckets_ObjStore_SWIFT() override {}
 
   int get_params() override;
-  void handle_listing_chunk(RGWUserBuckets&& buckets) override;
+  void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets) override;
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(RGWUserBuckets& buckets) override;
-  void send_response_data_reversed(RGWUserBuckets& buckets);
-  void dump_bucket_entry(const RGWBucketEnt& obj);
+  void send_response_data(rgw::sal::RGWBucketList& buckets) override;
+  void send_response_data_reversed(rgw::sal::RGWBucketList& buckets);
+  void dump_bucket_entry(const rgw::sal::RGWSalBucket& obj);
   void send_response_end() override;
 
   bool should_get_stats() override { return need_stats; }

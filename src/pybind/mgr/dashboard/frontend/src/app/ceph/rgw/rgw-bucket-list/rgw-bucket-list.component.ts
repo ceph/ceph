@@ -62,7 +62,8 @@ export class RgwBucketListComponent {
       permission: 'create',
       icon: Icons.add,
       routerLink: () => this.urlBuilder.getCreate(),
-      name: this.actionLabels.CREATE
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const editAction: CdTableAction = {
       permission: 'update',
@@ -74,7 +75,9 @@ export class RgwBucketListComponent {
       permission: 'delete',
       icon: Icons.destroy,
       click: () => this.deleteAction(),
-      name: this.actionLabels.DELETE
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.DELETE,
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }
@@ -100,6 +103,7 @@ export class RgwBucketListComponent {
         itemDescription: this.selection.hasSingleSelection
           ? this.i18n('bucket')
           : this.i18n('buckets'),
+        itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
         submitActionObservable: () => {
           return new Observable((observer: Subscriber<any>) => {
             // Delete all selected data table rows.

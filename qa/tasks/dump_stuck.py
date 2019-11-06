@@ -48,7 +48,7 @@ def task(ctx, config):
 
     timeout = 60
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -59,7 +59,7 @@ def task(ctx, config):
     manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
-    manager.raw_cluster_cmd('tell', 'mon.0', 'injectargs', '--',
+    manager.raw_cluster_cmd('tell', 'mon.a', 'injectargs', '--',
 #                            '--mon-osd-report-timeout 90',
                             '--mon-pg-stuck-threshold 10')
 

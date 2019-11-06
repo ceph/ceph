@@ -44,7 +44,7 @@ public:
     {
       std::lock_guard locker{m_lock};
       if (!m_in_flight.empty()) {
-	Context *ctx = new FunctionContext(
+	Context *ctx = new LambdaContext(
 	  [this, on_finish](int r) {
 	    ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
 	                     << ": completing flush" << dendl;
@@ -130,7 +130,7 @@ public:
 
     m_in_flight.insert(handle);
 
-    Context *ctx = new FunctionContext(
+    Context *ctx = new LambdaContext(
       [this, handle, watcher](int r) {
 	handle_notify(handle, watcher);
       });

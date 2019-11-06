@@ -150,7 +150,7 @@ bool WriteAroundObjectDispatch<I>::flush(
   auto ctx = util::create_async_context_callback(*m_image_ctx, *on_finish);
 
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  *on_finish = new FunctionContext([this, tid](int r) {
+  *on_finish = new LambdaContext([this, tid](int r) {
       handle_in_flight_flush_complete(r, tid);
     });
 
@@ -219,7 +219,7 @@ bool WriteAroundObjectDispatch<I>::dispatch_io(
   auto ctx = util::create_async_context_callback(*m_image_ctx, *on_finish);
 
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  *on_finish = new FunctionContext(
+  *on_finish = new LambdaContext(
     [this, tid, object_no, object_off, object_len](int r) {
       handle_in_flight_io_complete(r, tid, object_no, object_off, object_len);
     });

@@ -17,12 +17,13 @@
 #include <seastar/core/sharded.hh>
 
 #include "msg/Policy.h"
-#include "Connection.h"
-#include "Socket.h"
+#include "crimson/net/Connection.h"
+#include "crimson/net/Socket.h"
 #include "crimson/thread/Throttle.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
+class Dispatcher;
 class Protocol;
 class SocketMessenger;
 class SocketConnection;
@@ -46,11 +47,7 @@ class SocketConnection : public Connection {
     side = _side;
   }
 
-  ceph::net::Policy<ceph::thread::Throttle> policy;
-  uint64_t features;
-  void set_features(uint64_t new_features) {
-    features = new_features;
-  }
+  ceph::net::Policy<crimson::thread::Throttle> policy;
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
@@ -67,10 +64,6 @@ class SocketConnection : public Connection {
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
 
-  // which of the peer_addrs we're connecting to (as client)
-  // or should reconnect to (as peer)
-  entity_addr_t target_addr;
-
  public:
   SocketConnection(SocketMessenger& messenger,
                    Dispatcher& dispatcher,
@@ -79,7 +72,15 @@ class SocketConnection : public Connection {
 
   Messenger* get_messenger() const override;
 
-  seastar::future<bool> is_connected() override;
+  bool is_connected() const override;
+
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed() const override;
+
+  bool peer_wins() const override;
+#else
+  bool peer_wins() const;
+#endif
 
   seastar::future<> send(MessageRef msg) override;
 
@@ -91,7 +92,6 @@ class SocketConnection : public Connection {
 
   void print(ostream& out) const override;
 
- public:
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
   void start_connect(const entity_addr_t& peer_addr,
@@ -114,4 +114,4 @@ class SocketConnection : public Connection {
   friend class ProtocolV2;
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

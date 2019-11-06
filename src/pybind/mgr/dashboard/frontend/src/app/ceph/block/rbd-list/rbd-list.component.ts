@@ -63,6 +63,8 @@ export class RbdListComponent implements OnInit {
   builders = {
     'rbd/create': (metadata) =>
       this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
+    'rbd/delete': (metadata) =>
+      this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
     'rbd/clone': (metadata) =>
       this.createRbdFromTask(metadata['child_pool_name'], metadata['child_image_name']),
     'rbd/copy': (metadata) =>
@@ -289,6 +291,7 @@ export class RbdListComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'RBD',
+        itemNames: [`${poolName}/${imageName}`],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('rbd/delete', {

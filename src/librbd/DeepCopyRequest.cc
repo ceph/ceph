@@ -33,7 +33,7 @@ DeepCopyRequest<I>::DeepCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                     ContextWQ *work_queue, SnapSeqs *snap_seqs,
                                     ProgressContext *prog_ctx,
                                     Context *on_finish)
-  : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
+  : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
     m_snap_id_end(snap_id_end), m_flatten(flatten),
     m_object_number(object_number), m_work_queue(work_queue),
@@ -50,6 +50,18 @@ DeepCopyRequest<I>::~DeepCopyRequest() {
 
 template <typename I>
 void DeepCopyRequest<I>::send() {
+  if (!m_src_image_ctx->data_ctx.is_valid()) {
+    lderr(m_cct) << "missing data pool for source image" << dendl;
+    finish(-ENODEV);
+    return;
+  }
+
+  if (!m_dst_image_ctx->data_ctx.is_valid()) {
+    lderr(m_cct) << "missing data pool for destination image" << dendl;
+    finish(-ENODEV);
+    return;
+  }
+
   int r = validate_copy_points();
   if (r < 0) {
     finish(r);
@@ -214,7 +226,7 @@ void DeepCopyRequest<I>::send_copy_object_map() {
   }
 
   // rollback the object map (copy snapshot object map to HEAD)
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_copy_object_map(r);
       finish_op_ctx->complete(0);
     });
@@ -257,7 +269,7 @@ void DeepCopyRequest<I>::send_refresh_object_map() {
 
   ldout(m_cct, 20) << dendl;
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_refresh_object_map(r);
       finish_op_ctx->complete(0);
     });

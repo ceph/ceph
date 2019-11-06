@@ -1,1 +1,9 @@
-@import 'popover.scss';
+@import 'defaults';
+
+.running i {
+  color: $color-primary;
+}
+
+.running:hover i {
+  color: white;
+}

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGWRADOS_H
 #define CEPH_RGWRADOS_H
@@ -1036,8 +1036,7 @@ public:
                             rgw_obj& obj,                       /* in */
                             const DoutPrefixProvider *dpp,      /* in/out */ 
                             optional_yield y);                  /* in */                
-  int swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
-                               RGWObjectCtx& obj_ctx,           /* in/out */
+  int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in */
@@ -1314,12 +1313,13 @@ public:
   int get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs);
+  /* xxx dang obj_ctx -> svc */
   int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y);
   int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y);
 
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
 
-  int get_bucket_info(RGWSysObjectCtx& obj_ctx,
+  int get_bucket_info(RGWServices *svc,
 		      const string& tenant_name, const string& bucket_name,
 		      RGWBucketInfo& info,
 		      ceph::real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
@@ -1394,9 +1394,11 @@ public:
   int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
 
   void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
-  int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync);
+  int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag);
+  void delete_objs_inline(cls_rgw_obj_chain& chain, const string& tag);
   int gc_operate(string& oid, librados::ObjectWriteOperation *op);
-  int gc_aio_operate(string& oid, librados::ObjectWriteOperation *op, librados::AioCompletion **pc = nullptr);
+  int gc_aio_operate(const std::string& oid, librados::AioCompletion *c,
+                     librados::ObjectWriteOperation *op);
   int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
 
   int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
@@ -1424,7 +1426,7 @@ public:
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false);
 
   int check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
-			  RGWQuotaInfo& bucket_quota);
+			  uint64_t num_objs);
 
   int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);
 

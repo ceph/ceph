@@ -39,7 +39,7 @@ def task(ctx, config):
     log.info('Beginning scrub...')
 
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -82,7 +82,7 @@ class Scrubber:
         else:
             def tmp(x):
                 """Local display"""
-                print x
+                print(x)
             self.log = tmp
 
         self.stopping = False

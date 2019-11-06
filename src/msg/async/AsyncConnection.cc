@@ -113,7 +113,8 @@ class C_tick_wakeup : public EventCallback {
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
                                  Worker *w, bool m2, bool local)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
+  : Connection(cct, m),
+    delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
     logger(w->get_perf_counter()),
     state(STATE_NONE), port(-1),
     dispatch_queue(q), recv_buf(NULL),
@@ -304,7 +305,7 @@ ssize_t AsyncConnection::write(bufferlist &bl,
                                bool more) {
 
     std::unique_lock<std::mutex> l(write_lock);
-    outcoming_bl.claim_append(bl);
+    outgoing_bl.claim_append(bl);
     ssize_t r = _try_send(more);
     if (r > 0) {
       writeCallback = callback;
@@ -324,16 +325,16 @@ ssize_t AsyncConnection::_try_send(bool more)
   }
 
   ceph_assert(center->in_thread());
-  ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outcoming_bl.length()
+  ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outgoing_bl.length()
                              << " bytes" << dendl;
-  ssize_t r = cs.send(outcoming_bl, more);
+  ssize_t r = cs.send(outgoing_bl, more);
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
-                             << " remaining bytes " << outcoming_bl.length() << dendl;
+                             << " remaining bytes " << outgoing_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
     center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
@@ -348,7 +349,7 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
-  return outcoming_bl.length();
+  return outgoing_bl.length();
 }
 
 void AsyncConnection::inject_delay() {
@@ -524,14 +525,9 @@ int AsyncConnection::send_message(Message *m)
 		      << this
 		      << dendl;
 
-  auto cct = async_msgr->cct;
-  if ((cct->_conf->ms_blackhole_mon && peer_type == CEPH_ENTITY_TYPE_MON)||
-      (cct->_conf->ms_blackhole_osd && peer_type == CEPH_ENTITY_TYPE_OSD)||
-      (cct->_conf->ms_blackhole_mds && peer_type == CEPH_ENTITY_TYPE_MDS)||
-      (cct->_conf->ms_blackhole_client &&
-       peer_type == CEPH_ENTITY_TYPE_CLIENT)) {
-    lgeneric_subdout(cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
-				 << " blackhole " << *m << dendl;
+  if (is_blackhole()) {
+    lgeneric_subdout(async_msgr->cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
+      << " blackhole " << *m << dendl;
     m->put();
     return 0;
   }
@@ -543,7 +539,7 @@ int AsyncConnection::send_message(Message *m)
   m->get_header().src = async_msgr->get_myname();
   m->set_connection(this);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_BEGIN", true);
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
@@ -600,7 +596,7 @@ void AsyncConnection::fault()
 
   recv_start = recv_end = 0;
   state_offset = 0;
-  outcoming_bl.clear();
+  outgoing_bl.clear();
 }
 
 void AsyncConnection::_stop() {
@@ -618,7 +614,7 @@ void AsyncConnection::_stop() {
 }
 
 bool AsyncConnection::is_queued() const {
-  return outcoming_bl.length();
+  return outgoing_bl.length();
 }
 
 void AsyncConnection::shutdown_socket() {

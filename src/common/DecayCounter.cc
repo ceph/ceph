@@ -29,8 +29,8 @@ void DecayCounter::decode(bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
   if (struct_v < 2) {
-    double half_life = 0.0;
-    decode(half_life, p);
+    double k = 0.0;
+    decode(k, p);
   }
   if (struct_v < 3) {
     double k = 0.0;
@@ -51,14 +51,13 @@ void DecayCounter::dump(Formatter *f) const
 {
   decay();
   f->dump_float("value", val);
-  f->dump_float("halflife", rate.k);
+  f->dump_float("halflife", rate.get_halflife());
 }
 
 void DecayCounter::generate_test_instances(std::list<DecayCounter*>& ls)
 {
   DecayCounter *counter = new DecayCounter();
   counter->val = 3.0;
-  counter->rate = DecayRate(2.0);
   ls.push_back(counter);
   counter = new DecayCounter();
   ls.push_back(counter);

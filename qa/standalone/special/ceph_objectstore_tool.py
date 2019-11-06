@@ -150,7 +150,7 @@ def cat_file(level, filename):
     print("<EOF>")
 
 
-def vstart(new, opt=""):
+def vstart(new, opt="-o osd_pool_default_pg_autoscale_mode=off"):
     print("vstarting....", end="")
     NEW = new and "-n" or "-N"
     call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
@@ -605,6 +605,7 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
     errors=0
     print("Test removeall")
     kill_daemons()
+    test_force_remove = 0
     for nspace in db.keys():
         for basename in db[nspace].keys():
             JSON = db[nspace][basename]['json']
@@ -620,6 +621,25 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
                     if int(basename.split(REP_NAME)[1]) <= int(NUM_CLONED_REP_OBJECTS):
                         cmd = (CFSD_PREFIX + "'{json}' remove").format(osd=osd, json=JSON)
                         errors += test_failure(cmd, "Clones are present, use removeall to delete everything")
+                        if not test_force_remove:
+
+                            cmd = (CFSD_PREFIX + " '{json}' set-attr snapset /dev/null").format(osd=osd, json=JSON)
+                            logging.debug(cmd)
+                            ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                            if ret != 0:
+                                logging.error("Test set-up to corrupt snapset failed for {json}".format(json=JSON))
+                                errors += 1
+                                # Do the removeall since this test failed to set-up
+                            else:
+                                test_force_remove = 1
+
+                                cmd = (CFSD_PREFIX + " '{json}' --force remove").format(osd=osd, json=JSON)
+                                logging.debug(cmd)
+                                ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                                if ret != 0:
+                                    logging.error("forced remove with corrupt snapset failed for {json}".format(json=JSON))
+                                    errors += 1
+                                continue
 
                     cmd = (CFSD_PREFIX + " --force --dry-run '{json}' remove").format(osd=osd, json=JSON)
                     logging.debug(cmd)
@@ -1522,7 +1542,10 @@ def main(argv):
                             logging.debug("FOUND: {json} in {osd} has value '{val}'".format(osd=osd, json=JSON, val=out))
                             found += 1
                         except subprocess.CalledProcessError as e:
-                            if "No such file or directory" not in e.output and "No data available" not in e.output:
+                            logging.debug("Error message: {output}".format(output=e.output))
+                            if "No such file or directory" not in e.output and \
+                               "No data available" not in e.output and \
+                               "not contained by pg" not in e.output:
                                 raise
                 # Assuming k=2 m=1 for the default ec pool
                 if found != 3:

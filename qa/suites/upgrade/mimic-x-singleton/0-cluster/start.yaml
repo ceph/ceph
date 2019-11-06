@@ -14,6 +14,7 @@ overrides:
         ms bind msgr2: false
         bluestore warn on legacy statfs: false
         bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
       mds:
         debug ms: 1
         debug mds: 20

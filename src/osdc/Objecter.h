@@ -1253,8 +1253,8 @@ private:
   std::atomic<unsigned> num_in_flight{0};
   std::atomic<int> global_op_flags{0}; // flags which are applied to each IO op
   bool keep_balanced_budget = false;
-  bool honor_osdmap_full = true;
-  bool osdmap_full_try = false;
+  bool honor_pool_full = true;
+  bool pool_full_try = false;
 
   // If this is true, accumulate a set of blacklisted entities
   // to be drained by consume_blacklist_events.
@@ -2123,8 +2123,7 @@ private:
   // here or you will have great woe and misery.
 
   template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&... args) const ->
-    decltype(cb(*osdmap, std::forward<Args>(args)...)) {
+  decltype(auto) with_osdmap(Callback&& cb, Args&&... args) {
     shared_lock l(rwlock);
     return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
@@ -2140,11 +2139,11 @@ private:
   void set_balanced_budget() { keep_balanced_budget = true; }
   void unset_balanced_budget() { keep_balanced_budget = false; }
 
-  void set_honor_osdmap_full() { honor_osdmap_full = true; }
-  void unset_honor_osdmap_full() { honor_osdmap_full = false; }
+  void set_honor_pool_full() { honor_pool_full = true; }
+  void unset_honor_pool_full() { honor_pool_full = false; }
 
-  void set_osdmap_full_try() { osdmap_full_try = true; }
-  void unset_osdmap_full_try() { osdmap_full_try = false; }
+  void set_pool_full_try() { pool_full_try = true; }
+  void unset_pool_full_try() { pool_full_try = false; }
 
   void _scan_requests(
     OSDSession *s,
@@ -2322,6 +2321,8 @@ public:
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
     o->reqid = reqid;
     return o;
   }

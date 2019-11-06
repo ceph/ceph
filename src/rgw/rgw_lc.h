@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_LC_H
 #define CEPH_RGW_LC_H
@@ -86,7 +86,7 @@ public:
   bool valid() const {
     if (!days.empty() && !date.empty()) {
       return false;
-    } else if (!days.empty() && get_days() <= 0) {
+    } else if (!days.empty() && get_days() < 0) {
       return false;
     }
     //We've checked date in xml parsing

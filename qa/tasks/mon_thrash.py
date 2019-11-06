@@ -86,7 +86,8 @@ class MonitorThrasher(Thrasher):
             - mon/workloadgen.sh
     """
     def __init__(self, ctx, manager, config, logger):
-        super(MonitorThrasher, self).__init__()
+        Thrasher.__init__(self, "MonitorThrasher")
+
         self.ctx = ctx
         self.manager = manager
         self.manager.wait_for_clean()
@@ -167,9 +168,10 @@ class MonitorThrasher(Thrasher):
         Thrash the monitor specified.
         :param mon: monitor to thrash
         """
-        addr = self.ctx.ceph['ceph'].mons['mon.%s' % mon]
-        self.log('thrashing mon.{id}@{addr} store'.format(id=mon, addr=addr))
-        out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force')
+        self.log('thrashing mon.{id} store'.format(id=mon))
+        out = self.manager.raw_cluster_cmd(
+            'tell', 'mon.%s' % mon, 'sync_force',
+            '--yes-i-really-mean-it')
         j = json.loads(out)
         assert j['ret'] == 0, \
             'error forcing store sync on mon.{id}:\n{ret}'.format(
@@ -363,7 +365,7 @@ def task(ctx, config):
 
     log.info('Beginning mon_thrash...')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,

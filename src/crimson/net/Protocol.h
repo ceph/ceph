@@ -9,7 +9,7 @@
 #include "Fwd.h"
 #include "SocketConnection.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 class Protocol {
  public:
@@ -23,6 +23,8 @@ class Protocol {
   virtual ~Protocol();
 
   bool is_connected() const;
+
+  bool is_closed() const { return closed; }
 
   // Reentrant closing
   seastar::future<> close();
@@ -74,22 +76,28 @@ class Protocol {
  protected:
   // write_state is changed with state atomically, indicating the write
   // behavior of the according state.
-  enum class write_state_t {
+  enum class write_state_t : uint8_t {
     none,
     delay,
     open,
     drop
   };
+
+  static const char* get_state_name(write_state_t state) {
+    uint8_t index = static_cast<uint8_t>(state);
+    static const char *const state_names[] = {"none",
+                                              "delay",
+                                              "open",
+                                              "drop"};
+    assert(index < std::size(state_names));
+    return state_names[index];
+  }
+
   void set_write_state(const write_state_t& state) {
     if (write_state == write_state_t::open &&
-        state == write_state_t::delay) {
-      if (open_write) {
-        exit_open = seastar::shared_promise<>();
-      }
-    }
-    if (state == write_state_t::drop && exit_open) {
-      exit_open->set_value();
-      exit_open = std::nullopt;
+        state != write_state_t::open &&
+        write_dispatching) {
+      exit_open = seastar::shared_promise<>();
     }
     write_state = state;
     state_changed.set_value();
@@ -131,15 +139,14 @@ class Protocol {
   std::optional<utime_t> keepalive_ack = std::nullopt;
   uint64_t ack_left = 0;
   bool write_dispatching = false;
-  // Indicate if we are in the middle of writing.
-  bool open_write = false;
   // If another continuation is trying to close or replace socket when
-  // open_write is true, it needs to wait for exit_open until writing is
-  // stopped or failed.
+  // write_dispatching is true and write_state is open,
+  // it needs to wait for exit_open until writing is stopped or failed.
   std::optional<seastar::shared_promise<>> exit_open;
 
-  seastar::future<stop_t> do_write_dispatch_sweep();
+  seastar::future<stop_t> try_exit_sweep();
+  seastar::future<> do_write_dispatch_sweep();
   void write_event();
 };
 
-} // namespace ceph::net
+} // namespace crimson::net

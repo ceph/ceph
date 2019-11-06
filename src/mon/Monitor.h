@@ -104,14 +104,6 @@ class AdminSocketHook;
 
 #define COMPAT_SET_LOC "feature_set"
 
-class C_MonContext final : public FunctionContext {
-  const Monitor *mon;
-public:
-  explicit C_MonContext(Monitor *m, boost::function<void(int)>&& callback)
-    : FunctionContext(std::move(callback)), mon(m) {}
-  void finish(int r) override;
-};
-
 class Monitor : public Dispatcher,
 		public AuthClient,
 		public AuthServer,
@@ -405,7 +397,7 @@ public:
   /**
    * force a sync on next mon restart
    */
-  void sync_force(Formatter *f, ostream& ss);
+  void sync_force(Formatter *f);
 
 private:
   /**
@@ -692,10 +684,11 @@ public:
                         const cmdmap_t& cmdmap,
                         const map<string,string>& param_str_map,
                         const MonCommand *this_cmd);
-  void get_mon_status(Formatter *f, ostream& ss);
+  void get_mon_status(Formatter *f);
   void _quorum_status(Formatter *f, ostream& ss);
   bool _add_bootstrap_peer_hint(std::string_view cmd, const cmdmap_t& cmdmap,
 				std::ostream& ss);
+  void handle_tell_command(MonOpRequestRef op);
   void handle_command(MonOpRequestRef op);
   void handle_route(MonOpRequestRef op);
 
@@ -766,6 +759,9 @@ public:
   void reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version);
   void reply_command(MonOpRequestRef op, int rc, const string &rs, bufferlist& rdata, version_t version);
 
+  void reply_tell_command(MonOpRequestRef op, int rc, const string &rs);
+
+
 
   void handle_probe(MonOpRequestRef op);
   /**
@@ -827,7 +823,7 @@ public:
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
     void _finish(int r) override {
-      MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+      auto m = op->get_req<MMonCommand>();
       if (r >= 0) {
         ostringstream ss;
         if (!op->get_req()->get_connection()) {
@@ -992,8 +988,10 @@ private:
   int write_fsid();
   int write_fsid(MonitorDBStore::TransactionRef t);
 
-  void do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
-			std::string_view format, std::ostream& ss);
+  int do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
+		       Formatter *f,
+		       std::ostream& err,
+		       std::ostream& out);
 
 private:
   // don't allow copying
@@ -1042,5 +1040,32 @@ public:
 // make sure you add your feature to Monitor::get_supported_features
 
 
+/* Callers use:
+ *
+ *      new C_MonContext{...}
+ *
+ * instead of
+ *
+ *      new C_MonContext(...)
+ *
+ * because of gcc bug [1].
+ *
+ * [1] https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85883
+ */
+template<typename T>
+class C_MonContext : public LambdaContext<T> {
+public:
+  C_MonContext(const Monitor* m, T&& f) :
+      LambdaContext<T>(std::forward<T>(f)),
+      mon(m)
+  {}
+  void finish(int r) override {
+    if (mon->is_shutdown())
+      return;
+    LambdaContext<T>::finish(r);
+  }
+private:
+  const Monitor* mon;
+};
 
 #endif

@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <keyutils.h>
 
+#include "include/compat.h"
 #include "common/armor.h"
 #include "common/safe_io.h"
 
@@ -31,13 +32,13 @@ int read_secret_from_file(const char *filename, char *secret, size_t max_len)
   fd = open(filename, O_RDONLY);
   if (fd < 0) {
     perror("unable to read secretfile");
-    return -1;
+    return -errno;
   }
   len = safe_read(fd, secret, max_len);
   if (len <= 0) {
     perror("unable to read secret from file");
     close(fd);
-    return -1;
+    return len ? len : -ENODATA;
   }
   end = secret;
   while (end < secret + len && *end && *end != '\n' && *end != '\r')
@@ -65,11 +66,11 @@ int set_kernel_secret(const char *secret, const char *key_name)
   if (ret < 0) {
     char error_buf[80];
     fprintf(stderr, "secret is not valid base64: %s.\n",
-	    strerror_r(-ret, error_buf, sizeof(error_buf)));
+	    ceph_strerror_r(-ret, error_buf, sizeof(error_buf)));
     return ret;
   }
 
-  serial = add_key("ceph", key_name, payload, sizeof(payload), KEY_SPEC_PROCESS_KEYRING);
+  serial = add_key("ceph", key_name, payload, ret, KEY_SPEC_PROCESS_KEYRING);
   if (serial == -1) {
     ret = -errno;
   }
@@ -113,7 +114,7 @@ int get_secret_option(const char *secret, const char *key_name,
       } else {
         char error_buf[80];
 	fprintf(stderr, "adding ceph secret key to kernel failed: %s.\n",
-		strerror_r(-ret, error_buf, sizeof(error_buf)));
+		ceph_strerror_r(-ret, error_buf, sizeof(error_buf)));
 	return ret;
       }
     }

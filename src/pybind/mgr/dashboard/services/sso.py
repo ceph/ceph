@@ -2,26 +2,29 @@
 # pylint: disable=too-many-return-statements,too-many-branches
 from __future__ import absolute_import
 
+import os
 import errno
 import json
 import threading
+import warnings
 
 import six
+from six.moves.urllib import parse
+
+from .. import mgr, logger
+from ..tools import prepare_url_prefix
+
 if six.PY2:
-    FileNotFoundError = IOError
+    FileNotFoundError = IOError  # pylint: disable=redefined-builtin
 
 try:
-    from onelogin.saml2.settings import OneLogin_Saml2_Settings
-    from onelogin.saml2.errors import OneLogin_Saml2_Error
-    from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
+    from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
+    from onelogin.saml2.errors import OneLogin_Saml2_Error as Saml2Error
+    from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser as Saml2Parser
 
     python_saml_imported = True
 except ImportError:
     python_saml_imported = False
-
-
-from .. import mgr, logger
-from ..tools import prepare_url_prefix
 
 
 class Saml2(object):
@@ -147,8 +150,8 @@ def handle_sso_command(cmd):
 
     if cmd['prefix'] == 'dashboard sso enable saml2':
         try:
-            OneLogin_Saml2_Settings(mgr.SSO_DB.saml2.onelogin_settings)
-        except OneLogin_Saml2_Error:
+            Saml2Settings(mgr.SSO_DB.saml2.onelogin_settings)
+        except Saml2Error:
             return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
                           'use `ceph dashboard sso setup saml2`'
         mgr.SSO_DB.protocol = 'saml2'
@@ -174,43 +177,34 @@ def handle_sso_command(cmd):
         idp_metadata = cmd['idp_metadata']
         idp_username_attribute = _get_optional_attr(cmd, 'idp_username_attribute', 'uid')
         idp_entity_id = _get_optional_attr(cmd, 'idp_entity_id', None)
-        sp_x_509_cert = _get_optional_attr(cmd, 'sp_x_509_cert', '')
-        sp_private_key = _get_optional_attr(cmd, 'sp_private_key', '')
-        if sp_x_509_cert and not sp_private_key:
+        sp_x_509_cert_path = _get_optional_attr(cmd, 'sp_x_509_cert', '')
+        sp_private_key_path = _get_optional_attr(cmd, 'sp_private_key', '')
+        if sp_x_509_cert_path and not sp_private_key_path:
             return -errno.EINVAL, '', 'Missing parameter `sp_private_key`.'
-        if not sp_x_509_cert and sp_private_key:
+        if not sp_x_509_cert_path and sp_private_key_path:
             return -errno.EINVAL, '', 'Missing parameter `sp_x_509_cert`.'
-        has_sp_cert = sp_x_509_cert != "" and sp_private_key != ""
+        has_sp_cert = sp_x_509_cert_path != "" and sp_private_key_path != ""
         try:
-            f = open(sp_x_509_cert, 'r')
-            sp_x_509_cert = f.read()
-            f.close()
+            with open(sp_x_509_cert_path, 'r') as f:
+                sp_x_509_cert = f.read()
         except FileNotFoundError:
-            pass
+            sp_x_509_cert = ''
         try:
-            f = open(sp_private_key, 'r')
-            sp_private_key = f.read()
-            f.close()
+            with open(sp_private_key_path, 'r') as f:
+                sp_private_key = f.read()
         except FileNotFoundError:
-            pass
-        try:
-            idp_settings = OneLogin_Saml2_IdPMetadataParser.parse_remote(idp_metadata,
-                                                                         validate_cert=False,
-                                                                         entity_id=idp_entity_id)
-        # pylint: disable=broad-except
-        except Exception:
-            try:
-                f = open(idp_metadata, 'r')
-                idp_metadata = f.read()
-                f.close()
-            except FileNotFoundError:
-                pass
-            try:
-                idp_settings = OneLogin_Saml2_IdPMetadataParser.parse(idp_metadata,
-                                                                      entity_id=idp_entity_id)
-            # pylint: disable=broad-except
-            except Exception:
-                return -errno.EINVAL, '', 'Invalid parameter `idp_metadata`.'
+            sp_private_key = ''
+
+        if os.path.isfile(idp_metadata):
+            warnings.warn(
+                "Please prepend 'file://' to indicate a local SAML2 IdP file", DeprecationWarning)
+            with open(idp_metadata, 'r') as f:
+                idp_settings = Saml2Parser.parse(f.read(), entity_id=idp_entity_id)
+        elif parse.urlparse(idp_metadata)[0] in ('http', 'https', 'file'):
+            idp_settings = Saml2Parser.parse_remote(
+                url=idp_metadata, validate_cert=False, entity_id=idp_entity_id)
+        else:
+            idp_settings = Saml2Parser.parse(idp_metadata, entity_id=idp_entity_id)
 
         url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         settings = {
@@ -251,7 +245,7 @@ def handle_sso_command(cmd):
                 "wantAttributeStatement": False
             }
         }
-        settings = OneLogin_Saml2_IdPMetadataParser.merge_settings(settings, idp_settings)
+        settings = Saml2Parser.merge_settings(settings, idp_settings)
         mgr.SSO_DB.saml2.onelogin_settings = settings
         mgr.SSO_DB.protocol = 'saml2'
         mgr.SSO_DB.save()

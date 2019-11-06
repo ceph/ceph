@@ -1,0 +1,87 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: barbican
+        rgw keystone barbican tenant: rgwcrypt
+        rgw keystone barbican user: rgwcrypt-user
+        rgw keystone barbican password: rgwcrypt-pass
+  rgw:
+    client.0:
+      use-keystone-role: client.0
+      use-barbican-role: client.0
+
+tasks:
+- tox: [ client.0 ]
+- keystone:
+    client.0:
+      sha1: 12.0.0.0b2
+      force-branch: master
+      tenants:
+        - name: admin
+          description:  Admin Tenant
+        - name: rgwcrypt
+          description: Encryption Tenant
+        - name: barbican
+          description: Barbican
+        - name: s3
+          description: S3 project
+      users:
+        - name: admin
+          password: ADMIN
+          project: admin
+        - name: rgwcrypt-user
+          password: rgwcrypt-pass
+          project: rgwcrypt
+        - name: barbican-user
+          password: barbican-pass
+          project: barbican
+        - name: s3-user
+          password: s3-pass
+          project: s3
+      roles: [ name: admin, name: Member, name: creator ]
+      role-mappings:
+        - name: admin
+          user: admin
+          project: admin
+        - name: Member
+          user: rgwcrypt-user
+          project: rgwcrypt
+        - name: admin
+          user: barbican-user
+          project: barbican
+        - name: creator
+          user: s3-user
+          project: s3
+      services:
+        - name: keystone
+          type: identity
+          description: Keystone Identity Service
+        - name: swift
+          type: object-store
+          description: Swift Service
+- barbican:
+    client.0:
+      sha1: 5.0.1
+      force-branch: master
+      use-keystone-role: client.0
+      keystone_authtoken:
+        auth_plugin: password
+        username: barbican-user
+        password: barbican-pass
+        user_domain_name: Default
+      rgw_user:
+        tenantName: rgwcrypt
+        username: rgwcrypt-user
+        password: rgwcrypt-pass
+      secrets:
+        - name: my-key-1
+          base64: a2V5MS5GcWVxKzhzTGNLaGtzQkg5NGVpb1FKcFpGb2c=
+          tenantName: s3
+          username: s3-user
+          password: s3-pass
+        - name: my-key-2
+          base64: a2V5Mi5yNUNNMGFzMVdIUVZxcCt5NGVmVGlQQ1k4YWg=
+          tenantName: s3
+          username: s3-user
+          password: s3-pass

@@ -9,6 +9,7 @@ export class FinishedTask extends Task {
   progress: number;
   ret_value: any;
   success: boolean;
+  duration: number;
 
   errorMessage: string;
 }

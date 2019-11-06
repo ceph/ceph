@@ -9,9 +9,12 @@
 #include "osd/osd_types.h"
 
 namespace ceph::os {
-  class FuturizedStore;
-  class Collection;
   class Transaction;
+}
+
+namespace crimson::os {
+  class FuturizedCollection;
+  class FuturizedStore;
 }
 
 /// metadata shared across PGs, or put in another way,
@@ -19,12 +22,12 @@ namespace ceph::os {
 class OSDMeta {
   template<typename T> using Ref = boost::intrusive_ptr<T>;
 
-  ceph::os::FuturizedStore* store;
-  Ref<ceph::os::Collection> coll;
+  crimson::os::FuturizedStore* store;
+  Ref<crimson::os::FuturizedCollection> coll;
 
 public:
-  OSDMeta(Ref<ceph::os::Collection> coll,
-          ceph::os::FuturizedStore* store)
+  OSDMeta(Ref<crimson::os::FuturizedCollection> coll,
+          crimson::os::FuturizedStore* store)
     : store{store}, coll{coll}
   {}
 

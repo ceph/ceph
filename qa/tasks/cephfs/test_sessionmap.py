@@ -32,7 +32,7 @@ class TestSessionMap(CephFSTestCase):
     def _get_connection_count(self, status=None):
         perf = self.fs.rank_asok(["perf", "dump"], status=status)
         conn = 0
-        for module, dump in perf.iteritems():
+        for module, dump in perf.items():
             if "AsyncMessenger::Worker" in module:
                 conn += dump['msgr_active_connections']
         return conn
@@ -106,7 +106,7 @@ class TestSessionMap(CephFSTestCase):
         table_json = json.loads(self.fs.table_tool(["0", "show", "session"]))
         log.info("SessionMap: {0}".format(json.dumps(table_json, indent=2)))
         self.assertEqual(table_json['0']['result'], 0)
-        self.assertEqual(len(table_json['0']['data']['Sessions']), 2)
+        self.assertEqual(len(table_json['0']['data']['sessions']), 2)
 
         # Now, induce a "force_open_sessions" event by exporting a dir
         self.mount_a.run_shell(["mkdir", "bravo"])
@@ -147,7 +147,7 @@ class TestSessionMap(CephFSTestCase):
         table_json = json.loads(self.fs.table_tool(["0", "show", "session"]))
         log.info("SessionMap: {0}".format(json.dumps(table_json, indent=2)))
         self.assertEqual(table_json['0']['result'], 0)
-        self.assertEqual(len(table_json['0']['data']['Sessions']), 0)
+        self.assertEqual(len(table_json['0']['data']['sessions']), 0)
 
     def _configure_auth(self, mount, id_name, mds_caps, osd_caps=None, mon_caps=None):
         """

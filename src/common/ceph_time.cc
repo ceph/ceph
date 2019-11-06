@@ -95,25 +95,21 @@ namespace ceph {
 	   typename std::enable_if<Clock::is_steady>::type*>
   std::ostream& operator<<(std::ostream& m,
 			   const std::chrono::time_point<Clock>& t) {
-    return m << std::chrono::duration<double>(t.time_since_epoch()).count()
-	     << "s";
+    return m << std::fixed << std::chrono::duration<double>(
+		t.time_since_epoch()).count()
+	     << 's';
   }
 
   std::ostream& operator<<(std::ostream& m, const timespan& t) {
-    int64_t ns = t.count();
-    if (ns < 0) {
-      ns = -ns;
-      m << "-";
-    }
-    m << (ns / 1000000000ll);
-    ns %= 1000000000ll;
-    if (ns) {
+    static_assert(std::is_unsigned_v<timespan::rep>);
+    m << std::chrono::duration_cast<std::chrono::seconds>(t).count();
+    if (auto ns = (t % 1s).count(); ns > 0) {
       char oldfill = m.fill();
       m.fill('0');
       m << '.' << std::setw(9) << ns;
       m.fill(oldfill);
     }
-    return m << "s";
+    return m << 's';
   }
 
   template<typename Clock,

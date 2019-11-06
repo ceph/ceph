@@ -1606,172 +1606,490 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
   info.snapid = last;
 }
 
+void CInode::encode_lock_iauth(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  encode(inode.version, bl);
+  encode(inode.ctime, bl);
+  encode(inode.mode, bl);
+  encode(inode.uid, bl);
+  encode(inode.gid, bl);  
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_iauth(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(inode.version, p);
+  utime_t tm;
+  decode(tm, p);
+  if (inode.ctime < tm) inode.ctime = tm;
+  decode(inode.mode, p);
+  decode(inode.uid, p);
+  decode(inode.gid, p);
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_ilink(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  encode(inode.version, bl);
+  encode(inode.ctime, bl);
+  encode(inode.nlink, bl);
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_ilink(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(inode.version, p);
+  utime_t tm;
+  decode(tm, p);
+  if (inode.ctime < tm) inode.ctime = tm;
+  decode(inode.nlink, p);
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_idft(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  if (is_auth()) {
+    encode(inode.version, bl);
+  } else {
+    // treat flushing as dirty when rejoining cache
+    bool dirty = dirfragtreelock.is_dirty_or_flushing();
+    encode(dirty, bl);
+  }
+  {
+    // encode the raw tree
+    encode(dirfragtree, bl);
+
+    // also specify which frags are mine
+    set<frag_t> myfrags;
+    auto&& dfls = get_dirfrags();
+    for (const auto& dir : dfls) {
+      if (dir->is_auth()) {
+	frag_t fg = dir->get_frag();
+	myfrags.insert(fg);
+      }
+    }
+    encode(myfrags, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_idft(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  if (is_auth()) {
+    bool replica_dirty;
+    decode(replica_dirty, p);
+    if (replica_dirty) {
+      dout(10) << __func__ << " setting dftlock dirty flag" << dendl;
+      dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
+    }
+  } else {
+    decode(inode.version, p);
+  }
+  {
+    fragtree_t temp;
+    decode(temp, p);
+    set<frag_t> authfrags;
+    decode(authfrags, p);
+    if (is_auth()) {
+      // auth.  believe replica's auth frags only.
+      for (auto fg : authfrags) {
+        if (!dirfragtree.is_leaf(fg)) {
+          dout(10) << " forcing frag " << fg << " to leaf (split|merge)" << dendl;
+          dirfragtree.force_to_leaf(g_ceph_context, fg);
+          dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
+        }
+      }
+    } else {
+      // replica.  take the new tree, BUT make sure any open
+      //  dirfrags remain leaves (they may have split _after_ this
+      //  dft was scattered, or we may still be be waiting on the
+      //  notify from the auth)
+      dirfragtree.swap(temp);
+      for (const auto &p : dirfrags) {
+        if (!dirfragtree.is_leaf(p.first)) {
+          dout(10) << " forcing open dirfrag " << p.first << " to leaf (racing with split|merge)" << dendl;
+          dirfragtree.force_to_leaf(g_ceph_context, p.first);
+        }
+	if (p.second->is_auth())
+	  p.second->state_clear(CDir::STATE_DIRTYDFT);
+      }
+    }
+    if (g_conf()->mds_debug_frag)
+      verify_dirfrags();
+  }
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_ifile(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  if (is_auth()) {
+    encode(inode.version, bl); 
+    encode(inode.ctime, bl); 
+    encode(inode.mtime, bl); 
+    encode(inode.atime, bl); 
+    encode(inode.time_warp_seq, bl); 
+    if (!is_dir()) {
+      encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
+      encode(inode.size, bl); 
+      encode(inode.truncate_seq, bl); 
+      encode(inode.truncate_size, bl); 
+      encode(inode.client_ranges, bl); 
+      encode(inode.inline_data, bl); 
+    }    
+  } else {
+    // treat flushing as dirty when rejoining cache
+    bool dirty = filelock.is_dirty_or_flushing();
+    encode(dirty, bl); 
+  }    
+  dout(15) << __func__ << " inode.dirstat is " << inode.dirstat << dendl;
+  encode(inode.dirstat, bl);  // only meaningful if i am auth.
+  bufferlist tmp;
+  __u32 n = 0;
+  for (const auto &p : dirfrags) {
+    frag_t fg = p.first;
+    CDir *dir = p.second;
+    if (is_auth() || dir->is_auth()) {
+      fnode_t *pf = dir->get_projected_fnode();
+      dout(15) << fg << " " << *dir << dendl;
+      dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
+      dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
+      encode(fg, tmp);
+      encode(dir->first, tmp);
+      encode(pf->fragstat, tmp);
+      encode(pf->accounted_fragstat, tmp);
+      n++;
+    }
+  }
+  encode(n, bl);
+  bl.claim_append(tmp);
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  if (!is_auth()) {
+    decode(inode.version, p);
+    utime_t tm;
+    decode(tm, p);
+    if (inode.ctime < tm) inode.ctime = tm;
+    decode(inode.mtime, p);
+    decode(inode.atime, p);
+    decode(inode.time_warp_seq, p);
+    if (!is_dir()) {
+      decode(inode.layout, p);
+      decode(inode.size, p);
+      decode(inode.truncate_seq, p);
+      decode(inode.truncate_size, p);
+      decode(inode.client_ranges, p);
+      decode(inode.inline_data, p);
+    }
+  } else {
+    bool replica_dirty;
+    decode(replica_dirty, p);
+    if (replica_dirty) {
+      dout(10) << __func__ << " setting filelock dirty flag" << dendl;
+      filelock.mark_dirty();  // ok bc we're auth and caller will handle
+    }
+  }
+ 
+  frag_info_t dirstat;
+  decode(dirstat, p);
+  if (!is_auth()) {
+    dout(10) << " taking inode dirstat " << dirstat << " for " << *this << dendl;
+    inode.dirstat = dirstat;    // take inode summation if replica
+  }
+  __u32 n;
+  decode(n, p);
+  dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
+  while (n--) {
+    frag_t fg;
+    snapid_t fgfirst;
+    frag_info_t fragstat;
+    frag_info_t accounted_fragstat;
+    decode(fg, p);
+    decode(fgfirst, p);
+    decode(fragstat, p);
+    decode(accounted_fragstat, p);
+    dout(10) << fg << " [" << fgfirst << ",head] " << dendl;
+    dout(10) << fg << "           fragstat " << fragstat << dendl;
+    dout(20) << fg << " accounted_fragstat " << accounted_fragstat << dendl;
+
+    CDir *dir = get_dirfrag(fg);
+    if (is_auth()) {
+      ceph_assert(dir);                // i am auth; i had better have this dir open
+      dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+               << " on " << *dir << dendl;
+      dir->first = fgfirst;
+      dir->fnode.fragstat = fragstat;
+      dir->fnode.accounted_fragstat = accounted_fragstat;
+      if (!(fragstat == accounted_fragstat)) {
+        dout(10) << fg << " setting filelock updated flag" << dendl;
+        filelock.mark_dirty();  // ok bc we're auth and caller will handle
+      }
+    } else {
+      if (dir && dir->is_auth()) {
+        dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+                 << " on " << *dir << dendl;
+        dir->first = fgfirst;
+        fnode_t *pf = dir->get_projected_fnode();
+        finish_scatter_update(&filelock, dir,
+                              inode.dirstat.version, pf->accounted_fragstat.version);
+      }
+    }
+  }
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_inest(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  if (is_auth()) {
+    encode(inode.version, bl);
+  } else {
+    // treat flushing as dirty when rejoining cache
+    bool dirty = nestlock.is_dirty_or_flushing();
+    encode(dirty, bl);
+  }
+  dout(15) << __func__ << " inode.rstat is " << inode.rstat << dendl;
+  encode(inode.rstat, bl);  // only meaningful if i am auth.
+  bufferlist tmp;
+  __u32 n = 0;
+  for (const auto &p : dirfrags) {
+    frag_t fg = p.first;
+    CDir *dir = p.second;
+    if (is_auth() || dir->is_auth()) {
+      fnode_t *pf = dir->get_projected_fnode();
+      dout(10) << __func__ << " " << fg << " dir " << *dir << dendl;
+      dout(10) << __func__ << " " << fg << " rstat " << pf->rstat << dendl;
+      dout(10) << __func__ << " " << fg << " accounted_rstat " << pf->rstat << dendl;
+      dout(10) << __func__ << " " << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
+      encode(fg, tmp);
+      encode(dir->first, tmp);
+      encode(pf->rstat, tmp);
+      encode(pf->accounted_rstat, tmp);
+      encode(dir->dirty_old_rstat, tmp);
+      n++;
+    }
+  }
+  encode(n, bl);
+  bl.claim_append(tmp);
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_inest(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  if (is_auth()) {
+    bool replica_dirty;
+    decode(replica_dirty, p);
+    if (replica_dirty) {
+      dout(10) << __func__ << " setting nestlock dirty flag" << dendl;
+      nestlock.mark_dirty();  // ok bc we're auth and caller will handle
+    }
+  } else {
+    decode(inode.version, p);
+  }
+  nest_info_t rstat;
+  decode(rstat, p);
+  if (!is_auth()) {
+    dout(10) << __func__ << " taking inode rstat " << rstat << " for " << *this << dendl;
+    inode.rstat = rstat;    // take inode summation if replica
+  }
+  __u32 n;
+  decode(n, p);
+  while (n--) {
+    frag_t fg;
+    snapid_t fgfirst;
+    nest_info_t rstat;
+    nest_info_t accounted_rstat;
+    decltype(CDir::dirty_old_rstat) dirty_old_rstat;
+    decode(fg, p);
+    decode(fgfirst, p);
+    decode(rstat, p);
+    decode(accounted_rstat, p);
+    decode(dirty_old_rstat, p);
+    dout(10) << __func__ << " " << fg << " [" << fgfirst << ",head]" << dendl;
+    dout(10) << __func__ << " " << fg << " rstat " << rstat << dendl;
+    dout(10) << __func__ << " " << fg << " accounted_rstat " << accounted_rstat << dendl;
+    dout(10) << __func__ << " " << fg << " dirty_old_rstat " << dirty_old_rstat << dendl;
+    CDir *dir = get_dirfrag(fg);
+    if (is_auth()) {
+      ceph_assert(dir);                // i am auth; i had better have this dir open
+      dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+               << " on " << *dir << dendl;
+      dir->first = fgfirst;
+      dir->fnode.rstat = rstat;
+      dir->fnode.accounted_rstat = accounted_rstat;
+      dir->dirty_old_rstat.swap(dirty_old_rstat);
+      if (!(rstat == accounted_rstat) || !dir->dirty_old_rstat.empty()) {
+        dout(10) << fg << " setting nestlock updated flag" << dendl;
+        nestlock.mark_dirty();  // ok bc we're auth and caller will handle
+      }
+    } else {
+      if (dir && dir->is_auth()) {
+        dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+                 << " on " << *dir << dendl;
+        dir->first = fgfirst;
+        fnode_t *pf = dir->get_projected_fnode();
+        finish_scatter_update(&nestlock, dir,
+                              inode.rstat.version, pf->accounted_rstat.version);
+      }
+    }
+  }
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_ixattr(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  encode(inode.version, bl);
+  encode(inode.ctime, bl);
+  encode(xattrs, bl);
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_ixattr(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(inode.version, p);
+  utime_t tm;
+  decode(tm, p);
+  if (inode.ctime < tm) inode.ctime = tm;
+  decode(xattrs, p);
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_isnap(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  encode(inode.version, bl);
+  encode(inode.ctime, bl);
+  encode_snap(bl);
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_isnap(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(inode.version, p);
+  utime_t tm;
+  decode(tm, p);
+  if (inode.ctime < tm) inode.ctime = tm;
+  decode_snap(p);
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_iflock(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  encode(inode.version, bl);
+  _encode_file_locks(bl);
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_iflock(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(inode.version, p);
+  _decode_file_locks(p);
+  DECODE_FINISH(p);
+}
+
+void CInode::encode_lock_ipolicy(bufferlist& bl)
+{
+  ENCODE_START(1, 1, bl);
+  if (inode.is_dir()) {
+    encode(inode.version, bl);
+    encode(inode.ctime, bl);
+    encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
+    encode(inode.quota, bl);
+    encode(inode.export_pin, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  if (inode.is_dir()) {
+    decode(inode.version, p);
+    utime_t tm;
+    decode(tm, p);
+    if (inode.ctime < tm) inode.ctime = tm;
+    decode(inode.layout, p);
+    decode(inode.quota, p);
+    mds_rank_t old_pin = inode.export_pin;
+    decode(inode.export_pin, p);
+    maybe_export_pin(old_pin != inode.export_pin);
+  }
+  DECODE_FINISH(p);
+}
+
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
-  using ceph::encode;
+  ENCODE_START(1, 1, bl);
   encode(first, bl);
   if (!is_base())
     encode(parent->first, bl);
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
-    encode(inode.version, bl);
-    encode(inode.ctime, bl);
-    encode(inode.mode, bl);
-    encode(inode.uid, bl);
-    encode(inode.gid, bl);  
+    encode_lock_iauth(bl);
     break;
-    
+
   case CEPH_LOCK_ILINK:
-    encode(inode.version, bl);
-    encode(inode.ctime, bl);
-    encode(inode.nlink, bl);
+    encode_lock_ilink(bl);
     break;
-    
+
   case CEPH_LOCK_IDFT:
-    if (is_auth()) {
-      encode(inode.version, bl);
-    } else {
-      // treat flushing as dirty when rejoining cache
-      bool dirty = dirfragtreelock.is_dirty_or_flushing();
-      encode(dirty, bl);
-    }
-    {
-      // encode the raw tree
-      encode(dirfragtree, bl);
-
-      // also specify which frags are mine
-      set<frag_t> myfrags;
-      auto&& dfls = get_dirfrags();
-      for (const auto& dir : dfls) {
-	if (dir->is_auth()) {
-	  frag_t fg = dir->get_frag();
-	  myfrags.insert(fg);
-	}
-      }
-      encode(myfrags, bl);
-    }
+    encode_lock_idft(bl);
     break;
-    
-  case CEPH_LOCK_IFILE:
-    if (is_auth()) {
-      encode(inode.version, bl);
-      encode(inode.ctime, bl);
-      encode(inode.mtime, bl);
-      encode(inode.atime, bl);
-      encode(inode.time_warp_seq, bl);
-      if (!is_dir()) {
-	encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
-	encode(inode.size, bl);
-	encode(inode.truncate_seq, bl);
-	encode(inode.truncate_size, bl);
-	encode(inode.client_ranges, bl);
-	encode(inode.inline_data, bl);
-      }
-    } else {
-      // treat flushing as dirty when rejoining cache
-      bool dirty = filelock.is_dirty_or_flushing();
-      encode(dirty, bl);
-    }
 
-    {
-      dout(15) << __func__ << " inode.dirstat is " << inode.dirstat << dendl;
-      encode(inode.dirstat, bl);  // only meaningful if i am auth.
-      bufferlist tmp;
-      __u32 n = 0;
-      for (const auto &p : dirfrags) {
-	frag_t fg = p.first;
-	CDir *dir = p.second;
-	if (is_auth() || dir->is_auth()) {
-	  fnode_t *pf = dir->get_projected_fnode();
-	  dout(15) << fg << " " << *dir << dendl;
-	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
-	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
-	  encode(fg, tmp);
-	  encode(dir->first, tmp);
-	  encode(pf->fragstat, tmp);
-	  encode(pf->accounted_fragstat, tmp);
-	  n++;
-	}
-      }
-      encode(n, bl);
-      bl.claim_append(tmp);
-    }
+  case CEPH_LOCK_IFILE:
+    encode_lock_ifile(bl);
     break;
 
   case CEPH_LOCK_INEST:
-    if (is_auth()) {
-      encode(inode.version, bl);
-    } else {
-      // treat flushing as dirty when rejoining cache
-      bool dirty = nestlock.is_dirty_or_flushing();
-      encode(dirty, bl);
-    }
-    {
-      dout(15) << __func__ << " inode.rstat is " << inode.rstat << dendl;
-      encode(inode.rstat, bl);  // only meaningful if i am auth.
-      bufferlist tmp;
-      __u32 n = 0;
-      for (const auto &p : dirfrags) {
-	frag_t fg = p.first;
-	CDir *dir = p.second;
-	if (is_auth() || dir->is_auth()) {
-	  fnode_t *pf = dir->get_projected_fnode();
-	  dout(10) << fg << " " << *dir << dendl;
-	  dout(10) << fg << " " << pf->rstat << dendl;
-	  dout(10) << fg << " " << pf->rstat << dendl;
-	  dout(10) << fg << " " << dir->dirty_old_rstat << dendl;
-	  encode(fg, tmp);
-	  encode(dir->first, tmp);
-	  encode(pf->rstat, tmp);
-	  encode(pf->accounted_rstat, tmp);
-	  encode(dir->dirty_old_rstat, tmp);
-	  n++;
-	}
-      }
-      encode(n, bl);
-      bl.claim_append(tmp);
-    }
+    encode_lock_inest(bl);
     break;
     
   case CEPH_LOCK_IXATTR:
-    encode(inode.version, bl);
-    encode(inode.ctime, bl);
-    encode(xattrs, bl);
+    encode_lock_ixattr(bl);
     break;
 
   case CEPH_LOCK_ISNAP:
-    encode(inode.version, bl);
-    encode(inode.ctime, bl);
-    encode_snap(bl);
+    encode_lock_isnap(bl);
     break;
 
   case CEPH_LOCK_IFLOCK:
-    encode(inode.version, bl);
-    _encode_file_locks(bl);
+    encode_lock_iflock(bl);
     break;
 
   case CEPH_LOCK_IPOLICY:
-    if (inode.is_dir()) {
-      encode(inode.version, bl);
-      encode(inode.ctime, bl);
-      encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
-      encode(inode.quota, bl);
-      encode(inode.export_pin, bl);
-    }
+    encode_lock_ipolicy(bl);
     break;
   
   default:
     ceph_abort();
   }
+  ENCODE_FINISH(bl);
 }
-
 
 /* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 
 void CInode::decode_lock_state(int type, const bufferlist& bl)
 {
   auto p = bl.cbegin();
+
+  DECODE_START(1, p);
   utime_t tm;
 
   snapid_t newfirst;
@@ -1791,239 +2109,45 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
-    decode(inode.version, p);
-    decode(tm, p);
-    if (inode.ctime < tm) inode.ctime = tm;
-    decode(inode.mode, p);
-    decode(inode.uid, p);
-    decode(inode.gid, p);
+    decode_lock_iauth(p);
     break;
 
   case CEPH_LOCK_ILINK:
-    decode(inode.version, p);
-    decode(tm, p);
-    if (inode.ctime < tm) inode.ctime = tm;
-    decode(inode.nlink, p);
+    decode_lock_ilink(p);
     break;
 
   case CEPH_LOCK_IDFT:
-    if (is_auth()) {
-      bool replica_dirty;
-      decode(replica_dirty, p);
-      if (replica_dirty) {
-	dout(10) << __func__ << " setting dftlock dirty flag" << dendl;
-	dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
-      }
-    } else {
-      decode(inode.version, p);
-    }
-    {
-      fragtree_t temp;
-      decode(temp, p);
-      set<frag_t> authfrags;
-      decode(authfrags, p);
-      if (is_auth()) {
-	// auth.  believe replica's auth frags only.
-	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p)
-	  if (!dirfragtree.is_leaf(*p)) {
-	    dout(10) << " forcing frag " << *p << " to leaf (split|merge)" << dendl;
-	    dirfragtree.force_to_leaf(g_ceph_context, *p);
-	    dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
-	  }
-      } else {
-	// replica.  take the new tree, BUT make sure any open
-	//  dirfrags remain leaves (they may have split _after_ this
-	//  dft was scattered, or we may still be be waiting on the
-	//  notify from the auth)
-	dirfragtree.swap(temp);
-	for (const auto &p : dirfrags) {
-	  if (!dirfragtree.is_leaf(p.first)) {
-	    dout(10) << " forcing open dirfrag " << p.first << " to leaf (racing with split|merge)" << dendl;
-	    dirfragtree.force_to_leaf(g_ceph_context, p.first);
-	  }
-	  if (p.second->is_auth())
-	    p.second->state_clear(CDir::STATE_DIRTYDFT);
-	}
-      }
-      if (g_conf()->mds_debug_frag)
-	verify_dirfrags();
-    }
+    decode_lock_idft(p);
     break;
 
   case CEPH_LOCK_IFILE:
-    if (!is_auth()) {
-      decode(inode.version, p);
-      decode(tm, p);
-      if (inode.ctime < tm) inode.ctime = tm;
-      decode(inode.mtime, p);
-      decode(inode.atime, p);
-      decode(inode.time_warp_seq, p);
-      if (!is_dir()) {
-	decode(inode.layout, p);
-	decode(inode.size, p);
-	decode(inode.truncate_seq, p);
-	decode(inode.truncate_size, p);
-	decode(inode.client_ranges, p);
-	decode(inode.inline_data, p);
-      }
-    } else {
-      bool replica_dirty;
-      decode(replica_dirty, p);
-      if (replica_dirty) {
-	dout(10) << __func__ << " setting filelock dirty flag" << dendl;
-	filelock.mark_dirty();  // ok bc we're auth and caller will handle
-      }
-    }
-    {
-      frag_info_t dirstat;
-      decode(dirstat, p);
-      if (!is_auth()) {
-	dout(10) << " taking inode dirstat " << dirstat << " for " << *this << dendl;
-	inode.dirstat = dirstat;    // take inode summation if replica
-      }
-      __u32 n;
-      decode(n, p);
-      dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
-      while (n--) {
-	frag_t fg;
-	snapid_t fgfirst;
-	frag_info_t fragstat;
-	frag_info_t accounted_fragstat;
-	decode(fg, p);
-	decode(fgfirst, p);
-	decode(fragstat, p);
-	decode(accounted_fragstat, p);
-	dout(10) << fg << " [" << fgfirst << ",head] " << dendl;
-	dout(10) << fg << "           fragstat " << fragstat << dendl;
-	dout(20) << fg << " accounted_fragstat " << accounted_fragstat << dendl;
-
-	CDir *dir = get_dirfrag(fg);
-	if (is_auth()) {
-	  ceph_assert(dir);                // i am auth; i had better have this dir open
-	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
-		   << " on " << *dir << dendl;
-	  dir->first = fgfirst;
-	  dir->fnode.fragstat = fragstat;
-	  dir->fnode.accounted_fragstat = accounted_fragstat;
-	  dir->first = fgfirst;
-	  if (!(fragstat == accounted_fragstat)) {
-	    dout(10) << fg << " setting filelock updated flag" << dendl;
-	    filelock.mark_dirty();  // ok bc we're auth and caller will handle
-	  }
-	} else {
-	  if (dir && dir->is_auth()) {
-	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
-		     << " on " << *dir << dendl;
-	    dir->first = fgfirst;
-	    fnode_t *pf = dir->get_projected_fnode();
-	    finish_scatter_update(&filelock, dir,
-				  inode.dirstat.version, pf->accounted_fragstat.version);
-	  }
-	}
-      }
-    }
+    decode_lock_ifile(p);
     break;
 
   case CEPH_LOCK_INEST:
-    if (is_auth()) {
-      bool replica_dirty;
-      decode(replica_dirty, p);
-      if (replica_dirty) {
-	dout(10) << __func__ << " setting nestlock dirty flag" << dendl;
-	nestlock.mark_dirty();  // ok bc we're auth and caller will handle
-      }
-    } else {
-      decode(inode.version, p);
-    }
-    {
-      nest_info_t rstat;
-      decode(rstat, p);
-      if (!is_auth()) {
-	dout(10) << " taking inode rstat " << rstat << " for " << *this << dendl;
-	inode.rstat = rstat;    // take inode summation if replica
-      }
-      __u32 n;
-      decode(n, p);
-      while (n--) {
-	frag_t fg;
-	snapid_t fgfirst;
-	nest_info_t rstat;
-	nest_info_t accounted_rstat;
-	decltype(CDir::dirty_old_rstat) dirty_old_rstat;
-	decode(fg, p);
-	decode(fgfirst, p);
-	decode(rstat, p);
-	decode(accounted_rstat, p);
-	decode(dirty_old_rstat, p);
-	dout(10) << fg << " [" << fgfirst << ",head]" << dendl;
-	dout(10) << fg << "               rstat " << rstat << dendl;
-	dout(10) << fg << "     accounted_rstat " << accounted_rstat << dendl;
-	dout(10) << fg << "     dirty_old_rstat " << dirty_old_rstat << dendl;
-
-	CDir *dir = get_dirfrag(fg);
-	if (is_auth()) {
-	  ceph_assert(dir);                // i am auth; i had better have this dir open
-	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
-		   << " on " << *dir << dendl;
-	  dir->first = fgfirst;
-	  dir->fnode.rstat = rstat;
-	  dir->fnode.accounted_rstat = accounted_rstat;
-	  dir->dirty_old_rstat.swap(dirty_old_rstat);
-	  if (!(rstat == accounted_rstat) || !dir->dirty_old_rstat.empty()) {
-	    dout(10) << fg << " setting nestlock updated flag" << dendl;
-	    nestlock.mark_dirty();  // ok bc we're auth and caller will handle
-	  }
-	} else {
-	  if (dir && dir->is_auth()) {
-	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
-		     << " on " << *dir << dendl;
-	    dir->first = fgfirst;
-	    fnode_t *pf = dir->get_projected_fnode();
-	    finish_scatter_update(&nestlock, dir,
-				  inode.rstat.version, pf->accounted_rstat.version);
-	  }
-	}
-      }
-    }
+    decode_lock_inest(p);
     break;
 
   case CEPH_LOCK_IXATTR:
-    decode(inode.version, p);
-    decode(tm, p);
-    if (inode.ctime < tm) inode.ctime = tm;
-    decode(xattrs, p);
+    decode_lock_ixattr(p);
     break;
 
   case CEPH_LOCK_ISNAP:
-    {
-      decode(inode.version, p);
-      decode(tm, p);
-      if (inode.ctime < tm) inode.ctime = tm;
-      decode_snap(p);
-    }
+    decode_lock_isnap(p);
     break;
 
   case CEPH_LOCK_IFLOCK:
-    decode(inode.version, p);
-    _decode_file_locks(p);
+    decode_lock_iflock(p);
     break;
 
   case CEPH_LOCK_IPOLICY:
-    if (inode.is_dir()) {
-      decode(inode.version, p);
-      decode(tm, p);
-      if (inode.ctime < tm) inode.ctime = tm;
-      decode(inode.layout, p);
-      decode(inode.quota, p);
-      mds_rank_t old_pin = inode.export_pin;
-      decode(inode.export_pin, p);
-      maybe_export_pin(old_pin != inode.export_pin);
-    }
+    decode_lock_ipolicy(p);
     break;
 
   default:
     ceph_abort();
   }
+  DECODE_FINISH(p);
 }
 
 
@@ -2902,20 +3026,22 @@ void CInode::decode_snap_blob(const bufferlist& snapbl)
 
 void CInode::encode_snap(bufferlist& bl)
 {
-  using ceph::encode;
+  ENCODE_START(1, 1, bl);
   bufferlist snapbl;
   encode_snap_blob(snapbl);
   encode(snapbl, bl);
   encode(oldest_snap, bl);
+  ENCODE_FINISH(bl);
 }
 
 void CInode::decode_snap(bufferlist::const_iterator& p)
 {
-  using ceph::decode;
+  DECODE_START(1, p);
   bufferlist snapbl;
   decode(snapbl, p);
   decode(oldest_snap, p);
   decode_snap_blob(snapbl);
+  DECODE_FINISH(p);
 }
 
 // =============================================
@@ -3873,7 +3999,7 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
 
 void CInode::_encode_base(bufferlist& bl, uint64_t features)
 {
-  using ceph::encode;
+  ENCODE_START(1, 1, bl);
   encode(first, bl);
   encode(inode, bl, features);
   encode(symlink, bl);
@@ -3882,10 +4008,11 @@ void CInode::_encode_base(bufferlist& bl, uint64_t features)
   encode(old_inodes, bl, features);
   encode(damage_flags, bl);
   encode_snap(bl);
+  ENCODE_FINISH(bl);
 }
 void CInode::_decode_base(bufferlist::const_iterator& p)
 {
-  using ceph::decode;
+  DECODE_START(1, p);
   decode(first, p);
   decode(inode, p);
   {
@@ -3898,6 +4025,7 @@ void CInode::_decode_base(bufferlist::const_iterator& p)
   decode(old_inodes, p);
   decode(damage_flags, p);
   decode_snap(p);
+  DECODE_FINISH(p);
 }
 
 void CInode::_encode_locks_full(bufferlist& bl)
@@ -3935,6 +4063,7 @@ void CInode::_decode_locks_full(bufferlist::const_iterator& p)
 
 void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
 {
+  ENCODE_START(1, 1, bl);
   authlock.encode_state_for_replica(bl);
   linklock.encode_state_for_replica(bl);
   dirfragtreelock.encode_state_for_replica(bl);
@@ -3944,8 +4073,8 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
   snaplock.encode_state_for_replica(bl);
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
-  using ceph::encode;
   encode(need_recover, bl);
+  ENCODE_FINISH(bl);
 }
 
 void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
@@ -3961,8 +4090,9 @@ void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
   policylock.encode_state_for_replica(bl);
 }
 
-void CInode::_decode_locks_state(bufferlist::const_iterator& p, bool is_new)
+void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool is_new)
 {
+  DECODE_START(1, p);
   authlock.decode_state(p, is_new);
   linklock.decode_state(p, is_new);
   dirfragtreelock.decode_state(p, is_new);
@@ -3973,7 +4103,6 @@ void CInode::_decode_locks_state(bufferlist::const_iterator& p, bool is_new)
   flocklock.decode_state(p, is_new);
   policylock.decode_state(p, is_new);
 
-  using ceph::decode;
   bool need_recover;
   decode(need_recover, p);
   if (need_recover && is_new) {
@@ -3989,6 +4118,7 @@ void CInode::_decode_locks_state(bufferlist::const_iterator& p, bool is_new)
     flocklock.mark_need_recover();
     policylock.mark_need_recover();
   }
+  DECODE_FINISH(p);
 }
 void CInode::_decode_locks_rejoin(bufferlist::const_iterator& p, MDSContext::vec& waiters,
 				  list<SimpleLock*>& eval_locks, bool survivor)

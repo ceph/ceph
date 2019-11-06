@@ -129,6 +129,11 @@ void RemoveRequest<I>::handle_pre_remove_image(int r) {
     return;
   }
 
+  if (!m_image_ctx->data_ctx.is_valid()) {
+    detach_child();
+    return;
+  }
+
   trim_image();
 }
 
@@ -413,7 +418,7 @@ template<typename I>
 void RemoveRequest<I>::remove_v1_image() {
   ldout(m_cct, 20) << dendl;
 
-  Context *ctx = new FunctionContext([this] (int r) {
+  Context *ctx = new LambdaContext([this] (int r) {
       r = tmap_rm(m_ioctx, m_image_name);
       handle_remove_v1_image(r);
     });

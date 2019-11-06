@@ -106,7 +106,8 @@ class OSDThrasher(Thrasher):
     Object used to thrash Ceph
     """
     def __init__(self, manager, config, logger):
-        super(OSDThrasher, self).__init__()
+        Thrasher.__init__(self, "OSDThrasher")
+
         self.ceph_manager = manager
         self.cluster = manager.cluster
         self.ceph_manager.wait_for_clean()
@@ -1213,7 +1214,7 @@ class CephManager:
                 """
                 implement log behavior.
                 """
-                print x
+                print(x)
             self.log = tmp
         if self.config is None:
             self.config = dict()
@@ -1312,7 +1313,7 @@ class CephManager:
             return
         if no_wait is None:
             no_wait = []
-        for osd, need in seq.iteritems():
+        for osd, need in seq.items():
             if osd in no_wait:
                 continue
             got = 0
@@ -1618,7 +1619,7 @@ class CephManager:
         :param osdnum: osd number
         :param argdict: dictionary containing values to set.
         """
-        for k, v in argdict.iteritems():
+        for k, v in argdict.items():
             self.wait_run_admin_socket(
                 'osd', osdnum,
                 ['config', 'set', str(k), str(v)])
@@ -1896,14 +1897,18 @@ class CephManager:
         """
         self.log('Canceling any pending splits or merges...')
         osd_dump = self.get_osd_dump_json()
-        for pool in osd_dump['pools']:
-            if pool['pg_num'] != pool['pg_num_target']:
-                self.log('Setting pool %s (%d) pg_num %d -> %d' %
-                         (pool['pool_name'], pool['pool'],
-                          pool['pg_num_target'],
-                          pool['pg_num']))
-                self.raw_cluster_cmd('osd', 'pool', 'set', pool['pool_name'],
-                                     'pg_num', str(pool['pg_num']))
+        try:
+            for pool in osd_dump['pools']:
+                if pool['pg_num'] != pool['pg_num_target']:
+                    self.log('Setting pool %s (%d) pg_num %d -> %d' %
+                             (pool['pool_name'], pool['pool'],
+                              pool['pg_num_target'],
+                              pool['pg_num']))
+                    self.raw_cluster_cmd('osd', 'pool', 'set', pool['pool_name'],
+                                         'pg_num', str(pool['pg_num']))
+        except KeyError:
+            # we don't support pg_num_target before nautilus
+            pass
 
     def set_pool_pgpnum(self, pool_name, force):
         """
@@ -2665,8 +2670,7 @@ class CephManager:
         """
         Extract all the monitor status information from the cluster
         """
-        addr = self.ctx.ceph[self.cluster].mons['mon.%s' % mon]
-        out = self.raw_cluster_cmd('-m', addr, 'mon_status')
+        out = self.raw_cluster_cmd('tell', 'mon.%s' % mon, 'mon_status')
         return json.loads(out)
 
     def get_mon_quorum(self):

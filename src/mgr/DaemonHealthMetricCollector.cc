@@ -4,13 +4,6 @@
 #include "include/types.h"
 #include "DaemonHealthMetricCollector.h"
 
-
-
-ostream& operator<<(ostream& os,
-                    const DaemonHealthMetricCollector::DaemonKey& daemon) {
-  return os << daemon.first << "." << daemon.second;
-}
-
 namespace {
 
 class SlowOps final : public DaemonHealthMetricCollector {

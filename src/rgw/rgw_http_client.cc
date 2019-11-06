@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "include/compat.h"
 #include "common/errno.h"
@@ -91,8 +91,13 @@ struct rgw_http_req_data : public RefCountedObject {
 
   void set_state(int bitmask);
 
-  void finish(int r) {
+  void finish(int r, long http_status = -1) {
     std::lock_guard l{lock};
+    if (http_status != -1) {
+      if (client) {
+        client->set_http_status(http_status);
+      }
+    }
     ret = r;
     if (curl_handle)
       do_curl_easy_cleanup(curl_handle);
@@ -119,7 +124,7 @@ struct rgw_http_req_data : public RefCountedObject {
     std::lock_guard l{lock};
     return ret;
   }
-
+  
   RGWHTTPManager *get_manager() {
     std::lock_guard l{lock};
     return mgr;
@@ -854,9 +859,9 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
   req_data->put();
 }
 
-void RGWHTTPManager::finish_request(rgw_http_req_data *req_data, int ret)
+void RGWHTTPManager::finish_request(rgw_http_req_data *req_data, int ret, long http_status)
 {
-  req_data->finish(ret);
+  req_data->finish(ret, http_status);
   complete_request(req_data);
 }
 
@@ -1069,7 +1074,7 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
 
 int RGWHTTPManager::start()
 {
-  if (pipe_cloexec(thread_pipe) < 0) {
+  if (pipe_cloexec(thread_pipe, 0) < 0) {
     int e = errno;
     ldout(cct, 0) << "ERROR: pipe(): " << cpp_strerror(e) << dendl;
     return -e;
@@ -1172,7 +1177,7 @@ void *RGWHTTPManager::reqs_thread_entry()
           status = -EAGAIN;
         }
         int id = req_data->id;
-	finish_request(req_data, status);
+	finish_request(req_data, status, http_status);
         switch (result) {
           case CURLE_OK:
             break;

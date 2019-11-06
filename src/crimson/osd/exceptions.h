@@ -6,7 +6,7 @@
 #include <exception>
 #include <system_error>
 
-namespace ceph::osd {
+namespace crimson::osd {
 class error : private std::system_error {
 public:
   error(const std::errc ec)
@@ -40,6 +40,10 @@ struct invalid_argument : public error {
   invalid_argument() : error(std::errc::invalid_argument) {}
 };
 
+struct no_message_available : public error {
+  no_message_available() : error(std::errc::no_message_available) {}
+};
+
 // FIXME: error handling
 struct operation_not_supported : public error {
   operation_not_supported()
@@ -55,4 +59,4 @@ struct input_output_error : public error {
   input_output_error() : error(std::errc::io_error) {}
 };
 
-} // namespace ceph::osd
+} // namespace crimson::osd

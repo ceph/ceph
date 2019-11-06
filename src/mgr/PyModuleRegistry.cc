@@ -41,10 +41,10 @@ void PyModuleRegistry::init()
   // Set up global python interpreter
 #if PY_MAJOR_VERSION >= 3
 #define WCHAR(s) L ## #s
-  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(PYTHON_EXECUTABLE)));
+  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(MGR_PYTHON_EXECUTABLE)));
 #undef WCHAR
 #else
-  Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
+  Py_SetProgramName(const_cast<char*>(MGR_PYTHON_EXECUTABLE));
 #endif
   // Add more modules
   if (g_conf().get_val<bool>("daemonize")) {
@@ -286,14 +286,16 @@ std::set<std::string> PyModuleRegistry::probe_modules(const std::string &path) c
 }
 
 int PyModuleRegistry::handle_command(
-  std::string const &module_name,
+  const ModuleCommand& module_command,
+  const MgrSession& session,
   const cmdmap_t &cmdmap,
   const bufferlist &inbuf,
   std::stringstream *ds,
   std::stringstream *ss)
 {
   if (active_modules) {
-    return active_modules->handle_command(module_name, cmdmap, inbuf, ds, ss);
+    return active_modules->handle_command(module_command, session, cmdmap,
+                                          inbuf, ds, ss);
   } else {
     // We do not expect to be called before active modules is up, but
     // it's straightfoward to handle this case so let's do it.
