@@ -23,12 +23,10 @@ An example code is as follows:
 """
 import os
 import json
-import joblib
 import pickle
 import logging
 
 import numpy as np
-import pandas as pd
 from scipy import stats
 
 
@@ -90,10 +88,10 @@ class RHDiskFailurePredictor(object):
         # ensure all manufacturers whose context is defined in config file
         # have models and scalers saved inside model_dirpath
         for manufacturer in self.model_context:
-            scaler_path = os.path.join(model_dirpath, manufacturer + "_scaler.joblib")
+            scaler_path = os.path.join(model_dirpath, manufacturer + "_scaler.pkl")
             if not os.path.isfile(scaler_path):
                 return "Missing scaler file: {}".format(scaler_path)
-            model_path = os.path.join(model_dirpath, manufacturer + "_predictor.joblib")
+            model_path = os.path.join(model_dirpath, manufacturer + "_predictor.pkl")
             if not os.path.isfile(model_path):
                 return "Missing model file: {}".format(model_path)
 
@@ -123,45 +121,56 @@ class RHDiskFailurePredictor(object):
             )
             return None
 
-        # convert to dataframe, keeping only the required features
+        # convert to structured array, keeping only the required features
+        # assumes all data is in float64 dtype
         try:
-            disk_days_df = pd.DataFrame(disk_days, columns=model_smart_attr)
+            struc_dtypes = [(attr, np.float64) for attr in model_smart_attr]
+            values = [tuple(day[attr] for attr in model_smart_attr) for day in disk_days]
+            disk_days_sa = np.array(values, dtype=struc_dtypes)
         except KeyError as e:
             RHDiskFailurePredictor.LOGGER.debug(
                 "Mismatch in SMART attributes used to train model and SMART attributes available"
             )
             return None
 
+        # view structured array as 2d array for applying rolling window transforms
+        # do not include capacity_bytes in this. only use smart_attrs
+        disk_days_attrs = disk_days_sa[[attr for attr in model_smart_attr if 'smart_' in attr]]\
+                            .view(np.float64).reshape(disk_days_sa.shape + (-1,))
+
         # featurize n (6 to 12) days data - mean,std,coefficient of variation
         # current model is trained on 6 days of data because that is what will be
         # available at runtime
-        # NOTE: ensure unique indices so that features can be merged w/ pandas errors
-        disk_days_df = disk_days_df.reset_index(drop=True)
-        means = disk_days_df.drop("user_capacity", axis=1).rolling(6).mean()
-        stds = disk_days_df.drop("user_capacity", axis=1).rolling(6).std()
-        cvs = stds.divide(means, fill_value=0)
 
-        # rename and combine features into one df
-        means = means.rename(columns={col: "mean_" + col for col in means.columns})
-        stds = stds.rename(columns={col: "std_" + col for col in stds.columns})
-        cvs = cvs.rename(columns={col: "cv_" + col for col in cvs.columns})
-        featurized_df = means.merge(stds, left_index=True, right_index=True)
-        featurized_df = featurized_df.merge(cvs, left_index=True, right_index=True)
+        # rolling time window interval size in days
+        roll_window_size = 6
 
-        # drop rows where all features (mean,std,cv) are nans
-        featurized_df = featurized_df.dropna(how="all")
+        # rolling means generator
+        gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0) \
+                for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
+        means = np.vstack(gen)
 
-        # fill nans created by cv calculation
-        featurized_df = featurized_df.fillna(0)
+        # rolling stds generator
+        gen = (disk_days_attrs[i: i + roll_window_size, ...].std(axis=0, ddof=1) \
+                for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
+        stds = np.vstack(gen)
 
-        # capacity is not a feature that varies over time
-        featurized_df["user_capacity"] = disk_days_df["user_capacity"].iloc[0]
+        # coefficient of variation
+        cvs = stds / means
+        cvs[np.isnan(cvs)] = 0
+        featurized = np.hstack((
+                                means,
+                                stds,
+                                cvs,
+                                disk_days_sa['user_capacity'][: disk_days_attrs.shape[0] - roll_window_size + 1].reshape(-1, 1)
+                                ))
 
         # scale features
-        scaler_path = os.path.join(self.model_dirpath, manufacturer + "_scaler.joblib")
-        scaler = joblib.load(scaler_path)
-        featurized_df = scaler.transform(featurized_df)
-        return featurized_df
+        scaler_path = os.path.join(self.model_dirpath, manufacturer + "_scaler.pkl")
+        with open(scaler_path, 'rb') as f:
+            scaler = pickle.load(f)
+        featurized = scaler.transform(featurized)
+        return featurized
 
     @staticmethod
     def __get_manufacturer(model_name):
@@ -210,9 +219,10 @@ class RHDiskFailurePredictor(object):
 
         # get model for current manufacturer
         model_path = os.path.join(
-            self.model_dirpath, manufacturer + "_predictor.joblib"
+            self.model_dirpath, manufacturer + "_predictor.pkl"
         )
-        model = joblib.load(model_path)
+        with open(model_path, 'rb') as f:
+            model = pickle.load(f)
 
         # use prediction for most recent day
         # TODO: ensure that most recent day is last element and most previous day
