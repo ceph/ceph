@@ -52,10 +52,10 @@ void FSMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("standbys");
-  for (const auto &i : standby_daemons) {
+  for (const auto& [gid, info] : standby_daemons) {
     f->open_object_section("info");
-    i.second.dump(f);
-    f->dump_int("epoch", standby_epochs.at(i.first));
+    info.dump(f);
+    f->dump_int("epoch", standby_epochs.at(gid));
     f->close_section();
   }
   f->close_section();
