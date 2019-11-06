@@ -336,7 +336,7 @@ public:
   int handle_next_completion() {
     ceph_assert(!ios.empty());
     IO& io = ios.front();
-    io.c->wait_for_safe();
+    io.c->wait_for_complete();
     int ret = io.c->get_return_value();
     io.c->release();
 

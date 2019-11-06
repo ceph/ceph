@@ -14,8 +14,10 @@
 #include "PyFormatter.h"
 
 #include "common/debug.h"
+#include "mon/MonCommand.h"
 
 #include "ActivePyModule.h"
+#include "MgrSession.h"
 
 
 #define dout_context g_ceph_context
@@ -169,6 +171,8 @@ void ActivePyModule::config_notify()
 }
 
 int ActivePyModule::handle_command(
+  const ModuleCommand& module_command,
+  const MgrSession& session,
   const cmdmap_t &cmdmap,
   const bufferlist &inbuf,
   std::stringstream *ds,
@@ -192,10 +196,16 @@ int ActivePyModule::handle_command(
   string instr;
   inbuf.copy(0, inbuf.length(), instr);
 
+  ceph_assert(m_session == nullptr);
+  m_command_perms = module_command.perm;
+  m_session = &session;
+
   auto pResult = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("_handle_command"), const_cast<char*>("s#O"),
       instr.c_str(), instr.length(), py_cmd);
 
+  m_command_perms.clear();
+  m_session = nullptr;
   Py_DECREF(py_cmd);
 
   int r = 0;
@@ -227,3 +237,20 @@ void ActivePyModule::get_health_checks(health_check_map_t *checks)
   checks->merge(health_checks);
 }
 
+bool ActivePyModule::is_authorized(
+    const std::map<std::string, std::string>& arguments) const {
+  if (m_session == nullptr) {
+    return false;
+  }
+
+  // No need to pass command prefix here since that would have already been
+  // tested before command invokation. Instead, only test for service/module
+  // arguments as defined by the module itself.
+  MonCommand mon_command {"", "", "", m_command_perms};
+  return m_session->caps.is_capable(nullptr, m_session->entity_name, "py",
+                                    py_module->get_name(), "", arguments,
+                                    mon_command.requires_perm('r'),
+                                    mon_command.requires_perm('w'),
+                                    mon_command.requires_perm('x'),
+                                    m_session->get_peer_addr());
+}

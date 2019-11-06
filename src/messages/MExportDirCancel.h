@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirCancel : public Message {
+class MExportDirCancel : public SafeMessage {
 private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -28,9 +28,9 @@ private:
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
 protected:
-  MExportDirCancel() : Message{MSG_MDS_EXPORTDIRCANCEL, HEAD_VERSION, COMPAT_VERSION} {}
+  MExportDirCancel() : SafeMessage{MSG_MDS_EXPORTDIRCANCEL, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    Message{MSG_MDS_EXPORTDIRCANCEL, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df) {
+    SafeMessage{MSG_MDS_EXPORTDIRCANCEL, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirCancel() override {}

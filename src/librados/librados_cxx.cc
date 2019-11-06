@@ -1014,7 +1014,7 @@ int librados::AioCompletion::AioCompletion::wait_for_complete()
 int librados::AioCompletion::AioCompletion::wait_for_safe()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
-  return c->wait_for_safe();
+  return c->wait_for_complete();
 }
 
 bool librados::AioCompletion::AioCompletion::is_complete()
@@ -2794,6 +2794,15 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
 {
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
+  ceph_assert(r == 0);
+  return new AioCompletion(c);
+}
+
+librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
+								callback_t cb_complete)
+{
+  AioCompletionImpl *c;
+  int r = rados_aio_create_completion2(cb_arg, cb_complete, (void**)&c);
   ceph_assert(r == 0);
   return new AioCompletion(c);
 }

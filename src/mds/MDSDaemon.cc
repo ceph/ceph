@@ -63,8 +63,6 @@
 // cons/des
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
-  mds_lock(ceph::make_mutex("MDSDaemon::mds_lock")),
-  stopping(false),
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   beacon(m->cct, mc, n),
@@ -73,8 +71,6 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   monc(mc),
   mgrc(m->cct, m, &mc->monmap),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
-  mds_rank(NULL),
-  asok_hook(NULL),
   starttime(mono_clock::now())
 {
   orig_argc = 0;
@@ -921,12 +917,11 @@ void MDSDaemon::suicide()
 
   clean_up_admin_socket();
 
-  // Inform MDS we are going away, then shut down beacon
+  // Notify the Monitors (MDSMonitor) that we're dying, so that it doesn't have
+  // to wait for us to go laggy. Only do this if we're actually in the MDSMap,
+  // because otherwise the MDSMonitor will drop our message.
   beacon.set_want_state(*mdsmap, MDSMap::STATE_DNE);
   if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
-    // Notify the MDSMonitor that we're dying, so that it doesn't have to
-    // wait for us to go laggy.  Only do this if we're actually in the
-    // MDSMap, because otherwise the MDSMonitor will drop our message.
     beacon.send_and_wait(1);
   }
   beacon.shutdown();

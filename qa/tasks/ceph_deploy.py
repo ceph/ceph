@@ -242,7 +242,7 @@ def build_ceph_cluster(ctx, config):
         for d in node_dev_list:
             node = d[0]
             for disk in d[1:]:
-                zap = './ceph-deploy disk zap ' + node + ':' + disk
+                zap = './ceph-deploy disk zap ' + node + ' ' + disk
                 estatus = execute_ceph_deploy(zap)
                 if estatus != 0:
                     raise RuntimeError("ceph-deploy: Failed to zap osds")

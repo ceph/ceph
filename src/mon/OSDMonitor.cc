@@ -258,8 +258,7 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
   typedef std::map<std::string, std::string> CommandArgs;
 
   if (mon_caps.is_capable(
-	cct, CEPH_ENTITY_TYPE_MON,
-	entity_name, "osd",
+	cct, entity_name, "osd",
 	"osd pool op unmanaged-snap",
 	(pool_name == nullptr ?
 	 CommandArgs{} /* pool DNE, require unrestricted cap */ :
@@ -4053,7 +4052,6 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
     goto ignore;
   if (!session->caps.is_capable(
 	cct,
-	CEPH_ENTITY_TYPE_MON,
 	session->entity_name,
         "osd", "osd pool rmsnap", {}, true, true, false,
 	session->get_peer_socket_addr())) {
@@ -7860,14 +7858,20 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   int64_t uf = 0;  // micro-f
   cmd_getval(cct, cmdmap, "val", val);
 
-  // create list of properties that use SI units
-  std::set<std::string> si_items = {"target_max_objects"};
-  // create list of properties that use IEC units
-  std::set<std::string> iec_items = {"target_max_bytes", "target_size_bytes"};
-
-  if (si_items.count(var)) {
+  auto si_options = {
+    "target_max_objects"
+  };
+  auto iec_options = {
+    "target_max_bytes",
+    "target_size_bytes",
+    "compression_max_blob_size",
+    "compression_min_blob_size",
+    "csum_max_block",
+    "csum_min_block",
+  };
+  if (count(begin(si_options), end(si_options), var)) {
     n = strict_si_cast<int64_t>(val.c_str(), &interr);
-  } else if (iec_items.count(var)) {
+  } else if (count(begin(iec_options), end(iec_options), var)) {
     n = strict_iec_cast<int64_t>(val.c_str(), &interr);
   } else {
     // parse string as both int and float; different fields use different types.

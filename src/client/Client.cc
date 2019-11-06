@@ -4016,7 +4016,9 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
      * don't remove caps.
      */
     if (ceph_seq_cmp(seq, cap.seq) <= 0) {
-      ceph_assert(&cap == in->auth_cap);
+      if (&cap != in->auth_cap)
+         ldout(cct, 0) << "WARNING: " <<  "inode " << *in << " caps on mds." << mds << " != auth_cap." << dendl;
+
       ceph_assert(cap.cap_id == cap_id);
       seq = cap.seq;
       mseq = cap.mseq;
@@ -12634,15 +12636,6 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -EROFS;
   }
-  if (fromdir != todir) {
-    Inode *fromdir_root =
-      fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
-    Inode *todir_root =
-      todir->quota.is_enable() ? todir : get_quota_root(todir, perm);
-    if (fromdir_root != todir_root) {
-      return -EXDEV;
-    }
-  }
 
   InodeRef target;
   MetaRequest *req = new MetaRequest(op);
@@ -12675,7 +12668,32 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    res = _lookup(fromdir, fromname, 0, &oldin, perm);
+    Inode *fromdir_root = nullptr;
+    Inode *todir_root = nullptr;
+    int mask = 0;
+    bool quota_check = false;
+    if (fromdir != todir) {
+      fromdir_root =
+        fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
+      todir_root =
+        todir->quota.is_enable() ? todir : get_quota_root(todir, perm);
+
+      if (todir_root->quota.is_enable() && fromdir_root != todir_root) {
+        // use CEPH_STAT_RSTAT mask to force send getattr or lookup request 
+        // to auth MDS to get latest rstat for todir_root and source dir 
+        // even if their dentry caches and inode caps are satisfied.
+        res = _getattr(todir_root, CEPH_STAT_RSTAT, perm, true);
+        if (res < 0)
+          goto fail;
+
+        quota_check = true;
+        if (oldde->inode && oldde->inode->is_dir()) {
+          mask |= CEPH_STAT_RSTAT;
+        }
+      }
+    }
+
+    res = _lookup(fromdir, fromname, mask, &oldin, perm);
     if (res < 0)
       goto fail;
 
@@ -12683,6 +12701,39 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     oldinode->break_all_delegs();
     req->set_old_inode(oldinode);
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+
+    if (quota_check) {
+      int64_t old_bytes, old_files;
+      if (oldinode->is_dir()) {
+        old_bytes = oldinode->rstat.rbytes;
+        old_files = oldinode->rstat.rsize();
+      } else {
+        old_bytes = oldinode->size;
+        old_files = 1;
+      }
+
+      bool quota_exceed = false;
+      if (todir_root && todir_root->quota.max_bytes &&
+          (old_bytes + todir_root->rstat.rbytes) >= todir_root->quota.max_bytes) {
+        ldout(cct, 10) << "_rename (" << oldinode->ino << " bytes="
+                       << old_bytes << ") to (" << todir->ino 
+		       << ") will exceed quota on " << *todir_root << dendl;
+        quota_exceed = true;
+      }
+
+      if (todir_root && todir_root->quota.max_files &&
+          (old_files + todir_root->rstat.rsize()) >= todir_root->quota.max_files) {
+        ldout(cct, 10) << "_rename (" << oldinode->ino << " files="
+                       << old_files << ") to (" << todir->ino 
+                       << ") will exceed quota on " << *todir_root << dendl;
+        quota_exceed = true;
+      }
+
+      if (quota_exceed) {
+        res = (oldinode->is_dir()) ? -EXDEV : -EDQUOT;
+        goto fail;
+      }
+    }
 
     res = _lookup(todir, toname, 0, &otherin, perm);
     switch (res) {

@@ -99,7 +99,7 @@ public:
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectReadOperation *op) {
     std::lock_guard l{lock};
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
-    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
     if (r >= 0) {
       add_pending(arg->id, c, oid);
@@ -115,7 +115,7 @@ public:
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectWriteOperation *op) {
     std::lock_guard l{lock};
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
-    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
     if (r >= 0) {
       add_pending(arg->id, c, oid);

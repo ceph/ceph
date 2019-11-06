@@ -409,7 +409,7 @@ static int rgw_remove_bucket(RGWRadosStore *store, rgw_bucket& bucket, bool dele
 static int aio_wait(librados::AioCompletion *handle)
 {
   librados::AioCompletion *c = (librados::AioCompletion *)handle;
-  c->wait_for_safe();
+  c->wait_for_complete();
   int ret = c->get_return_value();
   c->release();
   return ret;

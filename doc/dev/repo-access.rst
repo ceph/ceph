@@ -6,7 +6,7 @@ Special branches
 
 * ``master``: current tip (integration branch)
 * Release branches (for example ``luminous``) corresponding to the releases
-  listed at :ref:`ceph-releases`
+  listed at :ref:`ceph-releases-index`
 
 Rules
 -----

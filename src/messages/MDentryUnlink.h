@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MDentryUnlink : public Message {
+class MDentryUnlink : public SafeMessage {
 private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -37,9 +37,9 @@ private:
 
 protected:
   MDentryUnlink() :
-    Message(MSG_MDS_DENTRYUNLINK, HEAD_VERSION, COMPAT_VERSION) { }
+    SafeMessage(MSG_MDS_DENTRYUNLINK, HEAD_VERSION, COMPAT_VERSION) { }
   MDentryUnlink(dirfrag_t df, std::string_view n) :
-    Message(MSG_MDS_DENTRYUNLINK, HEAD_VERSION, COMPAT_VERSION),
+    SafeMessage(MSG_MDS_DENTRYUNLINK, HEAD_VERSION, COMPAT_VERSION),
     dirfrag(df),
     dn(n) {}
   ~MDentryUnlink() override {}
