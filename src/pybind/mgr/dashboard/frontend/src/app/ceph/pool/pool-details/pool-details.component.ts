@@ -1,6 +1,7 @@
 import { Component, Input, OnChanges, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { TabsetComponent } from 'ngx-bootstrap/tabs';
 
 import { PoolService } from '../../../shared/api/pool.service';
@@ -68,5 +69,9 @@ export class PoolDetailsComponent implements OnChanges {
         this.selectedPoolConfiguration = poolConf;
       });
     }
+  }
+
+  filterNonPoolData(pool: object): object {
+    return _.omit(pool, ['cdExecuting', 'cdIsBinary']);
   }
 }
