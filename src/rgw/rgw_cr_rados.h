@@ -226,6 +226,73 @@ class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
   }
 };
 
+class RGWGenericAsyncCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  rgw::sal::RGWRadosStore *store;
+
+
+public:
+  class Action {
+  public:
+    virtual ~Action() {}
+    virtual int operate() = 0;
+  };
+
+private:
+  std::shared_ptr<Action> action;
+
+  class Request : public RGWAsyncRadosRequest {
+    std::shared_ptr<Action> action;
+  protected:
+    int _send_request() override {
+      if (!action) {
+	return 0;
+      }
+      return action->operate();
+    }
+  public:
+    Request(RGWCoroutine *caller,
+            RGWAioCompletionNotifier *cn,
+            std::shared_ptr<Action>& _action) : RGWAsyncRadosRequest(caller, cn),
+                                           action(_action) {}
+  } *req{nullptr};
+
+ public:
+  RGWGenericAsyncCR(CephContext *_cct,
+		    RGWAsyncRadosProcessor *_async_rados,
+		    std::shared_ptr<Action>& _action) : RGWSimpleCoroutine(_cct),
+                                                  async_rados(_async_rados),
+                                                  action(_action) {}
+  template<typename T>
+  RGWGenericAsyncCR(CephContext *_cct,
+		    RGWAsyncRadosProcessor *_async_rados,
+		    std::shared_ptr<T>& _action) : RGWSimpleCoroutine(_cct),
+                                                  async_rados(_async_rados),
+                                                  action(std::static_pointer_cast<Action>(_action)) {}
+
+  ~RGWGenericAsyncCR() override {
+    request_cleanup();
+  }
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request() override {
+    req = new Request(this,
+                      stack->create_completion_notifier(),
+                      action);
+
+    async_rados->queue(req);
+    return 0;
+  }
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+};
+
 
 class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
   RGWSysObjectCtx obj_ctx;
