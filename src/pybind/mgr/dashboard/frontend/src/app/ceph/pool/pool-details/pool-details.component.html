@@ -4,7 +4,7 @@
   <tab i18n-heading
        heading="Details">
     <cd-table-key-value [renderObjects]="true"
-                        [data]="selection.first()"
+                        [data]="filterNonPoolData(selection.first())"
                         [autoReload]="false">
     </cd-table-key-value>
   </tab>
