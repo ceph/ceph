@@ -326,10 +326,12 @@ class IscsiTarget(RESTController):
                 IscsiClient.instance(gateway_name=gateway_name).delete_group(target_iqn,
                                                                              group_id)
             TaskManager.current_task().inc_progress(task_progress_inc)
+        deleted_clients = []
         for client_iqn in list(target_config['clients'].keys()):
             if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
                                                      new_clients, client_iqn,
                                                      new_groups, deleted_groups):
+                deleted_clients.append(client_iqn)
                 IscsiClient.instance(gateway_name=gateway_name).delete_client(target_iqn,
                                                                               client_iqn)
             TaskManager.current_task().inc_progress(task_progress_inc)
@@ -337,6 +339,14 @@ class IscsiTarget(RESTController):
             if IscsiTarget._target_lun_deletion_required(target, new_target_iqn,
                                                          new_target_controls,
                                                          new_disks, image_id):
+                all_clients = target_config['clients'].keys()
+                not_deleted_clients = [c for c in all_clients if c not in deleted_clients]
+                for client_iqn in not_deleted_clients:
+                    client_image_ids = target_config['clients'][client_iqn]['luns'].keys()
+                    for client_image_id in client_image_ids:
+                        if image_id == client_image_id:
+                            IscsiClient.instance(gateway_name=gateway_name).delete_client_lun(
+                                target_iqn, client_iqn, client_image_id)
                 IscsiClient.instance(gateway_name=gateway_name).delete_target_lun(target_iqn,
                                                                                   image_id)
                 pool, image = image_id.split('/', 1)
@@ -638,13 +648,17 @@ class IscsiTarget(RESTController):
                 image = disk['image']
                 image_id = '{}/{}'.format(pool, image)
                 backstore = disk['backstore']
+                wwn = disk.get('wwn')
+                lun = disk.get('lun')
                 if image_id not in config['disks']:
                     IscsiClient.instance(gateway_name=gateway_name).create_disk(pool,
                                                                                 image,
-                                                                                backstore)
+                                                                                backstore,
+                                                                                wwn)
                 if not target_config or image_id not in target_config['disks']:
                     IscsiClient.instance(gateway_name=gateway_name).create_target_lun(target_iqn,
-                                                                                      image_id)
+                                                                                      image_id,
+                                                                                      lun)
 
                 controls = disk['controls']
                 d_conf_controls = {}
@@ -666,18 +680,20 @@ class IscsiTarget(RESTController):
                 if not target_config or client_iqn not in target_config['clients']:
                     IscsiClient.instance(gateway_name=gateway_name).create_client(target_iqn,
                                                                                   client_iqn)
-                    for lun in client['luns']:
-                        pool = lun['pool']
-                        image = lun['image']
-                        image_id = '{}/{}'.format(pool, image)
-                        IscsiClient.instance(gateway_name=gateway_name).create_client_lun(
-                            target_iqn, client_iqn, image_id)
                     user = client['auth']['user']
                     password = client['auth']['password']
                     m_user = client['auth']['mutual_user']
                     m_password = client['auth']['mutual_password']
                     IscsiClient.instance(gateway_name=gateway_name).create_client_auth(
                         target_iqn, client_iqn, user, password, m_user, m_password)
+                for lun in client['luns']:
+                    pool = lun['pool']
+                    image = lun['image']
+                    image_id = '{}/{}'.format(pool, image)
+                    if not target_config or client_iqn not in target_config['clients'] or \
+                            image_id not in target_config['clients'][client_iqn]['luns']:
+                        IscsiClient.instance(gateway_name=gateway_name).create_client_lun(
+                            target_iqn, client_iqn, image_id)
                 TaskManager.current_task().inc_progress(task_progress_inc)
             for group in groups:
                 group_id = group['group_id']
