@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <libpmemobj.h>
+#include "librbd/BlockGuard.h"
 
 class Context;
 
@@ -178,6 +179,7 @@ struct WriteLogPmemEntry {
     : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes),
       entry_valid(0), sync_point(0), sequenced(0), has_data(0), discard(0), writesame(0) {
   }
+  const BlockExtent block_extent();
   bool is_sync_point();
   bool is_discard();
   bool is_writesame();

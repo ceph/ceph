@@ -26,8 +26,16 @@ namespace cache {
 
 namespace rwl {
 
+class SyncPointLogEntry;
+class GeneralWriteLogEntry;
+class WriteLogEntry;
 class GenericLogEntry;
+
+typedef std::list<std::shared_ptr<GeneralWriteLogEntry>> GeneralWriteLogEntries;
+typedef std::list<std::shared_ptr<WriteLogEntry>> WriteLogEntries;
 typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
+
+/**** Write log entries end ****/
 
 class DeferredContexts;
 template <typename> class ImageCacheState;
