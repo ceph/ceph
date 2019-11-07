@@ -261,7 +261,8 @@ def check_unit(unit_name):
     # various exit codes based on the state of the service, but the
     # string result is more explicit (and sufficient).
     try:
-        out, err, code = call(['systemctl', 'is-enabled', unit_name])
+        out, err, code = call(['systemctl', 'is-enabled', unit_name],
+                              verbose_on_failure=False)
         enabled = out.strip() == 'enabled'
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
@@ -269,7 +270,8 @@ def check_unit(unit_name):
 
     state = 'unknown'
     try:
-        out, err, code = call(['systemctl', 'is-active', unit_name])
+        out, err, code = call(['systemctl', 'is-active', unit_name],
+                              verbose_on_failure=False)
         out = out.strip()
         if out in ['active']:
             state = 'running'
@@ -1354,7 +1356,8 @@ def list_daemons():
                             podman_path, 'inspect',
                             '--format', '{{.Id}}',
                             'ceph-%s-%s' % (fsid, j)
-                        ])
+                        ],
+                        verbose_on_failure=False)
                     if not code:
                         container_id = out.strip()[0:12]
                         out, err, code = call(
