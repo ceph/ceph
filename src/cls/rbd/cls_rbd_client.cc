@@ -1808,8 +1808,8 @@ int mirror_peer_list(librados::IoCtx *ioctx,
 
 int mirror_peer_add(librados::IoCtx *ioctx, const std::string &uuid,
                     const std::string &cluster_name,
-                    const std::string &client_name, int64_t pool_id) {
-  cls::rbd::MirrorPeer peer(uuid, cluster_name, client_name, pool_id);
+                    const std::string &client_name) {
+  cls::rbd::MirrorPeer peer(uuid, cluster_name, client_name, -1);
   bufferlist in_bl;
   encode(peer, in_bl);
 
