@@ -68,7 +68,8 @@
              let-actionDescription="actionDescription">
   <div *ngIf="!safeToDestroyResult['is_safe_to_destroy']"
        class="danger">
-    <cd-alert-panel type="warning" i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to destroy!</cd-alert-panel>
+    <cd-alert-panel type="warning"
+                    i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to destroy!</cd-alert-panel>
   </div>
   <ng-container i18n><strong>OSD {{ getSelectedOsdIds() | list }}</strong> will be
 <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>

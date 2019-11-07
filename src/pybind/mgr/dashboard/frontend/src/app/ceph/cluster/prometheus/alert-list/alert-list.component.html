@@ -12,7 +12,8 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <tabset cdTableDetail *ngIf="selection.hasSingleSelection">
+  <tabset cdTableDetail
+          *ngIf="selection.hasSingleSelection">
     <tab i18n-heading
          heading="Details">
       <cd-table-key-value [renderObjects]="true"
@@ -29,5 +30,6 @@
 <ng-template #externalLinkTpl
              let-row="row"
              let-value="value">
-  <a [href]="value" target="_blank"><i [ngClass]="[icons.lineChart]"></i> Source</a>
+  <a [href]="value"
+     target="_blank"><i [ngClass]="[icons.lineChart]"></i> Source</a>
 </ng-template>
