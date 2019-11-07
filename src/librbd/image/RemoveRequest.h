@@ -63,7 +63,7 @@ private:
    *                              PRE REMOVE IMAGE * * *        |
    *                                     |             *        |
    *                                     v             *        |
-   *    (skip if invalid data pool) TRIM IMAGE * * * * *        |
+   *                                TRIM IMAGE * * * * *        |
    *                                     |             *        |
    *                                     v             *        |
    *                                DETACH CHILD       *        |

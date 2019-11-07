@@ -124,11 +124,6 @@ public:
 
     ldout(m_cct, 20) << dendl;
 
-    if (!image_ctx.data_ctx.is_valid()) {
-      lderr(m_cct) << "missing data pool" << dendl;
-      return -ENODEV;
-    }
-
     if (image_ctx.exclusive_lock != nullptr &&
         !image_ctx.exclusive_lock->is_lock_owner()) {
       ldout(m_cct, 1) << "lost exclusive lock during sparsify" << dendl;
