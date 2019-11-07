@@ -33,7 +33,6 @@ set(common_srcs
   Readahead.cc
   RefCountedObj.cc
   SloppyCRCMap.cc
-  SubProcess.cc
   Thread.cc
   Throttle.cc
   Timer.cc
@@ -89,6 +88,7 @@ set(common_srcs
   pick_address.cc
   random_string.cc
   reverse.c
+  run_cmd.cc
   scrub_types.cc
   shared_mutex_debug.cc
   signal.cc
@@ -106,14 +106,15 @@ set(common_srcs
 if(WIN32)
   list(APPEND common_srcs
     blkdev_win32.cc
-    dns_resolve_win32.cc)
+    dns_resolve_win32.cc
+    SubProcess_win32.cc)
 else()
   list(APPEND common_srcs
     blkdev.cc
     dns_resolve.cc
     ipaddr.cc
     linux_version.c
-    run_cmd.cc)
+    SubProcess.cc)
 endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/version.cc
