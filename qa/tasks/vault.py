@@ -126,19 +126,30 @@ def run_vault(ctx, config):
 @contextlib.contextmanager
 def setup_vault(ctx, config):
     """
-    Mount simple kv Secret Engine
-    Note: this will be extended to support transit secret engine
+    Mount Transit or KV version 2 secrets engine
     """
-    data = {
-        "type": "kv",
-        "options": {
-            "version": "2"
-        }
-    }
-
     (cclient, cconfig) = config.items()[0]
-    log.info('Mount kv version 2 secret engine')
-    send_req(ctx, cconfig, cclient, '/v1/sys/mounts/kv', json.dumps(data))
+    engine = cconfig.get('engine')
+
+    if engine == 'kv':
+        log.info('Mounting kv version 2 secrets engine')
+        mount_path = '/v1/sys/mounts/kv'
+        data = {
+            "type": "kv",
+            "options": {
+                "version": "2"
+            }
+        }
+    elif engine == 'transit':
+        log.info('Mounting transit secrets engine')
+        mount_path = '/v1/sys/mounts/transit'
+        data = {
+            "type": "transit"
+        }
+    else:
+        raise Exception("Unknown or missing secrets engine")
+
+    send_req(ctx, cconfig, cclient, mount_path, json.dumps(data))
     yield
 
 
@@ -152,13 +163,14 @@ def send_req(ctx, cconfig, client, path, body, method='POST'):
     resp = req.getresponse()
     log.info(resp.read())
     if not (resp.status >= 200 and resp.status < 300):
-        raise Exception("Error Contacting Vault Server")
+        raise Exception("Request to Vault server failed with status %d" % resp.status)
     return resp
 
 
 @contextlib.contextmanager
 def create_secrets(ctx, config):
     (cclient, cconfig) = config.items()[0]
+    engine = cconfig.get('engine')
     prefix = cconfig.get('prefix')
     secrets = cconfig.get('secrets')
     if secrets is None:
@@ -166,17 +178,25 @@ def create_secrets(ctx, config):
 
     for secret in secrets:
         try:
-            data = {
-                "data": {
-                    "key": secret['secret']
+            path = secret['path']
+        except KeyError:
+            raise ConfigError('Missing "path" field in secret')
+
+        if engine == 'kv':
+            try:
+                data = {
+                    "data": {
+                        "key": secret['secret']
+                    }
                 }
-            }
-        except KeyError:
-            raise ConfigError('vault.secrets must have "secret" field')
-        try:
-            send_req(ctx, cconfig, cclient, urljoin(prefix, secret['path']), json.dumps(data))
-        except KeyError:
-            raise ConfigError('vault.secrets must have "path" field')
+            except KeyError:
+                raise ConfigError('Missing "secret" field in secret')
+        elif engine == 'transit':
+            data = {"exportable": "true"}
+        else:
+            raise Exception("Unknown or missing secrets engine")
+
+        send_req(ctx, cconfig, cclient, urljoin(prefix, path), json.dumps(data))
 
     log.info("secrets created")
     yield
@@ -194,6 +214,8 @@ def task(ctx, config):
         client.0:
           version: 1.2.2
           root_token: test_root_token
+          engine: kv
+          prefix: /v1/kv/data/
           secrets:
             - path: kv/teuthology/key_a
               secret: YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
@@ -220,6 +242,7 @@ def task(ctx, config):
     ctx.vault.endpoints = assign_ports(ctx, config, 8200)
     ctx.vault.root_token = None
     ctx.vault.prefix = config[client].get('prefix')
+    ctx.vault.engine = config[client].get('engine')
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),

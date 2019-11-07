@@ -680,10 +680,12 @@ EOF
         ; The following settings are for SSE-KMS with Vault
         ;rgw crypt s3 kms backend = vault
         ;rgw crypt vault auth = token
-        ;rgw crypt vault addr = http://127.0.0.1:8200
-        ;rgw crypt vault prefix = /v1/transit/export/encryption-key/
         ;rgw crypt vault token file = $CEPH_CONF_PATH/vault.token
+        ;rgw crypt vault addr = http://127.0.0.1:8200
+        ;rgw crypt vault secret engine = kv
+        ;rgw crypt vault prefix = /v1/kv/data
         ;rgw crypt vault secret engine = transit
+        ;rgw crypt vault prefix = /v1/transit/export/encryption-key/
 
 $extra_conf
 EOF

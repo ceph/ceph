@@ -93,7 +93,7 @@ protected:
       ldout(cct, 0) << "Loading Vault Token from filesystem" << dendl;
       res = load_token_from_file(&vault_token);
       if (res < 0){
-	return res;
+        return res;
       }
     }
 
@@ -177,9 +177,9 @@ private:
     size_t pos = 0;
 
     pos = key_id.rfind("/");
-    if (pos != std::string::npos){
+    if (pos != boost::string_view::npos){
       boost::string_view token = key_id.substr(pos+1, key_id.length()-pos);
-      if (!token.empty() && token.find_first_not_of("0123456789") == std::string::npos){
+      if (!token.empty() && token.find_first_not_of("0123456789") == boost::string_view::npos){
         version.assign(std::string(token));
         return 0;
       }
