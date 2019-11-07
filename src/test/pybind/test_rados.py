@@ -34,8 +34,11 @@ def test_rados_init():
 
 def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
+        if not conn.pool_exists('rbd'):
+            conn.create_pool('rbd')
         with conn.open_ioctx('rbd') as ioctx:
             pass
+        conn.delete_pool('rbd')
 
 def test_parse_argv():
     args = ['osd', 'pool', 'delete', 'foobar', 'foobar', '--yes-i-really-really-mean-it']
