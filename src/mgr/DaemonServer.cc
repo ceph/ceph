@@ -498,7 +498,9 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     // Clients should not be sending us stats unless they are declaring
     // themselves to be a daemon for some service.
     dout(10) << "rejecting report from non-daemon client " << m->daemon_name
-	    << dendl;
+	     << dendl;
+    clog->warn() << "rejecting report from non-daemon client " << m->daemon_name
+		 << " at " << m->get_connection()->get_peer_addrs();
     m->get_connection()->mark_down();
     return true;
   }
