@@ -264,9 +264,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def handle_command(self, inbuf, command):
         if command["prefix"] == "ssh set-ssh-config":
-            return self._set_ssh_config(inbuf, command)
+            return self._set_ssh_config(inbuf)
         elif command["prefix"] == "ssh clear-ssh-config":
-            return self._clear_ssh_config(inbuf, command)
+            return self._clear_ssh_config()
         else:
             raise NotImplementedError(command["prefix"])
 
@@ -314,7 +314,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 ", ".join(map(lambda h: "'{}'".format(h),
                     unregistered_hosts))))
 
-    def _set_ssh_config(self, inbuf, command):
+    def _set_ssh_config(self, inbuf):
         """
         Set an ssh_config file provided from stdin
 
@@ -326,7 +326,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.set_store("ssh_config", inbuf)
         return 0, "", ""
 
-    def _clear_ssh_config(self, inbuf, command):
+    def _clear_ssh_config(self):
         """
         Clear the ssh_config file provided from stdin
         """
