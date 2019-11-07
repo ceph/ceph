@@ -46,6 +46,7 @@ struct Election {
   map<int, set<int> > blocked_messages;
   int count;
   ElectionLogic::election_strategy election_strategy;
+  int ping_interval;
   set<int> disallowed_leaders;
 
   vector< function<void()> > messages;
@@ -56,7 +57,7 @@ struct Election {
   set<int> last_quorum_reported;
   int last_leader = -1;
   
-  Election(int c, ElectionLogic::election_strategy es, double tracker_halflife=5);
+  Election(int c, ElectionLogic::election_strategy es, int pingi=1, double tracker_halflife=5);
   ~Election();
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
@@ -196,13 +197,13 @@ struct Owner : public ElectionOwner, RankProvider {
     map<int,ConnectionReport> crs;
     bufferlist::const_iterator bi = bl.begin();
     decode(crs, bi);
-    peer_tracker.report_live_connection(rank, 1);
+    peer_tracker.report_live_connection(rank, parent->ping_interval);
     for (auto& i : crs) {
       peer_tracker.receive_peer_report(i.second);
     }
   }
   void receive_ping_timeout(int rank) {
-    peer_tracker.report_dead_connection(rank, 1);
+    peer_tracker.report_dead_connection(rank, parent->ping_interval);
   }
   void election_timeout() {
     ldout(g_ceph_context, 2) << "election epoch " << logic.get_epoch()
@@ -256,14 +257,16 @@ struct Owner : public ElectionOwner, RankProvider {
       }
     }
 
-    send_pings();
+    if (parent->timesteps_run % parent->ping_interval == 0) {
+      send_pings();
+    }
   }
   const char *prefix_name() { return "Owner:         "; }
   int timestep_count() { return parent->timesteps_run; }
 };
 
-Election::Election(int c, ElectionLogic::election_strategy es,
-		   double tracker_halflife) : count(c), election_strategy(es),
+Election::Election(int c, ElectionLogic::election_strategy es, int pingi,
+		   double tracker_halflife) : count(c), election_strategy(es), ping_interval(pingi),
   pending_election_messages(0), timesteps_run(0), last_quorum_change(0), last_quorum_formed(-1)
 {
   for (int i = 0; i < count; ++i) {
@@ -776,6 +779,49 @@ void handles_singly_connected_peon(ElectionLogic::election_strategy strategy)
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
+void handles_disagreeing_connectivity(ElectionLogic::election_strategy strategy)
+{
+  Election election(5, strategy, 5); // ping every 5 timesteps so they start elections before settling scores!
+
+  // start everybody up and run for a bit
+  election.start_all();
+  election.run_timesteps(20);
+  ASSERT_TRUE(election.quorum_stable(5));
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+
+  // block all the connections
+  for (int i = 0; i < 5; ++i) {
+    for (int j = i+1; j < 5; ++j) {
+      election.block_bidirectional_messages(i, j);
+    }
+  }
+
+  // now start them electing, which will obviously fail
+  election.start_all();
+  election.run_timesteps(50); // let them all demote scores of their peers
+  ASSERT_FALSE(election.quorum_stable(10));
+  ASSERT_FALSE(election.election_stable());
+
+  // now reconnect them, at which point they should start running an election before exchanging scores
+  for (int i = 0; i < 5; ++i) {
+    for (int j = i+1; j < 5; ++j) {
+      election.unblock_bidirectional_messages(i, j);
+    }
+  }
+  election.run_timesteps(100);
+
+  // these will pass if the nodes managed to converge on scores, but I expect failure
+  ASSERT_TRUE(election.quorum_stable(5));
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+}
+
+// TODO: write a test with more complicated connectivity graphs and make sure
+// they are stable with multiple disconnected ranks pinging peons
+
 // TODO: Write a test that disallowing and disconnecting 0 is otherwise stable?
 
 #define test_classic(utest) TEST(classic, utest) { utest(ElectionLogic::CLASSIC); }
@@ -806,3 +852,4 @@ test_connectivity(converges_after_flapping)
 test_connectivity(converges_while_flapping)
 test_connectivity(netsplit_with_disallowed_tiebreaker_converges)
 test_connectivity(handles_singly_connected_peon)
+test_connectivity(handles_disagreeing_connectivity)
