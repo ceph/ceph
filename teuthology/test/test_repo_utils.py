@@ -1,4 +1,5 @@
 import logging
+import mock
 import os
 import os.path
 from pytest import raises, mark
@@ -91,6 +92,26 @@ class TestRepoUtils(object):
         repo_utils.clone_repo(self.repo_url, self.dest_path, 'master')
         with raises(BranchNotFoundError):
             repo_utils.fetch_branch(self.dest_path, 'nobranch')
+
+    @mark.parametrize('git_str',
+                      ["fatal: couldn't find remote ref",
+                       "fatal: Couldn't find remote ref"])
+    @mock.patch('subprocess.Popen')
+    def test_fetch_branch_different_git_versions(self, mock_popen, git_str):
+        """
+        Newer git versions return a lower case string
+        See: https://github.com/git/git/commit/0b9c3afdbfb629363
+        """
+        branch_name = 'nobranch'
+        process_mock = mock.Mock()
+        attrs = {
+            'wait.return_value': 1,
+            'stdout.read.return_value': "%s %s" % (git_str, branch_name),
+        }
+        process_mock.configure_mock(**attrs)
+        mock_popen.return_value = process_mock
+        with raises(BranchNotFoundError):
+            repo_utils.fetch_branch('', branch_name)
 
     def test_enforce_existing_branch(self):
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
