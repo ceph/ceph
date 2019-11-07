@@ -1478,7 +1478,7 @@ namespace librbd {
   int64_t Image::get_data_pool_id()
   {
     ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
-    return ictx->data_ctx.get_id();
+    return librbd::api::Image<>::get_data_pool_id(ictx);
   }
 
   int Image::parent_info(string *parent_pool_name, string *parent_name,
@@ -4308,7 +4308,7 @@ extern "C" int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
 extern "C" int64_t rbd_get_data_pool_id(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx *>(image);
-  return ictx->data_ctx.get_id();
+  return librbd::api::Image<>::get_data_pool_id(ictx);
 }
 
 extern "C" int rbd_get_parent_info(rbd_image_t image,
