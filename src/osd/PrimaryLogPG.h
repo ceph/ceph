@@ -529,6 +529,8 @@ public:
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override;
   void send_message_osd_cluster(
+    std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override;
+  void send_message_osd_cluster(
     Message *m, Connection *con) override;
   void send_message_osd_cluster(
     Message *m, const ConnectionRef& con) override;
