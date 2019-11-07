@@ -19,6 +19,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "mon/health_check.h"
+#include <algorithm>
 
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
@@ -363,23 +364,50 @@ int main(int argc, const char **argv)
 	 << std::endl;
     OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
     pending_inc.fsid = osdmap.get_fsid();
-    set<int64_t> pools;
+    vector<int64_t> pools;
     for (auto& s : upmap_pools) {
       int64_t p = osdmap.lookup_pg_pool_name(s);
       if (p < 0) {
-	cerr << " pool '" << s << "' does not exist" << std::endl;
+	cerr << " pool " << s << " does not exist" << std::endl;
 	exit(1);
       }
-      pools.insert(p);
+      pools.push_back(p);
     }
-    if (!pools.empty())
+    if (!pools.empty()) {
       cout << " limiting to pools " << upmap_pools << " (" << pools << ")"
 	   << std::endl;
-    int changed = osdmap.calc_pg_upmaps(
-      g_ceph_context, upmap_deviation,
-      upmap_max, pools,
-      &pending_inc);
-    if (changed) {
+    } else {
+      mempool::osdmap::map<int64_t,pg_pool_t> opools = osdmap.get_pools();
+      for (auto& i : opools) {
+         pools.push_back(i.first);
+      }
+    }
+    if (pools.empty()) {
+      cout << "No pools available" << std::endl;
+      goto skip_upmap;
+    }
+    srand(time(0));
+    random_shuffle (pools.begin(), pools.end());
+    cout << "pools ";
+    for (auto& i: pools)
+      cout << osdmap.get_pool_name(i) << " ";
+    cout << std::endl;
+    int total_did = 0;
+    int left = upmap_max;
+    for (auto& i: pools) {
+      set<int64_t> one_pool;
+      one_pool.insert(i);
+      int did = osdmap.calc_pg_upmaps(
+        g_ceph_context, upmap_deviation,
+        left, one_pool,
+        &pending_inc);
+      total_did += did;
+      left -= did;
+      if (left <= 0)
+        break;
+    }
+    cout << "prepared " << total_did << "/" << upmap_max  << " changes" << std::endl;
+    if (total_did > 0) {
       print_inc_upmaps(pending_inc, upmap_fd);
       if (upmap_save) {
 	int r = osdmap.apply_incremental(pending_inc);
@@ -387,9 +415,12 @@ int main(int argc, const char **argv)
 	modified = true;
       }
     } else {
-      cout << "no upmaps proposed" << std::endl;
+      cout << "Unable to find further optimization, "
+	   << "or distribution is already perfect"
+	   << std::endl;
     }
   }
+skip_upmap:
   if (upmap_file != "-") {
     ::close(upmap_fd);
   }
