@@ -36,11 +36,6 @@ describe('OSDs page', () => {
       await expect(osds.getTableTotalCount()).toEqual(osds.getTableRows().count());
     });
 
-    it('should verify that selected footer increases when an entry is clicked', async () => {
-      await osds.getFirstCell().click();
-      await expect(osds.getTableSelectedCount()).toEqual(1);
-    });
-
     it('should verify that buttons exist', async () => {
       await expect(element(by.cssContainingText('button', 'Scrub')).isPresent()).toBe(true);
       await expect(
@@ -48,20 +43,29 @@ describe('OSDs page', () => {
       ).toBe(true);
     });
 
-    it('should show the correct text for the tab labels', async () => {
-      await osds.getFirstCell().click();
-      const tabHeadings = $$('#tabset-osd-details > div > tab').map((e) =>
-        e.getAttribute('heading')
-      );
-      await expect(tabHeadings).toEqual([
-        'Devices',
-        'Attributes (OSD map)',
-        'Metadata',
-        'Device health',
-        'Performance counter',
-        'Histogram',
-        'Performance Details'
-      ]);
+    describe('by selecting one row in OSDs List', () => {
+      beforeAll(async () => {
+        await osds.getFirstCell().click();
+      });
+
+      it('should verify that selected footer increases', async () => {
+        await expect(osds.getTableSelectedCount()).toEqual(1);
+      });
+
+      it('should show the correct text for the tab labels', async () => {
+        const tabHeadings = $$('#tabset-osd-details > div > tab').map((e) =>
+          e.getAttribute('heading')
+        );
+        await expect(tabHeadings).toEqual([
+          'Devices',
+          'Attributes (OSD map)',
+          'Metadata',
+          'Device health',
+          'Performance counter',
+          'Histogram',
+          'Performance Details'
+        ]);
+      });
     });
   });
 });
