@@ -3239,6 +3239,9 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
       return -EBADF;
     }
 
+    if ((fh->mode & CEPH_FILE_MODE_WR) && fh->gen != fd_gen)
+      return -EBADF;
+
     if ((in->flags & I_ERROR_FILELOCK) && fh->has_any_filelocks())
       return -EIO;
 
@@ -6348,6 +6351,7 @@ void Client::tick()
       last_auto_reconnect + 30 * 60 < now &&
       cct->_conf.get_val<bool>("client_reconnect_stale")) {
     messenger->client_reset();
+    fd_gen++; // invalidate open files
     blacklisted = false;
     _kick_stale_sessions();
     last_auto_reconnect = now;
@@ -8784,7 +8788,7 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 {
   ceph_assert(in);
-  Fh *f = new Fh(in, flags, cmode, perms);
+  Fh *f = new Fh(in, flags, cmode, fd_gen, perms);
 
   ldout(cct, 10) << __func__ << " " << in->ino << " mode " << cmode << dendl;
 
@@ -8912,7 +8916,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
       if (cmode & CEPH_FILE_MODE_RD)
         need |= CEPH_CAP_FILE_RD;
 
-      Fh fh(in, flags, cmode, perms);
+      Fh fh(in, flags, cmode, fd_gen, perms);
       result = get_caps(&fh, need, want, &have, -1);
       if (result < 0) {
 	ldout(cct, 8) << "Unable to get caps after open of inode " << *in <<

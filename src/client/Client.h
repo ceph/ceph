@@ -1233,6 +1233,7 @@ private:
   ceph::unordered_map<int, Fh*> fd_map;
   set<Fh*> ll_unclosed_fh_set;
   ceph::unordered_set<dir_result_t*> opened_dirs;
+  uint64_t fd_gen = 1;
 
   bool   initialized = false;
   bool   mounted = false;

@@ -17,6 +17,7 @@ struct Fh {
   loff_t    pos;
   int       mds;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
+  uint64_t  gen;
 
   int flags;
   bool pos_locked;           // pos is currently in use
@@ -50,7 +51,7 @@ struct Fh {
   }
 
   Fh() = delete;
-  Fh(InodeRef in, int flags, int cmode, const UserPerm &perms);
+  Fh(InodeRef in, int flags, int cmode, uint64_t gen, const UserPerm &perms);
   ~Fh();
 
   void get() { ++_ref; }
