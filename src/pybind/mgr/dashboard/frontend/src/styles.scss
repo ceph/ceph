@@ -278,7 +278,8 @@ a {
   color: $color-required-text;
 }
 /* Forms */
-.form-group > .col-form-label > span.required {
+.form-group > .col-form-label > span.required,
+.form-group > .col-sm-12 > .col-form-label > span.required {
   @extend .fa;
   @extend .fa-asterisk;
   @extend .required;
