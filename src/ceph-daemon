@@ -831,6 +831,7 @@ def command_bootstrap():
         cp.add_section('global')
     cp.set('global', 'fsid', fsid);
     cp.set('global', 'mon host', addr_arg)
+    cp.set('global', 'container_image', args.image)
     cpf = StringIO()
     cp.write(cpf)
     config = cpf.getvalue()
