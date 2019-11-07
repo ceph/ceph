@@ -2169,7 +2169,9 @@ struct pg_stat_t {
     // adding (or subtracting!) invalid stats render our stats invalid too
     stats_invalid |= o.stats_invalid;
     dirty_stats_invalid |= o.dirty_stats_invalid;
+    omap_stats_invalid |= o.omap_stats_invalid;
     hitset_stats_invalid |= o.hitset_stats_invalid;
+    hitset_bytes_stats_invalid |= o.hitset_bytes_stats_invalid;
     pin_stats_invalid |= o.pin_stats_invalid;
     manifest_stats_invalid |= o.manifest_stats_invalid;
   }
