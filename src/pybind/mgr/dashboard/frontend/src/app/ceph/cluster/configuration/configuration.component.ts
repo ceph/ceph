@@ -3,6 +3,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -83,7 +84,8 @@ export class ConfigurationComponent implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     private configurationService: ConfigurationService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().configOpt;
     const getConfigOptUri = () =>
@@ -92,7 +94,7 @@ export class ConfigurationComponent implements OnInit {
       permission: 'update',
       icon: 'fa-pencil',
       routerLink: () => `/configuration/edit/${getConfigOptUri()}`,
-      name: this.i18n('Edit'),
+      name: this.actionLabels.EDIT,
       disable: () => !this.isEditable(this.selection)
     };
     this.tableActions = [editAction];

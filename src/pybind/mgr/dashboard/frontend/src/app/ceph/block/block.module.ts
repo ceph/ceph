@@ -149,9 +149,9 @@ const routes: Routes = [
         children: [
           { path: '', component: IscsiTargetListComponent },
           {
-            path: URLVerbs.ADD,
+            path: URLVerbs.CREATE,
             component: IscsiTargetFormComponent,
-            data: { breadcrumbs: ActionLabels.ADD }
+            data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: `${URLVerbs.EDIT}/:target_iqn`,

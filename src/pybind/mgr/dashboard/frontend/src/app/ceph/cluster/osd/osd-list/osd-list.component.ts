@@ -7,6 +7,7 @@ import { Observable } from 'rxjs';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
@@ -60,54 +61,55 @@ export class OsdListComponent implements OnInit {
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private modalService: BsModalService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
-        name: this.i18n('Scrub'),
+        name: this.actionLabels.SCRUB,
         permission: 'update',
         icon: 'fa-stethoscope',
         click: () => this.scrubAction(false),
         disable: () => !this.hasOsdSelected
       },
       {
-        name: this.i18n('Deep Scrub'),
+        name: this.actionLabels.DEEP_SCRUB,
         permission: 'update',
         icon: 'fa-cog',
         click: () => this.scrubAction(true),
         disable: () => !this.hasOsdSelected
       },
       {
-        name: this.i18n('Reweight'),
+        name: this.actionLabels.REWEIGHT,
         permission: 'update',
         click: () => this.reweight(),
         disable: () => !this.hasOsdSelected,
         icon: 'fa-balance-scale'
       },
       {
-        name: this.i18n('Mark Out'),
+        name: this.actionLabels.MARK_OUT,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('out'), this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
         icon: 'fa-arrow-left'
       },
       {
-        name: this.i18n('Mark In'),
+        name: this.actionLabels.MARK_IN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('in'), this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
         icon: 'fa-arrow-right'
       },
       {
-        name: this.i18n('Mark Down'),
+        name: this.actionLabels.MARK_DOWN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('down'), this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
         icon: 'fa-arrow-down'
       },
       {
-        name: this.i18n('Mark Lost'),
+        name: this.actionLabels.MARK_LOST,
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
@@ -120,7 +122,7 @@ export class OsdListComponent implements OnInit {
         icon: 'fa-unlink'
       },
       {
-        name: this.i18n('Purge'),
+        name: this.actionLabels.PURGE,
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
@@ -133,7 +135,7 @@ export class OsdListComponent implements OnInit {
         icon: 'fa-eraser'
       },
       {
-        name: this.i18n('Destroy'),
+        name: this.actionLabels.DESTROY,
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
