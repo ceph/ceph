@@ -1052,6 +1052,30 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
   release_map(next_map);
 }
 
+void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch)
+{
+  OSDMapRef next_map = get_nextmap_reserved();
+  // service map is always newer/newest
+  ceph_assert(from_epoch <= next_map->get_epoch());
+
+  for (auto& iter : messages) {
+    if (next_map->is_down(iter.first) ||
+	next_map->get_info(iter.first).up_from > from_epoch) {
+      iter.second->put();
+      continue;
+    }
+    ConnectionRef peer_con;
+    if (iter.first == whoami) {
+      peer_con = osd->cluster_messenger->get_loopback_connection();
+    } else {
+      peer_con = osd->cluster_messenger->connect_to_osd(
+	  next_map->get_cluster_addrs(iter.first), false, true);
+    }
+    maybe_share_map(peer_con.get(), next_map);
+    peer_con->send_message(iter.second);
+  }
+  release_map(next_map);
+}
 ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
 {
   OSDMapRef next_map = get_nextmap_reserved();

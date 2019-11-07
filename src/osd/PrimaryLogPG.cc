@@ -483,6 +483,12 @@ void PrimaryLogPG::send_message_osd_cluster(
 }
 
 void PrimaryLogPG::send_message_osd_cluster(
+  std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch)
+{
+  osd->send_message_osd_cluster(messages, from_epoch);
+}
+
+void PrimaryLogPG::send_message_osd_cluster(
   Message *m, Connection *con)
 {
   osd->send_message_osd_cluster(m, con);
