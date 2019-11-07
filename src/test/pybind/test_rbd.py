@@ -767,6 +767,9 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         eq([], list(self.image.list_snaps()))
 
+    def test_remove_snap_not_found(self):
+        assert_raises(ImageNotFound, self.image.remove_snap, 'snap1')
+
     def test_remove_snap2(self):
         self.image.create_snap('snap1')
         self.image.protect_snap('snap1')
