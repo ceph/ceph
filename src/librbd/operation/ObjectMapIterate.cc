@@ -194,6 +194,11 @@ private:
 
 template <typename I>
 void ObjectMapIterateRequest<I>::send() {
+  if (!m_image_ctx.data_ctx.is_valid()) {
+    this->async_complete(-ENODEV);
+    return;
+  }
+
   send_verify_objects();
 }
 
@@ -201,6 +206,12 @@ template <typename I>
 bool ObjectMapIterateRequest<I>::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
+
+  if (r == -ENODEV) {
+    lderr(cct) << "missing data pool" << dendl;
+    return true;
+  }
+
   if (r < 0) {
     lderr(cct) << "object map operation encountered an error: "
 	       << cpp_strerror(r) << dendl;

@@ -305,6 +305,35 @@ for i in ${image2} ${image4}; do
   compare_images ${POOL} ${i}
 done
 
+testlog "TEST: remove mirroring pool"
+pool=pool_to_remove
+for cluster in ${CLUSTER1} ${CLUSTER2}; do
+    CEPH_ARGS='' ceph --cluster ${cluster} osd pool create ${pool} 16 16
+    CEPH_ARGS='' rbd --cluster ${cluster} pool init ${pool}
+    rbd --cluster ${cluster} mirror pool enable ${pool} pool
+done
+rbd --cluster ${CLUSTER1} mirror pool peer add ${pool} ${CLUSTER2}
+rbd --cluster ${CLUSTER2} mirror pool peer add ${pool} ${CLUSTER1}
+rdp_image=test_remove_data_pool
+create_image ${CLUSTER2} ${pool} ${image} 128
+create_image ${CLUSTER2} ${POOL} ${rdp_image} 128 --data-pool ${pool}
+write_image ${CLUSTER2} ${pool} ${image} 100
+write_image ${CLUSTER2} ${POOL} ${rdp_image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${pool} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${pool} ${image} 'up+replaying' 'master_position'
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${rdp_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${rdp_image} 'up+replaying' 'master_position'
+for cluster in ${CLUSTER1} ${CLUSTER2}; do
+    CEPH_ARGS='' ceph --cluster ${cluster} osd pool rm ${pool} ${pool} --yes-i-really-really-mean-it
+done
+remove_image_retry ${CLUSTER2} ${POOL} ${rdp_image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${rdp_image} 'deleted'
+for i in 0 1 2 4 8 8 8 8 16 16; do
+    sleep $i
+    admin_daemons "${CLUSTER2}" rbd mirror status ${pool}/${image} || break
+done
+admin_daemons "${CLUSTER2}" rbd mirror status ${pool}/${image} && false
+
 testlog "TEST: snapshot rename"
 snap_name='snap_rename'
 create_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_0"

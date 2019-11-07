@@ -378,7 +378,7 @@ public:
   }
 
   void expect_init_layout(MockRefreshImageCtx &mock_image_ctx) {
-    EXPECT_CALL(mock_image_ctx, init_layout());
+    EXPECT_CALL(mock_image_ctx, init_layout(_));
   }
 
   void expect_test_features(MockRefreshImageCtx &mock_image_ctx) {

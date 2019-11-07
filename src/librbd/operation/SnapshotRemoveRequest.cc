@@ -263,6 +263,11 @@ template <typename I>
 void SnapshotRemoveRequest<I>::release_snap_id() {
   I &image_ctx = this->m_image_ctx;
 
+  if (!image_ctx.data_ctx.is_valid()) {
+    remove_snap();
+    return;
+  }
+
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << "snap_name=" << m_snap_name << ", "
                 << "snap_id=" << m_snap_id << dendl;

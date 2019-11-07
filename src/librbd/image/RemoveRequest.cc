@@ -126,6 +126,11 @@ void RemoveRequest<I>::handle_pre_remove_image(int r) {
     return;
   }
 
+  if (!m_image_ctx->data_ctx.is_valid()) {
+    detach_child();
+    return;
+  }
+
   trim_image();
 }
 
