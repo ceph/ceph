@@ -7247,6 +7247,12 @@ void MDCache::standby_trim_segment(LogSegment *ls)
     CInode *in = ls->dirty_dirfrag_dirfragtree.front();
     in->dirfragtreelock.remove_dirty();
   }
+  while (!ls->truncating_inodes.empty()) {
+    auto it = ls->truncating_inodes.begin();
+    CInode *in = *it;
+    ls->truncating_inodes.erase(it);
+    in->put(CInode::PIN_TRUNCATING);
+  }
 }
 
 /* This function DOES put the passed message before returning */
