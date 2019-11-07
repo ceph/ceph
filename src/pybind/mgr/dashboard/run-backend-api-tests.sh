@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 
-set -eo pipefail
+# cross shell: Are we sourced?
+# Source: https://stackoverflow.com/a/28776166/3185053
+([[ -n $ZSH_EVAL_CONTEXT && $ZSH_EVAL_CONTEXT =~ :file$ ]] ||
+ [[ -n $KSH_VERSION && $(cd "$(dirname -- "$0")" &&
+    printf '%s' "${PWD%/}/")$(basename -- "$0") != "${.sh.file}" ]] ||
+ [[ -n $BASH_VERSION ]] && (return 0 2>/dev/null)) && sourced=1 || sourced=0
+
+if [ "$sourced" -eq 0 ] ; then
+    set -eo pipefail
+fi
 
 if [[ "$1" = "-h" || "$1" = "--help" ]]; then
 	echo "Usage (run from ./):"
@@ -45,7 +54,9 @@ get_build_py_version() {
 
 setup_teuthology() {
     TEMP_DIR=`mktemp -d`
-    TEUTHOLOGY_PY_REQS="
+    cd $TEMP_DIR
+
+    cat <<EOF > t_reqs.txt
 apache-libcloud==2.2.1
 asn1crypto==0.22.0
 backports.ssl-match-hostname==3.5.0.1
@@ -78,15 +89,15 @@ PyYAML==3.12
 requests==2.18.4
 six==1.10.0
 urllib3==1.22
-"
+EOF
 
-    cd $TEMP_DIR
     virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
     source venv/bin/activate
     pip install 'setuptools >= 12'
-    eval pip install $TEUTHOLOGY_PY_REQS
-    pip install -r $CURR_DIR/requirements.txt -c $CURR_DIR/constraints.txt
-
+    pip install -r t_reqs.txt
+    pushd $CURR_DIR
+    pip install -r requirements.txt -c constraints.txt
+    popd
     git clone --depth 1 https://github.com/ceph/teuthology.git
 
     deactivate
@@ -157,7 +168,7 @@ run_teuthology_tests() {
     export COVERAGE_FILE=.coverage.mgr.dashboard
     find . -iname "*${COVERAGE_FILE}*" -type f -delete
 
-    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries $OPTIONS $TEST_CASES
+    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries $OPTIONS $(echo $TEST_CASES)
 
     deactivate
     cd $CURR_DIR
@@ -196,8 +207,9 @@ setup_coverage
 run_teuthology_tests --create-cluster-only
 
 # End sourced section. Do not exit shell when the script has been sourced.
-set +e
-return 2>/dev/null || set -eo pipefail
+if [ "$sourced" -eq 1 ] ; then
+    return
+fi
 
 run_teuthology_tests "$@"
 cleanup_teuthology
