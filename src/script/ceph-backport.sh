@@ -31,7 +31,6 @@ deprecated_backport_common="$HOME/bin/backport_common.sh"
 existing_pr_milestone_number=""
 github_token=""
 github_token_file="$HOME/.github_token"
-github_token_ok=""
 github_user=""
 milestone=""
 non_interactive=""
@@ -41,7 +40,6 @@ original_pr=""
 original_pr_url=""
 redmine_key=""
 redmine_key_file="$HOME/.redmine_key"
-redmine_key_ok=""
 redmine_login=""
 redmine_user_id=""
 setup_ok=""
@@ -948,7 +946,7 @@ function set_github_user_from_github_token {
     else
         [ "$github_user" ] || assert_fail "set_github_user_from_github_token: failed to set github_user"
         info "my GitHub username is $github_user"
-        github_token_ok="yes"
+        setup_ok="yes"
     fi
 }
 
@@ -963,7 +961,7 @@ function set_redmine_user_from_redmine_key {
         [ "$redmine_user_id" ] || assert_fail "set_redmine_user_from_redmine_key: failed to set redmine_user_id"
         [ "$redmine_login" ] || assert_fail "set_redmine_user_from_redmine_key: failed to set redmine_login"
         info "my Redmine username is $redmine_login (ID $redmine_user_id)"
-        redmine_key_ok="yes"
+        setup_ok="yes"
     else
         error "Redmine API access key $redmine_key is invalid"
         redmine_login=""
@@ -1262,7 +1260,7 @@ function vet_setup {
         [ "$redmine_key" ] && set_redmine_user_from_redmine_key
     fi
     if [ "$github_token" ] ; then
-        if [ "$github_token_ok" ] ; then
+        if [ "$setup_ok" ] ; then
             github_token_display="(OK; value not shown)"
         else
             github_token_display="$invalid"
@@ -1271,7 +1269,7 @@ function vet_setup {
         github_token_display="$not_set"
     fi
     if [ "$redmine_key" ] ; then
-        if [ "$redmine_key_ok" ] ; then
+        if [ "$setup_ok" ] ; then
             redmine_key_display="(OK; value not shown)"
         else
             redmine_key_display="$invalid"
@@ -1457,7 +1455,7 @@ fi
 if [ "$INTERACTIVE_SETUP_ROUTINE" ] || [ "$SETUP_OPTION" ] ; then
     echo
     if [ "$setup_ok" ] ; then
-        if [ "$ISSUE" ] ; then
+        if [ "$ISSUE" ] && [ "$ISSUE" != "0" ] ; then
             true
         else
             exit 0
