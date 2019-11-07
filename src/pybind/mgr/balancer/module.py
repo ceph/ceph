@@ -951,51 +951,41 @@ class Module(MgrModule):
             detail = 'No pools available'
             self.log.info(detail)
             return -errno.ENOENT, detail
+        # shuffle pool list so they all get equal (in)attention
+        random.shuffle(pools)
+        self.log.info('pools %s' % pools)
 
         inc = plan.inc
         total_did = 0
         left = max_optimizations
-        osdmap_dump = self.get_osdmap().dump()
-        pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
+        pools_with_pg_merge = [p['pool_name'] for p in self.get_osdmap().dump().get('pools', [])
                                if p['pg_num'] > p['pg_num_target']]
-        crush_rule_by_pool_name = dict((p['pool_name'], p['crush_rule']) for p in osdmap_dump.get('pools', []))
-        pools_by_crush_rule = {} # group pools by crush_rule
         for pool in pools:
-            if pool not in crush_rule_by_pool_name:
-                self.log.info('pool %s does not exist' % pool)
-                continue
             if pool in pools_with_pg_merge:
                 self.log.info('pool %s has pending PG(s) for merging, skipping for now' % pool)
                 continue
-            crush_rule = crush_rule_by_pool_name[pool]
-            if crush_rule not in pools_by_crush_rule:
-                pools_by_crush_rule[crush_rule] = []
-            pools_by_crush_rule[crush_rule].append(pool)
-        classified_pools = list(pools_by_crush_rule.values())
-        # shuffle so all pools get equal (in)attention
-        random.shuffle(classified_pools)
-        for it in classified_pools:
+
             pool_dump = osdmap_dump.get('pools', [])
             num_pg = 0
             for p in pool_dump:
-                if p['pool_name'] in it:
+                if p['pool_name'] == pool:
                     num_pg += p['pg_num']
+                    break
 
             # note that here we deliberately exclude any scrubbing pgs too
             # since scrubbing activities have significant impacts on performance
-            pool_ids = list(p['pool'] for p in pool_dump if p['pool_name'] in it)
+            pool_id = p['pool'] for p in pool_dump if p['pool_name'] == pool
             num_pg_active_clean = 0
             pg_dump = self.get('pg_dump')
             for p in pg_dump['pg_stats']:
                 pg_pool = p['pgid'].split('.')[0]
-                if len(pool_ids) and int(pg_pool) not in pool_ids:
+                if int(pg_pool) != pool_id:
                     continue
                 if p['state'] == 'active+clean':
                     num_pg_active_clean += 1
 
             available = max_optimizations - (num_pg - num_pg_active_clean)
-            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, available, it)
-            self.log.info('prepared %d changes for pool(s) %s' % (did, it))
+            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, available, [pool])
             total_did += did
         self.log.info('prepared %d changes in total' % total_did)
         if total_did == 0:
