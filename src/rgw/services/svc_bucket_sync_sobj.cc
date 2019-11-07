@@ -687,12 +687,12 @@ int RGWSI_Bucket_Sync_SObj::get_bucket_sync_hints(const rgw_bucket& bucket,
       return r;
     }
 
-    index.get_entities(bucket, dests);
+    index.get_entities(bucket, sources);
 
     if (!bucket.bucket_id.empty()) {
       rgw_bucket b = bucket;
       b.bucket_id.clear();
-      index.get_entities(bucket, dests);
+      index.get_entities(b, sources);
     }
   }
 
@@ -710,7 +710,7 @@ int RGWSI_Bucket_Sync_SObj::get_bucket_sync_hints(const rgw_bucket& bucket,
     if (!bucket.bucket_id.empty()) {
       rgw_bucket b = bucket;
       b.bucket_id.clear();
-      index.get_entities(bucket, dests);
+      index.get_entities(b, dests);
     }
   }
 

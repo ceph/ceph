@@ -345,7 +345,6 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
 void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucket,
                                        RGWBucketSyncFlowManager::pipe_set *source_pipes,
                                        RGWBucketSyncFlowManager::pipe_set *dest_pipes,
-				       std::optional<rgw_bucket> filter_peer_bucket,
                                        bool only_enabled) const
 
 {
@@ -354,7 +353,7 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
   entity.bucket = effective_bucket.value_or(rgw_bucket());
 
   if (parent) {
-    parent->reflect(effective_bucket, source_pipes, dest_pipes, filter_peer_bucket, only_enabled);
+    parent->reflect(effective_bucket, source_pipes, dest_pipes, only_enabled);
   }
 
   for (auto& item : flow_groups) {
@@ -371,9 +370,6 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       if (!pipe.dest.match_bucket(effective_bucket)) {
         continue;
       }
-      if (!pipe.source.match_bucket(filter_peer_bucket)) {
-	continue;
-      }
 
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
@@ -386,9 +382,6 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
 
       if (!pipe.source.match_bucket(effective_bucket)) {
         continue;
-      }
-      if (!pipe.dest.match_bucket(filter_peer_bucket)) {
-	continue;
       }
 
       pipe.source.apply_bucket(effective_bucket);
@@ -510,8 +503,7 @@ RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const rgw_bu
   return new RGWBucketSyncPolicyHandler(this, bucket, sync_policy);
 }
 
-int RGWBucketSyncPolicyHandler::init(std::optional<rgw_bucket> filter_peer_bucket,
-				     optional_yield y)
+int RGWBucketSyncPolicyHandler::init(optional_yield y)
 {
   int r = bucket_sync_svc->get_bucket_sync_hints(bucket.value_or(rgw_bucket()),
 						 &source_hints,
@@ -531,7 +523,6 @@ int RGWBucketSyncPolicyHandler::init(std::optional<rgw_bucket> filter_peer_bucke
           &targets,
           &source_zones,
           &target_zones,
-	  filter_peer_bucket,
           true);
 
   return 0;
@@ -543,7 +534,6 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
                                          map<string, RGWBucketSyncFlowManager::pipe_set> *ptargets,
                                          std::set<string> *psource_zones,
                                          std::set<string> *ptarget_zones,
-					 std::optional<rgw_bucket> filter_peer_bucket,
                                          bool only_enabled) const
 {
   RGWBucketSyncFlowManager::pipe_set _sources_by_name;
@@ -553,7 +543,7 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
   std::set<string> _source_zones;
   std::set<string> _target_zones;
 
-  flow_mgr->reflect(bucket, &_sources_by_name, &_targets_by_name, filter_peer_bucket, only_enabled);
+  flow_mgr->reflect(bucket, &_sources_by_name, &_targets_by_name, only_enabled);
 
   for (auto& pipe : _sources_by_name.pipes) {
     if (!pipe.source.zone) {
@@ -598,6 +588,29 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
   }
   if (ptarget_zones) {
     *ptarget_zones = std::move(_target_zones);
+  }
+}
+
+void RGWBucketSyncPolicyHandler::get_pipes(RGWBucketSyncFlowManager::pipe_set *sources, RGWBucketSyncFlowManager::pipe_set *targets,
+					   std::optional<rgw_sync_bucket_entity> filter_peer) { /* return raw pipes (with zone name) */
+  if (!filter_peer) {
+    *sources = sources_by_name;
+    *targets = targets_by_name;
+    return;
+  }
+
+  auto& filter = *filter_peer;
+
+  for (auto& source_pipe : sources_by_name.pipes) {
+    if (source_pipe.source.match(filter)) {
+      sources->pipes.insert(source_pipe);
+    }
+  }
+
+  for (auto& target_pipe : targets_by_name.pipes) {
+    if (target_pipe.dest.match(filter)) {
+      targets->pipes.insert(target_pipe);
+    }
   }
 }
 

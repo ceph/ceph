@@ -131,6 +131,10 @@ struct rgw_sync_bucket_entity {
     zone = z;
   }
 
+  static bool match_bucket_id(const string& bid1, const string& bid2) {
+    return (bid1.empty() || bid2.empty() || (bid1 == bid2));
+  }
+
   bool match_bucket(std::optional<rgw_bucket> b) const {
     if (!b) {
       return true;
@@ -142,7 +146,14 @@ struct rgw_sync_bucket_entity {
 
     return (match_str(bucket->tenant, b->tenant) &&
             match_str(bucket->name, b->name) &&
-            match_str(bucket->bucket_id, b->bucket_id));
+            match_bucket_id(bucket->bucket_id, b->bucket_id));
+  }
+
+  bool match(const rgw_sync_bucket_entity& entity) const {
+    if (!entity.zone) {
+      return match_bucket(entity.bucket);
+    }
+    return (match_zone(*entity.zone) && match_bucket(entity.bucket));
   }
 
   const bool operator<(const rgw_sync_bucket_entity& e) const {
