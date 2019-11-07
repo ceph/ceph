@@ -212,6 +212,14 @@ struct WriteLogPoolRoot {
   uint32_t first_valid_entry;    /* Index of the oldest valid entry in the log */
 };
 
+struct WriteBufferAllocation {
+  unsigned int allocation_size = 0;
+  pobj_action buffer_alloc_action;
+  TOID(uint8_t) buffer_oid = OID_NULL;
+  bool allocated = false;
+  utime_t allocation_lat;
+};
+
 } // namespace rwl 
 } // namespace cache 
 } // namespace librbd 
