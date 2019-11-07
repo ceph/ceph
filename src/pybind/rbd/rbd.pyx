@@ -3030,12 +3030,16 @@ cdef class Image(object):
         """
         return rbd_get_data_pool_id(self.image)
 
-    def parent_info(self):
+    def get_parent_image_spec(self):
         """
-        Get information about a cloned image's parent (if any)
+        Get spec of the cloned image's parent
 
-        :returns: tuple - ``(pool name, image name, snapshot name)`` components
-                  of the parent image
+        :returns: dict - contains the following keys:
+            * ``pool_name`` (str) - parent pool name
+            * ``pool_namespace`` (str) - parent pool namespace
+            * ``image_name`` (str) - parent image name
+            * ``snap_name`` (str) - parent snapshot name
+
         :raises: :class:`ImageNotFound` if the image doesn't have a parent
         """
         cdef:
@@ -3046,13 +3050,27 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error getting parent info for image %s' % self.name)
 
-        result = (decode_cstr(parent_spec.pool_name),
-                  decode_cstr(parent_spec.image_name),
-                  decode_cstr(snap_spec.name))
+        result = {'pool_name': decode_cstr(parent_spec.pool_name),
+                  'pool_namespace': decode_cstr(parent_spec.pool_namespace),
+                  'image_name': decode_cstr(parent_spec.image_name),
+                  'snap_name': decode_cstr(snap_spec.name)}
 
         rbd_linked_image_spec_cleanup(&parent_spec)
         rbd_snap_spec_cleanup(&snap_spec)
         return result
+
+    def parent_info(self):
+        """
+        Deprecated. Use `get_parent_image_spec` instead.
+
+        Get information about a cloned image's parent (if any)
+
+        :returns: tuple - ``(pool name, image name, snapshot name)`` components
+                  of the parent image
+        :raises: :class:`ImageNotFound` if the image doesn't have a parent
+        """
+        parent = self.get_parent_image_spec()
+        return (parent['pool_name'], parent['image_name'], parent['snap_name'])
 
     def parent_id(self):
         """
