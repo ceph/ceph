@@ -70,6 +70,8 @@ These are exciting times in the Ceph community! Get involved!
 |                      | at http://github.com. See `Ceph Source Code`_   |                                               |
 |                      | for details on cloning from github.             |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
+| **Ceph Calendar**    | Learn about upcoming Ceph events.               | https://ceph.io/contribute/                   |
++----------------------+-------------------------------------------------+-----------------------------------------------+
 
 
 
