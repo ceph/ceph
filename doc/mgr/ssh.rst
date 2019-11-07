@@ -37,9 +37,3 @@ To clear this value use the command:
 ::
 
     # ceph ssh clear-ssh-config
-
-Development
------------
-
-Instructions for setting up a development environment can be found in the Ceph
-source tree at `src/pybind/mgr/ssh/README.md`.
