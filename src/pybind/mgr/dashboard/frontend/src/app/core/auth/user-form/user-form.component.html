@@ -35,10 +35,10 @@
           <label class="col-form-label col-sm-3"
                  for="password">
           <ng-container i18n>Password</ng-container>
-          <cd-helper class="text-pre"
-                     html="{{ requiredPasswordRulesMessage }}">
-          </cd-helper>
-          </label>     
+        <cd-helper class="text-pre"
+                   html="{{ requiredPasswordRulesMessage }}">
+        </cd-helper>
+          </label>
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -148,7 +148,8 @@
         </div>
 
         <!-- Enabled -->
-        <div class="form-group row" *ngIf="!isCurrentUser()">
+        <div class="form-group row"
+             *ngIf="!isCurrentUser()">
           <div class="offset-sm-3 col-sm-9">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"

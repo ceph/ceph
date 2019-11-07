@@ -204,7 +204,8 @@
         </div>
 
         <!-- Target level authentication was introduced in ceph-iscsi config v11 -->
-        <div formGroupName="auth" *ngIf="cephIscsiConfigVersion > 10 && !targetForm.getValue('acl_enabled')">
+        <div formGroupName="auth"
+             *ngIf="cephIscsiConfigVersion > 10 && !targetForm.getValue('acl_enabled')">
 
           <!-- Target user -->
           <div class="form-group row">
