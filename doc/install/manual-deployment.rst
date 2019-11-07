@@ -254,7 +254,7 @@ The procedure is as follows:
 
 #. Verify that the monitor is running. ::
 
-	ceph -s
+	sudo ceph -s
 
    You should see output that the monitor you started is up and running, and
    you should see a health error indicating that placement groups are stuck
