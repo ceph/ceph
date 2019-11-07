@@ -650,6 +650,33 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHReadCompletion(results)
 
     @log_exceptions
+    def blink_device_light(self, ident_fault, on, locs):
+        def blink(host, dev, ident_fault, on):
+            cmd = [
+                'lsmcli',
+                'local-disk-%s-led-%s' % (
+                    ident_fault,
+                    'on' if on else 'off'),
+                '--path', '/dev/' + dev,
+            ]
+            out, code = self._run_ceph_daemon(host, 'osd', 'shell', ['--'] + cmd,
+                                              error_ok=True)
+            if code:
+                raise RuntimeError(
+                    'Unable to affect %s light for %s:%s. Command: %s' % (
+                        ident_fault, host, dev, ' '.join(cmd)))
+            return "Set %s light for %s:%s %s" % (
+                ident_fault, host, dev, 'on' if on else 'off')
+
+        results = []
+        for loc in locs:
+            results.append(
+                self._worker_pool.apply_async(
+                    blink,
+                    (loc.host, loc.dev, ident_fault, on)))
+        return SSHWriteCompletion(results)
+
+    @log_exceptions
     def _create_osd(self, host, drive_group):
         # get bootstrap key
         ret, keyring, err = self.mon_command({
