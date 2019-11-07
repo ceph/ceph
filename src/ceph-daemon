@@ -425,7 +425,8 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
                   podman_args=None):
     if not podman_args:
         podman_args = []
-    if daemon_type == 'osd' or privileged:
+    if daemon_type in ['mon', 'osd'] or privileged:
+        # mon and osd need privileged in order for libudev to query devices
         podman_args += ['--privileged']
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
