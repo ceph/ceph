@@ -14,6 +14,7 @@ using ::testing::MakeAction;
 
 
 class MockTransitSecretEngine : public TransitSecretEngine {
+
 public:
   MockTransitSecretEngine(CephContext *cct) : TransitSecretEngine(cct){}
 
@@ -21,20 +22,31 @@ public:
 
 };
 
+class MockKvSecretEngine : public KvSecretEngine {
+
+public:
+  MockKvSecretEngine(CephContext *cct) : KvSecretEngine(cct){}
+
+  MOCK_METHOD(int, send_request, (boost::string_view key_id, JSONParser* parser), (override));
+
+};
 
 class TestSSEKMS : public ::testing::Test {
 
 protected:
   CephContext *cct;
   MockTransitSecretEngine* transit_engine;
+  MockKvSecretEngine* kv_engine;
 
   void SetUp() override {
     cct = (new CephContext(CEPH_ENTITY_TYPE_ANY))->get();
     transit_engine = new MockTransitSecretEngine(cct);
+    kv_engine = new MockKvSecretEngine(cct);
   }
 
   void TearDown() {
     delete transit_engine;
+    delete kv_engine;
   }
 
 };
@@ -42,25 +54,30 @@ protected:
 
 TEST_F(TestSSEKMS, vault_token_file_unset)
 {
+  cct->_conf.set_val("rgw_crypt_vault_auth", "token");
+  TransitSecretEngine te(cct);
+  KvSecretEngine kv(cct);
 
   boost::string_view key_id("my_key");
   std::string actual_key;
-  TransitSecretEngine te(cct);
-  int res = te.get_key(key_id, actual_key);
-  ASSERT_EQ(res, -EINVAL);
+
+  ASSERT_EQ(te.get_key(key_id, actual_key), -EINVAL);
+  ASSERT_EQ(kv.get_key(key_id, actual_key), -EINVAL);
 }
 
 
 TEST_F(TestSSEKMS, non_existent_vault_token_file)
 {
+  cct->_conf.set_val("rgw_crypt_vault_auth", "token");
   cct->_conf.set_val("rgw_crypt_vault_token_file", "/nonexistent/file");
+  TransitSecretEngine te(cct);
+  KvSecretEngine kv(cct);
 
   boost::string_view key_id("my_key/1");
   std::string actual_key;
-  TransitSecretEngine te(cct);
-  int res = te.get_key(key_id, actual_key);
 
-  ASSERT_EQ(res, -ENOENT);
+  ASSERT_EQ(te.get_key(key_id, actual_key), -ENOENT);
+  ASSERT_EQ(kv.get_key(key_id, actual_key), -ENOENT);
 }
 
 
@@ -90,15 +107,13 @@ Action<SendRequestMethod> SetPointedValue(std::string json) {
 
 
 TEST_F(TestSSEKMS, test_transit_key_version_extraction){
-
-  boost::string_view key_id("my_key");
-  std::string version;
-  std::string actual_key;
-
   string json = R"({"data": {"keys": {"6": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
   EXPECT_CALL(*transit_engine, send_request(_, _)).WillOnce(SetPointedValue(json));
 
-  std::string tests[4] {"/", "my_key/", "my_key", ""};
+  std::string actual_key;
+  std::string tests[11] {"/", "my_key/", "my_key", "", "my_key/a", "my_key/1a",
+    "my_key/a1", "my_key/1a1", "my_key/1/a", "1", "my_key/1/"
+  };
 
   int res;
   for (const auto &test: tests) {
@@ -122,6 +137,22 @@ TEST_F(TestSSEKMS, test_transit_backend){
   EXPECT_CALL(*transit_engine, send_request(_, _)).WillOnce(SetPointedValue(json));
 
   int res = transit_engine->get_key(my_key, actual_key);
+
+  ASSERT_EQ(res, 0);
+  ASSERT_EQ(actual_key, from_base64("8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="));
+}
+
+
+TEST_F(TestSSEKMS, test_kv_backend){
+
+  boost::string_view my_key("my_key");
+  std::string actual_key;
+
+  // Mocks the expected return value from Vault Server using custom Argument Action
+  string json = R"({"data": {"data": {"key": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
+  EXPECT_CALL(*kv_engine, send_request(_, _)).WillOnce(SetPointedValue(json));
+
+  int res = kv_engine->get_key(my_key, actual_key);
 
   ASSERT_EQ(res, 0);
   ASSERT_EQ(actual_key, from_base64("8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="));
@@ -155,7 +186,6 @@ TEST_F(TestSSEKMS, concat_url)
 
 TEST_F(TestSSEKMS, test_transit_backend_empty_response)
 {
-
   boost::string_view my_key("/key/nonexistent/1");
   std::string actual_key;
 
