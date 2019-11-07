@@ -1332,7 +1332,7 @@ chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
 install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 
-install -m 0755 src/ceph-daemon %{buildroot}%{_sbindir}/ceph-daemon
+install -m 0755 src/ceph-daemon/ceph-daemon %{buildroot}%{_sbindir}/ceph-daemon
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
