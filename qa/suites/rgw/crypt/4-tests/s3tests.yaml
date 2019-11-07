@@ -5,6 +5,9 @@ tasks:
       barbican:
         kms_key: my-key-1
         kms_key2: my-key-2
-      vault:
+      vault_kv:
         key_path: my-key-1
         key_path2: my-key-2
+      vault_transit:
+        key_path: my-key-1/1
+        key_path2: my-key-2/1

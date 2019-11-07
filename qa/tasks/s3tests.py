@@ -204,10 +204,10 @@ def configure(ctx, config):
                 s3tests_conf['DEFAULT']['kms_keyid2'] = key['id']
 
         elif hasattr(ctx, 'vault'):
-            properties = properties['vault']
-            log.info("Vault Key")
+            properties = properties['vault_%s' % ctx.vault.engine]
             s3tests_conf['DEFAULT']['kms_keyid'] = properties['key_path']
             s3tests_conf['DEFAULT']['kms_keyid2'] = properties['key_path2']
+
         else:
             # Fallback scenario where it's the local (ceph.conf) kms being tested
             s3tests_conf['DEFAULT']['kms_keyid'] = 'testkey-1'
