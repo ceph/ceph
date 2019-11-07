@@ -77,23 +77,6 @@ int pre_remove_image(librados::IoCtx& io_ctx, const std::string& image_id) {
 } // anonymous namespace
 
 template <typename I>
-int64_t Image<I>::get_data_pool_id(I *ictx) {
-  if (ictx->data_ctx.is_valid()) {
-    return ictx->data_ctx.get_id();
-  }
-
-  int64_t pool_id;
-  int r = cls_client::get_data_pool(&ictx->md_ctx, ictx->header_oid, &pool_id);
-  if (r < 0) {
-    CephContext *cct = ictx->cct;
-    lderr(cct) << "error getting data pool ID: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  return pool_id;
-}
-
-template <typename I>
 int Image<I>::get_op_features(I *ictx, uint64_t *op_features) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "image_ctx=" << ictx << dendl;

@@ -172,9 +172,7 @@ public:
     delete[] format_string;
 
     md_ctx.aio_flush();
-    if (data_ctx.is_valid()) {
-      data_ctx.aio_flush();
-    }
+    data_ctx.aio_flush();
     io_work_queue->drain();
 
     delete io_object_dispatcher;
@@ -193,7 +191,7 @@ public:
     asok_hook = new LibrbdAdminSocketHook(this);
 
     string pname = string("librbd-") + id + string("-") +
-      md_ctx.get_pool_name() + string("-") + name;
+      data_ctx.get_pool_name() + string("-") + name;
     if (!snap_name.empty()) {
       pname += "-";
       pname += snap_name;
@@ -214,7 +212,7 @@ public:
     asok_hook = nullptr;
   }
 
-  void ImageCtx::init_layout(int64_t pool_id)
+  void ImageCtx::init_layout()
   {
     if (stripe_unit == 0 || stripe_count == 0) {
       stripe_unit = 1ull << order;
@@ -231,7 +229,7 @@ public:
     layout.stripe_unit = stripe_unit;
     layout.stripe_count = stripe_count;
     layout.object_size = 1ull << order;
-    layout.pool_id = pool_id;  // FIXME: pool id overflow?
+    layout.pool_id = data_ctx.get_id();  // FIXME: pool id overflow?
 
     delete[] format_string;
     size_t len = object_prefix.length() + 16;
@@ -331,9 +329,7 @@ public:
       snap_namespace = it->second.snap_namespace;
       snap_name = it->second.name;
       snap_exists = true;
-      if (data_ctx.is_valid()) {
-        data_ctx.snap_set_read(snap_id);
-      }
+      data_ctx.snap_set_read(snap_id);
       return 0;
     }
     return -ENOENT;
@@ -346,9 +342,7 @@ public:
     snap_namespace = {};
     snap_name = "";
     snap_exists = true;
-    if (data_ctx.is_valid()) {
-      data_ctx.snap_set_read(snap_id);
-    }
+    data_ctx.snap_set_read(snap_id);
   }
 
   snap_t ImageCtx::get_snap_id(const cls::rbd::SnapshotNamespace& in_snap_namespace,
