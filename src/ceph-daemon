@@ -43,9 +43,11 @@ except ImportError:
 import json
 import logging
 import os
+import random
 import select
 import shutil
 import socket
+import string
 import subprocess
 import sys
 import tempfile
@@ -195,6 +197,13 @@ def pathify(p):
 
 def get_hostname():
     return socket.gethostname()
+
+def get_fqdn():
+    return socket.getfqdn() or socket.gethostname()
+
+def generate_password():
+    return ''.join(random.choice(string.ascii_lowercase + string.digits)
+                   for i in range(10))
 
 def make_fsid():
     return str(uuid.uuid1())
@@ -1096,6 +1105,34 @@ def command_bootstrap():
         logger.info('Adding host %s...' % host)
         cli(['orchestrator', 'host', 'add', host])
 
+    if not args.skip_dashboard:
+        logger.info('Enabling the dashboard module...')
+        cli(['mgr', 'module', 'enable', 'dashboard'])
+        logger.info('Waiting for the module to be available...')
+        while True:
+            c = cli(['-h'])
+            if 'dashboard' in c:
+                break
+            logger.info('Dashboard not yet available, waiting...')
+            time.sleep(1)
+        logger.info('Generating a dashboard self-signed certificate...')
+        cli(['dashboard', 'create-self-signed-cert'])
+        logger.info('Creating initial admin user...')
+        password = args.initial_dashboard_password or generate_password()
+        cli(['dashboard', 'ac-user-create',
+             args.initial_dashboard_user, password,
+             'administrator'])
+        logger.info('Fetching dashboard port number...')
+        out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
+        port = int(out)
+        logger.info('Ceph Dashboard is now available at:\n\n'
+                    '\t     URL: https://%s:%s/\n'
+                    '\t    User: %s\n'
+                    '\tPassword: %s\n' % (
+                        get_fqdn(), port,
+                        args.initial_dashboard_user,
+                        password))
+
     logger.info('Bootstrap complete.')
     return 0
 
@@ -1643,6 +1680,17 @@ def _get_parser():
         '--skip-ssh',
         action='store_true',
         help='skip setup of ssh key on local host')
+    parser_bootstrap.add_argument(
+        '--initial-dashboard-user',
+        default='admin',
+        help='Initial user for the dashboard')
+    parser_bootstrap.add_argument(
+        '--initial-dashboard-password',
+        help='Initial password for the initial dashboard user')
+    parser_bootstrap.add_argument(
+        '--skip-dashboard',
+        action='store_true',
+        help='do not enable the Ceph Dashboard')
     parser_bootstrap.add_argument(
         '--no-minimize-config',
         action='store_true',
