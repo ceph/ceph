@@ -1322,7 +1322,7 @@ def list_daemons():
                     if not host_version:
                         out, err, code = call(['ceph', '-v'])
                         if not code and out.startswith('ceph version '):
-                            host_version = out.split(' ')[3]
+                            host_version = out.split(' ')[2]
 
                     ls.append({
                         'style': 'legacy',
