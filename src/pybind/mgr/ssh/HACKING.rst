@@ -21,6 +21,10 @@ and add your $HOSTNAME to the list of known hosts.
 
 This will also enable the ssh mgr module and enable it as the orchestrator backend.
 
+**NOTE**:
+
+Please not that SELinux needs to be disabled due the way we bind volumes to the OSD containers. This will probably change in the future.
+
 *Optional:*
 
 While the above is sufficient for most operations, you may want to add a second host to the mix.
