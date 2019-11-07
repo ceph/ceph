@@ -2341,8 +2341,33 @@ static std::vector<string> convert_bucket_set_to_str_vec(const std::set<rgw_buck
   return std::move(result);
 }
 
+static void get_hint_entities(const std::set<string>& zone_names, const std::set<rgw_bucket>& buckets,
+			      std::set<rgw_sync_bucket_entity> *hint_entities)
+{
+  for (auto& zone : zone_names) {
+    for (auto& b : buckets) {
+      string zid;
+      if (!store->svc()->zone->find_zone_id_by_name(zone, &zid)) {
+	cerr << "WARNING: cannot find zone id for zone=" << zone << ", skippping" << std::endl;
+	continue;
+      }
+
+      RGWBucketInfo hint_bucket_info;
+      rgw_bucket hint_bucket;
+      int ret = init_bucket(b, hint_bucket_info, hint_bucket);
+      if (ret < 0) {
+	ldout(store->ctx(), 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+	continue;
+      }
+
+      hint_entities->insert(rgw_sync_bucket_entity(zid, hint_bucket));
+    }
+  }
+}
+
 static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bucket> opt_bucket, Formatter *formatter)
 {
+  string zone_name;
   std::optional<string> zone_id;
 
   if (opt_target_zone) {
@@ -2351,7 +2376,10 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
       cerr << "WARNING: cannot find zone id for zone=" << *opt_target_zone << std::endl;
       return -ENOENT;
     }
+    zone_name = *opt_target_zone;
     zone_id = zid;
+  } else {
+    zone_name = store->svc ()->zone->zone_name();
   }
 
   auto zone_policy_handler = store->svc()->zone->get_sync_policy_handler(zone_id);
@@ -2396,21 +2424,45 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
   auto source_hints_vec = convert_bucket_set_to_str_vec(handler->get_source_hints());
   auto target_hints_vec = convert_bucket_set_to_str_vec(handler->get_target_hints());
 
-  RGWBucketSyncFlowManager::pipe_set *resolved_sources;
-  RGWBucketSyncFlowManager::pipe_set *resolved_dests;
+  RGWBucketSyncFlowManager::pipe_set resolved_sources;
+  RGWBucketSyncFlowManager::pipe_set resolved_dests;
 
-  for (auto& b : handler->get_source_hints()) {
-    RGWBucketInfo hint_bucket_info;
-    rgw_bucket hint_bucket;
-    int ret = init_bucket(b, hint_bucket_info, hint_bucket);
-    if (ret < 0) {
-      ldout(cct, 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+  rgw_sync_bucket_entity self_entity(zone_name, opt_bucket);
+
+  set<string> source_zones;
+  set<string> target_zones;
+
+  zone_policy_handler->reflect(nullptr, nullptr,
+                               nullptr, nullptr,
+                               &source_zones,
+                               &target_zones,
+                               false); /* relaxed: also get all zones that we allow to sync to/from */
+
+  std::set<rgw_sync_bucket_entity> hint_entities;
+
+  get_hint_entities(source_zones, handler->get_source_hints(), &hint_entities);
+  get_hint_entities(target_zones, handler->get_target_hints(), &hint_entities);
+
+  for (auto& hint_entity : hint_entities) {
+    if (!hint_entity.zone ||
+	!hint_entity.bucket) {
+      continue; /* shouldn't really happen */
+    }
+
+    auto& zid = *hint_entity.zone;
+    auto& hint_bucket = *hint_entity.bucket;
+
+    RGWBucketSyncPolicyHandlerRef hint_bucket_handler;
+    int r = store->ctl()->bucket->get_sync_policy_handler(zid, hint_bucket, &hint_bucket_handler, null_yield);
+    if (r < 0) {
+      ldout(store->ctx(), 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
       continue;
     }
 
-    RGWBucketSyncPolicyHandlerRef hint_bucket_handler;
-    hint_bucket_handler.reset(handler->alloc_child(hint_bucket_indo));
-
+    hint_bucket_handler->get_pipes(&resolved_dests,
+				   &resolved_sources,
+				   self_entity); /* flipping resolved dests and sources as these are
+						    relative to the remote entity */
   }
 
   {
@@ -2424,8 +2476,8 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
     }
     {
       Formatter::ObjectSection resolved_hints_section(*formatter, "resolved-hints");
-      encode_json("resolved-hints", *sources, formatter);
-      encode_json("dests", *dests, formatter);
+      encode_json("sources", resolved_sources, formatter);
+      encode_json("dests", resolved_dests, formatter);
     }
   }
 
