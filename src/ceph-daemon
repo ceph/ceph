@@ -1133,6 +1133,12 @@ def command_bootstrap():
                         args.initial_dashboard_user,
                         password))
 
+    if args.output_config and args.output_keyring:
+        logger.info('You can access the Ceph CLI with:\n\n'
+                    '\tsudo %s shell -c %s -k %s\n' % (
+                        sys.argv[0],
+                        args.output_config,
+                        args.output_keyring))
     logger.info('Bootstrap complete.')
     return 0
 
