@@ -990,6 +990,19 @@ Rados::~Rados() {
   shutdown();
 }
 
+void Rados::from_rados_t(rados_t p, Rados &rados) {
+  if (rados.client != nullptr) {
+    reinterpret_cast<TestRadosClient*>(rados.client)->put();
+    rados.client = nullptr;
+  }
+
+  auto impl = reinterpret_cast<TestRadosClient*>(p);
+  if (impl) {
+    impl->get();
+    rados.client = reinterpret_cast<RadosClient*>(impl);
+  }
+}
+
 AioCompletion *Rados::aio_create_completion(void *cb_arg,
                                             callback_t cb_complete,
                                             callback_t cb_safe) {

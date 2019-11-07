@@ -911,3 +911,43 @@ TEST_F(TestMirroring, AioGetStatus) {
     ASSERT_EQ(0, status.last_update);
   }
 }
+
+TEST_F(TestMirroring, SiteName) {
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  const std::string expected_site_name("us-east-1a");
+  ASSERT_EQ(0, m_rbd.mirror_site_name_set(_rados, expected_site_name));
+
+  std::string site_name;
+  ASSERT_EQ(0, m_rbd.mirror_site_name_get(_rados, &site_name));
+  ASSERT_EQ(expected_site_name, site_name);
+
+  ASSERT_EQ(0, m_rbd.mirror_site_name_set(_rados, ""));
+
+  std::string fsid;
+  ASSERT_EQ(0, _rados.cluster_fsid(&fsid));
+  ASSERT_EQ(0, m_rbd.mirror_site_name_get(_rados, &site_name));
+  ASSERT_EQ(fsid, site_name);
+}
+
+TEST_F(TestMirroring, Bootstrap) {
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  std::string token_b64;
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+  ASSERT_EQ(-EINVAL, m_rbd.mirror_peer_bootstrap_create(m_ioctx, &token_b64));
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
+  ASSERT_EQ(0, m_rbd.mirror_peer_bootstrap_create(m_ioctx, &token_b64));
+
+  bufferlist token_b64_bl;
+  token_b64_bl.append(token_b64);
+
+  bufferlist token_bl;
+  token_bl.decode_base64(token_b64_bl);
+
+  // cannot import token into same cluster
+  ASSERT_EQ(-EINVAL,
+            m_rbd.mirror_peer_bootstrap_import(
+              m_ioctx, RBD_MIRROR_PEER_DIRECTION_RX, token_b64));
+}
