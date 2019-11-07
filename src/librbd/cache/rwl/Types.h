@@ -140,6 +140,8 @@ namespace librbd {
 namespace cache {
 namespace rwl {
 
+static const bool RWL_VERBOSE_LOGGING = false;
+
 /* Defer a set of Contexts until destruct/exit. Used for deferring
  * work on a given thread until a required lock is dropped. */
 class DeferredContexts {
