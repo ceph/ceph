@@ -2817,7 +2817,8 @@ void CInode::decode_snap_blob(const bufferlist& snapbl)
       }
     }
     dout(20) << __func__ << " " << *snaprealm << dendl;
-  } else if (snaprealm) {
+  } else if (snaprealm &&
+	     !is_root() && !is_mdsdir()) { // see https://tracker.ceph.com/issues/42675
     ceph_assert(mdcache->mds->is_any_replay());
     snaprealm->merge_to(NULL);
   }
