@@ -165,6 +165,7 @@ if(WITH_RBD_RWL)
     ${librbd_internal_srcs}
     cache/rwl/ImageCacheState.cc
     cache/rwl/LogEntry.cc
+    cache/rwl/LogOperation.cc
     cache/rwl/SyncPoint.cc
     cache/rwl/Types.cc
     cache/ReplicatedWriteLog.cc)

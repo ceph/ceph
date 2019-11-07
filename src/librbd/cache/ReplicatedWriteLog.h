@@ -37,6 +37,7 @@ typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
 
 /**** Write log entries end ****/
 
+
 class DeferredContexts;
 template <typename> class ImageCacheState;
 } // namespace rwl
