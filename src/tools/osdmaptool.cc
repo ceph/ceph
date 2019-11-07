@@ -46,7 +46,7 @@ void usage()
   cout << "                           commands to <file> [default: - for stdout]" << std::endl;
   cout << "   --upmap <file>          calculate pg upmap entries to balance pg layout" << std::endl;
   cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
-  cout << "   --upmap-max <max-count> set max upmap entries to calculate [default: 100]" << std::endl;
+  cout << "   --upmap-max <max-count> set max upmap entries to calculate [default: 10]" << std::endl;
   cout << "   --upmap-deviation <max-deviation>" << std::endl;
   cout << "                           max deviation from target [default: .01]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
@@ -127,7 +127,7 @@ int main(int argc, const char **argv)
   bool upmap_save = false;
   bool health = false;
   std::string upmap_file = "-";
-  int upmap_max = 100;
+  int upmap_max = 10;
   float upmap_deviation = .01;
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;

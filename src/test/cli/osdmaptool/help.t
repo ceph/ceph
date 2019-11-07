@@ -18,7 +18,7 @@
                              commands to <file> [default: - for stdout]
      --upmap <file>          calculate pg upmap entries to balance pg layout
                              writing commands to <file> [default: - for stdout]
-     --upmap-max <max-count> set max upmap entries to calculate [default: 100]
+     --upmap-max <max-count> set max upmap entries to calculate [default: 10]
      --upmap-deviation <max-deviation>
                              max deviation from target [default: .01]
      --upmap-pool <poolname> restrict upmap balancing to 1 or more pools
