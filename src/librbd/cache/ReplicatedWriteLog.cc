@@ -50,8 +50,8 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::rwl::Imag
     m_image_ctx(image_ctx),
     m_log_pool_config_size(DEFAULT_POOL_SIZE),
     m_image_writeback(image_ctx),
-    m_lock("librbd::cache::ReplicatedWriteLog::m_lock",
-           true, true),
+    m_lock(ceph::make_mutex(util::unique_lock_name(
+      "librbd::cache::ReplicatedWriteLog::m_lock", this))),
     m_thread_pool(image_ctx.cct, "librbd::cache::ReplicatedWriteLog::thread_pool", "tp_rwl",
                   4,
                   ""),
@@ -287,7 +287,7 @@ void ReplicatedWriteLog<I>::periodic_stats() {
 
 template <typename I>
 void ReplicatedWriteLog<I>::arm_periodic_stats() {
-  ceph_assert(m_timer_lock->is_locked());
+  ceph_assert(ceph_mutex_is_locked(*m_timer_lock));
   if (m_periodic_stats_enabled) {
     m_timer_ctx = new LambdaContext(
       [this](int r) {

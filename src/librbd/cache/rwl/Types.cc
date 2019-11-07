@@ -25,6 +25,26 @@ void DeferredContexts::add(Context* ctx) {
     contexts.push_back(ctx);
 }
 
+/*
+ * A BlockExtent identifies a range by first and last.
+ *
+ * An Extent ("image extent") identifies a range by start and length.
+ *
+ * The ImageCache interface is defined in terms of image extents, and
+ * requires no alignment of the beginning or end of the extent. We
+ * convert between image and block extents here using a "block size"
+ * of 1.
+ */
+const BlockExtent block_extent(const uint64_t offset_bytes, const uint64_t length_bytes)
+{
+  return BlockExtent(offset_bytes,
+                     offset_bytes + length_bytes - 1);
+}
+
+const BlockExtent WriteLogPmemEntry::block_extent() {
+  return BlockExtent(librbd::cache::rwl::block_extent(image_offset_bytes, write_bytes));
+}
+
 bool WriteLogPmemEntry::is_sync_point() {
   return sync_point;
 }
