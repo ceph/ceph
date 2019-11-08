@@ -219,11 +219,34 @@ std::map<std::string, std::string> Mgr::load_store()
   return loaded;
 }
 
+void Mgr::handle_signal(int signum)
+{
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
+  shutdown();
+  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
+}
+
+// A reference for use by the signal handler
+static Mgr *signal_mgr = nullptr;
+
+static void handle_mgr_signal(int signum)
+{
+  if (signal_mgr) {
+    signal_mgr->handle_signal(signum);
+  }
+}
+
 void Mgr::init()
 {
   std::unique_lock l(lock);
   ceph_assert(initializing);
   ceph_assert(!initialized);
+
+  // Enable signal handlers
+  signal_mgr = this;
+  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
   // Start communicating with daemons to learn statistics etc
   int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
@@ -395,6 +418,7 @@ void Mgr::load_all_metadata()
 
 void Mgr::shutdown()
 {
+  dout(10) << "mgr shutdown init" << dendl;
   finisher.queue(new LambdaContext([&](int) {
     {
       std::lock_guard l(lock);

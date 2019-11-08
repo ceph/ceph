@@ -80,7 +80,6 @@ public:
   void shutdown();
   void respawn();
   int main(vector<const char *> args);
-  void handle_signal(int signum);
   void tick();
 };
 
