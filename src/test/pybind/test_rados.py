@@ -316,6 +316,10 @@ class TestIoctx(object):
         self.ioctx.write_full('abc', b'd')
         eq(self.ioctx.read('abc'), b'd')
 
+    def test_writesame(self):
+        self.ioctx.writesame('ob', b'rzx', 9)
+        eq(self.ioctx.read('ob'), b'rzxrzxrzx')
+
     def test_append(self):
         self.ioctx.write('abc', b'a')
         self.ioctx.append('abc', b'b')
