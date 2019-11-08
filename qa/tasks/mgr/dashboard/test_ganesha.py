@@ -27,7 +27,7 @@ class GaneshaTest(DashboardTestCase):
     @classmethod
     def setUpClass(cls):
         super(GaneshaTest, cls).setUpClass()
-        cls.create_pool('ganesha', 3, 'replicated')
+        cls.create_pool('ganesha', 2**2, 'replicated')
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha1', 'create', 'conf-node1'])
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha1', 'create', 'conf-node2'])
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha1', 'create', 'conf-node3'])
