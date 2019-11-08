@@ -419,6 +419,9 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
             cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
         mounts[data_dir] = cdata_dir + ':z'
         mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
+        if daemon_type == 'rbd-mirror':
+            # rbd-mirror does not search for its keyring in a data directory
+            mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.rbd-mirror.%s.keyring' % daemon_id
 
     if daemon_type in ['mon', 'osd']:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
@@ -440,6 +443,9 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
+    elif daemon_type == 'rbd-mirror':
+        entrypoint = '/usr/bin/rbd-mirror'
+        name = 'client.rbd-mirror.%s' % daemon_id
     else:
         entrypoint = '/usr/bin/ceph-' + daemon_type
         name = '%s.%s' % (daemon_type, daemon_id)
@@ -1152,7 +1158,7 @@ def command_bootstrap():
 
 def command_deploy():
     (daemon_type, daemon_id) = args.name.split('.', 1)
-    if daemon_type not in ['mon', 'mgr', 'mds', 'osd', 'rgw']:
+    if daemon_type not in ['mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror']:
         raise RuntimeError('daemon type %s not recognized' % daemon_type)
     (config, keyring, crash_keyring) = get_config_and_both_keyrings()
     if daemon_type == 'mon':
