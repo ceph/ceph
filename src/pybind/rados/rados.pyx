@@ -214,6 +214,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime)
     int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off)
     int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
+    int rados_writesame(rados_ioctx_t io, const char *oid, const char *buf, size_t data_len, size_t write_len, uint64_t off)
     int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
     int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off)
     int rados_remove(rados_ioctx_t io, const char *oid)
@@ -2794,6 +2795,39 @@ returned %d, but should return zero on success." % (self.name, ret))
         else:
             raise LogicError("Ioctx.write_full(%s): rados_write_full \
 returned %d, but should return zero on success." % (self.name, ret))
+
+    @requires(('key', str_type), ('data', bytes), ('write_len', int), ('offset', int))
+    def writesame(self, key, data, write_len, offset=0):
+        """
+        Write the same buffer multiple times
+        :param key: name of the object
+        :type key: str
+        :param data: data to write
+        :type data: bytes
+        :param write_len: total number of bytes to write
+        :type write_len: int
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+
+        :raises: :class:`TypeError`
+        :raises: :class:`LogicError`
+        """
+        self.require_ioctx_open()
+
+        key = cstr(key, 'key')
+        cdef:
+            char *_key = key
+            char *_data = data
+            size_t _data_len = len(data)
+            size_t _write_len = write_len
+            uint64_t _offset = offset
+
+        with nogil:
+            ret = rados_writesame(self.io, _key, _data, _data_len, _write_len, _offset)
+        if ret < 0:
+            raise make_ex(ret, "Ioctx.writesame(%s): failed to write %s"
+                           % (self.name, key))
+        assert(ret == 0)
 
     @requires(('key', str_type), ('data', bytes))
     def append(self, key, data):
