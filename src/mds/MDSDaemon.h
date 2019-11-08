@@ -127,7 +127,6 @@ class MDSDaemon : public Dispatcher {
       bool *need_reply);
   void handle_command(const cref_t<MCommand> &m);
   void handle_mds_map(const cref_t<MMDSMap> &m);
-  void _handle_mds_map(const MDSMap &oldmap);
 
   Beacon beacon;
 
