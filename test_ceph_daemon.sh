@@ -4,16 +4,18 @@ fsid='00000000-0000-0000-0000-0000deadbeef'
 image='ceph/daemon-base:latest-master'
 [ -z "$ip" ] && ip=127.0.0.1
 
+CEPH_DAEMON=../src/ceph-daemon/ceph-daemon
+
 #A="-d"
 
-../src/ceph-daemon $A rm-cluster --fsid $fsid --force
+$CEPH_DAEMON $A rm-cluster --fsid $fsid --force
 
 cat <<EOF > c
 [global]
 log to file = true
 EOF
 
-../src/ceph-daemon $A \
+$CEPH_DAEMON $A \
     --image $image \
     bootstrap \
     --mon-id a \
@@ -27,7 +29,7 @@ chmod 644 k c
 
 if [ -n "$ip2" ]; then
     # mon.b
-    ../src/ceph-daemon $A \
+    $CEPH_DAEMON $A \
     --image $image \
     deploy --name mon.b \
     --fsid $fsid \
@@ -41,7 +43,7 @@ bin/ceph -c c -k k auth get-or-create mgr.y \
 	 mon 'allow profile mgr' \
 	 osd 'allow *' \
 	 mds 'allow *' > k-mgr.y
-../src/ceph-daemon $A \
+$CEPH_DAEMON $A \
     --image $image \
     deploy --name mgr.y \
     --fsid $fsid \
@@ -55,7 +57,7 @@ for id in k j; do
 	     mgr 'allow profile mds' \
 	     osd 'allow *' \
 	     mds 'allow *' > k-mds.$id
-    ../src/ceph-daemon $A \
+    $CEPH_DAEMON $A \
 	--image $image \
 	deploy --name mds.$id \
 	--fsid $fsid \

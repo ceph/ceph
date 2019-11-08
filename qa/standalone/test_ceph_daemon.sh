@@ -9,8 +9,9 @@ IMAGE_MIMIC=${IMAGE_MIMIC:-'ceph/daemon-base:latest-mimic'}
 [ -z "$SUDO" ] && SUDO=sudo
 
 if [ -z "$CEPH_DAEMON" ]; then
-    [ -x src/ceph-daemon ] && CEPH_DAEMON=src/ceph-daemon
-    [ -x ../src/ceph-daemon ] && CEPH_DAEMON=../src/ceph-daemon
+    [ -x src/ceph-daemon/ceph-daemon ] && CEPH_DAEMON=src/ceph-daemon/ceph-daemon
+    [ -x ../src/ceph-daemon/ceph-daemon ] && CEPH_DAEMON=../src/ceph-daemon/ceph-daemon
+    [ -x ./ceph-daemon/ceph-daemon ] && CEPH_DAEMON=./ceph-daemon/ceph-daemon
     [ -x ./ceph-daemon ] && CEPH_DAEMON=.ceph-daemon
     which ceph-daemon && CEPH_DAEMON=$(which ceph-daemon)
 fi
