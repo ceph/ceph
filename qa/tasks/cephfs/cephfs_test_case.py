@@ -253,9 +253,13 @@ class CephFSTestCase(CephTestCase):
     def delete_mds_coredump(self, daemon_id):
         # delete coredump file, otherwise teuthology.internal.coredump will
         # catch it later and treat it as a failure.
-        p = self.mds_cluster.mds_daemons[daemon_id].remote.run(args=[
-            "sudo", "sysctl", "-n", "kernel.core_pattern"], stdout=StringIO())
-        core_dir = os.path.dirname(p.stdout.getvalue().strip())
+        path = self.mds_cluster.mds_daemons[daemon_id].remote.run(args=[
+            "sudo", "sysctl", "-n", "kernel.core_pattern"],
+            stdout=StringIO()).stdout.getvalue().strip()
+        if path[0] == '|':
+            path = path[1:]
+        core_dir = os.path.dirname(path)
+
         if core_dir:  # Non-default core_pattern with a directory in it
             # We have seen a core_pattern that looks like it's from teuthology's coredump
             # task, so proceed to clear out the core file
