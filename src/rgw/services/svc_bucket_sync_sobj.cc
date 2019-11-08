@@ -11,6 +11,37 @@
 static string bucket_sync_sources_oid_prefix = "bucket.sync-source-hints";
 static string bucket_sync_targets_oid_prefix = "bucket.sync-target-hints";
 
+class RGWSI_Bucket_Sync_SObj_HintIndexManager {
+  CephContext *cct;
+
+  struct {
+    RGWSI_Zone *zone;
+    RGWSI_SysObj *sysobj;
+  } svc;
+
+public:
+  RGWSI_Bucket_Sync_SObj_HintIndexManager(RGWSI_Zone *_zone_svc,
+                                          RGWSI_SysObj *_sysobj_svc) {
+    svc.zone = _zone_svc;
+    svc.sysobj = _sysobj_svc;
+
+    cct = svc.zone->ctx();
+  }
+
+  rgw_raw_obj get_sources_obj(const rgw_bucket& bucket) const;
+  rgw_raw_obj get_dests_obj(const rgw_bucket& bucket) const;
+
+  template <typename C1, typename C2>
+  int update_hints(const RGWBucketInfo& bucket_info,
+                   C1& added_dests,
+                   C2& removed_dests,
+                   C1& added_sources,
+                   C2& removed_sources,
+                   optional_yield y);
+};
+
+RGWSI_Bucket_Sync_SObj::RGWSI_Bucket_Sync_SObj(CephContext *cct) : RGWSI_Bucket_Sync(cct) {
+}
 RGWSI_Bucket_Sync_SObj::~RGWSI_Bucket_Sync_SObj() {
 }
 
@@ -24,8 +55,7 @@ void RGWSI_Bucket_Sync_SObj::init(RGWSI_Zone *_zone_svc,
   svc.cache = _cache_svc;
   svc.bucket_sobj = bucket_sobj_svc;
 
-  hint_index_mgr.init(svc.zone,
-                      svc.sysobj);
+  hint_index_mgr.reset(new RGWSI_Bucket_Sync_SObj_HintIndexManager(svc.zone, svc.sysobj));
 }
 
 int RGWSI_Bucket_Sync_SObj::do_start()
@@ -117,11 +147,13 @@ static bool diff_sets(std::set<rgw_bucket>& orig_set,
       ++niter;
       continue;
     }
-    while (*oiter < *niter) {
+    while (*oiter < *niter &&
+	   oiter != orig_set.end()) {
       removed->push_back(*oiter);
       ++oiter;
     }
-    while (*niter < *oiter) {
+    while (*niter < *oiter
+	   && niter != new_set.end()) {
       added->push_back(*niter);
       ++niter;
     }
@@ -319,17 +351,19 @@ public:
     svc.sysobj = _sysobj_svc;
   }
 
+  template <typename C1, typename C2>
   int update(const rgw_bucket& entity,
              const RGWBucketInfo& info_source,
-             std::optional<std::vector<rgw_bucket> > add,
-             std::optional<std::vector<rgw_bucket> > remove,
+             C1 *add,
+             C2 *remove,
              optional_yield y);
 
 private:
+  template <typename C1, typename C2>
   void update_entries(const rgw_bucket& info_source,
                       const obj_version& info_source_ver,
-                      std::optional<std::vector<rgw_bucket> > add,
-                      std::optional<std::vector<rgw_bucket> > remove,
+                      C1 *add,
+                      C2 *remove,
                       single_instance_info *instance);
 
   int read(optional_yield y);
@@ -349,10 +383,11 @@ WRITE_CLASS_ENCODER(RGWSI_BS_SObj_HintIndexObj::bi_entry)
 WRITE_CLASS_ENCODER(RGWSI_BS_SObj_HintIndexObj::single_instance_info)
 WRITE_CLASS_ENCODER(RGWSI_BS_SObj_HintIndexObj::info_map)
 
+template <typename C1, typename C2>
 int RGWSI_BS_SObj_HintIndexObj::update(const rgw_bucket& entity,
                                        const RGWBucketInfo& info_source,
-                                       std::optional<std::vector<rgw_bucket> > add,
-                                       std::optional<std::vector<rgw_bucket> > remove,
+                                       C1 *add,
+                                       C2 *remove,
                                        optional_yield y)
 {
   int r = 0;
@@ -396,10 +431,11 @@ int RGWSI_BS_SObj_HintIndexObj::update(const rgw_bucket& entity,
   return -EIO;
 }
 
+template <typename C1, typename C2>
 void RGWSI_BS_SObj_HintIndexObj::update_entries(const rgw_bucket& info_source,
                                                 const obj_version& info_source_ver,
-                                                std::optional<std::vector<rgw_bucket> > add,
-                                                std::optional<std::vector<rgw_bucket> > remove,
+                                                C1 *add,
+                                                C2 *remove,
                                                 single_instance_info *instance)
 {
   if (remove) {
@@ -468,7 +504,7 @@ int RGWSI_BS_SObj_HintIndexObj::flush(optional_yield y) {
   return 0;
 }
 
-rgw_raw_obj RGWSI_Bucket_Sync_SObj::HintIndexManager::get_sources_obj(const rgw_bucket& bucket) const
+rgw_raw_obj RGWSI_Bucket_Sync_SObj_HintIndexManager::get_sources_obj(const rgw_bucket& bucket) const
 {
   rgw_bucket b = bucket;
   b.bucket_id.clear();
@@ -476,7 +512,7 @@ rgw_raw_obj RGWSI_Bucket_Sync_SObj::HintIndexManager::get_sources_obj(const rgw_
                      bucket_sync_sources_oid_prefix + "." + b.get_key());
 }
 
-rgw_raw_obj RGWSI_Bucket_Sync_SObj::HintIndexManager::get_dests_obj(const rgw_bucket& bucket) const
+rgw_raw_obj RGWSI_Bucket_Sync_SObj_HintIndexManager::get_dests_obj(const rgw_bucket& bucket) const
 {
   rgw_bucket b = bucket;
   b.bucket_id.clear();
@@ -484,39 +520,39 @@ rgw_raw_obj RGWSI_Bucket_Sync_SObj::HintIndexManager::get_dests_obj(const rgw_bu
                      bucket_sync_targets_oid_prefix + "." + b.get_key());
 }
 
-int RGWSI_Bucket_Sync_SObj::do_update_hints(const RGWBucketInfo& bucket_info,
-                                            std::vector<rgw_bucket>& added_dests,
-                                            std::vector<rgw_bucket>& removed_dests,
-                                            std::vector<rgw_bucket>& added_sources,
-                                            std::vector<rgw_bucket>& removed_sources,
-                                            optional_yield y)
+template <typename C1, typename C2>
+int RGWSI_Bucket_Sync_SObj_HintIndexManager::update_hints(const RGWBucketInfo& bucket_info,
+                                                          C1& added_dests,
+                                                          C2& removed_dests,
+                                                          C1& added_sources,
+                                                          C2& removed_sources,
+                                                          optional_yield y)
 {
-  std::vector<rgw_bucket> self_entity;
-  self_entity.push_back(bucket_info.bucket);
+  C1 self_entity = { bucket_info.bucket };
 
   if (!added_dests.empty() ||
       !removed_dests.empty()) {
     /* update our dests */
     RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     hint_index_mgr.get_dests_obj(bucket_info.bucket));
+                                     get_dests_obj(bucket_info.bucket));
     int r = index.update(bucket_info.bucket,
                          bucket_info,
-                         added_dests,
-                         removed_dests,
+                         &added_dests,
+                         &removed_dests,
                          y);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to update targets index for bucket=" << bucket_info.bucket << " r=" << r << dendl;
       return r;
     }
 
-    /* update added dest buckets */
+    /* update dest buckets */
     for (auto& dest_bucket : added_dests) {
       RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           hint_index_mgr.get_sources_obj(dest_bucket));
+                                           get_sources_obj(dest_bucket));
       int r = dep_index.update(dest_bucket,
                                bucket_info,
-                               self_entity,
-                               std::nullopt,
+                               &self_entity,
+                               static_cast<C2 *>(nullptr),
                                y);
       if (r < 0) {
         ldout(cct, 0) << "ERROR: failed to update targets index for bucket=" << dest_bucket << " r=" << r << dendl;
@@ -526,11 +562,11 @@ int RGWSI_Bucket_Sync_SObj::do_update_hints(const RGWBucketInfo& bucket_info,
     /* update removed dest buckets */
     for (auto& dest_bucket : removed_dests) {
       RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           hint_index_mgr.get_sources_obj(dest_bucket));
+                                           get_sources_obj(dest_bucket));
       int r = dep_index.update(dest_bucket,
                                bucket_info,
-                               std::nullopt,
-                               self_entity,
+                               static_cast<C1 *>(nullptr),
+                               &self_entity,
                                y);
       if (r < 0) {
         ldout(cct, 0) << "ERROR: failed to update targets index for bucket=" << dest_bucket << " r=" << r << dendl;
@@ -539,15 +575,15 @@ int RGWSI_Bucket_Sync_SObj::do_update_hints(const RGWBucketInfo& bucket_info,
     }
   }
 
-  if (!added_dests.empty() ||
-      !removed_dests.empty()) {
+  if (!added_sources.empty() ||
+      !removed_sources.empty()) {
     RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     hint_index_mgr.get_sources_obj(bucket_info.bucket));
+                                     get_sources_obj(bucket_info.bucket));
     /* update our sources */
     int r = index.update(bucket_info.bucket,
                          bucket_info,
-                         added_sources,
-                         removed_sources,
+                         &added_sources,
+                         &removed_sources,
                          y);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to update targets index for bucket=" << bucket_info.bucket << " r=" << r << dendl;
@@ -557,11 +593,11 @@ int RGWSI_Bucket_Sync_SObj::do_update_hints(const RGWBucketInfo& bucket_info,
     /* update added sources buckets */
     for (auto& source_bucket : added_sources) {
       RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           hint_index_mgr.get_dests_obj(source_bucket));
+                                           get_dests_obj(source_bucket));
       int r = dep_index.update(source_bucket,
                                bucket_info,
-                               self_entity,
-                               std::nullopt,
+                               &self_entity,
+                               static_cast<C2 *>(nullptr),
                                y);
       if (r < 0) {
         ldout(cct, 0) << "ERROR: failed to update targets index for bucket=" << source_bucket << " r=" << r << dendl;
@@ -571,11 +607,11 @@ int RGWSI_Bucket_Sync_SObj::do_update_hints(const RGWBucketInfo& bucket_info,
     /* update removed dest buckets */
     for (auto& source_bucket : removed_sources) {
       RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           hint_index_mgr.get_dests_obj(source_bucket));
+                                           get_dests_obj(source_bucket));
       int r = dep_index.update(source_bucket,
                                bucket_info,
-                               std::nullopt,
-                               self_entity,
+                               static_cast<C1 *>(nullptr),
+                               &self_entity,
                                y);
       if (r < 0) {
         ldout(cct, 0) << "ERROR: failed to update targets index for bucket=" << source_bucket << " r=" << r << dendl;
@@ -614,12 +650,12 @@ int RGWSI_Bucket_Sync_SObj::handle_bi_removal(const RGWBucketInfo& bucket_info,
   std::vector<rgw_bucket> added_sources;
   std::vector<rgw_bucket> added_dests;
 
-  return do_update_hints(bucket_info,
-                         added_dests,
-                         removed_dests,
-                         added_sources,
-                         removed_sources,
-                         y);
+  return hint_index_mgr->update_hints(bucket_info,
+                                      added_dests,
+                                      removed_dests,
+                                      added_sources,
+                                      removed_sources,
+                                      y);
 }
 
 int RGWSI_Bucket_Sync_SObj::handle_bi_update(RGWBucketInfo& bucket_info,
@@ -661,12 +697,12 @@ int RGWSI_Bucket_Sync_SObj::handle_bi_update(RGWBucketInfo& bucket_info,
     return 0;
   }
 
-  return do_update_hints(bucket_info,
-                         added_dests,
-                         removed_dests,
-                         added_sources,
-                         removed_sources,
-                         y);
+  return hint_index_mgr->update_hints(bucket_info,
+                                      dests, /* set all dests, not just the ones that were added */
+                                      removed_dests,
+                                      sources, /* set all sources, not just that the ones that were added */
+                                      removed_sources,
+                                      y);
 }
 
 int RGWSI_Bucket_Sync_SObj::get_bucket_sync_hints(const rgw_bucket& bucket,
@@ -680,7 +716,7 @@ int RGWSI_Bucket_Sync_SObj::get_bucket_sync_hints(const rgw_bucket& bucket,
 
   if (sources) {
     RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     hint_index_mgr.get_sources_obj(bucket));
+                                     hint_index_mgr->get_sources_obj(bucket));
     int r = index.read(y);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to update sources index for bucket=" << bucket << " r=" << r << dendl;
@@ -698,7 +734,7 @@ int RGWSI_Bucket_Sync_SObj::get_bucket_sync_hints(const rgw_bucket& bucket,
 
   if (dests) {
     RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     hint_index_mgr.get_dests_obj(bucket));
+                                     hint_index_mgr->get_dests_obj(bucket));
     int r = index.read(y);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to read targets index for bucket=" << bucket << " r=" << r << dendl;
