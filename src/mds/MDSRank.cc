@@ -13,7 +13,7 @@
  */
 
 #include <string_view>
-
+#include <typeinfo>
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/async/blocked_completion.h"
@@ -1008,7 +1008,14 @@ void MDSRank::ProgressThread::shutdown()
 
 bool MDSRankDispatcher::ms_dispatch(const cref_t<Message> &m)
 {
-  if (m->get_source().is_client()) {
+  if (m->get_source().is_mds()) {
+    const Message *msg = m.get();
+    const MMDSOp *op = dynamic_cast<const MMDSOp*>(msg);
+    if (!op)
+      dout(0) << typeid(*msg).name() << " is not an MMDSOp type" << dendl;
+    ceph_assert(op);
+  }
+  else if (m->get_source().is_client()) {
     Session *session = static_cast<Session*>(m->get_connection()->get_priv().get());
     if (session)
       session->last_seen = Session::clock::now();
