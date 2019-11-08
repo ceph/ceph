@@ -842,6 +842,9 @@ def command_bootstrap():
         if ret:
             raise RuntimeError('Failed to ping %s' % mon_ip)
 
+    logger.info('Pulling latest %s container...' % args.image)
+    call_throws([podman_path, 'pull', args.image])
+
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid()
 
