@@ -427,6 +427,8 @@ cdef extern from "rbd/librbd.h" nogil:
                            rbd_image_t *image, const char *snap_name)
     int rbd_open_by_id_read_only(rados_ioctx_t io, const char *image_id,
                                  rbd_image_t *image, const char *snap_name)
+    int rbd_features_to_string(uint64_t features, char *str_features, size_t *size)
+    int rbd_features_from_string(const char *str_features, uint64_t *features)
     int rbd_close(rbd_image_t image)
     int rbd_resize2(rbd_image_t image, uint64_t size, bint allow_shrink,
                     librbd_progress_fn_t cb, void *cbdata)
@@ -2516,6 +2518,52 @@ class RBD(object):
                     'trash_snap_count': _trash_snap_count}
         finally:
             rbd_pool_stats_destroy(_stats)
+
+    def features_to_string(self, features):
+        """
+        Convert features bitmask to str.
+
+        :param features: feature bitmask
+        :type features: int
+        :returns: str - the features str of the image
+        :raises: :class:`InvalidArgument`
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            uint64_t _features = features
+            size_t size = 1024
+            char *str_features = NULL
+        try:
+            while ret == -errno.ERANGE:
+                str_features =  <char *>realloc_chk(str_features, size)
+                with nogil:
+                    ret = rbd_features_to_string(_features, str_features, &size)
+
+            if ret != 0:
+                raise make_ex(ret, 'error converting features bitmask to str')
+            return decode_cstr(str_features)
+        finally:
+            free(str_features)
+
+    def features_from_string(self, str_features):
+        """
+        Get features bitmask from str, if str_features is empty, it will return
+        RBD_FEATURES_DEFAULT.
+
+        :param str_features: feature str
+        :type str_features: str
+        :returns: int - the features bitmask of the image
+        :raises: :class:`InvalidArgument`
+        """
+        str_features = cstr(str_features, 'str_features')
+        cdef:
+            const char *_str_features = str_features
+            uint64_t features
+        with nogil:
+            ret = rbd_features_from_string(_str_features, &features)
+        if ret != 0:
+            raise make_ex(ret, 'error getting features bitmask from str')
+        return features
 
 
 cdef class MirrorPeerIterator(object):

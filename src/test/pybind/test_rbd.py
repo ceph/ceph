@@ -23,6 +23,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
+                 RBD_FEATURE_DEEP_FLATTEN, RBD_FEATURE_FAST_DIFF,
+                 RBD_FEATURE_OBJECT_MAP,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
@@ -476,6 +478,35 @@ def check_stat(info, size, order):
     eq(info['order'], order)
     eq(info['num_objs'], size // (1 << order))
     eq(info['obj_size'], 1 << order)
+
+@require_new_format()
+def test_features_to_string():
+    rbd = RBD()
+    features = RBD_FEATURE_DEEP_FLATTEN | RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_FAST_DIFF \
+               | RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP
+    expected_features_string = "deep-flatten,exclusive-lock,fast-diff,layering,object-map"
+    features_string = rbd.features_to_string(features)
+    eq(expected_features_string, features_string)
+
+    features = RBD_FEATURE_LAYERING
+    features_string = rbd.features_to_string(features)
+    eq(features_string, "layering")
+
+    features = 1024
+    assert_raises(InvalidArgument, rbd.features_to_string, features)
+
+@require_new_format()
+def test_features_from_string():
+    rbd = RBD()
+    features_string = "deep-flatten,exclusive-lock,fast-diff,layering,object-map"
+    expected_features_bitmask = RBD_FEATURE_DEEP_FLATTEN | RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_FAST_DIFF \
+                                | RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP
+    features = rbd.features_from_string(features_string)
+    eq(expected_features_bitmask, features)
+
+    features_string = "layering"
+    features = rbd.features_from_string(features_string)
+    eq(features, RBD_FEATURE_LAYERING)
 
 class TestImage(object):
 
