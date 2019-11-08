@@ -6,10 +6,10 @@ from setuptools.command.test import test as TestCommand
 
 if sys.version_info >= (3,0):
     mypy = ['mypy', 'pytest-mypy']
-    pytest = 'pytest >=2.1.3'
+    pytest = ['pytest >=2.1.3']
 else:
     mypy = []
-    pytest = 'pytest >=2.1.3,<5'
+    pytest = ['pytest >=2.1.3,<5', 'mock']
 
 
 with open("README.rst", "r") as fh:
@@ -49,9 +49,9 @@ setup(
         'six',
     ),
     tests_require=[
-        pytest,
         'tox',
-    ] + mypy,
+        'pyyaml'
+    ] + mypy + pytest,
     classifiers = [
         'Intended Audience :: Developer',
         'Operating System :: POSIX :: Linux',
