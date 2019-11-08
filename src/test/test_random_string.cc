@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw/rgw_common.h"
+#include "common/random_string.h"
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include <gtest/gtest.h>
@@ -52,12 +52,26 @@ TEST(RandomString, alphanumeric)
   EXPECT_TRUE(std::all_of(arr, arr + 64, is_alphanumeric));
 }
 
+TEST(RandomString, alphanumeric_string)
+{
+  std::string str = gen_rand_alphanumeric(g_ceph_context, 64);
+  EXPECT_EQ(64, str.size());
+  EXPECT_TRUE(std::all_of(str.begin(), str.end(), is_alphanumeric));
+}
+
 TEST(RandomString, alphanumeric_lower)
 {
   char arr[65] = {};
   gen_rand_alphanumeric_lower(g_ceph_context, arr, sizeof(arr));
   EXPECT_EQ(0, arr[64]);
   EXPECT_TRUE(std::all_of(arr, arr + 64, is_alphanumeric_lower));
+}
+
+TEST(RandomString, alphanumeric_lower_string)
+{
+  std::string str = gen_rand_alphanumeric_lower(g_ceph_context, 64);
+  EXPECT_EQ(64, str.size());
+  EXPECT_TRUE(std::all_of(str.begin(), str.end(), is_alphanumeric_lower));
 }
 
 TEST(RandomString, alphanumeric_upper)
@@ -68,6 +82,13 @@ TEST(RandomString, alphanumeric_upper)
   EXPECT_TRUE(std::all_of(arr, arr + 64, is_alphanumeric_upper));
 }
 
+TEST(RandomString, alphanumeric_upper_string)
+{
+  std::string str = gen_rand_alphanumeric_upper(g_ceph_context, 64);
+  EXPECT_EQ(64, str.size());
+  EXPECT_TRUE(std::all_of(str.begin(), str.end(), is_alphanumeric_upper));
+}
+
 TEST(RandomString, alphanumeric_no_underscore)
 {
   char arr[65] = {};
@@ -76,10 +97,24 @@ TEST(RandomString, alphanumeric_no_underscore)
   EXPECT_TRUE(std::all_of(arr, arr + 64, is_alphanumeric_no_underscore));
 }
 
+TEST(RandomString, alphanumeric_no_underscore_string)
+{
+  std::string str = gen_rand_alphanumeric_no_underscore(g_ceph_context, 64);
+  EXPECT_EQ(64, str.size());
+  EXPECT_TRUE(std::all_of(str.begin(), str.end(), is_alphanumeric_no_underscore));
+}
+
 TEST(RandomString, alphanumeric_plain)
 {
   char arr[65] = {};
   gen_rand_alphanumeric_plain(g_ceph_context, arr, sizeof(arr));
   EXPECT_EQ(0, arr[64]);
   EXPECT_TRUE(std::all_of(arr, arr + 64, is_alphanumeric_plain));
+}
+
+TEST(RandomString, alphanumeric_plain_string)
+{
+  std::string str = gen_rand_alphanumeric_plain(g_ceph_context, 64);
+  EXPECT_EQ(64, str.size());
+  EXPECT_TRUE(std::all_of(str.begin(), str.end(), is_alphanumeric_plain));
 }
