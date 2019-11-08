@@ -990,7 +990,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def add_mds(self, spec):
-        if len(spec.placement.nodes) < spec.count:
+        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
         daemons = self._get_services('mds')
         results = []
@@ -1040,7 +1040,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def add_rgw(self, spec):
-        if len(spec.placement.nodes) < spec.count:
+        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
         # ensure rgw_zone is set for these daemons
         ret, out, err = self.mon_command({
