@@ -300,7 +300,6 @@ This is an overview of the current implementation status of the orchestrators.
  mgr update                          ⚪         ⚪       ⚪         ✔
  mon update                          ⚪         ✔       ⚪         ✔
  osd create                          ✔         ✔       ⚪         ✔
- osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
  osd rm                              ✔         ⚪       ⚪         ✔
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ✔
  device ls                           ✔         ✔       ✔         ✔
@@ -316,9 +315,9 @@ This is an overview of the current implementation status of the orchestrators.
  nfs add                             ⚪         ✔       ⚪         ⚪
  nfs rm                              ⚪         ✔       ⚪         ⚪
  nfs update                          ⚪         ✔       ⚪         ⚪
- rbd-mirror add                      ⚪         ⚪       ⚪         ⚪
- rbd-mirror rm                       ⚪         ⚪       ⚪         ⚪
- rbd-mirror update                   ⚪         ⚪       ⚪         ⚪
+ rbd-mirror add                      ⚪         ⚪       ⚪         ✔
+ rbd-mirror rm                       ⚪         ⚪       ⚪         ✔
+ rbd-mirror update                   ⚪         ⚪       ⚪         ✔
  rgw add                             ✔         ✔       ⚪         ✔
  rgw rm                              ✔         ✔       ⚪         ✔
  rgw update                          ⚪         ⚪       ⚪         ✔
