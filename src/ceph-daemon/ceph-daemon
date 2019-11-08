@@ -1305,9 +1305,12 @@ def list_daemons():
                     (enabled, state) = check_unit('ceph-%s@%s' % (daemon_type,
                                                                   daemon_id))
                     if not host_version:
-                        out, err, code = call(['ceph', '-v'])
-                        if not code and out.startswith('ceph version '):
-                            host_version = out.split(' ')[2]
+                        try:
+                            out, err, code = call(['ceph', '-v'])
+                            if not code and out.startswith('ceph version '):
+                                host_version = out.split(' ')[2]
+                        except Exception:
+                            pass
 
                     ls.append({
                         'style': 'legacy',
