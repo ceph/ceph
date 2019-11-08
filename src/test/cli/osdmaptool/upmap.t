@@ -7,6 +7,7 @@
   writing upmap command output to: c
   checking for upmap cleanups
   upmap, max-count 11, max deviation 0.01
+  pools 1 
   $ cat c
   ceph osd pg-upmap-items 1.7 142 147
   ceph osd pg-upmap-items 1.8 219 223
