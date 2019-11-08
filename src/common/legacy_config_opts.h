@@ -15,6 +15,7 @@
 /* note: no header guard */
 OPTION(host, OPT_STR) // "" means that ceph will use short hostname
 OPTION(public_addr, OPT_ADDR)
+OPTION(public_addrv, OPT_ADDRVEC)
 OPTION(public_bind_addr, OPT_ADDR)
 OPTION(cluster_addr, OPT_ADDR)
 OPTION(public_network, OPT_STR)
