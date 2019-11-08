@@ -109,7 +109,7 @@
       "title": "MDS Workload - $mds_servers",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -193,7 +193,7 @@
       "title": "Client Request Load - $mds_servers",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",

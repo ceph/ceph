@@ -431,7 +431,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "avg (\n  ((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100)\n  ) *\n  on(instance, device) label_replace(label_replace(ceph_disk_occupation{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")\n)",
+          "expr" : "avg (\n  ((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100)\n  ) *\n  on(instance, device) label_replace(label_replace(ceph_disk_occupation{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")\n)",
           "format": "time_series",
           "instant": true,
           "intervalFactor": 1,
@@ -581,11 +581,12 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "CPU Busy - Top 10 Hosts",
       "tooltip": {
         "shared": true,
-        "sort": 1,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -667,11 +668,12 @@
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "Network Load - Top 10",
       "tooltip": {
         "shared": true,
-        "sort": 1,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
