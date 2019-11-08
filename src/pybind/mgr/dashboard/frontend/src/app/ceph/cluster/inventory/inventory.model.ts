@@ -1,6 +1,7 @@
 export class Device {
   hostname: string;
   uid: string;
+  osd_ids: number[];
 
   blank: boolean;
   type: string;
