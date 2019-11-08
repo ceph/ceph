@@ -66,6 +66,7 @@ def zap_data(path):
         'of={path}'.format(path=path),
         'bs=1M',
         'count=10',
+        'conv=fsync'
     ])
 
 
