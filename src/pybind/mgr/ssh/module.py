@@ -833,6 +833,23 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.service_cache.invalidate(host)
         return "Removed {} from host '{}'".format(name, host)
 
+    def _update_service(self, daemon_type, add_func, spec):
+        daemons = self._get_services(daemon_type, service_name=spec.name)
+        results = []
+        if len(daemons) > spec.count:
+            # remove some
+            to_remove = len(daemons) - spec.count
+            for d in daemons[0:to_remove]:
+                results.append(self._worker_pool.apply_async(
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
+        elif len(daemons) < spec.count:
+            # add some
+            spec.count -= len(daemons)
+            return add_func(spec)
+        return SSHWriteCompletion(results)
+
     def _create_mon(self, host, network):
         """
         Create a new monitor on the given host.
@@ -996,21 +1013,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def update_mds(self, spec):
-        daemons = self._get_services('mds', service_name=spec.name)
-        results = []
-        if len(daemons) > spec.count:
-            # remove some
-            to_remove = len(daemons) - spec.count
-            for d in daemons[0:to_remove]:
-                results.append(self._worker_pool.apply_async(
-                    self._remove_daemon,
-                    ('%s.%s' % (d.service_type, d.service_instance),
-                     d.nodename)))
-        elif len(daemons) < spec.count:
-            # add some
-            spec.count -= len(daemons)
-            return self.add_mds(spec)
-        return SSHWriteCompletion(results)
+        return self._update_service('mds', self.add_mds, spec)
 
     def _create_mds(self, mds_id, host):
         # get mgr. key
@@ -1090,18 +1093,4 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def update_rgw(self, spec):
-        daemons = self._get_services('rgw', service_name=spec.name)
-        results = []
-        if len(daemons) > spec.count:
-            # remove some
-            to_remove = len(daemons) - spec.count
-            for d in daemons[0:to_remove]:
-                results.append(self._worker_pool.apply_async(
-                    self._remove_daemon,
-                    ('%s.%s' % (d.service_type, d.service_instance),
-                     d.nodename)))
-        elif len(daemons) < spec.count:
-            # add some
-            spec.count -= len(daemons)
-            return self.add_rgw(spec)
-        return SSHWriteCompletion(results)
+        return self._update_service('rgw', self.add_rgw, spec)
