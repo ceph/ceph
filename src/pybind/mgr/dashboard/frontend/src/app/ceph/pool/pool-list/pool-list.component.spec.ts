@@ -75,12 +75,6 @@ describe('PoolListComponent', () => {
     expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
   });
 
-  it('returns pool details correctly', () => {
-    const pool = { prop1: 1, cdIsBinary: true, prop2: 2, cdExecuting: true, prop3: 3 };
-    const expected = { prop1: 1, prop2: 2, prop3: 3 };
-    expect(component.getPoolDetails(pool)).toEqual(expected);
-  });
-
   describe('monAllowPoolDelete', () => {
     let configOptRead: boolean;
     let configurationService: ConfigurationService;
