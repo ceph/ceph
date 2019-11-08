@@ -627,6 +627,7 @@ function interactive_setup_routine {
     init_upstream_remote
     init_fork_remote
     vet_remotes
+    [ "$setup_ok" ] || abort_due_to_setup_problem
     [ "$github_token" ] || assert_fail "github_token not set, even after completing Steps 1-3 of interactive setup"
     [ "$github_user" ] || assert_fail "github_user not set, even after completing Steps 1-3 of interactive setup"
     [ "$upstream_remote" ] || assert_fail "upstream_remote not set, even after completing Steps 1-3 of interactive setup"
