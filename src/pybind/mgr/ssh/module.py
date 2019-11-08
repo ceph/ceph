@@ -377,7 +377,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         try:
             # get container image
-            if entity.startswith('rgw.'):
+            if entity.startswith('rgw.') or entity.startswith('rbd-mirror'):
                 entity = 'client.' + entity
             ret, image, err = self.mon_command({
                 'prefix': 'config get',
@@ -793,8 +793,8 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             ret, crash_keyring, err = self.mon_command({
                 'prefix': 'auth get-or-create',
                 'entity': 'client.crash.%s' % host,
-                'caps': ['mon', 'allow profile crash',
-                         'mgr', 'allow profile crash'],
+                'caps': ['mon', 'profile crash',
+                         'mgr', 'profile crash'],
             })
 
             j = json.dumps({
@@ -832,6 +832,23 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.log.debug('_remove_daemon code %s out %s' % (code, out))
         self.service_cache.invalidate(host)
         return "Removed {} from host '{}'".format(name, host)
+
+    def _update_service(self, daemon_type, add_func, spec):
+        daemons = self._get_services(daemon_type, service_name=spec.name)
+        results = []
+        if len(daemons) > spec.count:
+            # remove some
+            to_remove = len(daemons) - spec.count
+            for d in daemons[0:to_remove]:
+                results.append(self._worker_pool.apply_async(
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
+        elif len(daemons) < spec.count:
+            # add some
+            spec.count -= len(daemons)
+            return add_func(spec)
+        return SSHWriteCompletion(results)
 
     def _create_mon(self, host, network):
         """
@@ -898,7 +915,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'mgr.%s' % name,
-            'caps': ['mon', 'allow profile mgr',
+            'caps': ['mon', 'profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
@@ -944,8 +961,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if num_to_remove > 0:
                 for daemon in daemons:
                     result = self._worker_pool.apply_async(
-                        self._remove_mgr,
-                        (daemon.service_instance, daemon.nodename))
+                        self._remove_daemon,
+                        ('%s.%s' % (d.service_type, d.service_instance),
+                         d.nodename))
                     results.append(result)
                     num_to_remove -= 1
                     if num_to_remove == 0:
@@ -972,7 +990,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def add_mds(self, spec):
-        if len(spec.placement.nodes) < spec.count:
+        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
         daemons = self._get_services('mds')
         results = []
@@ -995,28 +1013,14 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def update_mds(self, spec):
-        daemons = self._get_services('mds', service_name=spec.name)
-        results = []
-        if len(daemons) > spec.count:
-            # remove some
-            to_remove = len(daemons) - spec.count
-            for d in daemons[0:to_remove]:
-                results.append(self._worker_pool.apply_async(
-                    self._remove_daemon,
-                    ('%s.%s' % (d.service_type, d.service_instance),
-                     d.nodename)))
-        elif len(daemons) < spec.count:
-            # add some
-            spec.count -= len(daemons)
-            return self.add_mds(spec)
-        return SSHWriteCompletion(results)
+        return self._update_service('mds', self.add_mds, spec)
 
     def _create_mds(self, mds_id, host):
         # get mgr. key
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'mds.' + mds_id,
-            'caps': ['mon', 'allow profile mds',
+            'caps': ['mon', 'profile mds',
                      'osd', 'allow rwx',
                      'mds', 'allow'],
         })
@@ -1036,7 +1040,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def add_rgw(self, spec):
-        if len(spec.placement.nodes) < spec.count:
+        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
         # ensure rgw_zone is set for these daemons
         ret, out, err = self.mon_command({
@@ -1089,16 +1093,54 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return SSHWriteCompletion(results)
 
     def update_rgw(self, spec):
-        daemons = self._get_services('rgw', service_name=spec.name)
+        return self._update_service('rgw', self.add_rgw, spec)
+
+    def add_rbd_mirror(self, spec):
+        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
+            raise RuntimeError("must specify at least %d hosts" % spec.count)
+        daemons = self._get_services('rbd-mirror')
         results = []
-        if len(daemons) > spec.count:
-            # remove some
-            to_remove = len(daemons) - spec.count
-            for d in daemons[0:to_remove]:
-                results.append(self._worker_pool.apply_async(
-                    self._remove_rgw, (d.service_instance, d.nodename)))
-        elif len(daemons) < spec.count:
-            # add some
-            spec.count -= len(daemons)
-            return self.add_rgw(spec)
+        num_added = 0
+        for host in spec.placement.nodes:
+            if num_added >= spec.count:
+                break
+            daemon_id = self.get_unique_name(daemons)
+            self.log.debug('placing rbd-mirror.%s on host %s' % (daemon_id,
+                                                                 host))
+            results.append(
+                self._worker_pool.apply_async(self._create_rbd_mirror,
+                                              (daemon_id, host))
+            )
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.ServiceDescription()
+            sd.service_instance = daemon_id
+            sd.service_type = 'rbd-mirror'
+            sd.nodename = host
+            daemons.append(sd)
+            num_added += 1
         return SSHWriteCompletion(results)
+
+    def _create_rbd_mirror(self, daemon_id, host):
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.rbd-mirror.' + daemon_id,
+            'caps': ['mon', 'profile rbd-mirror',
+                     'osd', 'profile rbd'],
+        })
+        return self._create_daemon('rbd-mirror', daemon_id, host, keyring)
+
+    def remove_rbd_mirror(self, name):
+        daemons = self._get_services('rbd-mirror')
+        results = []
+        for d in daemons:
+            if not name or d.service_instance == name:
+                results.append(self._worker_pool.apply_async(
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
+        if not results and name:
+            raise RuntimeError('Unable to find rbd-mirror.%s daemon' % name)
+        return SSHWriteCompletion(results)
+
+    def update_rbd_mirror(self, spec):
+        return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)

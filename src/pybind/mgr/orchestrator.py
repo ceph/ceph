@@ -496,6 +496,24 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def add_rbd_mirror(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """Create rbd-mirror cluster"""
+        raise NotImplementedError()
+
+    def remove_rbd_mirror(self):
+        # type: (str) -> WriteCompletion
+        """Remove rbd-mirror cluster"""
+        raise NotImplementedError()
+
+    def update_rbd_mirror(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy rbd-mirror cluster
+        Like for example changing the number of service instances.
+        """
+        raise NotImplementedError()
+
     def add_nfs(self, spec):
         # type: (NFSServiceSpec) -> WriteCompletion
         """Create a new MDS cluster"""
