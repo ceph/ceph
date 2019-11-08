@@ -101,14 +101,18 @@ struct Owner : public ElectionOwner, RankProvider {
   int victory_accepters;
   int timer_steps; // timesteps until we trigger timeout
   bool timer_election; // the timeout is for normal election, or victory
-
+  string prefix_str;
  Owner(int r, ElectionLogic::election_strategy es, double tracker_halflife,
        Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
     peer_tracker(this, tracker_halflife),
     logic(this, es, &peer_tracker, g_ceph_context),
     victory_accepters(0),
-    timer_steps(-1), timer_election(true) {}
+    timer_steps(-1), timer_election(true) {
+    std::stringstream str;
+    str << "Owner" << rank << "        ";
+    prefix_str = str.str();
+  }
     
   // in-memory store: just save to variable
   void persist_epoch(epoch_t e) { persisted_epoch = e; }
@@ -197,12 +201,15 @@ struct Owner : public ElectionOwner, RankProvider {
     map<int,ConnectionReport> crs;
     bufferlist::const_iterator bi = bl.begin();
     decode(crs, bi);
+    ldout(g_ceph_context, 6) << "receive ping from " << rank << dendl;
     peer_tracker.report_live_connection(rank, parent->ping_interval);
     for (auto& i : crs) {
       peer_tracker.receive_peer_report(i.second);
     }
+    
   }
   void receive_ping_timeout(int rank) {
+    ldout(g_ceph_context, 6) << "timeout ping from " << rank << dendl;
     peer_tracker.report_dead_connection(rank, parent->ping_interval);
   }
   void election_timeout() {
@@ -261,7 +268,9 @@ struct Owner : public ElectionOwner, RankProvider {
       send_pings();
     }
   }
-  const char *prefix_name() { return "Owner:         "; }
+  const char *prefix_name() {
+    return prefix_str.c_str();
+  }
   int timestep_count() { return parent->timesteps_run; }
 };
 
