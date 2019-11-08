@@ -296,30 +296,34 @@ def check_unit(unit_name):
         state = 'unknown'
     return (enabled, state)
 
-def get_legacy_config_fsid(cluster):
-    try:
-        config = ConfigParser()
-        config.read('/etc/ceph/%s.conf' % cluster)
-        if config.has_section('global') and config.has_option('global', 'fsid'):
-            return config.get('global', 'fsid')
-    except Exception as e:
-        logger.warning('unable to parse \'fsid\' from \'[global]\' section of /etc/ceph/ceph.conf: %s' % e)
-        return None
+def get_legacy_config_fsid(cluster, legacy_dir=None):
+    config_file = '/etc/ceph/%s.conf' % cluster
+    if legacy_dir is not None:
+        config_file = os.path.abspath(legacy_dir + config_file)
+
+    config = ConfigParser()
+    config.read(config_file)
+
+    if config.has_section('global') and config.has_option('global', 'fsid'):
+        return config.get('global', 'fsid')
     return None
 
-def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id):
+def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id, legacy_dir=None):
     fsid = None
     if daemon_type == 'osd':
         try:
-            with open(os.path.join(args.data_dir,
-                                   daemon_type,
-                                   'ceph-%s' % daemon_id,
-                                   'ceph_fsid'), 'r') as f:
+            fsid_file = os.path.join(args.data_dir,
+                                     daemon_type,
+                                     'ceph-%s' % daemon_id,
+                                     'ceph_fsid')
+            if legacy_dir is not None:
+                fsid_file = os.path.abspath(legacy_dir + fsid_file)
+            with open(fsid_file, 'r') as f:
                 fsid = f.read().strip()
         except IOError:
             pass
     if not fsid:
-        fsid = get_legacy_config_fsid(cluster)
+        fsid = get_legacy_config_fsid(cluster, legacy_dir=legacy_dir)
     return fsid
 
 def get_daemon_args(fsid, daemon_type, daemon_id):
@@ -1390,7 +1394,10 @@ def command_adopt():
     (daemon_type, daemon_id) = args.name.split('.', 1)
     (uid, gid) = extract_uid_gid()
     if args.style == 'legacy':
-        fsid = get_legacy_daemon_fsid(args.cluster, daemon_type, daemon_id)
+        fsid = get_legacy_daemon_fsid(args.cluster,
+                                      daemon_type,
+                                      daemon_id,
+                                      legacy_dir=args.legacy_dir)
         if not fsid:
             raise RuntimeError('could not detect fsid; add fsid = to ceph.conf')
 
@@ -1411,6 +1418,7 @@ def command_adopt():
         logger.info('Moving data...')
         data_dir_src = ('/var/lib/ceph/%s/%s-%s' %
                         (daemon_type, args.cluster, daemon_id))
+        data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
         data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id)
         for data_file in glob(os.path.join(data_dir_src, '*')):
             logger.debug('Move \'%s\' -> \'%s\'' % (data_file, data_dir_dst))
@@ -1422,6 +1430,7 @@ def command_adopt():
 
         # config
         config_src = '/etc/ceph/%s.conf' % (args.cluster)
+        config_src = os.path.abspath(args.legacy_dir + config_src)
         config_dst = os.path.join(data_dir_dst, 'config')
         logger.debug('Copy \'%s\' -> \'%s\'' % (config_src, config_dst))
         shutil.copy(config_src, config_dst)
@@ -1430,6 +1439,7 @@ def command_adopt():
         logger.info('Moving logs...')
         log_dir_src = ('/var/log/ceph/%s-%s.%s.log*' %
                         (args.cluster, daemon_type, daemon_id))
+        log_dir_src = os.path.abspath(args.legacy_dir + log_dir_src)
         log_dir_dst = make_log_dir(fsid, uid=uid, gid=gid)
         for log_file in glob(log_dir_src):
             logger.debug('Move \'%s\' -> \'%s\'' % (log_file, log_dir_dst))
@@ -1574,6 +1584,10 @@ def _get_parser():
         '--cluster',
         default='ceph',
         help='cluster name')
+    parser_adopt.add_argument(
+        '--legacy-dir',
+        default='/',
+        help='base directory for legacy daemon data')
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
