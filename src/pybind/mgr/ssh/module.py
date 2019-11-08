@@ -793,8 +793,8 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             ret, crash_keyring, err = self.mon_command({
                 'prefix': 'auth get-or-create',
                 'entity': 'client.crash.%s' % host,
-                'caps': ['mon', 'allow profile crash',
-                         'mgr', 'allow profile crash'],
+                'caps': ['mon', 'profile crash',
+                         'mgr', 'profile crash'],
             })
 
             j = json.dumps({
@@ -915,7 +915,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'mgr.%s' % name,
-            'caps': ['mon', 'allow profile mgr',
+            'caps': ['mon', 'profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
@@ -1020,7 +1020,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'mds.' + mds_id,
-            'caps': ['mon', 'allow profile mds',
+            'caps': ['mon', 'profile mds',
                      'osd', 'allow rwx',
                      'mds', 'allow'],
         })
@@ -1124,7 +1124,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.rbd-mirror.' + daemon_id,
-            'caps': ['mon', 'allow profile rbd-mirror',
+            'caps': ['mon', 'profile rbd-mirror',
                      'osd', 'profile rbd'],
         })
         return self._create_daemon('rbd-mirror', daemon_id, host, keyring)
