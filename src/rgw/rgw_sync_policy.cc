@@ -10,6 +10,71 @@ string rgw_sync_bucket_entity::bucket_key() const
 {
   return rgw_sync_bucket_entities::bucket_key(bucket);
 }
+
+bool rgw_sync_pipe_filter::_tag::from_str(const string& s)
+{
+  if (s.empty()) {
+    return false;
+  }
+
+  auto pos = s.find('=');
+  if (pos == string::npos) {
+    key = s;
+    return true;
+  }
+
+  key = s.substr(0, pos);
+  if (pos < s.size() - 1) {
+    value = s.substr(pos + 1);
+  }
+
+  return true;
+}
+
+void rgw_sync_pipe_filter::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(prefix, bl);
+  encode(tags, bl);
+  ENCODE_FINISH(bl);
+}
+
+void rgw_sync_pipe_filter::decode(bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(prefix, bl);
+  decode(tags, bl);
+  DECODE_FINISH(bl);
+}
+
+void rgw_sync_pipe_filter::set_prefix(std::optional<std::string> opt_prefix,
+                                      bool prefix_rm)
+{
+  if (opt_prefix) {
+    prefix = *opt_prefix;    
+  } else if (prefix_rm) {
+    prefix.reset();
+  }
+}
+
+void rgw_sync_pipe_filter::set_tags(std::list<std::string>& tags_add,
+                                    std::list<std::string>& tags_rm)
+{
+  for (auto& t : tags_rm) {
+    _tag tag;
+    if (tag.from_str(t)) {
+      tags.erase(tag);
+    }
+  }
+
+  for (auto& t : tags_add) {
+    _tag tag;
+    if (tag.from_str(t)) {
+      tags.insert(tag);
+    }
+  }
+}
+
 void rgw_sync_bucket_entity::apply_bucket(std::optional<rgw_bucket> b)
 {
   if (!b) {
@@ -158,8 +223,10 @@ std::vector<rgw_sync_bucket_pipe> rgw_sync_bucket_pipes::expand() const
   for (auto& s : sources) {
     for (auto& d : dests) {
       rgw_sync_bucket_pipe pipe;
+      pipe.id = id;
       pipe.source = s;
       pipe.dest = d;
+      pipe.params = params;
       result.push_back(pipe);
     }
   }

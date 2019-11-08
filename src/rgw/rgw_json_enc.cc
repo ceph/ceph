@@ -885,6 +885,68 @@ void rgw_sync_bucket_entity::decode_json(JSONObj *obj)
     }
   }
 }
+
+void rgw_sync_pipe_filter::_tag::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("value", value, f);
+}
+
+void rgw_sync_pipe_filter::_tag::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("value", value, obj);
+}
+
+void rgw_sync_pipe_filter::dump(Formatter *f) const
+{
+  encode_json("prefix", prefix, f);
+  encode_json("tags", tags, f);
+}
+
+void rgw_sync_pipe_filter::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("prefix", prefix, obj);
+  JSONDecoder::decode_json("tags", tags, obj);
+}
+
+void rgw_sync_pipe_acl_translation::dump(Formatter *f) const
+{
+  encode_json("owner", owner, f);
+}
+
+void rgw_sync_pipe_acl_translation::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("owner", owner, obj);
+}
+
+void rgw_sync_pipe_dest_params::dump(Formatter *f) const
+{
+  encode_json("acl_translation", acl_translation, f);
+  encode_json("storage_class", storage_class, f);
+}
+
+void rgw_sync_pipe_dest_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("acl_translation", acl_translation, obj);
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
+}
+
+void rgw_sync_pipe_params::dump(Formatter *f) const
+{
+  encode_json("filter", filter, f);
+  encode_json("dest_params", dest_params, f);
+  encode_json("priority", priority, f);
+}
+
+void rgw_sync_pipe_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("filter", filter, obj);
+  JSONDecoder::decode_json("dest_params", dest_params, obj);
+  JSONDecoder::decode_json("priority", priority, obj);
+}
+
+
 void rgw_sync_bucket_entities::dump(Formatter *f) const
 {
   encode_json("bucket", rgw_sync_bucket_entities::bucket_key(bucket), f);
@@ -932,14 +994,18 @@ void rgw_sync_bucket_entities::decode_json(JSONObj *obj)
 
 void rgw_sync_bucket_pipe::dump(Formatter *f) const
 {
+  encode_json("id", id, f);
   encode_json("source", source, f);
   encode_json("dest", dest, f);
+  encode_json("params", params, f);
 }
 
 void rgw_sync_bucket_pipe::decode_json(JSONObj *obj)
 {
+  JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("source", source, obj);
   JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("params", params, obj);
 }
 
 void rgw_sync_bucket_pipes::dump(Formatter *f) const
@@ -947,6 +1013,7 @@ void rgw_sync_bucket_pipes::dump(Formatter *f) const
   encode_json("id", id, f);
   encode_json("source", source, f);
   encode_json("dest", dest, f);
+  encode_json("params", params, f);
 }
 
 void rgw_sync_bucket_pipes::decode_json(JSONObj *obj)
@@ -954,6 +1021,7 @@ void rgw_sync_bucket_pipes::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("source", source, obj);
   JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("params", params, obj);
 }
 
 void rgw_sync_data_flow_group::dump(Formatter *f) const

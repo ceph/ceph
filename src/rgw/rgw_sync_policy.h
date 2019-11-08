@@ -176,10 +176,133 @@ struct rgw_sync_bucket_entity {
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
 
+struct rgw_sync_pipe_filter {
+  struct _tag {
+    string key;
+    string value;
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(key, bl);
+      encode(value, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      decode(key, bl);
+      decode(value, bl);
+      DECODE_FINISH(bl);
+    }
+
+    void dump(ceph::Formatter *f) const;
+    void decode_json(JSONObj *obj);
+
+    bool from_str(const string& s);
+
+    bool operator<(const _tag& t) const {
+      if (key < t.key) {
+        return true;
+      }
+      if (t.key < key) {
+        return false;
+      }
+      return (value < t.value);
+    }
+  };
+
+  std::optional<string> prefix;
+  std::set<_tag> tags;
+
+  void set_prefix(std::optional<std::string> opt_prefix,
+                  bool prefix_rm);
+  void set_tags(std::list<std::string>& tags_add,
+                std::list<std::string>& tags_rm);
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& bl);
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_pipe_filter)
+WRITE_CLASS_ENCODER(rgw_sync_pipe_filter::_tag)
+
+struct rgw_sync_pipe_acl_translation {
+  rgw_user owner;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(owner, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(owner, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_pipe_acl_translation)
+
+struct rgw_sync_pipe_dest_params { 
+  std::optional<rgw_sync_pipe_acl_translation> acl_translation;
+  std::optional<string> storage_class;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(acl_translation, bl);
+    encode(storage_class, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(acl_translation, bl);
+    decode(storage_class, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_pipe_dest_params)
+
+struct rgw_sync_pipe_params { 
+  rgw_sync_pipe_filter filter;
+  rgw_sync_pipe_dest_params dest_params;
+  int32_t priority{0};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(filter, bl);
+    encode(dest_params, bl);
+    encode(priority, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(filter, bl);
+    decode(dest_params, bl);
+    decode(priority, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_pipe_params)
+
 struct rgw_sync_bucket_pipe {
-public:
+  string id;
   rgw_sync_bucket_entity source;
   rgw_sync_bucket_entity dest;
+
+  rgw_sync_pipe_params params;
 
   bool specific() const {
     return source.specific() && dest.specific();
@@ -187,19 +310,29 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
+    encode(id, bl);
     encode(source, bl);
     encode(dest, bl);
+    encode(params, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
+    decode(id, bl);
     decode(source, bl);
     decode(dest, bl);
+    decode(params, bl);
     DECODE_FINISH(bl);
   }
 
   const bool operator<(const rgw_sync_bucket_pipe& p) const {
+    if (id < p.id) {
+      return true;
+    }
+    if (id >p.id) {
+      return false;
+    }
     if (source < p.source) {
       return true;
     }
@@ -288,11 +421,14 @@ struct rgw_sync_bucket_pipes {
   rgw_sync_bucket_entities source;
   rgw_sync_bucket_entities dest;
 
+  rgw_sync_pipe_params params;
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(id, bl);
     encode(source, bl);
     encode(dest, bl);
+    encode(params, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -301,6 +437,7 @@ struct rgw_sync_bucket_pipes {
     decode(id, bl);
     decode(source, bl);
     decode(dest, bl);
+    decode(params, bl);
     DECODE_FINISH(bl);
   }
 
