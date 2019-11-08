@@ -25,41 +25,9 @@ class MDSRank;
 class LogSegment;
 
 class MDSTableClient {
-protected:
-  MDSRank *mds;
-  int table;
-
-  uint64_t last_reqid;
-
-  bool server_ready;
-
-  // prepares
-  struct _pending_prepare {
-    MDSContext *onfinish;
-    version_t *ptid;
-    bufferlist *pbl; 
-    bufferlist mutation;
-
-    _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
-    _pending_prepare(MDSContext *c, version_t *pt, bufferlist *pb, bufferlist& m) :
-      onfinish(c), ptid(pt), pbl(pb), mutation(m) {}
-  };
-
-  map<uint64_t, _pending_prepare> pending_prepare;
-  map<version_t, uint64_t> prepared_update;
-  list<_pending_prepare> waiting_for_reqid;
-
-  // pending commits
-  map<version_t, LogSegment*> pending_commit;
-  map<version_t, MDSContext::vec > ack_waiters;
-
-  void handle_reply(class MMDSTableQuery *m);  
-  void _logged_ack(version_t tid);
-  friend class C_LoggedAck;
-
 public:
   MDSTableClient(MDSRank *m, int tab) :
-    mds(m), table(tab), last_reqid(~0ULL), server_ready(false) {}
+    mds(m), table(tab) {}
   virtual ~MDSTableClient() {}
 
   void handle_request(const cref_t<MMDSTableRequest> &m);
@@ -95,9 +63,37 @@ public:
   virtual void handle_query_result(const cref_t<MMDSTableRequest> &m) = 0;
   virtual void handle_notify_prep(const cref_t<MMDSTableRequest> &m) = 0;
   virtual void notify_commit(version_t tid) = 0;
+protected:
+  // prepares
+  struct _pending_prepare {
+    _pending_prepare() {}
+    _pending_prepare(MDSContext *c, version_t *pt, bufferlist *pb, bufferlist& m) :
+      onfinish(c), ptid(pt), pbl(pb), mutation(m) {}
 
-  // and friendly front-end for _prepare.
+    MDSContext *onfinish = nullptr;
+    version_t *ptid = nullptr;
+    bufferlist *pbl = nullptr;
+    bufferlist mutation;
+  };
 
+  friend class C_LoggedAck;
+
+  void handle_reply(class MMDSTableQuery *m);
+  void _logged_ack(version_t tid);
+
+  MDSRank *mds;
+  int table;
+
+  uint64_t last_reqid = ~0ULL;
+
+  bool server_ready = false;
+
+  map<uint64_t, _pending_prepare> pending_prepare;
+  map<version_t, uint64_t> prepared_update;
+  list<_pending_prepare> waiting_for_reqid;
+
+  // pending commits
+  map<version_t, LogSegment*> pending_commit;
+  map<version_t, MDSContext::vec > ack_waiters;
 };
-
 #endif
