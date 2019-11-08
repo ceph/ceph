@@ -697,7 +697,7 @@ $extra_conf
 [mgr]
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        ceph daemon path = $CEPH_ROOT/src/ceph-daemon
+        ceph daemon path = $CEPH_ROOT/src/ceph-daemon/ceph-daemon
 $DAEMONOPTS
 $extra_conf
 [osd]

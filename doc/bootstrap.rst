@@ -19,7 +19,7 @@ your Linux distribution::
 
 or by simply downloading the standalone script manually::
 
-  curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/ceph-daemon
+  curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/ceph-daemon/ceph-daemon
   chmod +x ceph-daemon
   sudo install -m 0755 ceph-daemon /usr/sbin    # optional!
 
