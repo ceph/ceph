@@ -944,8 +944,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if num_to_remove > 0:
                 for daemon in daemons:
                     result = self._worker_pool.apply_async(
-                        self._remove_mgr,
-                        (daemon.service_instance, daemon.nodename))
+                        self._remove_daemon,
+                        ('%s.%s' % (d.service_type, d.service_instance),
+                         d.nodename))
                     results.append(result)
                     num_to_remove -= 1
                     if num_to_remove == 0:
@@ -1096,7 +1097,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             to_remove = len(daemons) - spec.count
             for d in daemons[0:to_remove]:
                 results.append(self._worker_pool.apply_async(
-                    self._remove_rgw, (d.service_instance, d.nodename)))
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
         elif len(daemons) < spec.count:
             # add some
             spec.count -= len(daemons)
