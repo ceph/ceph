@@ -354,6 +354,34 @@ Usage:
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_write_cli('orchestrator rbd-mirror add',
+                "name=num,type=CephInt,req=false "
+                "name=hosts,type=CephString,n=N,req=false",
+                'Create an rbd-mirror service')
+    def _rbd_mirror_add(self, num=None, hosts=None):
+        spec = orchestrator.StatelessServiceSpec(
+            None,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
+        completion = self.add_rbd_mirror(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator rbd-mirror update',
+                "name=num,type=CephInt,req=true "
+                "name=hosts,type=CephString,n=N,req=false",
+                'Update the number of rbd-mirror instances')
+    def _rbd_mirror_update(self, num, hosts=None):
+        spec = orchestrator.StatelessServiceSpec(
+            None,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
+        completion = self.update_rbd_mirror(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_write_cli('orchestrator mds add',
                 "name=fs_name,type=CephString "
                 "name=num,type=CephInt,req=false "
@@ -440,6 +468,15 @@ Usage:
         spec = orchestrator.NFSServiceSpec(svc_arg, pool=pool, namespace=namespace)
         spec.validate_add()
         completion = self.add_nfs(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator rbd-mirror rm',
+                "name=name,type=CephString,req=false",
+                'Remove rbd-mirror service or rbd-mirror service instance')
+    def _rbd_mirror_rm(self, name=None):
+        completion = self.remove_rbd_mirror(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
