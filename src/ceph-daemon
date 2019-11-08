@@ -43,9 +43,11 @@ except ImportError:
 import json
 import logging
 import os
+import random
 import select
 import shutil
 import socket
+import string
 import subprocess
 import sys
 import tempfile
@@ -195,6 +197,13 @@ def pathify(p):
 
 def get_hostname():
     return socket.gethostname()
+
+def get_fqdn():
+    return socket.getfqdn() or socket.gethostname()
+
+def generate_password():
+    return ''.join(random.choice(string.ascii_lowercase + string.digits)
+                   for i in range(10))
 
 def make_fsid():
     return str(uuid.uuid1())
@@ -958,6 +967,23 @@ def command_bootstrap():
     tmp_config.write(config)
     tmp_config.flush()
 
+    # a CLI helper to reduce our typing
+    def cli(cmd, extra_mounts=None):
+        mounts = {
+            log_dir: '/var/log/ceph:z',
+            tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+            tmp_config.name: '/etc/ceph/ceph.conf:z',
+        }
+        if extra_mounts:
+            for k, v in extra_mounts.items():
+                mounts[k] = v
+        return CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=cmd,
+            volume_mounts=mounts,
+        ).run()
+
     logger.info('Waiting for mon to start...')
     while True:
         c = CephContainer(
@@ -980,31 +1006,19 @@ def command_bootstrap():
     # assimilate and minimize config
     if not args.no_minimize_config:
         logger.info('Assimilating anything we can from ceph.conf...')
-        out = CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=['config', 'assimilate-conf',
-                  '-i', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
-            volume_mounts={
-                log_dir: '/var/log/ceph:z',
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id,
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
+        cli([
+            'config', 'assimilate-conf',
+            '-i', '/var/lib/ceph/mon/ceph-%s/config' % mon_id
+        ], {
+            mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id
+        })
         logger.info('Generating new minimal ceph.conf...')
-        out = CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=['config', 'generate-minimal-conf',
-                  '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id],
-            volume_mounts={
-                log_dir: '/var/log/ceph:z',
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id,
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
+        cli([
+            'config', 'generate-minimal-conf',
+            '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id
+        ], {
+            mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id
+        })
         # re-read our minimized config
         with open(mon_dir + '/config', 'r') as f:
             config = f.read()
@@ -1040,17 +1054,7 @@ def command_bootstrap():
 
     logger.info('Waiting for mgr to start...')
     while True:
-        out = CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=[
-                'status', '-f', 'json-pretty'],
-            volume_mounts={
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
+        out = cli(['status', '-f', 'json-pretty'])
         j = json.loads(out)
         if j.get('mgrmap', {}).get('available', False):
             break
@@ -1078,36 +1082,14 @@ def command_bootstrap():
                 f.write(ssh_pub)
             logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
-        CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=[
-                'config-key',
-                'set',
-                'mgr/ssh/ssh_identity_key',
-                '-i', '/tmp/key'],
-            volume_mounts={
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-                tmp_key.name: '/tmp/key:z',
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
-        CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=[
-                'config-key',
-                'set',
-                'mgr/ssh/ssh_identity_pub',
-                '-i', '/tmp/pub'],
-            volume_mounts={
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-                tmp_pub.name: '/tmp/pub:z',
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
+        cli([
+            'config-key',
+            'set',
+            'mgr/ssh/ssh_identity_key',
+            '-i', '/tmp/key'
+        ], {
+            tmp_key.name: '/tmp/key:z',
+        })
 
         logger.info('Adding key to root@localhost\'s authorized_keys...')
         if not os.path.exists('/root/.ssh'):
@@ -1117,50 +1099,47 @@ def command_bootstrap():
             f.write(ssh_pub.strip() + '\n')
 
         logger.info('Enabling ssh module...')
-        CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=[
-                'mgr', 'module', 'enable', 'ssh'
-            ],
-            volume_mounts={
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-                tmp_pub.name: '/tmp/pub:z',
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
+        cli(['mgr', 'module', 'enable', 'ssh'])
         logger.info('Setting orchestrator backend to ssh...')
-        CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=[
-                'orchestrator', 'set', 'backend', 'ssh'
-            ],
-            volume_mounts={
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-                log_dir: '/var/log/ceph:z',
-                tmp_pub.name: '/tmp/pub:z',
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
+        cli(['orchestrator', 'set', 'backend', 'ssh'])
         host = get_hostname()
         logger.info('Adding host %s...' % host)
-        CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=[
-                'orchestrator', 'host', 'add', host
-            ],
-            volume_mounts={
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-                tmp_pub.name: '/tmp/pub:z',
-                tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-                tmp_config.name: '/etc/ceph/ceph.conf:z',
-            },
-        ).run()
+        cli(['orchestrator', 'host', 'add', host])
 
+    if not args.skip_dashboard:
+        logger.info('Enabling the dashboard module...')
+        cli(['mgr', 'module', 'enable', 'dashboard'])
+        logger.info('Waiting for the module to be available...')
+        while True:
+            c = cli(['-h'])
+            if 'dashboard' in c:
+                break
+            logger.info('Dashboard not yet available, waiting...')
+            time.sleep(1)
+        logger.info('Generating a dashboard self-signed certificate...')
+        cli(['dashboard', 'create-self-signed-cert'])
+        logger.info('Creating initial admin user...')
+        password = args.initial_dashboard_password or generate_password()
+        cli(['dashboard', 'ac-user-create',
+             args.initial_dashboard_user, password,
+             'administrator'])
+        logger.info('Fetching dashboard port number...')
+        out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
+        port = int(out)
+        logger.info('Ceph Dashboard is now available at:\n\n'
+                    '\t     URL: https://%s:%s/\n'
+                    '\t    User: %s\n'
+                    '\tPassword: %s\n' % (
+                        get_fqdn(), port,
+                        args.initial_dashboard_user,
+                        password))
+
+    if args.output_config and args.output_keyring:
+        logger.info('You can access the Ceph CLI with:\n\n'
+                    '\tsudo %s shell -c %s -k %s\n' % (
+                        sys.argv[0],
+                        args.output_config,
+                        args.output_keyring))
     logger.info('Bootstrap complete.')
     return 0
 
@@ -1708,6 +1687,17 @@ def _get_parser():
         '--skip-ssh',
         action='store_true',
         help='skip setup of ssh key on local host')
+    parser_bootstrap.add_argument(
+        '--initial-dashboard-user',
+        default='admin',
+        help='Initial user for the dashboard')
+    parser_bootstrap.add_argument(
+        '--initial-dashboard-password',
+        help='Initial password for the initial dashboard user')
+    parser_bootstrap.add_argument(
+        '--skip-dashboard',
+        action='store_true',
+        help='do not enable the Ceph Dashboard')
     parser_bootstrap.add_argument(
         '--no-minimize-config',
         action='store_true',
