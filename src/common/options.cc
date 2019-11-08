@@ -366,6 +366,11 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_STARTUP)
     .add_service({"mon", "mds", "osd", "mgr"}),
 
+    Option("public_addrv", Option::TYPE_ADDRVEC, Option::LEVEL_BASIC)
+    .set_description("public-facing address to bind to")
+    .set_flag(Option::FLAG_STARTUP)
+    .add_service({"mon", "mds", "osd", "mgr"}),
+
     Option("public_bind_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
     .set_default(entity_addr_t())
     .set_flag(Option::FLAG_STARTUP)
