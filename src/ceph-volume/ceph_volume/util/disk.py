@@ -706,7 +706,8 @@ def get_partitions_facts(sys_block_path):
                 if not part['sectorsize']:
                     part['sectorsize'] = get_file_contents(
                         part_sys_block_path + "/queue/hw_sector_size", 512)
-                part['size'] = human_readable_size(float(part['sectors']) * 512)
+                part['size'] = float(part['sectors']) * 512
+                part['human_readable_size'] = human_readable_size(float(part['sectors']) * 512)
                 part['holders'] = []
                 for holder in os.listdir(part_sys_block_path + '/holders'):
                     part['holders'].append(holder)
