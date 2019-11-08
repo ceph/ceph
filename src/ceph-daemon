@@ -1412,6 +1412,8 @@ def command_adopt():
             logger.debug('Move \'%s\' -> \'%s\'' % (data_file, data_dir_dst))
             shutil.move(data_file, data_dir_dst)
         logger.debug('Remove dir \'%s\'' % (data_dir_src))
+        if os.path.ismount(data_dir_src):
+            call_throws(['umount', data_dir_src])
         os.rmdir(data_dir_src)
 
         # config
