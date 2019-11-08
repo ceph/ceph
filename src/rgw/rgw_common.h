@@ -1178,6 +1178,14 @@ struct rgw_bucket {
   rgw_bucket(const rgw_bucket&) = default;
   rgw_bucket(rgw_bucket&&) = default;
 
+  bool match(const rgw_bucket& b) const {
+    return (tenant == b.tenant &&
+	    name == b.name &&
+	    (bucket_id == b.bucket_id ||
+	     bucket_id.empty() ||
+	     b.bucket_id.empty()));
+  }
+
   void convert(cls_user_bucket *b) const {
     b->name = name;
     b->marker = marker;
