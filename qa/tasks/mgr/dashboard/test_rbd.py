@@ -114,8 +114,8 @@ class RbdTest(DashboardTestCase):
     @classmethod
     def setUpClass(cls):
         super(RbdTest, cls).setUpClass()
-        cls.create_pool('rbd', 10, 'replicated')
-        cls.create_pool('rbd_iscsi', 10, 'replicated')
+        cls.create_pool('rbd', 2**3, 'replicated')
+        cls.create_pool('rbd_iscsi', 2**3, 'replicated')
 
         cls.create_image('rbd', 'img1', 2**30)
         cls.create_image('rbd', 'img2', 2*2**30)
@@ -324,7 +324,7 @@ class RbdTest(DashboardTestCase):
         if not self.bluestore_support:
             self.skipTest('requires bluestore cluster')
 
-        self.create_pool('data_pool', 12, 'erasure')
+        self.create_pool('data_pool', 2**4, 'erasure')
 
         rbd_name = 'test_rbd_in_data_pool'
         self.create_image('rbd', rbd_name, 10240, data_pool='data_pool')
