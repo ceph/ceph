@@ -300,7 +300,6 @@ This is an overview of the current implementation status of the orchestrators.
  mgr update                          ⚪         ⚪       ⚪         ✔
  mon update                          ⚪         ✔       ⚪         ✔
  osd create                          ✔         ✔       ⚪         ✔
- osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
  osd rm                              ✔         ⚪       ⚪         ✔
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ✔
  device ls                           ✔         ✔       ✔         ✔
