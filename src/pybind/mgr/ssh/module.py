@@ -377,7 +377,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         try:
             # get container image
-            if entity.startswith('rgw.'):
+            if entity.startswith('rgw.') or entity.startswith('rbd-mirror'):
                 entity = 'client.' + entity
             ret, image, err = self.mon_command({
                 'prefix': 'config get',
@@ -1094,3 +1094,53 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def update_rgw(self, spec):
         return self._update_service('rgw', self.add_rgw, spec)
+
+    def add_rbd_mirror(self, spec):
+        if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
+            raise RuntimeError("must specify at least %d hosts" % spec.count)
+        daemons = self._get_services('rbd-mirror')
+        results = []
+        num_added = 0
+        for host in spec.placement.nodes:
+            if num_added >= spec.count:
+                break
+            daemon_id = self.get_unique_name(daemons)
+            self.log.debug('placing rbd-mirror.%s on host %s' % (daemon_id,
+                                                                 host))
+            results.append(
+                self._worker_pool.apply_async(self._create_rbd_mirror,
+                                              (daemon_id, host))
+            )
+            # add to daemon list so next name(s) will also be unique
+            sd = orchestrator.ServiceDescription()
+            sd.service_instance = daemon_id
+            sd.service_type = 'rbd-mirror'
+            sd.nodename = host
+            daemons.append(sd)
+            num_added += 1
+        return SSHWriteCompletion(results)
+
+    def _create_rbd_mirror(self, daemon_id, host):
+        ret, keyring, err = self.mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.rbd-mirror.' + daemon_id,
+            'caps': ['mon', 'allow profile rbd-mirror',
+                     'osd', 'profile rbd'],
+        })
+        return self._create_daemon('rbd-mirror', daemon_id, host, keyring)
+
+    def remove_rbd_mirror(self, name):
+        daemons = self._get_services('rbd-mirror')
+        results = []
+        for d in daemons:
+            if not name or d.service_instance == name:
+                results.append(self._worker_pool.apply_async(
+                    self._remove_daemon,
+                    ('%s.%s' % (d.service_type, d.service_instance),
+                     d.nodename)))
+        if not results and name:
+            raise RuntimeError('Unable to find rbd-mirror.%s daemon' % name)
+        return SSHWriteCompletion(results)
+
+    def update_rbd_mirror(self, spec):
+        return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
