@@ -899,13 +899,13 @@ def command_bootstrap():
                '\tcaps osd = allow *\n'
                '[mgr.%s]\n'
                '\tkey = %s\n'
-               '\tcaps mon = allow profile mgr\n'
+               '\tcaps mon = profile mgr\n'
                '\tcaps mds = allow *\n'
                '\tcaps osd = allow *\n'
                '[client.crash.%s]\n'
                '\tkey = %s\n'
-               '\tcaps mon = allow profile crash\n'
-               '\tcaps mgr = allow profile crash\n'
+               '\tcaps mon = profile crash\n'
+               '\tcaps mgr = profile crash\n'
                % (mon_key, admin_key, mgr_id, mgr_key, hostname, crash_key))
 
     # tmp keyring file
