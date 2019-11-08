@@ -39,6 +39,7 @@ public:
 
 private:
   typedef std::map<uint8_t, ceph::ref_t<ObjectRecorder>> ObjectRecorderPtrs;
+  typedef std::vector<std::unique_lock<ceph::mutex>> Lockers;
 
   struct Listener : public JournalMetadataListener {
     JournalRecorder *journal_recorder;
@@ -120,17 +121,7 @@ private:
   void handle_closed(ObjectRecorder *object_recorder);
   void handle_overflow(ObjectRecorder *object_recorder);
 
-  void lock_object_recorders() {
-    for (auto& lock : m_object_locks) {
-      lock.lock();
-    }
-  }
-
-  void unlock_object_recorders() {
-    for (auto& lock : m_object_locks) {
-      lock.unlock();
-    }
-  }
+  Lockers lock_object_recorders();
 };
 
 } // namespace journal
