@@ -23,6 +23,7 @@
 
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/Features.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -618,6 +619,28 @@ namespace librbd {
                                               &image.ctx));
     }
     tracepoint(librbd, aio_open_image_by_id_exit, 0);
+    return 0;
+  }
+
+  int RBD::features_to_string(uint64_t features, std::string *str_features)
+  {
+    std::stringstream err;
+    *str_features = librbd::rbd_features_to_string(features, &err);
+    if (!err.str().empty()) {
+      return -EINVAL;
+    }
+
+    return 0;
+  }
+
+  int RBD::features_from_string(const std::string str_features, uint64_t *features)
+  {
+    std::stringstream err;
+    *features = librbd::rbd_features_from_string(str_features, &err);
+    if (!err.str().empty()) {
+      return -EINVAL;
+    }
+
     return 0;
   }
 
@@ -4514,6 +4537,35 @@ extern "C" int rbd_aio_open_by_id_read_only(rados_ioctx_t p, const char *id,
   ictx->state->open(0, new C_OpenComplete(ictx, get_aio_completion(comp),
                                           image));
   tracepoint(librbd, aio_open_image_exit, 0);
+  return 0;
+}
+
+extern "C" int rbd_features_to_string(uint64_t features, char *str_features, size_t *size)
+{
+  std::stringstream err;
+  std::string get_str_features = librbd::rbd_features_to_string(features, &err);
+  if (!err.str().empty()) {
+    return -EINVAL;
+  }
+  uint64_t expected_size = get_str_features.size();
+  if (*size <= expected_size) {
+    *size = expected_size + 1;
+    return -ERANGE;
+  }
+  strncpy(str_features, get_str_features.c_str(), expected_size);
+  str_features[expected_size] = '\0';
+  *size = expected_size + 1;
+  return 0;
+}
+
+extern "C" int rbd_features_from_string(const char *str_features, uint64_t *features)
+{
+  std::stringstream err;
+  *features = librbd::rbd_features_from_string(str_features, &err);
+  if (!err.str().empty()) {
+    return -EINVAL;
+  }
+
   return 0;
 }
 
