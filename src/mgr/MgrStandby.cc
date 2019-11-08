@@ -259,14 +259,6 @@ void MgrStandby::tick()
   )); 
 }
 
-void MgrStandby::handle_signal(int signum)
-{
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
-  //shutdown();
-}
-
 void MgrStandby::shutdown()
 {
   finisher.queue(new LambdaContext([&](int) {
@@ -458,31 +450,13 @@ bool MgrStandby::ms_handle_refused(Connection *con)
   return false;
 }
 
-// A reference for use by the signal handler
-static MgrStandby *signal_mgr = nullptr;
-
-static void handle_mgr_signal(int signum)
-{
-  if (signal_mgr) {
-    signal_mgr->handle_signal(signum);
-  }
-}
-
 int MgrStandby::main(vector<const char *> args)
 {
-  // Enable signal handlers
-  signal_mgr = this;
-  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
-
   client_messenger->wait();
 
   // Disable signal handlers
   unregister_async_signal_handler(SIGHUP, sighup_handler);
-  unregister_async_signal_handler(SIGINT, handle_mgr_signal);
-  unregister_async_signal_handler(SIGTERM, handle_mgr_signal);
   shutdown_async_signal_handler();
-  signal_mgr = nullptr;
 
   return 0;
 }

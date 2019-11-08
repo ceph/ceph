@@ -94,6 +94,8 @@ public:
   void background_init(Context *completion);
   void shutdown();
 
+  void handle_signal(int signum);
+
   std::map<std::string, std::string> get_services() const;
 };
 
