@@ -382,6 +382,15 @@ Usage:
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_write_cli('orchestrator rbd-mirror rm',
+                "name=name,type=CephString,req=false",
+                'Remove rbd-mirror service or rbd-mirror service instance')
+    def _rbd_mirror_rm(self, name=None):
+        completion = self.remove_rbd_mirror(name)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_write_cli('orchestrator mds add',
                 "name=fs_name,type=CephString "
                 "name=num,type=CephInt,req=false "
@@ -408,6 +417,15 @@ Usage:
             placement=orchestrator.PlacementSpec(nodes=hosts),
             count=num or 1)
         completion = self.update_mds(spec)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator mds rm',
+                "name=name,type=CephString",
+                'Remove an MDS service (mds id or fs_name)')
+    def _mds_rm(self, name):
+        completion = self.remove_mds(name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -459,6 +477,15 @@ Usage:
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_write_cli('orchestrator rgw rm',
+                "name=name,type=CephString",
+                'Remove an RGW service')
+    def _rgw_rm(self, name):
+        completion = self.remove_rgw(name)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_write_cli('orchestrator nfs add',
                 "name=svc_arg,type=CephString "
                 "name=pool,type=CephString "
@@ -472,31 +499,14 @@ Usage:
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
-    @_write_cli('orchestrator rbd-mirror rm',
-                "name=name,type=CephString,req=false",
-                'Remove rbd-mirror service or rbd-mirror service instance')
-    def _rbd_mirror_rm(self, name=None):
-        completion = self.remove_rbd_mirror(name)
+    @_write_cli('orchestrator nfs update',
+                "name=svc_id,type=CephString "
+                "name=num,type=CephInt",
+                'Scale an NFS service')
+    def _nfs_update(self, svc_id, num):
+        spec = orchestrator.NFSServiceSpec(svc_id, count=num)
+        completion = self.update_nfs(spec)
         self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_write_cli('orchestrator mds rm',
-                "name=name,type=CephString",
-                'Remove an MDS service (mds id or fs_name)')
-    def _mds_rm(self, name):
-        completion = self.remove_mds(name)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_write_cli('orchestrator rgw rm',
-                "name=name,type=CephString",
-                'Remove an RGW service')
-    def _rgw_rm(self, name):
-        completion = self.remove_rgw(name)
-        self._orchestrator_wait([completion])
-        orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator nfs rm',
@@ -506,16 +516,6 @@ Usage:
         completion = self.remove_nfs(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_write_cli('orchestrator nfs update',
-                "name=svc_id,type=CephString "
-                "name=num,type=CephInt",
-                'Scale an NFS service')
-    def _nfs_update(self, svc_id, num):
-        spec = orchestrator.NFSServiceSpec(svc_id, count=num)
-        completion = self.update_nfs(spec)
-        self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator service',
