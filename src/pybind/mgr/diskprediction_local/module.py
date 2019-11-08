@@ -25,6 +25,10 @@ class Module(MgrModule):
             'name': 'predict_interval',
             'default': str(86400),
         },
+        {
+            'name': 'predictor_model',
+            'default': 'prophetstor',
+        },
     ]
 
     COMMANDS = []
@@ -123,7 +127,6 @@ class Module(MgrModule):
 
     def _predict_life_expentancy(self, devid):
         predicted_result = ''
-        from .predictor import get_diskfailurepredictor_path, DiskFailurePredictor
         health_data = {}
         predict_datas = []
         try:
@@ -136,17 +139,38 @@ class Module(MgrModule):
         except Exception as e:
             self.log.error('failed to get device %s health data due to %s', devid, str(e))
 
-        obj_predictor = DiskFailurePredictor()
-        obj_predictor.initialize("{}/models".format(get_diskfailurepredictor_path()))
+        # initialize appropriate disk failure predictor model
+        from .predictor import get_diskfailurepredictor_path
+        if self.predictor_model == 'prophetstor':
+            from .predictor import PSDiskFailurePredictor
+            obj_predictor = PSDiskFailurePredictor()
+            ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+            if ret is not None:
+                self.log.error('Error initializing predictor')
+                return predicted_result
+        elif self.predictor_model == 'redhat':
+            from .predictor import RHDiskFailurePredictor
+            obj_predictor = RHDiskFailurePredictor()
+            ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+            if ret is not None:
+                self.log.error('Error initializing predictor')
+                return predicted_result
+        else:
+            self.log.error('invalid value received for MODULE_OPTIONS.predictor_model')
+            return predicted_result
 
         if len(health_data) >= 6:
             o_keys = sorted(health_data.keys(), reverse=True)
             for o_key in o_keys:
+                # get values for current day (?)
                 dev_smart = {}
                 s_val = health_data[o_key]
+
+                # add all smart attributes
                 ata_smart = s_val.get('ata_smart_attributes', {})
                 for attr in ata_smart.get('table', []):
-                    if attr.get('raw', {}).get('string'):
+                    # get raw smart values
+                    if attr.get('raw', {}).get('string') is not None:
                         if str(attr.get('raw', {}).get('string', '0')).isdigit():
                             dev_smart['smart_%s_raw' % attr.get('id')] = \
                                 int(attr.get('raw', {}).get('string', '0'))
@@ -158,8 +182,26 @@ class Module(MgrModule):
                             else:
                                 dev_smart['smart_%s_raw' % attr.get('id')] = \
                                     attr.get('raw', {}).get('value', 0)
+                    # get normalized smart values
+                    if attr.get('value') is not None:
+                        dev_smart['smart_%s_normalized' % attr.get('id')] = \
+                                    attr.get('value')
+                # add power on hours manually if not available in smart attributes
                 if s_val.get('power_on_time', {}).get('hours') is not None:
                     dev_smart['smart_9_raw'] = int(s_val['power_on_time']['hours'])
+                # add device capacity
+                if s_val.get('user_capacity') is not None:
+                    if s_val.get('user_capacity').get('bytes') is not None:
+                        dev_smart['user_capacity'] = s_val.get('user_capacity').get('bytes')
+                    else:
+                        self.log.debug('user_capacity not found in smart attributes list')
+                # add device model
+                if s_val.get('model_name') is not None:
+                    dev_smart['model_name'] = s_val.get('model_name')
+                # add vendor
+                if s_val.get('vendor') is not None:
+                    dev_smart['vendor'] = s_val.get('vendor')
+                # if smart data was found, then add that to list
                 if dev_smart:
                     predict_datas.append(dev_smart)
                 if len(predict_datas) >= 12:
