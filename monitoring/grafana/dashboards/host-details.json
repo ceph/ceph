@@ -207,7 +207,7 @@
       "title": "CPU Utilisation",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -330,7 +330,7 @@
       "title": "RAM Usage",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -434,7 +434,7 @@
       "title": "Network Load",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -631,7 +631,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(ceph_osd_stat_bytes and on (ceph_daemon) ceph_disk_occupation{exported_instance=~\"($ceph_hosts).*\"})",
+          "expr": "sum(ceph_osd_stat_bytes and on (ceph_daemon) ceph_disk_occupation{instance=~\"($ceph_hosts).*\"})",
           "format": "time_series",
           "intervalFactor": 2,
           "refId": "A",
@@ -808,7 +808,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(irate(node_disk_writes_completed{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_writes_completed_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "(irate(node_disk_writes_completed{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_writes_completed_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}}) writes",
@@ -817,7 +817,7 @@
           "textEditor": true
         },
         {
-          "expr": "(irate(node_disk_reads_completed{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_reads_completed_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "(irate(node_disk_reads_completed{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_reads_completed_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -848,7 +848,7 @@
           "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -909,14 +909,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(irate(node_disk_bytes_written{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_written_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "(irate(node_disk_bytes_written{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_written_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}}) write",
           "refId": "B"
         },
         {
-          "expr": "(irate(node_disk_bytes_read{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_read_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "(irate(node_disk_bytes_read{instance=~\"($ceph_hosts).*\"}[5m]) or irate(node_disk_read_bytes_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}}({{ceph_daemon}}) read",
@@ -946,7 +946,7 @@
           "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -1002,11 +1002,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "max by(instance,device) (((\n  (irate(node_disk_write_time_ms{ instance=~\"($ceph_hosts).*\"}[5m]) )\n  / clamp_min(irate(node_disk_writes_completed{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001) or \n  (irate(node_disk_read_time_ms{ instance=~\"($ceph_hosts).*\"}[5m]) )\n  / clamp_min(irate(node_disk_reads_completed{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001)\n  ) / 1000) or\n  (irate(node_disk_write_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )\n  / clamp_min(irate(node_disk_writes_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001) or \n  (irate(node_disk_read_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )\n  / clamp_min(irate(node_disk_reads_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001)\n  ) *\n  on(instance,device) group_left(osd_id) label_replace(ceph_disk_occupation,\"osd_id\",\"$1\",\"ceph_daemon\",\"osd.(.*)\")",
+          "expr": "max by(instance,device) ((irate(node_disk_write_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )  / clamp_min(irate(node_disk_writes_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001) or   (irate(node_disk_read_time_seconds_total{ instance=~\"($ceph_hosts).*\"}[5m]) )  / clamp_min(irate(node_disk_reads_completed_total{ instance=~\"($ceph_hosts).*\"}[5m]), 0.001)  ) *  on(instance,device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation{instance=~\"($ceph_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
-          "legendFormat": "{{device}}({{osd_id}})",
+          "legendFormat": "{{device}}({{ceph_daemon}})",
           "refId": "D"
         }
       ],
@@ -1058,6 +1058,7 @@
       "datasource": "$datasource",
       "description": "Show disk utilization % (util) of any OSD devices on the host by the physical device name and associated OSD id.",
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 11,
@@ -1077,8 +1078,11 @@
       "lines": true,
       "linewidth": 1,
       "links": [],
-      "minSpan": 12,
+      "maxPerRow": 2,
       "nullPointMode": "connected",
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 5,
       "points": false,
@@ -1089,24 +1093,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(\n  (irate(node_disk_io_time_ms[5m]) / 10 ) or\n  irate(node_disk_io_time_seconds_total[5m]) * 100)\n* on(instance, device) group_left(osd_id) label_replace(ceph_disk_occupation{instance=~\"($ceph_hosts).*\"}, \"osd_id\",\"$1\",\"ceph_daemon\",\"osd.(.*)\")\n",
+          "expr": "((irate(node_disk_io_time_ms{instance=~\"($ceph_hosts).*\"}[5m]) / 10 ) or  irate(node_disk_io_time_seconds_total{instance=~\"($ceph_hosts).*\"}[5m]) * 100)* on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation{instance=~\"($ceph_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
-          "legendFormat": "{{device}}({{osd_id}})",
-          "refId": "C",
-          "step": 10,
-          "textEditor": true
-        },
-        {
-          "expr": "(irate(node_disk_io_time_ms{instance=~\"($ceph_hosts).*\"}[5m] * 1000) or irate(node_disk_writes_completed_total{instance=~\"($ceph_hosts).*\"}[5m])) * on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
-          "format": "time_series",
-          "intervalFactor": 1,
+          "legendFormat": "{{device}}({{ceph_daemon}})",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
+      "timeRegions": [],
       "timeShift": null,
       "title": "$ceph_hosts Disk utilisation",
       "tooltip": {
@@ -1124,7 +1121,7 @@
       },
       "yaxes": [
         {
-          "format": "short",
+          "format": "percent",
           "label": "%Util",
           "logBase": 1,
           "max": "100",
