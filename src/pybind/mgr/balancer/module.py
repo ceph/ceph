@@ -984,9 +984,16 @@ class Module(MgrModule):
                 if p['state'] == 'active+clean':
                     num_pg_active_clean += 1
 
-            available = max_optimizations - (num_pg - num_pg_active_clean)
+            # Don't need more optimizations than active+clean pgs
+            if (left > num_pg_active_clean)
+              available = num_pg_active_clean;
+            else
+              available = left;
             did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, available, [pool])
             total_did += did
+            left -= did
+            if left <= 0:
+                break
         self.log.info('prepared %d changes in total' % total_did)
         if total_did == 0:
             return -errno.EALREADY, 'Unable to find further optimization, ' \
