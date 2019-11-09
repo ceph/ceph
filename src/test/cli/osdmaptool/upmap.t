@@ -7,8 +7,8 @@
   writing upmap command output to: c
   checking for upmap cleanups
   upmap, max-count 11, max deviation 0.01
-  pools rbd 
-  prepared 11/11 changes
+  prepared 11 changes for pools(s) rbd 
+  prepared 11 changes in total
   $ cat c
   ceph osd pg-upmap-items 1.7 142 147
   ceph osd pg-upmap-items 1.8 219 223
