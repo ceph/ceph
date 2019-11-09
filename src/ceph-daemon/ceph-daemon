@@ -8,6 +8,7 @@ UNIT_DIR='/etc/systemd/system'
 LOG_DIR_MODE=0o770
 DATA_DIR_MODE=0o700
 PODMAN_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
+CUSTOM_PS1='[ceph: \u@\h \W]\\$ '
 
 """
 You can invoke ceph-daemon in two ways:
@@ -1218,6 +1219,7 @@ def command_shell():
         podman_args += [
             '-it',
             '--env', 'LANG=C',
+            '-e', "PS1=%s" % CUSTOM_PS1,
         ]
     c = CephContainer(
         image=args.image,
@@ -1239,6 +1241,7 @@ def command_enter():
         podman_args += [
             '-it',
             '--env', 'LANG=C',
+            '-e', "PS1=%s" % CUSTOM_PS1,
         ]
     c = get_container(args.fsid, daemon_type, daemon_id,
                       podman_args=podman_args)
