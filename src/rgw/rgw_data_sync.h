@@ -15,34 +15,29 @@
 
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
+#include "rgw_sync_policy.h"
 
 class JSONObj;
 struct rgw_sync_bucket_pipe;
 
 struct rgw_bucket_sync_pair_info {
+  rgw_sync_pipe_params params;
   rgw_bucket_shard source_bs;
   rgw_bucket_shard dest_bs;
-  string source_prefix;
-  string dest_prefix;
 };
 
 inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pair_info& p) {
-  if (p.source_bs.bucket == p.dest_bs.bucket &&
-      p.source_prefix == p.dest_prefix) {
+  if (p.source_bs.bucket == p.dest_bs.bucket) {
     return out << p.source_bs;
   }
 
   out << p.source_bs;
 
-  if (!p.source_prefix.empty()) {
-    out << "/" << p.source_prefix;
+  if (p.params.filter.prefix) {
+    out << "/" << *p.params.filter.prefix + "*";
   }
 
   out << "->" << p.dest_bs.bucket;
-
-  if (!p.dest_prefix.empty()) {
-    out << "/" << p.dest_prefix;
-  }
 
   return out;
 }

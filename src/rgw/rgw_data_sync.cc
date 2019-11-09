@@ -1125,6 +1125,7 @@ std::ostream& operator<<(std::ostream& out, const rgw_sync_pipe_info_entity& e) 
 }
 
 struct rgw_sync_pipe_info {
+  rgw_sync_pipe_params params;
   rgw_sync_pipe_info_entity source;
   rgw_sync_pipe_info_entity target;
 
@@ -1132,7 +1133,9 @@ struct rgw_sync_pipe_info {
   rgw_sync_pipe_info(const rgw_sync_bucket_pipe& pipe,
                      std::optional<RGWBucketInfo> source_bucket_info,
                      std::optional<RGWBucketInfo> target_bucket_info) : source(pipe.source, source_bucket_info),
-                                                                        target(pipe.dest, target_bucket_info) {}
+                                                                        target(pipe.dest, target_bucket_info) {
+    params = pipe.params;
+  }
 
   bool operator<(const rgw_sync_pipe_info& p) const {
     if (source < p.source) {
@@ -3813,6 +3816,8 @@ int RGWRunBucketSourcesSyncCR::operate()
         }
         sync_pair.dest_bs.bucket = siter->target.get_bucket();
 
+        sync_pair.params = siter->params;
+
         if (sync_pair.source_bs.shard_id >= 0) {
           num_shards = 1;
           cur_shard = sync_pair.source_bs.shard_id;
@@ -3925,6 +3930,7 @@ int RGWSyncGetBucketInfoCR::operate()
 void RGWGetBucketPeersCR::update_from_target_bucket_policy()
 {
   if (!target_policy ||
+      !target_policy->policy_handler ||
       !pipes) {
     return;
   }
@@ -3949,6 +3955,7 @@ void RGWGetBucketPeersCR::update_from_target_bucket_policy()
 void RGWGetBucketPeersCR::update_from_source_bucket_policy()
 {
   if (!source_policy ||
+      !source_policy->policy_handler ||
       !pipes) {
     return;
   }
