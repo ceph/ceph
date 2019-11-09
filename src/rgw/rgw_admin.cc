@@ -673,6 +673,7 @@ enum class OPT {
   SYNC_GROUP_FLOW_CREATE,
   SYNC_GROUP_FLOW_REMOVE,
   SYNC_GROUP_PIPE_CREATE,
+  SYNC_GROUP_PIPE_MODIFY,
   SYNC_GROUP_PIPE_REMOVE,
   SYNC_POLICY_GET,
   BILOG_LIST,
@@ -877,6 +878,7 @@ static SimpleCmd::Commands all_cmds = {
   { "sync group flow create", OPT::SYNC_GROUP_FLOW_CREATE },
   { "sync group flow remove", OPT::SYNC_GROUP_FLOW_REMOVE },
   { "sync group pipe create", OPT::SYNC_GROUP_PIPE_CREATE },
+  { "sync group pipe modify", OPT::SYNC_GROUP_PIPE_MODIFY },
   { "sync group pipe remove", OPT::SYNC_GROUP_PIPE_REMOVE },
   { "bilog list", OPT::BILOG_LIST },
   { "bilog trim", OPT::BILOG_TRIM },
@@ -3116,6 +3118,9 @@ int main(int argc, const char **argv)
   std::optional<string> opt_dest_bucket_id;
   std::optional<string> opt_effective_zone;
 
+  std::optional<string> opt_prefix;
+  std::optional<string> opt_prefix_rm;
+
   rgw::notify::EventTypeList event_types;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
@@ -3508,6 +3513,10 @@ int main(int argc, const char **argv)
       opt_dest_bucket_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--effective-zone", (char*)NULL)) {
       opt_effective_zone = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
+      opt_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--prefix-rm", (char*)NULL)) {
+      opt_prefix_rm = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -8125,12 +8134,14 @@ next:
     show_result(sync_policy, formatter, cout);
   }
 
-  if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
+  if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE ||
+      opt_cmd == OPT::SYNC_GROUP_PIPE_MODIFY) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
     CHECK_TRUE(require_opt(opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_source_zones), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_dest_zones), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
-
+    if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
+      CHECK_TRUE(require_non_empty_opt(opt_source_zones), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_dest_zones), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
+    }
 
     SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
     ret = sync_policy_ctx.init();
@@ -8149,7 +8160,14 @@ next:
 
     rgw_sync_bucket_pipes *pipe;
 
-    group.find_pipe(*opt_pipe_id, true, &pipe);
+    if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
+      group.find_pipe(*opt_pipe_id, true, &pipe);
+    } else {
+      if (!group.find_pipe(*opt_pipe_id, false, &pipe)) {
+        cerr << "ERROR: could not find pipe '" << *opt_pipe_id << "'" << std::endl;
+        return ENOENT;
+      }
+    }
 
     pipe->source.add_zones(*opt_source_zones);
     pipe->source.set_bucket(opt_source_tenant,
@@ -8159,6 +8177,9 @@ next:
     pipe->dest.set_bucket(opt_dest_tenant,
                             opt_dest_bucket_name,
                             opt_dest_bucket_id);
+
+    pipe->params.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
+    pipe->params.filter.set_tags(tags_add, tags_rm);
 
     ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
