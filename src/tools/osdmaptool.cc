@@ -408,6 +408,12 @@ int main(int argc, const char **argv)
     int total_did = 0;
     int left = upmap_max;
     for (auto& i: pools) {
+      const string& pool_name = osdmap.get_pool_name(i);
+      auto pp = osdmap.get_pg_pool(i);
+      if (pp->get_pg_num() > pp->get_pg_num_target()) {
+	cout << "pool " << pool_name << " has pending PG(s) for merging, skipping for now" << std::endl;
+	continue;
+      }
       set<int64_t> one_pool;
       one_pool.insert(i);
       int did = osdmap.calc_pg_upmaps(
@@ -429,6 +435,7 @@ int main(int argc, const char **argv)
       }
     } else {
       cout << "Unable to find further optimization, "
+	   << "or pool(s) pg_num is decreasing, "
 	   << "or distribution is already perfect"
 	   << std::endl;
     }
