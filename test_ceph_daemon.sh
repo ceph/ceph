@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 fsid='00000000-0000-0000-0000-0000deadbeef'
-image='ceph/daemon-base:latest-master'
+image='ceph/daemon-base:latest-master-devel'
 [ -z "$ip" ] && ip=127.0.0.1
 
 CEPH_DAEMON=../src/ceph-daemon/ceph-daemon
