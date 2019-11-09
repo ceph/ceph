@@ -1101,6 +1101,14 @@ def command_bootstrap():
         ], {
             tmp_key.name: '/tmp/key:z',
         })
+        cli([
+            'config-key',
+            'set',
+            'mgr/ssh/ssh_identity_pub',
+            '-i', '/tmp/pub'
+        ], {
+            tmp_pub.name: '/tmp/pub:z',
+        })
 
         logger.info('Adding key to root@localhost\'s authorized_keys...')
         if not os.path.exists('/root/.ssh'):
