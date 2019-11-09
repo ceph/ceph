@@ -401,7 +401,7 @@ class TestCephDiskDevice(object):
         assert not disk.available
 
     def test_accept_non_removable_device(self, device_info):
-        data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
+        data = {"/dev/sdb": {"removable": 0}}
         device_info(devices=data)
         disk = device.Device("/dev/sdb")
         assert disk.available
@@ -412,14 +412,8 @@ class TestCephDiskDevice(object):
         disk = device.Device("/dev/cdrom")
         assert not disk.available
 
-    def test_reject_smaller_than_5gb(self, device_info):
-        data = {"/dev/sda": {"size": 5368709119}}
-        device_info(devices=data)
-        disk = device.Device("/dev/sda")
-        assert not disk.available, 'too small device is available'
-
     def test_accept_non_readonly_device(self, device_info):
-        data = {"/dev/sda": {"ro": 0, "size": 5368709120}}
+        data = {"/dev/sda": {"ro": 0}}
         device_info(devices=data)
         disk = device.Device("/dev/sda")
         assert disk.available
