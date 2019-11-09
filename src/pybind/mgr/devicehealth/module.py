@@ -316,7 +316,8 @@ class Module(MgrModule):
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
-                self.put_device_metrics(ioctx, device, data)
+                if device and data:
+                    self.put_device_metrics(ioctx, device, data)
         ioctx.close()
         return 0, "", ""
 
@@ -341,7 +342,8 @@ class Module(MgrModule):
                     continue
                 did_device[device] = 1
                 data = self.extract_smart_features(raw_data)
-                self.put_device_metrics(ioctx, device, data)
+                if device and data:
+                    self.put_device_metrics(ioctx, device, data)
         ioctx.close()
         return 0, "", ""
 
@@ -360,7 +362,8 @@ class Module(MgrModule):
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
-                self.put_device_metrics(ioctx, device, data)
+                if device and data:
+                    self.put_device_metrics(ioctx, device, data)
         ioctx.close()
         return 0, "", ""
 
@@ -385,6 +388,7 @@ class Module(MgrModule):
                     daemon_type, daemon_id, outb))
 
     def put_device_metrics(self, ioctx, devid, data):
+        assert devid
         old_key = datetime.utcnow() - timedelta(
             seconds=int(self.retention_period))
         prune = old_key.strftime(TIME_FORMAT)
