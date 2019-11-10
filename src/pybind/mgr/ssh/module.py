@@ -725,7 +725,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     self.log.debug('mismatched fsid, skipping %s' % osd)
                     continue
-                if len(list(set(devices) & set(osd['devices']))) == 0:
+                if len(list(set(devices) & set(osd['devices']))) == 0 and osd.get('lv_path') not in devices:
                     self.log.debug('mismatched devices, skipping %s' % osd)
                     continue
 
