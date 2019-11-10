@@ -544,6 +544,8 @@ public:
     return _truncate(h, offset);
   }
 
+  /// test purpose methods
+  void debug_inject_duplicate_gift(unsigned bdev, uint64_t offset, uint64_t len);
 };
 
 #endif
