@@ -570,7 +570,7 @@ Usage:
         def split_host(host):
             """Split host into host and network parts"""
             # TODO: stricter validation
-            parts = host.split(":")
+            parts = host.split(":", 1)
             if len(parts) == 1:
                 return (parts[0], None)
             elif len(parts) == 2:

@@ -862,8 +862,18 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'entity': 'mon.',
         })
 
+        # infer whether this is a CIDR network, addrvec, or plain IP
+        if '/' in network:
+            extra_args = ['--mon-network', network]
+        elif network.startswith('[v') and network.endswith(']'):
+            extra_args = ['--mon-addrv', network]
+        elif ':' not in network:
+            extra_args = ['--mon-ip', network]
+        else:
+            raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
+
         return self._create_daemon('mon', host, host, keyring,
-                                   extra_args=['--mon-network', network])
+                                   extra_args=extra_args)
 
     def update_mons(self, num, hosts):
         """
