@@ -33,11 +33,11 @@ namespace po = boost::program_options;
 
 namespace {
 
-int validate_mirroring_enabled(librbd::Image& image) {
+int validate_mirroring_enabled(librbd::Image &image, bool snapshot = false) {
   librbd::mirror_image_info_t mirror_image;
   int r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
   if (r < 0) {
-    std::cerr << "rbd: failed to retrieve mirror mode: "
+    std::cerr << "rbd: failed to retrieve mirror info: "
               << cpp_strerror(r) << std::endl;
     return r;
   }
@@ -46,6 +46,23 @@ int validate_mirroring_enabled(librbd::Image& image) {
     std::cerr << "rbd: mirroring not enabled on the image" << std::endl;
     return -EINVAL;
   }
+
+  if (snapshot) {
+    librbd::mirror_image_mode_t mode;
+    r = image.mirror_image_get_mode(&mode);
+    if (r < 0) {
+      std::cerr << "rbd: failed to retrieve mirror mode: "
+                << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    if (mode != RBD_MIRROR_IMAGE_MODE_SNAPSHOT) {
+      std::cerr << "rbd: snapshot based mirroring not enabled on the image"
+                << std::endl;
+      return -EINVAL;
+    }
+  }
+
   return 0;
 }
 
@@ -397,6 +414,46 @@ int execute_status(const po::variables_map &vm,
   return 0;
 }
 
+int execute_snapshot(const po::variables_map &vm,
+                     const std::vector<std::string> &ceph_global_init_args) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string namespace_name;
+  std::string image_name;
+  int r = utils::get_pool_image_snapshot_names(
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+      &image_name, nullptr, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  r = validate_mirroring_enabled(image, true);
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t snap_id;
+  r = image.mirror_image_create_snapshot(&snap_id);
+  if (r < 0) {
+    std::cerr << "rbd: error creating snapshot: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  std::cout << "Snapshot ID: " << snap_id << std::endl;
+  return 0;
+}
+
 Shell::Action action_enable(
   {"mirror", "image", "enable"}, {},
   "Enable RBD mirroring for an image.", "",
@@ -421,6 +478,10 @@ Shell::Action action_status(
   {"mirror", "image", "status"}, {},
   "Show RBD mirroring status for an image.", "",
   &get_status_arguments, &execute_status);
+Shell::Action action_snapshot(
+  {"mirror", "image", "snapshot"}, {},
+  "Create RBD mirroring image snapshot.", "",
+  &get_arguments, &execute_snapshot);
 
 } // namespace mirror_image
 } // namespace action
