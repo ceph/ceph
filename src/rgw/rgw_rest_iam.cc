@@ -29,7 +29,7 @@ void RGWHandler_REST_IAM::rgw_iam_parse_input()
           const auto key = t.substr(0, pos);
           if (key == "Action") {
             s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
-          } else if (key == "AssumeRolePolicyDocument" || key == "Path" || key == "PolicyDocument") {
+          } else if (key == "AssumeRolePolicyDocument" || key == "Path" || key == "PolicyDocument" || key == "PolicyName" || key == "UserName")  {
             const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
             s->info.args.append(key, value);
           }
