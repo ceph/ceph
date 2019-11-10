@@ -1013,35 +1013,62 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	RGWBucketInfo bucket_info;
 	map<string, bufferlist> attrs;
 
-	ret = store->getRados()->get_bucket_info(store->svc(), entry.tenant, entry.bucket_name,
-				     bucket_info, nullptr, null_yield, &attrs);
+	ret = store->getRados()->get_bucket_info(store->svc(),
+						 entry.tenant, entry.bucket_name,
+						 bucket_info, nullptr,
+						 null_yield, &attrs);
 	if (ret < 0) {
-	  ldout(cct, 0) <<  __func__ << ": Error in get_bucket_info: " <<
-	    cpp_strerror(-ret) << dendl;
-	  return -ret;
+	  ldout(cct, 0) <<  __func__ <<
+	    ": Error in get_bucket_info for bucket " << entry.bucket_name <<
+	    ": " << cpp_strerror(-ret) << dendl;
+	  if (ret != -ENOENT) {
+	    // any error other than ENOENT will abort
+	    return ret;
+	  }
+
+	  // we've encountered a reshard queue entry for an apparently
+	  // non-existent bucket; let's try to recover by cleaning up
+	  ldout(cct, 0) <<  __func__ <<
+	    ": removing reshard queue entry for non-existent bucket " <<
+	    entry.bucket_name << dendl;
+
+	  ret = remove(entry);
+	  if (ret < 0) {
+	    ldout(cct, 0) << __func__ <<
+	      ": Error removing non-existent bucket " <<
+	      entry.bucket_name << " from resharding queue: " <<
+	      cpp_strerror(-ret) << dendl;
+	    return ret;
+	  }
+
+	  // we cleaned up, move on to the next entry
+	  goto finished_entry;
 	}
 
 	RGWBucketReshard br(store, bucket_info, attrs, nullptr);
 	ret = br.execute(entry.new_num_shards, max_entries, false, nullptr,
 			 nullptr, this);
 	if (ret < 0) {
-	  ldout (store->ctx(), 0) <<  __func__ <<
-	    "ERROR in reshard_bucket " << entry.bucket_name << ":" <<
+	  ldout(store->ctx(), 0) <<  __func__ <<
+	    ": Error during resharding bucket " << entry.bucket_name << ":" <<
 	    cpp_strerror(-ret)<< dendl;
 	  return ret;
 	}
 
-	ldout (store->ctx(), 20) <<  " removing entry" << entry.bucket_name <<
+	ldout(store->ctx(), 20) << __func__ <<
+	  " removing reshard queue entry for bucket " << entry.bucket_name <<
 	  dendl;
 
       	ret = remove(entry);
 	if (ret < 0) {
-	  ldout(cct, 0)<< __func__ << ":Error removing bucket " <<
-	    entry.bucket_name << " for resharding queue: " <<
+	  ldout(cct, 0) << __func__ << ": Error removing bucket " <<
+	    entry.bucket_name << " from resharding queue: " <<
 	    cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
-      }
+      } // if new instance id is empty
+
+    finished_entry:
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
@@ -1052,7 +1079,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
       }
 
       entry.get_key(&marker);
-    }
+    } // entry for loop
   } while (truncated);
 
   logshard_lock.unlock();
