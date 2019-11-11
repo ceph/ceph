@@ -21,6 +21,8 @@ def encryption_status(abspath):
     return encryption.status(abspath)
 
 # TODO: create global list of LVs (and PVs and VGs) and then get rid of this.
+global_pvs = lvm.PVolumes()
+global_vgs = lvm.VolumeGroups()
 global_lvs = lvm.Volumes()
 
 class Devices(object):
@@ -81,13 +83,15 @@ class Device(object):
     ]
 
     def __init__(self, path, lvs=None):
+        global global_pvs
+        global global_vgs
         global global_lvs
 
         self.path = path
 
-        if lvm.is_pv(path):
+        if lvm.is_pv(path, global_pvs):
             self.lvs = lvs or lvm.get_lv(pv_name=path, lvs=global_lvs)
-        elif lvm.is_vg(os.path.basename(path)):
+        elif lvm.is_vg(os.path.basename(path), global_vgs):
             self.lvs = lvs or lvm.get_lv(vg_name=os.path.basename(path),
                                          lvs=global_lvs)
         elif lvm.is_lv(lv_name=path):

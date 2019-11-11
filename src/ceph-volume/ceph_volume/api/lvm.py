@@ -496,13 +496,16 @@ def remove_pv(pv_name):
     )
 
 
-def is_pv(pv_name):
-    stdout = [i.strip() for i in get_api_pvs(fields='pv_name', unparsed=True)]
-    try:
-        stdout.index(pv_name)
-    except ValueError:
-        return False
-    return True
+def is_pv(pv_name, pvs=None):
+    if pvs:
+        return pvs.get(pv_name) is not None
+    else:
+        stdout = [i.strip() for i in get_api_pvs(fields='pv_name', unparsed=True)]
+        try:
+            stdout.index(pv_name)
+        except ValueError:
+            return False
+        return True
 
 
 def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
@@ -853,13 +856,16 @@ def remove_vg(vg_name):
     )
 
 
-def is_vg(vg_name):
-    stdout = [i.strip() for i in get_api_vgs(fields='pv_name', unparsed=True)]
-    try:
-        stdout.index(vg_name)
-    except ValueError:
-        return False
-    return True
+def is_vg(vg_name, vgs=None):
+    if vgs:
+        return vgs.get(vg_name) is not None
+    else:
+        stdout = [i.strip() for i in get_api_vgs(fields='pv_name', unparsed=True)]
+        try:
+            stdout.index(vg_name)
+        except ValueError:
+            return False
+        return True
 
 
 def get_vg(vg_name=None, vg_tags=None, vgs=None):
