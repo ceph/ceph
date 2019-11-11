@@ -11,6 +11,10 @@
     user check                 check user info
     user stats                 show user stats as accounted by quota subsystem
     user list                  list users
+    user-policy put            add/update permission policy to user
+    user-policy list           list policies attached to a user
+    user-policy get            get the specified inline policy document embedded with the given user
+    user-policy rm             remove policy attached to a user
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser

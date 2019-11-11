@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <regex>
 
 #include <boost/optional.hpp>
 
@@ -72,6 +73,7 @@ extern "C" {
 #define PUBLIC_ID_LEN 20
 
 static rgw::sal::RGWRadosStore *store = NULL;
+static constexpr int MAX_POLICY_NAME_LEN = 128;
 
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {
@@ -97,6 +99,10 @@ void usage()
   cout << "  user check                 check user info\n";
   cout << "  user stats                 show user stats as accounted by quota subsystem\n";
   cout << "  user list                  list users\n";
+  cout << "  user-policy put            add/update permission policy to user\n";
+  cout << "  user-policy list           list policies attached to a user\n";
+  cout << "  user-policy get            get the specified inline policy document embedded with the given role\n";
+  cout << "  user-policy rm             remove policy attached to a user\n";
   cout << "  caps add                   add user capabilities\n";
   cout << "  caps rm                    remove user capabilities\n";
   cout << "  subuser create             create a new subuser\n" ;
@@ -574,6 +580,10 @@ enum {
   OPT_PUBSUB_SUB_RM,
   OPT_PUBSUB_SUB_PULL,
   OPT_PUBSUB_EVENT_RM,
+  OPT_USER_POLICY_PUT,
+  OPT_USER_POLICY_LIST,
+  OPT_USER_POLICY_GET,
+  OPT_USER_POLICY_DELETE,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -621,6 +631,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "topics") == 0 ||
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "user") == 0 ||
+      strcmp(cmd, "user-policy") == 0 ||
       strcmp(cmd, "zone") == 0 ||
       strcmp(cmd, "zonegroup") == 0 ||
       strcmp(cmd, "zonegroups") == 0) {
@@ -1028,6 +1039,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ROLE_POLICY_GET;
     if (match_str(cmd, "rm", "delete"))
       return OPT_ROLE_POLICY_DELETE;
+  } else if (strcmp(prev_cmd, "user-policy") == 0) {
+    if (strcmp(cmd, "put") == 0)
+      return OPT_USER_POLICY_PUT;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_USER_POLICY_LIST;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_USER_POLICY_GET;
+    if (match_str(cmd, "rm", "delete"))
+      return OPT_USER_POLICY_DELETE;
   } else if (strcmp(prev_cmd, "reshard") == 0) {
     if (strcmp(cmd, "bucket") == 0)
       return OPT_BUCKET_RESHARD;
@@ -3278,7 +3298,11 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT_ROLE_POLICY_DELETE
                           && opt_cmd != OPT_RESHARD_ADD
                           && opt_cmd != OPT_RESHARD_CANCEL
-                          && opt_cmd != OPT_RESHARD_STATUS) {
+                          && opt_cmd != OPT_RESHARD_STATUS
+                          && opt_cmd != OPT_USER_POLICY_PUT
+                          && opt_cmd != OPT_USER_POLICY_LIST
+                          && opt_cmd != OPT_USER_POLICY_GET
+                          && opt_cmd != OPT_USER_POLICY_DELETE) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -5385,6 +5409,193 @@ int main(int argc, const char **argv)
       }
       cout << "Policy: " << policy_name << " successfully deleted for role: "
            << role_name << std::endl;
+      return 0;
+  }
+  case OPT_USER_POLICY_PUT:
+    {
+      if (policy_name.empty() || user_id.empty() || perm_policy_doc.empty()) {
+        cerr << "ERROR: one of policy name, user name or policy document is empty"
+                          << std::endl;
+        return -EINVAL;
+      }
+
+      if (policy_name.length() > MAX_POLICY_NAME_LEN) {
+        cerr << "ERROR: Invalid policy name length " << std::endl;
+        return -EINVAL;
+      }
+
+      std::regex regex_policy_name("[A-Za-z0-9:=,.@-]+");
+      if (! std::regex_match(policy_name, regex_policy_name)) {
+        cerr << "ERROR: Invalid chars in policy name " << std::endl;
+        return -EINVAL;
+      }
+
+      bufferlist bl = bufferlist::static_from_string(perm_policy_doc);
+
+      map<string, bufferlist> uattrs;
+
+      optional_yield yield{null_yield};
+
+      int ret = store->ctl()->user->get_info_by_uid(user_id, &info, yield);
+      if (ret < 0) {
+        return -ERR_NO_SUCH_ENTITY;
+      }
+
+      ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, yield);
+      if (ret < 0) {
+        return -ERR_NO_SUCH_ENTITY;
+      }
+
+      try {
+        const rgw::IAM::Policy p(g_ceph_context, tenant, bl);
+        map<string, string> policies;
+        if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+          bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];
+          decode(policies, out_bl);
+        }
+        bufferlist in_bl;
+        policies[policy_name] = perm_policy_doc;
+        encode(policies, in_bl);
+        uattrs[RGW_ATTR_USER_POLICY] = in_bl;
+
+        ret = store->ctl()->user->store_info(info, yield,
+                                      RGWUserCtl::PutParams()
+                                        .set_attrs(&uattrs));
+        if (ret < 0) {
+          return -ret;
+        }
+      } catch (rgw::IAM::PolicyParseException& e) {
+        cerr << "failed to parse perm policy: " << e.what() << std::endl;
+        return -EINVAL;
+      }
+      return 0;
+  }
+  case OPT_USER_POLICY_LIST:
+    {
+      if (user_id.empty()) {
+        cerr << "ERROR: user name is empty"
+             << std::endl;
+        return -EINVAL;
+      }
+      map<string, bufferlist> uattrs;
+      optional_yield yield{null_yield};
+
+      int ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, yield);
+      if (ret < 0) {
+        return -ERR_NO_SUCH_ENTITY;
+      }
+      if (ret == 0) {
+        map<string, string> policies;
+        if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+          bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
+          decode(policies, bl);
+          formatter->open_object_section("userpolicy");
+          formatter->open_array_section("PolicyNames");
+          for (const auto& p : policies) {
+            formatter->dump_string("policy", p.first);
+          }
+          formatter->close_section();
+          formatter->close_section();
+          formatter->flush(std::cout);
+        } else {
+          cerr << "ERROR: RGW_ATTR_USER_POLICY not found" << std::endl;
+          return -ERR_NO_SUCH_ENTITY;
+        }
+      }
+      return 0;
+  }
+  case OPT_USER_POLICY_GET:
+    {
+      if (policy_name.empty()) {
+        cerr << "ERROR: policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (user_id.empty()) {
+        cerr << "ERROR: user name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      map<string, bufferlist> uattrs;
+      optional_yield yield{null_yield};
+      int ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, yield);
+      if (ret < 0) {
+        return -ERR_NO_SUCH_ENTITY;
+      }
+      if (ret == 0) {
+        map<string, string> policies;
+        if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+          bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
+          decode(policies, bl);
+          if (auto it = policies.find(policy_name); it != policies.end()) {
+            string perm_policy = policies[policy_name];
+            formatter->open_object_section("userpolicy");
+            formatter->dump_string("UserName", user_id.to_str());
+            formatter->dump_string("PolicyName", policy_name);
+            formatter->dump_string("PolicyDocument", perm_policy);
+            formatter->close_section();
+            formatter->flush(std::cout);
+          } else {
+            cerr << "ERROR: policy not found" << policy_name << std::endl;
+            return  -ERR_NO_SUCH_ENTITY;
+          }
+        } else {
+          cerr << "ERROR: RGW_ATTR_USER_POLICY not found" << std::endl;
+          return -ERR_NO_SUCH_ENTITY;
+        }
+      }
+      return 0;
+  }
+  case OPT_USER_POLICY_DELETE:
+    {
+      if (policy_name.empty()) {
+        cerr << "ERROR: policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (user_id.empty()) {
+        cerr << "ERROR: user name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      map<string, bufferlist> uattrs;
+      optional_yield yield{null_yield};
+
+      int ret = store->ctl()->user->get_info_by_uid(user_id, &info, yield);
+      if (ret < 0) {
+        return -ERR_NO_SUCH_ENTITY;
+      }
+
+      ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, yield);
+      if (ret < 0) {
+        return -ERR_NO_SUCH_ENTITY;
+      }
+
+      if (ret == 0) {
+        map<string, string> policies;
+        if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+          bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
+          decode(policies, bl);
+          if (auto it = policies.find(policy_name); it != policies.end()) {
+            bufferlist in_bl;
+            policies.erase(it);
+            encode(policies, in_bl);
+            uattrs[RGW_ATTR_USER_POLICY] = in_bl;
+            ret = store->ctl()->user->store_info(info, yield,
+                                                 RGWUserCtl::PutParams()
+                                                   .set_attrs(&uattrs));
+            if (ret < 0) {
+              return -ret;
+            }
+          } else {
+            cerr << "ERROR: policy not found" << policy_name << std::endl;
+            return  -ERR_NO_SUCH_ENTITY;
+          }
+        } else {
+          cerr << "ERROR: RGW_ATTR_USER_POLICY not found" << std::endl;
+          return -ERR_NO_SUCH_ENTITY;
+        }
+      }
       return 0;
   }
   default:
