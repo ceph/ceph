@@ -28,6 +28,30 @@
                         i18n>This field is required.</span>
                 </div>
               </ng-template>
+              <ng-template [ngSwitchCase]="'select'">
+                <label *ngIf="field.label"
+                       class="col-form-label col-sm-3"
+                       [for]="field.name">
+                  {{ field.label }}
+                </label>
+                <div [ngClass]="{'col-sm-9': field.label, 'col-sm-12': !field.label}">
+                  <select class="form-control custom-select"
+                          [id]="field.name"
+                          [formControlName]="field.name">
+                    <option *ngIf="field.placeholder"
+                            [ngValue]="null">
+                      {{ field.placeholder }}
+                    </option>
+                    <option *ngFor="let option of field.options"
+                            [value]="option.value">
+                      {{ option.text }}
+                    </option>
+                  </select>
+                  <span *ngIf="formGroup.hasError('required', field.name)"
+                        class="invalid-feedback"
+                        i18n>This field is required.</span>
+                </div>
+              </ng-template>
             </ng-container>
           </div>
         </ng-container>

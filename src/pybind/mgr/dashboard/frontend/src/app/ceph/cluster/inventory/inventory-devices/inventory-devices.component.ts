@@ -3,11 +3,20 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
 import * as _ from 'lodash';
+import { BsModalService } from 'ngx-bootstrap/modal';
 
+import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
+import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
+import { NotificationType } from '../../../../shared/enum/notification-type.enum';
+import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
+import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { Permission } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { NotificationService } from '../../../../shared/services/notification.service';
 import { InventoryDeviceFilter } from './inventory-device-filter.interface';
 import { InventoryDeviceFiltersChangeEvent } from './inventory-device-filters-change-event.interface';
 import { InventoryDevice } from './inventory-device.model';
@@ -45,10 +54,32 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
   icons = Icons;
   columns: Array<CdTableColumn> = [];
   filters: InventoryDeviceFilter[] = [];
+  selection: CdTableSelection = new CdTableSelection();
+  permission: Permission;
+  tableActions: CdTableAction[];
 
-  constructor(private dimlessBinary: DimlessBinaryPipe, private i18n: I18n) {}
+  constructor(
+    private authStorageService: AuthStorageService,
+    private dimlessBinary: DimlessBinaryPipe,
+    private i18n: I18n,
+    private modalService: BsModalService,
+    private notificationService: NotificationService,
+    private orchService: OrchestratorService
+  ) {}
 
   ngOnInit() {
+    this.permission = this.authStorageService.getPermissions().osd;
+    this.tableActions = [
+      {
+        permission: 'update',
+        icon: Icons.show,
+        click: () => this.identifyDevice(),
+        name: this.i18n('Identify'),
+        disable: () => !this.selection.hasSingleSelection,
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
+        visible: () => _.isString(this.selectionType)
+      }
+    ];
     const columns = [
       {
         name: this.i18n('Hostname'),
@@ -195,6 +226,49 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
       filters: [],
       filterInDevices: this.filterInDevices,
       filterOutDevices: this.filterOutDevices
+    });
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
+  identifyDevice() {
+    const selected = this.selection.first();
+    const hostname = selected.hostname;
+    const device = selected.path || selected.device_id;
+    this.modalService.show(FormModalComponent, {
+      initialState: {
+        titleText: this.i18n(`Identify device {{device}}`, { device }),
+        message: this.i18n('Please enter the duration how long to blink the LED.'),
+        fields: [
+          {
+            type: 'select',
+            name: 'duration',
+            value: 300,
+            required: true,
+            options: [
+              { text: this.i18n('1 minute'), value: 60 },
+              { text: this.i18n('2 minutes'), value: 120 },
+              { text: this.i18n('5 minutes'), value: 300 },
+              { text: this.i18n('10 minutes'), value: 600 },
+              { text: this.i18n('15 minutes'), value: 900 }
+            ]
+          }
+        ],
+        submitButtonText: this.i18n('Execute'),
+        onSubmit: (values) => {
+          this.orchService.identifyDevice(hostname, device, values.duration).subscribe(() => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n(`Identifying '{{device}}' started on host '{{hostname}}'`, {
+                hostname,
+                device
+              })
+            );
+          });
+        }
+      }
     });
   }
 }

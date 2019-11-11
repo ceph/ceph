@@ -393,6 +393,15 @@ export class TaskMessageService {
       this.commonOperations.update,
       this.grafana.update_dashboards,
       () => ({})
+    ),
+    // Orchestrator tasks
+    'orchestrator/identify_device': this.newTaskMessage(
+      new TaskMessageOperation(
+        this.i18n('Identifying'),
+        this.i18n('identify'),
+        this.i18n('Identified')
+      ),
+      (metadata) => this.i18n(`device '{{device}}' on host '{{hostname}}'`, metadata)
     )
   };
 

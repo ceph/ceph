@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import logging
 
-from orchestrator import InventoryFilter
+from orchestrator import InventoryFilter, DeviceLightLoc, Completion
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from .. import mgr
 from ..tools import wraps
@@ -121,3 +121,8 @@ class OrchClient(object):
 
     def status(self):
         return self.api.status()
+
+    @wait_api_result
+    def blink_device_light(self, hostname, device, ident_fault, on):
+        # type: (str, str, str, bool) -> Completion
+        return self.api.blink_device_light(ident_fault, on, [DeviceLightLoc(hostname, device)])
