@@ -223,11 +223,13 @@ def ceph_bootstrap(ctx, config):
     mons = ctx.ceph[cluster_name].mons
     first_mon_role = sorted(mons.keys())[0]
     _, _, first_mon = teuthology.split_role(first_mon_role)
-    (mon_remote,) = ctx.cluster.only(first_mon_role).remotes.keys()
-    log.info('First mon is mon.%s on %s' % (first_mon, mon_remote.shortname))
+    (bootstrap_remote,) = ctx.cluster.only(first_mon_role).remotes.keys()
+    log.info('First mon is mon.%s on %s' % (first_mon,
+                                            bootstrap_remote.shortname))
+    ctx.ceph[cluster_name].bootstrap_remote = bootstrap_remote
     ctx.ceph[cluster_name].first_mon = first_mon
 
-    others = ctx.cluster.remotes[mon_remote]
+    others = ctx.cluster.remotes[bootstrap_remote]
     log.info('others %s' % others)
     mgrs = sorted([r for r in others
                    if teuthology.is_type('mgr', cluster_name)(r)])
@@ -244,7 +246,7 @@ def ceph_bootstrap(ctx, config):
         seed_config = build_initial_config(ctx, config)
         seed_config.write(conf_fp)
         teuthology.write_file(
-            remote=mon_remote,
+            remote=bootstrap_remote,
             path='{}/seed.{}.conf'.format(testdir, cluster_name),
             data=conf_fp.getvalue())
 
@@ -274,27 +276,45 @@ def ceph_bootstrap(ctx, config):
             run.Raw('&&'),
             'sudo', 'chmod', '+r', '{}/{}.keyring'.format(testdir, cluster_name),
         ]
-        mon_remote.run(args=cmd)
+        bootstrap_remote.run(args=cmd)
+
+        # register initial daemons
+        ctx.daemons.register_daemon(
+            bootstrap_remote, 'mon', first_mon,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild('mon.' + first_mon),
+            wait=False,
+            started=True,
+        )
+        ctx.daemons.register_daemon(
+            bootstrap_remote, 'mgr', first_mgr,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild('mgr.' + first_mgr),
+            wait=False,
+            started=True,
+        )
 
         # fetch keys and configs
         log.info('Fetching config...')
         ctx.ceph[cluster_name].config_file = teuthology.get_file(
-            remote=mon_remote,
+            remote=bootstrap_remote,
             path='{}/{}.conf'.format(testdir, cluster_name))
         log.info('Fetching client.admin keyring...')
         ctx.ceph[cluster_name].admin_keyring = teuthology.get_file(
-            remote=mon_remote,
+            remote=bootstrap_remote,
             path='{}/{}.keyring'.format(testdir, cluster_name))
         log.info('Fetching mon keyring...')
         ctx.ceph[cluster_name].mon_keyring = teuthology.get_file(
-            remote=mon_remote,
+            remote=bootstrap_remote,
             path='/var/lib/ceph/%s/mon.%s/keyring' % (fsid, first_mon),
             sudo=True)
 
         # fetch ssh key, distribute to additional nodes
         log.info('Fetching pub ssh key...')
         ssh_pub_key = teuthology.get_file(
-            remote=mon_remote,
+            remote=bootstrap_remote,
             path='{}/{}.pub'.format(testdir, cluster_name)
         ).strip()
 
@@ -311,7 +331,7 @@ def ceph_bootstrap(ctx, config):
 
         # add other hosts
         for remote in ctx.cluster.remotes.keys():
-            if remote == mon_remote:
+            if remote == bootstrap_remote:
                 continue
             log.info('Writing conf and keyring to %s' % remote.shortname)
             teuthology.write_file(
@@ -347,14 +367,9 @@ def ceph_bootstrap(ctx, config):
         #ctx.cluster.run(args=['sudo', 'systemctl', 'stop', 'ceph.target'])
 
         # so, stop them individually
-        for remote, roles in ctx.cluster.remotes.items():
-            for role in roles:
-                log.info('Stopping %s on %s...' % (role, remote.shortname))
-                remote.run(args=[
-                    'sudo', 'systemctl', 'stop',
-                    'ceph-%s@%s' % (fsid, role)
-                ])
-
+        for role in ctx.daemons.resolve_role_list(None, CEPH_ROLE_TYPES):
+            cluster, type_, id_ = teuthology.split_role(role)
+            ctx.daemons.get_daemon(type_, id_, cluster).stop()
 
 @contextlib.contextmanager
 def ceph_mons(ctx, config):
@@ -362,6 +377,7 @@ def ceph_mons(ctx, config):
     Deploy any additional mons
     """
     cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
     testdir = teuthology.get_testdir(ctx)
     num_mons = 1
 
@@ -372,13 +388,21 @@ def ceph_mons(ctx, config):
                 c_, _, id_ = teuthology.split_role(mon)
                 if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mon:
                     continue
-                log.info('Adding mon.%s on %s' % (mon, remote.shortname))
+                log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
                 shell(ctx, cluster_name, remote, [
                     'ceph', 'orchestrator', 'mon', 'update',
                     str(num_mons),
-                    remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + mon.split('.', 1)[1],
+                    remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
                 ])
+                ctx.daemons.register_daemon(
+                    remote, 'mon', id_,
+                    cluster=cluster_name,
+                    fsid=fsid,
+                    logger=log.getChild(mon),
+                    wait=False,
+                    started=True,
+                )
 
                 while True:
                     log.info('Waiting for %d mons in monmap...' % (num_mons))
@@ -409,6 +433,7 @@ def ceph_mgrs(ctx, config):
     Deploy any additional mgrs
     """
     cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
     testdir = teuthology.get_testdir(ctx)
 
     try:
@@ -419,9 +444,18 @@ def ceph_mgrs(ctx, config):
                 c_, _, id_ = teuthology.split_role(mgr)
                 if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mgr:
                     continue
-                log.info('Adding mgr.%s on %s' % (mgr, remote.shortname))
-                ### FIXME: we don't get to choose the mgr names ####
-                nodes.append(remote.shortname + '=' + mgr.split('.', 1)[1])
+                log.info('Adding %s on %s' % (mgr, remote.shortname))
+                nodes.append(remote.shortname + '=' + id_)
+
+                ctx.daemons.register_daemon(
+                    remote, 'mgr', id_,
+                    cluster=cluster_name,
+                    fsid=fsid,
+                    logger=log.getChild(mgr),
+                    wait=False,
+                    started=True,
+                )
+
         shell(ctx, cluster_name, remote, [
             'ceph', 'orchestrator', 'mgr', 'update',
             str(len(nodes) + 1)] + nodes
@@ -438,21 +472,45 @@ def ceph_osds(ctx, config):
     Deploy OSDs
     """
     cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
     try:
         log.info('Deploying OSDs...')
+
+        # provision OSDs in order
+        id_to_remote = {}
+        devs_by_remote = {}
         for remote, roles in ctx.cluster.remotes.items():
-            devs = teuthology.get_scratch_devices(remote)
-            for osd in [r for r in roles if r.startswith('osd.')]:
-                assert devs   ## FIXME ##
-                dev = devs.pop()
-                log.info('Deploying %s on %s with %s...' % (
-                    osd, remote.shortname, dev))
-                shell(ctx, cluster_name, remote, [
-                    'ceph-volume', 'lvm', 'zap', dev])
-                shell(ctx, cluster_name, remote, [
-                    'ceph', 'orchestrator', 'osd', 'create',
-                    remote.shortname + ':' + dev
-                ])
+            devs_by_remote[remote] = teuthology.get_scratch_devices(remote)
+            for osd in [r for r in roles
+                        if teuthology.is_type('osd', cluster_name)(r)]:
+                _, _, id_ = teuthology.split_role(osd)
+                id_to_remote[id_] = (osd, remote)
+
+        cur = 0
+        for osd_id, t in id_to_remote.items():
+            osd, remote = t
+            _, _, id_ = teuthology.split_role(osd)
+            assert int(id_) == cur
+            devs = devs_by_remote[remote]
+            assert devs   ## FIXME ##
+            dev = devs.pop()
+            log.info('Deploying %s on %s with %s...' % (
+                osd, remote.shortname, dev))
+            shell(ctx, cluster_name, remote, [
+                'ceph-volume', 'lvm', 'zap', dev])
+            shell(ctx, cluster_name, remote, [
+                'ceph', 'orchestrator', 'osd', 'create',
+                remote.shortname + ':' + dev
+            ])
+            ctx.daemons.register_daemon(
+                remote, 'osd', id_,
+                cluster=cluster_name,
+                fsid=fsid,
+                logger=log.getChild(osd),
+                wait=False,
+                started=True,
+            )
+            cur += 1
 
         yield
     finally:
