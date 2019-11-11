@@ -124,7 +124,7 @@ export class CephfsChartComponent implements OnChanges, OnInit {
       this.chartCanvas,
       this.chartTooltip,
       (tooltip) => tooltip.caretX + 'px',
-      (tooltip) => tooltip.caretY - tooltip.height - 15 + 'px'
+      (tooltip) => tooltip.caretY - tooltip.height - 23 + 'px'
     );
     chartTooltip.getTitle = (ts) => moment(ts, 'x').format('LTS');
     chartTooltip.checkOffset = true;
