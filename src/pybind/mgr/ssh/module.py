@@ -210,7 +210,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             else:
                 name = ''
             name += ''.join(random.choice(string.ascii_lowercase)
-                            for i in range(6))
+                            for _ in range(6))
             if len([d for d in existing if d.service_instance == name]):
                 self.log('name %s exists, trying again', name)
                 continue
@@ -227,9 +227,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if not ssh_config:
                 ssh_config = DEFAULT_SSH_CONFIG
             f = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-conf-')
-            os.fchmod(f.fileno(), 0o600);
+            os.fchmod(f.fileno(), 0o600)
             f.write(ssh_config.encode('utf-8'))
-            f.flush() # make visible to other processes
+            f.flush()  # make visible to other processes
             temp_files += [f]
             ssh_config_fname = f.name
         if ssh_config_fname:
@@ -246,12 +246,12 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if ssh_key and ssh_pub:
             tkey = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-identity-')
             tkey.write(ssh_key.encode('utf-8'))
-            os.fchmod(tkey.fileno(), 0o600);
-            tkey.flush() # make visible to other processes
+            os.fchmod(tkey.fileno(), 0o600)
+            tkey.flush()  # make visible to other processes
             tpub = open(tkey.name + '.pub', 'w')
-            os.fchmod(tpub.fileno(), 0o600);
+            os.fchmod(tpub.fileno(), 0o600)
             tpub.write(ssh_pub)
-            tpub.flush() # make visible to other processes
+            tpub.flush()  # make visible to other processes
             temp_files += [tkey, tpub]
             ssh_options += ['-i', tkey.name]
 
@@ -893,8 +893,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         # current support requires a network to be specified
         for host, network in hosts:
             if not network:
-                raise RuntimeError("Host '{}' missing network "
-                        "part".format(host))
+                raise RuntimeError("Host '{}' missing network part".format(host))
 
         # explicit placement: enough hosts provided?
         num_new_mons = num - num_mons
@@ -906,7 +905,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             num_new_mons, ",".join(map(lambda h: ":".join(h), hosts))))
 
         # TODO: we may want to chain the creation of the monitors so they join
-        # the quroum one at a time.
+        # the quorum one at a time.
         results = []
         for host, network in hosts:
             result = self._worker_pool.apply_async(self._create_mon, (host,
