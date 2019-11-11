@@ -309,7 +309,8 @@ uib-accordion .panel-title,
   color: $color-required-text;
 }
 /* Forms */
-.form-group > .control-label > span.required {
+.form-group > .control-label > span.required,
+.form-group > .col-sm-12 > .control-label > span.required {
   @extend .fa;
   @extend .fa-asterisk;
   @extend .required;
