@@ -1402,6 +1402,10 @@ OPTION(rgw_nfs_max_gc, OPT_INT) /* max gc events per cycle */
 OPTION(rgw_nfs_write_completion_interval_s, OPT_INT) /* stateless (V3)
 							  * commit
 							  * delay */
+OPTION(rgw_nfs_s3_fast_attrs, OPT_BOOL) /* use fast S3 attrs from
+					 * bucket index--currently
+					 * assumes NFS mounts are
+					 * immutable */
 
 OPTION(rgw_zone, OPT_STR) // zone name
 OPTION(rgw_zone_root_pool, OPT_STR)    // pool where zone specific info is stored
