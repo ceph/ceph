@@ -104,7 +104,9 @@ def _zypper_wipe_all_repos(remote):
     :return:
     """
     log.info("Wiping zypper repos (if any)")
-    remote.sh('sudo zypper repos -upEP && sudo rm -f /etc/zypp/repos.d/*')
+    remote.sh('sudo zypper repos -upEP && '
+              'sudo rm -f /etc/zypp/repos.d/* || '
+              'true')
 
 def _downgrade_packages(ctx, remote, pkgs, pkg_version, config):
     """
