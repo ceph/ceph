@@ -6,8 +6,12 @@ target_include_directories(fio_ceph_objectstore SYSTEM PUBLIC ${FIO_INCLUDE_DIR}
 add_library(fio_ceph_messenger SHARED fio_ceph_messenger.cc)
 target_include_directories(fio_ceph_messenger SYSTEM PUBLIC ${FIO_INCLUDE_DIR})
 
-# prevent fio from adding a 'typedef int bool'
-set(FIO_CFLAGS "-DCONFIG_HAVE_BOOL")
+# prevent fio from adding 'typedef int bool' and gettid()
+if(HAVE_GETTID)
+  set(FIO_CFLAGS "-DCONFIG_HAVE_BOOL -DCONFIG_HAVE_GETTID")
+else()
+  set(FIO_CFLAGS "-DCONFIG_HAVE_BOOL")
+endif()
 
 # fio headers use typeof(), which requires c++11 extensions
 set_target_properties(fio_ceph_objectstore PROPERTIES
