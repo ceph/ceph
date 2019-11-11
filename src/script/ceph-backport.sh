@@ -21,15 +21,18 @@
 
 full_path="$0"
 
-SCRIPT_VERSION="15.0.0.6814"
+SCRIPT_VERSION="15.0.0.6950"
 active_milestones=""
+backport_pr_labels=""
 backport_pr_number=""
+backport_pr_title=""
 backport_pr_url=""
 deprecated_backport_common="$HOME/bin/backport_common.sh"
+existing_pr_milestone_number=""
 github_token=""
 github_token_file="$HOME/.github_token"
-github_token_ok=""
 github_user=""
+milestone=""
 non_interactive=""
 original_issue=""
 original_issue_url=""
@@ -37,7 +40,6 @@ original_pr=""
 original_pr_url=""
 redmine_key=""
 redmine_key_file="$HOME/.redmine_key"
-redmine_key_ok=""
 redmine_login=""
 redmine_user_id=""
 setup_ok=""
@@ -101,6 +103,26 @@ function assert_fail {
     error "(internal error) $message"
     info "This could be reported as a bug!"
     false
+}
+
+function backport_pr_needs_label {
+    local check_label="$1"
+    local label
+    local needs_label="yes"
+    while read -r label ; do
+        if [ "$label" = "$check_label" ] ; then
+            needs_label=""
+        fi
+    done <<< "$backport_pr_labels"
+    echo "$needs_label"
+}
+
+function backport_pr_needs_milestone {
+    if [ "$existing_pr_milestone_number" ] ; then
+        echo ""
+    else
+        echo "yes"
+    fi
 }
 
 function bail_out_github_api {
@@ -193,10 +215,15 @@ function cherry_pick_phase {
     if [ "$base_branch" = "ceph:master" ] ; then
         true
     else
-        error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
-        info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
-        info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
-        false
+        if [ "$FORCE" ] ; then
+            warning "base_branch ->$base_branch<- is something other than \"ceph:master\""
+            info "--force was given, so continuing anyway"
+        else
+            error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
+            info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
+            info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
+            false
+        fi
     fi
     merged=$(echo "${remote_api_output}" | jq -r '.merged')
     if [ "$merged" = "true" ] ; then
@@ -332,14 +359,19 @@ function existing_pr_routine {
     local new_pr_title
     local pr_body
     local pr_json_tempfile
-    local pr_title
     local remote_api_output
+    local update_pr_body
     remote_api_output="$(curl --silent "https://api.github.com/repos/ceph/ceph/pulls/${backport_pr_number}?access_token=${github_token}")"
-    pr_title="$(echo "$remote_api_output" | jq -r '.title')"
-    if [ "$pr_title" = "null" ] ; then
+    backport_pr_title="$(echo "$remote_api_output" | jq -r '.title')"
+    if [ "$backport_pr_title" = "null" ] ; then
         error "could not get PR title of existing PR ${backport_pr_number}"
         bail_out_github_api "$remote_api_output"
     fi
+    existing_pr_milestone_number="$(echo "$remote_api_output" | jq -r '.milestone.number')"
+    if [ "$existing_pr_milestone_number" = "null" ] ; then
+        existing_pr_milestone_number=""
+    fi
+    backport_pr_labels="$(echo "$remote_api_output" | jq -r '.labels[].name')"
     pr_body="$(echo "$remote_api_output" | jq -r '.body')"
     if [ "$pr_body" = "null" ] ; then
         error "could not get PR body of existing PR ${backport_pr_number}"
@@ -358,11 +390,11 @@ function existing_pr_routine {
     clipped_pr_body="$(xargs < "$pr_json_tempfile")"
     rm "$pr_json_tempfile"
     verbose_en "Clipped body of existing PR ${backport_pr_number}:\n${clipped_pr_body}\n"
-    if [[ "$pr_title" =~ ^${milestone}: ]] ; then
+    if [[ "$backport_pr_title" =~ ^${milestone}: ]] ; then
         verbose "Existing backport PR ${backport_pr_number} title has ${milestone} prepended"
     else
         warning "Existing backport PR ${backport_pr_number} title does NOT have ${milestone} prepended"
-        new_pr_title="${milestone}: $pr_title"
+        new_pr_title="${milestone}: $backport_pr_title"
         if [[ "$new_pr_title" =~ \" ]] ; then
             new_pr_title="${new_pr_title//\"/\\\"}"
         fi
@@ -371,9 +403,16 @@ function existing_pr_routine {
     redmine_url_without_scheme="${redmine_url//http?:\/\//}"
     verbose "Redmine URL without scheme: $redmine_url_without_scheme"
     if [[ "$clipped_pr_body" =~ $redmine_url_without_scheme ]] ; then
-        verbose "Existing backport PR ${backport_pr_number} mentions $redmine_url"
+        info "Existing backport PR ${backport_pr_number} already mentions $redmine_url"
+        if [ "$FORCE" ] ; then
+            warning "--force was given, so updating the PR body anyway"
+            update_pr_body="yes"
+        fi
     else
         warning "Existing backport PR ${backport_pr_number} does NOT mention $redmine_url - adding it"
+        update_pr_body="yes"
+    fi
+    if [ "$update_pr_body" ] ; then
         new_pr_body="backport tracker: ${redmine_url}"
         if [ "${original_pr_url}" ] ; then
             new_pr_body="${new_pr_body}
@@ -395,7 +434,7 @@ $clipped_pr_body
 
 updated using ceph-backport.sh version ${SCRIPT_VERSION}"
     fi
-    maybe_update_pr_title_body "${backport_pr_number}" "${new_pr_title}" "${new_pr_body}"
+    maybe_update_pr_title_body "${new_pr_title}" "${new_pr_body}"
 }
 
 function failed_mandatory_var_check {
@@ -588,6 +627,7 @@ function interactive_setup_routine {
     init_upstream_remote
     init_fork_remote
     vet_remotes
+    [ "$setup_ok" ] || abort_due_to_setup_problem
     [ "$github_token" ] || assert_fail "github_token not set, even after completing Steps 1-3 of interactive setup"
     [ "$github_user" ] || assert_fail "github_user not set, even after completing Steps 1-3 of interactive setup"
     [ "$upstream_remote" ] || assert_fail "upstream_remote not set, even after completing Steps 1-3 of interactive setup"
@@ -756,42 +796,65 @@ function maybe_delete_deprecated_backport_common {
 }
 
 function maybe_update_pr_milestone_labels {
-    local pr_number="$1"
     local component
     local data_binary
+    local data_binary
+    local label
+    local needs_milestone
     if [ "$EXPLICIT_COMPONENT" ] ; then
         debug "Component given on command line: using it"
         component="$EXPLICIT_COMPONENT"
     else
         debug "Attempting to guess component"
-        component=$(guess_component "$title")
+        component=$(guess_component "$backport_pr_title")
     fi
-    if [ "$component" ] ; then
-        debug "Attempting to set ${component} label and ${milestone} milestone in ${pr_url}"
-        data_binary='{"milestone":'$milestone_number',"labels":["'$component'"]}'
+    data_binary="{"
+    needs_milestone="$(backport_pr_needs_milestone)"
+    if [ "$needs_milestone" ] ; then
+        debug "Attempting to set ${milestone} milestone in ${backport_pr_url}"
+        data_binary="${data_binary}\"milestone\":${milestone_number}"
     else
-        debug "Attempting to set ${milestone} milestone in ${pr_url}"
-        data_binary='{"milestone":'$milestone_number'}'
+        info "Backport PR ${backport_pr_url} already has ${milestone} milestone"
     fi
-    blindly_set_pr_metadata "$pr_number" "$data_binary"
+    if [ "$(backport_pr_needs_label "$component")" ] ; then
+        debug "Attempting to add ${component} label to ${backport_pr_url}"
+        if [ "$needs_milestone" ] ; then
+            data_binary="${data_binary},"
+        fi
+        data_binary="${data_binary}\"labels\":[\"${component}\""
+        while read -r label ; do
+            if [ "$label" ] ; then
+                data_binary="${data_binary},\"${label}\""
+            fi
+        done <<< "$backport_pr_labels"
+        data_binary="${data_binary}]}"
+    else
+        info "Backport PR ${backport_pr_url} already has label ${component}"
+        data_binary="${data_binary}}"
+    fi
+    if [ "$data_binary" = "{}" ] ; then
+        true
+    else
+        blindly_set_pr_metadata "$backport_pr_number" "$data_binary"
+    fi
 }
 
 function maybe_update_pr_title_body {
-    local pr_number="$1"
-    local new_title="$2"
-    local new_body="$3"
+    local new_title="$1"
+    local new_body="$2"
     local data_binary
     if [ "$new_title" ] && [ "$new_body" ] ; then
         data_binary="{\"title\":\"${new_title}\", \"body\":\"$(munge_body "${new_body}")\"}"
     elif [ "$new_title" ] ; then
         data_binary="{\"title\":\"${new_title}\"}"
+        backport_pr_title="${new_title}"
     elif [ "$new_body" ] ; then
         data_binary="{\"body\":\"$(munge_body "${new_body}")\"}"
         #log hex "${data_binary}"
         #echo -n "${data_binary}"
     fi
     if [ "$data_binary" ] ; then
-        blindly_set_pr_metadata "${pr_number}" "$data_binary"
+        blindly_set_pr_metadata "${backport_pr_number}" "$data_binary"
     fi
 }
 
@@ -884,7 +947,7 @@ function set_github_user_from_github_token {
     else
         [ "$github_user" ] || assert_fail "set_github_user_from_github_token: failed to set github_user"
         info "my GitHub username is $github_user"
-        github_token_ok="yes"
+        setup_ok="yes"
     fi
 }
 
@@ -899,7 +962,7 @@ function set_redmine_user_from_redmine_key {
         [ "$redmine_user_id" ] || assert_fail "set_redmine_user_from_redmine_key: failed to set redmine_user_id"
         [ "$redmine_login" ] || assert_fail "set_redmine_user_from_redmine_key: failed to set redmine_login"
         info "my Redmine username is $redmine_login (ID $redmine_user_id)"
-        redmine_key_ok="yes"
+        setup_ok="yes"
     else
         error "Redmine API access key $redmine_key is invalid"
         redmine_login=""
@@ -1198,7 +1261,7 @@ function vet_setup {
         [ "$redmine_key" ] && set_redmine_user_from_redmine_key
     fi
     if [ "$github_token" ] ; then
-        if [ "$github_token_ok" ] ; then
+        if [ "$setup_ok" ] ; then
             github_token_display="(OK; value not shown)"
         else
             github_token_display="$invalid"
@@ -1207,7 +1270,7 @@ function vet_setup {
         github_token_display="$not_set"
     fi
     if [ "$redmine_key" ] ; then
-        if [ "$redmine_key_ok" ] ; then
+        if [ "$setup_ok" ] ; then
             redmine_key_display="(OK; value not shown)"
         else
             redmine_key_display="$invalid"
@@ -1393,7 +1456,7 @@ fi
 if [ "$INTERACTIVE_SETUP_ROUTINE" ] || [ "$SETUP_OPTION" ] ; then
     echo
     if [ "$setup_ok" ] ; then
-        if [ "$ISSUE" ] ; then
+        if [ "$ISSUE" ] && [ "$ISSUE" != "0" ] ; then
             true
         else
             exit 0
@@ -1503,7 +1566,6 @@ fi
 info "milestone/release is $milestone"
 debug "milestone number is $milestone_number"
 
-
 if [ "$CHERRY_PICK_PHASE" ] ; then
     local_branch=wip-${issue}-${target_branch}
     if git show-ref --verify --quiet "refs/heads/$local_branch" ; then
@@ -1559,21 +1621,20 @@ if [ "$PR_PHASE" ] ; then
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
-        title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+        backport_pr_title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
     else
         if [[ $tracker_title =~ ^${milestone}: ]] ; then
-            title="${tracker_title}"
+            backport_pr_title="${tracker_title}"
         else
-            title="${milestone}: ${tracker_title}"
+            backport_pr_title="${milestone}: ${tracker_title}"
         fi
     fi
-    if [[ "$title" =~ \" ]] ; then
-        #title="$(echo "$title" | sed -e 's/"/\\"/g')"
-        title="${title//\"/\\\"}"
+    if [[ "$backport_pr_title" =~ \" ]] ; then
+        backport_pr_title="${backport_pr_title//\"/\\\"}"
     fi
     
     debug "Opening backport PR"
-    remote_api_output=$(curl --silent --data-binary "{\"title\":\"${title}\",\"head\":\"${github_user}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "https://api.github.com/repos/ceph/ceph/pulls?access_token=${github_token}")
+    remote_api_output=$(curl --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${github_user}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "https://api.github.com/repos/ceph/ceph/pulls?access_token=${github_token}")
     backport_pr_number=$(echo "$remote_api_output" | jq -r .number)
     if [ -z "$backport_pr_number" ] || [ "$backport_pr_number" = "null" ] ; then
         error "failed to open backport PR"
@@ -1592,7 +1653,7 @@ if [ "$EXISTING_PR" ] ; then
 fi
 
 if [ "$PR_PHASE" ] || [ "$EXISTING_PR" ] ; then
-    maybe_update_pr_milestone_labels "${backport_pr_number}"
+    maybe_update_pr_milestone_labels
     pgrep firefox >/dev/null && firefox "${backport_pr_url}"
 fi
 
