@@ -8,7 +8,7 @@ UNIT_DIR='/etc/systemd/system'
 LOG_DIR_MODE=0o770
 DATA_DIR_MODE=0o700
 PODMAN_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
-CUSTOM_PS1='[ceph: \u@\h \W]\\$ '
+CUSTOM_PS1=r'[ceph: \u@\h \W]\\$ '
 
 """
 You can invoke ceph-daemon in two ways:
