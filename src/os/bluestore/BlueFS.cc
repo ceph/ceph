@@ -787,10 +787,13 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   bool seen_recs = false;
 
   boost::dynamic_bitset<uint64_t> used_blocks[MAX_BDEV];
+  boost::dynamic_bitset<uint64_t> owned_blocks[MAX_BDEV];
+
   if (cct->_conf->bluefs_log_replay_check_allocations) {
     for (size_t i = 0; i < MAX_BDEV; ++i) {
       if (alloc_size[i] != 0 && bdev[i] != nullptr) {
         used_blocks[i].resize(bdev[i]->get_size() / alloc_size[i]);
+        owned_blocks[i].resize(bdev[i]->get_size() / alloc_size[i]);
       }
     }
   }
@@ -975,6 +978,22 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
             if (cct->_conf->bluefs_log_replay_check_allocations) {
               bool fail = false;
+              apply(offset, length, alloc_size[id], owned_blocks[id],
+                [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                  ceph_assert(pos < bs.size());
+                  if (bs.test(pos)) {
+                    fail = true;
+                  } else {
+                    bs.set(pos);
+                  }
+                }
+              );
+              if (fail) {
+                derr << __func__ << " invalid extent " << (int)id
+                  << ": 0x" << std::hex << offset << "~" << length
+                  << std::dec << ": already given" << dendl;
+                return -EFAULT;
+              }
               apply(offset, length, alloc_size[id], used_blocks[id],
                 [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
                   ceph_assert(pos < bs.size());
@@ -985,7 +1004,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                 }
               );
               if (fail) {
-                derr << __func__ << " invalid extent " << id << ": 0x" << std::hex << offset << "~" << length
+                derr << __func__ << " invalid extent " << int(id)
+                  << ": 0x" << std::hex << offset << "~" << length
                   << std::dec << ": already in use" << dendl;
                 return -EFAULT;
               }
@@ -1017,6 +1037,23 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	    alloc[id]->init_rm_free(offset, length);
             if (cct->_conf->bluefs_log_replay_check_allocations) {
               bool fail = false;
+              apply(offset, length, alloc_size[id], owned_blocks[id],
+                [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                  ceph_assert(pos < bs.size());
+                  if (!bs.test(pos)) {
+                    fail = true;
+                  } else {
+                    bs.reset(pos);
+                  }
+                }
+              );
+              if (fail) {
+                derr << __func__ << " invalid extent " << int(id)
+                  << ": 0x" << std::hex << offset << "~" << length
+                  << std::dec << ": wasn't given" << dendl;
+                return -EFAULT;
+              }
+
               apply(offset, length, alloc_size[id], used_blocks[id],
                 [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
                   ceph_assert(pos < bs.size());
@@ -1026,7 +1063,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                 }
               );
               if (fail) {
-                derr << __func__ << " invalid extent " << id << ": 0x" << std::hex << offset << "~" << length
+                derr << __func__ << " invalid extent " << (int)id
+                   << ": 0x" << std::hex << offset << "~" << length
                   << std::dec << ": still in use" << dendl;
                 return -EFAULT;
               }
@@ -1166,6 +1204,23 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               for (auto e : fnode_extents) {
                 auto id = e.bdev;
                 bool fail = false;
+                apply(e.offset, e.length, alloc_size[id], owned_blocks[id],
+                  [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                    ceph_assert(pos < bs.size());
+                    if (!bs.test(pos)) {
+                      fail = true;
+                    }
+                  }
+                );
+                if (fail) {
+                  derr << __func__ << " invalid extent " << int(id)
+                    << ": 0x" << std::hex << e.offset << "~" << e.length
+                    << std::dec
+                    << ": wasn't given but allocated for ino " << fnode.ino
+                    << dendl;
+                  return -EFAULT;
+                }
+
                 apply(e.offset, e.length, alloc_size[id], used_blocks[id],
                   [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
                     ceph_assert(pos < bs.size());
@@ -1176,8 +1231,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                   }
                 );
                 if (fail) {
-                  derr << __func__ << " invalid extent " << e.bdev << ": 0x" << std::hex << e.offset << "~" << e.length
-                    << std::dec << ": duplicate reference, ino " << fnode.ino << dendl;
+                  derr << __func__ << " invalid extent " << int(e.bdev)
+                    << ": 0x" << std::hex << e.offset << "~" << e.length
+                    << std::dec << ": duplicate reference, ino " << fnode.ino
+                    << dendl;
                   return -EFAULT;
                 }
               }
@@ -1205,6 +1262,23 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               for (auto e : fnode_extents) {
                 auto id = e.bdev;
                 bool fail = false;
+                apply(e.offset, e.length, alloc_size[id], owned_blocks[id],
+                  [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                    ceph_assert(pos < bs.size());
+                    if (!bs.test(pos)) {
+                      fail = true;
+                    }
+                  }
+                );
+                if (fail) {
+                  derr << __func__ << " invalid extent " << int(id)
+                    << ": 0x" << std::hex << e.offset << "~" << e.length
+                    << std::dec
+                    << ": wasn't given but allocated for removed ino " << ino
+                    << dendl;
+                  return -EFAULT;
+                }
+
                 apply(e.offset, e.length, alloc_size[id], used_blocks[id],
                   [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
                     ceph_assert(pos < bs.size());
@@ -1215,8 +1289,11 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                   }
                 );
                 if (fail) {
-                  derr << __func__ << " invalid extent " << e.bdev << ": 0x" << std::hex << e.offset << "~" << e.length
-                    << std::dec << ": not in use while releasing for ino " << ino << dendl;
+                  derr << __func__ << " invalid extent " << int(id)
+                    << ": 0x" << std::hex << e.offset << "~" << e.length
+                    << std::dec
+                    << ": not in use but allocated for removed ino " << ino
+                    << dendl;
                   return -EFAULT;
                 }
               }
