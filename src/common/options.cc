@@ -1148,6 +1148,10 @@ std::vector<Option> get_global_options() {
     .set_default(1000)
     .set_description(""),
 
+    Option("ms_async_rdma_gid_idx", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("use gid_idx to select GID for choosing RoCEv1 or RoCEv2"),
+
     Option("ms_async_rdma_local_gid", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description(""),

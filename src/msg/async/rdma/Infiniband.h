@@ -62,7 +62,7 @@ class Port {
   int port_num;
   struct ibv_port_attr port_attr;
   uint16_t lid;
-  int gid_idx = 0;
+  int gid_idx;
   union ibv_gid gid;
 
  public:
