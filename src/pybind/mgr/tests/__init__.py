@@ -22,7 +22,6 @@ if 'UNITTEST' in os.environ:
             self._ceph_get = mock.MagicMock()
             self._ceph_get_module_option = mock.MagicMock()
             self._ceph_log = mock.MagicMock()
-            self._ceph_get_option = mock.MagicMock()
             self._ceph_get_store = lambda _: ''
             self._ceph_get_store_prefix = lambda _: {}
 
