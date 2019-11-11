@@ -31,6 +31,8 @@ from tasks.daemonwatchdog import DaemonWatchdog
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons
 
+CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
+
 log = logging.getLogger(__name__)
 
 
@@ -49,6 +51,41 @@ def shell(ctx, remote, args, **kwargs):
             ] + args,
         **kwargs
     )
+
+def build_initial_config(ctx, config):
+    #path = os.path.join(os.path.dirname(__file__), 'ceph.conf.template')
+    conf = configobj.ConfigObj() #path, file_error=True)
+
+    conf.setdefault('global', {})
+    conf['global']['fsid'] = ctx.fsid
+
+    # overrides
+    for section, keys in config['conf'].items():
+        for key, value in keys.items():
+            log.info("[%s] %s = %s" % (section, key, value))
+            if section not in conf:
+                conf[section] = {}
+            conf[section][key] = value
+
+    return conf
+
+@contextlib.contextmanager
+def normalize_hostnames(ctx):
+    """
+    Ensure we have short hostnames throughout, for consistency between
+    remote.shortname and socket.gethostname() in ceph-daemon.
+    """
+    log.info('Normalizing hostnames...')
+    ctx.cluster.run(args=[
+        'sudo',
+        'hostname',
+        run.Raw('$(hostname -s)'),
+    ])
+
+    try:
+        yield
+    finally:
+        pass
 
 @contextlib.contextmanager
 def download_ceph_daemon(ctx, config):
@@ -74,6 +111,15 @@ def download_ceph_daemon(ctx, config):
     try:
         yield
     finally:
+        log.info('Removing cluster...')
+        ctx.cluster.run(args=[
+            'sudo',
+            '{}/ceph-daemon'.format(testdir),
+            'rm-cluster',
+            '--fsid', ctx.fsid,
+            '--force',
+        ])
+
         log.info('Removing ceph-daemon ...')
         ctx.cluster.run(
             args=[
@@ -122,7 +168,7 @@ def ceph_log(ctx, config, fsid):
             except OSError as e:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.shortname)
+                sub = os.path.join(path, remote.name)
                 try:
                     os.makedirs(sub)
                 except OSError as e:
@@ -147,7 +193,7 @@ def ceph_crash(ctx, fsid):
             except OSError as e:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.shortname)
+                sub = os.path.join(path, remote.name)
                 try:
                     os.makedirs(sub)
                 except OSError as e:
@@ -179,6 +225,18 @@ def ceph_bootstrap(ctx, config, fsid):
     ctx.first_mgr = first_mgr
 
     try:
+        # write seed config
+        log.info('Writing seed config...')
+        conf_fp = StringIO()
+        seed_config = build_initial_config(ctx, config)
+        seed_config.write(conf_fp)
+        teuthology.write_file(
+            remote=mon_remote,
+            path='{}/seed.ceph.conf'.format(testdir),
+            data=conf_fp.getvalue())
+
+        # bootstrap
+        log.info('Bootstrapping...')
         cmd = [
             'sudo',
             '{}/ceph-daemon'.format(testdir),
@@ -187,6 +245,7 @@ def ceph_bootstrap(ctx, config, fsid):
             '--fsid', fsid,
             '--mon-id', first_mon[4:],
             '--mgr-id', first_mgr[4:],
+            '--config', '{}/seed.ceph.conf'.format(testdir),
             '--output-config', '{}/ceph.conf'.format(testdir),
             '--output-keyring', '{}/ceph.keyring'.format(testdir),
             '--output-pub-ssh-key', '{}/ceph.pub'.format(testdir),
@@ -195,7 +254,9 @@ def ceph_bootstrap(ctx, config, fsid):
             cmd += ['--mon-addrv', mons[first_mon]]
         else:
             cmd += ['--mon-ip', mons[first_mon]]
-        # bootstrap makes the keyring root 0600; +r it for our purposes
+        if config.get('skip_dashboard'):
+            cmd += ['--skip-dashboard']
+        # bootstrap makes the keyring root 0600, so +r it for our purposes
         cmd += [
             run.Raw('&&'),
             'sudo', 'chmod', '+r', '{}/ceph.keyring'.format(testdir),
@@ -207,7 +268,7 @@ def ceph_bootstrap(ctx, config, fsid):
         ctx.config_file = teuthology.get_file(
             remote=mon_remote,
             path='{}/ceph.conf'.format(testdir))
-        log.info('Fetching adming keyring...')
+        log.info('Fetching client.admin keyring...')
         ctx.admin_keyring = teuthology.get_file(
             remote=mon_remote,
             path='{}/ceph.keyring'.format(testdir))
@@ -261,17 +322,14 @@ def ceph_bootstrap(ctx, config, fsid):
         log.info('Cleaning up testdir ceph.* files...')
         ctx.cluster.run(args=[
             'rm', '-f',
+            '{}/seed.ceph.conf'.format(testdir),
             '{}/ceph.pub'.format(testdir),
             '{}/ceph.conf'.format(testdir),
             '{}/ceph.keyring'.format(testdir),
         ])
-        log.info('Cleaning up cluster data...')
-        ctx.cluster.run(args=[
-            'sudo',
-            '{}/ceph-daemon'.format(testdir),
-            'rm-cluster',
-            '--fsid', fsid,
-            '--force'])
+
+        log.info('Stopping all daemons...')
+        ctx.cluster.run(args=['sudo', 'systemctl', 'stop', 'ceph.target'])
 
 @contextlib.contextmanager
 def ceph_mons(ctx, config):
@@ -280,7 +338,6 @@ def ceph_mons(ctx, config):
     """
     testdir = teuthology.get_testdir(ctx)
     num_mons = 1
-    (mon_remote,) = ctx.cluster.only(ctx.first_mon).remotes.keys()
 
     try:
         for remote, roles in ctx.cluster.remotes.items():
@@ -299,7 +356,7 @@ def ceph_mons(ctx, config):
                     log.info('Waiting for %d mons in monmap...' % (num_mons))
                     r = shell(
                         ctx=ctx,
-                        remote=mon_remote,
+                        remote=remote,
                         args=[
                             'ceph', 'mon', 'dump', '-f', 'json',
                         ],
@@ -309,6 +366,8 @@ def ceph_mons(ctx, config):
                     if len(j['mons']) == num_mons:
                         break
                     time.sleep(1)
+
+        ## FIXME: refresh ceph.conf files for all mons + first mgr ##
 
         yield
 
@@ -327,6 +386,8 @@ def ceph_mgrs(ctx, config):
         nodes = []
         for remote, roles in ctx.cluster.remotes.items():
             for mgr in [r for r in roles if r.startswith('mgr.')]:
+                if mgr == ctx.first_mgr:
+                    continue
                 log.info('Adding %s on %s' % (mgr, remote.shortname))
                 ### FIXME: we don't get to choose the mgr names ####
                 nodes.append(remote.shortname)
@@ -341,12 +402,82 @@ def ceph_mgrs(ctx, config):
         pass
 
 @contextlib.contextmanager
-def ceph_final():
-    log.info('Setup complete, yielding')
+def ceph_osds(ctx, config):
+    """
+    Deploy OSDs
+    """
+    try:
+        log.info('Zapping devices...')
+        devs_by_remote = {}
+        for remote, roles in ctx.cluster.remotes.items():
+            devs = teuthology.get_scratch_devices(remote)
+            for dev in devs:
+                shell(ctx, remote, [
+                    'ceph-volume', 'lvm', 'zap', dev])
+            devs_by_remote[remote] = devs
+
+        log.info('Deploying OSDs...')
+        for remote, roles in ctx.cluster.remotes.items():
+            devs = devs_by_remote[remote]
+            for osd in [r for r in roles if r.startswith('osd.')]:
+                assert devs   ## FIXME ##
+                dev = devs.pop()
+                log.info('Deploying %s on %s with %s...' % (
+                    osd, remote.shortname, dev))
+                shell(ctx, remote, [
+                    'ceph', 'orchestrator', 'osd', 'create',
+                    remote.shortname + ':' + dev
+                ])
+
+        yield
+    finally:
+        pass
+
+@contextlib.contextmanager
+def ceph_initial():
     try:
         yield
     finally:
-        log.info('Teardown begin')
+        log.info('Teardown complete')
+
+## public methods
+@contextlib.contextmanager
+def stop(ctx, config):
+    """
+    Stop ceph daemons
+
+    For example::
+      tasks:
+      - ceph.stop: [mds.*]
+
+      tasks:
+      - ceph.stop: [osd.0, osd.2]
+
+      tasks:
+      - ceph.stop:
+          daemons: [osd.0, osd.2]
+
+    """
+    if config is None:
+        config = {}
+    elif isinstance(config, list):
+        config = {'daemons': config}
+
+    daemons = ctx.daemons.resolve_role_list(
+        config.get('daemons', None), CEPH_ROLE_TYPES, True)
+    clusters = set()
+
+    for role in daemons:
+        cluster, type_, id_ = teuthology.split_role(role)
+        ctx.daemons.get_daemon(type_, id_, cluster).stop()
+        clusters.add(cluster)
+
+#    for cluster in clusters:
+#        ctx.ceph[cluster].watchdog.stop()
+#        ctx.ceph[cluster].watchdog.join()
+
+    yield
+
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -358,8 +489,9 @@ def task(ctx, config):
 
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('ceph', {}))
+    log.info('Config: ' + str(config))
 
-    log.info('config ' + str(config))
+    testdir = teuthology.get_testdir(ctx)
 
     ## FIXME i don't understand multicluster ##
     first_ceph_cluster = False
@@ -384,10 +516,11 @@ def task(ctx, config):
     if branch in ['master', 'nautilus']:
         ctx.image = 'ceph/daemon-base:latest-%s-devel' % branch
     else:
-        ctx.image = 'ceph-ci/ceph:%s' % branch
+#        ctx.image = 'ceph-ci/ceph:%s' % branch
+        ctx.image = 'cephci/daemon-base:%s' % branch
     log.info('Cluster image is %s' % ctx.image)
 
-    # uid
+    # uuid
     fsid = str(uuid.uuid1())
     ctx.fsid = fsid
     log.info('Cluster fsid is %s' % fsid)
@@ -408,16 +541,20 @@ def task(ctx, config):
     log.info('Monitor IPs: %s' % ctx.mons)
 
     with contextutil.nested(
+            lambda: ceph_initial(),
+            lambda: normalize_hostnames(ctx=ctx),
             lambda: download_ceph_daemon(ctx=ctx, config=config),
             lambda: ceph_log(ctx=ctx, config=config, fsid=fsid),
             lambda: ceph_crash(ctx=ctx, fsid=fsid),
             lambda: ceph_bootstrap(ctx=ctx, config=config, fsid=fsid),
-#            lambda: ceph_mons(ctx=ctx, config=config),
+            lambda: ceph_mons(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
-            lambda: ceph_final(),
+            lambda: ceph_osds(ctx=ctx, config=config),
     ):
         try:
+            log.info('Setup complete, yielding')
             yield
 
         finally:
-            log.info('Teardown complete')
+            log.info('Teardown begin')
+
