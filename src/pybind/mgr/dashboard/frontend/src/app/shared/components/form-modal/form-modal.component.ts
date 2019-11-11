@@ -7,11 +7,17 @@ import { BsModalRef } from 'ngx-bootstrap/modal';
 import { CdFormBuilder } from '../../forms/cd-form-builder';
 
 interface CdFormFieldConfig {
-  type: 'textInput';
+  type: 'inputText' | 'select';
   name: string;
   label?: string;
   value?: any;
   required?: boolean;
+  // --- select ---
+  placeholder?: string;
+  options?: Array<{
+    text: string;
+    value: any;
+  }>;
 }
 
 @Component({
