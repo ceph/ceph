@@ -84,18 +84,7 @@ class Device(object):
         global global_lvs
 
         self.path = path
-
-        if lvm.is_pv(path):
-            self.lvs = lvs or lvm.get_lv(pv_name=path, lvs=global_lvs)
-        elif lvm.is_vg(os.path.basename(path)):
-            self.lvs = lvs or lvm.get_lv(vg_name=os.path.basename(path),
-                                         lvs=global_lvs)
-        elif lvm.is_lv(lv_name=path):
-            self.lvs = lvs or global_lvs
-        # for new devices and for testing...
-        else:
-            self.lvs = lvs or []
-
+        self.lvs = lvs or []
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
