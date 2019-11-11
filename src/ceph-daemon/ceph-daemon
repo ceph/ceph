@@ -1467,7 +1467,7 @@ def command_rm_cluster():
                            'this command may destroy precious data!')
 
     # stop + disable individual daemon units
-    for d in list_daemons():
+    for d in list_daemons(detail=False):
         if d['fsid'] != args.fsid:
             continue
         if d['style'] != 'ceph-daemon:v1':
