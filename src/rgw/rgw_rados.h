@@ -1781,6 +1781,9 @@ public:
 
     class List {
     protected:
+      // absolute maximum number of objects that
+      // list_objects_(un)ordered can return
+      static constexpr int64_t bucket_list_objects_absolute_max = 25000;
 
       RGWRados::Bucket *target;
       rgw_obj_key next_marker;
