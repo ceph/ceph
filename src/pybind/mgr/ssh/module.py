@@ -941,7 +941,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return SSHWriteCompletionReady("The requested number of managers exist.")
 
         # check that all the hosts are registered
-        self._require_hosts(hosts)
+        self._require_hosts(map(lambda h: h[0], hosts))
 
         results = []
         if num < num_mgrs:
@@ -987,13 +987,19 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     "Error: {} hosts provided, expected {}".format(
                         len(hosts), num_new_mgrs))
 
+            for _, name in hosts:
+                if name and len([d for d in daemons if d.service_instance == name]):
+                    raise RuntimeError('name %s alrady exists', name)
+
             self.log.info("creating {} managers on hosts: '{}'".format(
-                num_new_mgrs, ",".join(hosts)))
+                num_new_mgrs, ",".join(map(lambda h: h[0], hosts))))
 
             for i in range(num_new_mgrs):
-                name = self.get_unique_name(daemons)
+                host, name = hosts[i]
+                if not name:
+                    name = self.get_unique_name(daemons)
                 result = self._worker_pool.apply_async(self._create_mgr,
-                                                       (hosts[i], name))
+                                                       (host, name))
                 results.append(result)
 
         return SSHWriteCompletion(results)
