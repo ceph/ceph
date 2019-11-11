@@ -671,6 +671,11 @@ class ServiceDescription(object):
         # Service status description when status == -1.
         self.status_desc = status_desc
 
+    def name(self):
+        if self.service_instance:
+            return '%s.%s' % (self.service_type, self.service_instance)
+        return self.service_type
+
     def to_json(self):
         out = {
             'nodename': self.nodename,
