@@ -474,7 +474,7 @@ class Orchestrator(object):
         Update the number of cluster monitors.
 
         :param num: requested number of monitors.
-        :param hosts: list of hosts + network (optional)
+        :param hosts: list of hosts + network + name (optional)
         """
         raise NotImplementedError()
 

@@ -850,7 +850,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return add_func(spec)
         return SSHWriteCompletion(results)
 
-    def _create_mon(self, host, network):
+    def _create_mon(self, host, network, name):
         """
         Create a new monitor on the given host.
         """
@@ -872,7 +872,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         else:
             raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
 
-        return self._create_daemon('mon', host, host, keyring,
+        return self._create_daemon('mon', name or host, host, keyring,
                                    extra_args=extra_args)
 
     def update_mons(self, num, hosts):
@@ -891,9 +891,14 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self._require_hosts(map(lambda h: h[0], hosts))
 
         # current support requires a network to be specified
-        for host, network in hosts:
+        for host, network, name in hosts:
             if not network:
                 raise RuntimeError("Host '{}' missing network part".format(host))
+
+        daemons = self._get_services('mon')
+        for _, _, name in hosts:
+            if name and len([d for d in daemons if d.service_instance == name]):
+                raise RuntimeError('name %s alrady exists', name)
 
         # explicit placement: enough hosts provided?
         num_new_mons = num - num_mons
@@ -907,9 +912,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         # TODO: we may want to chain the creation of the monitors so they join
         # the quorum one at a time.
         results = []
-        for host, network in hosts:
-            result = self._worker_pool.apply_async(self._create_mon, (host,
-                network))
+        for host, network, name in hosts:
+            result = self._worker_pool.apply_async(self._create_mon,
+                                                   (host, network, name))
             results.append(result)
 
         return SSHWriteCompletion(results)

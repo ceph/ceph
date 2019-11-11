@@ -587,11 +587,12 @@ Usage:
         def split_host(host):
             """Split host into host and network parts"""
             # TODO: stricter validation
+            (host, name) = host.split('=', 1)
             parts = host.split(":", 1)
             if len(parts) == 1:
-                return (parts[0], None)
+                return (parts[0], None, name)
             elif len(parts) == 2:
-                return (parts[0], parts[1])
+                return (parts[0], parts[1], name)
             else:
                 raise RuntimeError("Invalid host specification: "
                         "'{}'".format(host))
