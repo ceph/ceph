@@ -1,11 +1,7 @@
 from __future__ import absolute_import
 import json
 
-try:
-    from unittest.mock import MagicMock
-except ImportError:
-    # py2
-    from mock import MagicMock
+from tests import mock
 
 import pytest
 
@@ -123,14 +119,14 @@ def test_promise():
 
 def test_promise_then():
     p = Completion(value=3).then(lambda three: three + 1)
-    p._first_promise.finalize()
+    p.finalize()
     assert p.result == 4
 
 
 def test_promise_mondatic_then():
     p = Completion(value=3)
     p.then(lambda three: Completion(value=three + 1))
-    p._first_promise.finalize()
+    p.finalize()
     assert p.result == 4
 
 
@@ -138,11 +134,11 @@ def some_complex_completion():
     c = Completion(value=3).then(
         lambda three: Completion(value=three + 1).then(
             lambda four: four + 1))
-    return c._first_promise
+    return c
 
 def test_promise_mondatic_then_combined():
     p = some_complex_completion()
-    p._first_promise.finalize()
+    p.finalize()
     assert p.result == 5
 
 
@@ -161,13 +157,13 @@ def test_side_effect():
         foo['x'] = x
 
     foo['x'] = 1
-    Completion(value=3).then(run)._first_promise.finalize()
+    Completion(value=3).then(run).finalize()
     assert foo['x'] == 3
 
 
 def test_progress():
     c = some_complex_completion()
-    mgr = MagicMock()
+    mgr = mock.MagicMock()
     mgr.process = lambda cs: [c.finalize(None) for c in cs]
 
     progress_val = 0.75
@@ -193,7 +189,7 @@ def test_progress():
 
 
 def test_with_progress():
-    mgr = MagicMock()
+    mgr = mock.MagicMock()
     mgr.process = lambda cs: [c.finalize(None) for c in cs]
 
     def execute(y):
@@ -221,10 +217,10 @@ def test_exception():
     def run(x):
         raise KeyError(x)
 
-    c = Completion(value=3).then(run)._first_promise
+    c = Completion(value=3).then(run)
     c.finalize()
-
-    assert isinstance(c.exception, KeyError)
+    with pytest.raises(KeyError):
+        raise_if_exception(c)
 
 
 def test_fail():

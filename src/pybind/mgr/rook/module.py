@@ -35,7 +35,7 @@ from .rook_cluster import RookCluster
 
 class RookCompletion(orchestrator.Completion):
     def evaluate(self):
-        self._first_promise.finalize(None)
+        self.finalize(None)
 
 
 def deferred_read(f):

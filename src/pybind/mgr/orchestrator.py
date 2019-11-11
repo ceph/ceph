@@ -165,16 +165,20 @@ class _Promise(object):
     helper to build orchestrator modules.
     """
     INITIALIZED = 1  # We have a parent completion and a next completion
-    FINISHED = 2  # we have a final result
+    RUNNING = 2
+    FINISHED = 3  # we have a final result
 
     NO_RESULT = _no_result()  # type: None
+    ASYNC_RESULT = object()
 
     def __init__(self,
                  _first_promise=None,  # type: Optional["_Promise"]
                  value=NO_RESULT,  # type: Optional
-                 on_complete=None    # type: Optional[Callable]
+                 on_complete=None,    # type: Optional[Callable]
+                 name=None,  # type: Optional[str]
                  ):
         self._on_complete = on_complete
+        self._name = name
         self._next_promise = None  # type: Optional[_Promise]
 
         self._state = self.INITIALIZED
@@ -188,10 +192,10 @@ class _Promise(object):
         self._first_promise = _first_promise or self  # type: 'Completion'
 
     def __repr__(self):
-        name = getattr(self._on_complete, '__name__', '??') if self._on_complete else 'None'
+        name = self._name or getattr(self._on_complete, '__name__', '??') if self._on_complete else 'None'
         val = repr(self._value) if self._value is not self.NO_RESULT else 'NA'
-        return '{}(_s={}, val={}, id={}, name={}, pr={}, _next={})'.format(
-            self.__class__, self._state, val, id(self), name, getattr(next, '_progress_reference', 'NA'), repr(self._next_promise)
+        return '{}(_s={}, val={}, _on_c={}, id={}, name={}, pr={}, _next={})'.format(
+            self.__class__, self._state, val, self._on_complete, id(self), name, getattr(next, '_progress_reference', 'NA'), repr(self._next_promise)
         )
 
     def then(self, on_complete):
@@ -199,7 +203,7 @@ class _Promise(object):
         """
         Call ``on_complete`` as soon as this promise is finalized.
         """
-        assert self._state is self.INITIALIZED
+        assert self._state in (self.INITIALIZED, self.RUNNING)
         if self._on_complete is not None:
             assert self._next_promise is None
             self._set_next_promise(self.__class__(
@@ -216,14 +220,14 @@ class _Promise(object):
     def _set_next_promise(self, next):
         # type: (_Promise) -> None
         assert self is not next
-        assert self._state is self.INITIALIZED
+        assert self._state in (self.INITIALIZED, self.RUNNING)
 
         self._next_promise = next
         assert self._next_promise is not None
         for p in iter(self._next_promise):
             p._first_promise = self._first_promise
 
-    def finalize(self, value=NO_RESULT):
+    def _finalize(self, value=NO_RESULT):
         """
         Sets this promise to complete.
 
@@ -231,11 +235,13 @@ class _Promise(object):
 
         :param value: new value.
         """
-        assert self._state is self.INITIALIZED
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+
+        self._state = self.RUNNING
 
         if value is not self.NO_RESULT:
             self._value = value
-        assert self._value is not self.NO_RESULT
+        assert self._value is not self.NO_RESULT, repr(self)
 
         if self._on_complete:
             try:
@@ -255,21 +261,25 @@ class _Promise(object):
             self._set_next_promise(next_result)
             if self._next_promise._value is self.NO_RESULT:
                 self._next_promise._value = self._value
-        else:
+            self.propagate_to_next()
+        elif next_result is not self.ASYNC_RESULT:
             # simple map. simply forward
             if self._next_promise:
                 self._next_promise._value = next_result
             else:
                 # Hack: next_result is of type U, _value is of type T
                 self._value = next_result  # type: ignore
-        self._state = self.FINISHED
-        logger.debug('finalized {}'.format(repr(self)))
-        self.propagate_to_next()
+            self.propagate_to_next()
+        else:
+            # asynchronous promise
+            pass
+
 
     def propagate_to_next(self):
-        assert self._state is self.FINISHED
+        self._state = self.FINISHED
+        logger.debug('finalized {}'.format(repr(self)))
         if self._next_promise:
-            self._next_promise.finalize()
+            self._next_promise._finalize()
 
     def fail(self, e):
         # type: (Exception) -> None
@@ -277,7 +287,7 @@ class _Promise(object):
         Sets the whole completion to be faild with this exception and end the
         evaluation.
         """
-        assert self._state is self.INITIALIZED
+        assert self._state in (self.INITIALIZED, self.RUNNING)
         logger.exception('_Promise failed')
         self._exception = e
         self._value = 'exception'
@@ -379,10 +389,10 @@ class ProgressReference(object):
         return self.progress == 1 and self._completion_has_result
 
     def update(self):
-        def run(progress):
+        def progress_run(progress):
             self.progress = progress
         if self.completion:
-            c = self.completion().then(run)
+            c = self.completion().then(progress_run)
             self.mgr.process([c._first_promise])
         else:
             self.progress = 1
@@ -424,9 +434,10 @@ class Completion(_Promise):
     def __init__(self,
                  _first_promise=None,  # type: Optional["Completion"]
                  value=_Promise.NO_RESULT,  # type: Any
-                 on_complete=None  # type: Optional[Callable]
+                 on_complete=None,  # type: Optional[Callable],
+                 name=None,  # type: Optional[str]
                  ):
-        super(Completion, self).__init__(_first_promise, value, on_complete)
+        super(Completion, self).__init__(_first_promise, value, on_complete, name)
 
     @property
     def _progress_reference(self):
@@ -477,6 +488,10 @@ class Completion(_Promise):
         super(Completion, self).fail(e)
         if self._progress_reference:
             self._progress_reference.fail()
+
+    def finalize(self, result=_Promise.NO_RESULT):
+        if self._first_promise._state == self.INITIALIZED:
+            self._first_promise._finalize(result)
 
     @property
     def result(self):
@@ -846,7 +861,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mons(self, num, hosts):
-        # type: (int, List[Tuple[str,str]]) -> Completion
+        # type: (int, List[Tuple[str,str,str]]) -> Completion
         """
         Update the number of cluster monitors.
 
@@ -874,17 +889,17 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_rbd_mirror(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """Create rbd-mirror cluster"""
         raise NotImplementedError()
 
-    def remove_rbd_mirror(self):
-        # type: (str) -> WriteCompletion
+    def remove_rbd_mirror(self, name):
+        # type: (str) -> Completion
         """Remove rbd-mirror cluster"""
         raise NotImplementedError()
 
     def update_rbd_mirror(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """
         Update / redeploy rbd-mirror cluster
         Like for example changing the number of service instances.
@@ -1286,6 +1301,9 @@ class InventoryNode(object):
     def get_host_names(nodes):
         # type: (List[InventoryNode]) -> List[str]
         return [node.name for node in nodes]
+
+    def __eq__(self, other):
+        return self.name == other.name and self.devices == other.devices
 
 
 class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev'])):
