@@ -1613,6 +1613,14 @@ std::string url_encode(const std::string& src, bool encode_slash)
   return dst;
 }
 
+std::string url_encode(const boost::string_view src, bool encode_slash)
+{
+  std::string dst;
+  url_encode(src.to_string(), dst, encode_slash);
+
+  return dst;
+}
+
 std::string url_remove_prefix(const std::string& url)
 {
   std::string dst = url;

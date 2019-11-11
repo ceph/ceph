@@ -2263,6 +2263,7 @@ extern std::string url_decode(const std::string_view& src_str,
 extern void url_encode(const std::string& src, string& dst,
                        bool encode_slash = true);
 extern std::string url_encode(const std::string& src, bool encode_slash = true);
+extern std::string url_encode(const boost::string_view src, bool encode_slash = true);
 extern std::string url_remove_prefix(const std::string& url); // Removes hhtp, https and www from url
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
