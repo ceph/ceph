@@ -843,20 +843,22 @@ void Infiniband::MemoryManager::MemPoolContext::update_stats(int nbufs)
 
 void *Infiniband::MemoryManager::mem_pool::slow_malloc()
 {
-  void *p;
-
-  std::lock_guard l{PoolAllocator::lock};
-  PoolAllocator::g_ctx = ctx;
   // this will trigger pool expansion via PoolAllocator::malloc()
-  p = boost::pool<PoolAllocator>::malloc();
-  PoolAllocator::g_ctx = nullptr;
-  return p;
+  return PoolAllocator::with_context(ctx, [this] {
+    return boost::pool<PoolAllocator>::malloc();
+  });
 }
-Infiniband::MemoryManager::MemPoolContext *Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
-ceph::mutex Infiniband::MemoryManager::PoolAllocator::lock =
-			    ceph::make_mutex("pool-alloc-lock");
+
+Infiniband::MemoryManager::MemPoolContext*
+Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
 
 // lock is taken by mem_pool::slow_malloc()
+ceph::mutex& Infiniband::MemoryManager::PoolAllocator::get_lock()
+{
+  static ceph::mutex lock = ceph::make_mutex("pool-alloc-lock");
+  return lock;
+}
+
 char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_size)
 {
   ceph_assert(g_ctx);
@@ -904,7 +906,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
 void Infiniband::MemoryManager::PoolAllocator::free(char * const block)
 {
   mem_info *m;
-  std::lock_guard l{lock};
+  std::lock_guard l{get_lock()};
     
   Chunk *mem_info_chunk = reinterpret_cast<Chunk *>(block);
   m = reinterpret_cast<mem_info *>(reinterpret_cast<char *>(mem_info_chunk) - offsetof(mem_info, chunks));
