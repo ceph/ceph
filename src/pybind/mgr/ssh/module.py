@@ -922,7 +922,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return self._create_daemon('mgr', name, host, keyring)
 
-    def update_mgrs(self, num, hosts):
+    def update_mgrs(self, num, hosts, names):
         """
         Adjust the number of cluster managers.
         """
@@ -978,11 +978,15 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     "Error: {} hosts provided, expected {}".format(
                         len(hosts), num_new_mgrs))
 
+            for name in names:
+                if name and len([d for d in daemons if d.service_instance == name]):
+                    raise RuntimeError('name %s alrady exists', name)
+
             self.log.info("creating {} managers on hosts: '{}'".format(
                 num_new_mgrs, ",".join(hosts)))
 
             for i in range(num_new_mgrs):
-                name = self.get_unique_name(daemons)
+                name = names[i] or self.get_unique_name(daemons)
                 result = self._worker_pool.apply_async(self._create_mgr,
                                                        (hosts[i], name))
                 results.append(result)

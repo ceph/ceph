@@ -551,7 +551,17 @@ Usage:
             return HandleCommandResult(-errno.EINVAL,
                     stderr="Invalid number of mgrs: require {} > 0".format(num))
 
-        completion = self.update_mgrs(num, hosts)
+        names = None
+        if hosts:
+            names = []
+            newhosts = []
+            for i in hosts:
+                (h, n) = i.split('=', 1)
+                names.append(n)
+                newhosts.append(h)
+            hosts = newhosts
+
+        completion = self.update_mgrs(num, hosts, names)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

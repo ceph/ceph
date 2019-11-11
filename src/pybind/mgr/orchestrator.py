@@ -458,13 +458,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def update_mgrs(self, num, hosts):
+    def update_mgrs(self, num, hosts, names):
         # type: (int, List[str]) -> WriteCompletion
         """
         Update the number of cluster managers.
 
         :param num: requested number of managers.
         :param hosts: list of hosts (optional)
+        :param hosts: list of daemon names (optional)
         """
         raise NotImplementedError()
 
