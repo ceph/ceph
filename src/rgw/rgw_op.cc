@@ -3657,10 +3657,10 @@ void RGWPutObj::execute()
 
   rgw_placement_rule *pdest_placement;
 
+  multipart_upload_info upload_info;
   if (multipart) {
     RGWMPObj mp(s->object.name, multipart_upload_id);
 
-    multipart_upload_info upload_info;
     op_ret = get_multipart_info(store, s, mp.get_meta(), nullptr, nullptr, &upload_info);
     if (op_ret < 0) {
       if (op_ret != -ENOENT) {
