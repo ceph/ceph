@@ -597,8 +597,18 @@ class PlacementSpec(object):
     """
     def __init__(self, label=None, nodes=[]):
         self.label = label
-        self.nodes = nodes
 
+        def split_host(host):
+            """Split host into host and name parts"""
+            # TODO: stricter validation
+            a = host.split('=', 1)
+            if len(a) == 1:
+                return (a[0], None)
+            else:
+                assert len(a) == 2
+                return tuple(a)
+
+        self.nodes = list(map(split_host, nodes))
 
 def handle_type_error(method):
     @wraps(method)

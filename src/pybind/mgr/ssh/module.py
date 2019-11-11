@@ -200,10 +200,15 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
-    def get_unique_name(self, existing, prefix=None):
+    def get_unique_name(self, existing, prefix=None, forcename=None):
         """
         Generate a unique random service name
         """
+        if forcename:
+            if len([d for d in existing if d.service_instance == name]):
+                raise RuntimeError('specified name %s already in use', name)
+            return forcename
+
         while True:
             if prefix:
                 name = prefix + '.'
@@ -1015,10 +1020,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         daemons = self._get_services('mds')
         results = []
         num_added = 0
-        for host in spec.placement.nodes:
+        for host, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
-            mds_id = self.get_unique_name(daemons, spec.name)
+            mds_id = self.get_unique_name(daemons, spec.name, name)
             self.log.debug('placing mds.%s on host %s' % (mds_id, host))
             results.append(
                 self._worker_pool.apply_async(self._create_mds, (mds_id, host))
@@ -1072,10 +1077,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         daemons = self._get_services('rgw')
         results = []
         num_added = 0
-        for host in spec.placement.nodes:
+        for host, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
-            rgw_id = self.get_unique_name(daemons, spec.name)
+            rgw_id = self.get_unique_name(daemons, spec.name, name)
             self.log.debug('placing rgw.%s on host %s' % (rgw_id, host))
             results.append(
                 self._worker_pool.apply_async(self._create_rgw, (rgw_id, host))
@@ -1118,13 +1123,14 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def add_rbd_mirror(self, spec):
         if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
+        self.log.debug('nodes %s' % spec.placement.nodes)
         daemons = self._get_services('rbd-mirror')
         results = []
         num_added = 0
-        for host in spec.placement.nodes:
+        for host, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
-            daemon_id = self.get_unique_name(daemons)
+            daemon_id = self.get_unique_name(daemons, None, name)
             self.log.debug('placing rbd-mirror.%s on host %s' % (daemon_id,
                                                                  host))
             results.append(
