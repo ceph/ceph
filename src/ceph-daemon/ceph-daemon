@@ -1301,10 +1301,10 @@ def command_unit():
 ##################################
 
 def command_ls():
-    ls = list_daemons()
+    ls = list_daemons(detail=not args.no_detail)
     print(json.dumps(ls, indent=4))
 
-def list_daemons():
+def list_daemons(detail=True):
     host_version = None
     ls = []
 
@@ -1319,65 +1319,64 @@ def list_daemons():
                     (cluster, daemon_id) = j.split('-', 1)
                     fsid = get_legacy_daemon_fsid(cluster, daemon_type,
                                                   daemon_id) or 'unknown'
-                    (enabled, state) = check_unit('ceph-%s@%s' % (daemon_type,
-                                                                  daemon_id))
-                    if not host_version:
-                        try:
-                            out, err, code = call(['ceph', '-v'])
-                            if not code and out.startswith('ceph version '):
-                                host_version = out.split(' ')[2]
-                        except Exception:
-                            pass
-
-                    ls.append({
+                    i = {
                         'style': 'legacy',
                         'name': '%s.%s' % (daemon_type, daemon_id),
                         'fsid': fsid,
-                        'enabled': enabled,
-                        'state': state,
-                        'version': host_version,
-                    })
+                    }
+                    if detail:
+                        (i['enabled'], i['state']) = check_unit(
+                            'ceph-%s@%s' % (daemon_type, daemon_id))
+                        if not host_version:
+                            try:
+                                out, err, code = call(['ceph', '-v'])
+                                if not code and out.startswith('ceph version '):
+                                    host_version = out.split(' ')[2]
+                            except Exception:
+                                pass
+                        i['host_version'] = host_version
+                    ls.append(i)
             elif is_fsid(i):
                 fsid = i
                 for j in os.listdir(os.path.join(args.data_dir, i)):
                     if j == 'crash':
                         name = 'crash'
                         unit_name = 'ceph-%s-crash.service' % fsid
-                        (enabled, state) = check_unit(unit_name)
                     elif '.' in j:
                         name = j
                         (daemon_type, daemon_id) = j.split('.', 1)
-                        (enabled, state) = check_unit(get_unit_name(fsid,
-                                                                    daemon_type,
-                                                                    daemon_id))
+                        unit_name = get_unit_name(fsid,
+                                                  daemon_type,
+                                                  daemon_id)
                     else:
                         continue
-
-                    # get container id
-                    container_id = None
-                    version = None
-                    out, err, code = call(
-                        [
-                            podman_path, 'inspect',
-                            '--format', '{{.Id}}',
-                            'ceph-%s-%s' % (fsid, j)
-                        ],
-                        verbose_on_failure=False)
-                    if not code:
-                        container_id = out.strip()[0:12]
-                        out, err, code = call(
-                            [podman_path, 'exec', container_id, 'ceph', '-v'])
-                        if not code and out.startswith('ceph version '):
-                            version = out.split(' ')[2]
-                    ls.append({
+                    i = {
                         'style': 'ceph-daemon:v1',
                         'name': name,
                         'fsid': fsid,
-                        'enabled': enabled,
-                        'state': state,
-                        'container_id': container_id,
-                        'version': version,
-                    })
+                    }
+                    if detail:
+                        # get container id
+                        (i['enabled'], i['state']) = check_unit(unit_name)
+                        container_id = None
+                        version = None
+                        out, err, code = call(
+                            [
+                                podman_path, 'inspect',
+                                '--format', '{{.Id}}',
+                                'ceph-%s-%s' % (fsid, j)
+                            ],
+                            verbose_on_failure=False)
+                        if not code:
+                            container_id = out.strip()[0:12]
+                            out, err, code = call(
+                                [podman_path, 'exec', container_id,
+                                 'ceph', '-v'])
+                            if not code and out.startswith('ceph version '):
+                                version = out.split(' ')[2]
+                        i['container_id'] = container_id
+                        i['version'] = version
+                    ls.append(i)
 
     # /var/lib/rook
     # WRITE ME
@@ -1468,7 +1467,7 @@ def command_rm_cluster():
                            'this command may destroy precious data!')
 
     # stop + disable individual daemon units
-    for d in list_daemons():
+    for d in list_daemons(detail=False):
         if d['fsid'] != args.fsid:
             continue
         if d['style'] != 'ceph-daemon:v1':
@@ -1557,6 +1556,10 @@ def _get_parser():
 
     parser_ls = subparsers.add_parser(
         'ls', help='list daemon instances on this host')
+    parser_ls.add_argument(
+        '--no-detail',
+        action='store_true',
+        help='Do not include daemon status')
     parser_ls.set_defaults(func=command_ls)
 
     parser_adopt = subparsers.add_parser(
