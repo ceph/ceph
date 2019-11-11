@@ -1412,3 +1412,16 @@ echo ""
 
 echo "CEPH_DEV=1"
 
+# always keep this section at the very bottom of this file
+STRAY_CONF_PATH="/etc/ceph/ceph.conf"
+if [ -f "$STRAY_CONF_PATH" -a -n "$conf_fn" -a ! "$conf_fn" -ef "$STRAY_CONF_PATH" ]; then
+    echo ""
+    echo ""
+    echo "WARNING:"
+    echo "    Please remove stray $STRAY_CONF_PATH if not needed."
+    echo "    Your conf files $conf_fn and $STRAY_CONF_PATH may not be in sync"
+    echo "    and may lead to undesired results."
+    echo ""
+    echo "NOTE:"
+    echo "    Remember to restart cluster after removing $STRAY_CONF_PATH"
+fi
