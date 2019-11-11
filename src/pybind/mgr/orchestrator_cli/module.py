@@ -266,7 +266,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
-            for s in services:
+            for s in sorted(services, key=lambda s: s.name()):
                 if s.service is None:
                     service_id = s.service_instance
                 else:
