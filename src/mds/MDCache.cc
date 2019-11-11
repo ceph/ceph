@@ -9365,12 +9365,12 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 	  }
 	case CEPH_MDS_OP_LOOKUP:
 	  {
-	    CDentry* dn = mdr->dn[0].back();
-	    if (dn) {
+	    if (mdr->dn[0].size()) {
+	      CDentry* dn = mdr->dn[0].back();
 	      auto it = dn->batch_ops.find(mask);
 	      if (it != dn->batch_ops.end()) {
-                it->second->forward(who);
-                dn->batch_ops.erase(it);
+		it->second->forward(who);
+		dn->batch_ops.erase(it);
 	      }
 	    }
 	    break;
