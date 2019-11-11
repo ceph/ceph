@@ -517,6 +517,41 @@ def ceph_osds(ctx, config):
         pass
 
 @contextlib.contextmanager
+def ceph_mdss(ctx, config):
+    """
+    Deploy MDSss
+    """
+    cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
+    testdir = teuthology.get_testdir(ctx)
+
+    nodes = []
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('mds', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            nodes.append(remote.shortname)
+
+            ### FIXME names ###
+            ctx.daemons.register_daemon(
+                remote, 'mds', id_,
+                cluster=cluster_name,
+                fsid=fsid,
+                logger=log.getChild(role),
+                wait=False,
+                started=True,
+            )
+
+    shell(ctx, cluster_name, remote, [
+        'ceph', 'orchestrator', 'mds', 'update',
+        'all',
+        str(len(nodes))] + nodes
+    )
+
+    yield
+
+@contextlib.contextmanager
 def ceph_initial():
     try:
         yield
@@ -653,6 +688,7 @@ def task(ctx, config):
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
+            lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):
         try:
