@@ -267,22 +267,27 @@ vector<rgw_sync_bucket_pipe> rgw_sync_group_pipe_map::find_pipes(const string& s
   return vector<rgw_sync_bucket_pipe>();
 }
 
-void RGWBucketSyncFlowManager::pipe_rules::insert(const rgw_sync_bucket_pipe& pipe)
+void RGWBucketSyncFlowManager::pipe_rules::insert(rgw_sync_bucket_pipe *ppipe)
 {
-  auto ppipe = &pipe_map[pipe.id];
-
-  auto prefix = pipe.params.filter.prefix.value_or(string());
+  auto prefix = ppipe->params.filter.prefix.value_or(string());
 
   prefix_by_size.insert(make_pair(prefix.size(), ppipe));
 
-  for (auto& tag : pipe.params.filter.tags) {
+  for (auto& tag : ppipe->params.filter.tags) {
     auto titer = tag_refs.find(tag);
     if (titer != tag_refs.end() &&
-        pipe.params.priority > titer->second->params.priority) {
+        ppipe->params.priority > titer->second->params.priority) {
       titer->second = ppipe;
     } else {
       tag_refs[tag] = ppipe;
     }
+  }
+}
+
+void RGWBucketSyncFlowManager::pipe_set::finish_init()
+{
+  for (auto& entry : rules) {
+    entry.second.finish_init();
   }
 }
 
@@ -319,9 +324,22 @@ void RGWBucketSyncFlowManager::pipe_rules::finish_init()
   }
 }
 
+void RGWBucketSyncFlowManager::pipe_set::insert(const rgw_sync_bucket_pipe& pipe) {
+  auto ppipe = &pipe_map[pipe.id];
+  *ppipe = pipe;
+
+  auto prules = &rules[endpoints_pair(*ppipe)];
+
+  prules->insert(ppipe);
+
+  pipe_handler h(prules, pipe);
+
+  handlers.insert(h);
+}
+
 void RGWBucketSyncFlowManager::pipe_set::dump(ceph::Formatter *f) const
 {
-  encode_json("pipes", pipes, f);
+  encode_json("pipes", pipe_map, f);
 }
 
 bool RGWBucketSyncFlowManager::allowed_data_flow(const string& source_zone,
@@ -426,7 +444,7 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
 
-      source_pipes->pipes.insert(pipe);
+      source_pipes->insert(pipe);
     }
 
     for (auto& entry : flow_group_map.dests) {
@@ -439,9 +457,12 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
 
-      dest_pipes->pipes.insert(pipe);
+      dest_pipes->insert(pipe);
     }
   }
+
+  source_pipes->finish_init();
+  dest_pipes->finish_init();
 }
 
 
@@ -597,7 +618,8 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
 
   flow_mgr->reflect(bucket, &_sources_by_name, &_targets_by_name, only_enabled);
 
-  for (auto& pipe : _sources_by_name.pipes) {
+  for (auto& entry : _sources_by_name.pipe_map) {
+    auto& pipe = entry.second;
     if (!pipe.source.zone) {
       continue;
     }
@@ -608,9 +630,14 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
     if (zone_svc->find_zone_id_by_name(*pipe.source.zone, &zone_id)) {
       new_pipe.source.zone = zone_id;
     }
-    _sources[*new_pipe.source.zone].pipes.insert(new_pipe);
+    _sources[*new_pipe.source.zone].insert(new_pipe);
   }
-  for (auto& pipe : _targets_by_name.pipes) {
+  for (auto& s : _sources) {
+    s.second.finish_init();
+  }
+
+  for (auto& entry : _targets_by_name.pipe_map) {
+    auto& pipe = entry.second;
     if (!pipe.dest.zone) {
       continue;
     }
@@ -620,7 +647,10 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
     if (zone_svc->find_zone_id_by_name(*pipe.dest.zone, &zone_id)) {
       new_pipe.dest.zone = zone_id;
     }
-    _targets[*new_pipe.dest.zone].pipes.insert(new_pipe);
+    _targets[*new_pipe.dest.zone].insert(new_pipe);
+  }
+  for (auto& t : _targets) {
+    t.second.finish_init();
   }
 
   if (psources_by_name) {
@@ -643,25 +673,21 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
   }
 }
 
-void RGWBucketSyncPolicyHandler::get_pipes(RGWBucketSyncFlowManager::pipe_set *sources, RGWBucketSyncFlowManager::pipe_set *targets,
+void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *sources, std::set<rgw_sync_bucket_pipe> *targets,
 					   std::optional<rgw_sync_bucket_entity> filter_peer) { /* return raw pipes (with zone name) */
-  if (!filter_peer) {
-    *sources = sources_by_name;
-    *targets = targets_by_name;
-    return;
-  }
-
-  auto& filter = *filter_peer;
-
-  for (auto& source_pipe : sources_by_name.pipes) {
-    if (source_pipe.source.match(filter)) {
-      sources->pipes.insert(source_pipe);
+  for (auto& entry : sources_by_name.pipe_map) {
+    auto& source_pipe = entry.second;
+    if (!filter_peer ||
+        source_pipe.source.match(*filter_peer)) {
+      sources->insert(source_pipe);
     }
   }
 
-  for (auto& target_pipe : targets_by_name.pipes) {
-    if (target_pipe.dest.match(filter)) {
-      targets->pipes.insert(target_pipe);
+  for (auto& entry : targets_by_name.pipe_map) {
+    auto& target_pipe = entry.second;
+    if (!filter_peer ||
+        target_pipe.dest.match(*filter_peer)) {
+      targets->insert(target_pipe);
     }
   }
 }

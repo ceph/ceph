@@ -1124,20 +1124,20 @@ std::ostream& operator<<(std::ostream& out, const rgw_sync_pipe_info_entity& e) 
   return out;
 }
 
-struct rgw_sync_pipe_info {
-  rgw_sync_pipe_params params;
+struct rgw_sync_pipe_handler_info {
+  RGWBucketSyncFlowManager::pipe_handler handler;
   rgw_sync_pipe_info_entity source;
   rgw_sync_pipe_info_entity target;
 
-  rgw_sync_pipe_info() {}
-  rgw_sync_pipe_info(const rgw_sync_bucket_pipe& pipe,
+  rgw_sync_pipe_handler_info() {}
+  rgw_sync_pipe_handler_info(const RGWBucketSyncFlowManager::pipe_handler& _handler,
                      std::optional<RGWBucketInfo> source_bucket_info,
-                     std::optional<RGWBucketInfo> target_bucket_info) : source(pipe.source, source_bucket_info),
-                                                                        target(pipe.dest, target_bucket_info) {
-    params = pipe.params;
+                     std::optional<RGWBucketInfo> target_bucket_info) : handler(_handler),
+                                                                        source(handler.source, source_bucket_info),
+                                                                        target(handler.dest, target_bucket_info) {
   }
 
-  bool operator<(const rgw_sync_pipe_info& p) const {
+  bool operator<(const rgw_sync_pipe_handler_info& p) const {
     if (source < p.source) {
       return true;
     }
@@ -1153,37 +1153,37 @@ struct rgw_sync_pipe_info {
   }
 };
 
-std::ostream& operator<<(std::ostream& out, const rgw_sync_pipe_info& p) {
+std::ostream& operator<<(std::ostream& out, const rgw_sync_pipe_handler_info& p) {
   out << p.source << ">" << p.target;
   return out;
 }
 
 struct rgw_sync_pipe_info_set {
-  std::set<rgw_sync_pipe_info> pipes;
+  std::set<rgw_sync_pipe_handler_info> handlers;
 
-  using iterator = std::set<rgw_sync_pipe_info>::iterator;
+  using iterator = std::set<rgw_sync_pipe_handler_info>::iterator;
 
   void clear() {
-    pipes.clear();
+    handlers.clear();
   }
 
-  void insert(const rgw_sync_bucket_pipe& pipe,
+  void insert(const RGWBucketSyncFlowManager::pipe_handler& handler,
               std::optional<RGWBucketInfo>& source_bucket_info,
               std::optional<RGWBucketInfo>& target_bucket_info) {
-    rgw_sync_pipe_info p(pipe, source_bucket_info, target_bucket_info);
-    pipes.insert(p);
+    rgw_sync_pipe_handler_info p(handler, source_bucket_info, target_bucket_info);
+    handlers.insert(p);
   }
 
   iterator begin() {
-    return pipes.begin();
+    return handlers.begin();
   }
 
   iterator end() {
-    return pipes.end();
+    return handlers.end();
   }
 
   bool empty() const {
-    return pipes.empty();
+    return handlers.empty();
   }
 
   void update_empty_bucket_info(const std::map<rgw_bucket, RGWBucketInfo>& buckets_info) {
@@ -1191,14 +1191,14 @@ struct rgw_sync_pipe_info_set {
       return;
     }
 
-    std::set<rgw_sync_pipe_info> p;
+    std::set<rgw_sync_pipe_handler_info> p;
 
-    for (auto pipe : pipes) {
+    for (auto pipe : handlers) {
       pipe.update_empty_bucket_info(buckets_info);
       p.insert(pipe);
     }
 
-    pipes = std::move(p);
+    handlers = std::move(p);
   }
 };
 
@@ -3646,17 +3646,17 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
                                 << " all_sources.size()=" << all_sources.size() << dendl;
     auto iters = get_pipe_iters(all_sources, source_zone);
     for (auto i = iters.first; i != iters.second; ++i) {
-      for (auto& pipe : i->second.pipes) {
-        if (!pipe.specific()) {
-          ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe=" << pipe << ": skipping" << dendl;
+      for (auto& handler : i->second) {
+        if (!handler.specific()) {
+          ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe_handler=" << handler << ": skipping" << dendl;
           continue;
         }
         if (source_bucket &&
-            !source_bucket->match(*pipe.source.bucket)) {
+            !source_bucket->match(*handler.source.bucket)) {
           continue;
         }
-        ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe=" << pipe << ": adding" << dendl;
-        result->insert(pipe, source_bucket_info, target_bucket_info);
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe_handler=" << handler << ": adding" << dendl;
+        result->insert(handler, source_bucket_info, target_bucket_info);
       }
     }
   }
@@ -3670,15 +3670,15 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
                                 << " all_targets.size()=" << all_targets.size() << dendl;
     auto iters = get_pipe_iters(all_targets, target_zone);
     for (auto i = iters.first; i != iters.second; ++i) {
-      for (auto& pipe : i->second.pipes) {
+      for (auto& handler : i->second) {
         if (target_bucket &&
-            pipe.dest.bucket &&
-            !target_bucket->match(*pipe.dest.bucket)) {
-          ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe=" << pipe << ": skipping" << dendl;
+            handler.dest.bucket &&
+            !target_bucket->match(*handler.dest.bucket)) {
+          ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe_handler=" << handler << ": skipping" << dendl;
           continue;
         }
-        ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe=" << pipe << ": adding" << dendl;
-        result->insert(pipe, source_bucket_info, target_bucket_info);
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": pipe_handler=" << handler << ": adding" << dendl;
+        result->insert(handler, source_bucket_info, target_bucket_info);
       }
     }
   }
@@ -3789,7 +3789,7 @@ int RGWRunBucketSourcesSyncCR::operate()
         }
         sync_pair.dest_bs.bucket = siter->target.get_bucket();
 
-        sync_pair.params = siter->params;
+        sync_pair.handler = siter->handler;
 
         if (sync_pair.source_bs.shard_id >= 0) {
           num_shards = 1;

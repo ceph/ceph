@@ -2328,8 +2328,10 @@ void encode_json(const char *name, const RGWBucketSyncFlowManager::pipe_set& pse
   Formatter::ObjectSection top_section(*f, name);
   Formatter::ArraySection as(*f, "entries");
 
-  for (auto& pipe : pset.pipes) {
-    encode_json("pipe", pipe, f);
+  for (auto& pipe_handler : pset) {
+    Formatter::ObjectSection hs(*f, "handler");
+    encode_json("source", pipe_handler.source, f);
+    encode_json("dest", pipe_handler.dest, f);
   }
 }
 
@@ -2418,16 +2420,16 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
     handler = bucket_handler;
   }
 
-  RGWBucketSyncFlowManager::pipe_set *sources;
-  RGWBucketSyncFlowManager::pipe_set *dests;
+  std::set<rgw_sync_bucket_pipe> sources;
+  std::set<rgw_sync_bucket_pipe> dests;
 
-  handler->get_pipes(&sources, &dests);
+  handler->get_pipes(&sources, &dests, std::nullopt);
 
   auto source_hints_vec = convert_bucket_set_to_str_vec(handler->get_source_hints());
   auto target_hints_vec = convert_bucket_set_to_str_vec(handler->get_target_hints());
 
-  RGWBucketSyncFlowManager::pipe_set resolved_sources;
-  RGWBucketSyncFlowManager::pipe_set resolved_dests;
+  std::set<rgw_sync_bucket_pipe> resolved_sources;
+  std::set<rgw_sync_bucket_pipe> resolved_dests;
 
   rgw_sync_bucket_entity self_entity(zone_name, opt_bucket);
 
@@ -2469,8 +2471,8 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
 
   {
     Formatter::ObjectSection os(*formatter, "result");
-    encode_json("sources", *sources, formatter);
-    encode_json("dests", *dests, formatter);
+    encode_json("sources", sources, formatter);
+    encode_json("dests", dests, formatter);
     {
       Formatter::ObjectSection hints_section(*formatter, "hints");
       encode_json("sources", source_hints_vec, formatter);
@@ -2519,8 +2521,8 @@ static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo&
   for (auto& m : sources) {
     auto& zone = m.first;
     out << indented{width, "source zone"} << zone << std::endl;
-    for (auto& pipe : m.second.pipes) {
-      out << indented{width, "bucket"} << *pipe.source.bucket << std::endl;
+    for (auto& pipe_handler : m.second) {
+      out << indented{width, "bucket"} << *pipe_handler.source.bucket << std::endl;
     }
   }
 
@@ -2593,7 +2595,8 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
     }
 
     for (auto& m : sources) {
-      for (auto& pipe : m.second.pipes) {
+      for (auto& entry : m.second.pipe_map) {
+        auto& pipe = entry.second;
         if (pipe.source.zone.value_or("") == z->second.id) {
           bucket_source_sync_status(store, zone, z->second,
                                     c->second,
