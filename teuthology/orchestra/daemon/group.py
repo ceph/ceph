@@ -1,13 +1,14 @@
 from teuthology import misc
 from teuthology.orchestra.daemon.state import DaemonState
 from teuthology.orchestra.daemon.systemd import SystemDState
+from teuthology.orchestra.daemon.cephdaemonunit import CephDaemonUnit
 
 
 class DaemonGroup(object):
     """
     Collection of daemon state instances
     """
-    def __init__(self, use_systemd=False):
+    def __init__(self, use_systemd=False, use_ceph_daemon=False):
         """
         self.daemons is a dictionary indexed by role.  Each entry is a
         dictionary of DaemonState values indexed by an id parameter.
@@ -18,6 +19,7 @@ class DaemonGroup(object):
         """
         self.daemons = {}
         self.use_systemd = use_systemd
+        self.use_ceph_daemon = use_ceph_daemon
 
     def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
@@ -57,13 +59,16 @@ class DaemonGroup(object):
         if id_ in self.daemons[role]:
             self.daemons[role][id_].stop()
             self.daemons[role][id_] = None
+
         klass = DaemonState
-        if remote.init_system == 'systemd':
+        if self.use_ceph_daemon:
+            klass = CephDaemonUnit
+        elif self.use_systemd and \
+             not any(map(lambda i: i == 'valgrind', args)) and \
+             remote.init_system == 'systemd':
             # We currently cannot use systemd and valgrind together because
             # it would require rewriting the unit files
-            if self.use_systemd and \
-                    not any(map(lambda i: i == 'valgrind', args)):
-                klass = SystemDState
+            klass = SystemDState
         self.daemons[role][id_] = klass(
             remote, role, id_, *args, **kwargs)
 
