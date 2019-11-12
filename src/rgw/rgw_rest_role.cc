@@ -25,7 +25,7 @@ int RGWRestRole::verify_permission()
   }
 
   string role_name = s->info.args.get("RoleName");
-  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->user_id.tenant);
+  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
   if (op_ret = role.get(); op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_ROLE_FOUND;
@@ -33,7 +33,7 @@ int RGWRestRole::verify_permission()
     return op_ret;
   }
 
-  if (int ret = check_caps(s->user->caps); ret == 0) {
+  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
     _role = std::move(role);
     return ret;
   }
@@ -44,7 +44,7 @@ int RGWRestRole::verify_permission()
                               s,
                               rgw::ARN(resource_name,
                                             "role",
-                                             s->user->user_id.tenant, true),
+                                             s->user->get_tenant(), true),
                                              op)) {
     return -EACCES;
   }
@@ -63,12 +63,12 @@ void RGWRestRole::send_response()
   end_header(s, this);
 }
 
-int RGWRoleRead::check_caps(RGWUserCaps& caps)
+int RGWRoleRead::check_caps(const RGWUserCaps& caps)
 {
     return caps.check_cap("roles", RGW_CAP_READ);
 }
 
-int RGWRoleWrite::check_caps(RGWUserCaps& caps)
+int RGWRoleWrite::check_caps(const RGWUserCaps& caps)
 {
     return caps.check_cap("roles", RGW_CAP_WRITE);
 }
@@ -79,7 +79,7 @@ int RGWCreateRole::verify_permission()
     return -EACCES;
   }
 
-  if (int ret = check_caps(s->user->caps); ret == 0) {
+  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
     return ret;
   }
 
@@ -91,7 +91,7 @@ int RGWCreateRole::verify_permission()
                               s,
                               rgw::ARN(resource_name,
                                             "role",
-                                             s->user->user_id.tenant, true),
+                                             s->user->get_tenant(), true),
                                              get_op())) {
     return -EACCES;
   }
@@ -113,7 +113,7 @@ int RGWCreateRole::get_params()
 
   bufferlist bl = bufferlist::static_from_string(trust_policy);
   try {
-    const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
   }
   catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
@@ -130,7 +130,7 @@ void RGWCreateRole::execute()
     return;
   }
   RGWRole role(s->cct, store->getRados()->pctl, role_name, role_path, trust_policy,
-                s->user->user_id.tenant, max_session_duration);
+                s->user->get_tenant(), max_session_duration);
   op_ret = role.create(true);
 
   if (op_ret == -EEXIST) {
@@ -194,7 +194,7 @@ int RGWGetRole::_verify_permission(const RGWRole& role)
     return -EACCES;
   }
 
-  if (int ret = check_caps(s->user->caps); ret == 0) {
+  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
     return ret;
   }
 
@@ -203,7 +203,7 @@ int RGWGetRole::_verify_permission(const RGWRole& role)
                               s,
                               rgw::ARN(resource_name,
                                             "role",
-                                             s->user->user_id.tenant, true),
+                                             s->user->get_tenant(), true),
                                              get_op())) {
     return -EACCES;
   }
@@ -228,7 +228,7 @@ void RGWGetRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->user_id.tenant);
+  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
   op_ret = role.get();
 
   if (op_ret == -ENOENT) {
@@ -293,7 +293,7 @@ int RGWListRoles::verify_permission()
     return -EACCES;
   }
 
-  if (int ret = check_caps(s->user->caps); ret == 0) {
+  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
     return ret;
   }
 
@@ -321,7 +321,7 @@ void RGWListRoles::execute()
     return;
   }
   vector<RGWRole> result;
-  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->user_id.tenant, result);
+  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->get_tenant(), result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
@@ -353,7 +353,7 @@ int RGWPutRolePolicy::get_params()
   }
   bufferlist bl = bufferlist::static_from_string(perm_policy);
   try {
-    const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
   }
   catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;

@@ -42,6 +42,7 @@
 #include "rgw_quota.h"
 #include "rgw_putobj.h"
 #include "rgw_multi.h"
+#include "rgw_sal.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -73,7 +74,7 @@ class StrategyRegistry;
 }
 
 int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
-                                       RGWUserCtl *user_ctl,
+				       rgw::sal::RGWRadosStore *store,
                                        RGWBucketInfo& bucket_info,
                                        map<string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy);
@@ -813,8 +814,7 @@ public:
 
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
-    rgw::sal::RGWRadosUser user(store, s->user->user_id);
-    bucket = new rgw::sal::RGWRadosBucket(store, user, s->bucket);
+    bucket = new rgw::sal::RGWRadosBucket(store, *s->user, s->bucket);
   }
   virtual int get_params() = 0;
   void send_response() override = 0;
@@ -2133,7 +2133,7 @@ public:
     return caps.check_cap("admin", RGW_CAP_READ);
   }
   int verify_permission() override {
-    return check_caps(s->user->caps);
+    return check_caps(s->user->get_info().caps);
   }
   void pre_exec() override;
   void execute() override;

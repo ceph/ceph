@@ -42,7 +42,7 @@ int RGWRestUserPolicy::verify_permission()
     return -EACCES;
   }
 
-  if(int ret = check_caps(s->user->caps); ret == 0) {
+  if(int ret = check_caps(s->user->get_caps()); ret == 0) {
     return ret;
   }
 
@@ -73,12 +73,12 @@ bool RGWRestUserPolicy::validate_input()
   return true;
 }
 
-int RGWUserPolicyRead::check_caps(RGWUserCaps& caps)
+int RGWUserPolicyRead::check_caps(const RGWUserCaps& caps)
 {
     return caps.check_cap("user-policy", RGW_CAP_READ);
 }
 
-int RGWUserPolicyWrite::check_caps(RGWUserCaps& caps)
+int RGWUserPolicyWrite::check_caps(const RGWUserCaps& caps)
 {
     return caps.check_cap("user-policy", RGW_CAP_WRITE);
 }
@@ -132,7 +132,7 @@ void RGWPutUserPolicy::execute()
   }
 
   try {
-    const Policy p(s->cct, s->user->user_id.tenant, bl);
+    const Policy p(s->cct, s->user->get_tenant(), bl);
     map<string, string> policies;
     if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
       bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];

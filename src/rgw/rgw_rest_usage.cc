@@ -14,7 +14,7 @@ class RGWOp_Usage_Get : public RGWRESTOp {
 public:
   RGWOp_Usage_Get() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_READ);
   }
   void execute() override;
@@ -60,7 +60,7 @@ class RGWOp_Usage_Delete : public RGWRESTOp {
 public:
   RGWOp_Usage_Delete() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_WRITE);
   }
   void execute() override;
