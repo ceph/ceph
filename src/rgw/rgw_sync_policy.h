@@ -176,43 +176,44 @@ struct rgw_sync_bucket_entity {
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
 
+struct rgw_sync_pipe_filter_tag {
+  string key;
+  string value;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    encode(value, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(key, bl);
+    decode(value, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  bool from_str(const string& s);
+
+  bool operator<(const rgw_sync_pipe_filter_tag& t) const {
+    if (key < t.key) {
+      return true;
+    }
+    if (t.key < key) {
+      return false;
+    }
+    return (value < t.value);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_sync_pipe_filter_tag)
+
 struct rgw_sync_pipe_filter {
-  struct _tag {
-    string key;
-    string value;
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(key, bl);
-      encode(value, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(1, bl);
-      decode(key, bl);
-      decode(value, bl);
-      DECODE_FINISH(bl);
-    }
-
-    void dump(ceph::Formatter *f) const;
-    void decode_json(JSONObj *obj);
-
-    bool from_str(const string& s);
-
-    bool operator<(const _tag& t) const {
-      if (key < t.key) {
-        return true;
-      }
-      if (t.key < key) {
-        return false;
-      }
-      return (value < t.value);
-    }
-  };
-
   std::optional<string> prefix;
-  std::set<_tag> tags;
+  std::set<rgw_sync_pipe_filter_tag> tags;
 
   void set_prefix(std::optional<std::string> opt_prefix,
                   bool prefix_rm);
@@ -224,9 +225,10 @@ struct rgw_sync_pipe_filter {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  bool is_subset_of(const rgw_sync_pipe_filter& f) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_filter)
-WRITE_CLASS_ENCODER(rgw_sync_pipe_filter::_tag)
 
 struct rgw_sync_pipe_acl_translation {
   rgw_user owner;

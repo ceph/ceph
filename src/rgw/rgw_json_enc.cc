@@ -886,13 +886,13 @@ void rgw_sync_bucket_entity::decode_json(JSONObj *obj)
   }
 }
 
-void rgw_sync_pipe_filter::_tag::dump(Formatter *f) const
+void rgw_sync_pipe_filter_tag::dump(Formatter *f) const
 {
   encode_json("key", key, f);
   encode_json("value", value, f);
 }
 
-void rgw_sync_pipe_filter::_tag::decode_json(JSONObj *obj)
+void rgw_sync_pipe_filter_tag::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("key", key, obj);
   JSONDecoder::decode_json("value", value, obj);

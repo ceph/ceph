@@ -111,7 +111,45 @@ public:
 class RGWBucketSyncFlowManager {
   friend class RGWBucketSyncPolicyHandler;
 public:
+  struct endpoints_pair {
+    rgw_sync_bucket_entity source;
+    rgw_sync_bucket_entity dest;
+
+    endpoints_pair() {}
+    endpoints_pair(const rgw_sync_bucket_pipe& pipe) {
+      source = pipe.source;
+      dest = pipe.dest;
+    }
+
+    bool operator<(const endpoints_pair& e) const {
+      if (source < e.source) {
+        return true;
+      }
+      if (e.source < source) {
+        return false;
+      }
+      return (dest < e.dest);
+    }
+  };
+
+  class pipe_rules {
+    void resolve_prefix(rgw_sync_bucket_pipe *ppipe);
+
+  public:
+    std::map<string, rgw_sync_bucket_pipe> pipe_map; /* id to pipe */
+
+    std::multimap<size_t, rgw_sync_bucket_pipe *> prefix_by_size;
+
+    map<rgw_sync_pipe_filter_tag, rgw_sync_bucket_pipe *> tag_refs;
+    map<string, rgw_sync_bucket_pipe *> prefix_refs;
+
+    void insert(const rgw_sync_bucket_pipe& pipe);
+
+    void finish_init();
+  };
+
   struct pipe_set {
+    std::map<endpoints_pair, pipe_rules> rules;
     std::set<rgw_sync_bucket_pipe> pipes;
 
     using iterator = std::set<rgw_sync_bucket_pipe>::iterator;
