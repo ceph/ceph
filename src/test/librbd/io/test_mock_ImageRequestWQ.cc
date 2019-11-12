@@ -255,6 +255,16 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
   void expect_start_op(MockImageDispatchSpec &mock_image_request) {
     EXPECT_CALL(mock_image_request, start_op()).Times(1);
   }
+
+  void expect_get_image_extents(MockImageDispatchSpec &mock_image_request,
+                                const Extents &extents) {
+    EXPECT_CALL(mock_image_request, get_image_extents())
+      .WillOnce(Return(extents));
+  }
+
+  void expect_get_tid(MockImageDispatchSpec &mock_image_request, uint64_t tid) {
+    EXPECT_CALL(mock_image_request, get_tid()).WillOnce(Return(tid));
+  }
 };
 
 TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
@@ -270,6 +280,8 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
   auto mock_queued_image_request = new MockImageDispatchSpec();
   expect_was_throttled(*mock_queued_image_request, false);
   expect_set_throttled(*mock_queued_image_request);
+  expect_get_image_extents(*mock_queued_image_request, {});
+  expect_get_tid(*mock_queued_image_request, 0);
 
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
@@ -317,6 +329,8 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockBlacklisted) {
   auto mock_queued_image_request = new MockImageDispatchSpec();
   expect_was_throttled(*mock_queued_image_request, false);
   expect_set_throttled(*mock_queued_image_request);
+  expect_get_image_extents(*mock_queued_image_request, {});
+  expect_get_tid(*mock_queued_image_request, 0);
 
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
@@ -357,6 +371,8 @@ TEST_F(TestMockIoImageRequestWQ, RefreshError) {
   auto mock_queued_image_request = new MockImageDispatchSpec();
   expect_was_throttled(*mock_queued_image_request, false);
   expect_set_throttled(*mock_queued_image_request);
+  expect_get_image_extents(*mock_queued_image_request, {});
+  expect_get_tid(*mock_queued_image_request, 0);
 
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
