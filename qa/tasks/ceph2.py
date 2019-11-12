@@ -531,9 +531,7 @@ def ceph_mdss(ctx, config):
                     if teuthology.is_type('mds', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
-            nodes.append(remote.shortname)
-
-            ### FIXME names ###
+            nodes.append(remote.shortname + '=' + id_)
             ctx.daemons.register_daemon(
                 remote, 'mds', id_,
                 cluster=cluster_name,
