@@ -26,6 +26,40 @@ try:
 except ImportError:
     T, G = object, object
 
+def split_host(host):
+    """
+    Split host into host and (optional) daemon name parts
+    e.g.,
+      "myhost=name" -> ('myhost', 'name')
+      "myhost" -> ('myhost', None)
+    """
+    # TODO: stricter validation
+    a = host.split('=', 1)
+    if len(a) == 1:
+        return (a[0], None)
+    else:
+        assert len(a) == 2
+        return tuple(a)
+
+def split_host_with_network(host):
+    """
+    Split host into host, network, and (optional) daemon name parts.  The network
+    part can be an IP, CIDR, or ceph addrvec like
+    '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
+    e.g.,
+      "myhost:1.2.3.4=name" -> ('myhost', '1.2.3.4', 'name')
+      "myhost:1.2.3.0/24" -> ('myhost', '1.2.3.0/24', None)
+    """
+    # TODO: stricter validation
+    (host, name) = host.split('=', 1)
+    parts = host.split(":", 1)
+    if len(parts) == 1:
+        return (parts[0], None, name)
+    elif len(parts) == 2:
+        return (parts[0], parts[1], name)
+    else:
+        raise RuntimeError("Invalid host specification: "
+                           "'{}'".format(host))
 
 class OrchestratorError(Exception):
     """
@@ -597,16 +631,6 @@ class PlacementSpec(object):
     """
     def __init__(self, label=None, nodes=[]):
         self.label = label
-
-        def split_host(host):
-            """Split host into host and name parts"""
-            # TODO: stricter validation
-            a = host.split('=', 1)
-            if len(a) == 1:
-                return (a[0], None)
-            else:
-                assert len(a) == 2
-                return tuple(a)
 
         self.nodes = list(map(split_host, nodes))
 
