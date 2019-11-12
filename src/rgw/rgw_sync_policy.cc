@@ -31,6 +31,21 @@ bool rgw_sync_pipe_filter_tag::from_str(const string& s)
   return true;
 }
 
+bool rgw_sync_pipe_filter_tag::operator==(const string& s) const
+{
+  if (s.empty()) {
+    return false;
+  }
+
+  auto pos = s.find('=');
+  if (pos == string::npos) {
+    return value.empty() && (s == key);
+  }
+
+  return s.compare(0, pos, s) == 0 &&
+         s.compare(pos + 1, s.size() - pos - 1, value) == 0;
+}
+
 void rgw_sync_pipe_filter::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -98,6 +113,30 @@ bool rgw_sync_pipe_filter::is_subset_of(const rgw_sync_pipe_filter& f) const
   }
 
   return true;
+}
+
+bool rgw_sync_pipe_filter::check_tag(const string& s) const
+{
+  if (tags.empty()) { /* tag filter wasn't defined */
+    return true;
+  }
+
+  for (auto& t : tags) {
+    if (t == s) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool rgw_sync_pipe_filter::check_tags(const std::vector<string>& tags) const
+{
+  for (auto& t : tags) {
+    if (check_tag(t)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void rgw_sync_bucket_entity::apply_bucket(std::optional<rgw_bucket> b)

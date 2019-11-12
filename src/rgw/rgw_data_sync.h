@@ -44,6 +44,10 @@ struct rgw_bucket_sync_pipe {
   rgw_bucket_sync_pair_info info;
   RGWBucketInfo source_bucket_info;
   RGWBucketInfo dest_bucket_info;
+
+  RGWBucketSyncFlowManager::pipe_rules_ref& get_rules() {
+    return info.handler.rules;
+  }
 };
 
 inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pipe& p) {

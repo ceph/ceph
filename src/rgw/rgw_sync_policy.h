@@ -208,6 +208,8 @@ struct rgw_sync_pipe_filter_tag {
     }
     return (value < t.value);
   }
+
+  bool operator==(const string& s) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_filter_tag)
 
@@ -227,6 +229,9 @@ struct rgw_sync_pipe_filter {
   void decode_json(JSONObj *obj);
 
   bool is_subset_of(const rgw_sync_pipe_filter& f) const;
+
+  bool check_tag(const string& s) const;
+  bool check_tags(const std::vector<string>& tags) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_filter)
 
