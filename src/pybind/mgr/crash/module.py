@@ -1,9 +1,11 @@
+import hashlib
 from mgr_module import MgrModule
 import datetime
 import errno
 import json
 from collections import defaultdict
 from prettytable import PrettyTable
+import re
 from threading import Event
 
 
@@ -134,6 +136,36 @@ class Module(MgrModule):
             return f(time)
         return filter(inner, self.crashes.items())
 
+    # stack signature helpers
+
+    def sanitize_backtrace(self, bt):
+        ret = list()
+        for func_record in bt:
+            # split into two fields on last space, take the first one,
+            # strip off leading ( and trailing )
+            func_plus_offset = func_record.rsplit(' ', 1)[0][1:-1]
+            ret.append(func_plus_offset.split('+')[0])
+
+        return ret
+
+    ASSERT_MATCHEXPR = re.compile(r'(?s)(.*) thread .* time .*(: .*)\n')
+
+    def sanitize_assert_msg(self, msg):
+        # (?s) allows matching newline.  get everything up to "thread" and
+        # then after-and-including the last colon-space.  This skips the
+        # thread id, timestamp, and file:lineno, because file is already in
+        # the beginning, and lineno may vary.
+        return ''.join(self.ASSERT_MATCHEXPR.match(msg).groups())
+
+    def calc_sig(self, bt, assert_msg):
+        sig = hashlib.sha256()
+        for func in self.sanitize_backtrace(bt):
+            sig.update(func.encode())
+        if assert_msg:
+            sig.update(self.sanitize_assert_msg(assert_msg).encode())
+        # remove 'ord' for py3
+        return ''.join('%02x' % ord(c) for c in sig.digest())
+
     # command handlers
 
     def do_info(self, cmd, inbuf):
@@ -149,6 +181,8 @@ class Module(MgrModule):
             metadata = self.validate_crash_metadata(inbuf)
         except Exception as e:
             return errno.EINVAL, '', 'malformed crash metadata: %s' % e
+        metadata['stack_sig'] = self.calc_sig(
+                metadata.get('backtrace'), metadata.get('assert_msg'))
         crashid = metadata['crash_id']
 
         if crashid not in self.crashes:
