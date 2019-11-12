@@ -22,6 +22,11 @@ except ImportError as e:
     remoto = None
     remoto_import_error = str(e)
 
+try:
+    from typing import List
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SSH_CONFIG = ('Host *\n'
@@ -31,6 +36,7 @@ DEFAULT_SSH_CONFIG = ('Host *\n'
 # high-level TODO:
 #  - bring over some of the protections from ceph-deploy that guard against
 #    multiple bootstrapping / initialization
+
 
 class SSHCompletionmMixin(object):
     def __init__(self, result):
@@ -43,6 +49,7 @@ class SSHCompletionmMixin(object):
     @property
     def result(self):
         return list(map(lambda r: r.get(), self._result))
+
 
 class SSHReadCompletion(SSHCompletionmMixin, orchestrator.ReadCompletion):
     @property
@@ -69,6 +76,7 @@ class SSHWriteCompletion(SSHCompletionmMixin, orchestrator.WriteCompletion):
                 return True
         return False
 
+
 class SSHWriteCompletionReady(SSHWriteCompletion):
     def __init__(self, result):
         orchestrator.WriteCompletion.__init__(self)
@@ -89,6 +97,7 @@ class SSHWriteCompletionReady(SSHWriteCompletion):
     @property
     def is_errored(self):
         return False
+
 
 def log_exceptions(f):
     if six.PY3:
@@ -604,7 +613,6 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self.log.debug('_service_action code %s out %s' % (code, out))
         return "{} {} from host '{}'".format(action, name, host)
 
-
     def get_inventory(self, node_filter=None, refresh=False):
         """
         Return the storage inventory of nodes matching the given filter.
@@ -625,7 +633,6 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         @log_exceptions
         def run(host, host_info):
             # type: (str, orchestrator.OutdatableData) -> orchestrator.InventoryNode
-
 
             if host_info.outdated(self.inventory_cache_timeout) or refresh:
                 self.log.info("refresh stale inventory for '{}'".format(host))
@@ -651,12 +658,15 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     @log_exceptions
     def blink_device_light(self, ident_fault, on, locs):
-        def blink(host, dev, ident_fault, on):
+        # type: (str, bool, List[orchestrator.DeviceLightLoc]) -> SSHWriteCompletion
+
+        def blink(host, dev, ident_fault_, on_):
+            # type: (str, str, str, bool) -> str
             cmd = [
                 'lsmcli',
                 'local-disk-%s-led-%s' % (
-                    ident_fault,
-                    'on' if on else 'off'),
+                    ident_fault_,
+                    'on' if on_ else 'off'),
                 '--path', '/dev/' + dev,
             ]
             out, code = self._run_ceph_daemon(host, 'osd', 'shell', ['--'] + cmd,
@@ -664,9 +674,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if code:
                 raise RuntimeError(
                     'Unable to affect %s light for %s:%s. Command: %s' % (
-                        ident_fault, host, dev, ' '.join(cmd)))
+                        ident_fault_, host, dev, ' '.join(cmd)))
             return "Set %s light for %s:%s %s" % (
-                ident_fault, host, dev, 'on' if on else 'off')
+                ident_fault_, host, dev, 'on' if on_ else 'off')
 
         results = []
         for loc in locs:
