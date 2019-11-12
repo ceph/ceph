@@ -106,6 +106,14 @@ class MonitorDBStore
       }
     }
 
+    int approx_size() const {
+      return 6 + 1 +
+	4 + prefix.size() +
+	4 + key.size() +
+	4 + endkey.size() +
+	4 + bl.length();
+    }
+
     static void generate_test_instances(list<Op*>& ls) {
       ls.push_back(new Op);
       // we get coverage here from the Transaction instances
@@ -118,7 +126,7 @@ class MonitorDBStore
     list<Op> ops;
     uint64_t bytes, keys;
 
-    Transaction() : bytes(0), keys(0) {}
+    Transaction() : bytes(6 + 4 + 8*2), keys(0) {}
 
     enum {
       OP_PUT	= 1,
@@ -130,7 +138,7 @@ class MonitorDBStore
     void put(const string& prefix, const string& key, const bufferlist& bl) {
       ops.push_back(Op(OP_PUT, prefix, key, bl));
       ++keys;
-      bytes += prefix.length() + key.length() + bl.length();
+      bytes += ops.back().approx_size();
     }
 
     void put(const string& prefix, version_t ver, const bufferlist& bl) {
@@ -149,7 +157,7 @@ class MonitorDBStore
     void erase(const string& prefix, const string& key) {
       ops.push_back(Op(OP_ERASE, prefix, key));
       ++keys;
-      bytes += prefix.length() + key.length();
+      bytes += ops.back().approx_size();
     }
 
     void erase(const string& prefix, version_t ver) {
@@ -162,7 +170,7 @@ class MonitorDBStore
 		     const string& end) {
       ops.push_back(Op(OP_ERASE_RANGE, prefix, begin, end));
       ++keys;
-      bytes += prefix.length() + begin.length() + end.length();
+      bytes += ops.back().approx_size();
     }
 
     void compact_prefix(const string& prefix) {
