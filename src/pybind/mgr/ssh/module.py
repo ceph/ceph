@@ -209,10 +209,15 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
-    def get_unique_name(self, existing, prefix=None):
+    def get_unique_name(self, existing, prefix=None, forcename=None):
         """
         Generate a unique random service name
         """
+        if forcename:
+            if len([d for d in existing if d.service_instance == name]):
+                raise RuntimeError('specified name %s already in use', name)
+            return forcename
+
         while True:
             if prefix:
                 name = prefix + '.'
@@ -860,7 +865,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return add_func(spec)
         return SSHWriteCompletion(results)
 
-    def _create_mon(self, host, network):
+    def _create_mon(self, host, network, name):
         """
         Create a new monitor on the given host.
         """
@@ -882,7 +887,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         else:
             raise RuntimeError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
 
-        return self._create_daemon('mon', host, host, keyring,
+        return self._create_daemon('mon', name or host, host, keyring,
                                    extra_args=extra_args)
 
     def update_mons(self, num, hosts):
@@ -901,9 +906,14 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self._require_hosts(map(lambda h: h[0], hosts))
 
         # current support requires a network to be specified
-        for host, network in hosts:
+        for host, network, name in hosts:
             if not network:
                 raise RuntimeError("Host '{}' missing network part".format(host))
+
+        daemons = self._get_services('mon')
+        for _, _, name in hosts:
+            if name and len([d for d in daemons if d.service_instance == name]):
+                raise RuntimeError('name %s alrady exists', name)
 
         # explicit placement: enough hosts provided?
         num_new_mons = num - num_mons
@@ -917,9 +927,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         # TODO: we may want to chain the creation of the monitors so they join
         # the quorum one at a time.
         results = []
-        for host, network in hosts:
-            result = self._worker_pool.apply_async(self._create_mon, (host,
-                network))
+        for host, network, name in hosts:
+            result = self._worker_pool.apply_async(self._create_mon,
+                                                   (host, network, name))
             results.append(result)
 
         return SSHWriteCompletion(results)
@@ -951,7 +961,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             return SSHWriteCompletionReady("The requested number of managers exist.")
 
         # check that all the hosts are registered
-        self._require_hosts(hosts)
+        self._require_hosts(map(lambda h: h[0], hosts))
 
         results = []
         if num < num_mgrs:
@@ -997,13 +1007,19 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                     "Error: {} hosts provided, expected {}".format(
                         len(hosts), num_new_mgrs))
 
+            for _, name in hosts:
+                if name and len([d for d in daemons if d.service_instance == name]):
+                    raise RuntimeError('name %s alrady exists', name)
+
             self.log.info("creating {} managers on hosts: '{}'".format(
-                num_new_mgrs, ",".join(hosts)))
+                num_new_mgrs, ",".join(map(lambda h: h[0], hosts))))
 
             for i in range(num_new_mgrs):
-                name = self.get_unique_name(daemons)
+                host, name = hosts[i]
+                if not name:
+                    name = self.get_unique_name(daemons)
                 result = self._worker_pool.apply_async(self._create_mgr,
-                                                       (hosts[i], name))
+                                                       (host, name))
                 results.append(result)
 
         return SSHWriteCompletion(results)
@@ -1014,10 +1030,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         daemons = self._get_services('mds')
         results = []
         num_added = 0
-        for host in spec.placement.nodes:
+        for host, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
-            mds_id = self.get_unique_name(daemons, spec.name)
+            mds_id = self.get_unique_name(daemons, spec.name, name)
             self.log.debug('placing mds.%s on host %s' % (mds_id, host))
             results.append(
                 self._worker_pool.apply_async(self._create_mds, (mds_id, host))
@@ -1071,10 +1087,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         daemons = self._get_services('rgw')
         results = []
         num_added = 0
-        for host in spec.placement.nodes:
+        for host, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
-            rgw_id = self.get_unique_name(daemons, spec.name)
+            rgw_id = self.get_unique_name(daemons, spec.name, name)
             self.log.debug('placing rgw.%s on host %s' % (rgw_id, host))
             results.append(
                 self._worker_pool.apply_async(self._create_rgw, (rgw_id, host))
@@ -1117,13 +1133,14 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def add_rbd_mirror(self, spec):
         if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
             raise RuntimeError("must specify at least %d hosts" % spec.count)
+        self.log.debug('nodes %s' % spec.placement.nodes)
         daemons = self._get_services('rbd-mirror')
         results = []
         num_added = 0
-        for host in spec.placement.nodes:
+        for host, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
-            daemon_id = self.get_unique_name(daemons)
+            daemon_id = self.get_unique_name(daemons, None, name)
             self.log.debug('placing rbd-mirror.%s on host %s' % (daemon_id,
                                                                  host))
             results.append(
