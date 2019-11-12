@@ -354,6 +354,7 @@ int main(int argc, const char **argv)
 
     dout(10) << "public_network " << g_conf()->public_network << dendl;
     dout(10) << "public_addr " << g_conf()->public_addr << dendl;
+    dout(10) << "public_addrv " << g_conf()->public_addrv << dendl;
 
     common_init_finish(g_ceph_context);
 
@@ -400,6 +401,14 @@ int main(int argc, const char **argv)
       if (monmap.contains(g_conf()->name.get_id())) {
 	// hmm, make sure the ip listed exists on the current host?
 	// maybe later.
+      } else if (!g_conf()->public_addrv.empty()) {
+	entity_addrvec_t av = g_conf()->public_addrv;
+	string name;
+	if (monmap.contains(av, &name)) {
+	  monmap.rename(name, g_conf()->name.get_id());
+	  dout(0) << argv[0] << ": renaming mon." << name << " " << av
+		  << " to mon." << g_conf()->name.get_id() << dendl;
+	}
       } else if (!g_conf()->public_addr.is_blank_ip()) {
 	entity_addrvec_t av = make_mon_addrs(g_conf()->public_addr);
 	string name;
@@ -715,7 +724,10 @@ int main(int argc, const char **argv)
     dout(0) << g_conf()->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
-    if (!g_conf()->public_addr.is_blank_ip()) {
+    if (!g_conf()->public_addrv.empty()) {
+      ipaddrs = g_conf()->public_addrv;
+      dout(0) << "using public_addrv " << ipaddrs << dendl;
+    } else if (!g_conf()->public_addr.is_blank_ip()) {
       ipaddrs = make_mon_addrs(g_conf()->public_addr);
       dout(0) << "using public_addr " << g_conf()->public_addr << " -> "
 	      << ipaddrs << dendl;

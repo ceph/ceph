@@ -176,7 +176,7 @@ int Option::parse_value(
       return -EINVAL;
     }
     *out = addr;
-  } else if (type == Option::TYPE_ADDR) {
+  } else if (type == Option::TYPE_ADDRVEC) {
     entity_addrvec_t addr;
     if (!addr.parse(val.c_str())){
       return -EINVAL;
@@ -362,6 +362,11 @@ std::vector<Option> get_global_options() {
     .add_tag("service"),
 
     Option("public_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
+    .set_description("public-facing address to bind to")
+    .set_flag(Option::FLAG_STARTUP)
+    .add_service({"mon", "mds", "osd", "mgr"}),
+
+    Option("public_addrv", Option::TYPE_ADDRVEC, Option::LEVEL_BASIC)
     .set_description("public-facing address to bind to")
     .set_flag(Option::FLAG_STARTUP)
     .add_service({"mon", "mds", "osd", "mgr"}),
