@@ -476,7 +476,7 @@ def ceph_osds(ctx, config):
     try:
         log.info('Deploying OSDs...')
 
-        # provision OSDs in order
+        # provision OSDs in numeric order
         id_to_remote = {}
         devs_by_remote = {}
         for remote, roles in ctx.cluster.remotes.items():
@@ -484,11 +484,11 @@ def ceph_osds(ctx, config):
             for osd in [r for r in roles
                         if teuthology.is_type('osd', cluster_name)(r)]:
                 _, _, id_ = teuthology.split_role(osd)
-                id_to_remote[id_] = (osd, remote)
+                id_to_remote[int(id_)] = (osd, remote)
 
         cur = 0
-        for osd_id, t in id_to_remote.items():
-            osd, remote = t
+        for osd_id in sorted(id_to_remote.keys()):
+            osd, remote = id_to_remote[osd_id]
             _, _, id_ = teuthology.split_role(osd)
             assert int(id_) == cur
             devs = devs_by_remote[remote]
