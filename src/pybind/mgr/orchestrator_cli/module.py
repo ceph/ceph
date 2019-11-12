@@ -41,6 +41,7 @@ def _cli_command(perm):
 _read_cli = _cli_command('r')
 _write_cli = _cli_command('rw')
 
+
 class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = [
         {'name': 'orchestrator'}
@@ -89,7 +90,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     def _get_device_locations(self, dev_id):
         # type: (str) -> List[orchestrator.DeviceLightLoc]
         locs = [d['location'] for d in self.get('devices')['devices'] if d['devid'] == dev_id]
-        return [orchestrator.DeviceLightLoc(**l) for l in  sum(locs, [])]
+        return [orchestrator.DeviceLightLoc(**l) for l in sum(locs, [])]
 
     @_read_cli(prefix='device ls-lights',
                desc='List currently active device indicator lights')
