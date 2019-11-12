@@ -1307,6 +1307,20 @@ def command_unit():
 
 ##################################
 
+def command_logs():
+    cmd = [podman_path, 'logs']
+    if args.follow:
+        cmd.append('-f')
+    if args.tail:
+        cmd.append('--tail=' + str(args.tail))
+    cmd.append('ceph-%s-%s' % (args.fsid, args.name))
+
+    # call this directly, without our wrapper, so that we get an unmolested
+    # stdout with logger prefixing.
+    subprocess.call(cmd)
+
+##################################
+
 def command_ls():
     ls = list_daemons(detail=not args.no_detail)
     print(json.dumps(ls, indent=4))
@@ -1697,6 +1711,25 @@ def _get_parser():
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
+
+    parser_logs = subparsers.add_parser(
+        'logs', help='fetch the log for a daemon\'s container')
+    parser_logs.set_defaults(func=command_logs)
+    parser_logs.add_argument(
+        '--fsid',
+        required=True,
+        help='cluster FSID')
+    parser_logs.add_argument(
+        '--name', '-n',
+        required=True,
+        help='daemon name (type.id)')
+    parser_logs.add_argument(
+        '-f', '--follow',
+        action='store_true',
+        help='Follow log output')
+    parser_logs.add_argument(
+        '--tail',
+        help='Output the specified number of lines at the end of the log')
 
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
