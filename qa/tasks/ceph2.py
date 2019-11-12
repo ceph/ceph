@@ -642,6 +642,7 @@ def task(ctx, config):
         ctx.daemons = DaemonGroup(use_ceph_daemon=True)
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
+        ctx.managers = {}
     if 'cluster' not in config:
         config['cluster'] = 'ceph'
     cluster_name = config['cluster']
@@ -690,6 +691,14 @@ def task(ctx, config):
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
     ):
+        ctx.managers[cluster_name] = CephManager(
+            ctx.ceph[cluster_name].bootstrap_remote,
+            ctx=ctx,
+            logger=log.getChild('ceph_manager.' + cluster_name),
+            cluster=cluster_name,
+            ceph_daemon=True,
+        )
+
         try:
             log.info('Setup complete, yielding')
             yield
