@@ -1322,28 +1322,34 @@ def command_logs():
 ##################################
 
 def command_ls():
-    ls = list_daemons(detail=not args.no_detail)
+    ls = list_daemons(detail=not args.no_detail,
+                      legacy_dir=args.legacy_dir)
     print(json.dumps(ls, indent=4))
 
-def list_daemons(detail=True):
+def list_daemons(detail=True, legacy_dir=None):
     host_version = None
     ls = []
 
+    data_dir = args.data_dir
+    if legacy_dir is not None:
+        data_dir = os.path.abspath(legacy_dir + data_dir)
+
     # /var/lib/ceph
-    if os.path.exists(args.data_dir):
-        for i in os.listdir(args.data_dir):
+    if os.path.exists(data_dir):
+        for i in os.listdir(data_dir):
             if i in ['mon', 'osd', 'mds', 'mgr']:
                 daemon_type = i
-                for j in os.listdir(os.path.join(args.data_dir, i)):
+                for j in os.listdir(os.path.join(data_dir, i)):
                     if '-' not in j:
                         continue
                     (cluster, daemon_id) = j.split('-', 1)
-                    fsid = get_legacy_daemon_fsid(cluster, daemon_type,
-                                                  daemon_id) or 'unknown'
+                    fsid = get_legacy_daemon_fsid(
+                            cluster, daemon_type, daemon_id,
+                            legacy_dir=legacy_dir)
                     i = {
                         'style': 'legacy',
                         'name': '%s.%s' % (daemon_type, daemon_id),
-                        'fsid': fsid,
+                        'fsid': fsid if fsid is not None else 'unknown',
                     }
                     if detail:
                         (i['enabled'], i['state']) = check_unit(
@@ -1359,7 +1365,7 @@ def list_daemons(detail=True):
                     ls.append(i)
             elif is_fsid(i):
                 fsid = i
-                for j in os.listdir(os.path.join(args.data_dir, i)):
+                for j in os.listdir(os.path.join(data_dir, i)):
                     if j == 'crash':
                         name = 'crash'
                         unit_name = 'ceph-%s-crash.service' % fsid
@@ -1583,11 +1589,15 @@ def _get_parser():
 
     parser_ls = subparsers.add_parser(
         'ls', help='list daemon instances on this host')
+    parser_ls.set_defaults(func=command_ls)
     parser_ls.add_argument(
         '--no-detail',
         action='store_true',
         help='Do not include daemon status')
-    parser_ls.set_defaults(func=command_ls)
+    parser_ls.add_argument(
+        '--legacy-dir',
+        default='/',
+        help='base directory for legacy daemon data')
 
     parser_adopt = subparsers.add_parser(
         'adopt', help='adopt daemon deployed with a different tool')
