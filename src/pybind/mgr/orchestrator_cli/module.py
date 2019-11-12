@@ -260,17 +260,13 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout=json.dumps(data))
         else:
             table = PrettyTable(
-                ['TYPE', 'ID', 'HOST', 'CONTAINER', 'VERSION', 'STATUS',
+                ['NAME', 'HOST', 'CONTAINER', 'VERSION', 'STATUS',
                  'DESCRIPTION'],
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 1
-            for s in services:
-                if s.service is None:
-                    service_id = s.service_instance
-                else:
-                    service_id = "{0}.{1}".format(s.service, s.service_instance)
+            for s in sorted(services, key=lambda s: s.name()):
                 status = {
                     -1: 'error',
                     0: 'stopped',
@@ -279,8 +275,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                 }[s.status]
 
                 table.add_row((
-                    s.service_type,
-                    service_id,
+                    s.name(),
                     ukn(s.nodename),
                     ukn(s.container_id),
                     ukn(s.version),
