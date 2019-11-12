@@ -132,42 +132,61 @@ public:
     }
   };
 
+  /*
+   * pipe_rules: deal with a set of pipes that have common endpoints_pair
+   */
   class pipe_rules {
     void resolve_prefix(rgw_sync_bucket_pipe *ppipe);
 
   public:
-    std::map<string, rgw_sync_bucket_pipe> pipe_map; /* id to pipe */
-
     std::multimap<size_t, rgw_sync_bucket_pipe *> prefix_by_size;
 
     map<rgw_sync_pipe_filter_tag, rgw_sync_bucket_pipe *> tag_refs;
     map<string, rgw_sync_bucket_pipe *> prefix_refs;
 
-    void insert(const rgw_sync_bucket_pipe& pipe);
+    void insert(rgw_sync_bucket_pipe *pipe);
 
     void finish_init();
   };
 
+  /*
+   * pipe_handler: extends endpoints_rule to point at the corresponding rules handler
+   */
+  struct pipe_handler : public endpoints_pair {
+    pipe_rules *rules;
+
+    pipe_handler() {}
+    pipe_handler(pipe_rules *_rules,
+                 const rgw_sync_bucket_pipe& _pipe) : endpoints_pair(_pipe),
+                                                      rules(_rules) {}
+    bool specific() const {
+      return source.specific() && dest.specific();
+    }
+  };
+
   struct pipe_set {
     std::map<endpoints_pair, pipe_rules> rules;
-    std::set<rgw_sync_bucket_pipe> pipes;
+    std::map<string, rgw_sync_bucket_pipe> pipe_map;
 
-    using iterator = std::set<rgw_sync_bucket_pipe>::iterator;
+    std::set<pipe_handler> handlers;
+
+    using iterator = std::set<pipe_handler>::iterator;
 
     void clear() {
-      pipes.clear();
+      rules.clear();
+      pipe_map.clear();
+      handlers.clear();
     }
 
-    void insert(const rgw_sync_bucket_pipe& pipe) {
-      pipes.insert(pipe);
+    void insert(const rgw_sync_bucket_pipe& pipe);
+    void finish_init();
+
+    iterator begin() const {
+      return handlers.begin();
     }
 
-    iterator begin() {
-      return pipes.begin();
-    }
-
-    iterator end() {
-      return pipes.end();
+    iterator end() const {
+      return handlers.end();
     }
 
     void dump(ceph::Formatter *f) const;
@@ -209,6 +228,11 @@ public:
                bool only_enabled) const;
 
 };
+
+ostream& operator<<(ostream& os, const RGWBucketSyncFlowManager::endpoints_pair& e) {
+  os << e.dest << " -> " << e.source;
+  return os;
+}
 
 class RGWBucketSyncPolicyHandler {
   const RGWBucketSyncPolicyHandler *parent{nullptr};
@@ -290,8 +314,8 @@ public:
     *sources = &sources_by_name;
     *targets = &targets_by_name;
   }
-  void get_pipes(RGWBucketSyncFlowManager::pipe_set *sources, RGWBucketSyncFlowManager::pipe_set *targets,
-		 std::optional<rgw_sync_bucket_entity> filter_peer);
+  void get_pipes(std::set<rgw_sync_bucket_pipe> *sources, std::set<rgw_sync_bucket_pipe> *targets,
+                 std::optional<rgw_sync_bucket_entity> filter_peer);
 
   const std::set<rgw_bucket>& get_source_hints() const {
     return source_hints;

@@ -17,11 +17,13 @@
 #include "rgw_sync_trace.h"
 #include "rgw_sync_policy.h"
 
+#include "rgw_bucket_sync.h"
+
 class JSONObj;
 struct rgw_sync_bucket_pipe;
 
 struct rgw_bucket_sync_pair_info {
-  rgw_sync_pipe_params params;
+  RGWBucketSyncFlowManager::pipe_handler handler; /* responsible for sync filters */
   rgw_bucket_shard source_bs;
   rgw_bucket_shard dest_bs;
 };
@@ -32,10 +34,6 @@ inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pair_info& p) {
   }
 
   out << p.source_bs;
-
-  if (p.params.filter.prefix) {
-    out << "/" << *p.params.filter.prefix + "*";
-  }
 
   out << "->" << p.dest_bs.bucket;
 
