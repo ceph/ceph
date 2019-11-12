@@ -457,10 +457,11 @@ def ceph_mgrs(ctx, config):
                     started=True,
                 )
 
-        shell(ctx, cluster_name, remote, [
-            'ceph', 'orchestrator', 'mgr', 'update',
-            str(len(nodes) + 1)] + nodes
-        )
+        if nodes:
+            shell(ctx, cluster_name, remote, [
+                'ceph', 'orchestrator', 'mgr', 'update',
+                str(len(nodes) + 1)] + nodes
+            )
 
         yield
 
@@ -542,11 +543,12 @@ def ceph_mdss(ctx, config):
                 started=True,
             )
 
-    shell(ctx, cluster_name, remote, [
-        'ceph', 'orchestrator', 'mds', 'update',
-        'all',
-        str(len(nodes))] + nodes
-    )
+    if nodes:
+        shell(ctx, cluster_name, remote, [
+            'ceph', 'orchestrator', 'mds', 'update',
+            'all',
+            str(len(nodes))] + nodes
+        )
 
     yield
 
