@@ -547,6 +547,13 @@ Usage:
             return HandleCommandResult(-errno.EINVAL,
                     stderr="Invalid number of mgrs: require {} > 0".format(num))
 
+        if hosts:
+            try:
+                hosts = list(map(orchestrator.split_host, hosts))
+            except Exception as e:
+                msg = "Failed to parse host list: '{}': {}".format(hosts, e)
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
         completion = self.update_mgrs(num, hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
@@ -563,21 +570,9 @@ Usage:
             return HandleCommandResult(-errno.EINVAL,
                     stderr="Invalid number of mons: require {} > 0".format(num))
 
-        def split_host(host):
-            """Split host into host and network parts"""
-            # TODO: stricter validation
-            parts = host.split(":", 1)
-            if len(parts) == 1:
-                return (parts[0], None)
-            elif len(parts) == 2:
-                return (parts[0], parts[1])
-            else:
-                raise RuntimeError("Invalid host specification: "
-                        "'{}'".format(host))
-
         if hosts:
             try:
-                hosts = list(map(split_host, hosts))
+                hosts = list(map(orchestrator.split_host_with_network, hosts))
             except Exception as e:
                 msg = "Failed to parse host list: '{}': {}".format(hosts, e)
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
