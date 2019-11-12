@@ -2705,6 +2705,16 @@ class CephManager:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
 
+    def wait_until_healthy(self, timeout=None):
+        self.log("wait_until_healthy")
+        start = time.time()
+        while self.get_mon_health()['status'] != 'HEALTH_OK':
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_until_healthy'
+            time.sleep(3)
+        self.log("wait_until_healthy done")
+
     def get_filepath(self):
         """
         Return path to osd data with {id} needing to be replaced
