@@ -136,36 +136,59 @@ public:
    * pipe_rules: deal with a set of pipes that have common endpoints_pair
    */
   class pipe_rules {
-    void resolve_prefix(rgw_sync_bucket_pipe *ppipe);
+    std::vector<rgw_sync_bucket_pipe> pipes;
 
   public:
-    std::multimap<size_t, rgw_sync_bucket_pipe *> prefix_by_size;
+    using prefix_map_t = multimap<string, rgw_sync_bucket_pipe *>;
 
-    map<rgw_sync_pipe_filter_tag, rgw_sync_bucket_pipe *> tag_refs;
-    map<string, rgw_sync_bucket_pipe *> prefix_refs;
+    map<string, rgw_sync_bucket_pipe *> tag_refs;
+    prefix_map_t prefix_refs;
 
-    void insert(rgw_sync_bucket_pipe *pipe);
+    void insert(const rgw_sync_bucket_pipe& pipe);
 
-    void finish_init();
+    bool find_obj_params(const rgw_obj_key& key, 
+                         const vector<string>& tags,
+                         rgw_sync_pipe_params *params) const;
+
+    void scan_prefixes(std::vector<string> *prefixes) const;
+
+    prefix_map_t::const_iterator prefix_begin() const {
+      return prefix_refs.begin();
+    }
+    prefix_map_t::const_iterator prefix_search(const std::string& s) const;
+    prefix_map_t::const_iterator prefix_end() const {
+      return prefix_refs.end();
+    }
   };
+
+  using pipe_rules_ref = std::shared_ptr<pipe_rules>;
 
   /*
    * pipe_handler: extends endpoints_rule to point at the corresponding rules handler
    */
   struct pipe_handler : public endpoints_pair {
-    pipe_rules *rules;
+    pipe_rules_ref rules;
 
     pipe_handler() {}
-    pipe_handler(pipe_rules *_rules,
+    pipe_handler(pipe_rules_ref& _rules,
                  const rgw_sync_bucket_pipe& _pipe) : endpoints_pair(_pipe),
                                                       rules(_rules) {}
     bool specific() const {
       return source.specific() && dest.specific();
     }
+    
+    bool find_obj_params(const rgw_obj_key& key,
+                         const std::vector<string>& tags,
+                         rgw_sync_pipe_params *params) const {
+      if (!rules) {
+        return false;
+      }
+      return rules->find_obj_params(key, tags, params);
+    }
   };
 
   struct pipe_set {
-    std::map<endpoints_pair, pipe_rules> rules;
+    std::map<endpoints_pair, pipe_rules_ref> rules;
     std::map<string, rgw_sync_bucket_pipe> pipe_map;
 
     std::set<pipe_handler> handlers;
@@ -179,7 +202,6 @@ public:
     }
 
     void insert(const rgw_sync_bucket_pipe& pipe);
-    void finish_init();
 
     iterator begin() const {
       return handlers.begin();
@@ -229,7 +251,7 @@ public:
 
 };
 
-ostream& operator<<(ostream& os, const RGWBucketSyncFlowManager::endpoints_pair& e) {
+static inline ostream& operator<<(ostream& os, const RGWBucketSyncFlowManager::endpoints_pair& e) {
   os << e.dest << " -> " << e.source;
   return os;
 }

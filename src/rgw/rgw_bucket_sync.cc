@@ -267,13 +267,17 @@ vector<rgw_sync_bucket_pipe> rgw_sync_group_pipe_map::find_pipes(const string& s
   return vector<rgw_sync_bucket_pipe>();
 }
 
-void RGWBucketSyncFlowManager::pipe_rules::insert(rgw_sync_bucket_pipe *ppipe)
+void RGWBucketSyncFlowManager::pipe_rules::insert(const rgw_sync_bucket_pipe& pipe)
 {
+  pipes.push_back(pipe);
+
+  auto ppipe = &pipes.back();
   auto prefix = ppipe->params.filter.prefix.value_or(string());
 
-  prefix_by_size.insert(make_pair(prefix.size(), ppipe));
+  prefix_refs.insert(make_pair(prefix, ppipe));
 
-  for (auto& tag : ppipe->params.filter.tags) {
+  for (auto& t : ppipe->params.filter.tags) {
+    string tag = t.key + "=" + t.value;
     auto titer = tag_refs.find(tag);
     if (titer != tag_refs.end() &&
         ppipe->params.priority > titer->second->params.priority) {
@@ -284,55 +288,80 @@ void RGWBucketSyncFlowManager::pipe_rules::insert(rgw_sync_bucket_pipe *ppipe)
   }
 }
 
-void RGWBucketSyncFlowManager::pipe_set::finish_init()
+#warning add support for tags
+bool RGWBucketSyncFlowManager::pipe_rules::find_obj_params(const rgw_obj_key& key,
+                                                           const vector<string>& tags,
+                                                           rgw_sync_pipe_params *params) const
 {
-  for (auto& entry : rules) {
-    entry.second.finish_init();
+  auto iter = prefix_refs.lower_bound(key.name);
+  if (iter == prefix_refs.end()) {
+    return false;
   }
-}
 
-void RGWBucketSyncFlowManager::pipe_rules::resolve_prefix(rgw_sync_bucket_pipe *ppipe)
-{
-  auto prefix = ppipe->params.filter.prefix.value_or(string());
-  auto iter = prefix_refs.lower_bound(prefix);
+  auto max = prefix_refs.end();
 
-  while (iter != prefix_refs.end()) {
-    auto cur_iter = iter++;
+  std::optional<int> priority;
 
-    auto& cur_pipe = *cur_iter->second;
-    auto cur_prefix = cur_pipe.params.filter.prefix.value_or(string());
-
-    if (!boost::starts_with(cur_prefix, prefix)) {
-      return;
+  for (; iter != prefix_refs.end(); ++iter) {
+    auto& prefix = iter->first;
+    if (!boost::starts_with(key.name, prefix)) {
+      break;
     }
 
-    if (cur_pipe.params.priority > ppipe->params.priority) {
+    auto& rule_params = iter->second->params;
+    auto& filter = rule_params.filter;
+
+    if (!filter.check_tags(tags)) {
       continue;
     }
 
-    prefix_refs.erase(cur_iter);
+    if (rule_params.priority > priority) {
+      priority = rule_params.priority;
+      max = iter;
+    }
   }
+
+  if (max == prefix_refs.end()) {
+    return false;
+  }
+
+  *params = max->second->params;
+  return true;
 }
 
-void RGWBucketSyncFlowManager::pipe_rules::finish_init()
+/*
+ * return either the current prefix for s, or the next one if s is not within a prefix
+ */
+
+RGWBucketSyncFlowManager::pipe_rules::prefix_map_t::const_iterator RGWBucketSyncFlowManager::pipe_rules::prefix_search(const std::string& s) const
 {
-  /* go from the bigger prefixes to the shorter ones, this way we know that we covered all
-   * overlapping prefixes
-   */
-  for (auto iter = prefix_by_size.rbegin(); iter != prefix_by_size.rend(); ++iter) {
-    resolve_prefix(iter->second);
+  if (prefix_refs.empty()) {
+    return prefix_refs.end();
   }
+  auto next = prefix_refs.upper_bound(s);
+  auto iter = next;
+  if (iter != prefix_refs.begin()) {
+    --iter;
+  }
+  if (!boost::starts_with(s, iter->first)) {
+    return next;
+  }
+
+  return iter;
 }
 
 void RGWBucketSyncFlowManager::pipe_set::insert(const rgw_sync_bucket_pipe& pipe) {
-  auto ppipe = &pipe_map[pipe.id];
-  *ppipe = pipe;
+  pipe_map[pipe.id] = pipe;
 
-  auto prules = &rules[endpoints_pair(*ppipe)];
+  auto& rules_ref = rules[endpoints_pair(pipe)];
 
-  prules->insert(ppipe);
+  if (!rules_ref) {
+    rules_ref = make_shared<RGWBucketSyncFlowManager::pipe_rules>();
+  }
 
-  pipe_handler h(prules, pipe);
+  rules_ref->insert(pipe);
+
+  pipe_handler h(rules_ref, pipe);
 
   handlers.insert(h);
 }
@@ -460,9 +489,6 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       dest_pipes->insert(pipe);
     }
   }
-
-  source_pipes->finish_init();
-  dest_pipes->finish_init();
 }
 
 
@@ -632,9 +658,6 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
     }
     _sources[*new_pipe.source.zone].insert(new_pipe);
   }
-  for (auto& s : _sources) {
-    s.second.finish_init();
-  }
 
   for (auto& entry : _targets_by_name.pipe_map) {
     auto& pipe = entry.second;
@@ -648,9 +671,6 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
       new_pipe.dest.zone = zone_id;
     }
     _targets[*new_pipe.dest.zone].insert(new_pipe);
-  }
-  for (auto& t : _targets) {
-    t.second.finish_init();
   }
 
   if (psources_by_name) {

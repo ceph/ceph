@@ -3144,6 +3144,51 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   rgw_zone_set zones_trace;
 
   RGWSyncTraceNodeRef tn;
+
+  struct _prefix_handler {
+    RGWBucketSyncFlowManager::pipe_rules_ref rules;
+    RGWBucketSyncFlowManager::pipe_rules::prefix_map_t::const_iterator iter;
+    std::optional<string> cur_prefix;
+
+    void set_rules(RGWBucketSyncFlowManager::pipe_rules_ref& _rules) {
+      rules = _rules;
+    }
+
+    bool revalidate_marker(rgw_obj_key *marker) {
+      if (cur_prefix &&
+          boost::starts_with(marker->name, *cur_prefix)) {
+        return true;
+      }
+      if (!rules) {
+        return false;
+      }
+      iter = rules->prefix_search(marker->name);
+      if (iter == rules->prefix_end()) {
+        return false;
+      }
+      cur_prefix = iter->first;
+      marker->name = *cur_prefix;
+      marker->instance.clear();
+      return true;
+    }
+
+    bool check_key(const rgw_obj_key& key) {
+      if (!rules) {
+        return false;
+      }
+      if (cur_prefix &&
+          boost::starts_with(key.name, *cur_prefix)) {
+        return true;
+      }
+      iter = rules->prefix_search(key.name);
+      if (iter == rules->prefix_end()) {
+        return false;
+      }
+      cur_prefix = iter->first;
+      return boost::starts_with(key.name, iter->first);
+    }
+  } prefix_handler;
+
 public:
   RGWBucketShardFullSyncCR(RGWDataSyncCtx *_sc,
                            rgw_bucket_sync_pipe& _sync_pipe,
@@ -3160,6 +3205,7 @@ public:
                                          SSTR(bucket_shard_str{bs}))) {
     zones_trace.insert(sc->source_zone);
     marker_tracker.set_tn(tn);
+    prefix_handler.set_rules(sync_pipe.get_rules());
   }
 
   int operate() override;
@@ -3179,6 +3225,11 @@ int RGWBucketShardFullSyncCR::operate()
       }
       set_status("listing remote bucket");
       tn->log(20, "listing bucket for full sync");
+
+      if (!prefix_handler.revalidate_marker(&list_marker)) {
+        break;
+      }
+
       yield call(new RGWListBucketShardCR(sc, bs, list_marker,
                                           &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
@@ -3198,11 +3249,15 @@ int RGWBucketShardFullSyncCR::operate()
         tn->log(20, SSTR("[full sync] syncing object: "
             << bucket_shard_str{bs} << "/" << entries_iter->key));
         entry = &(*entries_iter);
-        total_entries++;
         list_marker = entries_iter->key;
+        if (!prefix_handler.check_key(entries_iter->key)) {
+          continue;
+        }
+        total_entries++;
         if (!marker_tracker.start(entry->key, total_entries, real_time())) {
           tn->log(0, SSTR("ERROR: cannot start syncing " << entry->key << ". Duplicate entry?"));
         } else {
+#warning look in here
           using SyncCR = RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>;
           yield spawn(new SyncCR(sc, sync_pipe, entry->key,
                                  false, /* versioned, only matters for object removal */
