@@ -173,7 +173,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
         if (mds->is_cache_trimmable()) {
           dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;
           trim_client_leases();
-          trim();
+          trim(g_conf().get_val<int64_t>("mds_cache_trim_num_per_trim_interval"), true);
           check_memory_usage();
           auto flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
           mds->server->recall_client_state(nullptr, flags);
@@ -6536,7 +6536,7 @@ void MDCache::start_recovered_truncates()
 // ================================================================================
 // cache trimming
 
-std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap)
+std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap, bool is_regular)
 {
   bool is_standby_replay = mds->is_standby_replay();
   std::vector<CDentry *> unexpirables;
@@ -6571,10 +6571,9 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
     bottom_lru.lru_insert_mid(dn);
   }
   unexpirables.clear();
-
   // trim dentries from the LRU until count is reached
   // if mds is in standbyreplay and will trim all inodes which aren't in segments
-  while (!throttled && (cache_toofull() || count > 0 || is_standby_replay)) {
+  while (!throttled && (cache_toofull() || (count > 0 && !(is_regular && cache_below_trim_limit())) || is_standby_replay)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) break;
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
@@ -6611,7 +6610,7 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
  *
  * @param count is number of dentries to try to expire
  */
-std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
+std::pair<bool, uint64_t> MDCache::trim(uint64_t count, bool is_regular)
 {
   uint64_t used = cache_size();
   uint64_t limit = cache_memory_limit;
@@ -6625,7 +6624,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
   // process delayed eval_stray()
   stray_manager.advance_delayed();
 
-  auto result = trim_lru(count, expiremap);
+  auto result = trim_lru(count, expiremap, is_regular);
   auto& trimmed = result.second;
 
   // trim non-auth, non-bound subtrees

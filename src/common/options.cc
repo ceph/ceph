@@ -7426,6 +7426,14 @@ std::vector<Option> get_mds_options() {
     .set_default(1)
     .set_description("interval in seconds between cache trimming"),
 
+    Option("mds_cache_trim_num_per_trim_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("number of inodes trimed every trim interval"),
+
+    Option("mds_cache_low_limit_on_regular_trim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(-1.0)
+    .set_description("don't trim inode regularly when memory reached the ratio of mds_cache_memory_limit"),
+
     Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of inodes in MDS cache (<=0 is unlimited)")

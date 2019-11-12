@@ -194,6 +194,14 @@ class MDCache {
   bool cache_toofull(void) const {
     return cache_toofull_ratio() > 0.0;
   }
+  double cache_memory_limit_ratio(void) {
+    return fmin(1.0*cache_size()/cache_limit_memory(), cache_inode_limit == 0 ? 1.0 : (1.0*CInode::count()/cache_inode_limit));
+  }
+  bool cache_below_trim_limit(void) {
+    if (g_conf().get_val<double>("mds_cache_low_limit_on_regular_trim") < 0.0)
+      return true;
+    return (cache_memory_limit_ratio() < g_conf().get_val<double>("mds_cache_low_limit_on_regular_trim"));
+  }
   uint64_t cache_size(void) const {
     return mempool::get_pool(mempool::mds_co::id).allocated_bytes();
   }
@@ -586,8 +594,8 @@ class MDCache {
   size_t get_cache_size() { return lru.lru_get_size(); }
 
   // trimming
-  std::pair<bool, uint64_t> trim(uint64_t count=0);
 
+  std::pair<bool, uint64_t> trim(uint64_t count=0, bool is_regular=false);
   bool trim_non_auth_subtree(CDir *directory);
   void standby_trim_segment(LogSegment *ls);
   void try_trim_non_auth_subtree(CDir *dir);
@@ -1217,7 +1225,7 @@ class MDCache {
 
   void identify_files_to_recover();
 
-  std::pair<bool, uint64_t> trim_lru(uint64_t count, expiremap& expiremap);
+  std::pair<bool, uint64_t> trim_lru(uint64_t count, expiremap& expiremap, bool is_regular=false);
   bool trim_dentry(CDentry *dn, expiremap& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con, expiremap& expiremap);
   bool trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap&);
