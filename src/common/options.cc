@@ -1267,6 +1267,11 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("send ourselves a SIGTERM early during startup"),
 
+    Option("blkin_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("enables blkin tracing")
+    .set_long_description("Enables gathering of LTTNG traces compatible with zipkin tool"),
+
     // MON
     Option("mon_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -3849,10 +3854,12 @@ std::vector<Option> get_global_options() {
 
     Option("osd_blkin_trace_all", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_see_also("blkin_tracing")
     .set_description(""),
 
     Option("osdc_blkin_trace_all", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_see_also("blkin_tracing")
     .set_description(""),
 
     Option("osd_discard_disconnected_ops", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -7350,6 +7357,7 @@ static std::vector<Option> get_rbd_options() {
 
     Option("rbd_blkin_trace_all", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_see_also("blkin_tracing")
     .set_description("create a blkin trace for all RBD requests"),
 
     Option("rbd_validate_pool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)

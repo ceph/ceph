@@ -215,7 +215,7 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
 #ifdef WITH_BLKIN
-#include "Messenger.h"
+#include "msg/Messenger.h"
 #endif
 
 #define DEBUGLVL  10    // debug level of output
