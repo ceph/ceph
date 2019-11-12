@@ -1,1 +1,3 @@
 pytest-cov==2.7.1
+mock; python_version <= '3.3'
+../../python-common

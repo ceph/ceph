@@ -45,15 +45,7 @@ else:
     os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
                                         os.environ['PATH'])
 
-    # Mock ceph module otherwise every module that is involved in a testcase and imports it will
-    # raise an ImportError
-    import sys
-    try:
-        import mock
-    except ImportError:
-        import unittest.mock as mock
-
-    sys.modules['ceph_module'] = mock.Mock()
+    from tests import mock
 
     mgr = mock.Mock()
     mgr.get_frontend_path.side_effect = lambda: os.path.abspath("./frontend/dist")
