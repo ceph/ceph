@@ -1487,24 +1487,6 @@ def healthy(ctx, config):
         ceph_fs.wait_for_daemons(timeout=300)
 
 
-def wait_for_osds_up(ctx, config):
-    """
-    Wait for all osd's to come up.
-
-    :param ctx: Context
-    :param config: Configuration
-    """
-    log.info('Waiting until ceph osds are all up...')
-    cluster_name = config.get('cluster', 'ceph')
-    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
-    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-    teuthology.wait_until_osds_up(
-        ctx,
-        cluster=ctx.cluster,
-        remote=mon0_remote
-    )
-
-
 def wait_for_mon_quorum(ctx, config):
     """
     Check renote ceph status until all monitors are up.
@@ -1630,7 +1612,7 @@ def restart(ctx, config):
             healthy(ctx=ctx, config=dict(cluster=cluster))
     if config.get('wait-for-osds-up', False):
         for cluster in clusters:
-            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
+            ctx.managers[cluster].wait_for_all_osds_up()
     yield
 
 
