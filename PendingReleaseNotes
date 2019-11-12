@@ -38,6 +38,17 @@
 
     ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
 
+* Ceph will issue a health warning if a RADOS pool's ``size`` is set to 1
+  or in other words the pool is configured with no redundancy. This can
+  be fixed by setting the pool size to the minimum recommended value
+  with::
+
+    ceph osd pool set <pool-name> size <num-replicas>
+
+  The warning can be silenced with::
+
+    ceph config set global mon_warn_on_pool_no_redundancy false
+
 
 >=15.0.0
 --------
