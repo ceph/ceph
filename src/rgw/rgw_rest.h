@@ -473,6 +473,44 @@ public:
     ~RGWInfo_ObjStore() override = default;
 };
 
+class RGWPutBucketObjectLock_ObjStore : public RGWPutBucketObjectLock {
+public:
+  RGWPutBucketObjectLock_ObjStore() = default;
+  ~RGWPutBucketObjectLock_ObjStore() = default;
+  int get_params() override;
+};
+
+class RGWGetBucketObjectLock_ObjStore : public RGWGetBucketObjectLock {
+public:
+  RGWGetBucketObjectLock_ObjStore() = default;
+  ~RGWGetBucketObjectLock_ObjStore() override = default;
+};
+
+class RGWPutObjRetention_ObjStore : public RGWPutObjRetention {
+public:
+  RGWPutObjRetention_ObjStore() = default;
+  ~RGWPutObjRetention_ObjStore() override = default;
+};
+
+class RGWGetObjRetention_ObjStore : public RGWGetObjRetention {
+public:
+  RGWGetObjRetention_ObjStore() = default;
+  ~RGWGetObjRetention_ObjStore() = default;
+};
+
+class RGWPutObjLegalHold_ObjStore : public RGWPutObjLegalHold {
+public:
+  RGWPutObjLegalHold_ObjStore() = default;
+  ~RGWPutObjLegalHold_ObjStore() override = default;
+  int get_params() override;
+};
+
+class RGWGetObjLegalHold_ObjStore : public RGWGetObjLegalHold {
+public:
+  RGWGetObjLegalHold_ObjStore() = default;
+  ~RGWGetObjLegalHold_ObjStore() = default;
+};
+
 class RGWRESTOp : public RGWOp {
 protected:
   int http_ret;

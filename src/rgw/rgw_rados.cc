@@ -3583,6 +3583,18 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     meta.set_mtime = real_clock::now();
   }
 
+  if (target->bucket_info.obj_lock_enabled() && target->bucket_info.obj_lock.has_rule() && meta.flags == PUT_OBJ_CREATE) {
+    auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+    if (iter == attrs.end()) {
+      real_time lock_until_date = target->bucket_info.obj_lock.get_lock_until_date(meta.set_mtime);
+      string mode = target->bucket_info.obj_lock.get_mode();
+      RGWObjectRetention obj_retention(mode, lock_until_date);
+      bufferlist bl;
+      obj_retention.encode(bl);
+      op.setxattr(RGW_ATTR_OBJECT_RETENTION, bl);
+    }
+  }
+
   if (state->is_olh) {
     op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
   }

@@ -453,6 +453,49 @@ public:
   void end_response() override;
 };
 
+class RGWPutBucketObjectLock_ObjStore_S3 : public RGWPutBucketObjectLock_ObjStore {
+public:
+  RGWPutBucketObjectLock_ObjStore_S3() {}
+  ~RGWPutBucketObjectLock_ObjStore_S3() override {}
+  void send_response() override;
+};
+
+class RGWGetBucketObjectLock_ObjStore_S3 : public RGWGetBucketObjectLock_ObjStore {
+public:
+  RGWGetBucketObjectLock_ObjStore_S3() {}
+  ~RGWGetBucketObjectLock_ObjStore_S3() {}
+  void send_response() override;
+};
+
+class RGWPutObjRetention_ObjStore_S3 : public RGWPutObjRetention_ObjStore {
+public:
+  RGWPutObjRetention_ObjStore_S3() {}
+  ~RGWPutObjRetention_ObjStore_S3() {}
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWGetObjRetention_ObjStore_S3 : public RGWGetObjRetention_ObjStore {
+public:
+  RGWGetObjRetention_ObjStore_S3() {}
+  ~RGWGetObjRetention_ObjStore_S3() {}
+  void send_response() override;
+};
+
+class RGWPutObjLegalHold_ObjStore_S3 : public RGWPutObjLegalHold_ObjStore {
+public:
+  RGWPutObjLegalHold_ObjStore_S3() {}
+  ~RGWPutObjLegalHold_ObjStore_S3() {}
+  void send_response() override;
+};
+
+class RGWGetObjLegalHold_ObjStore_S3 : public RGWGetObjLegalHold_ObjStore {
+public:
+  RGWGetObjLegalHold_ObjStore_S3() {}
+  ~RGWGetObjLegalHold_ObjStore_S3() {}
+  void send_response() override;
+};
+
 class RGWGetObjLayout_ObjStore_S3 : public RGWGetObjLayout {
 public:
   RGWGetObjLayout_ObjStore_S3() {}
@@ -576,6 +619,9 @@ protected:
   bool is_policy_op() {
     return s->info.args.exists("policy");
   }
+  bool is_object_lock_op() {
+    return s->info.args.exists("object-lock");
+  }
   bool is_notification_op() const {
     if (enable_pubsub) {
         return s->info.args.exists("notification");
@@ -604,8 +650,15 @@ protected:
   bool is_tagging_op() {
     return s->info.args.exists("tagging");
   }
+  bool is_obj_retention_op() {
+    return s->info.args.exists("retention");
+  }
+  bool is_obj_legal_hold_op() {
+    return s->info.args.exists("legal-hold");
+  }
+
   bool is_obj_update_op() override {
-    return is_acl_op() || is_tagging_op() ;
+    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op();
   }
   RGWOp *get_obj_op(bool get_data);
 

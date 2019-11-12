@@ -45,6 +45,7 @@
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
 #include "rgw_tag.h"
+#include "rgw_object_lock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -294,6 +295,9 @@ protected:
   bufferlist waiting;
   uint64_t action = 0;
 
+  bool get_retention;
+  bool get_legal_hold;
+
   int init_common();
 public:
   RGWGetObj() {
@@ -321,6 +325,8 @@ public:
     q_len = 0;
     first_data = true;
     cur_ofs = 0;
+    get_retention = false;
+    get_legal_hold = false;
  }
 
   bool prefetch_data() override;
@@ -915,6 +921,7 @@ protected:
   obj_version ep_objv;
   bool has_cors;
   bool relaxed_region_enforcement;
+  bool obj_lock_enabled;
   RGWCORSConfiguration cors_config;
   boost::optional<std::string> swift_ver_location;
   map<string, buffer::list> attrs;
@@ -925,7 +932,7 @@ protected:
   virtual bool need_metadata_upload() const { return false; }
 
 public:
-  RGWCreateBucket() : has_cors(false), relaxed_region_enforcement(false) {}
+  RGWCreateBucket() : has_cors(false), relaxed_region_enforcement(false), obj_lock_enabled(false) {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
@@ -1058,6 +1065,10 @@ protected:
   uint64_t position;
   uint64_t cur_accounted_size;
 
+  //object lock
+  RGWObjectRetention *obj_retention;
+  RGWObjectLegalHold *obj_legal_hold;
+
 public:
   RGWPutObj() : ofs(0),
                 supplied_md5_b64(NULL),
@@ -1073,10 +1084,14 @@ public:
                 olh_epoch(0),
                 append(false),
                 position(0),
-                cur_accounted_size(0) {}
+                cur_accounted_size(0),
+                obj_retention(nullptr),
+                obj_legal_hold(nullptr) {}
 
   ~RGWPutObj() override {
     delete slo_info;
+    delete obj_retention;
+    delete obj_legal_hold;
   }
 
   void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
@@ -1280,13 +1295,17 @@ protected:
   ceph::real_time unmod_since; /* if unmodified since */
   bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
+  bool bypass_perm;
+  bool bypass_governance_mode;
 
 public:
   RGWDeleteObj()
     : delete_marker(false),
       multipart_delete(false),
       no_precondition_error(false),
-      deleter(nullptr) {
+      deleter(nullptr),
+      bypass_perm(true),
+      bypass_governance_mode(false) {
   }
 
   int verify_permission() override;
@@ -2135,6 +2154,94 @@ public:
   RGWOpType get_type() override {
     return RGW_OP_DELETE_BUCKET_POLICY;
   }
+};
+
+class RGWPutBucketObjectLock : public RGWOp {
+protected:
+  bufferlist data;
+  bufferlist obj_lock_bl;
+  RGWObjectLock obj_lock;
+public:
+  RGWPutBucketObjectLock() = default;
+  ~RGWPutBucketObjectLock() {}
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void send_response() = 0;
+  virtual int get_params() = 0;
+  const char* name() const override { return "put_bucket_object_lock"; }
+  RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OBJ_LOCK; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetBucketObjectLock : public RGWOp {
+public:
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void send_response() = 0;
+  const char* name() const override {return "get_bucket_object_lock"; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OBJ_LOCK; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWPutObjRetention : public RGWOp {
+protected:
+  bufferlist data;
+  RGWObjectRetention obj_retention;
+  bool bypass_perm;
+  bool bypass_governance_mode;
+public:
+  RGWPutObjRetention():bypass_perm(true), bypass_governance_mode(false) {}
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void send_response() override = 0;
+  virtual int get_params() = 0;
+  const char* name() const override { return "put_obj_retention"; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWOpType get_type() override { return RGW_OP_PUT_OBJ_RETENTION; }
+};
+
+class RGWGetObjRetention : public RGWOp {
+protected:
+  RGWObjectRetention obj_retention;
+public:
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void send_response() = 0;
+  const char* name() const override {return "get_obj_retention"; }
+  RGWOpType get_type() override { return RGW_OP_GET_OBJ_RETENTION; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWPutObjLegalHold : public RGWOp {
+protected:
+  bufferlist data;
+  RGWObjectLegalHold obj_legal_hold;
+public:
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void send_response() override = 0;
+  virtual int get_params() = 0;
+  const char* name() const override { return "put_obj_legal_hold"; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWOpType get_type() override { return RGW_OP_PUT_OBJ_LEGAL_HOLD; }
+};
+
+class RGWGetObjLegalHold : public RGWOp {
+protected:
+  RGWObjectLegalHold obj_legal_hold;
+public:
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+  virtual void send_response() = 0;
+  const char* name() const override {return "get_obj_legal_hold"; }
+  RGWOpType get_type() override { return RGW_OP_GET_OBJ_LEGAL_HOLD; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 
