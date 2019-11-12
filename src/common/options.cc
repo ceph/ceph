@@ -6655,7 +6655,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(1000)
     .set_description("Max number of buckets per user")
     .set_long_description(
-        "A user can create this many buckets. Zero means unlimmited, negative number means "
+        "A user can create this many buckets. Zero means unlimited, negative number means "
         "user cannot create any buckets (although user will retain buckets already created."),
 
     Option("rgw_objexp_gc_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
