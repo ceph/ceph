@@ -36,9 +36,9 @@ function TEST_minimal() {
 
 function TEST_multimon() {
     local dir=$1
-    MONA="127.0.0.1:$((mon_port++))"
-    MONB="127.0.0.1:$((mon_port++))"
-    MONC="127.0.0.1:$((mon_port++))"
+    MONA="v1:127.0.0.1:$((mon_port++))"
+    MONB="v1:127.0.0.1:$((mon_port++))"
+    MONC="v1:127.0.0.1:$((mon_port++))"
 
     run_mon $dir a --public-addr $MONA
     run_mon $dir b --public-addr $MONB
