@@ -8,6 +8,7 @@
 #include <boost/asio.hpp>
 #include <boost/intrusive/list.hpp>
 
+#include <boost/context/protected_fixedsize_stack.hpp>
 #include <spawn/spawn.hpp>
 
 #include "common/async/shared_mutex.h"
@@ -33,6 +34,11 @@ namespace ssl = boost::asio::ssl;
 #endif
 
 using parse_buffer = boost::beast::flat_static_buffer<65536>;
+
+// use mmap/mprotect to allocate 512k coroutine stacks
+auto make_stack_allocator() {
+  return boost::context::protected_fixedsize_stack{512*1024};
+}
 
 template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
@@ -615,7 +621,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
           stream.async_shutdown(yield[ec]);
         }
         s.shutdown(tcp::socket::shutdown_both, ec);
-      });
+      }, make_stack_allocator());
   } else {
 #else
   {
@@ -629,7 +635,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         handle_connection(context, env, s, *buffer, false, pause_mutex,
                           scheduler.get(), ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
-      });
+      }, make_stack_allocator());
   }
 }
 
