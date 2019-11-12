@@ -528,6 +528,12 @@ class TestIoctx(object):
             with assert_raises(ObjectNotFound):
                 self.ioctx.read('write_ops')
 
+    def test_execute_op(self):
+        with WriteOpCtx() as write_op:
+            write_op.execute("hello", "record_hello", "ebs")
+            self.ioctx.operate_write_op(write_op, "object")
+        eq(self.ioctx.read('object'), b"Hello, ebs!")
+
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
