@@ -153,7 +153,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume resize '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=new_size,type=CephInt,req=true '
+                   'name=new_size,type=CephString,req=true '
                    'name=group_name,type=CephString,req=false '
                    'name=no_shrink,type=CephBool,req=false ',
             'desc': "Resize a CephFS subvolume",
