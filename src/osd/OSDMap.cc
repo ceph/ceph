@@ -4623,7 +4623,7 @@ int OSDMap::calc_pg_upmaps(
                      << dendl;
     }
     if (overfull.empty()) {
-      lderr(cct) << __func__ << " failed to build overfull" << dendl;
+      ldout(cct, 20) << __func__ << " failed to build overfull" << dendl;
       break;
     }
 
@@ -4647,7 +4647,7 @@ int OSDMap::calc_pg_upmaps(
                      << dendl;
     }
     if (underfull.empty()) {
-      lderr(cct) << __func__ << " failed to build underfull" << dendl;
+      ldout(cct, 20) << __func__ << " failed to build underfull" << dendl;
       break;
     }
 
