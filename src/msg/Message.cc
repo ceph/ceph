@@ -211,6 +211,10 @@
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
+#ifdef WITH_BLKIN
+#include "msg/Messenger.h"
+#endif
+
 #define DEBUGLVL  10    // debug level of output
 
 #define dout_subsys ceph_subsys_ms
@@ -970,13 +974,14 @@ void Message::decode_trace(bufferlist::const_iterator &p, bool create)
 
   const auto msgr = connection->get_messenger();
   const auto endpoint = msgr->get_trace_endpoint();
+  std::string name(get_type_name());
   if (info.trace_id) {
-    trace.init(get_type_name(), endpoint, &info, true);
+    trace.init(name.c_str(), endpoint, &info, true);
     trace.event("decoded trace");
   } else if (create || (msgr->get_myname().is_osd() &&
                         msgr->cct->_conf->osd_blkin_trace_all)) {
     // create a trace even if we didn't get one on the wire
-    trace.init(get_type_name(), endpoint);
+    trace.init(name.c_str(), endpoint);
     trace.event("created trace");
   }
   trace.keyval("tid", get_tid());
