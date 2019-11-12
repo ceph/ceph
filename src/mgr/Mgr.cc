@@ -302,6 +302,8 @@ void Mgr::init()
       kv_store, *monc, clog, audit_clog, *objecter, *client,
       finisher, server);
 
+  cluster_state.final_init();
+
   dout(4) << "Complete." << dendl;
   initializing = false;
   initialized = true;

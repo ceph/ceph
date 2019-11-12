@@ -24,3 +24,19 @@
   bucket reshard in earlier versions of RGW. One subcommand lists such
   objects and the other deletes them. Read the troubleshooting section
   of the dynamic resharding docs for details.
+
+* A health warning is now generated if the average osd heartbeat ping
+  time exceeds a configurable threshold for any of the intervals
+  computed.  The OSD computes 1 minute, 5 minute and 15 minute
+  intervals with average, minimum and maximum values.  New configuration
+  option ``mon_warn_on_slow_ping_ratio`` specifies a percentage of
+  ``osd_heartbeat_grace`` to determine the threshold.  A value of zero
+  disables the warning.  New configuration option
+ ``mon_warn_on_slow_ping_time`` specified in milliseconds over-rides the
+  computed value, causes a warning
+  when OSD heartbeat pings take longer than the specified amount.
+  New admin command ``ceph daemon mgr.# dump_osd_network [threshold]`` command will
+  list all connections with a ping time longer than the specified threshold or
+  value determined by the config options, for the average for any of the 3 intervals.
+  New admin command ``ceph daemon osd.# dump_osd_network [threshold]`` will
+  do the same but only including heartbeats initiated by the specified OSD.

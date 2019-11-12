@@ -159,6 +159,114 @@ to a health state:
     2017-07-25 10:11:13.535493 mon.a mon.0 172.21.9.34:6789/0 110 : cluster [INF] Health check cleared: PG_DEGRADED (was: Degraded data redundancy: 2 pgs unclean, 2 pgs degraded, 2 pgs undersized)
     2017-07-25 10:11:13.535577 mon.a mon.0 172.21.9.34:6789/0 111 : cluster [INF] Cluster is now healthy
 
+Network Performance Checks
+--------------------------
+
+Ceph OSDs send heartbeat ping messages amongst themselves to monitor daemon availability.  We
+also use the response times to monitor network performance.
+While it is possible that a busy OSD could delay a ping response, we can assume
+that if a network switch fails mutiple delays will be detected between distinct pairs of OSDs.
+
+By default we will warn about ping times which exceed 1 second (1000 milliseconds).
+
+::
+
+    HEALTH_WARN Long heartbeat ping times on back interface seen, longest is 1118.001 msec
+
+The health detail will add the combination of OSDs are seeing the delays and by how much.  There is a limit of 10
+detail line items.
+
+::
+
+    [WRN] OSD_SLOW_PING_TIME_BACK: Long heartbeat ping times on back interface seen, longest is 1118.001 msec
+        Slow heartbeat ping on back interface from osd.0 to osd.1 1118.001 msec
+        Slow heartbeat ping on back interface from osd.0 to osd.2 1030.123 msec
+        Slow heartbeat ping on back interface from osd.2 to osd.1 1015.321 msec
+        Slow heartbeat ping on back interface from osd.1 to osd.0 1010.456 msec
+
+To see even more detail and a complete dump of network performance information the ``dump_osd_network`` command can be used.  Typically, this would be
+sent to a mgr, but it can be limited to a particular OSD's interactions by issuing it to any OSD.  The current threshold which defaults to 1 second
+(1000 milliseconds) can be overridden as an argument in milliseconds.
+
+The following command will show all gathered network performance data by specifying a threshold of 0 and sending to the mgr.
+
+::
+
+    $ ceph daemon /var/run/ceph/ceph-mgr.x.asok dump_osd_network 0
+    {
+        "threshold": 0,
+        "entries": [
+            {
+                "last update": "Wed Sep  4 17:04:49 2019",
+                "stale": false,
+                "from osd": 2,
+                "to osd": 0,
+                "interface": "front",
+                "average": {
+                    "1min": 1.023,
+                    "5min": 0.860,
+                    "15min": 0.883
+                },
+                "min": {
+                    "1min": 0.818,
+                    "5min": 0.607,
+                    "15min": 0.607
+                },
+                "max": {
+                    "1min": 1.164,
+                    "5min": 1.173,
+                    "15min": 1.544
+                },
+                "last": 0.924
+            },
+            {
+                "last update": "Wed Sep  4 17:04:49 2019",
+                "stale": false,
+                "from osd": 2,
+                "to osd": 0,
+                "interface": "back",
+                "average": {
+                    "1min": 0.968,
+                    "5min": 0.897,
+                    "15min": 0.830
+                },
+                "min": {
+                    "1min": 0.860,
+                    "5min": 0.563,
+                    "15min": 0.502
+                },
+                "max": {
+                    "1min": 1.171,
+                    "5min": 1.216,
+                    "15min": 1.456
+                },
+                "last": 0.845
+            },
+            {
+                "last update": "Wed Sep  4 17:04:48 2019",
+                "stale": false,
+                "from osd": 0,
+                "to osd": 1,
+                "interface": "front",
+                "average": {
+                    "1min": 0.965,
+                    "5min": 0.811,
+                    "15min": 0.850
+                },
+                "min": {
+                    "1min": 0.650,
+                    "5min": 0.488,
+                    "15min": 0.466
+                },
+                "max": {
+                    "1min": 1.252,
+                    "5min": 1.252,
+                    "15min": 1.362
+                },
+            "last": 0.791
+        },
+        ...
+
 
 Detecting configuration issues
 ==============================
