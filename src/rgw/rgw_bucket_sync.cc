@@ -267,6 +267,58 @@ vector<rgw_sync_bucket_pipe> rgw_sync_group_pipe_map::find_pipes(const string& s
   return vector<rgw_sync_bucket_pipe>();
 }
 
+void RGWBucketSyncFlowManager::pipe_rules::insert(const rgw_sync_bucket_pipe& pipe)
+{
+  auto ppipe = &pipe_map[pipe.id];
+
+  auto prefix = pipe.params.filter.prefix.value_or(string());
+
+  prefix_by_size.insert(make_pair(prefix.size(), ppipe));
+
+  for (auto& tag : pipe.params.filter.tags) {
+    auto titer = tag_refs.find(tag);
+    if (titer != tag_refs.end() &&
+        pipe.params.priority > titer->second->params.priority) {
+      titer->second = ppipe;
+    } else {
+      tag_refs[tag] = ppipe;
+    }
+  }
+}
+
+void RGWBucketSyncFlowManager::pipe_rules::resolve_prefix(rgw_sync_bucket_pipe *ppipe)
+{
+  auto prefix = ppipe->params.filter.prefix.value_or(string());
+  auto iter = prefix_refs.lower_bound(prefix);
+
+  while (iter != prefix_refs.end()) {
+    auto cur_iter = iter++;
+
+    auto& cur_pipe = *cur_iter->second;
+    auto cur_prefix = cur_pipe.params.filter.prefix.value_or(string());
+
+    if (!boost::starts_with(cur_prefix, prefix)) {
+      return;
+    }
+
+    if (cur_pipe.params.priority > ppipe->params.priority) {
+      continue;
+    }
+
+    prefix_refs.erase(cur_iter);
+  }
+}
+
+void RGWBucketSyncFlowManager::pipe_rules::finish_init()
+{
+  /* go from the bigger prefixes to the shorter ones, this way we know that we covered all
+   * overlapping prefixes
+   */
+  for (auto iter = prefix_by_size.rbegin(); iter != prefix_by_size.rend(); ++iter) {
+    resolve_prefix(iter->second);
+  }
+}
+
 void RGWBucketSyncFlowManager::pipe_set::dump(ceph::Formatter *f) const
 {
   encode_json("pipes", pipes, f);

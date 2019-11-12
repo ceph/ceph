@@ -11,7 +11,7 @@ string rgw_sync_bucket_entity::bucket_key() const
   return rgw_sync_bucket_entities::bucket_key(bucket);
 }
 
-bool rgw_sync_pipe_filter::_tag::from_str(const string& s)
+bool rgw_sync_pipe_filter_tag::from_str(const string& s)
 {
   if (s.empty()) {
     return false;
@@ -61,18 +61,43 @@ void rgw_sync_pipe_filter::set_tags(std::list<std::string>& tags_add,
                                     std::list<std::string>& tags_rm)
 {
   for (auto& t : tags_rm) {
-    _tag tag;
+    rgw_sync_pipe_filter_tag tag;
     if (tag.from_str(t)) {
       tags.erase(tag);
     }
   }
 
   for (auto& t : tags_add) {
-    _tag tag;
+    rgw_sync_pipe_filter_tag tag;
     if (tag.from_str(t)) {
       tags.insert(tag);
     }
   }
+}
+
+bool rgw_sync_pipe_filter::is_subset_of(const rgw_sync_pipe_filter& f) const
+{
+  if (f.prefix) {
+    if (!prefix) {
+      return false;
+    }
+    /* f.prefix exists, and this->prefix is either equal or bigger,
+     * therefore this->prefix also set */
+
+    if (!boost::starts_with(*prefix, *f.prefix)) {
+      return false;
+    }
+  }
+
+  /* prefix is subset, now check tags. All our tags should exist in f.tags */
+
+  for (auto& t : tags) {
+    if (f.tags.find(t) == f.tags.end()) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 void rgw_sync_bucket_entity::apply_bucket(std::optional<rgw_bucket> b)

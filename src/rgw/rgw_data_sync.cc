@@ -1277,7 +1277,6 @@ class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   string entry_marker;
 
   rgw_bucket_shard source_bs;
-  rgw_bucket_sync_pair_info sync_pair;
 
   int sync_status;
 
@@ -3765,38 +3764,12 @@ RGWRunBucketSourcesSyncCR::RGWRunBucketSourcesSyncCR(RGWDataSyncCtx *_sc,
 int RGWRunBucketSourcesSyncCR::operate()
 {
   reenter(this) {
-#if 0
-    yield {
-      set_status("acquiring sync lock");
-      auto store = sync_env->store;
-      lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                              sources_obj,
-                                              "sync_lock",
-                                              cct->_conf->rgw_sync_lease_period,
-                                              this));
-      lease_stack.reset(spawn(lease_cr.get(), false));
-    }
-    while (!lease_cr->is_locked()) {
-      if (lease_cr->is_done()) {
-        tn->log(5, "failed to take lease");
-        set_status("lease lock failed, early abort");
-        return set_cr_error(lease_cr->get_ret_status());
-      }
-      set_sleeping(true);
-      yield;
-    }
-
-    tn->log(10, "took lease");
-#endif
     yield call(new RGWGetBucketPeersCR(sync_env, target_bucket, sc->source_zone, source_bucket, &pipes, tn));
     if (retcode < 0 && retcode != -ENOENT) {
       tn->log(0, "ERROR: failed to read sync status for bucket");
-#if 0
-      lease_cr->go_down();
-      drain_all();
-#endif
       return set_cr_error(retcode);
     }
+
     ldpp_dout(sync_env->dpp, 20) << __func__ << "(): requested source_bs=" << source_bs << " target_bs=" << target_bs << dendl;
 
     if (pipes.empty()) {
