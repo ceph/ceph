@@ -819,8 +819,8 @@ TEST_F(IPPolicyTest, asNetworkInvalid) {
 TEST_F(IPPolicyTest, IPEnvironment) {
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
-  RGWUserInfo user;
   rgw::sal::RGWRadosStore store;
+  rgw::sal::RGWRadosUser user(&store);
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
   req_state rgw_req_state(cct.get(), &rgw_env, &user, 0);

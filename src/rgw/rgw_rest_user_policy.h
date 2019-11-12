@@ -22,13 +22,13 @@ public:
 class RGWUserPolicyRead : public RGWRestUserPolicy {
 public:
   RGWUserPolicyRead() = default;
-  int check_caps(RGWUserCaps& caps) override;
+  int check_caps(const RGWUserCaps& caps) override;
 };
 
 class RGWUserPolicyWrite : public RGWRestUserPolicy {
 public:
   RGWUserPolicyWrite() = default;
-  int check_caps(RGWUserCaps& caps) override;
+  int check_caps(const RGWUserCaps& caps) override;
 };
 
 class RGWPutUserPolicy : public RGWUserPolicyWrite {

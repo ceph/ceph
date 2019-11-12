@@ -254,7 +254,7 @@ void req_info::rebuild_from(req_info& src)
 }
 
 
-req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id)
+req_state::req_state(CephContext* _cct, RGWEnv* e, rgw::sal::RGWUser* u, uint64_t id)
   : cct(_cct), user(u),
     info(_cct, e), id(id)
 {
@@ -1744,9 +1744,9 @@ void RGWUserCaps::decode_json(JSONObj *obj)
   }
 }
 
-int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
+int RGWUserCaps::check_cap(const string& cap, uint32_t perm) const
 {
-  map<string, uint32_t>::iterator iter = caps.find(cap);
+  auto iter = caps.find(cap);
 
   if ((iter == caps.end()) ||
       (iter->second & perm) != perm) {

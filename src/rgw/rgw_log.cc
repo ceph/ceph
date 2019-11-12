@@ -200,10 +200,10 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!bucket_name.empty()) {
     user = s->bucket_owner.get_id();
     if (s->bucket_info.requester_pays) {
-      payer = s->user->user_id;
+      payer = s->user->get_id();
     }
   } else {
-      user = s->user->user_id;
+      user = s->user->get_id();
   }
 
   bool error = s->err.is_err();
@@ -406,7 +406,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     }
   }
 
-  entry.user = s->user->user_id.to_str();
+  entry.user = s->user->get_id().to_str();
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();

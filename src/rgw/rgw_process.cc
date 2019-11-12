@@ -141,7 +141,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
+    } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
       dout(2) << "overriding permissions due to admin operation" << dendl;
     } else {
       return ret;
@@ -185,9 +185,9 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  RGWUserInfo userinfo;
+  rgw::sal::RGWRadosUser user;
 
-  struct req_state rstate(g_ceph_context, &rgw_env, &userinfo, req->id);
+  struct req_state rstate(g_ceph_context, &rgw_env, &user, req->id);
   struct req_state *s = &rstate;
 
   RGWObjectCtx rados_ctx(store, s);
@@ -227,7 +227,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
   should_log = mgr->get_logging();
 
   ldpp_dout(s, 2) << "getting op " << s->op << dendl;
-  op = handler->get_op(store);
+  op = handler->get_op();
   if (!op) {
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
@@ -269,8 +269,8 @@ int process_request(rgw::sal::RGWRadosStore* const store,
       goto done;
     }
 
-    if (s->user->suspended) {
-      dout(10) << "user is suspended, uid=" << s->user->user_id << dendl;
+    if (s->user->get_info().suspended) {
+      dout(10) << "user is suspended, uid=" << s->user->get_id() << dendl;
       abort_early(s, op, -ERR_USER_SUSPENDED, handler);
       goto done;
     }

@@ -114,13 +114,13 @@ static void dump_account_metadata(struct req_state * const s,
 
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
-    auto iter = s->user->temp_url_keys.find(0);
-    if (iter != std::end(s->user->temp_url_keys) && ! iter->second.empty()) {
+    auto iter = s->user->get_info().temp_url_keys.find(0);
+    if (iter != std::end(s->user->get_info().temp_url_keys) && ! iter->second.empty()) {
       dump_header(s, "X-Account-Meta-Temp-Url-Key", iter->second);
     }
 
-    iter = s->user->temp_url_keys.find(1);
-    if (iter != std::end(s->user->temp_url_keys) && ! iter->second.empty()) {
+    iter = s->user->get_info().temp_url_keys.find(1);
+    if (iter != std::end(s->user->get_info().temp_url_keys) && ! iter->second.empty()) {
       dump_header(s, "X-Account-Meta-Temp-Url-Key-2", iter->second);
     }
   }
@@ -186,7 +186,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   if (! op_ret) {
     dump_start(s);
     s->formatter->open_array_section_with_attrs("account",
-            FormatterAttrs("name", s->user->display_name.c_str(), NULL));
+            FormatterAttrs("name", s->user->get_display_name().c_str(), NULL));
 
     sent_data = true;
   }
@@ -545,7 +545,7 @@ static void dump_container_metadata(struct req_state *s,
 void RGWStatAccount_ObjStore_SWIFT::execute()
 {
   RGWStatAccount_ObjStore::execute();
-  op_ret = store->ctl()->user->get_attrs_by_uid(s->user->user_id, &attrs, s->yield);
+  op_ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &attrs, s->yield);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
@@ -599,8 +599,8 @@ static int get_swift_container_settings(req_state * const s,
   if (read_list || write_list) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
     const auto r = swift_policy.create(store->ctl()->user,
-                                       s->user->user_id,
-                                       s->user->display_name,
+                                       s->user->get_id(),
+                                       s->user->get_display_name(),
                                        read_list,
                                        write_list,
                                        *rw_mask);
@@ -708,7 +708,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   }
 
   if (!has_policy) {
-    policy.create_default(s->user->user_id, s->user->display_name);
+    policy.create_default(s->user->get_id(), s->user->get_display_name());
   }
 
   location_constraint = store->svc()->zone->get_zonegroup().api_name;
@@ -849,7 +849,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
-    r = store->getRados()->get_bucket_info(store->svc(), s->user->user_id.tenant,
+    r = store->getRados()->get_bucket_info(store->svc(), s->user->get_id().tenant,
 			       bucket_name, bucket_info, nullptr,
 			       s->yield, &bucket_attrs);
     if (r < 0) {
@@ -943,7 +943,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     }
   }
 
-  policy.create_default(s->user->user_id, s->user->display_name);
+  policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
@@ -1061,8 +1061,8 @@ static int get_swift_account_settings(req_state * const s,
   if (acl_attr) {
     RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
     const bool r = swift_acct_policy.create(store->ctl()->user,
-                                     s->user->user_id,
-                                     s->user->display_name,
+                                     s->user->get_id(),
+                                     s->user->get_display_name(),
                                      string(acl_attr));
     if (r != true) {
       return -EINVAL;
@@ -1376,7 +1376,7 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state
 
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 {
-  dest_policy.create_default(s->user->user_id, s->user->display_name);
+  dest_policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   return 0;
 }
@@ -1441,7 +1441,7 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 
   /* Dump X-Copied-From-Account. */
   /* XXX tenant */
-  dump_header(s, "X-Copied-From-Account", url_encode(s->user->user_id.id));
+  dump_header(s, "X-Copied-From-Account", url_encode(s->user->get_id().id));
 
   /* Dump X-Copied-From-Last-Modified. */
   dump_time_header(s, "X-Copied-From-Last-Modified", src_mtime);
@@ -2031,14 +2031,14 @@ bool RGWFormPost::is_integral()
   const std::string form_signature = get_part_str(ctrl_parts, "signature");
 
   try {
-    get_owner_info(s, *s->user);
+    get_owner_info(s, s->user->get_info());
     s->auth.identity = rgw::auth::transform_old_authinfo(s);
   } catch (...) {
     ldpp_dout(this, 5) << "cannot get user_info of account's owner" << dendl;
     return false;
   }
 
-  for (const auto& kv : s->user->temp_url_keys) {
+  for (const auto& kv : s->user->get_info().temp_url_keys) {
     const int temp_url_key_num = kv.first;
     const string& temp_url_key = kv.second;
 
@@ -2132,7 +2132,7 @@ int RGWFormPost::get_params()
     return ret;
   }
 
-  policy.create_default(s->user->user_id, s->user->display_name);
+  policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   /* Let's start parsing the HTTP body by parsing each form part step-
    * by-step till encountering the first part with file data. */
@@ -2794,7 +2794,7 @@ int RGWHandler_REST_SWIFT::postauth_init()
   struct req_init_state* t = &s->init_state;
 
   /* XXX Stub this until Swift Auth sets account into URL. */
-  s->bucket_tenant = s->user->user_id.tenant;
+  s->bucket_tenant = s->user->get_tenant();
   s->bucket_name = t->url_bucket;
 
   dout(10) << "s->object=" <<
@@ -2819,7 +2819,7 @@ int RGWHandler_REST_SWIFT::postauth_init()
      * We don't allow cross-tenant copy at present. It requires account
      * names in the URL for Swift.
      */
-    s->src_tenant_name = s->user->user_id.tenant;
+    s->src_tenant_name = s->user->get_tenant();
     s->src_bucket_name = t->src_bucket;
 
     ret = validate_bucket_name(s->src_bucket_name);

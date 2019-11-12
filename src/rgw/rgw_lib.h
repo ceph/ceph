@@ -128,18 +128,18 @@ namespace rgw {
 			public RGWHandler_Lib {
   public:
     CephContext* cct;
-    RGWUserInfo* user;
+    rgw::sal::RGWUser* user;
     boost::optional<RGWSysObjectCtx> sysobj_ctx;
 
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
-    RGWLibRequest(CephContext* _cct, RGWUserInfo* _user)
+    RGWLibRequest(CephContext* _cct, rgw::sal::RGWUser* _user)
       :  RGWRequest(rgwlib.get_store()->getRados()->get_new_req_id()), cct(_cct),
 	 user(_user)
       {}
 
-    RGWUserInfo* get_user() { return user; }
+    rgw::sal::RGWUser* get_user() { return user; }
 
   int postauth_init() override { return 0; }
 
@@ -190,7 +190,7 @@ namespace rgw {
     RGWObjectCtx rados_ctx;
   public:
 
-    RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user)
+    RGWLibContinuedReq(CephContext* _cct, rgw::sal::RGWUser* _user)
       :  RGWLibRequest(_cct, _user), io_ctx(),
 	 rstate(_cct, &io_ctx.get_env(), _user, id),
 	 rados_ctx(rgwlib.get_store(), &rstate)

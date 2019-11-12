@@ -24,13 +24,13 @@ public:
 class RGWRoleRead : public RGWRestRole {
 public:
   RGWRoleRead() = default;
-  int check_caps(RGWUserCaps& caps) override;
+  int check_caps(const RGWUserCaps& caps) override;
 };
 
 class RGWRoleWrite : public RGWRestRole {
 public:
   RGWRoleWrite() = default;
-  int check_caps(RGWUserCaps& caps) override;
+  int check_caps(const RGWUserCaps& caps) override;
 };
 
 class RGWCreateRole : public RGWRoleWrite {

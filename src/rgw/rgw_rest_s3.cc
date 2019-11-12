@@ -613,7 +613,7 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 
   if (! op_ret) {
     list_all_buckets_start(s);
-    dump_owner(s, s->user->user_id, s->user->display_name);
+    dump_owner(s, s->user->get_id(), s->user->get_display_name());
     s->formatter->open_array_section("Buckets");
     sent_data = true;
   }
@@ -1109,7 +1109,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
         s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
       if (fetchOwner == true) {
-        dump_owner(s, s->user->user_id, s->user->display_name);
+        dump_owner(s, s->user->get_id(), s->user->get_display_name());
       }
       s->formatter->close_section();
     }
@@ -1188,7 +1188,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
       s->formatter->dump_string("StorageClass", storage_class.c_str());
       if (fetchOwner == true) {
-        dump_owner(s, s->user->user_id, s->user->display_name);
+        dump_owner(s, s->user->get_id(), s->user->get_display_name());
       }
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
@@ -2318,8 +2318,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
       return -EACCES;
     } else {
       /* Populate the owner info. */
-      s->owner.set_id(s->user->user_id);
-      s->owner.set_name(s->user->display_name);
+      s->owner.set_id(s->user->get_id());
+      s->owner.set_name(s->user->get_display_name());
       ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
@@ -3244,8 +3244,8 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
         s->formatter->dump_string("Key", mp.get_key());
       }
       s->formatter->dump_string("UploadId", mp.get_upload_id());
-      dump_owner(s, s->user->user_id, s->user->display_name, "Initiator");
-      dump_owner(s, s->user->user_id, s->user->display_name);
+      dump_owner(s, s->user->get_id(), s->user->get_display_name(), "Initiator");
+      dump_owner(s, s->user->get_id(), s->user->get_display_name());
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_time(s, "Initiated", &iter->obj.meta.mtime);
       s->formatter->close_section();
@@ -3612,7 +3612,7 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   if (isSTSEnabled) {
     RGWHandler_REST_STS sts_handler(auth_registry, post_body);
     sts_handler.init(store, s, s->cio);
-    auto op = sts_handler.get_op(store);
+    auto op = sts_handler.get_op();
     if (op) {
       return op;
     }
@@ -3621,7 +3621,7 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   if (isIAMEnabled) {
     RGWHandler_REST_IAM iam_handler(auth_registry, post_body);
     iam_handler.init(store, s, s->cio);
-    auto op = iam_handler.get_op(store);
+    auto op = iam_handler.get_op();
     if (op) {
       return op;
     }
@@ -3630,7 +3630,7 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   if (isPSEnabled) {
     RGWHandler_REST_PSTopic_AWS topic_handler(auth_registry, post_body);
     topic_handler.init(store, s, s->cio);
-    auto op = topic_handler.get_op(store);
+    auto op = topic_handler.get_op();
     if (op) {
       return op;
     }
@@ -3971,7 +3971,7 @@ int RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
 
-  rgw_parse_url_bucket(t->url_bucket, s->user->user_id.tenant,
+  rgw_parse_url_bucket(t->url_bucket, s->user->get_tenant(),
 		      s->bucket_tenant, s->bucket_name);
 
   dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
@@ -3988,7 +3988,7 @@ int RGWHandler_REST_S3::postauth_init()
   }
 
   if (!t->src_bucket.empty()) {
-    rgw_parse_url_bucket(t->src_bucket, s->user->user_id.tenant,
+    rgw_parse_url_bucket(t->src_bucket, s->user->get_tenant(),
 			s->src_tenant_name, s->src_bucket_name);
     ret = rgw_validate_tenant_name(s->src_tenant_name);
     if (ret)
@@ -3997,7 +3997,7 @@ int RGWHandler_REST_S3::postauth_init()
 
   const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
   if (mfa) {
-    ret = verify_mfa(store, s->user, string(mfa), &s->mfa_verified, s);
+    ret = verify_mfa(store, &s->user->get_info(), string(mfa), &s->mfa_verified, s);
   }
 
   return 0;
@@ -4126,8 +4126,8 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
   const auto ret = rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s);
   if (ret == 0) {
     /* Populate the owner info. */
-    s->owner.set_id(s->user->user_id);
-    s->owner.set_name(s->user->display_name);
+    s->owner.set_id(s->user->get_id());
+    s->owner.set_name(s->user->get_display_name());
   }
   return ret;
 }
