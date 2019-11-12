@@ -33,7 +33,7 @@ if [ -n "$ip2" ]; then
     --image $image \
     deploy --name mon.b \
     --fsid $fsid \
-    --mon-ip $ip2 \
+    --mon-addrv "[v2:$ip2:3300,v1:$ip2:6789]" \
     --keyring /var/lib/ceph/$fsid/mon.a/keyring \
     --config c
 fi
