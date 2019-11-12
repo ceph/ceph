@@ -301,7 +301,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_remove(rados_write_op_t write_op)
     void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
     void rados_write_op_zero(rados_write_op_t write_op, uint64_t offset, uint64_t len)
-
+    void rados_write_op_exec(rados_write_op_t write_op, const char *cls, const char *method, const char *in_buf, size_t in_len, int *prval)
     void rados_read_op_omap_get_vals2(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_keys2(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)
@@ -2122,6 +2122,29 @@ cdef class WriteOp(object):
         with nogil:
             rados_write_op_truncate(self.write_op,  _offset)
 
+    @requires(('cls', str_type), ('method', str_type), ('data', bytes))
+    def execute(self, cls, method, data):
+        """
+        Execute an OSD class method on an object
+        
+        :param cls: name of the object class
+        :type cls: str
+        :param method: name of the method
+        :type method: str
+        :param data: input data
+        :type data: bytes
+        """
+
+        cls = cstr(cls, 'cls')
+        method = cstr(method, 'method')
+        cdef:
+            char *_cls = cls
+            char *_method = method
+            char *_data = data
+            size_t _data_len = len(data)
+
+        with nogil:
+            rados_write_op_exec(self.write_op, _cls, _method, _data, _data_len, NULL)
 
 class WriteOpCtx(WriteOp, OpCtx):
     """write operation context manager"""
