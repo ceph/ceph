@@ -415,38 +415,6 @@ class MonitorDBStore
     StoreIteratorImpl() : done(false) { }
     virtual ~StoreIteratorImpl() { }
 
-    bool add_chunk_entry(TransactionRef tx,
-			 const string &prefix,
-			 const string &key,
-			 bufferlist &value,
-			 uint64_t max) {
-      auto tmp(std::make_shared<Transaction>());
-      bufferlist tmp_bl;
-      tmp->put(prefix, key, value);
-      tmp->encode(tmp_bl);
-
-      bufferlist tx_bl;
-      tx->encode(tx_bl);
-
-      size_t len = tx_bl.length() + tmp_bl.length();
-
-      if (!tx->empty() && (len > max)) {
-	return false;
-      }
-
-      tx->append(tmp);
-      last_key.first = prefix;
-      last_key.second = key;
-
-      if (g_conf()->mon_sync_debug) {
-	encode(prefix, crc_bl);
-	encode(key, crc_bl);
-	encode(value, crc_bl);
-      }
-
-      return true;
-    }
-
     virtual bool _is_valid() = 0;
 
   public:
@@ -489,7 +457,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    void get_chunk_tx(TransactionRef tx, uint64_t max) override {
+    void get_chunk_tx(TransactionRef tx, uint64_t max_bytes) override {
       ceph_assert(done == false);
       ceph_assert(iter->valid() == true);
 
@@ -498,8 +466,24 @@ class MonitorDBStore
 	string key(iter->raw_key().second);
 	if (sync_prefixes.count(prefix)) {
 	  bufferlist value = iter->value();
-	  if (!add_chunk_entry(tx, prefix, key, value, max))
+	  if (tx->empty() ||
+	      (tx->get_bytes() + value.length() + key.size() +
+	       prefix.size() < max_bytes)) {
+	    // NOTE: putting every key in a separate transaction is
+	    // questionable as far as efficiency goes
+	    auto tmp(std::make_shared<Transaction>());
+	    tmp->put(prefix, key, value);
+	    tx->append(tmp);
+	    if (g_conf()->mon_sync_debug) {
+	      encode(prefix, crc_bl);
+	      encode(key, crc_bl);
+	      encode(value, crc_bl);
+	    }
+	  } else {
+	    last_key.first = prefix;
+	    last_key.second = key;
 	    return;
+	  }
 	}
 	iter->next();
       }
