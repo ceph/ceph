@@ -236,9 +236,11 @@ class WriteCompletion(_Completion):
         """
         return not self.is_persistent
 
+
 def _hide_in_features(f):
     f._hide_in_features = True
     return f
+
 
 class Orchestrator(object):
     """
@@ -331,7 +333,6 @@ class Orchestrator(object):
                 ...     OrchestratorClientMixin().get_hosts()
                 ... except (OrchestratorError, NotImplementedError):
                 ...     ...
-
 
         :returns: Dict of API method names to ``{'available': True or False}``
         """
@@ -575,6 +576,7 @@ class Orchestrator(object):
         :return: List of strings
         """
         raise NotImplementedError()
+
 
 class UpgradeSpec(object):
     # Request to orchestrator to initiate an upgrade to a particular
@@ -1193,8 +1195,10 @@ class OutdatableDictMixin(object):
         self[key] = OutdatableData(self[key].data,
                                    datetime.datetime.fromtimestamp(0))
 
+
 class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
     pass
+
 
 class OutdatableDict(OutdatableDictMixin, dict):
     pass
