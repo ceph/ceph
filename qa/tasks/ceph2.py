@@ -55,8 +55,8 @@ def shell(ctx, cluster_name, remote, args, **kwargs):
 def build_initial_config(ctx, config):
     cluster_name = config['cluster']
 
-    #path = os.path.join(os.path.dirname(__file__), 'ceph.conf.template')
-    conf = configobj.ConfigObj() #path, file_error=True)
+    path = os.path.join(os.path.dirname(__file__), 'ceph2.conf')
+    conf = configobj.ConfigObj(path, file_error=True)
 
     conf.setdefault('global', {})
     conf['global']['fsid'] = ctx.ceph[cluster_name].fsid
@@ -64,7 +64,7 @@ def build_initial_config(ctx, config):
     # overrides
     for section, keys in config['conf'].items():
         for key, value in keys.items():
-            log.info("[%s] %s = %s" % (section, key, value))
+            log.info(" override: [%s] %s = %s" % (section, key, value))
             if section not in conf:
                 conf[section] = {}
             conf[section][key] = value
@@ -249,6 +249,7 @@ def ceph_bootstrap(ctx, config):
             remote=bootstrap_remote,
             path='{}/seed.{}.conf'.format(testdir, cluster_name),
             data=conf_fp.getvalue())
+        log.debug('Final config:\n' + conf_fp.getvalue())
 
         # bootstrap
         log.info('Bootstrapping...')
