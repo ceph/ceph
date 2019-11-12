@@ -312,6 +312,11 @@ global_init(const std::map<std::string,std::string> *defaults,
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
     cerr << "warning: unable to set dumpable flag: " << cpp_strerror(errno) << std::endl;
   }
+#  if defined(PR_SET_THP_DISABLE)
+  if (!g_conf().get_val<bool>("thp") && prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0) == -1) {
+    cerr << "warning: unable to disable THP: " << cpp_strerror(errno) << std::endl;
+  }
+#  endif
 #endif
 
   //
