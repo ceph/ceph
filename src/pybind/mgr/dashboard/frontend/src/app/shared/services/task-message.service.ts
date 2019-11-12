@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
+import { RbdService } from '../api/rbd.service';
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
 import { Task } from '../models/task';
@@ -57,7 +58,7 @@ class TaskMessage {
   providedIn: 'root'
 })
 export class TaskMessageService {
-  constructor(private i18n: I18n) {}
+  constructor(private i18n: I18n, private rbdService: RbdService) {}
 
   defaultMessage = this.newTaskMessage(
     new TaskMessageOperation(this.i18n('Executing'), this.i18n('execute'), this.i18n('Executed')),
@@ -99,19 +100,41 @@ export class TaskMessageService {
   rbd = {
     default: (metadata) =>
       this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.pool_name}/${metadata.image_name}`
+        id: `${metadata.image_spec}`
       }),
-    child: (metadata) =>
-      this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.child_pool_name}/${metadata.child_image_name}`
-      }),
-    destination: (metadata) =>
-      this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.dest_pool_name}/${metadata.dest_image_name}`
-      }),
+    create: (metadata) => {
+      const id = this.rbdService.getImageSpec(
+        metadata.pool_name,
+        metadata.namespace,
+        metadata.image_name
+      );
+      return this.i18n(`RBD '{{id}}'`, {
+        id: id
+      });
+    },
+    child: (metadata) => {
+      const id = this.rbdService.getImageSpec(
+        metadata.child_pool_name,
+        metadata.child_namespace,
+        metadata.child_image_name
+      );
+      return this.i18n(`RBD '{{id}}'`, {
+        id: id
+      });
+    },
+    destination: (metadata) => {
+      const id = this.rbdService.getImageSpec(
+        metadata.dest_pool_name,
+        metadata.dest_namespace,
+        metadata.dest_image_name
+      );
+      return this.i18n(`RBD '{{id}}'`, {
+        id: id
+      });
+    },
     snapshot: (metadata) =>
       this.i18n(`RBD snapshot '{{id}}'`, {
-        id: `${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}`
+        id: `${metadata.image_spec}@${metadata.snapshot_name}`
       })
   };
 
@@ -174,10 +197,10 @@ export class TaskMessageService {
     // RBD tasks
     'rbd/create': this.newTaskMessage(
       this.commonOperations.create,
-      this.rbd.default,
+      this.rbd.create,
       (metadata) => ({
         '17': this.i18n('Name is already used by {{rbd_name}}.', {
-          rbd_name: this.rbd.default(metadata)
+          rbd_name: this.rbd.create(metadata)
         })
       })
     ),
@@ -265,7 +288,7 @@ export class TaskMessageService {
       new TaskMessageOperation(this.i18n('Moving'), this.i18n('move'), this.i18n('Moved')),
       (metadata) =>
         this.i18n(`image '{{id}}' to trash`, {
-          id: `${metadata.pool_name}/${metadata.image_name}`
+          id: metadata.image_spec
         }),
       () => ({
         2: this.i18n('Could not find image.')
@@ -275,12 +298,12 @@ export class TaskMessageService {
       new TaskMessageOperation(this.i18n('Restoring'), this.i18n('restore'), this.i18n('Restored')),
       (metadata) =>
         this.i18n(`image '{{id}}' into '{{new_id}}'`, {
-          id: `${metadata.pool_name}@${metadata.image_id}`,
-          new_id: `${metadata.pool_name}/${metadata.new_image_name}`
+          id: metadata.image_id_spec,
+          new_id: metadata.new_image_name
         }),
       (metadata) => ({
         17: this.i18n(`Image name '{{id}}' is already in use.`, {
-          id: `${metadata.pool_name}/${metadata.new_image_name}`
+          id: metadata.new_image_name
         })
       })
     ),
@@ -288,7 +311,7 @@ export class TaskMessageService {
       new TaskMessageOperation(this.i18n('Deleting'), this.i18n('delete'), this.i18n('Deleted')),
       (metadata) =>
         this.i18n(`image '{{id}}'`, {
-          id: `${metadata.pool_name}/${metadata.image_name}@${metadata.image_id}`
+          id: `${metadata.image_id_spec}`
         })
     ),
     'rbd/trash/purge': this.newTaskMessage(

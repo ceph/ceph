@@ -144,6 +144,10 @@ export class IscsiTargetFormComponent implements OnInit {
       this.imagesAll = _(data[1])
         .flatMap((pool) => pool.value)
         .filter((image) => {
+          // Namespaces are not supported by ceph-iscsi
+          if (image.namespace) {
+            return false;
+          }
           const imageId = `${image.pool_name}/${image.name}`;
           if (usedImages.indexOf(imageId) !== -1) {
             return false;

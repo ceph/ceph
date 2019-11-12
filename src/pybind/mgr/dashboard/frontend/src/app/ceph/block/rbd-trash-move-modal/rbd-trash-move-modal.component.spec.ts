@@ -67,7 +67,7 @@ describe('RbdTrashMoveModalComponent', () => {
 
     it('with normal delay', () => {
       component.moveImage();
-      const req = httpTesting.expectOne('api/block/image/foo/bar/move_trash');
+      const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
       expect(req.request.body).toEqual({ delay: 0 });
     });
@@ -79,7 +79,7 @@ describe('RbdTrashMoveModalComponent', () => {
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
-      const req = httpTesting.expectOne('api/block/image/foo/bar/move_trash');
+      const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
       expect(req.request.body).toEqual({ delay: 0 });
     });
@@ -92,7 +92,7 @@ describe('RbdTrashMoveModalComponent', () => {
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
-      const req = httpTesting.expectOne('api/block/image/foo/bar/move_trash');
+      const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
       expect(req.request.body.delay).toBeGreaterThan(86390);
     });

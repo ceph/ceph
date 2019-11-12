@@ -369,7 +369,7 @@ class RbdMirroringPoolMode(RESTController):
                     rbd.RBD().mirror_mode_set(ioctx, mode_enum)
                 _reset_view_cache()
 
-        return _rbd_call(pool_name, _edit, mirror_mode)
+        return _rbd_call(pool_name, None, _edit, mirror_mode)
 
 
 @ApiController('/block/mirroring/pool/{pool_name}/peer', Scope.RBD_MIRRORING)
