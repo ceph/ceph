@@ -4,8 +4,6 @@ try:
 except ImportError:
     from unittest import mock
 
-from ceph.deployment.inventory import Devices
-
 from orchestrator import InventoryNode, ServiceDescription
 
 from . import ControllerTestCase
@@ -68,16 +66,16 @@ class OrchestratorControllerTest(ControllerTestCase):
             {
                 'name': 'host-0',
                 'devices': [
-                    {'id': 'nvme0n1'},
-                    {'id': 'sdb'},
-                    {'id': 'sdc'},
+                    {'path': 'nvme0n1'},
+                    {'path': 'sdb'},
+                    {'path': 'sdc'},
                 ]
             },
             {
                 'name': 'host-1',
                 'devices': [
-                    {'id': 'sda'},
-                    {'id': 'sdb'},
+                    {'path': 'sda'},
+                    {'path': 'sdb'},
                 ]
             }
         ]
