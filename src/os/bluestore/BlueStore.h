@@ -1763,8 +1763,6 @@ public:
 
     std::atomic_int kv_submitted_waiters = {0};
 
-    std::atomic_int kv_drain_preceding_waiters = {0};
-
     std::atomic_bool zombie = {false};    ///< in zombie_osr set (collection going away)
 
     const uint32_t sequencer_id;

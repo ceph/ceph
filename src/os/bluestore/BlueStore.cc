@@ -11280,7 +11280,8 @@ void BlueStore::_txc_finish(TransContext *txc)
       dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
 	       << dendl;
       if (txc->state != TransContext::STATE_DONE) {
-	if (osr->kv_drain_preceding_waiters && txc->state == TransContext::STATE_PREPARE) {
+	if (txc->state == TransContext::STATE_PREPARE &&
+	  deferred_aggressive) {
 	  // for _osr_drain_preceding()
           notify = true;
 	}
@@ -11403,7 +11404,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
 {
   OpSequencer *osr = txc->osr.get();
   dout(10) << __func__ << " " << txc << " osr " << osr << dendl;
-  osr->kv_drain_preceding_waiters++;
+  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
   {
     // submit anything pending
     deferred_lock.lock();
@@ -11422,7 +11423,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
     }
   }
   osr->drain_preceding(txc);
-  osr->kv_drain_preceding_waiters--;
+  --deferred_aggressive;
   dout(10) << __func__ << " " << osr << " done" << dendl;
 }
 
