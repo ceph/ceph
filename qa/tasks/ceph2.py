@@ -29,7 +29,7 @@ from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
 
 # these items we use from ceph.py should probably eventually move elsewhere
-from tasks.ceph import get_mons
+from tasks.ceph import get_mons, healthy
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
 
@@ -700,6 +700,9 @@ def task(ctx, config):
         )
 
         try:
+            if config.get('wait-for-healthy', True):
+                healthy(ctx=ctx, config=config)
+
             log.info('Setup complete, yielding')
             yield
 
