@@ -588,7 +588,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   share_map_with_random_osd();
   update_logger();
-
   process_failures();
 
   // make sure our feature bits reflect the latest map
@@ -2590,23 +2589,27 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   // help us localize the grace correction to a subset of the system
   // (say, a rack with a bad switch) that is unhappy.
   ceph_assert(fi.reporters.size());
-  for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
-	p != fi.reporters.end();
-	++p) {
+  for (auto p = fi.reporters.begin(); p != fi.reporters.end();) {
     // get the parent bucket whose type matches with "reporter_subtree_level".
     // fall back to OSD if the level doesn't exist.
-    map<string, string> reporter_loc = osdmap.crush->get_full_location(p->first);
-    map<string, string>::iterator iter = reporter_loc.find(reporter_subtree_level);
-    if (iter == reporter_loc.end()) {
-      reporters_by_subtree.insert("osd." + to_string(p->first));
+    if (osdmap.exists(p->first)) {
+      auto reporter_loc = osdmap.crush->get_full_location(p->first);
+      if (auto iter = reporter_loc.find(reporter_subtree_level);
+          iter == reporter_loc.end()) {
+        reporters_by_subtree.insert("osd." + to_string(p->first));
+      } else {
+        reporters_by_subtree.insert(iter->second);
+      }
+      if (g_conf()->mon_osd_adjust_heartbeat_grace) {
+        const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
+        utime_t elapsed = now - xi.down_stamp;
+        double decay = exp((double)elapsed * decay_k);
+        peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
+      }
+      ++p;
     } else {
-      reporters_by_subtree.insert(iter->second);
-    }
-    if (g_conf()->mon_osd_adjust_heartbeat_grace) {
-      const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
-      utime_t elapsed = now - xi.down_stamp;
-      double decay = exp((double)elapsed * decay_k);
-      peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
+      fi.cancel_report(p->first);;
+      p = fi.reporters.erase(p);
     }
   }
   
