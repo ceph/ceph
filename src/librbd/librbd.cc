@@ -2359,6 +2359,18 @@ namespace librbd {
     return librbd::api::Image<>::snap_set(ictx, snap_id);
   }
 
+  int Image::snap_get_name(uint64_t snap_id, std::string *snap_name)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Snapshot<>::get_name(ictx, snap_id, snap_name);
+  }
+
+  int Image::snap_get_id(const std::string snap_name, uint64_t *snap_id)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Snapshot<>::get_id(ictx, snap_name, snap_id);
+  }
+
   ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -5261,6 +5273,28 @@ extern "C" int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::api::Image<>::snap_set(ictx, snap_id);
+}
+
+extern "C" int rbd_snap_get_name(rbd_image_t image, uint64_t snap_id, char *snapname, size_t *name_len)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  std::string snap_name;
+  int r = librbd::api::Snapshot<>::get_name(ictx, snap_id, &snap_name);
+  size_t expected_size = snap_name.size();
+  if (*name_len <= expected_size) {
+    *name_len = expected_size + 1;
+    return  -ERANGE;
+  }
+  strncpy(snapname, snap_name.c_str(), expected_size);
+  snapname[expected_size] = '\0';
+  *name_len = expected_size + 1;
+  return r;
+}
+
+extern "C" int rbd_snap_get_id(rbd_image_t image, const char *snapname, uint64_t *snap_id)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Snapshot<>::get_id(ictx, snapname, snap_id);
 }
 
 extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,

@@ -985,6 +985,38 @@ class TestImage(object):
         eq(read, data)
         self.image.remove_snap('snap1')
 
+    def test_snap_get_name(self):
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        self.image.create_snap('snap2')
+        self.image.create_snap('snap3')
+
+        for snap in self.image.list_snaps():
+            expected_snap_name = self.image.snap_get_name(snap['id'])
+            eq(expected_snap_name, snap['name'])
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+        self.image.remove_snap('snap3')
+        eq([], list(self.image.list_snaps()))
+
+        assert_raises(ImageNotFound, self.image.snap_get_name, 1)
+
+    def test_snap_get_id(self):
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        self.image.create_snap('snap2')
+        self.image.create_snap('snap3')
+
+        for snap in self.image.list_snaps():
+            expected_snap_id = self.image.snap_get_id(snap['name'])
+            eq(expected_snap_id, snap['id'])
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+        self.image.remove_snap('snap3')
+        eq([], list(self.image.list_snaps()))
+
+        assert_raises(ImageNotFound, self.image.snap_get_id, 'snap1')
+
     def test_set_snap_sparse(self):
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)
