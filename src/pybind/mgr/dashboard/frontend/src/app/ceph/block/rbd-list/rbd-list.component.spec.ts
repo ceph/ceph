@@ -117,19 +117,27 @@ describe('RbdListComponent', () => {
         case 'rbd/copy':
           task.metadata = {
             dest_pool_name: 'rbd',
+            dest_namespace: null,
             dest_image_name: 'd'
           };
           break;
         case 'rbd/clone':
           task.metadata = {
             child_pool_name: 'rbd',
+            child_namespace: null,
             child_image_name: 'd'
+          };
+          break;
+        case 'rbd/create':
+          task.metadata = {
+            pool_name: 'rbd',
+            namespace: null,
+            image_name: image_name
           };
           break;
         default:
           task.metadata = {
-            pool_name: 'rbd',
-            image_name: image_name
+            image_spec: `rbd/${image_name}`
           };
           break;
       }

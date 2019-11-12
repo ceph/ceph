@@ -41,6 +41,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   @Input()
   poolName: string;
   @Input()
+  namespace: string;
+  @Input()
   rbdName: string;
   @ViewChild('nameTpl', { static: false })
   nameTpl: TemplateRef<any>;
@@ -129,8 +131,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     actions.unprotect.click = () => this.toggleProtection();
     const getImageUri = () =>
       this.selection.first() &&
-      `${encodeURIComponent(this.poolName)}/${encodeURIComponent(
-        this.rbdName
+      `${encodeURIComponent(
+        this.rbdService.getImageSpec(this.poolName, this.namespace, this.rbdName)
       )}/${encodeURIComponent(this.selection.first().name)}`;
     actions.clone.routerLink = () => `/block/rbd/clone/${getImageUri()}`;
     actions.copy.routerLink = () => `/block/rbd/copy/${getImageUri()}`;
@@ -147,8 +149,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         ['rbd/snap/create', 'rbd/snap/delete', 'rbd/snap/edit', 'rbd/snap/rollback'].includes(
           task.name
         ) &&
-        this.poolName === task.metadata['pool_name'] &&
-        this.rbdName === task.metadata['image_name']
+        this.rbdService.getImageSpec(this.poolName, this.namespace, this.rbdName) ===
+          task.metadata['image_spec']
       );
     };
 
@@ -167,6 +169,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     this.modalRef = this.modalService.show(RbdSnapshotFormComponent);
     this.modalRef.content.poolName = this.poolName;
     this.modalRef.content.imageName = this.rbdName;
+    this.modalRef.content.namespace = this.namespace;
     if (snapName) {
       this.modalRef.content.setEditing();
     } else {
@@ -202,12 +205,11 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/edit';
     finishedTask.metadata = {
-      pool_name: this.poolName,
-      image_name: this.rbdName,
+      image_spec: this.rbdService.getImageSpec(this.poolName, this.namespace, this.rbdName),
       snapshot_name: snapshotName
     };
     this.rbdService
-      .protectSnapshot(this.poolName, this.rbdName, snapshotName, !isProtected)
+      .protectSnapshot(this.poolName, this.namespace, this.rbdName, snapshotName, !isProtected)
       .toPromise()
       .then(() => {
         const executingTask = new ExecutingTask();
@@ -229,11 +231,10 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const finishedTask = new FinishedTask();
     finishedTask.name = taskName;
     finishedTask.metadata = {
-      pool_name: this.poolName,
-      image_name: this.rbdName,
+      image_spec: this.rbdService.getImageSpec(this.poolName, this.namespace, this.rbdName),
       snapshot_name: snapshotName
     };
-    this.rbdService[task](this.poolName, this.rbdName, snapshotName)
+    this.rbdService[task](this.poolName, this.namespace, this.rbdName, snapshotName)
       .toPromise()
       .then(() => {
         const executingTask = new ExecutingTask();
@@ -257,12 +258,13 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   rollbackModal() {
     const snapshotName = this.selection.selected[0].name;
+    const imageSpec = this.rbdService.getImageSpec(this.poolName, this.namespace, this.rbdName);
     const initialState = {
       titleText: this.i18n('RBD snapshot rollback'),
       buttonText: this.i18n('Rollback'),
       bodyTpl: this.rollbackTpl,
       bodyData: {
-        snapName: `${this.poolName}/${this.rbdName}@${snapshotName}`
+        snapName: `${imageSpec}@${snapshotName}`
       },
       onSubmit: () => {
         this._asyncTask('rollbackSnapshot', 'rbd/snap/rollback', snapshotName);

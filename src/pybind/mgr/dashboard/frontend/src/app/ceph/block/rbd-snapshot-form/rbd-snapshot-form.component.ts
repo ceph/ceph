@@ -17,6 +17,7 @@ import { TaskManagerService } from '../../../shared/services/task-manager.servic
 })
 export class RbdSnapshotFormComponent implements OnInit {
   poolName: string;
+  namespace: string;
   imageName: string;
   snapName: string;
 
@@ -66,12 +67,11 @@ export class RbdSnapshotFormComponent implements OnInit {
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/edit';
     finishedTask.metadata = {
-      pool_name: this.poolName,
-      image_name: this.imageName,
+      image_spec: this.rbdService.getImageSpec(this.poolName, this.namespace, this.imageName),
       snapshot_name: snapshotName
     };
     this.rbdService
-      .renameSnapshot(this.poolName, this.imageName, this.snapName, snapshotName)
+      .renameSnapshot(this.poolName, this.namespace, this.imageName, this.snapName, snapshotName)
       .toPromise()
       .then(() => {
         this.taskManagerService.subscribe(
@@ -94,12 +94,11 @@ export class RbdSnapshotFormComponent implements OnInit {
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/create';
     finishedTask.metadata = {
-      pool_name: this.poolName,
-      image_name: this.imageName,
+      image_spec: this.rbdService.getImageSpec(this.poolName, this.namespace, this.imageName),
       snapshot_name: snapshotName
     };
     this.rbdService
-      .createSnapshot(this.poolName, this.imageName, snapshotName)
+      .createSnapshot(this.poolName, this.namespace, this.imageName, snapshotName)
       .toPromise()
       .then(() => {
         this.taskManagerService.subscribe(

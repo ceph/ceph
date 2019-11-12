@@ -131,8 +131,7 @@ describe('RbdSnapshotListComponent', () => {
       const task = new ExecutingTask();
       task.name = task_name;
       task.metadata = {
-        pool_name: 'rbd',
-        image_name: 'foo',
+        image_spec: 'rbd/foo',
         snapshot_name: snapshot_name
       };
       summaryService.addRunningTask(task);

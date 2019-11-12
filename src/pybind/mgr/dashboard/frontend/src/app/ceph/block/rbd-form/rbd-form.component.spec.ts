@@ -178,17 +178,23 @@ describe('RbdFormComponent', () => {
       spyOn(rbdService, 'get').and.callThrough();
     });
 
-    it('without snapName', () => {
-      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: undefined });
+    it('with namespace', () => {
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar%2Fbaz' });
 
-      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(rbdService.get).toHaveBeenCalledWith('foo', 'bar', 'baz');
+    });
+
+    it('without snapName', () => {
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar', snap: undefined });
+
+      expect(rbdService.get).toHaveBeenCalledWith('foo', null, 'bar');
       expect(component.snapName).toBeUndefined();
     });
 
     it('with snapName', () => {
-      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: 'baz%2Fbaz' });
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar', snap: 'baz%2Fbaz' });
 
-      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(rbdService.get).toHaveBeenCalledWith('foo', null, 'bar');
       expect(component.snapName).toBe('baz/baz');
     });
   });
