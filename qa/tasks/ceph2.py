@@ -641,7 +641,8 @@ def task(ctx, config):
     first_ceph_cluster = False
     if not hasattr(ctx, 'daemons'):
         first_ceph_cluster = True
-        ctx.daemons = DaemonGroup(use_ceph_daemon=True)
+        ctx.daemons = DaemonGroup(
+            use_ceph_daemon='{}/ceph-daemon'.format(testdir))
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
         ctx.managers = {}
