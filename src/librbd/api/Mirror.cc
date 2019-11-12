@@ -241,24 +241,6 @@ int create_bootstrap_peer(CephContext* cct, librados::IoCtx& io_ctx,
   return 0;
 }
 
-template <typename I>
-int validate_mirroring_enabled(I *ictx) {
-  CephContext *cct = ictx->cct;
-  cls::rbd::MirrorImage mirror_image_internal;
-  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
-      &mirror_image_internal);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  } else if (mirror_image_internal.state !=
-               cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-    lderr(cct) << "mirroring is not currently enabled" << dendl;
-    return -EINVAL;
-  }
-  return 0;
-}
-
 int list_mirror_images(librados::IoCtx& io_ctx,
                        std::set<std::string>& mirror_image_ids) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
@@ -448,7 +430,7 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     return -EINVAL;
   }
 
-  // is mirroring  enabled for the child?
+  // is mirroring  enabled for the image?
   cls::rbd::MirrorImage mirror_image_internal;
   r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
                                    &mirror_image_internal);
