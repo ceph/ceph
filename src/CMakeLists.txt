@@ -691,7 +691,7 @@ if(WITH_FUSE)
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
   target_link_libraries(ceph-fuse ${FUSE_LIBRARIES}
-    ${GSSAPI_LIBRARIES} client ceph-common global-static)
+    ${GSSAPI_LIBRARIES} client ceph-common global-static ${EXTRALIBS})
   set_target_properties(ceph-fuse PROPERTIES
     COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
