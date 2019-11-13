@@ -22,8 +22,8 @@ hello_world_cpp
 "
 BINARIES="${BINARIES_TO_RUN}hello_radosstriper_cpp
 "
-DL_PREFIX="http://git.ceph.com/?p=ceph.git;a=blob_plain;hb=master;f=examples/librados/"
-#DL_PREFIX="https://raw.githubusercontent.com/ceph/ceph/master/examples/librados/"
+DL_PREFIX="http://git.ceph.com/?p=ceph.git;a=blob_plain;hb=nautilus;f=examples/librados/"
+#DL_PREFIX="https://raw.githubusercontent.com/ceph/ceph/nautilus/examples/librados/"
 DESTDIR=$(pwd)
 
 function cleanup () {
