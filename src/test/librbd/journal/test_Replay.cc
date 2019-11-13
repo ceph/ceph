@@ -14,6 +14,7 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequest.h"
@@ -374,7 +375,7 @@ TEST_F(TestJournalReplay, SnapProtect) {
   ASSERT_EQ(initial_entry + 2, current_entry);
 
   bool is_protected;
-  ASSERT_EQ(0, librbd::snap_is_protected(ictx, "snap", &is_protected));
+  ASSERT_EQ(0, librbd::api::Snapshot<>::is_protected(ictx, "snap", &is_protected));
   ASSERT_TRUE(is_protected);
 
   // verify lock ordering constraints
@@ -427,7 +428,7 @@ TEST_F(TestJournalReplay, SnapUnprotect) {
   ASSERT_EQ(initial_entry + 2, current_entry);
 
   bool is_protected;
-  ASSERT_EQ(0, librbd::snap_is_protected(ictx, "snap", &is_protected));
+  ASSERT_EQ(0, librbd::api::Snapshot<>::is_protected(ictx, "snap", &is_protected));
   ASSERT_FALSE(is_protected);
 
   // verify lock ordering constraints
