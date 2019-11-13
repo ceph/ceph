@@ -3124,6 +3124,8 @@ int main(int argc, const char **argv)
   std::optional<string> opt_prefix;
   std::optional<string> opt_prefix_rm;
 
+  std::optional<int> opt_priority;
+
   rgw::notify::EventTypeList event_types;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
@@ -3520,6 +3522,8 @@ int main(int argc, const char **argv)
       opt_prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix-rm", (char*)NULL)) {
       opt_prefix_rm = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--priority", (char*)NULL)) {
+      opt_priority = atoi(val.c_str());
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -8183,6 +8187,9 @@ next:
 
     pipe->params.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
     pipe->params.filter.set_tags(tags_add, tags_rm);
+    if (opt_priority) {
+      pipe->params.priority = *opt_priority;
+    }
 
     ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
