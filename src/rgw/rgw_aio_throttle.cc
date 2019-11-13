@@ -48,6 +48,7 @@ AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
 
   if (cost > window) {
     p->result = -EDEADLK; // would never succeed
+    std::unique_lock lock{mutex};
     completed.push_back(*p);
   } else {
     get(*p);
@@ -57,6 +58,7 @@ AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
     }
   }
   p.release();
+  std::unique_lock lock{mutex};
   return std::move(completed);
 }
 
@@ -71,6 +73,7 @@ AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
 
   if (cost > window) {
     p->result = -EDEADLK; // would never succeed
+    std::unique_lock lock{mutex};
     completed.push_back(*p);
   } else {
     get(*p);
@@ -80,6 +83,7 @@ AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
     }
   }
   p.release();
+  std::unique_lock lock{mutex};
   return std::move(completed);
 }
 
