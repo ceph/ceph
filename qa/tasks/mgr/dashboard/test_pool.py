@@ -298,6 +298,16 @@ class PoolTest(DashboardTestCase):
                 self._validate_pool_properties(pool['pool_quotas_to_check'],
                                                self._get_pool(pool_name))
 
+    def test_pool_update_name(self):
+        name = 'pool_update'
+        updated_name = 'pool_updated_name'
+        with self.__yield_pool(name, None, updated_name):
+            props = {'pool': updated_name}
+            self._task_put('/api/pool/{}'.format(name), props)
+            time.sleep(5)
+            self.assertStatus(200)
+            self._validate_pool_properties(props, self._get_pool(updated_name))
+
     def test_pool_update_metadata(self):
         pool_name = 'pool_update_metadata'
         with self.__yield_pool(pool_name):
