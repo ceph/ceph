@@ -792,7 +792,7 @@ int Migration<I>::abort() {
     } BOOST_SCOPE_EXIT_END;
 
     std::vector<librbd::snap_info_t> snaps;
-    r = snap_list(dst_image_ctx, snaps);
+    r = Snapshot<I>::list(dst_image_ctx, snaps);
     if (r < 0) {
       lderr(m_cct) << "failed listing snapshots: " << cpp_strerror(r)
                    << dendl;
@@ -801,8 +801,8 @@ int Migration<I>::abort() {
 
     for (auto &snap : snaps) {
       librbd::NoOpProgressContext prog_ctx;
-      int r = snap_remove(dst_image_ctx, snap.name.c_str(),
-                          RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
+      int r = Snapshot<I>::remove(dst_image_ctx, snap.name.c_str(),
+                                  RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
       if (r < 0) {
         lderr(m_cct) << "failed removing snapshot: " << cpp_strerror(r)
                      << dendl;
@@ -975,7 +975,7 @@ template <typename I>
 int Migration<I>::list_src_snaps(std::vector<librbd::snap_info_t> *snaps) {
   ldout(m_cct, 10) << dendl;
 
-  int r = snap_list(m_src_image_ctx, *snaps);
+  int r = Snapshot<I>::list(m_src_image_ctx, *snaps);
   if (r < 0) {
     lderr(m_cct) << "failed listing snapshots: " << cpp_strerror(r) << dendl;
     return r;
@@ -1732,8 +1732,8 @@ int Migration<I>::remove_src_image() {
     auto &snap = *it;
 
     librbd::NoOpProgressContext prog_ctx;
-    int r = snap_remove(m_src_image_ctx, snap.name.c_str(),
-                        RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
+    int r = Snapshot<I>::remove(m_src_image_ctx, snap.name.c_str(),
+                                RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
     if (r < 0) {
       lderr(m_cct) << "failed removing source image snapshot '" << snap.name
                    << "': " << cpp_strerror(r) << dendl;
