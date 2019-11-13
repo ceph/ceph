@@ -142,7 +142,6 @@ class _Completion(G):
         # type: () -> bool
         raise NotImplementedError()
 
-
 def raise_if_exception(c):
     # type: (_Completion) -> None
     """
@@ -213,7 +212,6 @@ class TrivialReadCompletion(ReadCompletion):
     @property
     def is_complete(self):
         return True
-
 
 class WriteCompletion(_Completion):
     """
@@ -505,6 +503,24 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def add_mgrs(self, hosts):
+        # type: (List[Tuple[str,str]]) -> WriteCompletion
+        """
+        Add mgrs to cluster.
+
+        :param hosts: list of hosts
+        """
+        raise NotImplementedError()
+
+    def remove_mgrs(self, hosts):
+        # type: (List[Tuple[str,str]]) -> WriteCompletion
+        """
+        Removes mgrs from the cluster.
+
+        :param hosts: list of hosts
+        """
+        raise NotImplementedError()
+
     def update_mons(self, num, hosts):
         # type: (int, List[Tuple[str,str]]) -> WriteCompletion
         """
@@ -512,6 +528,24 @@ class Orchestrator(object):
 
         :param num: requested number of monitors.
         :param hosts: list of hosts + network + name (optional)
+        """
+        raise NotImplementedError()
+
+    def add_mon(self, hosts):
+        # type: (List[Tuple[str,str]]) -> WriteCompletion
+        """
+        Add monitor to cluster.
+
+        :param hosts: list of hosts + network (required)
+        """
+        raise NotImplementedError()
+
+    def remove_mon(self, hosts):
+        # type: (List[Tuple[str,str]]) -> WriteCompletion
+        """
+        Remove monitor from cluster.
+
+        :param hosts: list of hosts
         """
         raise NotImplementedError()
 

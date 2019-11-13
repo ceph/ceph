@@ -891,6 +891,56 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._create_daemon('mon', name or host, host, keyring,
                                    extra_args=extra_args)
 
+    def add_mon(self, hosts):
+        """
+        Adjust the number of cluster monitors.
+        """
+        # current support limited to adding monitors.
+        # check that all the hostnames are registered
+        self._require_hosts(map(lambda h: h[0], hosts))
+
+        # current support requires a network to be specified
+        for host, network, name in hosts:
+            if not network:
+                raise RuntimeError("Host '{}' missing network part".format(host))
+
+        daemons = self._get_services('mon')
+        for _, _, name in hosts:
+            if name and len([d for d in daemons if d.service_instance == name]):
+                raise RuntimeError('name %s alrady exists', name)
+
+
+        self.log.info("creating monitor on hosts: '{}'".format(",".join(map(lambda h: ":".join(h), hosts))))
+
+        # TODO: we may want to chain the creation of the monitors so they join
+        # the quorum one at a time.
+        results = []
+        for host, network, name in hosts:
+            result = self._worker_pool.apply_async(self._create_mon,
+                                                   (host, network, name))
+            results.append(result)
+
+        return SSHWriteCompletion(results)
+
+
+    def remove_mon(self, hosts):
+        mon_map = self.get("mon_map")
+        num_mons = len(mon_map["mons"])
+        if num_mons <= 1:
+            return SSHWriteCompletionReady("Won't remove the last monitor.")
+
+        daemons = self._get_services('mon')
+        results = []
+        for daemon in daemons:
+            self.log.info("Removing mon from {}".format(daemon))
+            result = self._worker_pool.apply_async(
+                self._remove_daemon,
+                ('%s.%s' % (daemon.service_type, daemon.service_instance),
+                 daemon.nodename))
+            results.append(result)
+        return SSHWriteCompletion(results)
+
+
     def update_mons(self, num, hosts):
         """
         Adjust the number of cluster monitors.
@@ -952,6 +1002,46 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return self._create_daemon('mgr', name, host, keyring)
 
+    def add_mgrs(self, hosts):
+        """
+        Add mgrs to cluster.
+        """
+        daemons = self._get_services('mgr')
+
+        # check that all the hosts are registered
+        self._require_hosts(hosts)
+
+        results = []
+        for name in hosts:
+            if name and len([d for d in daemons if d.service_instance == name]):
+                raise RuntimeError('name %s alrady exists', name)
+
+        self.log.info("creating manager on hosts: '{}'".format(
+            ",".join(hosts)))
+
+        for host in hosts:
+            name = self.get_unique_name(daemons)
+            result = self._worker_pool.apply_async(self._create_mgr,
+                                                   (host, name))
+            results.append(result)
+
+        return SSHWriteCompletion(results)
+
+    def remove_mgrs(self, hosts):
+        """
+        Remove managers from hosts.
+        """
+        daemons = self._get_services('mgr')
+        results = []
+        for daemon in daemons:
+            self.log.info("Removing mgr from {}".format(daemon))
+            result = self._worker_pool.apply_async(
+                self._remove_daemon,
+                ('%s.%s' % (daemon.service_type, daemon.service_instance),
+                 daemon.nodename))
+            results.append(result)
+        return SSHWriteCompletion(results)
+
     def update_mgrs(self, num, hosts):
         """
         Adjust the number of cluster managers.
@@ -992,8 +1082,8 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 for daemon in daemons:
                     result = self._worker_pool.apply_async(
                         self._remove_daemon,
-                        ('%s.%s' % (d.service_type, d.service_instance),
-                         d.nodename))
+                        ('%s.%s' % (daemon.service_type, daemon.service_instance),
+                         daemon.nodename))
                     results.append(result)
                     num_to_remove -= 1
                     if num_to_remove == 0:

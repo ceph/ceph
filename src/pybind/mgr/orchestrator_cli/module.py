@@ -567,6 +567,45 @@ Usage:
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_write_cli('orchestrator mgr add',
+                "name=hosts,type=CephString,n=N,req=true",
+                'add manager instances to hosts')
+    def _add_mgrs(self, hosts=[]):
+        if not hosts:
+            return HandleCommandResult(-errno.EINVAL,
+                    stderr="Need to provide hosts")
+
+        completion = self.add_mgrs(hosts)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator mgr rm',
+                "name=hosts,type=CephString,n=N,req=true",
+                'remove manager instances from hosts')
+    def _remove_mgrs(self, hosts=[]):
+        if not hosts:
+            return HandleCommandResult(-errno.EINVAL,
+                    stderr="Need to provide hosts")
+
+        completion = self.remove_mgrs(hosts)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator mon rm',
+                "name=hosts,type=CephString,n=N,req=true",
+                'remove monitor instances from hosts')
+    def _remove_mons(self, hosts=[]):
+        if not hosts:
+            return HandleCommandResult(-errno.EINVAL,
+                    stderr="Need to provide hosts")
+
+        completion = self.remove_mon(hosts)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_write_cli('orchestrator mon update',
                 "name=num,type=CephInt,req=true "
                 "name=hosts,type=CephString,n=N,req=false",
@@ -586,6 +625,25 @@ Usage:
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
         completion = self.update_mons(num, hosts)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_write_cli('orchestrator mon add',
+                "name=hosts,type=CephString,n=N,req=true",
+                'Add a monitor instance to host')
+    def _add_mon(self, hosts=[]):
+        if not hosts:
+            return HandleCommandResult(-errno.EINVAL,
+                    stderr="Need to provide hosts")
+
+        try:
+            hosts = list(map(orchestrator.split_host_with_network, hosts))
+        except Exception as e:
+            msg = "Failed to parse host list: '{}': {}".format(hosts, e)
+            return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
+        completion = self.add_mon(hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
