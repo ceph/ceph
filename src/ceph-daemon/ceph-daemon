@@ -1578,7 +1578,7 @@ def _get_parser():
         default=UNIT_DIR,
         help='base directory for systemd units')
     parser.add_argument(
-        '--debug', '-d',
+        '--verbose', '-v',
         action='store_true',
         help='Show debug-level log messages')
     subparsers = parser.add_subparsers(help='sub-command')
@@ -1852,7 +1852,7 @@ if __name__ == "__main__":
     parser = _get_parser()
     args = parser.parse_args(av)
 
-    if args.debug:
+    if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
