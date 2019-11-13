@@ -88,6 +88,8 @@ void PyModuleRunner::shutdown()
     derr << "Failed to invoke shutdown() on " << get_name() << dendl;
     derr << handle_pyerror() << dendl;
   }
+
+  dead = true;
 }
 
 void PyModuleRunner::log(int level, const std::string &record)

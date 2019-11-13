@@ -53,6 +53,11 @@ int ActivePyModule::load(ActivePyModules *py_modules)
 
 void ActivePyModule::notify(const std::string &notify_type, const std::string &notify_id)
 {
+  if (is_dead()) {
+    dout(5) << "cancelling notify " << notify_type << " " << notify_id << dendl;
+    return;
+  }
+
   ceph_assert(pClassInstance != nullptr);
 
   Gil gil(py_module->pMyThreadState, true);
@@ -76,6 +81,11 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
 
 void ActivePyModule::notify_clog(const LogEntry &log_entry)
 {
+  if (is_dead()) {
+    dout(5) << "cancelling notify_clog" << dendl;
+    return;
+  }
+
   ceph_assert(pClassInstance != nullptr);
 
   Gil gil(py_module->pMyThreadState, true);
@@ -159,6 +169,11 @@ PyObject *ActivePyModule::dispatch_remote(
 
 void ActivePyModule::config_notify()
 {
+  if (is_dead()) {
+    dout(5) << "cancelling config_notify" << dendl;
+    return;
+  }
+
   Gil gil(py_module->pMyThreadState, true);
   dout(20) << "Calling " << py_module->get_name() << ".config_notify..."
 	   << dendl;
@@ -234,6 +249,10 @@ int ActivePyModule::handle_command(
 
 void ActivePyModule::get_health_checks(health_check_map_t *checks)
 {
+  if (is_dead()) {
+    dout(5) << "cancelling get_health_checks" << dendl;
+    return;
+  }
   checks->merge(health_checks);
 }
 
