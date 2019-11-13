@@ -439,6 +439,7 @@ def ceph_mgrs(ctx, config):
 
     try:
         nodes = []
+        daemons = {}
         for remote, roles in ctx.cluster.remotes.items():
             for mgr in [r for r in roles
                         if teuthology.is_type('mgr', cluster_name)(r)]:
@@ -447,20 +448,21 @@ def ceph_mgrs(ctx, config):
                     continue
                 log.info('Adding %s on %s' % (mgr, remote.shortname))
                 nodes.append(remote.shortname + '=' + id_)
-
-                ctx.daemons.register_daemon(
-                    remote, 'mgr', id_,
-                    cluster=cluster_name,
-                    fsid=fsid,
-                    logger=log.getChild(mgr),
-                    wait=False,
-                    started=True,
-                )
-
+                daemons[mgr] = (remote, id_)
         if nodes:
             shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'mgr', 'update',
                 str(len(nodes) + 1)] + nodes
+            )
+        for mgr, i in daemons.items():
+            remote, id_ = i
+            ctx.daemons.register_daemon(
+                remote, 'mgr', id_,
+                cluster=cluster_name,
+                fsid=fsid,
+                logger=log.getChild(mgr),
+                wait=False,
+                started=True,
             )
 
         yield
@@ -528,26 +530,29 @@ def ceph_mdss(ctx, config):
     testdir = teuthology.get_testdir(ctx)
 
     nodes = []
+    daemons = {}
     for remote, roles in ctx.cluster.remotes.items():
         for role in [r for r in roles
                     if teuthology.is_type('mds', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
             nodes.append(remote.shortname + '=' + id_)
-            ctx.daemons.register_daemon(
-                remote, 'mds', id_,
-                cluster=cluster_name,
-                fsid=fsid,
-                logger=log.getChild(role),
-                wait=False,
-                started=True,
-            )
-
+            daemons[role] = (remote, id_)
     if nodes:
         shell(ctx, cluster_name, remote, [
             'ceph', 'orchestrator', 'mds', 'update',
             'all',
             str(len(nodes))] + nodes
+        )
+    for role, i in daemons.items():
+        remote, id_ = i
+        ctx.daemons.register_daemon(
+            remote, 'mds', id_,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild(role),
+            wait=False,
+            started=True,
         )
 
     yield
