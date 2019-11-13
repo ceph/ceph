@@ -714,6 +714,10 @@ class ServiceDescription(object):
             return '%s.%s' % (self.service_type, self.service_instance)
         return self.service_type
 
+    def __repr__(self):
+        return "<ServiceDescription>({n_name}:{s_type})".format(n_name=self.nodename,
+                                                                  s_type=self.name())
+
     def to_json(self):
         out = {
             'nodename': self.nodename,
@@ -919,6 +923,9 @@ class InventoryNode(object):
     def from_nested_items(cls, hosts):
         devs = inventory.Devices.from_json
         return [cls(item[0], devs(item[1].data)) for item in hosts]
+
+    def __repr__(self):
+        return "<InventoryNode>({name})".format(name=self.name)
 
 
 class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev'])):
