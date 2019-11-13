@@ -17,6 +17,7 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { Permission } from '../../../shared/models/permissions';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -115,10 +116,8 @@ export class RbdTrashListComponent implements OnInit {
     ];
 
     const itemFilter = (entry, task) => {
-      return (
-        this.rbdService.getImageSpec(entry.pool_name, entry.namespace, entry.id) ===
-        task.metadata['image_id_spec']
-      );
+      const imageSpec = new ImageSpec(entry.pool_name, entry.namespace, entry.id);
+      return imageSpec.toString() === task.metadata['image_id_spec'];
     };
 
     const taskFilter = (task) => {
@@ -191,7 +190,7 @@ export class RbdTrashListComponent implements OnInit {
     const namespace = this.selection.first().namespace;
     const imageId = this.selection.first().id;
     const expiresAt = this.selection.first().deferment_end_time;
-    const imageIdSpec = this.rbdService.getImageSpec(poolName, namespace, imageId);
+    const imageIdSpec = new ImageSpec(poolName, namespace, imageId);
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
@@ -202,9 +201,9 @@ export class RbdTrashListComponent implements OnInit {
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('rbd/trash/remove', {
-              image_id_spec: imageIdSpec
+              image_id_spec: imageIdSpec.toString()
             }),
-            call: this.rbdService.removeTrash(poolName, namespace, imageId, true)
+            call: this.rbdService.removeTrash(imageIdSpec, true)
           })
       }
     });
