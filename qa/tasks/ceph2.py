@@ -62,7 +62,7 @@ def build_initial_config(ctx, config):
     conf['global']['fsid'] = ctx.ceph[cluster_name].fsid
 
     # overrides
-    for section, keys in config['conf'].items():
+    for section, keys in config.get('conf',{}).items():
         for key, value in keys.items():
             log.info(" override: [%s] %s = %s" % (section, key, value))
             if section not in conf:
