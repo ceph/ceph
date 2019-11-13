@@ -2,9 +2,9 @@ import { Injectable } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
-import { RbdService } from '../api/rbd.service';
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
+import { ImageSpec } from '../models/image-spec';
 import { Task } from '../models/task';
 
 export class TaskMessageOperation {
@@ -58,7 +58,7 @@ class TaskMessage {
   providedIn: 'root'
 })
 export class TaskMessageService {
-  constructor(private i18n: I18n, private rbdService: RbdService) {}
+  constructor(private i18n: I18n) {}
 
   defaultMessage = this.newTaskMessage(
     new TaskMessageOperation(this.i18n('Executing'), this.i18n('execute'), this.i18n('Executed')),
@@ -103,31 +103,31 @@ export class TaskMessageService {
         id: `${metadata.image_spec}`
       }),
     create: (metadata) => {
-      const id = this.rbdService.getImageSpec(
+      const id = new ImageSpec(
         metadata.pool_name,
         metadata.namespace,
         metadata.image_name
-      );
+      ).toString();
       return this.i18n(`RBD '{{id}}'`, {
         id: id
       });
     },
     child: (metadata) => {
-      const id = this.rbdService.getImageSpec(
+      const id = new ImageSpec(
         metadata.child_pool_name,
         metadata.child_namespace,
         metadata.child_image_name
-      );
+      ).toString();
       return this.i18n(`RBD '{{id}}'`, {
         id: id
       });
     },
     destination: (metadata) => {
-      const id = this.rbdService.getImageSpec(
+      const id = new ImageSpec(
         metadata.dest_pool_name,
         metadata.dest_namespace,
         metadata.dest_image_name
-      );
+      ).toString();
       return this.i18n(`RBD '{{id}}'`, {
         id: id
       });

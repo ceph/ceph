@@ -16,6 +16,7 @@ import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
@@ -78,9 +79,9 @@ export class RbdListComponent implements OnInit {
       )
   };
 
-  private createRbdFromTaskImageSpec(imageSpec: string): RbdModel {
-    const [poolName, namespace, rbdName] = this.rbdService.parseImageSpec(imageSpec);
-    return this.createRbdFromTask(poolName, namespace, rbdName);
+  private createRbdFromTaskImageSpec(imageSpecStr: string): RbdModel {
+    const imageSpec = ImageSpec.fromString(imageSpecStr);
+    return this.createRbdFromTask(imageSpec.poolName, imageSpec.namespace, imageSpec.imageName);
   }
 
   private createRbdFromTask(pool: string, namespace: string, name: string): RbdModel {
@@ -107,13 +108,11 @@ export class RbdListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
       this.selection.first() &&
-      `${encodeURIComponent(
-        this.rbdService.getImageSpec(
-          this.selection.first().pool_name,
-          this.selection.first().namespace,
-          this.selection.first().name
-        )
-      )}`;
+      new ImageSpec(
+        this.selection.first().pool_name,
+        this.selection.first().namespace,
+        this.selection.first().name
+      ).toStringEncoded();
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -231,32 +230,32 @@ export class RbdListComponent implements OnInit {
       let taskImageSpec: string;
       switch (task.name) {
         case 'rbd/copy':
-          taskImageSpec = this.rbdService.getImageSpec(
+          taskImageSpec = new ImageSpec(
             task.metadata['dest_pool_name'],
             task.metadata['dest_namespace'],
             task.metadata['dest_image_name']
-          );
+          ).toString();
           break;
         case 'rbd/clone':
-          taskImageSpec = this.rbdService.getImageSpec(
+          taskImageSpec = new ImageSpec(
             task.metadata['child_pool_name'],
             task.metadata['child_namespace'],
             task.metadata['child_image_name']
-          );
+          ).toString();
           break;
         case 'rbd/create':
-          taskImageSpec = this.rbdService.getImageSpec(
+          taskImageSpec = new ImageSpec(
             task.metadata['pool_name'],
             task.metadata['namespace'],
             task.metadata['image_name']
-          );
+          ).toString();
           break;
         default:
           taskImageSpec = task.metadata['image_spec'];
           break;
       }
       return (
-        taskImageSpec === this.rbdService.getImageSpec(entry.pool_name, entry.namespace, entry.name)
+        taskImageSpec === new ImageSpec(entry.pool_name, entry.namespace, entry.name).toString()
       );
     };
 
@@ -321,7 +320,7 @@ export class RbdListComponent implements OnInit {
     const poolName = this.selection.first().pool_name;
     const namespace = this.selection.first().namespace;
     const imageName = this.selection.first().name;
-    const imageSpec = this.rbdService.getImageSpec(poolName, namespace, imageName);
+    const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
@@ -330,9 +329,9 @@ export class RbdListComponent implements OnInit {
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('rbd/delete', {
-              image_spec: imageSpec
+              image_spec: imageSpec.toString()
             }),
-            call: this.rbdService.delete(poolName, namespace, imageName)
+            call: this.rbdService.delete(imageSpec)
           })
       }
     });
@@ -348,13 +347,13 @@ export class RbdListComponent implements OnInit {
     this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, { initialState });
   }
 
-  flattenRbd(poolName, namespace, imageName) {
+  flattenRbd(imageSpec: ImageSpec) {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('rbd/flatten', {
-          image_spec: this.rbdService.getImageSpec(poolName, namespace, imageName)
+          image_spec: imageSpec.toString()
         }),
-        call: this.rbdService.flatten(poolName, namespace, imageName)
+        call: this.rbdService.flatten(imageSpec)
       })
       .subscribe(undefined, undefined, () => {
         this.modalRef.hide();
@@ -366,11 +365,12 @@ export class RbdListComponent implements OnInit {
     const namespace = this.selection.first().namespace;
     const imageName = this.selection.first().name;
     const parent: RbdParentModel = this.selection.first().parent;
-    const parentImageSpec = this.rbdService.getImageSpec(
+    const parentImageSpec = new ImageSpec(
       parent.pool_name,
       parent.pool_namespace,
       parent.image_name
     );
+    const childImageSpec = new ImageSpec(poolName, namespace, imageName);
 
     const initialState = {
       titleText: 'RBD flatten',
@@ -378,10 +378,10 @@ export class RbdListComponent implements OnInit {
       bodyTpl: this.flattenTpl,
       bodyData: {
         parent: `${parentImageSpec}@${parent.snap_name}`,
-        child: this.rbdService.getImageSpec(poolName, namespace, imageName)
+        child: childImageSpec.toString()
       },
       onSubmit: () => {
-        this.flattenRbd(poolName, namespace, imageName);
+        this.flattenRbd(childImageSpec);
       }
     };
 

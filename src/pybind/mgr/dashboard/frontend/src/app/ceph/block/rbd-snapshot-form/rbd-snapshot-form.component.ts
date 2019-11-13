@@ -9,6 +9,7 @@ import { RbdService } from '../../../shared/api/rbd.service';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
 
@@ -73,14 +74,15 @@ export class RbdSnapshotFormComponent implements OnInit {
 
   editAction() {
     const snapshotName = this.snapshotForm.getValue('snapshotName');
+    const imageSpec = new ImageSpec(this.poolName, this.namespace, this.imageName);
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/edit';
     finishedTask.metadata = {
-      image_spec: this.rbdService.getImageSpec(this.poolName, this.namespace, this.imageName),
+      image_spec: imageSpec.toString(),
       snapshot_name: snapshotName
     };
     this.rbdService
-      .renameSnapshot(this.poolName, this.namespace, this.imageName, this.snapName, snapshotName)
+      .renameSnapshot(imageSpec, this.snapName, snapshotName)
       .toPromise()
       .then(() => {
         this.taskManagerService.subscribe(
@@ -100,14 +102,15 @@ export class RbdSnapshotFormComponent implements OnInit {
 
   createAction() {
     const snapshotName = this.snapshotForm.getValue('snapshotName');
+    const imageSpec = new ImageSpec(this.poolName, this.namespace, this.imageName);
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/create';
     finishedTask.metadata = {
-      image_spec: this.rbdService.getImageSpec(this.poolName, this.namespace, this.imageName),
+      image_spec: imageSpec.toString(),
       snapshot_name: snapshotName
     };
     this.rbdService
-      .createSnapshot(this.poolName, this.namespace, this.imageName, snapshotName)
+      .createSnapshot(imageSpec, snapshotName)
       .toPromise()
       .then(() => {
         this.taskManagerService.subscribe(
