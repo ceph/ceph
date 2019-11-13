@@ -393,7 +393,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
         #
         for bt in self.backport_trackers:
             # does the Backport Tracker description link back to the GitHub PR?
-            p = re.compile('http.*://github.com/ceph/ceph/pull/\\d+')
+            p = re.compile('http.?://github.com/ceph/ceph/pull/\\d+')
             bt.tracker_description = bt.redmine_issue.description
             bt.github_url_from_tracker = None
             try:
@@ -487,7 +487,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
 
     def extract_backport_trackers_from_github_pr_desc(self):
         global redmine_endpoint
-        p = re.compile('http.*://tracker.ceph.com/issues/\\d+')
+        p = re.compile('http.?://tracker.ceph.com/issues/\\d+')
         matching_strings = p.findall(self.github_pr_desc)
         if not matching_strings: 
             print_outer_divider()
