@@ -694,7 +694,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
         for (; miter != manifest.obj_end() && max_aio--; ++miter) {
           if (!max_aio) {
             ret = drain_handles(handles);
-            if (ret < 0) {
+            if (ret < 0 && ret != -ENOENT) {
               lderr(store->ctx()) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
               return ret;
             }
@@ -723,7 +723,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
 
       if (!max_aio) {
         ret = drain_handles(handles);
-        if (ret < 0) {
+        if (ret < 0 && ret != -ENOENT) {
           lderr(store->ctx()) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
           return ret;
         }
@@ -734,7 +734,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
   }
 
   ret = drain_handles(handles);
-  if (ret < 0) {
+  if (ret < 0 && ret != -ENOENT) {
     lderr(store->ctx()) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
     return ret;
   }
