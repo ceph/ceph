@@ -2,7 +2,10 @@ import errno
 import json
 from functools import wraps
 
+from ceph.deployment.inventory import Device
 from prettytable import PrettyTable
+
+from mgr_util import format_bytes
 
 try:
     from typing import List, Set, Optional
@@ -216,22 +219,27 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             data = [n.to_json() for n in completion.result]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
-            # Return a human readable version
-            result = ""
+            out = []
 
-            for inventory_node in completion.result:
-                result += "Host {0}:\n".format(inventory_node.name)
-
-                if inventory_node.devices:
-                    result += inventory_node.devices[0].pretty_print(only_header=True)
-                else:
-                    result += "No storage devices found"
-
-                for d in inventory_node.devices:
-                    result += d.pretty_print()
-                result += "\n"
-
-            return HandleCommandResult(stdout=result)
+            for host in completion.result: # type: orchestrator.InventoryNode
+                out.append('Host {}:'.format(host.name))
+                table = PrettyTable(
+                    ['Path', 'Type', 'Size', 'Available', 'Ceph Device ID', 'Reject Reasons'],
+                    border=False)
+                table._align['Path'] = 'l'
+                for d in host.devices.devices:  # type: Device
+                    table.add_row(
+                        (
+                            d.path,
+                            d.human_readable_type,
+                            format_bytes(d.sys_api.get('size', 0), 5, colored=False),
+                            d.available,
+                            d.device_id,
+                            ', '.join(d.rejected_reasons)
+                        )
+                    )
+                out.append(table.get_string())
+            return HandleCommandResult(stdout='\n'.join(out))
 
     @_read_cli('orchestrator service ls',
                "name=host,type=CephString,req=false "

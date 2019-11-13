@@ -10,6 +10,7 @@ import random
 import tempfile
 import multiprocessing.pool
 
+from ceph.deployment import inventory
 from mgr_module import MgrModule
 import orchestrator
 
@@ -478,7 +479,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         TODO:
           - InventoryNode probably needs to be able to report labels
         """
-        nodes = [orchestrator.InventoryNode(host_name, []) for host_name in self.inventory_cache]
+        nodes = [orchestrator.InventoryNode(host_name, inventory.Devices([])) for host_name in self.inventory_cache]
         return orchestrator.TrivialReadCompletion(nodes)
 
     def _refresh_host_services(self, host):
@@ -651,7 +652,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             else:
                 self.log.debug("reading cached inventory for '{}'".format(host))
 
-            devices = orchestrator.InventoryDevice.from_ceph_volume_inventory_list(host_info.data)
+            devices = inventory.Devices.from_json(host_info.data)
             return orchestrator.InventoryNode(host, devices)
 
         results = []
