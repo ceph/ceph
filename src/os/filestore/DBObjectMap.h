@@ -355,6 +355,10 @@ public:
       o.back()->seq = 30;
     }
 
+    size_t length() {
+      return sizeof(_Header);
+    }
+
     _Header() : seq(0), parent(0), num_children(1) {}
   };
 

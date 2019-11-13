@@ -3534,21 +3534,33 @@ void *BlueStore::MempoolThread::entry()
 {
   std::unique_lock l(lock);
 
-  std::list<std::shared_ptr<PriorityCache::PriCache>> caches;
-  binned_kv_cache = store->db->get_priority_cache();
-  if (binned_kv_cache != nullptr) {
-    caches.push_back(binned_kv_cache);
-  }
-  caches.push_back(meta_cache);
-  caches.push_back(data_cache);
+  uint64_t base = store->osd_memory_base;
+  double fragmentation = store->osd_memory_expected_fragmentation;
+  uint64_t target = store->osd_memory_target;
+  uint64_t min = store->osd_memory_cache_min;
+  uint64_t max = min;
 
-  autotune_cache_size = store->osd_memory_cache_min;
+  // When setting the maximum amount of memory to use for cache, first 
+  // assume some base amount of memory for the OSD and then fudge in
+  // some overhead for fragmentation that scales with cache usage.
+  uint64_t ltarget = (1.0 - fragmentation) * target;
+  if (ltarget > base + min) {
+    max = ltarget - base;
+  }
+
+  binned_kv_cache = store->db->get_priority_cache();
+  if (store->cache_autotune && binned_kv_cache != nullptr) {
+    pcm = std::make_shared<PriorityCache::Manager>(
+        store->cct, min, max, target, true);
+    pcm->insert("kv", binned_kv_cache, true);
+    pcm->insert("meta", meta_cache, true);
+    pcm->insert("data", data_cache, true);
+  }
 
   utime_t next_balance = ceph_clock_now();
   utime_t next_resize = ceph_clock_now();
 
   bool interval_stats_trim = false;
-  bool interval_stats_resize = false; 
   while (!stop) {
     // Before we trim, check and see if it's time to rebalance/resize.
     double autotune_interval = store->cache_autotune_interval;
@@ -3558,19 +3570,18 @@ void *BlueStore::MempoolThread::entry()
       _adjust_cache_settings();
 
       // Log events at 5 instead of 20 when balance happens.
-      interval_stats_resize = true; 
       interval_stats_trim = true;
-      if (store->cache_autotune) {
-        _balance_cache(caches);
+
+      if (pcm != nullptr) {
+        pcm->balance();
       }
 
       next_balance = ceph_clock_now();
       next_balance += autotune_interval;
     }
     if (resize_interval > 0 && next_resize < ceph_clock_now()) {
-      if (ceph_using_tcmalloc() && store->cache_autotune) {
-        _tune_cache_size(interval_stats_resize);
-        interval_stats_resize = false;
+      if (ceph_using_tcmalloc() && pcm != nullptr) {
+        pcm->tune_memory();
       }
       next_resize = ceph_clock_now();
       next_resize += resize_interval;
@@ -3615,9 +3626,8 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   int64_t data_alloc =
      static_cast<int64_t>(store->cache_data_ratio * cache_size);
 
-  if (binned_kv_cache != nullptr && store->cache_autotune) {
-    cache_size = autotune_cache_size;
-
+  if (pcm != nullptr && binned_kv_cache != nullptr) {
+    cache_size = pcm->get_tuned_mem();
     kv_alloc = binned_kv_cache->get_committed_size();
     meta_alloc = meta_cache->get_committed_size();
     data_alloc = data_cache->get_committed_size();
@@ -3650,169 +3660,6 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
 
   for (auto i : store->cache_shards) {
     i->trim(max_shard_onodes, max_shard_buffer);
-  }
-}
-
-void BlueStore::MempoolThread::_tune_cache_size(bool interval_stats)
-{
-  auto cct = store->cct;
-  uint64_t target = store->osd_memory_target;
-  uint64_t base = store->osd_memory_base;
-  double fragmentation = store->osd_memory_expected_fragmentation;
-  uint64_t cache_min = store->osd_memory_cache_min;
-  uint64_t cache_max = cache_min;
-  uint64_t limited_target = (1.0 - fragmentation) * target;
-  if (limited_target > base + cache_min) {
-    cache_max = limited_target - base;
-  }
-
-  size_t heap_size = 0;
-  size_t unmapped = 0;
-  uint64_t mapped = 0;
-
-  ceph_heap_release_free_memory();
-  ceph_heap_get_numeric_property("generic.heap_size", &heap_size);
-  ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped);
-  mapped = heap_size - unmapped;
-
-  uint64_t new_size = autotune_cache_size;
-  new_size = (new_size < cache_max) ? new_size : cache_max;
-  new_size = (new_size > cache_min) ? new_size : cache_min;
-
-  // Approach the min/max slowly, but bounce away quickly.
-  if ((uint64_t) mapped < target) {
-    double ratio = 1 - ((double) mapped / target);
-    new_size += ratio * (cache_max - new_size); 
-  } else {
-    double ratio = 1 - ((double) target / mapped);
-    new_size -= ratio * (new_size - cache_min);
-  }
-
-  if (interval_stats) {
-    ldout(cct, 5) << __func__
-                  << " target: " << target
-                  << " heap: " << heap_size
-                  << " unmapped: " << unmapped
-                  << " mapped: " << mapped 
-                  << " old cache_size: " << autotune_cache_size
-                  << " new cache size: " << new_size << dendl;
-  } else {
-    ldout(cct, 20) << __func__
-                   << " target: " << target
-                   << " heap: " << heap_size
-                   << " unmapped: " << unmapped
-                   << " mapped: " << mapped        
-                   << " old cache_size: " << autotune_cache_size
-                   << " new cache size: " << new_size << dendl;
-  }
-  autotune_cache_size = new_size;
-}
-
-void BlueStore::MempoolThread::_balance_cache(
-    const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches)
-{
-  int64_t mem_avail = autotune_cache_size;
-  /* Each cache is going to get at least 1 chunk's worth of memory from get_chunk
-   * so shrink the available memory here to compensate.  Don't shrink the amount of
-   * memory below 0 however.
-   */
-  mem_avail -= PriorityCache::get_chunk(1, autotune_cache_size) * caches.size();
-  if (mem_avail < 0) {
-    mem_avail = 0;
-  }
-
-  // Assign memory for each priority level
-  for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
-    ldout(store->cct, 10) << __func__ << " assigning cache bytes for PRI: " << i << dendl;
-    PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
-    _balance_cache_pri(&mem_avail, caches, pri);
-  }
-  // Assign any leftover memory based on the default ratios.
-  if (mem_avail > 0) {
-    for (auto it = caches.begin(); it != caches.end(); it++) {
-      int64_t fair_share =
-          static_cast<int64_t>((*it)->get_cache_ratio() * mem_avail);
-      if (fair_share > 0) {
-        (*it)->add_cache_bytes(PriorityCache::Priority::LAST, fair_share);
-      }
-    }
-  }
-  // assert if we assigned more memory than is available.
-  ceph_assert(mem_avail >= 0);
-
-  // Finally commit the new cache sizes
-  for (auto it = caches.begin(); it != caches.end(); it++) {
-    (*it)->commit_cache_size(autotune_cache_size);
-  }
-}
-
-void BlueStore::MempoolThread::_balance_cache_pri(int64_t *mem_avail,
-    const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches,
-    PriorityCache::Priority pri)
-{
-  std::list<std::shared_ptr<PriorityCache::PriCache>> tmp_caches = caches;
-  double cur_ratios = 0;
-  double new_ratios = 0;
-
-  // Zero this priority's bytes, sum the initial ratios.
-  for (auto it = tmp_caches.begin(); it != tmp_caches.end(); it++) {
-    (*it)->set_cache_bytes(pri, 0);
-    cur_ratios += (*it)->get_cache_ratio();
-  }
-
-  // For this priority, loop until caches are satisified or we run out of memory.
-  // Since we can't allocate fractional bytes, stop if we have fewer bytes left
-  // than the number of participating caches.
-  while (!tmp_caches.empty() && *mem_avail > static_cast<int64_t>(tmp_caches.size())) {
-    uint64_t total_assigned = 0;
-
-    for (auto it = tmp_caches.begin(); it != tmp_caches.end(); ) {
-      int64_t cache_wants = (*it)->request_cache_bytes(pri, autotune_cache_size);
-
-      // Usually the ratio should be set to the fraction of the current caches'
-      // assigned ratio compared to the total ratio of all caches that still
-      // want memory.  There is a special case where the only caches left are
-      // all assigned 0% ratios but still want memory.  In that case, give 
-      // them an equal shot at the remaining memory for this priority.
-      double ratio = 1.0 / tmp_caches.size();
-      if (cur_ratios > 0) {
-        ratio = (*it)->get_cache_ratio() / cur_ratios;
-      }
-      int64_t fair_share = static_cast<int64_t>(*mem_avail * ratio);
-
-      if (cache_wants > fair_share) {
-        // If we want too much, take what we can get but stick around for more
-        (*it)->add_cache_bytes(pri, fair_share);
-        total_assigned += fair_share;
-
-        new_ratios += (*it)->get_cache_ratio();
-        ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name() 
-                              << " wanted: " << cache_wants << " fair_share: " << fair_share
-                              << " mem_avail: " << *mem_avail
-                              << " staying in list.  Size: " << tmp_caches.size()
-                              << dendl;
-        ++it;
-      } else {
-        // Otherwise assign only what we want
-        if (cache_wants > 0) { 
-          (*it)->add_cache_bytes(pri, cache_wants);
-          total_assigned += cache_wants;
-
-          ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name()
-                                << " wanted: " << cache_wants << " fair_share: " << fair_share
-                                << " mem_avail: " << *mem_avail
-                                << " removing from list.  New size: " << tmp_caches.size() - 1
-                                << dendl;
-
-        }
-        // Either the cache didn't want anything or got what it wanted, so remove it from the tmp list. 
-        it = tmp_caches.erase(it);
-      }
-    }
-    // Reset the ratios 
-    *mem_avail -= total_assigned;
-    cur_ratios = new_ratios;
-    new_ratios = 0;
   }
 }
 

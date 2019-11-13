@@ -2025,6 +2025,7 @@ private:
     bool stop = false;
     uint64_t autotune_cache_size = 0;
     std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
+    std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
 
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
@@ -2041,8 +2042,8 @@ private:
         int64_t assigned = get_cache_bytes(pri);
 
         switch (pri) {
-        // All cache items are currently shoved into the LAST priority 
-        case PriorityCache::Priority::LAST:
+        // All cache items are currently shoved into the PRI1 priority 
+        case PriorityCache::Priority::PRI1:
           {
             int64_t request = _get_used_bytes();
             return(request > assigned) ? request - assigned : 0;
