@@ -421,7 +421,21 @@ def ceph_mons(ctx, config):
                         break
                     time.sleep(1)
 
-        ## FIXME: refresh ceph.conf files for all mons + first mgr ##
+        # refresh ceph.conf files for all mons + first mgr
+        """
+        for remote, roles in ctx.cluster.remotes.items():
+            for mon in [r for r in roles
+                        if teuthology.is_type('mon', cluster_name)(r)]:
+                c_, _, id_ = teuthology.split_role(mon)
+                shell(ctx, cluster_name, remote, [
+                    'ceph', 'orchestrator', 'service', 'redeploy',
+                    'mon', id_,
+                ])
+        shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
+            'ceph', 'orchestrator', 'service', 'redeploy',
+            'mgr', ctx.ceph[cluster_name].first_mgr,
+        ])
+        """
 
         yield
 
