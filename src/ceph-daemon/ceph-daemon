@@ -1229,7 +1229,7 @@ def command_shell():
         command = ['bash']
         podman_args += [
             '-it',
-            '--env', 'LANG=C',
+            '-e', 'LANG=C',
             '-e', "PS1=%s" % CUSTOM_PS1,
         ]
     c = CephContainer(
@@ -1251,7 +1251,7 @@ def command_enter():
         command = ['bash']
         podman_args += [
             '-it',
-            '--env', 'LANG=C',
+            '-e', 'LANG=C',
             '-e', "PS1=%s" % CUSTOM_PS1,
         ]
     c = get_container(args.fsid, daemon_type, daemon_id,
