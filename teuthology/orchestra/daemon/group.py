@@ -65,7 +65,7 @@ class DaemonGroup(object):
             klass = CephDaemonUnit
             kwargs['use_ceph_daemon'] = self.use_ceph_daemon
         elif self.use_systemd and \
-             not any(map(lambda i: i == 'valgrind', args)) and \
+             not any(i == 'valgrind' for i in args) and \
              remote.init_system == 'systemd':
             # We currently cannot use systemd and valgrind together because
             # it would require rewriting the unit files
