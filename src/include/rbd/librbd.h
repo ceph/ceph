@@ -172,6 +172,11 @@ typedef struct {
 #define RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY      "key"
 
 typedef enum {
+  RBD_MIRROR_IMAGE_MODE_JOURNAL  = 0,
+  RBD_MIRROR_IMAGE_MODE_SNAPSHOT = 1,
+} rbd_mirror_image_mode_t;
+
+typedef enum {
   RBD_MIRROR_IMAGE_DISABLING = 0,
   RBD_MIRROR_IMAGE_ENABLED = 1,
   RBD_MIRROR_IMAGE_DISABLED = 2
@@ -1185,6 +1190,8 @@ CEPH_RBD_API int rbd_mirror_image_create_snapshot(rbd_image_t image,
 CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
                                            rbd_mirror_image_info_t *mirror_image_info,
                                            size_t info_size);
+CEPH_RBD_API int rbd_mirror_image_get_mode(rbd_image_t image,
+                                           rbd_mirror_image_mode_t *mode);
 
 CEPH_RBD_API int rbd_mirror_image_get_global_status(
     rbd_image_t image,

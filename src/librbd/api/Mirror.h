@@ -81,6 +81,9 @@ struct Mirror {
   static void image_get_info(ImageCtxT *ictx,
                              mirror_image_info_t *mirror_image_info,
                              Context *on_finish);
+  static int image_get_mode(ImageCtxT *ictx, mirror_image_mode_t *mode);
+  static void image_get_mode(ImageCtxT *ictx, mirror_image_mode_t *mode,
+                             Context *on_finish);
   static int image_get_global_status(ImageCtxT *ictx,
                                      mirror_image_global_status_t *status);
   static void image_get_global_status(ImageCtxT *ictx,

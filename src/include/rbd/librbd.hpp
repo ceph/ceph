@@ -108,6 +108,7 @@ namespace librbd {
     time_t last_seen;
   } mirror_peer_site_t;
 
+  typedef rbd_mirror_image_mode_t mirror_image_mode_t;
   typedef rbd_mirror_image_state_t mirror_image_state_t;
 
   typedef struct {
@@ -735,6 +736,7 @@ public:
   int mirror_image_create_snapshot(uint64_t *snap_id);
   int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                             size_t info_size);
+  int mirror_image_get_mode(mirror_image_mode_t *mode);
   int mirror_image_get_global_status(
       mirror_image_global_status_t *mirror_image_global_status,
       size_t status_size);
@@ -746,6 +748,8 @@ public:
   int aio_mirror_image_demote(RBD::AioCompletion *c);
   int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                                 size_t info_size, RBD::AioCompletion *c);
+  int aio_mirror_image_get_mode(mirror_image_mode_t *mode,
+                                RBD::AioCompletion *c);
   int aio_mirror_image_get_global_status(
       mirror_image_global_status_t *mirror_image_global_status,
       size_t status_size, RBD::AioCompletion *c);
