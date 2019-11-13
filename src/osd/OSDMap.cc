@@ -555,13 +555,15 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 8;
+    uint8_t v = 9;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 5;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       v = 6;
+    } else if (!HAVE_FEATURE(features, SERVER_OCTOPUS)) {
+      v = 8;
     }
     ENCODE_START(v, 1, bl); // client-usable data
     encode(fsid, bl);
@@ -610,6 +612,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     if (v >= 8) {
       encode(new_last_up_change, bl);
       encode(new_last_in_change, bl);
+    }
+    if (v >= 9) {
+      encode(new_require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -816,7 +821,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     return;
   }
   {
-    DECODE_START(8, bl); // client-usable data
+    DECODE_START(9, bl); // client-usable data
     decode(fsid, bl);
     decode(epoch, bl);
     decode(modified, bl);
@@ -2847,13 +2852,15 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t v = 9;
+    uint8_t v = 10;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 6;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       v = 7;
+    } else if (!HAVE_FEATURE(features, SERVER_OCTOPUS)) {
+      v = 9;
     }
     ENCODE_START(v, 1, bl); // client-usable data
     // base
@@ -2928,6 +2935,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     if (v >= 9) {
       encode(last_up_change, bl);
       encode(last_in_change, bl);
+    }
+    if (v >= 10) {
+      encode(require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -3170,7 +3180,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(9, bl); // client-usable data
+    DECODE_START(10, bl); // client-usable data
     // base
     decode(fsid, bl);
     decode(epoch, bl);
