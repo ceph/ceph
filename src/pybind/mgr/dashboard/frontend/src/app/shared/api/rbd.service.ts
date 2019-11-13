@@ -195,7 +195,7 @@ export class RbdService {
     });
   }
 
-  restoreTrash(poolName, namespace, imageId, newImageName) {
+  restoreTrash(poolName, namespace, imageId, @cdEncodeNot newImageName) {
     const imageSpec = this.getImageSpec(poolName, namespace, imageId);
     return this.http.post(
       `api/block/image/trash/${encodeURIComponent(imageSpec)}/restore`,
