@@ -171,7 +171,6 @@ BuildRequires:	libnl3-devel
 BuildRequires:	liboath-devel
 BuildRequires:	libtool
 BuildRequires:	libxml2-devel
-BuildRequires:	libuuid-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
 BuildRequires:	parted
@@ -195,6 +194,7 @@ BuildRequires:  librabbitmq-devel
 %endif
 %if 0%{with make_check}
 BuildRequires:  jq
+BuildRequires:	libuuid-devel
 BuildRequires:	python%{_python_buildid}-bcrypt
 BuildRequires:	python%{_python_buildid}-coverage
 BuildRequires:	python%{_python_buildid}-nose
