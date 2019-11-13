@@ -125,10 +125,6 @@ ENDOFKEY
 }
 
 function ensure_decent_cmake_on_ubuntu {
-    # TODO: remove me after a while
-    # remove Kitware Apt Archive Automatic Signing Key
-    $SUDO apt-key del 40CD72DA
-    $SUDO rm -f /etc/apt/sources.list.d/kitware.list
     local new=$1
     if command -v cmake > /dev/null; then
         local old=$(cmake --version | grep -Po 'version \K[0-9].*')
