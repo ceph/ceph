@@ -221,7 +221,7 @@ class PoolTest(DashboardTestCase):
     def test_pool_create_with_two_applications(self):
         self.__yield_pool(None, {
             'pool': 'dashboard_pool1',
-            'pg_num': '32',
+            'pg_num': '8',
             'pool_type': 'replicated',
             'application_metadata': ['rbd', 'sth'],
         })
@@ -232,7 +232,7 @@ class PoolTest(DashboardTestCase):
             ['osd', 'erasure-code-profile', 'set', 'ecprofile', 'crush-failure-domain=osd'])
         self.__yield_pool(None, {
             'pool': 'dashboard_pool2',
-            'pg_num': '32',
+            'pg_num': '8',
             'pool_type': 'erasure',
             'application_metadata': ['rbd'],
             'erasure_code_profile': 'ecprofile',
@@ -243,7 +243,7 @@ class PoolTest(DashboardTestCase):
     def test_pool_create_with_compression(self):
         pool = {
             'pool': 'dashboard_pool3',
-            'pg_num': '32',
+            'pg_num': '8',
             'pool_type': 'replicated',
             'compression_algorithm': 'zstd',
             'compression_mode': 'aggressive',
