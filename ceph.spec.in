@@ -1988,8 +1988,8 @@ fi
 %{_libdir}/librgw.so.*
 %{_libdir}/librgw_admin_user.so.*
 %if %{with lttng}
-%{_libdir}/librgw_op_tp.so*
-%{_libdir}/librgw_rados_tp.so*
+%{_libdir}/librgw_op_tp.so.*
+%{_libdir}/librgw_rados_tp.so.*
 %endif
 
 %post -n librgw2 -p /sbin/ldconfig
@@ -2003,6 +2003,10 @@ fi
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
 %{_libdir}/librgw_admin_user.so
+%if %{with lttng}
+%{_libdir}/librgw_op_tp.so
+%{_libdir}/librgw_rados_tp.so
+%endif
 
 %if 0%{with python2}
 %files -n python-rgw
