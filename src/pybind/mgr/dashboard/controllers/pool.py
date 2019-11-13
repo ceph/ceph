@@ -83,6 +83,8 @@ class Pool(RESTController):
     @pool_task('edit', ['{pool_name}'])
     def set(self, pool_name, flags=None, application_metadata=None, configuration=None, **kwargs):
         self._set_pool_values(pool_name, application_metadata, flags, True, kwargs)
+        if kwargs.get('pool'):
+            pool_name = kwargs['pool']
         RbdConfiguration(pool_name).set_configuration(configuration)
         self._wait_for_pgs(pool_name)
 
