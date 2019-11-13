@@ -749,8 +749,8 @@ def task(ctx, config):
     if branch in ['master', 'nautilus']:
         ctx.image = 'ceph/daemon-base:latest-%s-devel' % branch
     else:
-#        ctx.image = 'ceph-ci/ceph:%s' % branch
-        ctx.image = 'cephci/daemon-base:%s' % branch
+        ctx.image = 'ceph-ci/ceph:%s' % branch
+#        ctx.image = 'cephci/daemon-base:%s' % branch
     log.info('Cluster image is %s' % ctx.image)
 
     # uuid
