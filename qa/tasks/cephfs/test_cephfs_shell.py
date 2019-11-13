@@ -671,11 +671,8 @@ class TestMisc(TestCephFSShell):
         dirname = 'somedirectory'
         self.run_cephfs_shell_cmd(['mkdir', dirname])
 
-        # TODO: Once cephfs-shell can pickup its config variables from
-        # ceph.conf, set colors Never there and get rid of the same in
-        # following comamnd.
         output = self.mount_a.client_remote.run(args=['cephfs-shell', '-c',
-            self.mount_a.config_path, 'set colors Never, ls'],
+            self.mount_a.config_path, 'ls'],
             stdout=StringIO()).stdout.getvalue().strip()
 
         if sys_version_info.major >= 3:
