@@ -875,6 +875,33 @@ static int netlink_disconnect_by_path(const std::string& devpath)
   return netlink_disconnect(index);
 }
 
+static int netlink_setup_sock_attr(struct nl_msg *msg, int fd)
+{
+  struct nlattr *sock_attr;
+  struct nlattr *sock_opt;
+
+  sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
+  if (!sock_attr) {
+    cerr << "rbd-nbd: Could not init sockets in netlink message." << std::endl;
+    goto fail;
+  }
+
+  sock_opt = nla_nest_start(msg, NBD_SOCK_ITEM);
+  if (!sock_opt) {
+    cerr << "rbd-nbd: Could not init sock in netlink message." << std::endl;
+    goto fail;
+  }
+
+  NLA_PUT_U32(msg, NBD_SOCK_FD, fd);
+  nla_nest_end(msg, sock_opt);
+  nla_nest_end(msg, sock_attr);
+  return 0;
+
+nla_put_failure:
+fail:
+  return -EIO;
+}
+
 static int netlink_resize(int nbd_index, uint64_t size)
 {
   struct nl_sock *sock;
@@ -952,8 +979,6 @@ static int netlink_connect_cb(struct nl_msg *msg, void *arg)
 static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
                            uint64_t size, uint64_t flags)
 {
-  struct nlattr *sock_attr;
-  struct nlattr *sock_opt;
   struct nl_msg *msg;
   int ret;
 
@@ -986,21 +1011,8 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
   NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
 
-  sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
-  if (!sock_attr) {
-    cerr << "rbd-nbd: Could not init sockets in netlink message." << std::endl;
+  if (netlink_setup_sock_attr(msg, fd))
     goto free_msg;
-  }
-
-  sock_opt = nla_nest_start(msg, NBD_SOCK_ITEM);
-  if (!sock_opt) {
-    cerr << "rbd-nbd: Could not init sock in netlink message." << std::endl;
-    goto free_msg;
-  }
-
-  NLA_PUT_U32(msg, NBD_SOCK_FD, fd);
-  nla_nest_end(msg, sock_opt);
-  nla_nest_end(msg, sock_attr);
 
   ret = nl_send_sync(sock, msg);
   if (ret < 0) {
