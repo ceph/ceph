@@ -3038,7 +3038,7 @@ public:
     data_sync_module = sync_env->sync_module->get_data_handler();
     
     zones_trace = _zones_trace;
-    zones_trace.insert(sync_env->svc->zone->get_zone().id);
+    zones_trace.insert(sync_env->svc->zone->get_zone().id, _sync_pipe.info.dest_bs.get_key());
   }
 
   int operate() override {
@@ -3203,7 +3203,7 @@ public:
       status_oid(status_oid),
       tn(sync_env->sync_tracer->add_node(tn_parent, "full_sync",
                                          SSTR(bucket_shard_str{bs}))) {
-    zones_trace.insert(sc->source_zone);
+    zones_trace.insert(sc->source_zone, sync_pipe.info.dest_bs.bucket.get_key());
     marker_tracker.set_tn(tn);
     prefix_handler.set_rules(sync_pipe.get_rules());
   }
@@ -3349,6 +3349,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   bool updated_status{false};
   const string& status_oid;
   const string& zone_id;
+  string target_location_key;
 
   string cur_id;
 
@@ -3377,6 +3378,7 @@ public:
     set_status("init");
     marker_tracker.set_tn(tn);
     rules = sync_pipe.get_rules();
+    target_location_key = sync_pipe.info.dest_bs.bucket.get_key();
   }
 
   bool check_key_handled(const rgw_obj_key& key) {
@@ -3432,7 +3434,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         if (e.state != CLS_RGW_STATE_COMPLETE) {
           continue;
         }
-        if (e.zones_trace.find(zone_id) != e.zones_trace.end()) {
+        if (e.zones_trace.exists(zone_id, target_location_key)) {
           continue;
         }
         auto& squash_entry = squash_map[make_pair(e.object, e.instance)];
@@ -3506,7 +3508,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
-        if (entry->zones_trace.find(zone_id) != entry->zones_trace.end()) {
+        if (entry->zones_trace.exists(zone_id, target_location_key)) {
           set_status() << "redundant operation, skipping";
           tn->log(20, SSTR("skipping object: "
               <<bucket_shard_str{bs} <<"/"<<key<<": redundant operation"));
