@@ -79,9 +79,18 @@ function(do_build_dpdk dpdk_dir)
     set(make_cmd "${MAKE_EXECUTABLE}")
   endif()
 
+  if(Seastar_DPDK AND WITH_SPDK)
+    message(FATAL_ERROR "not able to build DPDK with "
+      "both Seastar_DPDK and WITH_SPDK enabled")
+  elseif(Seastar_DPDK)
+    set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/seastar/dpdk)
+  else() # WITH_SPDK or WITH_DPDK is enabled
+    set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/spdk/dpdk)
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(dpdk-ext
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
+    SOURCE_DIR ${dpdk_source_dir}
     CONFIGURE_COMMAND ${make_cmd} config O=${dpdk_dir} T=${target}
     BUILD_COMMAND ${make_cmd} O=${dpdk_dir} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=-fPIC
     BUILD_IN_SOURCE 1
@@ -108,17 +117,38 @@ function(do_export_dpdk dpdk_dir)
     endif()
   endif()
 
-  foreach(c
-      bus_pci
-      cmdline
-      eal
-      ethdev
-      kvargs
-      mbuf
-      mempool
-      mempool_ring
-      pci
-      ring)
+  list(APPEND dpdk_components
+    bus_pci
+    cmdline
+    eal
+    ethdev
+    kvargs
+    mbuf
+    mempool
+    mempool_ring
+    pci
+    ring)
+  if(Seastar_DPDK)
+    list(APPEND dpdk_components
+      bus_vdev
+      cfgfile
+      hash
+      net
+      pmd_bnxt
+      pmd_cxgbe
+      pmd_e1000
+      pmd_ena
+      pmd_enic
+      pmd_i40e
+      pmd_ixgbe
+      pmd_nfp
+      pmd_qede
+      pmd_ring
+      pmd_sfc_efx
+      timer)
+  endif()
+
+  foreach(c ${dpdk_components})
     add_library(dpdk::${c} STATIC IMPORTED)
     add_dependencies(dpdk::${c} dpdk-ext)
     set(dpdk_${c}_LIBRARY
