@@ -2389,32 +2389,11 @@ int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
 int RGWDataChangesLog::trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                                     const string& start_marker, const string& end_marker)
 {
-  int ret;
-
   if (shard_id > num_shards)
     return -EINVAL;
 
-  ret = store->time_log_trim(oids[shard_id], start_time, end_time, start_marker, end_marker);
-
-  if (ret == -ENOENT || ret == -ENODATA)
-    ret = 0;
-
-  return ret;
-}
-
-int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time& end_time,
-                                    const string& start_marker, const string& end_marker)
-{
-  for (int shard = 0; shard < num_shards; shard++) {
-    int ret = store->time_log_trim(oids[shard], start_time, end_time, start_marker, end_marker);
-    if (ret == -ENOENT || ret == -ENODATA) {
-      continue;
-    }
-    if (ret < 0)
-      return ret;
-  }
-
-  return 0;
+  return store->time_log_trim(oids[shard_id], start_time, end_time,
+                               start_marker, end_marker, nullptr);
 }
 
 int RGWDataChangesLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {

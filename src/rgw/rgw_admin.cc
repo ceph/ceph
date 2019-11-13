@@ -7020,8 +7020,12 @@ next:
     }
     RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
-    ret = meta_log->trim(shard_id, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
-    if (ret < 0) {
+    // trim until -ENODATA
+    do {
+      ret = meta_log->trim(shard_id, start_time.to_real_time(),
+                           end_time.to_real_time(), start_marker, end_marker);
+    } while (ret == 0);
+    if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
@@ -7660,9 +7664,20 @@ next:
     if (ret < 0)
       return -ret;
 
-    RGWDataChangesLog *log = store->data_log;
-    ret = log->trim_entries(start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
-    if (ret < 0) {
+    if (!specified_shard_id) {
+      cerr << "ERROR: requires a --shard-id" << std::endl;
+      return EINVAL;
+    }
+
+    // loop until -ENODATA
+    do {
+      auto datalog = store->data_log;
+      ret = datalog->trim_entries(shard_id, start_time.to_real_time(),
+                                  end_time.to_real_time(),
+                                  start_marker, end_marker);
+    } while (ret == 0);
+
+    if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
