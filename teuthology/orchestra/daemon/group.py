@@ -8,7 +8,7 @@ class DaemonGroup(object):
     """
     Collection of daemon state instances
     """
-    def __init__(self, use_systemd=False, use_ceph_daemon=False):
+    def __init__(self, use_systemd=False, use_ceph_daemon=None):
         """
         self.daemons is a dictionary indexed by role.  Each entry is a
         dictionary of DaemonState values indexed by an id parameter.
@@ -63,6 +63,7 @@ class DaemonGroup(object):
         klass = DaemonState
         if self.use_ceph_daemon:
             klass = CephDaemonUnit
+            kwargs['use_ceph_daemon'] = self.use_ceph_daemon
         elif self.use_systemd and \
              not any(map(lambda i: i == 'valgrind', args)) and \
              remote.init_system == 'systemd':

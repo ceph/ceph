@@ -11,7 +11,10 @@ class CephDaemonUnit(DaemonState):
             remote, role, id_, *command_args, **command_kwargs)
         self._set_commands()
         self.log = command_kwargs.get('logger', log)
+        self.use_ceph_daemon = command_kwargs.get('use_ceph_daemon')
         self.is_started = command_kwargs.get('started', False)
+        if self.is_started:
+            self._start_logger()
 
     def name(self):
         return '%s.%s' % (self.type_, self.id_)
@@ -30,6 +33,21 @@ class CephDaemonUnit(DaemonState):
         self.show_cmd = self._get_systemd_cmd('show')
         self.status_cmd = self._get_systemd_cmd('status')
 
+    def _start_logger(self):
+        name = '%s.%s' % (self.type_, self.id_)
+        self.remote_logger = self.remote.run(
+            args=['sudo', self.use_ceph_daemon, 'logs',
+                  '-f',
+                  '--fsid', self.fsid,
+                  '--name', name],
+            logger=logging.getLogger(self.cluster + '.' + name),
+            label=name,
+            wait=False)
+
+    def _join_logger(self):
+        self.remote_logger.wait()
+        self.remote_logger = None
+
     def reset(self):
         """
         Does nothing in this implementation
@@ -46,10 +64,13 @@ class CephDaemonUnit(DaemonState):
         if not self.running():
             self.log.info('Restarting %s (starting--it wasn\'t running)...' % self.name())
             self.remote.sh(self.start_cmd)
+            self._start_logger()
+            self.is_started = True
         else:
             self.log.info('Restarting %s...' % self.name())
             self.remote.sh(self.restart_cmd)
-        self.is_started = True
+            self._join_logger()
+            self._start_logger()
 
     def restart_with_args(self, extra_args):
         """
@@ -82,6 +103,7 @@ class CephDaemonUnit(DaemonState):
             self.restart()
             return
         self.remote.run(self.start_cmd)
+        self._start_logger()
 
     def stop(self, timeout=300):
         """
@@ -98,6 +120,7 @@ class CephDaemonUnit(DaemonState):
         self.log.info('Stopping %s...' % self.name())
         self.remote.sh(self.stop_cmd)
         self.is_started = False
+        self._join_logger()
         self.log.info('Stopped %s' % self.name())
 
     # FIXME why are there two wait methods?
