@@ -44,23 +44,23 @@ export class InventoryComponent implements OnChanges, OnInit {
     this.columns = [
       {
         name: this.i18n('Device path'),
-        prop: 'id',
+        prop: 'path',
         flexGrow: 1
       },
       {
         name: this.i18n('Type'),
-        prop: 'type',
+        prop: 'human_readable_type',
         flexGrow: 1
       },
       {
         name: this.i18n('Size'),
-        prop: 'size',
+        prop: 'sys_api.size',
         flexGrow: 1,
         pipe: this.dimlessBinary
       },
       {
         name: this.i18n('Rotates'),
-        prop: 'rotates',
+        prop: 'sys_api.rotational',
         flexGrow: 1
       },
       {
@@ -70,7 +70,7 @@ export class InventoryComponent implements OnChanges, OnInit {
       },
       {
         name: this.i18n('Model'),
-        prop: 'model',
+        prop: 'sys_api.model',
         flexGrow: 1
       },
       {
@@ -128,7 +128,7 @@ export class InventoryComponent implements OnChanges, OnInit {
         data.forEach((node: InventoryNode) => {
           node.devices.forEach((device: Device) => {
             device.hostname = node.name;
-            device.uid = `${node.name}-${device.id}`;
+            device.uid = `${node.name}-${device.device_id}`;
             devices.push(device);
           });
         });

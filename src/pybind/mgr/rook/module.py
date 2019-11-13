@@ -3,6 +3,8 @@ import functools
 import os
 import uuid
 
+from ceph.deployment import inventory
+
 try:
     from typing import List, Dict
     from ceph.deployment.drive_group import DriveGroupSpec
@@ -312,32 +314,24 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for node_name, node_devs in devs.items():
             devs = []
             for d in node_devs:
-                dev = orchestrator.InventoryDevice()
-
-                # XXX CAUTION!  https://github.com/rook/rook/issues/1716
-                # Passing this through for the sake of completeness but it
-                # is not trustworthy!
-                dev.blank = d['empty']
-                dev.type = 'hdd' if d['rotational'] else 'ssd'
-                dev.id = d['name']
-                dev.size = d['size']
-
-                if d['filesystem'] == "" and not d['rotational']:
-                    # Empty or partitioned SSD
-                    partitioned_space = sum(
-                        [p['size'] for p in d['Partitions']])
-                    dev.metadata_space_free = max(0, d[
-                        'size'] - partitioned_space)
-
+                dev = inventory.Device(
+                    path=d['name'],
+                    sys_api=dict(
+                        rotational='1' if d['rotational'] else '0',
+                        size=d['size']
+                    ),
+                    available=d['empty'],
+                    rejected_reasons=[] if d['empty'] else ['not empty'],
+                )
                 devs.append(dev)
 
-            result.append(orchestrator.InventoryNode(node_name, devs))
+            result.append(orchestrator.InventoryNode(node_name, inventory.Devices(devs)))
 
         return result
 
     @deferred_read
     def get_hosts(self):
-        return [orchestrator.InventoryNode(n, []) for n in self.rook_cluster.get_node_names()]
+        return [orchestrator.InventoryNode(n, inventory.Devices([])) for n in self.rook_cluster.get_node_names()]
 
     @deferred_read
     def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):

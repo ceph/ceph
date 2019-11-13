@@ -81,7 +81,7 @@ class OrchestratorInventory(RESTController):
             node_osds = device_osd_map.get(inventory_node['name'])
             for device in inventory_node['devices']:
                 if node_osds:
-                    device['osd_ids'] = sorted(node_osds.get(device['id'], []))
+                    device['osd_ids'] = sorted(node_osds.get(device['path'], []))
                 else:
                     device['osd_ids'] = []
         return inventory_nodes

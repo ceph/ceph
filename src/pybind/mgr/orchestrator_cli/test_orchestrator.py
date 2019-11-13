@@ -3,25 +3,22 @@ import json
 
 import pytest
 
+from ceph.deployment import inventory
 from orchestrator import ReadCompletion, raise_if_exception, RGWSpec
-from orchestrator import InventoryNode, InventoryDevice, ServiceDescription
+from orchestrator import InventoryNode, ServiceDescription
 from orchestrator import OrchestratorValidationError
 
 
-def _test_resource(data, resource_class, extra):
-    # create the instance with normal way
-    rsc = resource_class(**data)
-    if hasattr(rsc, 'pretty_print'):
-        assert rsc.pretty_print()
-
+def _test_resource(data, resource_class, extra=None):
     # ensure we can deserialize and serialize
     rsc = resource_class.from_json(data)
     rsc.to_json()
 
-    # if there is an unexpected data provided
-    data.update(extra)
-    with pytest.raises(OrchestratorValidationError):
-        resource_class.from_json(data)
+    if extra:
+        # if there is an unexpected data provided
+        data.update(extra)
+        with pytest.raises(OrchestratorValidationError):
+            resource_class.from_json(data)
 
 
 def test_inventory():
@@ -29,16 +26,20 @@ def test_inventory():
         'name': 'host0',
         'devices': [
             {
-                'type': 'hdd',
-                'id': '/dev/sda',
-                'size': 1024,
-                'rotates': True
+                'sys_api': {
+                    'rotational': '1',
+                    'size': 1024,
+                },
+                'path': '/dev/sda',
+                'available': False,
+                'rejected_reasons': [],
+                'lvs': []
             }
         ]
     }
     _test_resource(json_data, InventoryNode, {'abc': False})
     for devices in json_data['devices']:
-        _test_resource(devices, InventoryDevice, {'abc': False})
+        _test_resource(devices, inventory.Device)
 
     json_data = [{}, {'name': 'host0'}, {'devices': []}]
     for data in json_data:

@@ -7,8 +7,8 @@ completion objects
 
 import json
 
-
-from orchestrator import InventoryDevice, InventoryNode
+from ceph.deployment import inventory
+from orchestrator import InventoryNode
 
 from .ansible_runner_svc import EVENT_DATA_URL
 
@@ -75,11 +75,7 @@ class ProcessInventory(OutputWizard):
                 host = event_data["host"]
 
                 devices = json.loads(event_data["res"]["stdout"])
-                devs = []
-                for storage_device in devices:
-                    dev = InventoryDevice.from_ceph_volume_inventory(storage_device)
-                    devs.append(dev)
-
+                devs = inventory.Devices.from_json(devices)
                 inventory_nodes.append(InventoryNode(host, devs))
 
 
@@ -140,7 +136,7 @@ class ProcessHostsList(OutputWizard):
             json_resp = json.loads(host_ls_json)
 
             for host in json_resp["data"]["hosts"]:
-                inventory_nodes.append(InventoryNode(host, []))
+                inventory_nodes.append(InventoryNode(host, inventory.Devices([])))
 
         except ValueError:
             self.log.exception("Malformed json response")

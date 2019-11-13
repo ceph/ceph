@@ -14,6 +14,8 @@ import random
 import datetime
 import copy
 
+from ceph.deployment import inventory
+
 from mgr_module import MgrModule, PersistentStoreDict
 from mgr_util import format_bytes
 
@@ -877,107 +879,6 @@ class InventoryFilter(object):
         self.nodes = nodes  # Optional: get info about certain named nodes only
 
 
-class InventoryDevice(object):
-    """
-    When fetching inventory, block devices are reported in this format.
-
-    Note on device identifiers: the format of this is up to the orchestrator,
-    but the same identifier must also work when passed into StatefulServiceSpec.
-    The identifier should be something meaningful like a device WWID or
-    stable device node path -- not something made up by the orchestrator.
-
-    "Extended" is for reporting any special configuration that may have
-    already been done out of band on the block device.  For example, if
-    the device has already been configured for encryption, report that
-    here so that it can be indicated to the user.  The set of
-    extended properties may differ between orchestrators.  An orchestrator
-    is permitted to support no extended properties (only normal block
-    devices)
-    """
-    def __init__(self, blank=False, type=None, id=None, size=None,
-                 rotates=False, available=False, dev_id=None, extended=None,
-                 metadata_space_free=None):
-        # type: (bool, str, str, int, bool, bool, str, dict, bool) -> None
-
-        self.blank = blank
-
-        #: 'ssd', 'hdd', 'nvme'
-        self.type = type
-
-        #: unique within a node (or globally if you like).
-        self.id = id
-
-        #: byte integer.
-        self.size = size
-
-        #: indicates if it is a spinning disk
-        self.rotates = rotates
-
-        #: can be used to create a new OSD?
-        self.available = available
-
-        #: vendor/model
-        self.dev_id = dev_id
-
-        #: arbitrary JSON-serializable object
-        self.extended = extended if extended is not None else extended
-
-        # If this drive is not empty, but is suitable for appending
-        # additional journals, wals, or bluestore dbs, then report
-        # how much space is available.
-        self.metadata_space_free = metadata_space_free
-
-    def to_json(self):
-        return dict(type=self.type, blank=self.blank, id=self.id,
-                    size=self.size, rotates=self.rotates,
-                    available=self.available, dev_id=self.dev_id,
-                    extended=self.extended)
-
-    @classmethod
-    @handle_type_error
-    def from_json(cls, data):
-        return cls(**data)
-
-    @classmethod
-    def from_ceph_volume_inventory(cls, data):
-        # TODO: change InventoryDevice itself to mirror c-v inventory closely!
-
-        dev = InventoryDevice()
-        dev.id = data["path"]
-        dev.type = 'hdd' if data["sys_api"]["rotational"] == "1" else 'ssd/nvme'
-        dev.size = data["sys_api"]["size"]
-        dev.rotates = data["sys_api"]["rotational"] == "1"
-        dev.available = data["available"]
-        dev.dev_id = "%s/%s" % (data["sys_api"]["vendor"],
-                                data["sys_api"]["model"])
-        dev.extended = data
-        return dev
-
-    @classmethod
-    def from_ceph_volume_inventory_list(cls, datas):
-        return [cls.from_ceph_volume_inventory(d) for d in datas]
-
-    def pretty_print(self, only_header=False):
-        """Print a human friendly line with the information of the device
-
-        :param only_header: Print only the name of the device attributes
-
-        Ex::
-
-            Device Path           Type       Size    Rotates  Available Model
-            /dev/sdc            hdd   50.00 GB       True       True ATA/QEMU
-
-        """
-        row_format = "  {0:<15} {1:>10} {2:>10} {3:>10} {4:>10} {5:<15}\n"
-        if only_header:
-            return row_format.format("Device Path", "Type", "Size", "Rotates",
-                                     "Available", "Model")
-        else:
-            return row_format.format(str(self.id), self.type if self.type is not None else "",
-                                     format_bytes(self.size if self.size is not None else 0, 5,
-                                                  colored=False),
-                                     str(self.rotates), str(self.available),
-                                     self.dev_id if self.dev_id is not None else "")
 
 
 class InventoryNode(object):
@@ -985,22 +886,24 @@ class InventoryNode(object):
     When fetching inventory, all Devices are groups inside of an
     InventoryNode.
     """
-    def __init__(self, name, devices):
-        # type: (str, List[InventoryDevice]) -> None
-        assert isinstance(devices, list)
+    def __init__(self, name, devices=None):
+        # type: (str, inventory.Devices) -> None
+        if devices is None:
+            devices = inventory.Devices([])
+        assert isinstance(devices, inventory.Devices)
+
         self.name = name  # unique within cluster.  For example a hostname.
         self.devices = devices
 
     def to_json(self):
-        return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+        return {'name': self.name, 'devices': self.devices.to_json()}
 
     @classmethod
     def from_json(cls, data):
         try:
             _data = copy.deepcopy(data)
             name = _data.pop('name')
-            devices = [InventoryDevice.from_json(device)
-                       for device in _data.pop('devices')]
+            devices = inventory.Devices.from_json(_data.pop('devices'))
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
@@ -1008,10 +911,13 @@ class InventoryNode(object):
         except KeyError as e:
             error_msg = '{} is required for {}'.format(e, cls.__name__)
             raise OrchestratorValidationError(error_msg)
+        except TypeError as e:
+            raise OrchestratorValidationError('Failed to read inventory: {}'.format(e))
+
 
     @classmethod
     def from_nested_items(cls, hosts):
-        devs = InventoryDevice.from_ceph_volume_inventory_list
+        devs = inventory.Devices.from_json
         return [cls(item[0], devs(item[1].data)) for item in hosts]
 
 
