@@ -7161,6 +7161,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool size must be between 1 and 10";
       return -EINVAL;
     }
+    if (!osdmap.crush->check_crush_rule(p.get_crush_rule(), p.type, n, ss)) {
+      return -EINVAL;
+    }
     int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
     if (r < 0) {
       return r;
