@@ -144,6 +144,20 @@ function ensure_decent_cmake_on_ubuntu {
 	cmake
 }
 
+function ensure_decent_binutils_on_ubuntu {
+    local new=$1
+    local old=$(ld --version | head -n1 | grep -Po ' \K[0-9].*')
+    if dpkg --compare-versions $old ge $new; then
+        return
+    fi
+    install_pkg_on_ubuntu \
+	binutils \
+	7fa393306ed8b93019d225548474c0540b8928f7 \
+	xenial \
+	force \
+	binutils
+}
+
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -308,6 +322,7 @@ else
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 8 xenial
                 ensure_decent_cmake_on_ubuntu 3.10.1
+                ensure_decent_binutils_on_ubuntu 2.28
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
