@@ -28,6 +28,7 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                 RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
                  RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
@@ -2060,6 +2061,8 @@ class TestMirroring(object):
         peer2_uuid = self.rbd.mirror_peer_add(ioctx, "cluster2", "client")
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
         self.image.mirror_image_enable()
+        mode = self.image.mirror_image_get_mode()
+        eq(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode)
 
         snap_id = self.image.mirror_image_create_snapshot()
 

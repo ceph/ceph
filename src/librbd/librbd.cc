@@ -2827,6 +2827,12 @@ namespace librbd {
     return librbd::api::Mirror<>::image_get_info(ictx, mirror_image_info);
   }
 
+  int Image::mirror_image_get_mode(mirror_image_mode_t *mode) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    return librbd::api::Mirror<>::image_get_mode(ictx, mode);
+  }
+
   int Image::mirror_image_get_global_status(
       mirror_image_global_status_t *mirror_image_global_status,
       size_t status_size) {
@@ -2909,6 +2915,16 @@ namespace librbd {
       ictx, mirror_image_info,
       new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
                           get_aio_completion(c)));
+    return 0;
+  }
+
+  int Image::aio_mirror_image_get_mode(mirror_image_mode_t *mode,
+                                       RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    librbd::api::Mirror<>::image_get_mode(
+      ictx, mode, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                      get_aio_completion(c)));
     return 0;
   }
 
@@ -6196,6 +6212,14 @@ extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
   return 0;
 }
 
+extern "C" int rbd_mirror_image_get_mode(rbd_image_t image,
+                                         rbd_mirror_image_mode_t *mode)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+
+  return librbd::api::Mirror<>::image_get_mode(ictx, mode);
+}
+
 extern "C" int rbd_mirror_image_get_global_status(
     rbd_image_t image, rbd_mirror_image_global_status_t *status,
     size_t status_size)
@@ -6299,6 +6323,18 @@ extern "C" int rbd_aio_mirror_image_get_info(rbd_image_t image,
                               get_aio_completion(comp)));
   librbd::api::Mirror<>::image_get_info(
     ictx, &ctx->cpp_mirror_image_info, ctx);
+  return 0;
+}
+
+extern "C" int rbd_aio_mirror_image_get_mode(rbd_image_t image,
+                                             rbd_mirror_image_mode_t *mode,
+                                             rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  librbd::api::Mirror<>::image_get_mode(
+    ictx, mode, new C_AioCompletion(ictx, librbd::io::AIO_TYPE_GENERIC,
+                                    get_aio_completion(comp)));
   return 0;
 }
 

@@ -276,13 +276,16 @@ int list_mirror_images(librados::IoCtx& io_ctx,
 
 struct C_ImageGetInfo : public Context {
   mirror_image_info_t *mirror_image_info;
+  mirror_image_mode_t *mirror_image_mode;
   Context *on_finish;
 
   cls::rbd::MirrorImage mirror_image;
   mirror::PromotionState promotion_state = mirror::PROMOTION_STATE_PRIMARY;
 
-  C_ImageGetInfo(mirror_image_info_t *mirror_image_info, Context *on_finish)
-    : mirror_image_info(mirror_image_info), on_finish(on_finish) {
+  C_ImageGetInfo(mirror_image_info_t *mirror_image_info,
+                 mirror_image_mode_t *mirror_image_mode,  Context *on_finish)
+    : mirror_image_info(mirror_image_info),
+      mirror_image_mode(mirror_image_mode), on_finish(on_finish) {
   }
 
   void finish(int r) override {
@@ -291,11 +294,19 @@ struct C_ImageGetInfo : public Context {
       return;
     }
 
-    mirror_image_info->global_id = mirror_image.global_image_id;
-    mirror_image_info->state = static_cast<rbd_mirror_image_state_t>(
-      mirror_image.state);
-    mirror_image_info->primary = (
-      promotion_state == mirror::PROMOTION_STATE_PRIMARY);
+    if (mirror_image_info != nullptr) {
+      mirror_image_info->global_id = mirror_image.global_image_id;
+      mirror_image_info->state = static_cast<rbd_mirror_image_state_t>(
+        mirror_image.state);
+      mirror_image_info->primary = (
+        promotion_state == mirror::PROMOTION_STATE_PRIMARY);
+    }
+
+    if (mirror_image_mode != nullptr) {
+      *mirror_image_mode =
+        static_cast<rbd_mirror_image_mode_t>(mirror_image.mode);
+    }
+
     on_finish->complete(0);
   }
 };
@@ -310,7 +321,7 @@ struct C_ImageGetGlobalStatus : public C_ImageGetInfo {
       const std::string &image_name,
       mirror_image_global_status_t *mirror_image_global_status,
       Context *on_finish)
-    : C_ImageGetInfo(&mirror_image_global_status->info, on_finish),
+    : C_ImageGetInfo(&mirror_image_global_status->info, nullptr, on_finish),
       image_name(image_name),
       mirror_image_global_status(mirror_image_global_status) {
   }
@@ -611,7 +622,7 @@ void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  auto ctx = new C_ImageGetInfo(mirror_image_info, on_finish);
+  auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
                                                &ctx->promotion_state,
                                                ctx);
@@ -622,6 +633,31 @@ template <typename I>
 int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info) {
   C_SaferCond ctx;
   image_get_info(ictx, mirror_image_info, &ctx);
+
+  int r = ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+template <typename I>
+void Mirror<I>::image_get_mode(I *ictx, mirror_image_mode_t *mode,
+                               Context *on_finish) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
+
+  auto ctx = new C_ImageGetInfo(nullptr, mode, on_finish);
+  auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
+                                               &ctx->promotion_state,
+                                               ctx);
+  req->send();
+}
+
+template <typename I>
+int Mirror<I>::image_get_mode(I *ictx, mirror_image_mode_t *mode) {
+  C_SaferCond ctx;
+  image_get_mode(ictx, mode, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {

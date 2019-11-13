@@ -187,6 +187,10 @@ cdef extern from "rbd/librbd.h" nogil:
     cdef char* _RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST "RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST"
     cdef char* _RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY "RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY"
 
+    ctypedef enum rbd_mirror_image_mode_t:
+        _RBD_MIRROR_IMAGE_MODE_JOURNAL "RBD_MIRROR_IMAGE_MODE_JOURNAL"
+        _RBD_MIRROR_IMAGE_MODE_SNAPSHOT "RBD_MIRROR_IMAGE_MODE_SNAPSHOT"
+
     ctypedef enum rbd_mirror_image_state_t:
         _RBD_MIRROR_IMAGE_DISABLING "RBD_MIRROR_IMAGE_DISABLING"
         _RBD_MIRROR_IMAGE_ENABLED "RBD_MIRROR_IMAGE_ENABLED"
@@ -587,6 +591,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_get_info(rbd_image_t image,
                                   rbd_mirror_image_info_t *mirror_image_info,
                                   size_t info_size)
+    int rbd_mirror_image_get_mode(rbd_image_t image,
+                                  rbd_mirror_image_mode_t *mode)
     int rbd_mirror_image_get_global_status(
         rbd_image_t image,
         rbd_mirror_image_global_status_t *mirror_image_global_status,
@@ -717,6 +723,9 @@ RBD_MIRROR_MODE_POOL = _RBD_MIRROR_MODE_POOL
 RBD_MIRROR_PEER_DIRECTION_RX = _RBD_MIRROR_PEER_DIRECTION_RX
 RBD_MIRROR_PEER_DIRECTION_TX = _RBD_MIRROR_PEER_DIRECTION_TX
 RBD_MIRROR_PEER_DIRECTION_RX_TX = _RBD_MIRROR_PEER_DIRECTION_RX_TX
+
+RBD_MIRROR_IMAGE_MODE_JOURNAL = _RBD_MIRROR_IMAGE_MODE_JOURNAL
+RBD_MIRROR_IMAGE_MODE_SNAPSHOT = _RBD_MIRROR_IMAGE_MODE_SNAPSHOT
 
 RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
@@ -4594,6 +4603,19 @@ written." % (self.name, ret, length))
             }
         free(c_info.global_id)
         return info
+
+    def mirror_image_get_mode(self):
+        """
+        Get mirror mode for the image.
+
+        :returns: int - mirror mode
+        """
+        cdef rbd_mirror_image_mode_t c_mode
+        with nogil:
+            ret = rbd_mirror_image_get_mode(self.image, &c_mode)
+        if ret != 0:
+            raise make_ex(ret, 'error getting mirror mode for image %s' % self.name)
+        return int(c_mode)
 
     def mirror_image_get_status(self):
         """
