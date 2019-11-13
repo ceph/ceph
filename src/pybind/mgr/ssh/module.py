@@ -12,6 +12,7 @@ import multiprocessing.pool
 
 from mgr_module import MgrModule
 import orchestrator
+from orchestrator import OrchestratorError
 
 from . import remotes
 
@@ -579,11 +580,13 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 self._service_action, (d.service_type, d.service_instance,
                                        d.nodename, action)))
         if not results:
-            n = service_name
-            if n:
-                n += '-*'
-            raise OrchestratorError('Unable to find %s.%s%s daemon(s)' % (
-                service_type, service_id, n))
+            if service_name:
+                n = service_name + '-*'
+            else:
+                n = service_id
+            raise OrchestratorError(
+                'Unable to find %s.%s daemon(s)' % (
+                    service_type, n))
         return SSHWriteCompletion(results)
 
     def _service_action(self, service_type, service_id, host, action):
