@@ -4,7 +4,7 @@
 #
 #    pip-compile
 #
-ansible==2.8.0
+ansible==2.8.2
 apache-libcloud==1.5.0
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0
