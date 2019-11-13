@@ -450,7 +450,7 @@ class Orchestrator(object):
         :param service_id: service daemon instance (usually a short hostname)
         :rtype: WriteCompletion
         """
-        assert action in ["start", "stop", "reload"]
+        assert action in ["start", "stop", "reload", "restart", "redeploy"]
         assert service_name or service_id
         assert not (service_name and service_id)
         raise NotImplementedError()
