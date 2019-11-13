@@ -38,6 +38,7 @@ cmake_pop_check_state()
 
 check_function_exists(eventfd HAVE_EVENTFD)
 check_function_exists(getprogname HAVE_GETPROGNAME)
+check_function_exists(gettid HAVE_GETTID)
 
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
 CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
