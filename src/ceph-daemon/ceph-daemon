@@ -7,7 +7,7 @@ LOGROTATE_DIR='/etc/logrotate.d'
 UNIT_DIR='/etc/systemd/system'
 LOG_DIR_MODE=0o770
 DATA_DIR_MODE=0o700
-PODMAN_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
+CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1=r'[ceph: \u@\h \W]\$ '
 
 """
@@ -82,7 +82,7 @@ except ImportError:
             self.cleanup()
 
 
-podman_path = None
+container_path = None
 
 ##################################
 # Popen wrappers, lifted from ceph-volume
@@ -465,11 +465,11 @@ def get_container_mounts(fsid, daemon_type, daemon_id):
     return mounts
 
 def get_container(fsid, daemon_type, daemon_id, privileged=False,
-                  podman_args=[]):
+                  container_args=[]):
     # type: (str, str, Union[int, str], bool, List[str]) -> CephContainer
     if daemon_type in ['mon', 'osd'] or privileged:
         # mon and osd need privileged in order for libudev to query devices
-        podman_args += ['--privileged']
+        container_args += ['--privileged']
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
@@ -486,7 +486,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
             '-n', name,
             '-f', # foreground
         ] + get_daemon_args(fsid, daemon_type, daemon_id),
-        podman_args=podman_args,
+        container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
     )
@@ -562,7 +562,7 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
                 str(daemon_id), args.osd_fsid,
                 '--no-systemd'
             ],
-            podman_args=['--privileged'],
+            container_args=['--privileged'],
             volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
             cname='ceph-%s-activate-%s.%s' % (fsid, daemon_type, daemon_id),
         )
@@ -704,7 +704,7 @@ def deploy_crash(fsid, uid, gid, config, keyring):
                 '[Service]\n'
                 'Type=simple\n'
                 'ExecStart={cmd}\n'
-                'ExecStop=-{podman_path} stop ceph-{fsid}-crash\n'
+                'ExecStop=-{container_path} stop ceph-{fsid}-crash\n'
                 'Restart=always\n'
                 'RestartSec=10\n'
                 'StartLimitInterval=10min\n'
@@ -712,7 +712,7 @@ def deploy_crash(fsid, uid, gid, config, keyring):
                 '\n'
                 '[Install]\n'
                 'WantedBy=ceph-{fsid}.target\n'.format(
-                    podman_path=podman_path,
+                    container_path=container_path,
                     fsid=fsid,
                     cmd=' '.join(c.run_cmd()))
         )
@@ -741,10 +741,10 @@ Before=ceph-{fsid}.target
 LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
-ExecStartPre=-{podman_path} rm ceph-{fsid}-%i
+ExecStartPre=-{container_path} rm ceph-{fsid}-%i
 ExecStartPre=-{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}
 ExecStart=/bin/bash {data_dir}/{fsid}/%i/cmd
-ExecStop=-{podman_path} stop ceph-{fsid}-%i
+ExecStop=-{container_path} stop ceph-{fsid}-%i
 Restart=on-failure
 RestartSec=10s
 TimeoutStartSec=120
@@ -755,7 +755,7 @@ StartLimitBurst=5
 [Install]
 WantedBy=ceph-{fsid}.target
 """.format(
-    podman_path=podman_path,
+    container_path=container_path,
     install_path=install_path,
     fsid=fsid,
     uid=uid,
@@ -791,14 +791,14 @@ class CephContainer:
                  args=[],
                  volume_mounts={},
                  cname='',
-                 podman_args=[]):
+                 container_args=[]):
         # type: (str, str, List[str], Dict[str, str], str, List[str]) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
         self.cname = cname
-        self.podman_args = podman_args
+        self.container_args = container_args
 
     def run_cmd(self):
         # type: () -> List[str]
@@ -814,11 +814,11 @@ class CephContainer:
         ]
         cname = ['--name', self.cname] if self.cname else []
         return [
-            str(podman_path),
+            str(container_path),
             'run',
             '--rm',
             '--net=host',
-        ] + self.podman_args + \
+        ] + self.container_args + \
         cname + envs + \
         vols + \
         [
@@ -840,10 +840,10 @@ class CephContainer:
         if cmd:
             cmd_args = ['-c'] + cmd
         return [
-            str(podman_path),
+            str(container_path),
             'run',
             '--net=host',
-        ] + self.podman_args + envs + vols + [
+        ] + self.container_args + envs + vols + [
             '--entrypoint', cmd[0],
             self.image
         ] + cmd[1:]
@@ -851,9 +851,9 @@ class CephContainer:
     def exec_cmd(self, cmd):
         # type: (List[str]) -> List[str]
         return [
-            str(podman_path),
+            str(container_path),
             'exec',
-        ] + self.podman_args + [
+        ] + self.container_args + [
             self.cname,
         ] + cmd
 
@@ -911,7 +911,7 @@ def command_bootstrap():
 
     if not args.skip_pull:
         logger.info('Pulling latest %s container...' % args.image)
-        call_throws([podman_path, 'pull', args.image])
+        call_throws([container_path, 'pull', args.image])
 
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid()
@@ -1268,12 +1268,12 @@ def command_shell():
         mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
     if args.keyring:
         mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
-    podman_args = ['--privileged']
+    container_args = ['--privileged']
     if args.command:
         command = args.command
     else:
         command = ['bash']
-        podman_args += [
+        container_args += [
             '-it',
             '-e', 'LANG=C',
             '-e', "PS1=%s" % CUSTOM_PS1,
@@ -1282,7 +1282,7 @@ def command_shell():
         image=args.image,
         entrypoint='doesnotmatter',
         args=[],
-        podman_args=podman_args,
+        container_args=container_args,
         volume_mounts=mounts)
     return subprocess.call(c.shell_cmd(command))
 
@@ -1291,18 +1291,18 @@ def command_shell():
 def command_enter():
     # type: () -> int
     (daemon_type, daemon_id) = args.name.split('.', 1)
-    podman_args = [] # type: List[str]
+    container_args = [] # type: List[str]
     if args.command:
         command = args.command
     else:
         command = ['bash']
-        podman_args += [
+        container_args += [
             '-it',
             '-e', 'LANG=C',
             '-e', "PS1=%s" % CUSTOM_PS1,
         ]
     c = get_container(args.fsid, daemon_type, daemon_id,
-                      podman_args=podman_args)
+                      container_args=container_args)
     return subprocess.call(c.exec_cmd(command))
 
 ##################################
@@ -1340,7 +1340,7 @@ def command_ceph_volume():
         image=args.image,
         entrypoint='/usr/sbin/ceph-volume',
         args=args.command,
-        podman_args=['--privileged'],
+        container_args=['--privileged'],
         volume_mounts=mounts,
     )
     out, err, code = call_throws(c.run_cmd(), verbose=True)
@@ -1362,7 +1362,7 @@ def command_unit():
 
 def command_logs():
     # type: () -> None
-    cmd = [podman_path, 'logs']
+    cmd = [container_path, 'logs']
     if args.follow:
         cmd.append('-f')
     if args.tail:
@@ -1445,7 +1445,7 @@ def list_daemons(detail=True, legacy_dir=None):
                         version = None
                         out, err, code = call(
                             [
-                                podman_path, 'inspect',
+                                container_path, 'inspect',
                                 '--format', '{{.Id}}',
                                 'ceph-%s-%s' % (fsid, j)
                             ],
@@ -1453,7 +1453,7 @@ def list_daemons(detail=True, legacy_dir=None):
                         if not code:
                             container_id = out.strip()[0:12]
                             out, err, code = call(
-                                [podman_path, 'exec', container_id,
+                                [container_path, 'exec', container_id,
                                  'ceph', '-v'])
                             if not code and out.startswith('ceph version '):
                                 version = out.split(' ')[2]
@@ -1920,16 +1920,16 @@ if __name__ == "__main__":
 
     # podman or docker?
     if args.docker:
-        podman_path = find_program('docker')
+        container_path = find_program('docker')
     else:
-        for i in PODMAN_PREFERENCE:
+        for i in CONTAINER_PREFERENCE:
             try:
-                podman_path = find_program(i)
+                container_path = find_program(i)
                 break
             except Exception as e:
                 logger.debug('could not locate %s: %s' % (i, e))
-        if not podman_path:
-            raise RuntimeError('unable to locate any of %s' % PODMAN_PREFERENCE)
+        if not container_path:
+            raise RuntimeError('unable to locate any of %s' % CONTAINER_PREFERENCE)
 
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
