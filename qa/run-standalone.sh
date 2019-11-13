@@ -135,7 +135,7 @@ do
 	    CEPH_ROOT=.. \
 	    CEPH_LIB=lib \
 	    LOCALRUN=yes \
-	    $cmd ; then
+	    time -f "Elapsed %E (%e seconds)" $cmd ; then
           echo "$f .............. FAILED"
           errors=$(expr $errors + 1)
         fi
