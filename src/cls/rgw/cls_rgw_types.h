@@ -23,7 +23,61 @@ namespace ceph {
 }
 using ceph::operator <<;
 
-using rgw_zone_set = std::set<std::string>;
+struct rgw_zone_set_entry {
+  string zone;
+  std::optional<std::string> location_key;
+
+  bool operator<(const rgw_zone_set_entry& e) const {
+    if (zone < e.zone) {
+      return true;
+    }
+    if (zone > e.zone) {
+      return false;
+    }
+    return (location_key < e.location_key);
+  }
+
+  rgw_zone_set_entry() {}
+  rgw_zone_set_entry(const string& _zone,
+                     std::optional<std::string> _location_key) : zone(_zone),
+                                                                location_key(_location_key) {}
+  rgw_zone_set_entry(const string& s) {
+    from_str(s);
+  }
+
+  void from_str(const string& s);
+  string to_str() const;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator &bl);
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_zone_set_entry)
+
+struct rgw_zone_set {
+  std::set<rgw_zone_set_entry> entries;
+
+  void encode(bufferlist &bl) const {
+    /* no ENCODE_START, ENCODE_END for backward compatibility */
+    ceph::encode(entries, bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    /* no DECODE_START, DECODE_END for backward compatibility */
+    ceph::decode(entries, bl);
+  }
+  void decode_json(JSONObj *obj);
+
+  void insert(const string& zone, std::optional<string> location_key);
+  bool exists(const string& zone, std::optional<string> location_key) const;
+};
+WRITE_CLASS_ENCODER(rgw_zone_set)
+
+/* backward compatibility, rgw_zone_set needs to encode/decode the same as std::set */
+void encode_json(const char *name, const rgw_zone_set& zs, ceph::Formatter *f);
+void decode_json_obj(rgw_zone_set& zs, JSONObj *obj);
+
 
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY = 0,

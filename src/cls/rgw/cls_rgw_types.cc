@@ -6,6 +6,75 @@
 #include "include/utime.h"
 
 
+void rgw_zone_set_entry::from_str(const string& s)
+{
+  auto pos = s.find(':');
+  if (pos == string::npos) {
+    zone = s;
+    location_key.reset();
+  } else {
+    zone = s.substr(0, pos);
+    location_key = s.substr(pos + 1);
+  }
+}
+
+string rgw_zone_set_entry::to_str() const
+{
+  string s = zone;
+  if (location_key) {
+    s = s + ":" + *location_key;
+  }
+  return s;
+}
+
+void rgw_zone_set_entry::encode(bufferlist &bl) const
+{
+  /* no ENCODE_START, ENCODE_END for backward compatibility */
+  ceph::encode(to_str(), bl);  
+}
+
+void rgw_zone_set_entry::decode(bufferlist::const_iterator &bl)
+{
+  /* no DECODE_START, DECODE_END for backward compatibility */
+  string s;
+  ceph::decode(s, bl);
+  from_str(s);
+}
+
+void rgw_zone_set_entry::dump(Formatter *f) const
+{
+  encode_json("entry", to_str(), f);
+}
+
+void rgw_zone_set_entry::decode_json(JSONObj *obj) {
+  string s;
+  JSONDecoder::decode_json("entry", s, obj);
+  from_str(s);
+}
+
+void rgw_zone_set::insert(const string& zone, std::optional<string> location_key)
+{
+  entries.insert(rgw_zone_set_entry(zone, location_key));
+}
+
+bool rgw_zone_set::exists(const string& zone, std::optional<string> location_key) const
+{
+  return entries.find(rgw_zone_set_entry(zone, location_key)) != entries.end();
+}
+
+void encode_json(const char *name, const rgw_zone_set& zs, ceph::Formatter *f)
+{
+  Formatter::ArraySection as(*f, name);
+  for (auto& e : zs.entries) {
+    encode_json("entry", e, f);
+  }
+}
+
+void decode_json_obj(rgw_zone_set& zs, JSONObj *obj)
+{
+  decode_json_obj(zs.entries, obj);
+}
+
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
 {
   rgw_bucket_pending_info *i = new rgw_bucket_pending_info;
