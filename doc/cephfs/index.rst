@@ -91,9 +91,8 @@ Mounting CephFS
    :hidden:
 
 	Create a CephFS file system <createfs>
-	Mount CephFS with the Kernel Driver <kernel>
-	Mount CephFS as FUSE <fuse>
-	Mount CephFS in fstab <fstab>
+	Mount CephFS using Kernel Driver <kernel>
+	Mount CephFS using FUSE <fuse>
 	Use the CephFS Shell <cephfs-shell>
 	Supported Features of Kernel Driver <kernel-features>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
