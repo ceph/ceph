@@ -27,14 +27,17 @@ class PerfCounters;
 
 class RecoveryQueue {
 public:
+  explicit RecoveryQueue(MDSRank *mds_);
+
   void enqueue(CInode *in);
   void advance();
   void prioritize(CInode *in);   ///< do this inode now/soon
-  explicit RecoveryQueue(MDSRank *mds_);
 
   void set_logger(PerfCounters *p) {logger=p;}
 
 private:
+  friend class C_MDC_Recover;
+
   void _start(CInode *in);  ///< start recovering this file
   void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
 
@@ -46,10 +49,8 @@ private:
   std::map<CInode*, bool> file_recovering; // inode -> need_restart
 
   MDSRank *mds;
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
   Filer filer;
-
-  friend class C_MDC_Recover;
 };
 
 #endif // RECOVERY_QUEUE_H
