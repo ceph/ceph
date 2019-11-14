@@ -14,6 +14,7 @@
 #include "global/global_context.h"
 
 #include "boost/intrusive/list.hpp"
+#include "boost/dynamic_bitset.hpp"
 
 class PerfCounters;
 
@@ -384,6 +385,10 @@ private:
 
   int _open_super();
   int _write_super(int dev);
+  int _check_new_allocations(const bluefs_fnode_t& fnode,
+    size_t dev_count,
+    boost::dynamic_bitset<uint64_t>* owned_blocks,
+    boost::dynamic_bitset<uint64_t>* used_blocks);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
