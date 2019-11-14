@@ -6017,7 +6017,7 @@ void RGWCompleteMultipart::execute()
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
-      if ((obj_iter != obj_parts.begin()) &&
+      if ((handled_parts > 0) &&
           ((part_compressed != compressed) ||
             (cs_info.compression_type != obj_part.cs_info.compression_type))) {
           ldpp_dout(this, 0) << "ERROR: compression type was changed during multipart upload ("
