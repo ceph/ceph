@@ -530,21 +530,6 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
       return false;
     }
 
-    //
-    // allocate more data buffer
-    int bufs_count =  cct->_conf->ms_dpdk_rx_buffer_count_per_core - mbufs_per_queue_rx;
-    int mz_flags = RTE_MEMZONE_1GB|RTE_MEMZONE_SIZE_HINT_ONLY;
-    std::string mz_name = "rx_buffer_data" + std::to_string(_qid);
-    const struct rte_memzone *mz = rte_memzone_reserve_aligned(mz_name.c_str(),
-          mbuf_data_size*bufs_count, _pktmbuf_pool_rx->socket_id, mz_flags, mbuf_data_size);
-    ceph_assert(mz);
-    void* m = mz->addr;
-    for (int i = 0; i < bufs_count; i++) {
-      ceph_assert(m);
-      _alloc_bufs.push_back(m);
-      m += mbuf_data_size;
-    }
-
     if (rte_eth_rx_queue_setup(_dev_port_idx, _qid, default_ring_size,
                                rte_eth_dev_socket_id(_dev_port_idx),
                                _dev->def_rx_conf(), _pktmbuf_pool_rx) < 0) {
@@ -727,11 +712,19 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
 
     _frags.emplace_back(fragment{data, rte_pktmbuf_data_len(m)});
     _bufs.push_back(data);
+    _rx_free_pkts.insert({data, m});
   }
 
   auto del = std::bind(
           [this](std::vector<char*> &bufs) {
-            for (auto&& b : bufs) { _alloc_bufs.push_back(b); }
+            for (auto&& b : bufs) {
+              auto it = _rx_free_pkts.find(b);
+              if (it != _rx_free_pkts.end()) {
+                rte_mbuf* mbuf = it->second;
+                _rx_free_bufs.push_back(mbuf);
+                _rx_free_pkts.erase(it);
+              }
+            }
           }, std::move(_bufs));
   return Packet(
       _frags.begin(), _frags.end(), make_deleter(std::move(del)));
@@ -739,34 +732,24 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
 
 inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
 {
-  _rx_free_pkts.push_back(m);
   _num_rx_free_segs += m->nb_segs;
 
   if (!_dev->hw_features_ref().rx_lro || rte_pktmbuf_is_contiguous(m)) {
     char* data = rte_pktmbuf_mtod(m, char*);
+    _rx_free_pkts.insert({data, m});
 
     return Packet(fragment{data, rte_pktmbuf_data_len(m)},
-                  make_deleter([this, data] { _alloc_bufs.push_back(data); }));
+                  make_deleter([this, data] {
+                    auto it = _rx_free_pkts.find(data);
+                    if (it != _rx_free_pkts.end()) {
+                      rte_mbuf* mbuf = it->second;
+                      _rx_free_bufs.push_back(mbuf);
+                      _rx_free_pkts.erase(it);
+                    }
+                 }));
   } else {
     return from_mbuf_lro(m);
   }
-}
-
-inline bool DPDKQueuePair::refill_one_cluster(rte_mbuf* head)
-{
-  for (; head != nullptr; head = head->next) {
-    if (!refill_rx_mbuf(head, mbuf_data_size, _alloc_bufs)) {
-      //
-      // If we failed to allocate a new buffer - push the rest of the
-      // cluster back to the free_packets list for a later retry.
-      //
-      _rx_free_pkts.push_back(head);
-      return false;
-    }
-    _rx_free_bufs.push_back(head);
-  }
-
-  return true;
 }
 
 bool DPDKQueuePair::rx_gc(bool force)
@@ -774,23 +757,9 @@ bool DPDKQueuePair::rx_gc(bool force)
   if (_num_rx_free_segs >= rx_gc_thresh || force) {
     ldout(cct, 10) << __func__ << " free segs " << _num_rx_free_segs
                    << " thresh " << rx_gc_thresh
-                   << " free pkts " << _rx_free_pkts.size()
+                   << " free bufs " << _rx_free_bufs.size()
                    << dendl;
 
-    while (!_rx_free_pkts.empty()) {
-      //
-      // Use back() + pop_back() semantics to avoid an extra
-      // _rx_free_pkts.clear() at the end of the function - clear() has a
-      // linear complexity.
-      //
-      auto m = _rx_free_pkts.back();
-      _rx_free_pkts.pop_back();
-
-      if (!refill_one_cluster(m)) {
-        ldout(cct, 1) << __func__ << " get new mbuf failed " << dendl;
-        break;
-      }
-    }
     for (auto&& m : _rx_free_bufs) {
       rte_pktmbuf_prefree_seg(m);
     }

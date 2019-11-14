@@ -588,37 +588,8 @@ class DPDKQueuePair {
     return sent;
   }
 
-  /**
-   * Allocate a new data buffer and set the mbuf to point to it.
-   *
-   * Do some DPDK hacks to work on PMD: it assumes that the buf_addr
-   * points to the private data of RTE_PKTMBUF_HEADROOM before the actual
-   * data buffer.
-   *
-   * @param m mbuf to update
-   */
-  static bool refill_rx_mbuf(rte_mbuf* m, size_t size,
-                             std::vector<void*> &datas) {
-    if (datas.empty())
-      return false;
-    void *data = datas.back();
-    datas.pop_back();
-
-    //
-    // Set the mbuf to point to our data.
-    //
-    // Do some DPDK hacks to work on PMD: it assumes that the buf_addr
-    // points to the private data of RTE_PKTMBUF_HEADROOM before the
-    // actual data buffer.
-    //
-    m->buf_addr      = (char*)data - RTE_PKTMBUF_HEADROOM;
-    m->buf_physaddr  = rte_mem_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
-    return true;
-  }
-
   bool init_rx_mbuf_pool();
   bool rx_gc(bool force=false);
-  bool refill_one_cluster(rte_mbuf* head);
 
   /**
    * Polls for a burst of incoming packets. This function will not block and
@@ -660,7 +631,6 @@ class DPDKQueuePair {
   circular_buffer<Packet> _proxy_packetq;
   stream<Packet> _rx_stream;
   circular_buffer<Packet> _tx_packetq;
-  std::vector<void*> _alloc_bufs;
 
   PerfCounters *perf_logger;
   DPDKDevice* _dev;
@@ -668,7 +638,7 @@ class DPDKQueuePair {
   EventCenter *center;
   uint8_t _qid;
   rte_mempool *_pktmbuf_pool_rx;
-  std::vector<rte_mbuf*> _rx_free_pkts;
+  std::unordered_map<char*, rte_mbuf*> _rx_free_pkts;
   std::vector<rte_mbuf*> _rx_free_bufs;
   std::vector<fragment> _frags;
   std::vector<char*> _bufs;

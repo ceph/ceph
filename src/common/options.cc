@@ -1243,10 +1243,6 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("ms_dpdk_rx_buffer_count_per_core", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(8192)
-    .set_description(""),
-
     Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("send ourselves a SIGTERM early during startup"),
