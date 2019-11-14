@@ -37,6 +37,9 @@
 	mon cluster log file level = debug
 	debug asserts on shutdown = true
 
+	# we see this fail in qa on *nautilus*; bump up retries
+	mon_client_directed_command_retry = 4
+
 [osd]
         osd journal size = 100
 
