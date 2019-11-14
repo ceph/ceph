@@ -175,6 +175,20 @@ class TestMkdir(TestCephFSShell):
         o = self.mount_a.stat('d5/d6/d7')
         log.info("mount_a output:\n{}".format(o))
 
+class TestRmdir(TestCephFSShell):
+    dir_name = "test_dir"
+
+    def test_rmdir(self):
+        """
+        Test that rmdir deletes directory
+        """
+        self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
+        self.run_cephfs_shell_cmd("rmdir " + self.dir_name)
+
+        self.assertFalse(path.exists(self.dir_name),
+                         "Something went wrong!! test_dir is not deleted")
+
+
 class TestGetAndPut(TestCephFSShell):
     # the 'put' command gets tested as well with the 'get' comamnd
     def test_put_and_get_without_target_directory(self):
