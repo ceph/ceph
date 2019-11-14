@@ -571,7 +571,7 @@ class OpenStack(object):
             while proceed():
                 try:
                     client = connection.connect(**client_args)
-                except paramiko.PasswordRequiredException as e:
+                except paramiko.PasswordRequiredException:
                     raise Exception(
                         "The private key requires a passphrase.\n"
                         "Create a new key with:"
@@ -609,7 +609,7 @@ class OpenStack(object):
                         if self.up_string in line:
                             success = True
                             break
-                except socket.timeout as e:
+                except socket.timeout:
                     client.close()
                     log.debug('cloud_init_wait socket.timeout ' + tail)
                     continue
