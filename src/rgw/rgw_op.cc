@@ -5355,7 +5355,7 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  op_ret = policy->rebuild(store->ctl()->user, &owner, new_policy);
+  op_ret = policy->rebuild(store->ctl()->user, &owner, new_policy, s->err.message);
   if (op_ret < 0)
     return;
 
