@@ -65,11 +65,11 @@ def _get_matrix(path, subset=None):
     if subset:
         (index, outof) = subset
         mat = _build_matrix(path, mincyclicity=outof)
-        first = (mat.size() / outof) * index
+        first = (mat.size() // outof) * index
         if index == outof or index == outof - 1:
             matlimit = mat.size()
         else:
-            matlimit = (mat.size() / outof) * (index + 1)
+            matlimit = (mat.size() // outof) * (index + 1)
     else:
         first = 0
         mat = _build_matrix(path)
@@ -133,7 +133,7 @@ def _build_matrix(path, mincyclicity=0, item=''):
             mat = matrix.Product(item, submats)
             if mat and mat.cyclicity() < mincyclicity:
                 mat = matrix.Cycle(
-                    (mincyclicity + mat.cyclicity() - 1) / mat.cyclicity(), mat
+                    (mincyclicity + mat.cyclicity() - 1) // mat.cyclicity(), mat
                 )
             return mat
         else:
@@ -148,7 +148,7 @@ def _build_matrix(path, mincyclicity=0, item=''):
                     continue
                 if submat.cyclicity() < mincyclicity:
                     submat = matrix.Cycle(
-                        ((mincyclicity + submat.cyclicity() - 1) /
+                        ((mincyclicity + submat.cyclicity() - 1) //
                          submat.cyclicity()),
                         submat)
                 submats.append(submat)
