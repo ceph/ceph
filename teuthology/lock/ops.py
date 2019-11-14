@@ -13,8 +13,8 @@ from teuthology.contextutil import safe_while
 from teuthology.task import console_log
 from teuthology.misc import canonicalize_hostname
 
-import util
-import keys
+from teuthology.lock import util
+from teuthology.lock import keys
 
 log = logging.getLogger(__name__)
 

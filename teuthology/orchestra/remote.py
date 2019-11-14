@@ -5,6 +5,7 @@ import teuthology.lock.query
 import teuthology.lock.util
 from teuthology.orchestra import run
 from teuthology.orchestra import connection
+from teuthology.orchestra import console
 from teuthology.orchestra.opsys import OS
 from teuthology import misc
 from teuthology.exceptions import CommandFailedError
@@ -17,8 +18,6 @@ import os
 import pwd
 import tempfile
 import netaddr
-
-import console
 
 log = logging.getLogger(__name__)
 
