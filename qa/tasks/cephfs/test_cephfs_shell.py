@@ -46,7 +46,7 @@ class TestCephFSShell(CephFSTestCase):
 
         log.info("Running command: {}".format(" ".join(args)))
         return mount_x.client_remote.run(args=args, stdout=StringIO(),
-                                           stdin=stdin)
+                                         stderr=StringIO(), stdin=stdin)
 
     def get_cephfs_shell_cmd_output(self, cmd, mount_x=None, opts=None,
                                     stdin=None):
