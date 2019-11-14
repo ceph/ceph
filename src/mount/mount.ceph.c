@@ -61,12 +61,17 @@ void mount_ceph_debug(const char *fmt, ...)
 static int parse_src(const char *orig_str, struct ceph_mount_info *cmi)
 {
 	size_t len;
-	char *mount_path;
+	const char *mount_path;
 
 	mount_path = strstr(orig_str, ":/");
 	if (!mount_path) {
-		fprintf(stderr, "source mount path was not specified\n");
-		return -EINVAL;
+		/* allow the source path to be omitted */
+		len = strlen(orig_str);
+		if (orig_str[len - 1] != ':') {
+			fprintf(stderr, "if source mount path was omitted, then please make sure the last character is ':'\n");
+			return -EINVAL;
+		}
+		mount_path = orig_str + len - 1;
 	}
 
 	len = mount_path - orig_str;
@@ -77,9 +82,11 @@ static int parse_src(const char *orig_str, struct ceph_mount_info *cmi)
 	}
 
 	mount_path++;
-	cmi->cmi_path = strdup(mount_path);
-	if (!cmi->cmi_path)
-		return -ENOMEM;
+	if (mount_path[0] == '/') {
+		cmi->cmi_path = strdup(mount_path);
+		if (!cmi->cmi_path)
+			return -ENOMEM;
+	}
 	return 0;
 }
 
@@ -94,7 +101,8 @@ static char *finalize_src(struct ceph_mount_info *cmi)
 
 	len = strlen(src);
 	pos = safe_cat(&src, &len, len, ":");
-	safe_cat(&src, &len, pos, cmi->cmi_path);
+	if (cmi->cmi_path)
+		safe_cat(&src, &len, pos, cmi->cmi_path);
 
 	return src;
 }
@@ -218,7 +226,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 		if(*data == 0)
 			break;
 		next_keyword = strchr(data,',');
-	
+
 		/* temporarily null terminate end of keyword=value pair */
 		if(next_keyword)
 			*next_keyword++ = 0;
@@ -326,7 +334,6 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			} else {
 				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, data);
 			}
-			
 		}
 		data = next_keyword;
 	} while (data);

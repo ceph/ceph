@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **mount.ceph** [*mon1_socket*\ ,\ *mon2_socket*\ ,...]:/[*subdir*] *dir* [
+| **mount.ceph** [*mon1_socket*\ ,\ *mon2_socket*\ ,...]:[*/subdir*] *dir* [
   -o *options* ]
 
 
@@ -43,7 +43,8 @@ the secret from it.
 
 A sub-directory of the file system can be mounted by specifying the (absolute)
 path to the sub-directory right after ":" after the socket in the device part
-of the mount command.
+of the mount command. If both the '/' and sub-directory are omitted, the '/'
+will be used in kernel space.
 
 Mount helper application conventions dictate that the first two options are
 device to be mounted and the mountpoint for that device. Options must be
