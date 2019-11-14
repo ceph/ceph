@@ -277,6 +277,9 @@ class RGWBucketSyncPolicyHandler {
 
   std::set<rgw_bucket> source_hints;
   std::set<rgw_bucket> target_hints;
+  std::set<rgw_sync_bucket_pipe> resolved_sources;
+  std::set<rgw_sync_bucket_pipe> resolved_dests;
+
 
   bool bucket_is_sync_source() const {
     return !targets.empty();
@@ -311,6 +314,20 @@ public:
                std::set<string> *psource_zones,
                std::set<string> *ptarget_zones,
                bool only_enabled) const;
+
+  void set_resolved_hints(std::set<rgw_sync_bucket_pipe>&& _resolved_sources,
+                          std::set<rgw_sync_bucket_pipe>&& _resolved_dests) {
+    resolved_sources = std::move(_resolved_sources);
+    resolved_dests = std::move(_resolved_dests);
+  }
+
+  const std::set<rgw_sync_bucket_pipe>& get_resolved_source_hints() {
+    return resolved_sources;
+  }
+
+  const std::set<rgw_sync_bucket_pipe>& get_resolved_dest_hints() {
+    return resolved_dests;
+  }
 
   const std::set<string>& get_source_zones() const {
     return source_zones;

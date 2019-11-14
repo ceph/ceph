@@ -64,10 +64,7 @@ bool rgw_zone_set::exists(const string& zone, std::optional<string> location_key
 
 void encode_json(const char *name, const rgw_zone_set& zs, ceph::Formatter *f)
 {
-  Formatter::ArraySection as(*f, name);
-  for (auto& e : zs.entries) {
-    encode_json("entry", e, f);
-  }
+  encode_json(name, zs.entries, f);
 }
 
 void decode_json_obj(rgw_zone_set& zs, JSONObj *obj)

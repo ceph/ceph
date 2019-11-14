@@ -31,6 +31,8 @@ class RGWChainedCacheImpl;
 
 class RGWSI_Bucket_Sync_SObj_HintIndexManager;
 
+struct rgw_sync_bucket_entity;
+
 class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
 {
   struct bucket_sync_policy_cache_entry {
@@ -44,6 +46,41 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
 
   int do_start() override;
 
+  struct optional_zone_bucket {
+    optional<string> zone;
+    optional<rgw_bucket> bucket;
+
+    optional_zone_bucket(const optional<string>& _zone,
+                         const optional<rgw_bucket>& _bucket) : zone(_zone), bucket(_bucket) {}
+
+    bool operator<(const optional_zone_bucket& ozb) const {
+      if (zone < ozb.zone) {
+        return true;
+      }
+      if (zone > ozb.zone) {
+        return false;
+      }
+      return bucket < ozb.bucket;
+    }
+  };
+
+  void get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
+                         const std::set<string>& zone_names,
+                         const std::set<rgw_bucket>& buckets,
+                         std::set<rgw_sync_bucket_entity> *hint_entities,
+                         optional_yield y);
+  int resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
+                           rgw_sync_bucket_entity& self_entity,
+                           RGWBucketSyncPolicyHandlerRef& handler,
+                           RGWBucketSyncPolicyHandlerRef& zone_policy_handler,
+                           std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
+                           optional_yield y);
+  int do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
+                            std::optional<string> zone,
+                            std::optional<rgw_bucket> _bucket,
+                            std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
+                            RGWBucketSyncPolicyHandlerRef *handler,
+                            optional_yield y);
 public:
   struct Svc {
     RGWSI_Zone *zone{nullptr};
@@ -61,11 +98,11 @@ public:
             RGWSI_Bucket_SObj *_bucket_sobj_svc);
 
 
-  int get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
+  int get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                          std::optional<string> zone,
                          std::optional<rgw_bucket> bucket,
                          RGWBucketSyncPolicyHandlerRef *handler,
-                         optional_yield y) override;
+                         optional_yield y);
 
   int handle_bi_update(RGWBucketInfo& bucket_info,
                        RGWBucketInfo *orig_bucket_info,
