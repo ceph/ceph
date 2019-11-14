@@ -75,7 +75,7 @@ void list_all_buckets_end(struct req_state *s)
   s->formatter->close_section();
 }
 
-void dump_bucket(struct req_state *s, rgw::sal::RGWSalBucket& obj)
+void dump_bucket(struct req_state *s, rgw::sal::RGWBucket& obj)
 {
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_string("Name", obj.get_name());
@@ -624,11 +624,11 @@ void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buc
   if (!sent_data)
     return;
 
-  map<string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
-  map<string, rgw::sal::RGWSalBucket*>::iterator iter;
+  map<string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
+  map<string, rgw::sal::RGWBucket*>::iterator iter;
 
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    rgw::sal::RGWSalBucket* obj = iter->second;
+    rgw::sal::RGWBucket* obj = iter->second;
     dump_bucket(s, *obj);
   }
   rgw_flush_formatter(s, s->formatter);
@@ -1483,7 +1483,7 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWSalBucket* bucket)
+static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWBucket* bucket)
 {
   dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket->get_count()));
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket->get_size()));
