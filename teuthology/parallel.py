@@ -5,6 +5,8 @@ import gevent
 import gevent.pool
 import gevent.queue
 
+from six import reraise
+
 log = logging.getLogger(__name__)
 
 
@@ -32,7 +34,7 @@ def resurrect_traceback(exc):
     else:
         return
 
-    raise exc_info[0], exc_info[1], exc_info[2]
+    reraise(*exc_info)
 
 
 class parallel(object):
