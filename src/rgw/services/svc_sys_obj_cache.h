@@ -84,6 +84,7 @@ protected:
   int distribute_cache(const string& normal_name, const rgw_raw_obj& obj,
                        ObjectCacheInfo& obj_info, int op,
                        optional_yield y);
+  int announce_epoch(optional_yield y);
 
   int watch_cb(uint64_t notify_id,
                uint64_t cookie,
@@ -133,6 +134,13 @@ public:
     // `call_zap` must erase the cache.
     int call_zap();
   } asocket;
+
+  std::optional<uint64_t> get_epoch() const override {
+    return cache.get_epoch();
+  }
+  bool handle_epoch(uint64_t e) override {
+    return cache.handle_epoch(e);
+  }
 };
 
 template <class T>

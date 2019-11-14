@@ -8754,3 +8754,10 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   }
   return ret;
 }
+
+std::optional<uint64_t> RGWRados::get_epoch() const {
+  return svc.sysobj->get_epoch();
+}
+bool RGWRados::handle_epoch(uint64_t e) {
+  return svc.sysobj->handle_epoch(e);
+}

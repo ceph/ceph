@@ -18,6 +18,7 @@
 enum {
   UPDATE_OBJ,
   REMOVE_OBJ,
+  EPOCH_NOTIFY,
 };
 
 #define CACHE_FLAG_DATA           0x01
@@ -95,30 +96,37 @@ struct ObjectCacheInfo {
 WRITE_CLASS_ENCODER(ObjectCacheInfo)
 
 struct RGWCacheNotifyInfo {
-  uint32_t op;
+  uint32_t op = 0;
   rgw_raw_obj obj;
   ObjectCacheInfo obj_info;
-  off_t ofs;
+  off_t ofs = 0;
   string ns;
+  std::optional<uint64_t> epoch;
 
-  RGWCacheNotifyInfo() : op(0), ofs(0) {}
+  RGWCacheNotifyInfo() = default;
 
   void encode(bufferlist& obl) const {
-    ENCODE_START(2, 2, obl);
+    ENCODE_START(3, 2, obl);
     encode(op, obl);
     encode(obj, obl);
     encode(obj_info, obl);
     encode(ofs, obl);
     encode(ns, obl);
+    encode(epoch, obl);
     ENCODE_FINISH(obl);
   }
   void decode(bufferlist::const_iterator& ibl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, ibl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, ibl);
     decode(op, ibl);
     decode(obj, ibl);
     decode(obj_info, ibl);
     decode(ofs, ibl);
     decode(ns, ibl);
+    if (struct_v > 2) {
+      decode(epoch, ibl);
+    } else {
+      epoch = std::nullopt;
+    }
     DECODE_FINISH(ibl);
   }
   void dump(Formatter *f) const;
@@ -157,10 +165,11 @@ struct ObjectCacheEntry {
 class ObjectCache {
   std::unordered_map<string, ObjectCacheEntry> cache_map;
   std::list<string> lru;
+  uint64_t epoch = 0;
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
-  ceph::shared_mutex lock = ceph::make_shared_mutex("ObjectCache");
+  mutable ceph::shared_mutex lock = ceph::make_shared_mutex("ObjectCache");
   CephContext *cct;
 
   vector<RGWChainedCache *> chained_cache;
@@ -174,7 +183,6 @@ class ObjectCache {
   void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
-
 public:
   ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), cct(NULL), enabled(false) { }
   ~ObjectCache();
@@ -214,6 +222,13 @@ public:
   void chain_cache(RGWChainedCache *cache);
   void unchain_cache(RGWChainedCache *cache);
   void invalidate_all();
+  uint64_t get_epoch() const {
+    std::shared_lock l(lock);
+    return epoch;
+  }
+  uint64_t bump_epoch();
+  // Returns true if we're in a new epoch
+  bool handle_epoch(uint64_t e);
 };
 
 #endif

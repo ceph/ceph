@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -422,9 +421,25 @@ int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name,
   info.op = op;
   info.obj_info = obj_info;
   info.obj = obj;
+  info.epoch = cache.get_epoch();
   bufferlist bl;
   encode(info, bl);
-  return notify_svc->distribute(normal_name, bl, y);
+  auto r = notify_svc->distribute(normal_name, bl, y);
+  if (r < 0) {
+    // Cache distribution failed. Declare a new epoch.
+    return announce_epoch(y);
+  }
+  return 0;
+}
+
+int RGWSI_SysObj_Cache::announce_epoch(optional_yield y)
+{
+  RGWCacheNotifyInfo info;
+  info.op = EPOCH_NOTIFY;
+  info.epoch = cache.bump_epoch();
+  bufferlist bl;
+  encode(info, bl);
+  return notify_svc->broadcast(bl, y);
 }
 
 int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
@@ -440,7 +455,7 @@ int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
   } catch (buffer::end_of_buffer& err) {
     ldout(cct, 0) << "ERROR: got bad notification" << dendl;
     return -EIO;
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     ldout(cct, 0) << "ERROR: buffer::error" << dendl;
     return -EIO;
   }
@@ -449,17 +464,22 @@ int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
   string oid;
   normalize_pool_and_obj(info.obj.pool, info.obj.oid, pool, oid);
   string name = normal_name(pool, oid);
-  
-  switch (info.op) {
-  case UPDATE_OBJ:
-    cache.put(name, info.obj_info, NULL);
-    break;
-  case REMOVE_OBJ:
-    cache.remove(name);
-    break;
-  default:
-    ldout(cct, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
-    return -EINVAL;
+
+  if (info.epoch && cache.handle_epoch(*info.epoch)) {
+    ldout(cct, 5) << "Got new epoch: " << cache.get_epoch()
+                  << ", flushing cache and dropping rest of message." << dendl;
+  } else {
+    switch (info.op) {
+    case UPDATE_OBJ:
+      cache.put(name, info.obj_info, NULL);
+      break;
+    case REMOVE_OBJ:
+      cache.remove(name);
+      break;
+    default:
+      ldout(cct, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
+      return -EINVAL;
+    }
   }
 
   return 0;

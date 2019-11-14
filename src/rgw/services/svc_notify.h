@@ -98,4 +98,5 @@ public:
   int distribute(const string& key, bufferlist& bl, optional_yield y);
 
   void register_watch_cb(CB *cb);
+  int broadcast(ceph::buffer::list& bl, optional_yield y);
 };

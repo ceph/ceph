@@ -189,3 +189,10 @@ RGWSI_Zone *RGWSI_SysObj::get_zone_svc()
 {
   return core_svc->get_zone_svc();
 }
+
+std::optional<uint64_t> RGWSI_SysObj::get_epoch() const {
+  return core_svc->get_epoch();
+}
+bool RGWSI_SysObj::handle_epoch(uint64_t e) {
+  return core_svc->handle_epoch(e);
+}

@@ -135,6 +135,9 @@ protected:
            RGWObjVersionTracker *objv_tracker,
            optional_yield y);
 
+
+  virtual std::optional<uint64_t> get_epoch() const { return std::nullopt; }
+  virtual bool handle_epoch(uint64_t e) { return false; }
 public:
   RGWSI_SysObj_Core(CephContext *cct): RGWServiceInstance(cct) {}
 

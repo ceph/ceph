@@ -467,6 +467,17 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
   return r;
 }
 
+int RGWSI_Notify::broadcast(ceph::buffer::list& bl, optional_yield y)
+{
+  int r;
+  for (auto& o : notify_objs) {
+    int rp = robust_notify(o, bl, y);
+    if (unlikely(!r && rp))
+      r = rp;
+  }
+  return r;
+}
+
 void RGWSI_Notify::register_watch_cb(CB *_cb)
 {
   std::unique_lock l{watchers_lock};

@@ -1500,6 +1500,10 @@ public:
    */
   static uint32_t calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 						     uint32_t num_shards);
+
+public:
+  std::optional<uint64_t> get_epoch() const;
+  bool handle_epoch(uint64_t e);
 };
 
 #endif

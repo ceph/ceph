@@ -305,6 +305,34 @@ void ObjectCache::invalidate_all()
   do_invalidate_all();
 }
 
+uint64_t ObjectCache::bump_epoch() {
+  std::unique_lock l(lock);
+
+  ++epoch;
+  do_invalidate_all();
+  return epoch;
+}
+
+bool ObjectCache::handle_epoch(uint64_t e) {
+  std::shared_lock l(lock);
+
+  auto old_epoch = epoch;
+
+  if (e != epoch &&
+      (e > epoch || epoch == 0 ||
+       // This seems like a reasonable heuristic for handling wraparound.
+       epoch > (std::numeric_limits<uint64_t>::max() / 2))) {
+    std::unique_lock u(*l.release());
+    // Check we weren't raced
+    if (old_epoch == epoch) {
+      epoch = e;
+      do_invalidate_all();
+    }
+    return true;
+  }
+  return false;
+}
+
 void ObjectCache::do_invalidate_all()
 {
   cache_map.clear();

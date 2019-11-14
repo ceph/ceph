@@ -206,6 +206,10 @@ public:
 
   virtual dmc::client_id dmclock_client() { return dmc::client_id::metadata; }
   virtual dmc::Cost dmclock_cost() { return 1; }
+
+  std::optional<uint64_t> get_epoch() const {
+    return store->getRados()->get_epoch();
+  }
 };
 
 class RGWDefaultResponseOp : public RGWOp {

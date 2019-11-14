@@ -277,6 +277,8 @@ public:
   }
 
   RGWSI_Zone *get_zone_svc();
+  std::optional<uint64_t> get_epoch() const;
+  bool handle_epoch(uint64_t e);
 };
 
 using RGWSysObj = RGWSI_SysObj::Obj;
