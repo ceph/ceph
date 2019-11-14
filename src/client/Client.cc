@@ -5162,7 +5162,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 		<< " mds." << mds << " seq " << m->get_seq()
 		<< " caps now " << ccap_string(new_caps)
 		<< " was " << ccap_string(cap->issued)
-		<< (was_stale ? "" : " (stale)") << dendl;
+		<< (was_stale ? " (stale)" : "") << dendl;
 
   if (was_stale)
       cap->issued = cap->implemented = CEPH_CAP_PIN;
