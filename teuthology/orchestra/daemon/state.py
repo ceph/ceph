@@ -28,6 +28,7 @@ class DaemonState(object):
         self.cluster, self.type_ = self.role.split('.')[0:2]
         self.id_ = id_
         self.log = command_kwargs.get('logger', log)
+        self.fsid = command_kwargs.get('fsid')
         self.proc = None
 
     def check_status(self):
