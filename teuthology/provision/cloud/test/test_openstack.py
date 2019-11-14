@@ -1,7 +1,8 @@
 import socket
-import urlparse
 import yaml
 import os
+
+from teuthology.util.compat import parse_qs
 
 from copy import deepcopy
 from libcloud.compute.providers import get_driver
@@ -657,7 +658,7 @@ class TestOpenStackProvisioner(TestOpenStackBase):
         assert len(call_args) == 1
         url_base, query_string = call_args[0][0][0].split('?')
         assert url_base == 'nsupdate_url'
-        parsed_query = urlparse.parse_qs(query_string)
+        parsed_query = parse_qs(query_string)
         assert parsed_query == dict(name=['x'], ip=['y'])
 
     @mark.parametrize(

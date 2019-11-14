@@ -1,11 +1,11 @@
 import logging
 import os
-import urllib
 
 import requests
 
 from teuthology import misc
 from teuthology.config import config
+from teuthology.util.compat import urlencode
 
 
 log = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def list_locks(keyed_by_name=False, **kwargs):
     if kwargs:
         if 'machine_type' in kwargs:
             kwargs['machine_type'] = kwargs['machine_type'].replace(',','|')
-        uri += '?' + urllib.urlencode(kwargs)
+        uri += '?' + urlencode(kwargs)
     try:
         response = requests.get(uri)
     except requests.ConnectionError:

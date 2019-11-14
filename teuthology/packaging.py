@@ -2,8 +2,8 @@ import logging
 import ast
 import re
 import requests
-import urllib
-import urlparse
+
+from teuthology.util.compat import urljoin, urlencode
 
 from collections import OrderedDict
 from cStringIO import StringIO
@@ -887,8 +887,8 @@ class ShamanProject(GitbuilderProject):
             req_obj['sha1'] = ref_val
         else:
             req_obj['ref'] = ref_val
-        req_str = urllib.urlencode(req_obj)
-        uri = urlparse.urljoin(
+        req_str = urlencode(req_obj)
+        uri = urljoin(
             self.query_url,
             'search',
         ) + '?%s' % req_str
@@ -962,7 +962,7 @@ class ShamanProject(GitbuilderProject):
     @property
     def repo_url(self):
         self.assert_result()
-        return urlparse.urljoin(
+        return urljoin(
             self._result.json()[0]['chacra_url'],
             'repo',
         )
