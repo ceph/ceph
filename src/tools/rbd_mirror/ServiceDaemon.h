@@ -30,6 +30,9 @@ public:
   void add_pool(int64_t pool_id, const std::string& pool_name);
   void remove_pool(int64_t pool_id);
 
+  void add_namespace(int64_t pool_id, const std::string& namespace_name);
+  void remove_namespace(int64_t pool_id, const std::string& namespace_name);
+
   uint64_t add_or_update_callout(int64_t pool_id, uint64_t callout_id,
                                  service_daemon::CalloutLevel callout_level,
                                  const std::string& text);
@@ -37,6 +40,9 @@ public:
 
   void add_or_update_attribute(int64_t pool_id, const std::string& key,
                                const service_daemon::AttributeValue& value);
+  void add_or_update_namespace_attribute(
+      int64_t pool_id, const std::string& namespace_name,
+      const std::string& key, const service_daemon::AttributeValue& value);
   void remove_attribute(int64_t pool_id, const std::string& key);
 
 private:
@@ -52,11 +58,13 @@ private:
   };
   typedef std::map<uint64_t, Callout> Callouts;
   typedef std::map<std::string, service_daemon::AttributeValue> Attributes;
+  typedef std::map<std::string, Attributes> NamespaceAttributes;
 
   struct Pool {
     std::string name;
     Callouts callouts;
     Attributes attributes;
+    NamespaceAttributes ns_attributes;
 
     Pool(const std::string& name) : name(name) {
     }
