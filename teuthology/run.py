@@ -1,7 +1,5 @@
 import os
 import yaml
-import StringIO
-import contextlib
 import sys
 import logging
 
@@ -258,20 +256,16 @@ def report_outcome(config, archive, summary, fake_ctx):
         with open(os.path.join(archive, 'summary.yaml'), 'w') as f:
             yaml.safe_dump(summary, f, default_flow_style=False)
 
-    with contextlib.closing(StringIO.StringIO()) as f:
-        yaml.safe_dump(summary, f)
-        log.info('Summary data:\n%s' % f.getvalue())
+    summary_dump = yaml.safe_dump(summary)
+    log.info('Summary data:\n%s' % summary_dump)
 
-    with contextlib.closing(StringIO.StringIO()) as f:
-        if ('email-on-error' in config
-                and not passed):
-            yaml.safe_dump(summary, f)
-            yaml.safe_dump(config, f)
-            emsg = f.getvalue()
-            subject = "Teuthology error -- %s" % summary[
-                'failure_reason']
-            email_results(subject, "Teuthology", config[
-                          'email-on-error'], emsg)
+    if ('email-on-error' in config
+            and not passed):
+        config_dump = yaml.safe_dump(config)
+        subject = "Teuthology error -- %s" % summary['failure_reason']
+        email_results(subject, "Teuthology", config['email-on-error'],
+            "\n".join([summary_dump, config_dump]))
+
 
     report.try_push_job_info(config, summary)
 

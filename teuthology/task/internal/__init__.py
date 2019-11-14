@@ -3,7 +3,6 @@ Internal tasks are tasks that are started from the teuthology infrastructure.
 Note that there is no corresponding task defined for this module.  All of
 the calls are made from other modules, most notably teuthology/run.py
 """
-from cStringIO import StringIO
 import contextlib
 import logging
 import os
@@ -311,8 +310,7 @@ def fetch_binaries_for_coredumps(path, remote):
             dump_program = dump_out.split("from '")[1].split(' ')[0]
 
             # Find path on remote server:
-            r = remote.run(args=['which', dump_program], stdout=StringIO())
-            remote_path = r.stdout.getvalue()
+            remote_path = remote.sh(['which', dump_program]).rstrip()
 
             # Pull remote program into coredump folder:
             remote._sftp_get_file(remote_path, os.path.join(coredump_path,
@@ -443,20 +441,15 @@ def coredump(ctx, config):
         # set status = 'fail' if the dir is still there = coredumps were
         # seen
         for rem in ctx.cluster.remotes.keys():
-            r = rem.run(
-                args=[
-                    'if', 'test', '!', '-e', '{adir}/coredump'.format(adir=archive_dir), run.Raw(';'), 'then',
-                    'echo', 'OK', run.Raw(';'),
-                    'fi',
-                ],
-                stdout=StringIO(),
-            )
-            if r.stdout.getvalue() != 'OK\n':
-                log.warning('Found coredumps on %s, flagging run as failed', rem)
-                set_status(ctx.summary, 'fail')
-                if 'failure_reason' not in ctx.summary:
-                    ctx.summary['failure_reason'] = \
-                        'Found coredumps on {rem}'.format(rem=rem)
+            try:
+                rem.sh("test -e " + archive_dir + "/coredump")
+            except run.CommandFailedError:
+                continue
+            log.warning('Found coredumps on %s, flagging run as failed', rem)
+            set_status(ctx.summary, 'fail')
+            if 'failure_reason' not in ctx.summary:
+                ctx.summary['failure_reason'] = \
+                    'Found coredumps on {rem}'.format(rem=rem)
 
 
 @contextlib.contextmanager
