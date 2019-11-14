@@ -30,7 +30,7 @@ class RGWSI_Bucket_Sync : public RGWServiceInstance
 public:
   RGWSI_Bucket_Sync(CephContext *cct) : RGWServiceInstance(cct) {}
 
-  virtual int get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
+  virtual int get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                                  std::optional<string> zone,
                                  std::optional<rgw_bucket> bucket,
                                  RGWBucketSyncPolicyHandlerRef *handler,

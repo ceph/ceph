@@ -67,7 +67,6 @@ struct rgw_zone_set {
     /* no DECODE_START, DECODE_END for backward compatibility */
     ceph::decode(entries, bl);
   }
-  void decode_json(JSONObj *obj);
 
   void insert(const string& zone, std::optional<string> location_key);
   bool exists(const string& zone, std::optional<string> location_key) const;
