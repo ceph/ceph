@@ -64,26 +64,25 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
       ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
-    map<string, rgw::sal::RGWSalBucket*>& buckets = user_buckets.get_buckets();
-    for (map<string, rgw::sal::RGWSalBucket*>::iterator i = buckets.begin();
+    map<string, rgw::sal::RGWBucket*>& buckets = user_buckets.get_buckets();
+    for (map<string, rgw::sal::RGWBucket*>::iterator i = buckets.begin();
          i != buckets.end();
          ++i) {
       marker = i->first;
 
-      rgw::sal::RGWSalBucket* bucket = i->second;
-      RGWBucketInfo bucket_info;
+      rgw::sal::RGWBucket* bucket = i->second;
 
-      ret = bucket->get_bucket_info(bucket_info, null_yield);
+      ret = bucket->get_bucket_info(null_yield);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = bucket->sync_user_stats(bucket_info);
+      ret = bucket->sync_user_stats();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      ret = store->getRados()->check_bucket_shards(bucket_info, bucket_info.bucket, bucket->get_count());
+      ret = bucket->check_bucket_shards();
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }
@@ -115,19 +114,18 @@ int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_use
       ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
-    std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+    std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
     for (const auto& i :  m) {
       marker = i.first;
 
-      rgw::sal::RGWSalBucket* bucket_ent = i.second;
-      RGWBucketEnt stats;
-      ret = store->ctl()->bucket->read_bucket_stats(bucket_ent->get_bi(), &stats, null_yield);
+      rgw::sal::RGWBucket* bucket_ent = i.second;
+      ret = bucket_ent->read_bucket_stats(null_yield);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
       }
       cls_user_bucket_entry entry;
-      stats.convert(&entry);
+      bucket_ent->convert(&entry);
       buckets_usage_map.emplace(bucket_ent->get_name(), entry);
     }
     done = (buckets.count() < max_entries);
@@ -1602,18 +1600,17 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
     }
   }
 
-  rgw::sal::RGWUser* old_user = new rgw::sal::RGWRadosUser(store, op_state.get_user_id());
-  RGWUserInfo old_user_info = op_state.get_user_info();
-  rgw::sal::RGWUser* new_user = new rgw::sal::RGWRadosUser(store, op_state.get_new_uid());
-  if (old_user->get_tenant() != new_user->get_tenant()) {
+  rgw::sal::RGWRadosUser old_user(store, op_state.get_user_info());
+  rgw::sal::RGWRadosUser new_user(store, op_state.get_new_uid());
+  if (old_user.get_tenant() != new_user.get_tenant()) {
     set_err_msg(err_msg, "users have to be under the same tenant namespace "
-                + old_user->get_tenant() + " != " + new_user->get_tenant());
+                + old_user.get_tenant() + " != " + new_user.get_tenant());
     return -EINVAL;
   }
 
   // create a stub user and write only the uid index and buckets object
   RGWUserInfo stub_user_info;
-  stub_user_info.user_id = new_user->get_user();
+  stub_user_info.user_id = new_user.get_user();
 
   RGWObjVersionTracker objv;
   const bool exclusive = !op_state.get_overwrite_new_user(); // overwrite if requested
@@ -1632,60 +1629,47 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   RGWAccessControlPolicy policy_instance;
-  policy_instance.create_default(new_user->get_user(), old_user_info.display_name);
+  policy_instance.create_default(new_user.get_user(), old_user.get_display_name());
 
   //unlink and link buckets to new user
   string marker;
-  string obj_marker;
   CephContext *cct = store->ctx();
   size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
-  RGWBucketCtl* bucket_ctl = store->ctl()->bucket;
   rgw::sal::RGWBucketList buckets;
 
   do {
-    ret = old_user->list_buckets(marker, "", max_buckets, false, buckets);
+    ret = old_user.list_buckets(marker, "", max_buckets, false, buckets);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to list user buckets");
       return ret;
     }
 
-    map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
-    std::map<std::string, rgw::sal::RGWSalBucket*>::iterator it;
+    map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
+    std::map<std::string, rgw::sal::RGWBucket*>::iterator it;
 
     for (it = m.begin(); it != m.end(); ++it) {
-      rgw::sal::RGWSalBucket* bucket = it->second;
+      rgw::sal::RGWBucket* bucket = it->second;
       marker = it->first;
 
-      RGWBucketInfo bucket_info;
-      ret = bucket->get_bucket_info(bucket_info, null_yield);
+      ret = bucket->get_bucket_info(null_yield);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket->get_name());
         return ret;
       }
 
-      ret = bucket->set_acl(policy_instance, bucket_info, null_yield);
+      ret = bucket->set_acl(policy_instance, null_yield);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to set acl on bucket " + bucket->get_name());
         return ret;
       }
 
-      RGWBucketEntryPoint ep;
-      ep.bucket = bucket_info.bucket;
-      ep.owner = new_user->get_user();
-      ep.creation_time = bucket_info.creation_time;
-      ep.linked = true;
-      map<string, bufferlist> ep_attrs;
-      rgw_ep_info ep_data{ep, ep_attrs};
-
-      ret = bucket_ctl->link_bucket(new_user->get_user(), bucket_info.bucket,
-				    ceph::real_time(), null_yield, true, &ep_data);
+      ret = bucket->link(&new_user, null_yield);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to link bucket " + bucket->get_name());
         return ret;
       }
 
-      ret = bucket_ctl->chown(store, bucket_info, new_user->get_user(),
-			      old_user_info.display_name, obj_marker, null_yield);
+      ret = bucket->chown(&new_user, &old_user, null_yield);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to run bucket chown" + cpp_strerror(-ret));
         return ret;
@@ -1697,10 +1681,10 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   // update the 'stub user' with all of the other fields and rewrite all of the
   // associated index objects
   RGWUserInfo& user_info = op_state.get_user_info();
-  user_info.user_id = new_user->get_user();
+  user_info.user_id = new_user.get_user();
   op_state.objv = objv;
 
-  rename_swift_keys(new_user->get_user(), user_info.swift_keys);
+  rename_swift_keys(new_user.get_user(), user_info.swift_keys);
 
   return update(op_state, err_msg);
 }
@@ -1898,13 +1882,13 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
       return ret;
     }
 
-    std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+    std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
     if (!m.empty() && !purge_data) {
       set_err_msg(err_msg, "must specify purge data to remove user with buckets");
       return -EEXIST; // change to code that maps to 409: conflict
     }
 
-    std::map<std::string, rgw::sal::RGWSalBucket*>::iterator it;
+    std::map<std::string, rgw::sal::RGWBucket*>::iterator it;
     for (it = m.begin(); it != m.end(); ++it) {
       ret = it->second->remove_bucket(true, y);
       if (ret < 0) {
@@ -2053,12 +2037,12 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
         return ret;
       }
 
-      std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
-      std::map<std::string, rgw::sal::RGWSalBucket*>::iterator iter;
+      std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
+      std::map<std::string, rgw::sal::RGWBucket*>::iterator iter;
 
       vector<rgw_bucket> bucket_names;
       for (iter = m.begin(); iter != m.end(); ++iter) {
-	rgw::sal::RGWSalBucket* obj = iter->second;
+	rgw::sal::RGWBucket* obj = iter->second;
         bucket_names.push_back(obj->get_bi());
 
         marker = iter->first;
