@@ -230,11 +230,18 @@ class VolumeClient(object):
                    'data': data_pool}
         return self.mgr.mon_command(command)
 
-    def remove_filesystem(self, fs_name):
+    def remove_filesystem(self, fs_name, confirm):
+        if confirm != "--yes-i-really-mean-it":
+            return -errno.EPERM, "", "WARNING: this will *PERMANENTLY DESTROY* all data " \
+                "stored in the filesystem '{0}'. If you are *ABSOLUTELY CERTAIN* " \
+                "that is what you want, re-issue the command followed by " \
+                "--yes-i-really-mean-it.".format(fs_name)
+
         command = {'prefix': 'fs fail', 'fs_name': fs_name}
         r, outb, outs = self.mgr.mon_command(command)
         if r != 0:
             return r, outb, outs
+
         command = {'prefix': 'fs rm', 'fs_name': fs_name, 'yes_i_really_mean_it': True}
         return self.mgr.mon_command(command)
 
@@ -276,7 +283,7 @@ class VolumeClient(object):
         # create mds
         return self.create_mds(volname)
 
-    def delete_volume(self, volname):
+    def delete_volume(self, volname, confirm):
         """
         delete the given module (tear down mds, remove filesystem)
         """
@@ -298,11 +305,13 @@ class VolumeClient(object):
         # In case orchestrator didn't tear down MDS daemons cleanly, or
         # there was no orchestrator, we force the daemons down.
         if self.volume_exists(volname):
-            r, outb, outs = self.remove_filesystem(volname)
+            r, outb, outs = self.remove_filesystem(volname, confirm)
             if r != 0:
                 return r, outb, outs
         else:
-            log.warning("Filesystem already gone for volume '{0}'".format(volname))
+            err = "Filesystem not found for volume '{0}'".format(volname)
+            log.warning(err)
+            return -errno.ENOENT, "", err
         metadata_pool, data_pool = self.gen_pool_names(volname)
         r, outb, outs = self.remove_pool(metadata_pool)
         if r != 0:

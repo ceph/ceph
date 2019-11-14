@@ -111,6 +111,7 @@ authentication keyring.
     Application best practices <app-best-practices>
     Scrub <scrub>
     LazyIO <lazyio>
+    FS volume and subvolumes <fs-volumes>
 
 .. toctree:: 
    :hidden:

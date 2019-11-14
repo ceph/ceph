@@ -63,7 +63,7 @@ class TestVolumes(CephFSTestCase):
         return path[1:].rstrip()
 
     def _delete_test_volume(self):
-        self._fs_cmd("volume", "rm", self.volname)
+        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
     def _do_subvolume_io(self, subvolume, number_of_files=DEFAULT_NUMBER_OF_FILES,
                          file_size=DEFAULT_FILE_SIZE):
@@ -94,6 +94,23 @@ class TestVolumes(CephFSTestCase):
         if self.vol_created:
             self._delete_test_volume()
         super(TestVolumes, self).tearDown()
+
+    def test_volume_rm(self):
+        try:
+            self._fs_cmd("volume", "rm", self.volname)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EPERM:
+                raise RuntimeError("expected the 'fs volume rm' command to fail with EPERM, "
+                                   "but it failed with {0}".format(ce.exitstatus))
+            else:
+                self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+
+                #check if it's gone
+                volumes = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd('fs', 'volume', 'ls', '--format=json-pretty'))
+                if (self.volname in [volume['name'] for volume in volumes]):
+                    raise RuntimeError("Expected the 'fs volume rm' command to succeed. The volume {0} not removed.".format(self.volname))
+        else:
+            raise RuntimeError("expected the 'fs volume rm' command to fail.")
 
     ### basic subvolume operations
 
