@@ -382,15 +382,15 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
     start_image_replayer(current_it->second);
   }
 
-  // TODO: add namespace support to service daemon
-  if (m_local_io_ctx.get_namespace().empty()) {
-    m_service_daemon->add_or_update_attribute(
-      m_local_io_ctx.get_id(), SERVICE_DAEMON_ASSIGNED_COUNT_KEY, image_count);
-    m_service_daemon->add_or_update_attribute(
-      m_local_io_ctx.get_id(), SERVICE_DAEMON_WARNING_COUNT_KEY, warning_count);
-    m_service_daemon->add_or_update_attribute(
-      m_local_io_ctx.get_id(), SERVICE_DAEMON_ERROR_COUNT_KEY, error_count);
-  }
+  m_service_daemon->add_or_update_namespace_attribute(
+    m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
+    SERVICE_DAEMON_ASSIGNED_COUNT_KEY, image_count);
+  m_service_daemon->add_or_update_namespace_attribute(
+    m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
+    SERVICE_DAEMON_WARNING_COUNT_KEY, warning_count);
+  m_service_daemon->add_or_update_namespace_attribute(
+    m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
+    SERVICE_DAEMON_ERROR_COUNT_KEY, error_count);
 
   m_async_op_tracker.finish_op();
 }

@@ -29,7 +29,6 @@ using ::operator<<;
 
 namespace {
 
-const std::string SERVICE_DAEMON_INSTANCE_ID_KEY("instance_id");
 const std::string SERVICE_DAEMON_LOCAL_COUNT_KEY("image_local_count");
 const std::string SERVICE_DAEMON_REMOTE_COUNT_KEY("image_remote_count");
 
@@ -183,16 +182,14 @@ void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
            << "added_count=" << added_image_ids.size() << ", "
            << "removed_count=" << removed_image_ids.size() << dendl;
 
-  // TODO: add namespace support to service daemon
-  if (m_local_io_ctx.get_namespace().empty()) {
-    m_service_daemon->add_or_update_attribute(
-        m_local_io_ctx.get_id(), SERVICE_DAEMON_LOCAL_COUNT_KEY,
-        m_local_pool_watcher->get_image_count());
-    if (m_remote_pool_watcher) {
-      m_service_daemon->add_or_update_attribute(
-          m_local_io_ctx.get_id(), SERVICE_DAEMON_REMOTE_COUNT_KEY,
-          m_remote_pool_watcher->get_image_count());
-    }
+  m_service_daemon->add_or_update_namespace_attribute(
+    m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
+    SERVICE_DAEMON_LOCAL_COUNT_KEY, m_local_pool_watcher->get_image_count());
+  if (m_remote_pool_watcher) {
+    m_service_daemon->add_or_update_namespace_attribute(
+      m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
+      SERVICE_DAEMON_REMOTE_COUNT_KEY,
+      m_remote_pool_watcher->get_image_count());
   }
 
   std::set<std::string> added_global_image_ids;
@@ -395,13 +392,6 @@ void NamespaceReplayer<I>::handle_init_instance_watcher(int r) {
     m_ret_val = r;
     shut_down_instance_replayer();
     return;
-  }
-
-  // TODO: add namespace support to service daemon
-  if (m_local_io_ctx.get_namespace().empty()) {
-    m_service_daemon->add_or_update_attribute(
-        m_local_io_ctx.get_id(), SERVICE_DAEMON_INSTANCE_ID_KEY,
-        m_instance_watcher->get_instance_id());
   }
 
   ceph_assert(m_on_finish != nullptr);
