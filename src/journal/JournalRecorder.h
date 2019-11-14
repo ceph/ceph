@@ -114,7 +114,7 @@ private:
 
   ceph::ref_t<ObjectRecorder> create_object_recorder(uint64_t object_number,
                                            ceph::mutex* lock);
-  void create_next_object_recorder(ceph::ref_t<ObjectRecorder> object_recorder);
+  bool create_next_object_recorder(ceph::ref_t<ObjectRecorder> object_recorder);
 
   void handle_update();
 
