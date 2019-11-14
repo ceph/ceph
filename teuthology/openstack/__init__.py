@@ -81,7 +81,7 @@ class OpenStackInstance(object):
         if info is None:
             self.set_info()
         else:
-            self.info = dict(map(lambda (k,v): (k.lower(), v), info.items()))
+            self.info = {k.lower(): v for k, v in info.items()}
         if isinstance(self.info, dict) and self.info.get('status', '') == 'ERROR':
             errmsg = 'VM creation failed'
             if 'message' in self.info:
