@@ -232,6 +232,16 @@ class TestRmdir(TestCephFSShell):
         log.info("cephfs-shell rmdir output:\n{}".format(rmdir_output))
         self.assertTrue(rmdir_output, "Something went wrong!! non existing dir deleted")
 
+    def test_rmdir_p_non_empty_dir(self):
+        """
+        Test that rmdir -p outputs error for non empty directory
+        """
+        self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
+        self.run_cephfs_shell_cmd("put - test_dir/dumpfile", stdin="Valid File")
+        self.run_cephfs_shell_cmd("rmdir -p " + self.dir_name)
+        self.assertTrue(path.exists(path.join(self.mount_a.mountpoint, self.dir_name)),
+                        "Something went wrong!! test_dir is deleted")
+
 class TestGetAndPut(TestCephFSShell):
     # the 'put' command gets tested as well with the 'get' comamnd
     def test_put_and_get_without_target_directory(self):
