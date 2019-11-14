@@ -15,7 +15,12 @@ def get_key_parser():
     )
     parser.add_argument(
         '--key-filename',
-        help='path to the ssh private key',
+        help='path to the ssh private key. Default: %(default)s',
+        default=[
+            os.environ['HOME'] + '/.ssh/id_rsa',
+            os.environ['HOME'] + '/.ssh/id_dsa',
+            os.environ['HOME'] + '/.ssh/id_ecdsa'
+        ]
     )
     return parser
 
