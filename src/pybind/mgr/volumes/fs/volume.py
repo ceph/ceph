@@ -368,6 +368,16 @@ class VolumeClient(object):
             return result
         return conn_wrapper
 
+    def nametojson(self, names):
+        """
+        convert the list of names to json
+        """
+
+        namedict = []
+        for i in range(len(names)):
+            namedict.append({'name': names[i].decode('utf-8')})
+        return json.dumps(namedict, indent=2)
+
     ### subvolume operations
 
     @connection_pool_wrap
@@ -434,6 +444,28 @@ class VolumeClient(object):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    @connection_pool_wrap
+    def list_subvolumes(self, fs_handle, **kwargs):
+        ret        = 0, "", ""
+        groupname  = kwargs['group_name']
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec(None, groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+                path = sv.get_group_path(spec)
+                # When default subvolume group is not yet created we just return an empty list.
+                if path is None:
+                    ret = 0, '[]', ""
+                else:
+                    subvolumes = sv.get_dir_entries(path)
+                    ret = 0, self.nametojson(subvolumes), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     ### subvolume snapshot
 
     @connection_pool_wrap
@@ -486,6 +518,31 @@ class VolumeClient(object):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    @connection_pool_wrap
+    def list_subvolume_snapshots(self, fs_handle, **kwargs):
+        ret        = 0, "", ""
+        subvolname = kwargs['sub_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec(subvolname, groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+
+                if sv.get_subvolume_path(spec) == None:
+                    raise VolumeException(-errno.ENOENT,
+                                          "Subvolume '{0}' not found".format(subvolname))
+
+                path = spec.make_subvol_snapdir_path(self.mgr.rados.conf_get('client_snapdir'))
+                snapshots = sv.get_dir_entries(path)
+                ret = 0, self.nametojson(snapshots), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+
     ### group operations
 
     @connection_pool_wrap
@@ -534,6 +591,18 @@ class VolumeClient(object):
         except VolumeException as ve:
             return self.volume_exception_to_retval(ve)
 
+    @connection_pool_wrap
+    def list_subvolume_groups(self, fs_handle, **kwargs):
+        ret = 0, "", ""
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                subvolumegroups = sv.get_dir_entries(SubvolumeSpec.DEFAULT_SUBVOL_PREFIX)
+                ret = 0, self.nametojson(subvolumegroups), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     ### group snapshot
 
     @connection_pool_wrap
@@ -570,6 +639,25 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, cannot " \
                         "remove it".format(groupname))
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    @connection_pool_wrap
+    def list_subvolume_group_snapshots(self, fs_handle, **kwargs):
+        ret        = 0, "", ""
+        groupname  = kwargs['group_name']
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec(None, groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+
+                path = spec.make_group_snapdir_path(self.mgr.rados.conf_get('client_snapdir'))
+                snapshots = sv.get_dir_entries(path)
+                ret = 0, self.nametojson(snapshots), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
