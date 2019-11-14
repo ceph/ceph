@@ -3,7 +3,6 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
 endif()
 add_subdirectory(insights)
 add_subdirectory(ansible)
-add_subdirectory(orchestrator_cli)
 
 if(WITH_TESTS)
   include(AddCephTest)
