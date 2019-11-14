@@ -876,16 +876,21 @@ class CephFSShell(Cmd):
                 continue
             else:
                 is_pattern = False
-            path = os.path.normpath(os.path.join(cephfs.getcwd(), path))
+
             if args.parent:
-                files = reversed(sorted(set(dirwalk(path))))
+                path = os.path.join(cephfs.getcwd(), path.rsplit(b'/')[0])
+                files = list(sorted(set(dirwalk(path)), reverse=True))
+                if not files:
+                    path = b'.'
                 for filepath in files:
-                    filepath = os.path.normpath(filepath)
-                    if filepath[1:] != path:
-                        try:
-                            cephfs.rmdir(filepath)
-                        except libcephfs.Error:
-                            cephfs.unlink(filepath)
+                    try:
+                        cephfs.rmdir(os.path.normpath(filepath))
+                    except libcephfs.Error as e:
+                        perror(e)
+                        path = b'.'
+                        break
+            else:
+                path = os.path.normpath(os.path.join(cephfs.getcwd(), path))
             if not is_pattern and path != os.path.normpath(b''):
                 try:
                     cephfs.rmdir(path)
