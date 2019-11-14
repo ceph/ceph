@@ -24,7 +24,7 @@ Some terminology is made up for the purposes of this module:
 
 INTERVAL = 5
 
-PG_NUM_MIN = 4  # unless specified on a per-pool basis
+PG_NUM_MIN = 16  # unless specified on a per-pool basis
 
 def nearest_power_of_two(n):
     v = int(n)
