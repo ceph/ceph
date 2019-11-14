@@ -3,10 +3,10 @@ import logging
 import teuthology.lock.query
 from teuthology.misc import decanonicalize_hostname, get_distro, get_distro_version
 
-import cloud
-import downburst
-import fog
-import openstack
+from teuthology.provision import cloud
+from teuthology.provision import downburst
+from teuthology.provision import fog
+from teuthology.provision import openstack
 import os
 
 

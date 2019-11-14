@@ -15,8 +15,8 @@ from paramiko.ssh_exception import NoValidConnectionsError
 from teuthology.config import config
 from teuthology.contextutil import safe_while
 
-import base
-import util
+from teuthology.provision.cloud import base
+from teuthology.provision.cloud import util
 from teuthology.provision.cloud.base import Provider
 
 
