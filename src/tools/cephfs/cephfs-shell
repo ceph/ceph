@@ -71,9 +71,22 @@ def setup_cephfs(config_file):
     """
     Mounting a cephfs
     """
+    from cephfs import ObjectNotFound
+    from cephfs import Error
+
     global cephfs
-    cephfs = libcephfs.LibCephFS(conffile=config_file)
-    cephfs.mount()
+    try:
+        cephfs = libcephfs.LibCephFS(conffile=config_file)
+        cephfs.mount()
+    except ObjectNotFound as e:
+        print('couldn\'t find ceph configuration not found')
+        sys.exit(1)
+    except Error as e:
+        print(e)
+        sys.exit(1)
+    else:
+        del ObjectNotFound
+        del Error
 
 
 def mode_notation(mode):
