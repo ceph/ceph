@@ -2580,7 +2580,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   return subdir_marker == content_type && state->size <= 1;
 }
 
-bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
+bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
   rgw_obj obj(s->bucket, index);
 

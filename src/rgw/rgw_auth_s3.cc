@@ -238,9 +238,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
 }
 
 
-namespace rgw {
-namespace auth {
-namespace s3 {
+namespace rgw::auth::s3 {
 
 bool is_time_skew_ok(time_t t)
 {
@@ -1130,6 +1128,4 @@ AWSv4ComplSingle::create(const req_state* const s,
   return std::make_shared<AWSv4ComplSingle>(s);
 }
 
-} /* namespace s3 */
-} /* namespace auth */
-} /* namespace rgw */
+} // namespace rgw::auth::s3
