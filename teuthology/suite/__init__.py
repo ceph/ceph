@@ -223,7 +223,7 @@ def wait(name, max_job_time, upload_url):
     jobs = reporter.get_jobs(name, fields=['job_id', 'status',
                                            'description', 'log_href'])
     # dead, fail, pass : show fail/dead jobs first
-    jobs = sorted(jobs, lambda a, b: cmp(a['status'], b['status']))
+    jobs = sorted(jobs, key=lambda x: x['status'])
     for job in jobs:
         if upload_url:
             url = os.path.join(upload_url, name, job['job_id'])
