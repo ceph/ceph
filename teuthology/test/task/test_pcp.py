@@ -1,10 +1,7 @@
 import os
 import requests
 
-try:
-    from urllib.parse import parse_qs, urljoin
-except ImportError:
-    from urlparse import parse_qs, urljoin
+from teuthology.util.compat import parse_qs, urljoin
 
 from mock import patch, DEFAULT, Mock, mock_open, call
 from pytest import raises

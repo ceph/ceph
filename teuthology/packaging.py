@@ -3,11 +3,7 @@ import ast
 import re
 import requests
 
-try:
-    from urllib.parse import urljoin, urlencode
-except ImportError:
-    from urlparse import urljoin
-    from urllib import urlencode
+from teuthology.util.compat import urljoin, urlencode
 
 from collections import OrderedDict
 from cStringIO import StringIO

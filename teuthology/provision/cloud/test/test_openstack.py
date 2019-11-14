@@ -2,11 +2,7 @@ import socket
 import yaml
 import os
 
-try:
-    from urllib.parse import parse_qs
-except ImportError:
-    from urlparse import parse_qs
-
+from teuthology.util.compat import parse_qs
 
 from copy import deepcopy
 from libcloud.compute.providers import get_driver

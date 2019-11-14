@@ -1,15 +1,11 @@
 import logging
 import os
 
-try:
-    from urllib.parse import urlencode
-except ImportError:
-    from urllib import urlencode
-
 import requests
 
 from teuthology import misc
 from teuthology.config import config
+from teuthology.util.compat import urlencode
 
 
 log = logging.getLogger(__name__)

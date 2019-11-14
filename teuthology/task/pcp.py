@@ -7,11 +7,7 @@ import os
 import requests
 import time
 
-try:
-    from urllib.parse import urljoin, urlencode
-except ImportError:
-    from urlparse import urljoin
-    from urllib import urlencode
+from teuthology.util.compat import urljoin, urlencode
 
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run

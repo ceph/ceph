@@ -8,10 +8,7 @@ import os
 import re
 import shlex
 
-try:
-    from urllib.parse import urljoin
-except ImportError:
-    from urlparse import urljoin
+from teuthology.util.compat import urljoin
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel

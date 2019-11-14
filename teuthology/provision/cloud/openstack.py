@@ -5,10 +5,7 @@ import socket
 import time
 import yaml
 
-try:
-    from urllib.parse import  urlencode
-except ImportError:
-    from urllib import urlencode
+from teuthology.util.compat import urlencode
 
 from copy import deepcopy
 from libcloud.common.exceptions import RateLimitReachedError, BaseHTTPError

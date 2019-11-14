@@ -18,13 +18,7 @@ import json
 import re
 import pprint
 
-try:
-    from urllib.parse import urljoin
-    from urllib.request import urlopen
-    from urllib.error import HTTPError
-except ImportError:
-    from urlparse import urljoin
-    from urllib2 import urlopen,  HTTPError
+from teuthology.util.compat import urljoin, urlopen, HTTPError
 
 from netaddr.strategy.ipv4 import valid_str as _is_ipv4
 from netaddr.strategy.ipv6 import valid_str as _is_ipv6
