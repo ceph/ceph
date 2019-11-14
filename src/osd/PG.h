@@ -1673,11 +1673,13 @@ protected:
     hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
     add_backoff(s, begin, end);
   }
+public:
   void release_pg_backoffs() {
     hobject_t begin = info.pgid.pgid.get_hobj_start();
     hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
     release_backoffs(begin, end);
   }
+protected:
 
   // -- scrub --
 public:
