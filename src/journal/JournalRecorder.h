@@ -113,7 +113,7 @@ private:
 
   ObjectRecorderPtr create_object_recorder(uint64_t object_number,
                                            std::shared_ptr<Mutex> lock);
-  void create_next_object_recorder(ObjectRecorderPtr object_recorder);
+  bool create_next_object_recorder(ObjectRecorderPtr object_recorder);
 
   void handle_update();
 
