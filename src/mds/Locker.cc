@@ -2034,6 +2034,24 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
 	mds->queue_waiter_front(new C_Locker_RevokeStaleCap(this, in, it->first));
 	continue;
       }
+
+      if (!cap->is_valid() && (pending & ~CEPH_CAP_PIN)) {
+	// After stale->resume circle, client thinks it only has CEPH_CAP_PIN.
+	// mds needs to re-issue caps, then do revocation.
+	long seq = cap->issue(pending, true);
+
+	dout(7) << "   sending MClientCaps to client." << it->first
+		<< " seq " << seq << " re-issue " << ccap_string(pending) << dendl;
+
+	auto m = MClientCaps::create(CEPH_CAP_OP_GRANT, in->ino(),
+				     in->find_snaprealm()->inode->ino(),
+				     cap->get_cap_id(), cap->get_last_seq(),
+				     pending, wanted, 0, cap->get_mseq(),
+				     mds->get_osd_epoch_barrier());
+	in->encode_cap_message(m, cap);
+
+	mds->send_message_client_counted(m, cap->get_session());
+      }
     }
 
     // notify clients about deleted inode, to make sure they release caps ASAP.
@@ -2072,10 +2090,8 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
 
       auto m = MClientCaps::create(op, in->ino(),
 				   in->find_snaprealm()->inode->ino(),
-				   cap->get_cap_id(),
-				   cap->get_last_seq(),
-				   after, wanted, 0,
-				   cap->get_mseq(),
+				   cap->get_cap_id(), cap->get_last_seq(),
+				   after, wanted, 0, cap->get_mseq(),
 				   mds->get_osd_epoch_barrier());
       in->encode_cap_message(m, cap);
 
