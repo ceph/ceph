@@ -81,7 +81,7 @@ class OpenStackInstance(object):
         if info is None:
             self.set_info()
         else:
-            self.info = dict(map(lambda (k,v): (k.lower(), v), info.items()))
+            self.info = {k.lower(): v for k, v in info.items()}
         if isinstance(self.info, dict) and self.info.get('status', '') == 'ERROR':
             errmsg = 'VM creation failed'
             if 'message' in self.info:
@@ -571,7 +571,7 @@ class OpenStack(object):
             while proceed():
                 try:
                     client = connection.connect(**client_args)
-                except paramiko.PasswordRequiredException as e:
+                except paramiko.PasswordRequiredException:
                     raise Exception(
                         "The private key requires a passphrase.\n"
                         "Create a new key with:"
@@ -609,7 +609,7 @@ class OpenStack(object):
                         if self.up_string in line:
                             success = True
                             break
-                except socket.timeout as e:
+                except socket.timeout:
                     client.close()
                     log.debug('cloud_init_wait socket.timeout ' + tail)
                     continue

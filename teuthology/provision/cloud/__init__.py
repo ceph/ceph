@@ -2,7 +2,7 @@ import logging
 
 from teuthology.config import config
 
-import openstack
+from teuthology.provision.cloud import openstack
 
 log = logging.getLogger(__name__)
 
