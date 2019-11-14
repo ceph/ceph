@@ -8440,6 +8440,11 @@ bool OSD::advance_pg(
 	  pg->write_if_dirty(rctx);
 	  dispatch_context(rctx, pg, pg->get_osdmap(), &handle);
 	  pg->ch->flush();
+	  // release backoffs explicitly, since the on_shutdown path
+	  // aggressively tears down backoff state.
+	  if (pg->is_primary()) {
+	    pg->release_pg_backoffs();
+	  }
 	  pg->on_shutdown();
 	  OSDShard *sdata = pg->osd_shard;
 	  {
