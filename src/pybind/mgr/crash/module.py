@@ -181,7 +181,8 @@ class Module(MgrModule):
             metadata = self.validate_crash_metadata(inbuf)
         except Exception as e:
             return errno.EINVAL, '', 'malformed crash metadata: %s' % e
-        metadata['stack_sig'] = self.calc_sig(
+        if 'backtrace' in metadata:
+            metadata['stack_sig'] = self.calc_sig(
                 metadata.get('backtrace'), metadata.get('assert_msg'))
         crashid = metadata['crash_id']
 
