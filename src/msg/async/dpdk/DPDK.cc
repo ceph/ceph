@@ -404,25 +404,8 @@ int DPDKDevice::init_port_fini()
     return -1;
   }
 
-  if (_num_queues > 1) {
-    if (!rte_eth_dev_filter_supported(_port_idx, RTE_ETH_FILTER_HASH)) {
-      ldout(cct, 5) << __func__ << " Port " << _port_idx << ": HASH FILTER configuration is supported" << dendl;
-
-      // Setup HW touse the TOEPLITZ hash function as an RSS hash function
-      struct rte_eth_hash_filter_info info = {};
-
-      info.info_type = RTE_ETH_HASH_FILTER_GLOBAL_CONFIG;
-      info.info.global_conf.hash_func = RTE_ETH_HASH_FUNCTION_TOEPLITZ;
-
-      if (rte_eth_dev_filter_ctrl(_port_idx, RTE_ETH_FILTER_HASH,
-                                  RTE_ETH_FILTER_SET, &info) < 0) {
-        lderr(cct) << __func__ << " cannot set hash function on a port " << _port_idx << dendl;
-        return -1;
-      }
-    }
-
+  if (_num_queues > 1)
     set_rss_table();
-  }
 
   // Wait for a link
   if (check_port_link_status() < 0) {
@@ -432,6 +415,50 @@ int DPDKDevice::init_port_fini()
 
   ldout(cct, 5) << __func__ << " created DPDK device" << dendl;
   return 0;
+}
+
+void DPDKDevice::set_rss_table()
+{
+  struct rte_flow_attr attr;
+  struct rte_flow_item pattern[1];
+  struct rte_flow_action action[2];
+  struct rte_flow_action_rss rss_conf;
+
+  /*
+   * set the rule attribute.
+   * in this case only ingress packets will be checked.
+   */
+  memset(&attr, 0, sizeof(struct rte_flow_attr));
+  attr.ingress = 1;
+
+  /* the final level must be always type end */
+  pattern[0].type = RTE_FLOW_ITEM_TYPE_END;
+
+  /*
+   * create the action sequence.
+   * one action only,  set rss hash func to toeplitz.
+   */
+  uint16_t i = 0;
+  for (auto& r : _redir_table) {
+    r = i++ % _num_queues;
+  }
+  rss_conf.func = RTE_ETH_HASH_FUNCTION_TOEPLITZ;
+  rss_conf.types = ETH_RSS_FRAG_IPV4 | ETH_RSS_NONFRAG_IPV4_TCP;
+  rss_conf.queue_num = _num_queues;
+  rss_conf.queue = const_cast<uint16_t *>(_redir_table.data());
+  rss_conf.key_len = _dev_info.hash_key_size;
+  rss_conf.key = const_cast<uint8_t *>(_rss_key.data());
+  rss_conf.level = 0;
+  action[0].type = RTE_FLOW_ACTION_TYPE_RSS;
+  action[0].conf = &rss_conf;
+  action[1].type = RTE_FLOW_ACTION_TYPE_END;
+
+  if (rte_flow_validate(_port_idx, &attr, pattern, action, nullptr) == 0)
+    _flow = rte_flow_create(_port_idx, &attr, pattern, action, nullptr);
+  else
+    ldout(cct, 0) << __func__ << " Port " << _port_idx
+                  << ": flow rss func configuration is unsupported"
+                  << dendl;
 }
 
 void DPDKQueuePair::configure_proxies(const std::map<unsigned, float>& cpu_weights) {
@@ -1208,34 +1235,6 @@ size_t DPDKQueuePair::tx_buf::copy_one_data_buf(
   memcpy(rte_pktmbuf_mtod(m, void*), data, len);
 
   return len;
-}
-
-void DPDKDevice::set_rss_table()
-{
-  // always fill our local indirection table.
-  unsigned i = 0;
-  for (auto& r : _redir_table) {
-    r = i++ % _num_queues;
-  }
-
-  if (_dev_info.reta_size == 0)
-    return;
-
-  int reta_conf_size = std::max(1, _dev_info.reta_size / RTE_RETA_GROUP_SIZE);
-  rte_eth_rss_reta_entry64 reta_conf[reta_conf_size];
-
-  // Configure the HW indirection table
-  i = 0;
-  for (auto& x : reta_conf) {
-    x.mask = ~0ULL;
-    for (auto& r: x.reta) {
-      r = i++ % _num_queues;
-    }
-  }
-
-  if (rte_eth_dev_rss_reta_update(_port_idx, reta_conf, _dev_info.reta_size)) {
-    rte_exit(EXIT_FAILURE, "Port %d: Failed to update an RSS indirection table", _port_idx);
-  }
 }
 
 /******************************** Interface functions *************************/
