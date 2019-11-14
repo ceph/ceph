@@ -151,7 +151,7 @@ void rgw_sync_bucket_entity::apply_bucket(std::optional<rgw_bucket> b)
   }
 }
 
-void rgw_sync_bucket_entities::add_zones(const std::vector<string>& new_zones) {
+void rgw_sync_bucket_entities::add_zones(const std::vector<rgw_zone_id>& new_zones) {
   for (auto& z : new_zones) {
     if (z == "*") {
       all_zones = true;
@@ -194,7 +194,7 @@ std::vector<rgw_sync_bucket_entity> rgw_sync_bucket_entities::expand() const
   return result;
 }
 
-void rgw_sync_bucket_entities::remove_zones(const std::vector<string>& rm_zones) {
+void rgw_sync_bucket_entities::remove_zones(const std::vector<rgw_zone_id>& rm_zones) {
   all_zones = false;
 
   if (!zones) {
@@ -346,7 +346,7 @@ bool rgw_sync_data_flow_group::find_symmetrical(const string& flow_id, bool crea
   return true;
 }
 
-void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::optional<std::vector<string> > zones)
+void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::optional<std::vector<rgw_zone_id> > zones)
 {
   if (!symmetrical) {
     return;
@@ -387,7 +387,7 @@ void rgw_sync_data_flow_group::remove_symmetrical(const string& flow_id, std::op
   }
 }
 
-bool rgw_sync_data_flow_group::find_directional(const string& source_zone, const string& dest_zone, bool create, rgw_sync_directional_rule **flow_group)
+bool rgw_sync_data_flow_group::find_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone, bool create, rgw_sync_directional_rule **flow_group)
 {
   if (!directional) {
     if (!create) {
@@ -417,7 +417,7 @@ bool rgw_sync_data_flow_group::find_directional(const string& source_zone, const
   return true;
 }
 
-void rgw_sync_data_flow_group::remove_directional(const string& source_zone, const string& dest_zone)
+void rgw_sync_data_flow_group::remove_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone)
 {
   if (!directional) {
     return;
@@ -436,7 +436,7 @@ void rgw_sync_data_flow_group::remove_directional(const string& source_zone, con
   }
 }
 
-void rgw_sync_data_flow_group::init_default(const std::set<string>& zones)
+void rgw_sync_data_flow_group::init_default(const std::set<rgw_zone_id>& zones)
 {
   symmetrical.emplace();
   symmetrical->push_back(rgw_sync_symmetric_group("default", zones));

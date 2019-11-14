@@ -2662,4 +2662,70 @@ int decode_bl(bufferlist& bl, T& t)
   return 0;
 }
 
+/*
+ * should avoid encoding rgw_opt_zone_nid, and rgw_zone_nid,
+ * these should be used for run time representation of zone,
+ * but internally we should keep zone ids
+ */
+struct rgw_opt_zone_nid {
+  std::optional<string> id;
+  std::optional<string> name;
+};
+
+struct rgw_zone_nid {
+  string id;
+  string name;
+};
+
+struct rgw_zone_id {
+  string id;
+
+  rgw_zone_id() {}
+  rgw_zone_id(const string& _id) : id(_id) {}
+  rgw_zone_id(string&& _id) : id(std::move(_id)) {}
+
+  void encode(bufferlist& bl) const {
+    /* backward compatiblity, not using ENCODE_{START,END} macros */
+    ceph::encode(id, bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    /* backward compatiblity, not using DECODE_{START,END} macros */
+    ceph::decode(id, bl);
+  }
+
+  void clear() {
+    id.clear();
+  }
+
+  bool operator==(const string& _id) const {
+    return (id == _id);
+  }
+  bool operator==(const rgw_zone_id& zid) const {
+    return (id == zid.id);
+  }
+  bool operator!=(const rgw_zone_id& zid) const {
+    return (id != zid.id);
+  }
+  bool operator<(const rgw_zone_id& zid) const {
+    return (id < zid.id);
+  }
+  bool operator>(const rgw_zone_id& zid) const {
+    return (id > zid.id);
+  }
+
+  bool empty() const {
+    return id.empty();
+  }
+};
+WRITE_CLASS_ENCODER(rgw_zone_id)
+
+static inline ostream& operator<<(ostream& os, const rgw_zone_id& zid) {
+  os << zid.id;
+  return os;
+}
+
+void encode_json(const char *name, const rgw_zone_id& zid, Formatter *f);
+void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
+
 #endif

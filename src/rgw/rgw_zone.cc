@@ -261,14 +261,14 @@ void RGWZoneGroup::post_process_params()
   bool log_data = zones.size() > 1;
 
   if (master_zone.empty()) {
-    map<string, RGWZone>::iterator iter = zones.begin();
+    auto iter = zones.begin();
     if (iter != zones.end()) {
       master_zone = iter->first;
     }
   }
   
-  for (map<string, RGWZone>::iterator iter = zones.begin(); iter != zones.end(); ++iter) {
-    RGWZone& zone = iter->second;
+  for (auto& item : zones) {
+    RGWZone& zone = item.second;
     zone.log_data = log_data;
 
     RGWZoneParams zone_params(zone.id, zone.name);
@@ -278,9 +278,8 @@ void RGWZoneGroup::post_process_params()
       continue;
     }
 
-    for (map<string, RGWZonePlacementInfo>::iterator iter = zone_params.placement_pools.begin(); 
-         iter != zone_params.placement_pools.end(); ++iter) {
-      const string& placement_name = iter->first;
+    for (auto& pitem : zone_params.placement_pools) {
+      const string& placement_name = pitem.first;
       if (placement_targets.find(placement_name) == placement_targets.end()) {
         RGWZoneGroupPlacementTarget placement_target;
         placement_target.name = placement_name;
@@ -296,7 +295,7 @@ void RGWZoneGroup::post_process_params()
 
 int RGWZoneGroup::remove_zone(const std::string& zone_id)
 {
-  map<string, RGWZone>::iterator iter = zones.find(zone_id);
+  auto iter = zones.find(zone_id);
   if (iter == zones.end()) {
     ldout(cct, 0) << "zone id " << zone_id << " is not a part of zonegroup "
         << name << dendl;

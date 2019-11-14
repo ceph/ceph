@@ -412,7 +412,7 @@ class RGWRados
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
   RGWSyncTraceManager *sync_tracer = nullptr;
-  map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
+  map<rgw_zone_id, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   boost::optional<rgw::BucketTrimManager> bucket_trim;
   RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
@@ -1058,7 +1058,7 @@ public:
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
-               const string& source_zone,
+               const rgw_zone_id& source_zone,
                rgw_obj& src_obj,
                const RGWBucketInfo *src_bucket_info,
                real_time *src_mtime,
@@ -1077,7 +1077,7 @@ public:
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const rgw_user& user_id,
                        req_info *info,
-                       const string& source_zone,
+                       const rgw_zone_id& source_zone,
                        const rgw_obj& dest_obj,
                        const rgw_obj& src_obj,
                        const RGWBucketInfo& dest_bucket_info,
@@ -1120,7 +1120,7 @@ public:
   int copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
-               const string& source_zone,
+               const rgw_zone_id& source_zone,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
@@ -1180,10 +1180,10 @@ public:
   int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty = true);
 
   void wakeup_meta_sync_shards(set<int>& shard_ids);
-  void wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids);
+  void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids);
 
   RGWMetaSyncStatusManager* get_meta_sync_manager();
-  RGWDataSyncStatusManager* get_data_sync_manager(const std::string& source_zone);
+  RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone);
 
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
@@ -1397,8 +1397,8 @@ public:
 
   int get_target_shard_id(const RGWBucketInfo& bucket_info, const string& obj_key, int *shard_id);
 
-  int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
-  int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
+  int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, rgw_zone_id& zone_id, string& owner_id);
+  int unlock(const rgw_pool& pool, const string& oid, rgw_zone_id& zone_id, string& owner_id);
 
   void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
   int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag);

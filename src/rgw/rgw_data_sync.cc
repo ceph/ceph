@@ -533,7 +533,7 @@ public:
 
       /* fetch current position in logs */
       yield {
-        RGWRESTConn *conn = sync_env->svc->zone->get_zone_conn_by_id(sc->source_zone);
+        RGWRESTConn *conn = sync_env->svc->zone->get_zone_conn(sc->source_zone);
         if (!conn) {
           tn->log(0, SSTR("ERROR: connection to zone " << sc->source_zone << " does not exist!"));
           return set_cr_error(-EIO);
@@ -631,7 +631,7 @@ int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers
   return run(new RGWListRemoteDataLogCR(&sc, shard_markers, 1, result));
 }
 
-int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
+int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
                            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module,
                            PerfCounters* counters)
 {
@@ -738,10 +738,10 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
   return ret;
 }
 
-static string full_data_sync_index_shard_oid(const string& source_zone, int shard_id)
+static string full_data_sync_index_shard_oid(const rgw_zone_id& source_zone, int shard_id)
 {
-  char buf[datalog_sync_full_sync_index_prefix.size() + 1 + source_zone.size() + 1 + 16];
-  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_full_sync_index_prefix.c_str(), source_zone.c_str(), shard_id);
+  char buf[datalog_sync_full_sync_index_prefix.size() + 1 + source_zone.id.size() + 1 + 16];
+  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_full_sync_index_prefix.c_str(), source_zone.id.c_str(), shard_id);
   return string(buf);
 }
 
@@ -810,7 +810,7 @@ public:
                          rgw_data_sync_status *_sync_status) : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
                                                       store(sync_env->store), sync_status(_sync_status),
 						      req_ret(0), ret(0), entries_index(NULL), i(0), failed(false), truncated(false) {
-    oid_prefix = datalog_sync_full_sync_index_prefix + "." + sc->source_zone; 
+    oid_prefix = datalog_sync_full_sync_index_prefix + "." + sc->source_zone.id; 
     path = "/admin/metadata/bucket.instance";
     num_shards = sync_status->sync_info.num_shards;
   }
@@ -1054,7 +1054,7 @@ private:
   bool _has_bucket_info{false};
 
 public:
-  string zone;
+  rgw_zone_id zone;
 
   rgw_sync_pipe_info_entity() {}
   rgw_sync_pipe_info_entity(const rgw_sync_bucket_entity& e,
@@ -1245,7 +1245,7 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWDataSyncCtx *cur_sc{nullptr};
 
   RGWRESTConn *conn{nullptr};
-  string last_zone;
+  rgw_zone_id last_zone;
 
   int ret{0};
 
@@ -2158,7 +2158,7 @@ int RGWDataSyncStatusManager::init()
 {
   RGWZone *zone_def;
 
-  if (!store->svc()->zone->find_zone_by_id(source_zone, &zone_def)) {
+  if (!store->svc()->zone->find_zone(source_zone, &zone_def)) {
     ldpp_dout(this, 0) << "ERROR: failed to find zone config info for zone=" << source_zone << dendl;
     return -EIO;
   }
@@ -2173,7 +2173,7 @@ int RGWDataSyncStatusManager::init()
     sync_module = store->getRados()->get_sync_module();
   }
 
-  conn = store->svc()->zone->get_zone_conn_by_id(source_zone);
+  conn = store->svc()->zone->get_zone_conn(source_zone);
   if (!conn) {
     ldpp_dout(this, 0) << "connection object to zone " << source_zone << " does not exist" << dendl;
     return -EINVAL;
@@ -2219,22 +2219,22 @@ unsigned RGWDataSyncStatusManager::get_subsys() const
 
 std::ostream& RGWDataSyncStatusManager::gen_prefix(std::ostream& out) const
 {
-  auto zone = std::string_view{source_zone};
+  auto zone = std::string_view{source_zone.id};
   return out << "data sync zone:" << zone.substr(0, 8) << ' ';
 }
 
-string RGWDataSyncStatusManager::sync_status_oid(const string& source_zone)
+string RGWDataSyncStatusManager::sync_status_oid(const rgw_zone_id& source_zone)
 {
-  char buf[datalog_sync_status_oid_prefix.size() + source_zone.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%s", datalog_sync_status_oid_prefix.c_str(), source_zone.c_str());
+  char buf[datalog_sync_status_oid_prefix.size() + source_zone.id.size() + 16];
+  snprintf(buf, sizeof(buf), "%s.%s", datalog_sync_status_oid_prefix.c_str(), source_zone.id.c_str());
 
   return string(buf);
 }
 
-string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int shard_id)
+string RGWDataSyncStatusManager::shard_obj_name(const rgw_zone_id& source_zone, int shard_id)
 {
-  char buf[datalog_sync_status_shard_prefix.size() + source_zone.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_status_shard_prefix.c_str(), source_zone.c_str(), shard_id);
+  char buf[datalog_sync_status_shard_prefix.size() + source_zone.id.size() + 16];
+  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_status_shard_prefix.c_str(), source_zone.id.c_str(), shard_id);
 
   return string(buf);
 }
@@ -2335,7 +2335,7 @@ public:
 
 RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                                                RGWDataSyncEnv *_sync_env,
-                                               const string& _source_zone,
+                                               const rgw_zone_id& _source_zone,
                                                RGWRESTConn *_conn,
                                                const RGWBucketInfo& source_bucket_info,
                                                const rgw_bucket& dest_bucket) : dpp(_dpp), sync_env(_sync_env)
@@ -2655,7 +2655,7 @@ RGWCoroutine *RGWRemoteBucketManager::read_sync_status_cr(int num, rgw_bucket_sh
 }
 
 RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RGWRadosStore *_store,
-                                                               std::optional<string> _source_zone,
+                                                               std::optional<rgw_zone_id> _source_zone,
                                                                std::optional<rgw_bucket> _source_bucket,
                                                                const rgw_bucket& _dest_bucket) : store(_store),
                                                                                    cr_mgr(_store->ctx(), _store->getRados()->get_cr_registry()),
@@ -3203,7 +3203,7 @@ public:
       status_oid(status_oid),
       tn(sync_env->sync_tracer->add_node(tn_parent, "full_sync",
                                          SSTR(bucket_shard_str{bs}))) {
-    zones_trace.insert(sc->source_zone, sync_pipe.info.dest_bs.bucket.get_key());
+    zones_trace.insert(sc->source_zone.id, sync_pipe.info.dest_bs.bucket.get_key());
     marker_tracker.set_tn(tn);
     prefix_handler.set_rules(sync_pipe.get_rules());
   }
@@ -3348,7 +3348,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWBucketIncSyncShardMarkerTrack marker_tracker;
   bool updated_status{false};
   const string& status_oid;
-  const string& zone_id;
+  rgw_zone_id zone_id;
   string target_location_key;
 
   string cur_id;
@@ -3434,7 +3434,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         if (e.state != CLS_RGW_STATE_COMPLETE) {
           continue;
         }
-        if (e.zones_trace.exists(zone_id, target_location_key)) {
+        if (e.zones_trace.exists(zone_id.id, target_location_key)) {
           continue;
         }
         auto& squash_entry = squash_map[make_pair(e.object, e.instance)];
@@ -3508,7 +3508,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
-        if (entry->zones_trace.exists(zone_id, target_location_key)) {
+        if (entry->zones_trace.exists(zone_id.id, target_location_key)) {
           set_status() << "redundant operation, skipping";
           tn->log(20, SSTR("skipping object: "
               <<bucket_shard_str{bs} <<"/"<<key<<": redundant operation"));
@@ -3629,66 +3629,11 @@ int RGWBucketShardIncrementalSyncCR::operate()
   return 0;
 }
 
-struct rgw_bucket_sync_source_local_info {
-  string id;
-  string type;
-  string zone;
-  rgw_bucket bucket;
-  /* FIXME: config */
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(id, bl);
-    encode(type, bl);
-    encode(zone, bl);
-    encode(bucket, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(id, bl);
-    decode(type, bl);
-    decode(zone, bl);
-    decode(bucket, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(ceph::Formatter *f) const {
-    encode_json("id", id, f);
-    encode_json("type", type, f);
-    encode_json("zone", zone, f);
-    encode_json("bucket", bucket, f);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_bucket_sync_source_local_info)
-
-struct rgw_bucket_sync_sources_local_info {
-  map<string, rgw_bucket_sync_source_local_info> sources; /* id -> source */
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(sources, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(sources, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(ceph::Formatter *f) const {
-    encode_json("sources", sources, f);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_bucket_sync_sources_local_info)
-
-
 class RGWGetBucketPeersCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
 
   std::optional<rgw_bucket> target_bucket;
-  std::optional<string> source_zone;
+  std::optional<rgw_zone_id> source_zone;
   std::optional<rgw_bucket> source_bucket;
 
   rgw_sync_pipe_info_set *pipes;
@@ -3705,9 +3650,9 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
 
-  using pipe_const_iter = map<string, RGWBucketSyncFlowManager::pipe_set>::const_iterator;
+  using pipe_const_iter = map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set>::const_iterator;
 
-  static pair<pipe_const_iter, pipe_const_iter> get_pipe_iters(const map<string, RGWBucketSyncFlowManager::pipe_set>& m, std::optional<string> zone) {
+  static pair<pipe_const_iter, pipe_const_iter> get_pipe_iters(const map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set>& m, std::optional<rgw_zone_id> zone) {
     if (!zone) {
       return { m.begin(), m.end() };
     }
@@ -3719,11 +3664,11 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
     return { b, std::next(b) };
   }
 
-  void filter_sources(std::optional<string> source_zone,
+  void filter_sources(std::optional<rgw_zone_id> source_zone,
                       std::optional<rgw_bucket> source_bucket,
-                      const map<string, RGWBucketSyncFlowManager::pipe_set>& all_sources,
+                      const map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set>& all_sources,
                       rgw_sync_pipe_info_set *result) {
-    ldpp_dout(sync_env->dpp, 20) << __func__ << ": source_zone=" << source_zone.value_or("*")
+    ldpp_dout(sync_env->dpp, 20) << __func__ << ": source_zone=" << source_zone.value_or(rgw_zone_id("*")).id
                                 << " source_bucket=" << source_bucket.value_or(rgw_bucket())
                                 << " all_sources.size()=" << all_sources.size() << dendl;
     auto iters = get_pipe_iters(all_sources, source_zone);
@@ -3743,11 +3688,11 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
     }
   }
 
-  void filter_targets(std::optional<string> target_zone,
+  void filter_targets(std::optional<rgw_zone_id> target_zone,
                       std::optional<rgw_bucket> target_bucket,
-                      const map<string, RGWBucketSyncFlowManager::pipe_set>& all_targets,
+                      const map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set>& all_targets,
                       rgw_sync_pipe_info_set *result) {
-    ldpp_dout(sync_env->dpp, 20) << __func__ << ": target_zone=" << source_zone.value_or("*")
+    ldpp_dout(sync_env->dpp, 20) << __func__ << ": target_zone=" << source_zone.value_or(rgw_zone_id("*")).id
                                 << " target_bucket=" << source_bucket.value_or(rgw_bucket())
                                 << " all_targets.size()=" << all_targets.size() << dendl;
     auto iters = get_pipe_iters(all_targets, target_zone);
@@ -3796,7 +3741,7 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
 public:
   RGWGetBucketPeersCR(RGWDataSyncEnv *_sync_env,
                       std::optional<rgw_bucket> _target_bucket,
-                      std::optional<string> _source_zone,
+                      std::optional<rgw_zone_id> _source_zone,
                       std::optional<rgw_bucket> _source_bucket,
                       rgw_sync_pipe_info_set *_pipes,
                       const RGWSyncTraceNodeRef& _tn_parent)
@@ -3809,7 +3754,7 @@ public:
       tn(sync_env->sync_tracer->add_node(_tn_parent, "get_bucket_peers",
                                          SSTR( "target=" << target_bucket.value_or(rgw_bucket())
                                                << ":source=" << target_bucket.value_or(rgw_bucket())
-                                               << ":source_zone=" << source_zone.value_or("*")))) {
+                                               << ":source_zone=" << source_zone.value_or(rgw_zone_id("*")).id))) {
       }
 
   int operate() override;
@@ -4276,13 +4221,13 @@ int RGWBucketPipeSyncStatusManager::init()
     return ret;
   }
 
-  string last_zone;
+  rgw_zone_id last_zone;
 
   for (auto& pipe : pipes) {
     auto& szone = pipe.source.zone;
 
     if (last_zone != szone) {
-      conn = store->svc()->zone->get_zone_conn_by_id(szone);
+      conn = store->svc()->zone->get_zone_conn(szone);
       if (!conn) {
         ldpp_dout(this, 0) << "connection object to zone " << szone << " does not exist" << dendl;
         return -EINVAL;
@@ -4369,26 +4314,26 @@ unsigned RGWBucketPipeSyncStatusManager::get_subsys() const
 
 std::ostream& RGWBucketPipeSyncStatusManager::gen_prefix(std::ostream& out) const
 {
-  auto zone = std::string_view{source_zone.value_or("*")};
+  auto zone = std::string_view{source_zone.value_or(rgw_zone_id("*")).id};
   return out << "bucket sync zone:" << zone.substr(0, 8)
     << " bucket:" << dest_bucket << ' ';
 }
 
-string RGWBucketPipeSyncStatusManager::status_oid(const string& source_zone,
+string RGWBucketPipeSyncStatusManager::status_oid(const rgw_zone_id& source_zone,
                                               const rgw_bucket_sync_pair_info& sync_pair)
 {
   if (sync_pair.source_bs == sync_pair.dest_bs) {
-    return bucket_status_oid_prefix + "." + source_zone + ":" + sync_pair.dest_bs.get_key();
+    return bucket_status_oid_prefix + "." + source_zone.id + ":" + sync_pair.dest_bs.get_key();
   } else {
-    return bucket_status_oid_prefix + "." + source_zone + ":" + sync_pair.dest_bs.get_key() + ":" + sync_pair.source_bs.get_key();
+    return bucket_status_oid_prefix + "." + source_zone.id + ":" + sync_pair.dest_bs.get_key() + ":" + sync_pair.source_bs.get_key();
   }
 }
 
-string RGWBucketPipeSyncStatusManager::obj_status_oid(const string& source_zone,
+string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_zone_id& source_zone,
                                                   const rgw_obj& obj)
 {
 #warning FIXME
-  return object_status_oid_prefix + "." + source_zone + ":" + obj.bucket.get_key() + ":" +
+  return object_status_oid_prefix + "." + source_zone.id + ":" + obj.bucket.get_key() + ":" +
          obj.key.name + ":" + obj.key.instance;
 }
 

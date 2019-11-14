@@ -20,11 +20,11 @@
 
 struct rgw_sync_symmetric_group {
   string id;
-  std::set<string> zones;
+  std::set<rgw_zone_id> zones;
 
   rgw_sync_symmetric_group() {}
   rgw_sync_symmetric_group(const string& _id,
-                           const std::set<string> _zones) : id(_id), zones(_zones) {}
+                           const std::set<rgw_zone_id> _zones) : id(_id), zones(_zones) {}
 
 
   void encode(bufferlist& bl) const {
@@ -47,8 +47,8 @@ struct rgw_sync_symmetric_group {
 WRITE_CLASS_ENCODER(rgw_sync_symmetric_group)
 
 struct rgw_sync_directional_rule {
-  string source_zone;
-  string dest_zone;
+  rgw_zone_id source_zone;
+  rgw_zone_id dest_zone;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -70,7 +70,7 @@ struct rgw_sync_directional_rule {
 WRITE_CLASS_ENCODER(rgw_sync_directional_rule)
 
 struct rgw_sync_bucket_entity {
-  std::optional<string> zone; /* define specific zones */
+  std::optional<rgw_zone_id> zone; /* define specific zones */
   std::optional<rgw_bucket> bucket; /* define specific bucket */
 
   static bool match_str(const string& s1, const string& s2) { /* empty string is wildcard */
@@ -82,7 +82,7 @@ struct rgw_sync_bucket_entity {
   bool all_zones{false};
 
   rgw_sync_bucket_entity() {}
-  rgw_sync_bucket_entity(const string& _zone,
+  rgw_sync_bucket_entity(const rgw_zone_id& _zone,
                          std::optional<rgw_bucket> _bucket) : zone(_zone),
                                                               bucket(_bucket.value_or(rgw_bucket())) {}
 
@@ -115,7 +115,7 @@ struct rgw_sync_bucket_entity {
 
   string bucket_key() const;
 
-  bool match_zone(const string& z) const {
+  bool match_zone(const rgw_zone_id& z) const {
     if (all_zones) {
       return true;
     }
@@ -126,7 +126,7 @@ struct rgw_sync_bucket_entity {
     return (*zone == z);
   }
 
-  void apply_zone(const string& z) {
+  void apply_zone(const rgw_zone_id& z) {
     all_zones = false;
     zone = z;
   }
@@ -166,7 +166,7 @@ struct rgw_sync_bucket_entity {
     if (zone < e.zone) {
       return true;
     }
-    if (zone > e.zone) {
+    if (e.zone < zone) {
       return false;
     }
     return (bucket < e.bucket);
@@ -356,7 +356,7 @@ WRITE_CLASS_ENCODER(rgw_sync_bucket_pipe)
 
 struct rgw_sync_bucket_entities {
   std::optional<rgw_bucket> bucket; /* define specific bucket */
-  std::optional<std::set<string> > zones; /* define specific zones, if not set then all zones */
+  std::optional<std::set<rgw_zone_id> > zones; /* define specific zones, if not set then all zones */
 
   bool all_zones{false};
 
@@ -394,8 +394,8 @@ struct rgw_sync_bucket_entities {
             rgw_sync_bucket_entity::match_str(bucket->bucket_id, b->bucket_id));
   }
 
-  void add_zones(const std::vector<string>& new_zones);
-  void remove_zones(const std::vector<string>& rm_zones);
+  void add_zones(const std::vector<rgw_zone_id>& new_zones);
+  void remove_zones(const std::vector<rgw_zone_id>& rm_zones);
   void set_bucket(std::optional<string> tenant,
                   std::optional<string> bucket_name,
                   std::optional<string> bucket_id);
@@ -403,7 +403,7 @@ struct rgw_sync_bucket_entities {
                      std::optional<string> bucket_name,
                      std::optional<string> bucket_id);
 
-  bool match_zone(const string& zone) const {
+  bool match_zone(const rgw_zone_id& zone) const {
     if (all_zones) {
       return true;
     } else if (!zones) {
@@ -448,15 +448,15 @@ struct rgw_sync_bucket_pipes {
     DECODE_FINISH(bl);
   }
 
-  bool match_source(const string& zone, std::optional<rgw_bucket> b) const {
+  bool match_source(const rgw_zone_id& zone, std::optional<rgw_bucket> b) const {
     return (source.match_zone(zone) && source.match_bucket(b));
   }
 
-  bool match_dest(const string& zone, std::optional<rgw_bucket> b) const {
+  bool match_dest(const rgw_zone_id& zone, std::optional<rgw_bucket> b) const {
     return (dest.match_zone(zone) && dest.match_bucket(b));
   }
 
-  bool contains_zone_bucket(const string& zone, std::optional<rgw_bucket> b) const {
+  bool contains_zone_bucket(const rgw_zone_id& zone, std::optional<rgw_bucket> b) const {
     return (match_source(zone, b) || match_dest(zone, b));
   }
 
@@ -507,11 +507,11 @@ struct rgw_sync_data_flow_group {
   }
 
   bool find_symmetrical(const string& flow_id, bool create, rgw_sync_symmetric_group **flow_group);
-  void remove_symmetrical(const string& flow_id, std::optional<std::vector<string> > zones);
-  bool find_directional(const string& source_zone, const string& dest_zone, bool create, rgw_sync_directional_rule **flow_group);
-  void remove_directional(const string& source_zone, const string& dest_zone);
+  void remove_symmetrical(const string& flow_id, std::optional<std::vector<rgw_zone_id> > zones);
+  bool find_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone, bool create, rgw_sync_directional_rule **flow_group);
+  void remove_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone);
 
-  void init_default(const std::set<string>& zones);
+  void init_default(const std::set<rgw_zone_id>& zones);
 };
 WRITE_CLASS_ENCODER(rgw_sync_data_flow_group)
 

@@ -47,7 +47,7 @@ RGWSI_Zone::~RGWSI_Zone()
   delete current_period;
 }
 
-std::shared_ptr<RGWBucketSyncPolicyHandler> RGWSI_Zone::get_sync_policy_handler(std::optional<string> zone) const {
+std::shared_ptr<RGWBucketSyncPolicyHandler> RGWSI_Zone::get_sync_policy_handler(std::optional<rgw_zone_id> zone) const {
   if (!zone || *zone == zone_id()) {
     return sync_policy_handler;
   }
@@ -142,6 +142,9 @@ int RGWSI_Zone::do_start()
     lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
+
+  cur_zone_id = rgw_zone_id(zone_params->get_id());
+
   auto zone_iter = zonegroup->zones.find(zone_params->get_id());
   if (zone_iter == zonegroup->zones.end()) {
     if (using_local) {
@@ -166,7 +169,7 @@ int RGWSI_Zone::do_start()
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
   for (auto ziter : zonegroup->zones) {
-    auto zone_handler = new RGWBucketSyncPolicyHandler(this, sync_modules_svc, bucket_sync_svc, ziter.second.name);
+    auto zone_handler = new RGWBucketSyncPolicyHandler(this, sync_modules_svc, bucket_sync_svc, ziter.second.id);
     ret = zone_handler->init(null_yield);
     if (ret < 0) {
       lderr(cct) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;
@@ -177,13 +180,13 @@ int RGWSI_Zone::do_start()
 
   sync_policy_handler = sync_policy_handlers[zone_id()]; /* we made sure earlier that zonegroup->zones has our zone */
 
-  set<string> source_zones_by_name;
-  set<string> target_zones_by_name;
+  set<rgw_zone_id> source_zones;
+  set<rgw_zone_id> target_zones;
 
   sync_policy_handler->reflect(nullptr, nullptr,
                                nullptr, nullptr,
-                               &source_zones_by_name,
-                               &target_zones_by_name,
+                               &source_zones,
+                               &target_zones,
                                false); /* relaxed: also get all zones that we allow to sync to/from */
 
   ret = sync_modules_svc->start();
@@ -201,7 +204,7 @@ int RGWSI_Zone::do_start()
 
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
-    const string& id = ziter.first;
+    const rgw_zone_id& id = ziter.first;
     RGWZone& z = ziter.second;
     zone_id_by_name[z.name] = id;
     zone_by_id[id] = z;
@@ -212,7 +215,7 @@ int RGWSI_Zone::do_start()
   }
 
   for (const auto& ziter : zonegroup->zones) {
-    const string& id = ziter.first;
+    const rgw_zone_id& id = ziter.first;
     const RGWZone& z = ziter.second;
     if (id == zone_id()) {
       continue;
@@ -225,8 +228,8 @@ int RGWSI_Zone::do_start()
     RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints);
     zone_conn_map[id] = conn;
 
-    bool zone_is_source = source_zones_by_name.find(z.name) != source_zones_by_name.end();
-    bool zone_is_target = target_zones_by_name.find(z.name) != target_zones_by_name.end();
+    bool zone_is_source = source_zones.find(z.id) != source_zones.end();
+    bool zone_is_target = target_zones.find(z.id) != target_zones.end();
 
     if (zone_is_source || zone_is_target) {
       if (zone_is_source) {
@@ -250,14 +253,13 @@ void RGWSI_Zone::shutdown()
 {
   delete rest_master_conn;
 
-  map<string, RGWRESTConn *>::iterator iter;
-  for (iter = zone_conn_map.begin(); iter != zone_conn_map.end(); ++iter) {
-    RGWRESTConn *conn = iter->second;
+  for (auto& item : zone_conn_map) {
+    auto conn = item.second;
     delete conn;
   }
 
-  for (iter = zonegroup_conn_map.begin(); iter != zonegroup_conn_map.end(); ++iter) {
-    RGWRESTConn *conn = iter->second;
+  for (auto& item : zonegroup_conn_map) {
+    auto conn = item.second;
     delete conn;
   }
 }
@@ -405,7 +407,8 @@ int RGWSI_Zone::replace_region_with_zonegroup()
     return 0;
   }
 
-  string master_region, master_zone;
+  string master_region;
+  rgw_zone_id master_zone;
   for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
     if (*iter != default_zonegroup_name){
       RGWZoneGroup region(*iter);
@@ -425,7 +428,7 @@ int RGWSI_Zone::replace_region_with_zonegroup()
      The realm name will be the region and zone concatenated
      realm id will be mds of its name */
   if (realm->get_id().empty() && !master_region.empty() && !master_zone.empty()) {
-    string new_realm_name = master_region + "." + master_zone;
+    string new_realm_name = master_region + "." + master_zone.id;
     unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     MD5 hash;
@@ -507,11 +510,11 @@ int RGWSI_Zone::replace_region_with_zonegroup()
         return ret;
       }
     }
-    for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
+    for (auto iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
          ++iter) {
       ldout(cct, 0) << __func__ << " Converting zone" << iter->first << dendl;
-      RGWZoneParams zoneparams(iter->first, iter->first);
-      zoneparams.set_id(iter->first);
+      RGWZoneParams zoneparams(iter->first, iter->second.name);
+      zoneparams.set_id(iter->first.id);
       zoneparams.realm_id = realm->get_id();
       ret = zoneparams.init(cct, sysobj_svc);
       if (ret < 0 && ret != -ENOENT) {
@@ -893,12 +896,8 @@ const string& RGWSI_Zone::zone_name() const
 {
   return get_zone_params().get_name();
 }
-const string& RGWSI_Zone::zone_id() const
-{
-  return get_zone_params().get_id();
-}
 
-bool RGWSI_Zone::find_zone_by_id(const string& id, RGWZone **zone)
+bool RGWSI_Zone::find_zone(const rgw_zone_id& id, RGWZone **zone)
 {
   auto iter = zone_by_id.find(id);
   if (iter == zone_by_id.end()) {
@@ -908,8 +907,8 @@ bool RGWSI_Zone::find_zone_by_id(const string& id, RGWZone **zone)
   return true;
 }
 
-RGWRESTConn *RGWSI_Zone::get_zone_conn_by_id(const string& id) {
-  auto citer = zone_conn_map.find(id);
+RGWRESTConn *RGWSI_Zone::get_zone_conn(const rgw_zone_id& zone_id) {
+  auto citer = zone_conn_map.find(zone_id.id);
   if (citer == zone_conn_map.end()) {
     return NULL;
   }
@@ -923,10 +922,10 @@ RGWRESTConn *RGWSI_Zone::get_zone_conn_by_name(const string& name) {
     return NULL;
   }
 
-  return get_zone_conn_by_id(i->second);
+  return get_zone_conn(i->second);
 }
 
-bool RGWSI_Zone::find_zone_id_by_name(const string& name, string *id) {
+bool RGWSI_Zone::find_zone_id_by_name(const string& name, rgw_zone_id *id) {
   auto i = zone_id_by_name.find(name);
   if (i == zone_id_by_name.end()) {
     return false;
@@ -992,7 +991,7 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
   }
 
   /* zone is not master */
-  if (zonegroup->master_zone.compare(zone_public_config->id) != 0) {
+  if (zonegroup->master_zone != zone_public_config->id) {
     return false;
   }
 

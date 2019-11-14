@@ -1630,13 +1630,13 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
                          const string& access, const string& secret,
                          bool force)
 {
-  const string& master_zone = period.get_master_zone();
+  auto& master_zone = period.get_master_zone();
   if (master_zone.empty()) {
     cerr << "cannot commit period: period does not have a master zone of a master zonegroup" << std::endl;
     return -EINVAL;
   }
   // are we the period's master zone?
-  if (store->svc()->zone->get_zone_params().get_id() == master_zone) {
+  if (store->svc()->zone->zone_id() == master_zone) {
     // read the current period
     RGWPeriod current_period;
     int ret = current_period.init(g_ceph_context, store->svc()->sysobj, realm.get_id());
@@ -1655,7 +1655,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
 
   if (remote.empty() && url.empty()) {
     // use the new master zone's connection
-    remote = master_zone;
+    remote = master_zone.id;
     cout << "Sending period to new master zone " << remote << std::endl;
   }
   boost::optional<RGWRESTConn> conn;
@@ -1671,7 +1671,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   }
 
   // push period to the master with an empty period id
-  period.set_id("");
+  period.set_id(string());
 
   RGWEnv env;
   req_info info(g_ceph_context, &env);
@@ -2007,13 +2007,13 @@ static void get_md_sync_status(list<string>& status)
   flush_ss(ss, status);
 }
 
-static void get_data_sync_status(const string& source_zone, list<string>& status, int tab)
+static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& status, int tab)
 {
   stringstream ss;
 
   RGWZone *sz;
 
-  if (!store->svc()->zone->find_zone_by_id(source_zone, &sz)) {
+  if (!store->svc()->zone->find_zone(source_zone, &sz)) {
     push_ss(ss, status, tab) << string("zone not found");
     flush_ss(ss, status);
     return;
@@ -2205,11 +2205,11 @@ static void sync_status(Formatter *formatter)
   auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
 
   for (auto iter : zone_conn_map) {
-    const string& source_id = iter.first;
+    const rgw_zone_id& source_id = iter.first;
     string source_str = "source: ";
-    string s = source_str + source_id;
+    string s = source_str + source_id.id;
     RGWZone *sz;
-    if (store->svc()->zone->find_zone_by_id(source_id, &sz)) {
+    if (store->svc()->zone->find_zone(source_id, &sz)) {
       s += string(" (") + sz->name + ")";
     }
     data_status.push_back(s);
@@ -2345,17 +2345,11 @@ static std::vector<string> convert_bucket_set_to_str_vec(const std::set<rgw_buck
   return std::move(result);
 }
 
-static void get_hint_entities(const std::set<string>& zone_names, const std::set<rgw_bucket>& buckets,
+static void get_hint_entities(const std::set<rgw_zone_id>& zones, const std::set<rgw_bucket>& buckets,
 			      std::set<rgw_sync_bucket_entity> *hint_entities)
 {
-  for (auto& zone : zone_names) {
+  for (auto& zone_id : zones) {
     for (auto& b : buckets) {
-      string zid;
-      if (!store->svc()->zone->find_zone_id_by_name(zone, &zid)) {
-	cerr << "WARNING: cannot find zone id for zone=" << zone << ", skippping" << std::endl;
-	continue;
-      }
-
       RGWBucketInfo hint_bucket_info;
       rgw_bucket hint_bucket;
       int ret = init_bucket(b, hint_bucket_info, hint_bucket);
@@ -2364,27 +2358,33 @@ static void get_hint_entities(const std::set<string>& zone_names, const std::set
 	continue;
       }
 
-      hint_entities->insert(rgw_sync_bucket_entity(zid, hint_bucket));
+      hint_entities->insert(rgw_sync_bucket_entity(zone_id, hint_bucket));
     }
   }
 }
 
-static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bucket> opt_bucket, Formatter *formatter)
+static rgw_zone_id resolve_zone_id(const string& s)
 {
-  string zone_name;
-  std::optional<string> zone_id;
+  rgw_zone_id result;
 
-  if (opt_target_zone) {
-    string zid;
-    if (!store->svc()->zone->find_zone_id_by_name(*opt_target_zone, &zid)) {
-      cerr << "WARNING: cannot find zone id for zone=" << *opt_target_zone << std::endl;
-      return -ENOENT;
-    }
-    zone_name = *opt_target_zone;
-    zone_id = zid;
-  } else {
-    zone_name = store->svc ()->zone->zone_name();
+  RGWZone *zone;
+  if (store->svc()->zone->find_zone(s, &zone)) {
+    return rgw_zone_id(s);
   }
+  if (store->svc()->zone->find_zone_id_by_name(s, &result)) {
+    return result;
+  }
+  return rgw_zone_id(s);
+}
+
+rgw_zone_id validate_zone_id(const rgw_zone_id& zone_id)
+{
+  return resolve_zone_id(zone_id.id);
+}
+
+static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<rgw_bucket> opt_bucket, Formatter *formatter)
+{
+  rgw_zone_id zone_id = opt_target_zone.value_or(store->svc()->zone->zone_id());
 
   auto zone_policy_handler = store->svc()->zone->get_sync_policy_handler(zone_id);
 
@@ -2431,10 +2431,10 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
   std::set<rgw_sync_bucket_pipe> resolved_sources;
   std::set<rgw_sync_bucket_pipe> resolved_dests;
 
-  rgw_sync_bucket_entity self_entity(zone_name, opt_bucket);
+  rgw_sync_bucket_entity self_entity(zone_id, opt_bucket);
 
-  set<string> source_zones;
-  set<string> target_zones;
+  set<rgw_zone_id> source_zones;
+  set<rgw_zone_id> target_zones;
 
   zone_policy_handler->reflect(nullptr, nullptr,
                                nullptr, nullptr,
@@ -2453,7 +2453,7 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
       continue; /* shouldn't really happen */
     }
 
-    auto& zid = *hint_entity.zone;
+    auto zid = validate_zone_id(*hint_entity.zone);
     auto& hint_bucket = *hint_entity.bucket;
 
     RGWBucketSyncPolicyHandlerRef hint_bucket_handler;
@@ -2464,9 +2464,9 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
     }
 
     hint_bucket_handler->get_pipes(&resolved_dests,
-				   &resolved_sources,
-				   self_entity); /* flipping resolved dests and sources as these are
-						    relative to the remote entity */
+                                   &resolved_sources,
+                                   self_entity); /* flipping resolved dests and sources as these are
+                                                    relative to the remote entity */
   }
 
   {
@@ -2479,9 +2479,14 @@ static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bu
       encode_json("dests", target_hints_vec, formatter);
     }
     {
-      Formatter::ObjectSection resolved_hints_section(*formatter, "resolved-hints");
+      Formatter::ObjectSection resolved_hints_section(*formatter, "resolved-hints-1");
       encode_json("sources", resolved_sources, formatter);
       encode_json("dests", resolved_dests, formatter);
+    }
+    {
+      Formatter::ObjectSection resolved_hints_section(*formatter, "resolved-hints");
+      encode_json("sources", handler->get_resolved_source_hints(), formatter);
+      encode_json("dests", handler->get_resolved_dest_hints(), formatter);
     }
   }
 
@@ -2530,7 +2535,7 @@ static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo&
 }
 
 static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& info,
-                              const std::string& source_zone_id,
+                              const rgw_zone_id& source_zone_id,
                               std::ostream& out)
 {
   const RGWRealm& realm = store->svc()->zone->get_realm();
@@ -2559,7 +2564,7 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
   auto& sources = handler->get_sources();
 
   auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
-  set<string> zone_ids;
+  set<rgw_zone_id> zone_ids;
 
   if (!source_zone_id.empty()) {
     auto z = zonegroup.zones.find(source_zone_id);
@@ -2585,7 +2590,7 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
   }
 
   for (auto& zone_id : zone_ids) {
-    auto z = zonegroup.zones.find(zone_id);
+    auto z = zonegroup.zones.find(zone_id.id);
     if (z == zonegroup.zones.end()) { /* should't happen */
       continue;
     }
@@ -2597,7 +2602,7 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
     for (auto& m : sources) {
       for (auto& entry : m.second.pipe_map) {
         auto& pipe = entry.second;
-        if (pipe.source.zone.value_or("") == z->second.id) {
+        if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
           bucket_source_sync_status(store, zone, z->second,
                                     c->second,
                                     info, pipe,
@@ -2918,6 +2923,43 @@ public:
 
 };
 
+void resolve_zone_id_opt(std::optional<string>& zone_name, std::optional<rgw_zone_id>& zone_id)
+{
+  if (!zone_name || zone_id) {
+    return;
+  }
+  zone_id.emplace();
+  if (!store->svc()->zone->find_zone_id_by_name(*zone_name, &(*zone_id))) {
+    cerr << "WARNING: cannot find source zone id for name=" << *zone_name << std::endl;
+    zone_id = rgw_zone_id(*zone_name);
+  }
+}
+void resolve_zone_ids_opt(std::optional<vector<string> >& names, std::optional<vector<rgw_zone_id> >& ids)
+{
+  if (!names || ids) {
+    return;
+  }
+  ids.emplace();
+  for (auto& name : *names) {
+    rgw_zone_id zid;
+    if (!store->svc()->zone->find_zone_id_by_name(name, &zid)) {
+      cerr << "WARNING: cannot find source zone id for name=" << name << std::endl;
+      zid = rgw_zone_id(name);
+    }
+    ids->push_back(zid);
+  }
+}
+
+static vector<rgw_zone_id> zone_ids_from_str(const string& val)
+{
+  vector<rgw_zone_id> result;
+  vector<string> v;
+  get_str_vec(val, v);
+  for (auto& z : v) {
+    result.push_back(rgw_zone_id(z));
+  }
+  return result;
+}
 
 int main(int argc, const char **argv)
 {
@@ -3066,7 +3108,7 @@ int main(int argc, const char **argv)
   string err;
 
   string source_zone_name;
-  string source_zone; /* zone id */
+  rgw_zone_id source_zone; /* zone id */
 
   string tier_type;
   bool tier_type_specified = false;
@@ -3100,12 +3142,15 @@ int main(int argc, const char **argv)
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
   std::optional<string> opt_flow_type;
-  std::optional<vector<string> > opt_zones;
+  std::optional<vector<string> > opt_zone_names;
+  std::optional<vector<rgw_zone_id> > opt_zone_ids;
   std::optional<string> opt_flow_id;
   std::optional<string> opt_source_zone;
   std::optional<string> opt_dest_zone;
-  std::optional<vector<string> > opt_source_zones;
-  std::optional<vector<string> > opt_dest_zones;
+  std::optional<vector<string> > opt_source_zone_names;
+  std::optional<vector<rgw_zone_id> > opt_source_zone_ids;
+  std::optional<vector<string> > opt_dest_zone_names;
+  std::optional<vector<rgw_zone_id> > opt_dest_zone_ids;
   std::optional<string> opt_pipe_id;
   std::optional<rgw_bucket> opt_bucket;
   std::optional<string> opt_tenant;
@@ -3119,7 +3164,8 @@ int main(int argc, const char **argv)
   std::optional<string> opt_dest_tenant;
   std::optional<string> opt_dest_bucket_name;
   std::optional<string> opt_dest_bucket_id;
-  std::optional<string> opt_effective_zone;
+  std::optional<string> opt_effective_zone_name;
+  std::optional<rgw_zone_id> opt_effective_zone_id;
 
   std::optional<string> opt_prefix;
   std::optional<string> opt_prefix_rm;
@@ -3488,18 +3534,24 @@ int main(int argc, const char **argv)
       opt_status = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--flow-type", (char*)NULL)) {
       opt_flow_type = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--zones", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--zones", "--zone-names", (char*)NULL)) {
       vector<string> v;
       get_str_vec(val, v);
-      opt_zones = std::move(v);
-    } else if (ceph_argparse_witharg(args, i, &val, "--source-zones", (char*)NULL)) {
+      opt_zone_names = std::move(v);
+    } else if (ceph_argparse_witharg(args, i, &val, "--zone-ids", (char*)NULL)) {
+      opt_zone_ids = zone_ids_from_str(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-zones", "--source-zone-names", (char*)NULL)) {
       vector<string> v;
       get_str_vec(val, v);
-      opt_source_zones = std::move(v);
-    } else if (ceph_argparse_witharg(args, i, &val, "--dest-zones", (char*)NULL)) {
+      opt_source_zone_names = std::move(v);
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-zone-ids", (char*)NULL)) {
+      opt_source_zone_ids = zone_ids_from_str(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-zones", "--dest-zone-names", (char*)NULL)) {
       vector<string> v;
       get_str_vec(val, v);
-      opt_dest_zones = std::move(v);
+      opt_dest_zone_names = std::move(v);
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-zone-ids", (char*)NULL)) {
+      opt_dest_zone_ids = zone_ids_from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--flow-id", (char*)NULL)) {
       opt_flow_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--pipe-id", (char*)NULL)) {
@@ -3516,8 +3568,10 @@ int main(int argc, const char **argv)
       opt_dest_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-bucket-id", (char*)NULL)) {
       opt_dest_bucket_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--effective-zone", (char*)NULL)) {
-      opt_effective_zone = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--effective-zone-name", "--effective-zone", (char*)NULL)) {
+      opt_effective_zone_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--effective-zone-id", (char*)NULL)) {
+      opt_effective_zone_id = rgw_zone_id(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
       opt_prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix-rm", (char*)NULL)) {
@@ -3876,7 +3930,7 @@ int main(int argc, const char **argv)
           }
           if (remote.empty()) {
             // use realm master zone as remote
-            remote = current_period.get_master_zone();
+            remote = current_period.get_master_zone().id;
           }
           conn = get_remote_conn(store, current_period.get_map(), remote);
           if (!conn) {
@@ -5265,6 +5319,11 @@ int main(int argc, const char **argv)
     }
     return 0;
   }
+
+  resolve_zone_id_opt(opt_effective_zone_name, opt_effective_zone_id);
+  resolve_zone_ids_opt(opt_zone_names, opt_zone_ids);
+  resolve_zone_ids_opt(opt_source_zone_names, opt_source_zone_ids);
+  resolve_zone_ids_opt(opt_dest_zone_names, opt_dest_zone_ids);
 
   bool non_master_cmd = (!store->svc()->zone->is_meta_master() && !yes_i_really_mean_it);
   std::set<OPT> non_master_ops_list = {OPT::USER_CREATE, OPT::USER_RM, 
@@ -7489,7 +7548,7 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_INFO) {
-    sync_info(opt_effective_zone, opt_bucket, formatter);
+    sync_info(opt_effective_zone_id, opt_bucket, formatter);
   }
 
   if (opt_cmd == OPT::SYNC_STATUS) {
@@ -8075,13 +8134,13 @@ next:
     auto& group = iter->second;
 
     if (symmetrical_flow_opt(*opt_flow_type)) {
-      CHECK_TRUE(require_non_empty_opt(opt_zones), "ERROR: --zones not provided for symmetrical flow, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_zone_ids), "ERROR: --zones not provided for symmetrical flow, or is empty", EINVAL);
 
       rgw_sync_symmetric_group *flow_group;
 
       group.data_flow.find_symmetrical(*opt_flow_id, true, &flow_group);
 
-      for (auto& z : *opt_zones) {
+      for (auto& z : *opt_zone_ids) {
         flow_group->zones.insert(z);
       }
     } else { /* directional */
@@ -8125,7 +8184,7 @@ next:
     auto& group = iter->second;
 
     if (symmetrical_flow_opt(*opt_flow_type)) {
-      group.data_flow.remove_symmetrical(*opt_flow_id, opt_zones);
+      group.data_flow.remove_symmetrical(*opt_flow_id, opt_zone_ids);
     } else { /* directional */
       CHECK_TRUE(require_non_empty_opt(opt_source_zone), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
       CHECK_TRUE(require_non_empty_opt(opt_dest_zone), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
@@ -8146,8 +8205,8 @@ next:
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
     CHECK_TRUE(require_opt(opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
     if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
-      CHECK_TRUE(require_non_empty_opt(opt_source_zones), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
-      CHECK_TRUE(require_non_empty_opt(opt_dest_zones), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_source_zone_ids), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_dest_zone_ids), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
     }
 
     SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
@@ -8176,11 +8235,11 @@ next:
       }
     }
 
-    pipe->source.add_zones(*opt_source_zones);
+    pipe->source.add_zones(*opt_source_zone_ids);
     pipe->source.set_bucket(opt_source_tenant,
                             opt_source_bucket_name,
                             opt_source_bucket_id);
-    pipe->dest.add_zones(*opt_dest_zones);
+    pipe->dest.add_zones(*opt_dest_zone_ids);
     pipe->dest.set_bucket(opt_dest_tenant,
                             opt_dest_bucket_name,
                             opt_dest_bucket_id);
@@ -8225,25 +8284,25 @@ next:
       return ENOENT;
     }
 
-    if (opt_source_zones) {
-      pipe->source.remove_zones(*opt_source_zones);
+    if (opt_source_zone_ids) {
+      pipe->source.remove_zones(*opt_source_zone_ids);
     }
 
     pipe->source.remove_bucket(opt_source_tenant,
                                opt_source_bucket_name,
                                opt_source_bucket_id);
-    if (opt_dest_zones) {
-      pipe->dest.remove_zones(*opt_dest_zones);
+    if (opt_dest_zone_ids) {
+      pipe->dest.remove_zones(*opt_dest_zone_ids);
     }
     pipe->dest.remove_bucket(opt_dest_tenant,
                              opt_dest_bucket_name,
                              opt_dest_bucket_id);
 
-    if (!(opt_source_zones ||
+    if (!(opt_source_zone_ids ||
           opt_source_tenant ||
           opt_source_bucket ||
           opt_source_bucket_id ||
-          opt_dest_zones ||
+          opt_dest_zone_ids ||
           opt_dest_tenant ||
           opt_dest_bucket ||
           opt_dest_bucket_id)) {

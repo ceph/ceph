@@ -3663,7 +3663,7 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
   return ctl.user->flush_bucket_stats(user_id, *pent);
 }
 
-int RGWBucketCtl::get_sync_policy_handler(std::optional<string> zone,
+int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
                                           std::optional<rgw_bucket> bucket,
                                           RGWBucketSyncPolicyHandlerRef *phandler,
                                           optional_yield y)

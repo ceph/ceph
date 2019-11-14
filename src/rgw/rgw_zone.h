@@ -33,6 +33,7 @@ extern std::string default_storage_pool_suffix;
 class JSONObj;
 class RGWSyncModulesManager;
 
+
 struct RGWNameToId {
   std::string obj_id;
 
@@ -382,9 +383,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   RGWZoneParams() : RGWSystemMetaObj() {}
   explicit RGWZoneParams(const std::string& name) : RGWSystemMetaObj(name){}
-  RGWZoneParams(const std::string& id, const std::string& name) : RGWSystemMetaObj(id, name) {}
-  RGWZoneParams(const std::string& id, const std::string& name, const std::string& _realm_id)
-    : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
+  RGWZoneParams(const rgw_zone_id& id, const std::string& name) : RGWSystemMetaObj(id.id, name) {}
+  RGWZoneParams(const rgw_zone_id& id, const std::string& name, const std::string& _realm_id)
+    : RGWSystemMetaObj(id.id, name), realm_id(_realm_id) {}
 
   rgw_pool get_pool(CephContext *cct) const override;
   const std::string get_default_oid(bool old_format = false) const override;
@@ -695,8 +696,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   list<std::string> endpoints;
   bool is_master = false;
 
-  std::string master_zone;
-  map<std::string, RGWZone> zones;
+  rgw_zone_id master_zone;
+  map<rgw_zone_id, RGWZone> zones;
 
   map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
   rgw_placement_rule default_placement;
@@ -1021,7 +1022,7 @@ class RGWPeriod
   RGWPeriodMap period_map;
   RGWPeriodConfig period_config;
   std::string master_zonegroup;
-  std::string master_zone;
+  rgw_zone_id master_zone;
 
   std::string realm_id;
   std::string realm_name;
@@ -1054,7 +1055,7 @@ public:
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_realm_epoch() const { return realm_epoch; }
   const std::string& get_predecessor() const { return predecessor_uuid; }
-  const std::string& get_master_zone() const { return master_zone; }
+  const rgw_zone_id& get_master_zone() const { return master_zone; }
   const std::string& get_master_zonegroup() const { return master_zonegroup; }
   const std::string& get_realm() const { return realm_id; }
   const RGWPeriodMap& get_map() const { return period_map; }
@@ -1073,9 +1074,9 @@ public:
     period_config.bucket_quota = bucket_quota;
   }
 
-  void set_id(const std::string& id) {
-    this->id = id;
-    period_map.id = id;
+  void set_id(const string& _id) {
+    this->id = _id;
+    period_map.id = _id;
   }
   void set_epoch(epoch_t epoch) { this->epoch = epoch; }
   void set_realm_epoch(epoch_t epoch) { realm_epoch = epoch; }

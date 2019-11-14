@@ -68,19 +68,13 @@ int RGWSI_Bucket_Sync_SObj::do_start()
 }
 
 void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
-                                               const std::set<string>& zone_names,
+                                               const std::set<rgw_zone_id>& zones,
                                                const std::set<rgw_bucket>& buckets,
                                                std::set<rgw_sync_bucket_entity> *hint_entities,
                                                optional_yield y)
 {
-  for (auto& zone : zone_names) {
+  for (auto& zone : zones) {
     for (auto& b : buckets) {
-      string zid;
-      if (!svc.zone->find_zone_id_by_name(zone, &zid)) {
-	cerr << "WARNING: cannot find zone id for zone=" << zone << ", skippping" << std::endl;
-	continue;
-      }
-
       RGWBucketInfo hint_bucket_info;
       int ret = svc.bucket_sobj->read_bucket_info(ctx, b, &hint_bucket_info,
                                                   nullptr, nullptr, boost::none,
@@ -90,7 +84,7 @@ void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
 	continue;
       }
 
-      hint_entities->insert(rgw_sync_bucket_entity(zid, hint_bucket_info.bucket));
+      hint_entities->insert(rgw_sync_bucket_entity(zone, hint_bucket_info.bucket));
     }
   }
 }
@@ -102,8 +96,8 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
                                                  std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                                                  optional_yield y)
 {
-  set<string> source_zones;
-  set<string> target_zones;
+  set<rgw_zone_id> source_zones;
+  set<rgw_zone_id> target_zones;
 
   zone_policy_handler->reflect(nullptr, nullptr,
                                nullptr, nullptr,
@@ -153,7 +147,7 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
 }
 
 int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                                                  std::optional<string> zone,
+                                                  std::optional<rgw_zone_id> zone,
                                                   std::optional<rgw_bucket> _bucket,
                                                   std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                                                   RGWBucketSyncPolicyHandlerRef *handler,
@@ -170,7 +164,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   string bucket_key;
 
   if (zone && *zone != svc.zone->zone_id()) {
-    zone_key = *zone;
+    zone_key = zone->id;
   }
 
   bucket_key = RGWSI_Bucket::get_bi_meta_key(bucket);
@@ -202,6 +196,10 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   }
 
   auto zone_policy_handler = svc.zone->get_sync_policy_handler(zone);
+  if (!zone_policy_handler) {
+    ldout(cct, 20) << "ERROR: could not find policy handler for zone=" << zone << dendl;
+    return -ENOENT;
+  }
 
   e.handler.reset(zone_policy_handler->alloc_child(bucket_info));
 
@@ -234,7 +232,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
 }
 
 int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                                               std::optional<string> zone,
+                                               std::optional<rgw_zone_id> zone,
                                                std::optional<rgw_bucket> _bucket,
                                                RGWBucketSyncPolicyHandlerRef *handler,
                                                optional_yield y)

@@ -38,20 +38,21 @@ class RGWSI_Zone : public RGWServiceInstance
   RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */  
   RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
   RGWPeriod *current_period{nullptr};
+  rgw_zone_id cur_zone_id;
   uint32_t zone_short_id{0};
   bool writeable_zone{false};
 
   std::shared_ptr<RGWBucketSyncPolicyHandler> sync_policy_handler;
-  std::map<string, std::shared_ptr<RGWBucketSyncPolicyHandler> > sync_policy_handlers;
+  std::map<rgw_zone_id, std::shared_ptr<RGWBucketSyncPolicyHandler> > sync_policy_handlers;
 
   RGWRESTConn *rest_master_conn{nullptr};
-  map<string, RGWRESTConn *> zone_conn_map;
+  map<rgw_zone_id, RGWRESTConn *> zone_conn_map;
   std::vector<const RGWZone*> data_sync_source_zones;
-  map<string, RGWRESTConn *> zone_data_notify_to_map;
+  map<rgw_zone_id, RGWRESTConn *> zone_data_notify_to_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
-  map<string, string> zone_id_by_name;
-  map<string, RGWZone> zone_by_id;
+  map<string, rgw_zone_id> zone_id_by_name;
+  map<rgw_zone_id, RGWZone> zone_by_id;
 
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
 
@@ -79,10 +80,12 @@ public:
   int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) const;
   const RGWZone& get_zone() const;
 
-  std::shared_ptr<RGWBucketSyncPolicyHandler> get_sync_policy_handler(std::optional<string> zone = nullopt) const;
+  std::shared_ptr<RGWBucketSyncPolicyHandler> get_sync_policy_handler(std::optional<rgw_zone_id> zone = nullopt) const;
 
   const string& zone_name() const;
-  const string& zone_id() const;
+  const rgw_zone_id& zone_id() const {
+    return cur_zone_id;
+  }
   uint32_t get_zone_short_id() const;
 
   const string& get_current_period_id() const;
@@ -101,7 +104,7 @@ public:
     return zonegroup_conn_map;
   }
 
-  map<string, RGWRESTConn *>& get_zone_conn_map() {
+  map<rgw_zone_id, RGWRESTConn *>& get_zone_conn_map() {
     return zone_conn_map;
   }
 
@@ -109,15 +112,15 @@ public:
     return data_sync_source_zones;
   }
 
-  map<string, RGWRESTConn *>& get_zone_data_notify_to_map() {
+  map<rgw_zone_id, RGWRESTConn *>& get_zone_data_notify_to_map() {
     return zone_data_notify_to_map;
   }
 
-  bool find_zone_by_id(const string& id, RGWZone **zone);
+  bool find_zone(const rgw_zone_id& id, RGWZone **zone);
 
-  RGWRESTConn *get_zone_conn_by_id(const string& id);
+  RGWRESTConn *get_zone_conn(const rgw_zone_id& zone_id);
   RGWRESTConn *get_zone_conn_by_name(const string& name);
-  bool find_zone_id_by_name(const string& name, string *id);
+  bool find_zone_id_by_name(const string& name, rgw_zone_id *id);
 
   int select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id,
                               const rgw_placement_rule& rule,

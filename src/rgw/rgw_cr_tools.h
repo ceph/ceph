@@ -76,7 +76,7 @@ struct rgw_bucket_lifecycle_config_params {
 using RGWBucketLifecycleConfigCR = RGWSimpleWriteOnlyAsyncCR<rgw_bucket_lifecycle_config_params>;
 
 struct rgw_bucket_get_sync_policy_params {
-  std::optional<string> zone;
+  std::optional<rgw_zone_id> zone;
   std::optional<rgw_bucket> bucket;
 };
 
