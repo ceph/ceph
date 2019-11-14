@@ -1610,7 +1610,7 @@ public:
                               << " zone_short_id=" << src_zone_short_id << " pg_ver=" << src_pg_ver
                               << dendl;
 
-      source_conn = sync_env->svc->zone->get_zone_conn_by_id(sc->source_zone);
+      source_conn = sync_env->svc->zone->get_zone_conn(sc->source_zone);
       if (!source_conn) {
         ldout(sc->cct, 0) << "ERROR: cannot find http connection to zone " << sc->source_zone << dendl;
         return set_cr_error(-EINVAL);

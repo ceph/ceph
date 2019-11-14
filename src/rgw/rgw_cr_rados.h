@@ -918,7 +918,7 @@ class RGWRadosBILogTrimCR : public RGWSimpleCoroutine {
 
 class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
-  string source_zone;
+  rgw_zone_id source_zone;
 
   rgw_bucket src_bucket;
   std::optional<rgw_placement_rule> dest_placement_rule;
@@ -939,7 +939,7 @@ protected:
   int _send_request() override;
 public:
   RGWAsyncFetchRemoteObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
-                         const string& _source_zone,
+                         const rgw_zone_id& _source_zone,
                          const rgw_bucket& _src_bucket,
 			 std::optional<rgw_placement_rule> _dest_placement_rule,
                          const RGWBucketInfo& _dest_bucket_info,
@@ -969,7 +969,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
   CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RGWRadosStore *store;
-  string source_zone;
+  rgw_zone_id source_zone;
 
   rgw_bucket src_bucket;
   std::optional<rgw_placement_rule> dest_placement_rule;
@@ -990,7 +990,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
 
 public:
   RGWFetchRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
-                      const string& _source_zone,
+                      const rgw_zone_id& _source_zone,
                       const rgw_bucket& _src_bucket,
 		      std::optional<rgw_placement_rule> _dest_placement_rule,
                       const RGWBucketInfo& _dest_bucket_info,
@@ -1039,7 +1039,7 @@ public:
 
 class RGWAsyncStatRemoteObj : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
-  string source_zone;
+  rgw_zone_id source_zone;
 
   rgw_bucket src_bucket;
   rgw_obj_key key;
@@ -1054,7 +1054,7 @@ protected:
   int _send_request() override;
 public:
   RGWAsyncStatRemoteObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
-                         const string& _source_zone,
+                         const rgw_zone_id& _source_zone,
                          rgw_bucket& _src_bucket,
                          const rgw_obj_key& _key,
                          ceph::real_time *_pmtime,
@@ -1076,7 +1076,7 @@ class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
   CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RGWRadosStore *store;
-  string source_zone;
+  rgw_zone_id source_zone;
 
   rgw_bucket src_bucket;
   rgw_obj_key key;
@@ -1091,7 +1091,7 @@ class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
 
 public:
   RGWStatRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
-                      const string& _source_zone,
+                      const rgw_zone_id& _source_zone,
                       rgw_bucket& _src_bucket,
                       const rgw_obj_key& _key,
                       ceph::real_time *_pmtime,
@@ -1136,7 +1136,7 @@ public:
 
 class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
-  string source_zone;
+  rgw_zone_id source_zone;
 
   RGWBucketInfo bucket_info;
 
@@ -1155,7 +1155,7 @@ protected:
   int _send_request() override;
 public:
   RGWAsyncRemoveObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
-                         const string& _source_zone,
+                         const rgw_zone_id& _source_zone,
                          RGWBucketInfo& _bucket_info,
                          const rgw_obj_key& _key,
                          const string& _owner,
@@ -1189,7 +1189,7 @@ class RGWRemoveObjCR : public RGWSimpleCoroutine {
   CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RGWRadosStore *store;
-  string source_zone;
+  rgw_zone_id source_zone;
 
   RGWBucketInfo bucket_info;
 
@@ -1209,7 +1209,7 @@ class RGWRemoveObjCR : public RGWSimpleCoroutine {
 
 public:
   RGWRemoveObjCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
-                      const string& _source_zone,
+                      const rgw_zone_id& _source_zone,
                       RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
                       bool _versioned,

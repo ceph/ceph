@@ -47,10 +47,10 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
   int do_start() override;
 
   struct optional_zone_bucket {
-    optional<string> zone;
+    optional<rgw_zone_id> zone;
     optional<rgw_bucket> bucket;
 
-    optional_zone_bucket(const optional<string>& _zone,
+    optional_zone_bucket(const optional<rgw_zone_id>& _zone,
                          const optional<rgw_bucket>& _bucket) : zone(_zone), bucket(_bucket) {}
 
     bool operator<(const optional_zone_bucket& ozb) const {
@@ -65,7 +65,7 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
   };
 
   void get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
-                         const std::set<string>& zone_names,
+                         const std::set<rgw_zone_id>& zone_names,
                          const std::set<rgw_bucket>& buckets,
                          std::set<rgw_sync_bucket_entity> *hint_entities,
                          optional_yield y);
@@ -76,7 +76,7 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
                            std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                            optional_yield y);
   int do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                            std::optional<string> zone,
+                            std::optional<rgw_zone_id> zone,
                             std::optional<rgw_bucket> _bucket,
                             std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                             RGWBucketSyncPolicyHandlerRef *handler,
@@ -99,7 +99,7 @@ public:
 
 
   int get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                         std::optional<string> zone,
+                         std::optional<rgw_zone_id> zone,
                          std::optional<rgw_bucket> bucket,
                          RGWBucketSyncPolicyHandlerRef *handler,
                          optional_yield y);

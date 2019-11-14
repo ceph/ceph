@@ -1392,7 +1392,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("sync_policy", sync_policy, f);
 }
 
-static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
+static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
 {
   RGWZone z;
   z.decode_json(o);
@@ -2030,3 +2030,4 @@ void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
 }
+
