@@ -24,6 +24,8 @@ device_metadata_item_template = """
       {tag_name: <25} {value}"""
 
 
+global_lvs = api.Volumes()
+
 def readable_tag(tag):
     actual_name = tag.split('.')[-1]
     return actual_name.replace('_', ' ')
@@ -131,7 +133,8 @@ class List(object):
         Ensure all journal devices are up to date if they aren't a logical
         volume
         """
-        lvs = api.Volumes()
+        #lvs = api.Volumes()
+        lvs = global_lvs
         for lv in lvs:
             try:
                 lv.tags['ceph.osd_id']
@@ -172,19 +175,24 @@ class List(object):
         volume in the form of vg/lv or a device with an absolute path like
         /dev/sda1 or /dev/sda
         """
-        if lvs is None:
-            lvs = api.Volumes()
+        #if lvs is None:
+        #    lvs = api.Volumes()
+        lvs = global_lvs
         report = {}
-        lv = api.get_lv_from_argument(device)
+        # rishabh:
+        lv = api.get_lv_from_argument(device, lvs=global_lvs)
 
         # check if there was a pv created with the
         # name of device
+        # rishabh:
         pv = api.get_pv(pv_name=device)
         if pv and not lv:
             try:
-                lv = api.get_lv(vg_name=pv.vg_name)
+                # rishabh:
+                lv = api.get_lv(vg_name=pv.vg_name, lvs=global_lvs)
             except MultipleLVsError:
-                lvs.filter(vg_name=pv.vg_name)
+                # rishabh:
+                lvs = lvs.filter(vg_name=pv.vg_name)
                 return self.full_report(lvs=lvs)
 
         if lv:
@@ -206,6 +214,8 @@ class List(object):
             for device_type in ['journal', 'block', 'wal', 'db']:
                 device_tag_name = 'ceph.%s_device' % device_type
                 device_tag_uuid = 'ceph.%s_uuid' % device_type
+                # rishabh:
+                import pdb; pdb.set_trace(t)
                 associated_lv = lvs.get(lv_tags={device_tag_name: device})
                 if associated_lv:
                     _id = associated_lv.tags['ceph.osd_id']
@@ -226,8 +236,9 @@ class List(object):
         Generate a report for all the logical volumes and associated devices
         that have been previously prepared by Ceph
         """
-        if lvs is None:
-            lvs = api.Volumes()
+        lvs = global_lvs
+        #if lvs is None:
+        #    lvs = api.Volumes()
         report = {}
 
         for lv in lvs:
@@ -249,7 +260,8 @@ class List(object):
                     # bluestore will not have a journal, filestore will not have
                     # a block/wal/db, so we must skip if not present
                     continue
-                if not api.get_lv(lv_uuid=device_uuid, lvs=lvs):
+                # rishabh:
+                if not api.get_lv(lv_uuid=device_uuid, lvs=global_lvs):
                     # means we have a regular device, so query blkid
                     disk_device = disk.get_device_from_partuuid(device_uuid)
                     if disk_device:
