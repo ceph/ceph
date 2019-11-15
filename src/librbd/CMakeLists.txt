@@ -206,7 +206,7 @@ if(WITH_EVENTTRACE)
   add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE
-  osdc)
+  osdc rbd_types)
 
 if(WITH_RBD_RWL)
   target_link_libraries(rbd_internal
@@ -222,7 +222,7 @@ set(rbd_plugin_parent_cache_srcs
 add_library(librbd_plugin_parent_cache SHARED
   ${rbd_plugin_parent_cache_srcs})
 target_link_libraries(librbd_plugin_parent_cache PRIVATE
-  ceph_immutable_object_cache_lib
+  ceph_immutable_object_cache_lib ceph-common librbd
   librados)
 set_target_properties(librbd_plugin_parent_cache PROPERTIES
   OUTPUT_NAME ceph_librbd_parent_cache
@@ -236,7 +236,6 @@ add_library(librbd ${CEPH_SHARED}
 if(WITH_LTTNG)
   add_dependencies(librbd librbd-tp)
 endif()
-add_dependencies(librbd librbd_plugins)
 
 target_link_libraries(librbd PRIVATE
   rbd_internal
