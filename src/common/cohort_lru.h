@@ -343,6 +343,7 @@ namespace cohort {
 	  if (csz) {
 	    p.csz = csz;
 	    p.cache = (T**) ::operator new(csz * sizeof(T*));
+	    // FIPS zeroization audit 20191115: this memset is not security related.
 	    memset(p.cache, 0, csz * sizeof(T*));
 	  }
 	  locks.push_back(&p.lock);
