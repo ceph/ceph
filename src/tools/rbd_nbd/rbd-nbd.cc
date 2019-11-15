@@ -603,6 +603,20 @@ private:
   }
 };
 
+static bool find_mapped_dev_by_spec(Config *cfg) {
+  int pid;
+  Config c;
+  NBDListIterator it;
+  while (it.get(&pid, &c)) {
+    if (c.poolname == cfg->poolname && c.imgname == cfg->imgname &&
+        c.snapname == cfg->snapname) {
+      *cfg = c;
+      return true;
+    }
+  }
+  return false;
+}
+
 static int load_module(Config *cfg)
 {
   ostringstream param;
@@ -1414,21 +1428,6 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
   }
   return 0;
 }
-
-static bool find_mapped_dev_by_spec(Config *cfg) {
-  int pid;
-  Config c;
-  NBDListIterator it;
-  while (it.get(&pid, &c)) {
-    if (c.poolname == cfg->poolname && c.imgname == cfg->imgname &&
-        c.snapname == cfg->snapname) {
-      *cfg = c;
-      return true;
-    }
-  }
-  return false;
-}
-
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Command *command, Config *cfg) {
