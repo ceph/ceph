@@ -357,6 +357,17 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Default: ``True``
 
 
+``mon warn osd usage percent``
+
+:Description: Issue a ``HEALTH_WARN`` if usage percent between OSDs exceeds
+              specified value. Useful in situitions when OSD's aren't evenly
+	      used, which can cause overpopulation and crashing of some OSD's
+	      while the cluster seems to have space available overall.
+
+:Type: Float
+:Default: .40
+
+
 ``mon warn on crush straw calc version zero``
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if the CRUSH's
