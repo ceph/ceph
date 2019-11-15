@@ -6885,6 +6885,22 @@ std::vector<Option> get_rgw_options() {
     .set_description("mclock limit for metadata requests")
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
+
+
+    Option("rgw_allow_middle_headers", Option::TYPE_BOOL,
+          Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enable proxy assisted cache consistency.")
+    .add_tag("security")
+    .add_service("rgw")
+    .set_long_description("When false, reject any request containing headers "
+			  "that begin with the string `X-RGW-Middle`. These "
+			  "headers are intended to allow RGW to cooperate with "
+			  "load balancers and other intelligent proxies. "
+			  "However, they pose a security problem if RGW is run "
+			  "without a load balancer or application level "
+			  "firewall that prevents untrusted clients from "
+			  "appending them."),
   });
 }
 

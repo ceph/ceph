@@ -128,6 +128,8 @@ map<string, string> rgw_to_http_attrs;
 static map<string, string> generic_attrs_map;
 map<int, const char *> http_status_names;
 
+static bool allow_middle_headers = false;
+
 /*
  * make attrs look_like_this
  * converts dashes to underscores
@@ -227,6 +229,8 @@ void rgw_rest_init(CephContext *cct, const RGWZoneGroup& zone_group)
   /* TODO: we should repeat the hostnames_set sanity check here
    * and ALSO decide about overlap, if any
    */
+
+  allow_middle_headers = cct->_conf.get_val<bool>("rgw_allow_middle_headers");
 }
 
 static bool str_ends_with_nocase(const string& s, const string& suffix, size_t *pos)
@@ -2161,6 +2165,10 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   /* Validate for being free of the '\0' buried in the middle of the string. */
   if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
     return -ERR_ZERO_IN_URL;
+  }
+
+  if (!allow_middle_headers && info.env->exists_prefix(MIDDLE_PREFIX_PARSE)) {
+    return -EPERM;
   }
 
   /* FastCGI specification, section 6.3

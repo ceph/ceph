@@ -40,8 +40,10 @@ namespace ceph {
   class Formatter;
 }
 
-using ceph::crypto::MD5;
+#define MIDDLE_PREFIX "X-RGW-Middle"
+#define MIDDLE_PREFIX_PARSE "HTTP_X_RGW_MIDDLE"
 
+using ceph::crypto::MD5;
 
 #define RGW_ATTR_PREFIX  "user.rgw."
 

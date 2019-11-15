@@ -61,6 +61,10 @@ get_canon_amz_hdr(const std::map<std::string, std::string>& meta_map)
   std::string dest;
 
   for (const auto& kv : meta_map) {
+     if (rgw::is_rgw_middle_header(kv.first)) {
+       continue;
+     }
+
     dest.append(kv.first);
     dest.append(":");
     dest.append(kv.second);
