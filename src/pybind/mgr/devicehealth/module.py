@@ -22,6 +22,8 @@ HEALTH_MESSAGES = {
     DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 
+MAX_SAMPLES=500
+
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
@@ -390,7 +392,7 @@ class Module(MgrModule):
         erase = []
         try:
             with rados.ReadOpCtx() as op:
-                omap_iter, ret = ioctx.get_omap_keys(op, "", 500)  # fixme
+                omap_iter, ret = ioctx.get_omap_keys(op, "", MAX_SAMPLES)  # fixme
                 assert ret == 0
                 ioctx.operate_read_op(op, devid)
                 for key, _ in list(omap_iter):
@@ -427,7 +429,8 @@ class Module(MgrModule):
             return 0, json.dumps(res, indent=4), ''
         with ioctx:
             with rados.ReadOpCtx() as op:
-                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
+                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '',
+                                                     MAX_SAMPLES)  # fixme
                 assert ret == 0
                 try:
                     ioctx.operate_read_op(op, devid)
@@ -630,3 +633,9 @@ class Module(MgrModule):
                 return self.remote(plugin_name, 'predict_all_devices')
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
+
+    def get_recent_device_metrics(self, devid, min_sample):
+        return self._get_device_metrics(devid, min_sample=min_sample)
+
+    def get_time_format(self):
+        return TIME_FORMAT

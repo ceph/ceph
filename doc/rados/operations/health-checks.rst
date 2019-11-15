@@ -857,3 +857,36 @@ happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
 You can manually initiate a scrub of a clean PG with::
 
   ceph pg deep-scrub <pgid>
+
+
+Miscellaneous
+-------------
+
+TELEMETRY_CHANGED
+_________________
+
+Telemetry has been enabled, but the contents of the telemetry report
+have changed since that time, so telemetry reports will not be sent.
+
+The Ceph developers periodically revise the telemetry feature to
+include new and useful information, or to remove information found to
+be useless or sensitive.  If any new information is included in the
+report, Ceph will require the administrator to re-enable telemetry to
+ensure they have an opportunity to (re)review what information will be
+shared.
+
+To review the contents of the telemetry report,::
+
+  ceph telemetry show
+
+Note that the telemetry report consists of several optional channels
+that may be independently enabled or disabled.  For more information, see
+:ref:`telemetry`.
+
+To re-enable telemetry (and make this warning go away),::
+
+  ceph telemetry on
+
+To disable telemetry (and make this warning go away),::
+
+  ceph telemetry off
