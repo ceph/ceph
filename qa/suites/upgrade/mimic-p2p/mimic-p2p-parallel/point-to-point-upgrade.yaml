@@ -166,15 +166,6 @@ workload_mimic:
        env:
          CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.snapshots_namespaces'
    - print: "**** done rados/test.sh &  cls workload_mimic"
-   - sequential:
-     - rgw: [client.0]
-     - print: "**** done rgw workload_mimic"
-     - s3tests:
-         client.0:
-           force-branch: ceph-mimic
-           rgw_server: client.0
-           scan_for_encryption_keys: false
-     - print: "**** done s3tests workload_mimic"
 upgrade-sequence_mimic:
    sequential:
    - print: "**** done branch: mimic install.upgrade"
