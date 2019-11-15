@@ -477,9 +477,10 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
                            map<string, bufferlist>& bucket_attrs,
                            RGWAccessControlPolicy* acl,
                            string *storage_class,
-			   boost::optional<Policy>& policy,
+                           boost::optional<Policy>& policy,
                            rgw_bucket& bucket,
-                           rgw_obj_key& object)
+                           rgw_obj_key& object,
+                           bool copy_src=false)
 {
   string upload_id;
   upload_id = s->info.args.get("uploadId");
@@ -491,7 +492,9 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
     return -ERR_USER_SUSPENDED;
   }
 
-  if (!upload_id.empty()) {
+  // when getting policy info for copy-source obj, upload_id makes no sense.
+  // 'copy_src' is used to make this function backward compatible.
+  if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
     RGWMPObj mp(object.name, upload_id);
     string oid = mp.get_meta();
@@ -3466,6 +3469,99 @@ void RGWDeleteBucket::execute()
   return;
 }
 
+int RGWPutObj::init_processing() {
+  copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
+  copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
+  map<string, bufferlist> src_attrs;
+  size_t pos;
+  int ret;
+
+  /* handle x-amz-copy-source */
+  std::string_view cs_view(copy_source);
+  if (! cs_view.empty()) {
+    if (cs_view[0] == '/')
+      cs_view.remove_prefix(1);
+    copy_source_bucket_name = std::string(cs_view);
+    pos = copy_source_bucket_name.find("/");
+    if (pos == std::string::npos) {
+      ret = -EINVAL;
+      ldpp_dout(this, 5) << "x-amz-copy-source bad format" << dendl;
+      return ret;
+    }
+    copy_source_object_name =
+      copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
+    copy_source_bucket_name = copy_source_bucket_name.substr(0, pos);
+#define VERSION_ID_STR "?versionId="
+    pos = copy_source_object_name.find(VERSION_ID_STR);
+    if (pos == std::string::npos) {
+      copy_source_object_name = url_decode(copy_source_object_name);
+    } else {
+      copy_source_version_id =
+        copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
+      copy_source_object_name =
+        url_decode(copy_source_object_name.substr(0, pos));
+    }
+    pos = copy_source_bucket_name.find(":");
+    if (pos == std::string::npos) {
+      // if tenant is not specified in x-amz-copy-source, use tenant of the requester
+      copy_source_tenant_name = s->user->get_tenant();
+    } else {
+      copy_source_tenant_name = copy_source_bucket_name.substr(0, pos);
+      copy_source_bucket_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
+      if (copy_source_bucket_name.empty()) {
+        ret = -EINVAL;
+        ldpp_dout(this, 5) << "source bucket name is empty" << dendl;
+        return ret;
+      }
+    }
+    ret = store->getRados()->get_bucket_info(store->svc(),
+                                 copy_source_tenant_name,
+                                 copy_source_bucket_name,
+                                 copy_source_bucket_info,
+                                 NULL, s->yield, &src_attrs);
+    if (ret < 0) {
+      ldpp_dout(this, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* handle x-amz-copy-source-range */
+    if (copy_source_range) {
+      string range = copy_source_range;
+      pos = range.find("bytes=");
+      if (pos == std::string::npos || pos != 0) {
+        ret = -EINVAL;
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
+        return ret;
+      }
+      /* 6 is the length of "bytes=" */
+      range = range.substr(pos + 6);
+      pos = range.find("-");
+      if (pos == std::string::npos) {
+        ret = -EINVAL;
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
+        return ret;
+      }
+      string first = range.substr(0, pos);
+      string last = range.substr(pos + 1);
+      if (first.find_first_not_of("0123456789") != std::string::npos ||
+	  last.find_first_not_of("0123456789") != std::string::npos) {
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format not an integer" << dendl;
+        ret = -EINVAL;
+        return ret;
+      }
+      copy_source_range_fst = strtoull(first.c_str(), NULL, 10);
+      copy_source_range_lst = strtoull(last.c_str(), NULL, 10);
+      if (copy_source_range_fst > copy_source_range_lst) {
+        ret = -ERANGE;
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format first number bigger than second" << dendl;
+        return ret;
+      }
+    }
+
+  } /* copy_source */
+  return RGWOp::init_processing();
+}
+
 int RGWPutObj::verify_permission()
 {
   if (! copy_source.empty()) {
@@ -3482,7 +3578,7 @@ int RGWPutObj::verify_permission()
 
     /* check source object permissions */
     if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
-			policy, cs_bucket, cs_object) < 0) {
+			policy, cs_bucket, cs_object, true) < 0) {
       return -EACCES;
     }
 
