@@ -1,8 +1,20 @@
 overrides:
   ceph:
+    mon_bind_msgr2: false
+    mon_bind_addrvec: false
+    log-whitelist:
+    - scrub mismatch
+    - ScrubResult
+    - wrongly marked
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(SLOW_OPS\)
+    - overall HEALTH_
+    - \(MON_MSGR2_NOT_ENABLED\)
     conf:
       global:
         bluestore warn on legacy statfs: false
+      mon:
+        mon warn on osd down out interval zero: false
 
 tasks:
 - mds_pre_upgrade:
@@ -11,8 +23,32 @@ tasks:
     mon.a:
     mon.b:
 - print: "**** done install.upgrade both hosts"
+- ceph.restart:
+    daemons: [mon.*, mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: false
+- exec:
+    mon.a:
+      - ceph config set global mon_warn_on_msgr2_not_enabled false
+- ceph.healthy:
+- ceph.restart:
+    daemons: [osd.*]
+    wait-for-healthy: false
+    wait-for-osds-up: true
 - ceph.stop: [mds.*]
 - ceph.restart:
-    daemons: [mon.*, mgr.*, osd.*, mds.*]
-    mon-health-to-clog: false
+    daemons: [mds.*]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- exec:
+    mon.a:
+    - ceph mon enable-msgr2
+    - ceph config rm global mon_warn_on_msgr2_not_enabled
+- exec:
+    mon.a:
+    - ceph osd dump -f json-pretty
+    - ceph versions
+    - ceph osd require-osd-release nautilus
+    #- ceph osd set-require-min-compat-client nautilus
+- ceph.healthy:
 - print: "**** done ceph.restart"
