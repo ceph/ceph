@@ -244,7 +244,9 @@ namespace ceph::crypto::ssl {
   public:
     HMAC (const EVP_MD *type, const unsigned char *key, size_t length)
       : mpType(type) {
-      ::memset(&mContext, 0, sizeof(mContext));
+      // the strict FIPS zeroization doesn't seem to be necessary here.
+      // just in the case.
+      ::ceph::crypto::zeroize_for_security(&mContext, sizeof(mContext));
       const auto r = HMAC_Init_ex(&mContext, key, length, mpType, nullptr);
       if (r != 1) {
 	  throw DigestException("HMAC_Init_ex() failed");
