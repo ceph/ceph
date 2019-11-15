@@ -114,9 +114,9 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
 {
   PyObject *pool_list;
   BasePyOSDMapIncremental *incobj;
-  double max_deviation = 0;
+  int max_deviation = 0;
   int max_iterations = 0;
-  if (!PyArg_ParseTuple(args, "OdiO:calc_pg_upmaps",
+  if (!PyArg_ParseTuple(args, "OiiO:calc_pg_upmaps",
 			&incobj, &max_deviation,
 			&max_iterations, &pool_list)) {
     return nullptr;
