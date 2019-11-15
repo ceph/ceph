@@ -4,7 +4,7 @@ def assert_raises(excClass, callableObj, *args, **kwargs):
     """
     try:
         callableObj(*args, **kwargs)
-    except excClass, e:
+    except excClass as e:
         return e
     else:
         if hasattr(excClass,'__name__'): excName = excClass.__name__
