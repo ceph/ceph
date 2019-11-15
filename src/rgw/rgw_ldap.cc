@@ -3,6 +3,7 @@
 
 #include "rgw_ldap.h"
 
+#include "common/ceph_crypto.h"
 #include "common/ceph_context.h"
 #include "common/common_init.h"
 #include "common/dout.h"
@@ -35,6 +36,7 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
         if (ldap_bindpw.back() == '\n')
           ldap_bindpw.pop_back();
       }
+      ::ceph::crypto::zeroize_for_security(bindpw, sizeof(bindpw));
   }
 
   return ldap_bindpw;
