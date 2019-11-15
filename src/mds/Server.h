@@ -337,6 +337,7 @@ private:
   time reconnect_start = clock::zero();
   time reconnect_last_seen = clock::zero();
   set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+  set<client_t> client_reconnect_denied;  // clients whose reconnect msg have been denied .
 
   feature_bitset_t supported_features;
   feature_bitset_t required_client_features;
