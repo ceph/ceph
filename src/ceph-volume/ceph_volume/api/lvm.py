@@ -990,12 +990,16 @@ class Volumes(list):
     to filter them via keyword arguments.
     """
 
-    def __init__(self):
-        self._populate()
+    def __init__(self, populate=True, lvs=None):
+        if populate:
+            self._populate(lvs=lvs)
 
-    def _populate(self):
+    def _populate(self, lvs=None):
         # get all the lvs in the current system
-        for lv_item in get_api_lvs():
+        if not lvs:
+            lvs = get_api_lvs()
+
+        for lv_item in lvs:
             self.append(Volume(**lv_item))
 
     def _purge(self):
@@ -1006,12 +1010,29 @@ class Volumes(list):
         """
         self[:] = []
 
-    def _filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
+    def _filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None,
+                lv_tags=None, dev=None):
         """
         The actual method that filters using a new list. Useful so that other
         methods that do not want to alter the contents of the list (e.g.
         ``self.find``) can operate safely.
         """
+        if dev:
+            splitname = dmsetup_splitname(dev)
+            if not splitname.get('LV_NAME'):
+                return Volumes(populate=False)
+
+            if dev and lv_name and lv_name != splitname['LV_NAME']:
+                logger.fatal('Received both dev and LV_NAME and both are '
+                             'different')
+                raise RuntimeError('internal error; please check logs and report')
+            if dev and vg_name and vg_name != splitname['VG_NAME']:
+                logger.fatal('Received both dev and VG_NAME and both are '
+                             'different')
+                raise RuntimeError('internal error; please check logs and report')
+            lv_name = splitname['LV_NAME']
+            vg_name = splitname['VG_NAME']
+
         filtered = [i for i in self]
         if lv_name:
             filtered = [i for i in filtered if i.lv_name == lv_name]
@@ -1038,7 +1059,8 @@ class Volumes(list):
 
         return filtered
 
-    def filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
+    def filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None,
+               lv_tags=None, dev=None):
         """
         Filter out volumes on top level attributes like ``lv_name`` or by
         ``lv_tags`` where a dict is required. For example, to find a volume
@@ -1047,20 +1069,14 @@ class Volumes(list):
             lv_tags={'ceph.osd_id': '0'}
 
         """
-        if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
-            raise TypeError('.filter() requires lv_name, vg_name, lv_path, lv_uuid, or tags (none given)')
-        # first find the filtered volumes with the values in self
-        filtered_volumes = self._filter(
-            lv_name=lv_name,
-            vg_name=vg_name,
-            lv_path=lv_path,
-            lv_uuid=lv_uuid,
-            lv_tags=lv_tags
-        )
-        # then purge everything
-        self._purge()
-        # and add the filtered items
-        self.extend(filtered_volumes)
+        if not any([dev, lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
+            raise TypeError('.filter() requires lv_name, vg_name, lv_path, '
+                            'lv_uuid, or tags (none given)')
+
+        filtered_lvs = Volumes(populate=False)
+        filtered_lvs.extend(self._filter(lv_name, vg_name, lv_path, lv_uuid,
+                                         lv_tags, dev))
+        return filtered_lvs
 
     def get(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
         """
@@ -1224,7 +1240,7 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None,
     """
     if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
         return None
-    if lvs is None:
+    if lvs is None or len(lvs) == 0:
         lvs = Volumes()
     return lvs.get(
         lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_uuid=lv_uuid,
@@ -1232,14 +1248,14 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None,
     )
 
 
-def get_lv_from_argument(argument):
+def get_lv_from_argument(argument, lvs=None):
     """
     Helper proxy function that consumes a possible logical volume passed in from the CLI
     in the form of `vg/lv`, but with some validation so that an argument that is a full
     path to a device can be ignored
     """
     if argument.startswith('/'):
-        lv = get_lv(lv_path=argument)
+        lv = get_lv(lv_path=argument, lvs=lvs)
         return lv
     try:
         vg_name, lv_name = argument.split('/')
@@ -1290,3 +1306,45 @@ def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
             create_lv(lv_name, volume_group.name, extents=extents, tags=tags)
         )
     return lvs
+
+
+#############################################################
+#
+# New methods to get PVs, LVs, and VGs.
+# Later, these can be easily merged with get_api_* methods
+#
+###########################################################
+
+PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
+VG_FIELDS = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
+LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
+
+def get_pvs(fields=PV_FIELDS, sep='";"', filters=None):
+    args = ['pvs', '--no-heading', '--readonly', '--separator=' + sep,
+            '-o', fields]
+    if filters:
+        args.extend(['-S', filters])
+
+    stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
+
+    return _output_parser(stdout, fields)
+
+def get_vgs(fields=VG_FIELDS, sep='";"', filters=None):
+    args = ['vgs', '--no-heading', '--readonly', '--separator=' + sep,
+            '-o', fields]
+    if filters:
+        args.extend(['-S', filters])
+
+    stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
+
+    return _output_parser(stdout, fields)
+
+def get_lvs(fields=LV_FIELDS, sep='";"', filters=None):
+    args = ['lvs', '--no-heading', '--readonly', '--separator=' + sep,
+            '-o', fields]
+    if filters:
+        args.extend(['-S', filters])
+
+    stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
+
+    return _output_parser(stdout, fields)
