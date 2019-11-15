@@ -222,9 +222,7 @@ std::map<std::string, std::string> Mgr::load_store()
 void Mgr::handle_signal(int signum)
 {
   ceph_assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
-  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
 }
 
 // A reference for use by the signal handler
@@ -232,9 +230,11 @@ static Mgr *signal_mgr = nullptr;
 
 static void handle_mgr_signal(int signum)
 {
+  derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
   if (signal_mgr) {
     signal_mgr->handle_signal(signum);
   }
+  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
 }
 
 void Mgr::init()
