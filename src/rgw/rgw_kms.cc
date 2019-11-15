@@ -57,7 +57,7 @@ static int get_actual_key_from_conf(CephContext *cct,
     } else {
       res = -EIO;
     }
-    memset(_actual_key, 0, sizeof(_actual_key));
+    ::ceph::crypto::zeroize_for_security(_actual_key, sizeof(_actual_key));
   } else {
     ldout(cct, 20) << "Wrong size for key=" << key_id << dendl;
     res = -EIO;
@@ -169,7 +169,7 @@ static int request_key_from_vault_with_token(CephContext *cct,
     --res;
   }
   vault_token = std::string{buf, static_cast<size_t>(res)};
-  memset(buf, 0, sizeof(buf));
+  ::ceph::crypto::zeroize_for_security(buf, sizeof(buf));
 
   vault_addr = cct->_conf->rgw_crypt_vault_addr;
   if (vault_addr.empty()) {
