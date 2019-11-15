@@ -6,9 +6,13 @@ import {
   Validators
 } from '@angular/forms';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { Observable, of as observableOf, timer as observableTimer } from 'rxjs';
 import { map, switchMapTo, take } from 'rxjs/operators';
+
+import { DimlessBinaryPipe } from '../pipes/dimless-binary.pipe';
+import { FormatterService } from '../services/formatter.service';
 
 export function isEmptyInputValue(value: any): boolean {
   return value == null || value.length === 0;
@@ -319,6 +323,46 @@ export class CdValidators {
         return null;
       }
       return { invalidUuid: 'This is not a valid UUID' };
+    };
+  }
+
+  /**
+   * A simple minimum validator vor cd-binary inputs.
+   *
+   * To use the validation message pass I18n into the function as it cannot
+   * be called in a static one.
+   */
+  static binaryMin(bytes: number): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: (i18n: I18n) => string } | null => {
+      const formatterService = new FormatterService();
+      const currentBytes = new FormatterService().toBytes(control.value);
+      if (bytes <= currentBytes) {
+        return null;
+      }
+      const value = new DimlessBinaryPipe(formatterService).transform(bytes);
+      return {
+        binaryMin: (i18n: I18n) => i18n(`Size has to be at least {{value}} or more`, { value })
+      };
+    };
+  }
+
+  /**
+   * A simple maximum validator vor cd-binary inputs.
+   *
+   * To use the validation message pass I18n into the function as it cannot
+   * be called in a static one.
+   */
+  static binaryMax(bytes: number): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: (i18n: I18n) => string } | null => {
+      const formatterService = new FormatterService();
+      const currentBytes = formatterService.toBytes(control.value);
+      if (bytes >= currentBytes) {
+        return null;
+      }
+      const value = new DimlessBinaryPipe(formatterService).transform(bytes);
+      return {
+        binaryMax: (i18n: I18n) => i18n(`Size has to be at most {{value}} or less`, { value })
+      };
     };
   }
 }
