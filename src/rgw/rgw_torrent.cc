@@ -173,6 +173,7 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
     h->Final((unsigned char *)sha);
     set_info_pieces(sha);
   }
+  ::ceph::crypto::zeroize_for_security(sha, sizeof(sha));
 }
 
 int seed::get_params()

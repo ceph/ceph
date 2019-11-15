@@ -483,6 +483,7 @@ static int build_token(const string& swift_user,
     k[i % CEPH_CRYPTO_HMACSHA1_DIGESTSIZE] |= *s;
   }
   calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(), p.c_str());
+  ::ceph::crypto::zeroize_for_security(k, sizeof(k));
 
   bl.append(p);
 
