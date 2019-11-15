@@ -162,6 +162,10 @@ static void shutdown() {
 #endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 }
 
+void zeroize_for_security(void* const s, const size_t n) {
+  OPENSSL_cleanse(s, n);
+}
+
 } // namespace ceph::crypto::openssl
 
 
@@ -171,6 +175,10 @@ void ceph::crypto::init() {
 
 void ceph::crypto::shutdown([[maybe_unused]] const bool shared) {
   ceph::crypto::ssl::shutdown();
+}
+
+void ceph::crypto::zeroize_for_security(void* const s, const size_t n) {
+  ceph::crypto::ssl::zeroize_for_security(s, n);
 }
 
 ceph::crypto::ssl::OpenSSLDigest::OpenSSLDigest(const EVP_MD * _type)
