@@ -49,7 +49,7 @@ void usage()
   cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
   cout << "   --upmap-max <max-count> set max upmap entries to calculate [default: 10]" << std::endl;
   cout << "   --upmap-deviation <max-deviation>" << std::endl;
-  cout << "                           max deviation from target [default: .01]" << std::endl;
+  cout << "                           max deviation from target [default: 1]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
   cout << "   --upmap-save            write modified OSDMap with upmap changes" << std::endl;
   exit(1);
@@ -129,7 +129,7 @@ int main(int argc, const char **argv)
   bool health = false;
   std::string upmap_file = "-";
   int upmap_max = 10;
-  float upmap_deviation = .01;
+  int upmap_deviation = 1;
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
@@ -236,6 +236,10 @@ int main(int argc, const char **argv)
   }
   else if (args.size() > 1) {
     cerr << me << ": too many arguments" << std::endl;
+    usage();
+  }
+  if (upmap_deviation < 1) {
+    cerr << me << ": upmap-deviation must be >= 1" << std::endl;
     usage();
   }
   fn = args[0];
