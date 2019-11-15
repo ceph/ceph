@@ -128,7 +128,13 @@ int CephxClientHandler::handle_response(
 
   if (starting) {
     CephXServerChallenge ch;
-    decode(ch, indata);
+    try {
+      decode(ch, indata);
+    } catch (buffer::error& e) {
+      ldout(cct, 1) << __func__ << " failed to decode CephXServerChallenge: "
+		    << e.what() << dendl;
+      return -EPERM;
+    }
     server_challenge = ch.server_challenge;
     ldout(cct, 10) << " got initial server challenge "
 		   << std::hex << server_challenge << std::dec << dendl;
@@ -139,7 +145,13 @@ int CephxClientHandler::handle_response(
   }
 
   struct CephXResponseHeader header;
-  decode(header, indata);
+  try {
+    decode(header, indata);
+  } catch (buffer::error& e) {
+    ldout(cct, 1) << __func__ << " failed to decode CephXResponseHeader: "
+		  << e.what() << dendl;
+    return -EPERM;
+  }
 
   switch (header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -159,8 +171,14 @@ int CephxClientHandler::handle_response(
       ldout(cct, 10) << " want=" << want << " need=" << need << " have=" << have << dendl;
       if (!indata.end()) {
 	bufferlist cbl, extra_tickets;
-	decode(cbl, indata);
-	decode(extra_tickets, indata);
+	try {
+	  decode(cbl, indata);
+	  decode(extra_tickets, indata);
+	} catch (buffer::error& e) {
+	  ldout(cct, 1) << __func__ << " failed to decode tickets: "
+			<< e.what() << dendl;
+	  return -EPERM;
+	}
 	ldout(cct, 10) << " got connection bl " << cbl.length()
 		       << " and extra tickets " << extra_tickets.length()
 		       << dendl;

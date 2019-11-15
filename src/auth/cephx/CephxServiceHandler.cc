@@ -61,7 +61,13 @@ int CephxServiceHandler::handle_request(
   int ret = 0;
 
   struct CephXRequestHeader cephx_header;
-  decode(cephx_header, indata);
+  try {
+    decode(cephx_header, indata);
+  } catch (buffer::error& e) {
+    ldout(cct, 0) << __func__ << " failed to decode CephXRequestHeader: "
+		  << e.what() << dendl;
+    return -EPERM;
+  }
 
   switch (cephx_header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -70,7 +76,14 @@ int CephxServiceHandler::handle_request(
 		     << entity_name << dendl;
 
       CephXAuthenticate req;
-      decode(req, indata);
+      try {
+	decode(req, indata);
+      } catch (buffer::error& e) {
+	ldout(cct, 0) << __func__ << " failed to decode CephXAuthenticate: "
+		      << e.what() << dendl;
+	ret = -EPERM;
+	break;
+      }
 
       CryptoKey secret;
       if (!key_server->get_secret(entity_name, secret)) {
@@ -234,7 +247,15 @@ int CephxServiceHandler::handle_request(
       }
 
       CephXServiceTicketRequest ticket_req;
-      decode(ticket_req, indata);
+      try {
+	decode(ticket_req, indata);
+      } catch (buffer::error& e) {
+	ldout(cct, 0) << __func__
+		      << " failed to decode CephXServiceTicketRequest: "
+		      << e.what() << dendl;
+	ret = -EPERM;
+	break;
+      }
       ldout(cct, 10) << " ticket_req.keys = " << ticket_req.keys << dendl;
 
       ret = 0;
