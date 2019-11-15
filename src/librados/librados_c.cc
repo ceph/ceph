@@ -601,8 +601,10 @@ extern "C" int _rados_pool_list(rados_t cluster, char *buf, size_t len)
   }
 
   char *b = buf;
-  if (b)
+  if (b) {
+    // FIPS zeroization audit 20191116: this memset is not security related.
     memset(b, 0, len);
+  }
   int needed = 0;
   std::list<std::pair<int64_t, std::string> >::const_iterator i = pools.begin();
   std::list<std::pair<int64_t, std::string> >::const_iterator p_end =
@@ -647,8 +649,10 @@ extern "C" int _rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
   }
 
   char *b = buf;
-  if (b)
+  if (b) {
+    // FIPS zeroization audit 20191116: this memset is not security related.
     memset(b, 0, len);
+  }
   int needed = 0;
   for (const auto& s : pgs) {
     unsigned rl = s.length() + 1;
@@ -1952,6 +1956,7 @@ extern "C" int _rados_object_list(rados_ioctx_t io,
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
   // Zero out items so that they will be safe to free later
+  // FIPS zeroization audit 20191116: this memset is not security related.
   memset(result_items, 0, sizeof(rados_object_list_item) * result_item_count);
 
   std::list<librados::ListObjectImpl> result;
