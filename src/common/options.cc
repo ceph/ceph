@@ -2362,12 +2362,6 @@ std::vector<Option> get_global_options() {
                      "by doing a fairly exhaustive search of existing PGs "
                      "that can be unmapped or upmapped"),
 
-    Option("osd_calc_pg_upmaps_max_stddev", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1.0)
-    .set_flag(Option::FLAG_RUNTIME)
-    .set_description("standard deviation below which there is no attempt made "
-                     "while trying to calculate PG upmaps"),
-
     Option("osd_calc_pg_upmaps_local_fallback_retries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_flag(Option::FLAG_RUNTIME)
