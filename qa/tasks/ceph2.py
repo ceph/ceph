@@ -758,12 +758,19 @@ def task(ctx, config):
     #validate_config(ctx, config)
 
     # image
-    branch = config.get('branch', 'master')
-    ### FIXME ###
-    if branch in ['master', 'nautilus']:
-        ctx.image = 'ceph/daemon-base:latest-%s-devel' % branch
-    else:
-        ctx.image = 'quay.io/ceph-ci/ceph:%s' % branch
+    ctx.image = config.get('image')
+    if not ctx.image:
+        sha1 = config.get('sha1')
+        if sha1:
+            ctx.image = 'quay.io/ceph-ci/ceph:%s' % sha1
+        else:
+            # hmm, fall back to branch?
+            branch = config.get('branch', 'master')
+            # FIXME when ceph-ci builds all branches
+            if branch in ['master', 'nautilus']:
+                ctx.image = 'ceph/daemon-base:latest-%s-devel' % branch
+            else:
+                ctx.image = 'quay.io/ceph-ci/ceph:%s' % branch
     log.info('Cluster image is %s' % ctx.image)
 
     # uuid
