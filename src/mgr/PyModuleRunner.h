@@ -47,6 +47,8 @@ protected:
     void *entry() override;
   };
 
+  bool is_dead() const { return dead; }
+
   std::string thread_name;
 
 public:
@@ -79,6 +81,9 @@ public:
   PyModuleRunnerThread thread;
 
   std::string const &get_name() const { return py_module->get_name(); }
+
+private:
+  bool dead = false;
 };
 
 

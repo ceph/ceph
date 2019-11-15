@@ -419,11 +419,11 @@ void ActivePyModules::start_one(PyModuleRef py_module)
 {
   std::lock_guard l(lock);
 
-  ceph_assert(modules.count(py_module->get_name()) == 0);
-
   const auto name = py_module->get_name();
-  modules[name].reset(new ActivePyModule(py_module, clog));
-  auto active_module = modules.at(name).get();
+  auto em = modules.emplace(name,
+      std::make_shared<ActivePyModule>(py_module, clog));
+  ceph_assert(em.second); // actually inserted
+  auto& active_module = em.first->second;
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
@@ -446,10 +446,7 @@ void ActivePyModules::shutdown()
   std::lock_guard locker(lock);
 
   // Signal modules to drop out of serve() and/or tear down resources
-  for (auto &i : modules) {
-    auto module = i.second.get();
-    const auto& name = i.first;
-
+  for (auto& [name, module] : modules) {
     lock.unlock();
     dout(10) << "calling module " << name << " shutdown()" << dendl;
     module->shutdown();
@@ -459,11 +456,11 @@ void ActivePyModules::shutdown()
 
   // For modules implementing serve(), finish the threads where we
   // were running that.
-  for (auto &i : modules) {
+  for (auto& [name, module] : modules) {
     lock.unlock();
-    dout(10) << "joining module " << i.first << dendl;
-    i.second->thread.join();
-    dout(10) << "joined module " << i.first << dendl;
+    dout(10) << "joining module " << name << dendl;
+    module->thread.join();
+    dout(10) << "joined module " << name << dendl;
     lock.lock();
   }
 
@@ -479,10 +476,10 @@ void ActivePyModules::notify_all(const std::string &notify_type,
   std::lock_guard l(lock);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
-  for (auto& i : modules) {
-    auto module = i.second.get();
+  for (auto& [name, module] : modules) {
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
+    dout(15) << "queuing notify to " << name << dendl;
     finisher.queue(new LambdaContext([module, notify_type, notify_id](int r){
       module->notify(notify_type, notify_id);
     }));
@@ -494,14 +491,14 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
   std::lock_guard l(lock);
 
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
-  for (auto& i : modules) {
-    auto module = i.second.get();
+  for (auto& [name, module] : modules) {
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     //
     // Note intentional use of non-reference lambda binding on
     // log_entry: we take a copy because caller's instance is
     // probably ephemeral.
+    dout(15) << "queuing notify (clog) to " << name << dendl;
     finisher.queue(new LambdaContext([module, log_entry](int r){
       module->notify_clog(log_entry);
     }));
@@ -673,11 +670,10 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
 {
   std::map<std::string, std::string> result;
   std::lock_guard l(lock);
-  for (const auto& i : modules) {
-    const auto &module = i.second.get();
+  for (const auto& [name, module] : modules) {
     std::string svc_str = module->get_uri();
     if (!svc_str.empty()) {
-      result[module->get_name()] = svc_str;
+      result[name] = svc_str;
     }
   }
 
@@ -953,8 +949,9 @@ int ActivePyModules::handle_command(
 void ActivePyModules::get_health_checks(health_check_map_t *checks)
 {
   std::lock_guard l(lock);
-  for (auto& p : modules) {
-    p.second->get_health_checks(checks);
+  for (auto& [name, module] : modules) {
+    dout(15) << "getting health checks for" << name << dendl;
+    module->get_health_checks(checks);
   }
 }
 
@@ -990,10 +987,10 @@ void ActivePyModules::get_progress_events(std::map<std::string,ProgressEvent> *e
 void ActivePyModules::config_notify()
 {
   std::lock_guard l(lock);
-  for (auto& i : modules) {
-    auto module = i.second.get();
+  for (auto& [name, module] : modules) {
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
+    dout(15) << "notify (config) " << name << dendl;
     finisher.queue(new LambdaContext([module](int r){
 					 module->config_notify();
 				       }));
@@ -1007,7 +1004,7 @@ void ActivePyModules::set_uri(const std::string& module_name,
 
   dout(4) << " module " << module_name << " set URI '" << uri << "'" << dendl;
 
-  modules[module_name]->set_uri(uri);
+  modules.at(module_name)->set_uri(uri);
 }
 
 OSDPerfMetricQueryID ActivePyModules::add_osd_perf_query(
