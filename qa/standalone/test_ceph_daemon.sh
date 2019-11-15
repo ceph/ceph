@@ -1,10 +1,15 @@
 #!/bin/bash -ex
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 FSID='00000000-0000-0000-0000-0000deadbeef'
+FSID_LEGACY='00000000-0000-0000-0000-ffffdeadbeef'
+
 # images that are used
 IMAGE_MASTER=${IMAGE_MASTER:-'ceph/daemon-base:latest-master-devel'}
 IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'ceph/daemon-base:latest-mimic'}
+TEST_TARS=${SCRIPT_DIR}/test_ceph_daemon/*.tgz
 
 [ -z "$SUDO" ] && SUDO=sudo
 
@@ -46,6 +51,7 @@ fi
 
 # clean up previous run(s)?
 $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID --force
+$SUDO $CEPH_DAEMON rm-cluster --fsid $FSID_LEGACY --force
 
 TMPDIR=`mktemp -d -p .`
 trap "rm -rf $TMPDIR" TERM HUP INT
@@ -154,7 +160,29 @@ $SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
 # WRITE ME
 
 ## adopt
-# WRITE ME
+for tarball in $TEST_TARS; do
+    TMP_TAR_DIR=`mktemp -d -p $TMPDIR`
+    tar xzvf $tarball -C $TMP_TAR_DIR
+    NAMES=$($SUDO $CEPH_DAEMON ls --legacy-dir $TMP_TAR_DIR | jq -r '.[].name')
+    for name in $NAMES; do
+        # TODO: skip osd test for now
+        if [[ $name =~ "osd" ]]; then
+           continue
+        fi
+        $SUDO $CEPH_DAEMON --image $IMAGE_MASTER adopt \
+                           --style legacy \
+                           --legacy-dir $TMP_TAR_DIR \
+                           --name $name
+        # validate after adopt
+        out=$($SUDO $CEPH_DAEMON ls | jq '.[]' \
+                                    | jq 'select(.name == "'$name'")')
+        echo $out | jq -r '.style' | grep 'ceph-daemon'
+        echo $out | jq -r '.fsid' | grep $FSID_LEGACY
+    done
+    # clean-up before next iter
+    $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID_LEGACY --force
+    rm -rf $TMP_TAR_DIR
+done
 
 ## unit
 $SUDO $CEPH_DAEMON unit --fsid $FSID --name mon.a -- is-enabled
