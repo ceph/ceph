@@ -11,6 +11,8 @@ overrides:
         osd heartbeat grace: 40
       mon:
         mon osd crush smoke test: false
+      osd:
+        osd fast shutdown: false
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
