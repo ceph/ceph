@@ -53,6 +53,7 @@ struct rgw_http_req_data : public RefCountedObject {
   std::unique_ptr<Completion> completion;
 
   rgw_http_req_data() : id(-1) {
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(error_buf, 0, sizeof(error_buf));
   }
 
