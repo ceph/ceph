@@ -894,7 +894,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         return self._create_daemon('mon', name or host, host, keyring,
                                    extra_args=extra_args)
 
-    def update_mons(self, num, hosts):
+    def update_mons(self, num, host_specs):
         """
         Adjust the number of cluster monitors.
         """
@@ -906,34 +906,36 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if num < num_mons:
             raise NotImplementedError("Removing monitors is not supported.")
 
-        # check that all the hostnames are registered
-        self._require_hosts(map(lambda h: h[0], hosts))
+        self.log.debug("Trying to update monitors on: {}".format(host_specs))
+        # check that all the hosts are registered
+        [self._require_hosts(host.hostname) for host in host_specs]
 
         # current support requires a network to be specified
-        for host, network, name in hosts:
+        for host, network, _ in host_specs:
             if not network:
-                raise RuntimeError("Host '{}' missing network part".format(host))
+                raise RuntimeError("Host '{}' is missing a network spec".format(host))
 
         daemons = self._get_services('mon')
-        for _, _, name in hosts:
+        for _, _, name in host_specs:
             if name and len([d for d in daemons if d.service_instance == name]):
                 raise RuntimeError('name %s alrady exists', name)
 
         # explicit placement: enough hosts provided?
         num_new_mons = num - num_mons
-        if len(hosts) < num_new_mons:
+        if len(host_specs) < num_new_mons:
             raise RuntimeError("Error: {} hosts provided, expected {}".format(
-                len(hosts), num_new_mons))
+                len(host_specs), num_new_mons))
 
         self.log.info("creating {} monitors on hosts: '{}'".format(
-            num_new_mons, ",".join(map(lambda h: ":".join(h), hosts))))
+            num_new_mons, ",".join(map(lambda h: ":".join(h), host_specs))))
 
         # TODO: we may want to chain the creation of the monitors so they join
         # the quorum one at a time.
         results = []
-        for host, network, name in hosts:
+        for host, network, name in host_specs:
             result = self._worker_pool.apply_async(self._create_mon,
                                                    (host, network, name))
+
             results.append(result)
 
         return SSHWriteCompletion(results)
@@ -955,7 +957,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         return self._create_daemon('mgr', name, host, keyring)
 
-    def update_mgrs(self, num, hosts):
+    def update_mgrs(self, num, host_specs):
         """
         Adjust the number of cluster managers.
         """
@@ -964,8 +966,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         if num == num_mgrs:
             return SSHWriteCompletionReady("The requested number of managers exist.")
 
+        self.log.debug("Trying to update managers on: {}".format(host_specs))
         # check that all the hosts are registered
-        self._require_hosts(map(lambda h: h[0], hosts))
+        [self._require_hosts(host.hostname) for host in host_specs]
 
         results = []
         if num < num_mgrs:
@@ -975,10 +978,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             # cluster doesn't see
             connected = []
             mgr_map = self.get("mgr_map")
-            if mgr_map["active_name"]:
-                connected.append(mgr_map['active_name'])
-            for standby in mgr_map['standbys']:
-                connected.append(standby['name'])
+            if mgr_map.get("active_name", {}):
+                connected.append(mgr_map.get('active_name', ''))
+            for standby in mgr_map.get('standbys', []):
+                connected.append(standby.get('name', ''))
             for d in daemons:
                 if d.service_instance not in connected:
                     result = self._worker_pool.apply_async(
@@ -1006,24 +1009,26 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             # we assume explicit placement by which there are the same number of
             # hosts specified as the size of increase in number of daemons.
             num_new_mgrs = num - num_mgrs
-            if len(hosts) < num_new_mgrs:
+            if len(host_specs) < num_new_mgrs:
                 raise RuntimeError(
                     "Error: {} hosts provided, expected {}".format(
-                        len(hosts), num_new_mgrs))
+                        len(host_specs), num_new_mgrs))
 
-            for _, name in hosts:
-                if name and len([d for d in daemons if d.service_instance == name]):
-                    raise RuntimeError('name %s alrady exists', name)
+            for host_spec in host_specs:
+                if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
+                    raise RuntimeError('name %s alrady exists', host_spec.name)
+
+            for host_spec in host_specs:
+                if host_spec.name and len([d for d in daemons if d.service_instance == host_spec.name]):
+                    raise RuntimeError('name %s alrady exists', host_spec.name)
 
             self.log.info("creating {} managers on hosts: '{}'".format(
-                num_new_mgrs, ",".join(map(lambda h: h[0], hosts))))
+                num_new_mgrs, ",".join([spec.hostname for spec in host_specs])))
 
-            for i in range(num_new_mgrs):
-                host, name = hosts[i]
-                if not name:
-                    name = self.get_unique_name(daemons)
+            for host_spec in host_specs:
+                name = host_spec.name or self.get_unique_name(daemons)
                 result = self._worker_pool.apply_async(self._create_mgr,
-                                                       (host, name))
+                                                       (host_spec.hostname, name))
                 results.append(result)
 
         return SSHWriteCompletion(results)
@@ -1034,7 +1039,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         daemons = self._get_services('mds')
         results = []
         num_added = 0
-        for host, name in spec.placement.nodes:
+        for host, _, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
             mds_id = self.get_unique_name(daemons, spec.name, name)
@@ -1091,7 +1096,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         daemons = self._get_services('rgw')
         results = []
         num_added = 0
-        for host, name in spec.placement.nodes:
+        for host, _, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
             rgw_id = self.get_unique_name(daemons, spec.name, name)
@@ -1141,7 +1146,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         daemons = self._get_services('rbd-mirror')
         results = []
         num_added = 0
-        for host, name in spec.placement.nodes:
+        for host, _, name in spec.placement.nodes:
             if num_added >= spec.count:
                 break
             daemon_id = self.get_unique_name(daemons, None, name)

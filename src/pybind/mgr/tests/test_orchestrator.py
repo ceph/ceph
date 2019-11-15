@@ -7,6 +7,36 @@ from ceph.deployment import inventory
 from orchestrator import ReadCompletion, raise_if_exception, RGWSpec
 from orchestrator import InventoryNode, ServiceDescription
 from orchestrator import OrchestratorValidationError
+from orchestrator import parse_host_specs
+
+
+@pytest.mark.parametrize("test_input,expected, require_network",
+                         [("myhost", ('myhost', '', ''), False),
+                          ("myhost=sname", ('myhost', '', 'sname'), False),
+                          ("myhost:10.1.1.10", ('myhost', '10.1.1.10', ''), True),
+                          ("myhost:10.1.1.10=sname", ('myhost', '10.1.1.10', 'sname'), True),
+                          ("myhost:10.1.1.0/32", ('myhost', '10.1.1.0/32', ''), True),
+                          ("myhost:10.1.1.0/32=sname", ('myhost', '10.1.1.0/32', 'sname'), True),
+                          ("myhost:[v1:10.1.1.10:6789]", ('myhost', '[v1:10.1.1.10:6789]', ''), True),
+                          ("myhost:[v1:10.1.1.10:6789]=sname", ('myhost', '[v1:10.1.1.10:6789]', 'sname'), True),
+                          ("myhost:[v1:10.1.1.10:6789,v2:10.1.1.11:3000]", ('myhost', '[v1:10.1.1.10:6789,v2:10.1.1.11:3000]', ''), True),
+                          ("myhost:[v1:10.1.1.10:6789,v2:10.1.1.11:3000]=sname", ('myhost', '[v1:10.1.1.10:6789,v2:10.1.1.11:3000]', 'sname'), True),
+                          ])
+def test_parse_host_specs(test_input, expected, require_network):
+    ret = parse_host_specs(test_input, require_network=require_network)
+    assert ret == expected
+
+@pytest.mark.parametrize("test_input",
+                         # wrong subnet
+                         [("myhost:1.1.1.1/24"),
+                          # wrong ip format
+                          ("myhost:1"),
+                          # empty string
+                          ("myhost=1"),
+                          ])
+def test_parse_host_specs_raises(test_input):
+    with pytest.raises(ValueError):
+        ret = parse_host_specs(test_input)
 
 
 def _test_resource(data, resource_class, extra=None):

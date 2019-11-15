@@ -29,20 +29,20 @@ try:
 except ImportError:
     T, G = object, object
 
+
 def parse_host_specs(host, require_network=True):
     """
     Split host into host, network, and (optional) daemon name parts.  The network
-    part can be an IP, CIDR, or ceph addrvec like
-    '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
+    part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
     e.g.,
       "myhost"
       "myhost=name"
       "myhost:1.2.3.4"
       "myhost:1.2.3.4=name"
       "myhost:1.2.3.0/24"
-      "myhost:1.2.3.4/24=name"
-      "myhost:v2:1.2.3.4:3000/24=name"
-      "myhost:v2:1.2.3.4:3000,v1:1.2.3.4:6789/24=name"
+      "myhost:1.2.3.0/24=name"
+      "myhost:[v2:1.2.3.4:3000]=name"
+      "myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
     """
     # Matches from start to : or = or until end of string
     host_re = r'^(.*?)(:|=|$)'
@@ -60,41 +60,41 @@ def parse_host_specs(host, require_network=True):
     if match_host:
         host_spec = host_spec._replace(hostname=match_host.group(1))
 
-    ip_match = re.search(ip_re, host)
-    if ip_match:
-        host_spec = host_spec._replace(network=ip_match.group(1))
-
     name_match = re.search(name_re, host)
     if name_match:
         host_spec = host_spec._replace(name=name_match.group(1))
+
+    ip_match = re.search(ip_re, host)
+    if ip_match:
+        host_spec = host_spec._replace(network=ip_match.group(1))
 
     if not require_network:
         return host_spec
 
     from ipaddress import ip_network, ip_address
-    try:
-        networks = list()
-        network = host_spec.network
-        # in case we have v2:1.2.3.4:3000,v1:1.2.3.4:6478
-        if ',' in network:
-            net1, net2 = network.split(',')
-            networks.extend([net1, net2])
-        # if we only have one network string
-        else:
-            networks.append(network)
-        for network in networks:
-            # only if we have versioned network configs
-            if network.startswith('v'):
-                network = network.split(':')[1]
+    networks = list()
+    network = host_spec.network
+    # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
+    if ',' in network:
+        networks = [x for x in network.split(',')]
+    else:
+        networks.append(network)
+    for network in networks:
+        # only if we have versioned network configs
+        if network.startswith('v') or network.startswith('[v'):
+            network = network.split(':')[1]
+        try:
             # if subnets are defined, also verify the validity
             if '/' in network:
                 ip_network(network)
             else:
                 ip_address(network)
-    except ValueError:
-        raise Exception("No valid IPv4/IPv6 address provided")
+        except ValueError as e:
+            # logging?
+            raise e
 
     return host_spec
+
 
 class OrchestratorError(Exception):
     """
@@ -669,7 +669,7 @@ class PlacementSpec(object):
     def __init__(self, label=None, nodes=[]):
         self.label = label
 
-        self.nodes = list(map(split_host, nodes))
+        self.nodes = [parse_host_specs(x, require_network=False) for x in nodes]
 
 def handle_type_error(method):
     @wraps(method)
