@@ -17,6 +17,7 @@ install(DIRECTORY
   REGEX "CMakeLists.txt" EXCLUDE
   REGEX "\\.gitignore" EXCLUDE
   REGEX "hello/.*" EXCLUDE
+  REGEX "tests/.*" EXCLUDE
   REGEX "osd_perf_query/.*" EXCLUDE
   REGEX "tox.ini" EXCLUDE
   REGEX "requirements.txt" EXCLUDE)
