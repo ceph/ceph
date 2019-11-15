@@ -167,6 +167,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	<< "failed to create socket: " << cpp_strerror(err);
     return oss.str();
   }
+  // FIPS zeroization audit 20191115: this memset is fine.
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path),
@@ -219,6 +220,7 @@ void AdminSocket::entry() noexcept
   ldout(m_cct, 5) << "entry start" << dendl;
   while (true) {
     struct pollfd fds[2];
+    // FIPS zeroization audit 20191115: this memset is fine.
     memset(fds, 0, sizeof(fds));
     fds[0].fd = m_sock_fd;
     fds[0].events = POLLIN | POLLRDBAND;

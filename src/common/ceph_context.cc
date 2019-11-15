@@ -553,6 +553,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 	f->dump_string("error", "syntax error: 'config get <var>'");
       } else {
 	char buf[4096];
+	// FIPS zeroization audit 20191115: this memset is not security related.
 	memset(buf, 0, sizeof(buf));
 	char *tmp = buf;
 	int r = _conf.get_val(var.c_str(), &tmp, sizeof(buf));
