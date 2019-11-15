@@ -99,6 +99,7 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
       local_qpn = qp->get_local_qp_number();
       my_msg.qpn = local_qpn;
 
+      // FIPS zeroization audit 20191115: this memset is not security related.
       memset(&cm_params, 0, sizeof(cm_params));
       cm_params.retry_count = RETRY_COUNT;
       cm_params.qp_num = local_qpn;
