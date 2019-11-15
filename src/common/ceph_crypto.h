@@ -33,6 +33,8 @@ namespace ceph {
     void assert_init();
     void init();
     void shutdown(bool shared=true);
+
+    void zeroize_for_security(void *s, size_t n);
   }
 }
 
