@@ -23,6 +23,8 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
       << __func__ << " LDAP auth no rgw_ldap_secret file found in conf"
       << dendl;
     } else {
+      // FIPS zeroization audit 20191116: this memset is not intended to
+      // wipe out a secret after use.
       char bindpw[1024];
       memset(bindpw, 0, 1024);
       int pwlen = safe_read_file("" /* base */, ldap_secret.c_str(),
