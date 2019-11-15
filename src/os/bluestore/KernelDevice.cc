@@ -808,6 +808,11 @@ int KernelDevice::write(
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
   ceph_assert(is_valid_io(off, len));
+  if (cct->_conf->objectstore_blackhole) {
+    lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
+	       << dendl;
+    return 0;
+  }
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
@@ -832,6 +837,11 @@ int KernelDevice::aio_write(
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
   ceph_assert(is_valid_io(off, len));
+  if (cct->_conf->objectstore_blackhole) {
+    lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
+	       << dendl;
+    return 0;
+  }
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
@@ -908,6 +918,11 @@ int KernelDevice::aio_write(
 int KernelDevice::discard(uint64_t offset, uint64_t len)
 {
   int r = 0;
+  if (cct->_conf->objectstore_blackhole) {
+    lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
+	       << dendl;
+    return 0;
+  }
   if (support_discard) {
       dout(10) << __func__
 	       << " 0x" << std::hex << offset << "~" << len << std::dec
