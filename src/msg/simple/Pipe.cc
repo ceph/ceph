@@ -1606,6 +1606,7 @@ void Pipe::was_session_reset()
   randomize_out_seq();
 
   in_seq = 0;
+  in_seq_acked = 0;
   connect_seq = 0;
 }
 
