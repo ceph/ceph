@@ -526,4 +526,33 @@ describe('CdValidators', () => {
       expect(validatorFn(form.get('z'))).toEqual({ required: true });
     });
   });
+
+  describe('dimmlessBinary validators', () => {
+    const i18nMock = (a: string, b: { value: string }) => a.replace('{{value}}', b.value);
+
+    beforeEach(() => {
+      form = new CdFormGroup({
+        x: new FormControl('2 KiB', [CdValidators.binaryMin(1024), CdValidators.binaryMax(3072)])
+      });
+      formHelper = new FormHelper(form);
+    });
+
+    it('should not raise exception an exception for valid change', () => {
+      formHelper.expectValidChange('x', '2.5 KiB');
+    });
+
+    it('should not raise minimum error', () => {
+      formHelper.expectErrorChange('x', '0.5 KiB', 'binaryMin');
+      expect(form.get('x').getError('binaryMin')(i18nMock)).toBe(
+        'Size has to be at least 1 KiB or more'
+      );
+    });
+
+    it('should not raise maximum error', () => {
+      formHelper.expectErrorChange('x', '4 KiB', 'binaryMax');
+      expect(form.get('x').getError('binaryMax')(i18nMock)).toBe(
+        'Size has to be at most 3 KiB or less'
+      );
+    });
+  });
 });
