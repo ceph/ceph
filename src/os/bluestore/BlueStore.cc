@@ -11715,7 +11715,7 @@ void BlueStore::_kv_sync_thread()
       }
 
 #if defined(WITH_LTTNG)
-      auto sync_start = mono_clock::now();
+      utime_t sync_start = ceph_clock_now();
 #endif
       // submit synct synchronously (block and wait for it to commit)
       int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
@@ -11725,7 +11725,7 @@ void BlueStore::_kv_sync_thread()
       int deferred_size = deferred_stable.size();
 
 #if defined(WITH_LTTNG)
-      double sync_latency = ceph::to_seconds<double>(sync_start - mono_clock::now());
+      utime_t sync_latency = ceph_clock_now() - sync_start;
       for (auto txc: kv_committing) {
 	if (txc->tracing) {
 	  tracepoint(
@@ -11736,7 +11736,7 @@ void BlueStore::_kv_sync_thread()
 	    kv_committing.size(),
 	    deferred_done.size(),
 	    deferred_stable.size(),
-	    sync_latency);
+	    (double)sync_latency);
 	}
       }
 #endif
@@ -14951,13 +14951,13 @@ void BlueStore::BlueStoreThrottle::complete(TransContext &txc)
   }
   if (txc.tracing) {
     utime_t now = ceph_clock_now();
-    double usecs = ((double)(now.to_nsec()-txc.start.to_nsec()))/1000;
+    utime_t lat = now - txc.start;
     tracepoint(
       bluestore,
       transaction_total_duration,
       txc.osr->get_sequencer_id(),
       txc.seq,
-      usecs);
+      (double)lat);
   }
 }
 #endif
