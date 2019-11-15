@@ -194,6 +194,7 @@ private:
     ceph_assert(std::size(segments) <= MAX_NUM_SEGMENTS);
 
     preamble_block_t main_preamble;
+    // FIPS zeroization audit 20191115: this memset is not security related.
     ::memset(&main_preamble, 0, sizeof(main_preamble));
 
     main_preamble.tag = static_cast<__u8>(T::tag);
@@ -262,6 +263,8 @@ public:
       // called auth tag) will be added by the cipher.
       {
         epilogue_secure_block_t epilogue;
+        // FIPS zeroization audit 20191115: this memset is not security
+        // related.
         ::memset(&epilogue, 0, sizeof(epilogue));
         ceph::bufferlist epilogue_bl;
         epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
@@ -272,6 +275,7 @@ public:
     } else {
       // plain mode
       epilogue_plain_block_t epilogue;
+      // FIPS zeroization audit 20191115: this memset is not security related.
       ::memset(&epilogue, 0, sizeof(epilogue));
 
       ceph::bufferlist::const_iterator hdriter(&segments.front(),

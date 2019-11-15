@@ -456,6 +456,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
   ibv_send_wr* pre_wr = NULL;
   uint32_t num = 0; 
 
+  // FIPS zeroization audit 20191115: these memsets are not security related.
   memset(iswr, 0, sizeof(iswr));
   memset(isge, 0, sizeof(isge));
  
@@ -497,6 +498,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
 
 void RDMAConnectedSocketImpl::fin() {
   ibv_send_wr wr;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&wr, 0, sizeof(wr));
 
   wr.wr_id = reinterpret_cast<uint64_t>(qp);
