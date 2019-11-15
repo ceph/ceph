@@ -1567,8 +1567,10 @@ public:
         ceph::real_time *lastmod;
         uint64_t *obj_size;
         map<string, bufferlist> *attrs;
+        rgw_obj *target_obj;
 
-        Params() : lastmod(NULL), obj_size(NULL), attrs(NULL) {}
+        Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
+		 target_obj(nullptr) {}
       } params;
 
       explicit Read(RGWRados::Object *_source) : source(_source) {}
@@ -1781,6 +1783,9 @@ public:
 
     class List {
     protected:
+      // absolute maximum number of objects that
+      // list_objects_(un)ordered can return
+      static constexpr int64_t bucket_list_objects_absolute_max = 25000;
 
       RGWRados::Bucket *target;
       rgw_obj_key next_marker;

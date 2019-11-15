@@ -6,8 +6,8 @@
         novalidate>
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title"
-            i18n>NFS export {{ export_id ? cluster_id + ':' + export_id : '' }}</h3>
+        <h3 i18n="form title|Example: Create Pool@@formTitle"
+            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
       </div>
 
       <div class="panel-body">
@@ -412,7 +412,8 @@
             <select class="form-control"
                     formControlName="access_type"
                     name="access_type"
-                    id="access_type">
+                    id="access_type"
+                    (change)="accessTypeChangeHandler()">
               <option *ngIf="nfsAccessType === null"
                       value=""
                       i18n>Loading...</option>
@@ -429,6 +430,13 @@
                   *ngIf="nfsForm.getValue('access_type')">
               {{ getAccessTypeHelp(nfsForm.getValue('access_type')) }}
             </span>
+            <span class="text-warning"
+                  *ngIf="nfsForm.getValue('access_type') === 'RW' && nfsForm.getValue('name') === 'RGW'"
+                  i18n>The Object Gateway NFS backend has a number of
+              limitations which will seriously affect applications writing to
+              the share. Please consult the
+              <a href="{{docsUrl}}"
+                 target="_blank"> documentation</a> for details before enabling write access.</span>
             <span class="help-block"
                   *ngIf="nfsForm.showError('access_type', formDir, 'required')"
                   i18n>Required field</span>
@@ -509,11 +517,11 @@
 
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button [form]="formDir"
-                            type="button"
-                            (submitAction)="submitAction()">
-            <ng-container i18n>Submit</ng-container>
-          </cd-submit-button>
+          <cd-submit-button
+            [form]="formDir"
+            (submitAction)="submitAction()"
+            i18n="form action button|Example: Create Pool@@formActionButton"
+            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
           <cd-back-button></cd-back-button>
         </div>
       </div>

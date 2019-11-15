@@ -1,4 +1,4 @@
-import { $, $$, browser } from 'protractor';
+import { $, $$, browser, ElementFinder } from 'protractor';
 
 export class Helper {
   static EC = browser.ExpectedConditions;
@@ -28,8 +28,8 @@ export class Helper {
       });
   }
 
-  static getBreadcrumbText() {
-    return $('.breadcrumb-item.active').getText();
+  static getBreadcrumb() {
+    return $('.breadcrumb-item.active');
   }
 
   static getTabText(idx) {
@@ -40,5 +40,9 @@ export class Helper {
 
   static getTabsCount() {
     return $$('.nav.nav-tabs li').count();
+  }
+
+  static waitTextToBePresent(elem: ElementFinder, text: string, message?: string) {
+    return browser.wait(Helper.EC.textToBePresentInElement(elem, text), Helper.TIMEOUT, message);
   }
 }

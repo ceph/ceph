@@ -14,7 +14,7 @@ describe('Logs page', () => {
 
   it('should open and show breadcrumb', () => {
     page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Logs');
+    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Logs');
   });
 
   it('should show two tabs', () => {

@@ -114,16 +114,22 @@ class RgwBucketTest(RgwTestCase):
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwBucketTest, cls).setUpClass()
-        # Create a tenanted user.
+        # Create tenanted users.
         cls._radosgw_admin_cmd([
             'user', 'create', '--tenant', 'testx', '--uid', 'teuth-test-user',
             '--display-name', 'tenanted teuth-test-user'
+        ])
+        cls._radosgw_admin_cmd([
+            'user', 'create', '--tenant', 'testx', '--uid', 'teuth-test-user2',
+            '--display-name', 'tenanted teuth-test-user 2'
         ])
 
     @classmethod
     def tearDownClass(cls):
         cls._radosgw_admin_cmd(
             ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user'])
+        cls._radosgw_admin_cmd(
+            ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user2'])
         super(RgwBucketTest, cls).tearDownClass()
 
     def test_all(self):
@@ -232,7 +238,22 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['tenant'], 'testx')
         self.assertEqual(data['bid'], 'testx/teuth-test-bucket')
 
-        # Update the bucket.
+        # Update bucket: different user from same tenant.
+        self._put(
+            '/api/rgw/bucket/{}'.format(
+                urllib.quote_plus('testx/teuth-test-bucket')),
+            params={
+                'bucket_id': data['id'],
+                'uid': 'testx$teuth-test-user2'
+            })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/{}'.format(
+            urllib.quote_plus('testx/teuth-test-bucket')))
+        self.assertStatus(200)
+        self.assertIn('owner', data)
+        self.assertEqual(data['owner'], 'testx$teuth-test-user2')
+
+        # Update bucket: different user from empty tenant.
         self._put(
             '/api/rgw/bucket/{}'.format(
                 urllib.quote_plus('testx/teuth-test-bucket')),

@@ -17,6 +17,7 @@ import {
 import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { DataTableModule } from '../../../shared/datatable/datatable.module';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -81,6 +82,7 @@ describe('RbdSnapshotListComponent', () => {
     beforeEach(() => {
       fixture.detectChanges();
       const i18n = TestBed.get(I18n);
+      const actionLabelsI18n = TestBed.get(ActionLabelsI18n);
       called = false;
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
@@ -96,7 +98,8 @@ describe('RbdSnapshotListComponent', () => {
         notificationService,
         null,
         null,
-        i18n
+        i18n,
+        actionLabelsI18n
       );
       spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();

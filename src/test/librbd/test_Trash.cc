@@ -89,4 +89,20 @@ TEST_F(TestTrash, UserRemovingSource) {
   ASSERT_EQ(expected_images, images);
 }
 
+TEST_F(TestTrash, RestoreMirroringSource) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  std::string image_id;
+  ASSERT_EQ(0, rbd.open(m_ioctx, image, m_image_name.c_str()));
+  ASSERT_EQ(0, image.get_id(&image_id));
+  ASSERT_EQ(0, image.close());
+
+  ASSERT_EQ(0, api::Trash<>::move(m_ioctx, RBD_TRASH_IMAGE_SOURCE_MIRRORING,
+                                  m_image_name, 0));
+  ASSERT_EQ(0, rbd.trash_restore(m_ioctx, image_id.c_str(),
+                                 m_image_name.c_str()));
+}
+
 } // namespace librbd

@@ -1370,6 +1370,23 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("maximum number of OSDMaps to cache in memory"),
 
+    Option("mon_osd_cache_size_min", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(128_M)
+    .add_service("mon")
+    .set_description("The minimum amount of bytes to be kept mapped in memory for osd monitor caches."),
+
+    Option("mon_memory_target", Option::TYPE_SIZE, Option::LEVEL_BASIC)
+    .set_default(2_G)
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_service("mon")
+    .set_description("The amount of bytes pertaining to osd monitor caches and kv cache to be kept mapped in memory with cache auto-tuning enabled"),
+
+    Option("mon_memory_autotune", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_service("mon")
+    .set_description("Autotune the cache memory being used for osd monitors and kv database"),
+
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
     .add_service("mon")
@@ -1731,6 +1748,19 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .add_service("mgr")
     .set_description("Issue a health warning if there are fewer OSDs than osd_pool_default_size"),
+
+    Option("mon_warn_on_slow_ping_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .add_service("mgr")
+    .set_description("Override mon_warn_on_slow_ping_ratio with specified threshold in milliseconds")
+    .add_see_also("mon_warn_on_slow_ping_ratio"),
+
+    Option("mon_warn_on_slow_ping_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.05)
+    .add_service("mgr")
+    .set_description("Issue a health warning if heartbeat ping longer than percentage of osd_heartbeat_grace")
+    .add_see_also("osd_heartbeat_grace")
+    .add_see_also("mon_warn_on_slow_ping_time"),
 
     Option("mon_max_snap_prune_per_epoch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
@@ -2239,6 +2269,10 @@ std::vector<Option> get_global_options() {
     Option("mon_client_max_log_entries_per_message", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description(""),
+
+    Option("mon_client_directed_command_retry", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(2)
+    .set_description("Number of times to try sending a comamnd directed at a specific monitor"),
 
     Option("mon_max_pool_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(65536)
@@ -3336,9 +3370,9 @@ std::vector<Option> get_global_options() {
     .set_default(15_min)
     .set_description(""),
 
-    Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(6)
-    .set_min_max(1, 86400)
+    .set_min_max(1, 60)
     .set_description("Interval (in seconds) between peer pings"),
 
     Option("osd_heartbeat_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -3379,6 +3413,11 @@ std::vector<Option> get_global_options() {
     Option("osd_mon_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
     .set_description(""),
+
+    Option("osd_mon_heartbeat_stat_stale", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1_hr)
+    .set_description("Stop reporting on heartbeat ping times not updated for this many seconds.")
+    .set_long_description("Stop reporting on old heartbeat information unless this is set to zero"),
 
     Option("osd_mon_report_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
@@ -3463,6 +3502,10 @@ std::vector<Option> get_global_options() {
     Option("osd_scrub_during_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Allow scrubbing when PGs on the OSD are undergoing recovery"),
+
+    Option("osd_repair_during_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Allow requested repairing when PGs on the OSD are undergoing recovery"),
 
     Option("osd_scrub_begin_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -3773,6 +3816,10 @@ std::vector<Option> get_global_options() {
     Option("osd_debug_no_purge_strays", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false),
 
+    Option("osd_debug_pretend_recovery_active", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -3923,6 +3970,7 @@ std::vector<Option> get_global_options() {
 
     Option("rocksdb_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(512_M)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("rocksdb_cache_row_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -3958,7 +4006,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_enable_rmrange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
+    .set_default(false)
     .set_description("Refer to github.com/facebook/rocksdb/wiki/DeleteRange-Implementation"),
 
     Option("rocksdb_max_items_rmrange", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3982,7 +4030,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means they are cached with higher priority than other data and should typically stay in the block cache."),
 
     Option("rocksdb_pin_l0_filter_and_index_blocks_in_cache", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
+    .set_default(false)
     .set_description("Whether to pin Level 0 indices and bloom filters in the block cache")
     .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means that level 0 SST files will always have their indices and filters pinned in the block cache."),
 
@@ -5517,6 +5565,14 @@ std::vector<Option> get_global_options() {
     .set_description("")
     .add_service({"mon", "osd"})
     .set_long_description("This sets the gss target service name."),
+
+    Option("debug_disable_randomized_ping", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Disable heartbeat ping randomization for testing purposes"),
+
+    Option("debug_heartbeat_testing_span", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Override 60 second periods for testing only"),
   });
 }
 
@@ -6095,6 +6151,12 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_nfs_write_completion_interval_s", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description(""),
+
+    Option("rgw_nfs_s3_fast_attrs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("use fast S3 attrs from bucket index (immutable only)")
+    .set_long_description("use fast S3 attrs from bucket index (assumes NFS "
+			  "mounts are immutable)"),
 
     Option("rgw_rados_pool_autoscale_bias", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(4.0)

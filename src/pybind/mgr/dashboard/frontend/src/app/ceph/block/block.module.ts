@@ -14,6 +14,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '../../shared/services/feature-toggles-guard.service';
 import { SharedModule } from '../../shared/shared.module';
+import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
 import { IscsiTargetDiscoveryModalComponent } from './iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
@@ -67,6 +68,7 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
   declarations: [
     RbdListComponent,
     IscsiComponent,
+    IscsiSettingComponent,
     IscsiTabsComponent,
     IscsiTargetListComponent,
     RbdDetailsComponent,
@@ -149,9 +151,9 @@ const routes: Routes = [
         children: [
           { path: '', component: IscsiTargetListComponent },
           {
-            path: URLVerbs.ADD,
+            path: URLVerbs.CREATE,
             component: IscsiTargetFormComponent,
-            data: { breadcrumbs: ActionLabels.ADD }
+            data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: `${URLVerbs.EDIT}/:target_iqn`,

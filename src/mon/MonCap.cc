@@ -19,6 +19,7 @@
 #include <boost/spirit/include/phoenix.hpp>
 #include <boost/fusion/adapted/struct/adapt_struct.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "MonCap.h"
 #include "include/stringify.h"
@@ -177,6 +178,9 @@ void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
 
 void MonCapGrant::expand_profile_mgr(const EntityName& name) const
 {
+  if (profile == "crash") {
+    profile_grants.push_back(MonCapGrant("crash post"));
+  }
 }
 
 void MonCapGrant::expand_profile_mon(const EntityName& name) const
@@ -290,7 +294,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
-  if (profile == "rbd" || profile == "rbd-mirror") {
+  if (boost::starts_with(profile, "rbd")) {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
@@ -307,8 +311,19 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
                                 "rbd/mirror/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
-  }
+  } else if (profile == "rbd-mirror-peer") {
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_REGEX,
+                                "rbd/mirror/[^/]+");
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
 
+    constraint = StringConstraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                  "rbd/mirror/peer/");
+    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
+  }
+  else if (profile == "crash") {
+    // TODO: we could limit this to getting the monmap and mgrmap...
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+  }
   if (profile == "role-definer") {
     // grants ALL caps to the auth subsystem, read-only on the
     // monitor subsystem and nothing else.

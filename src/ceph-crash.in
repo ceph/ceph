@@ -5,6 +5,7 @@
 import argparse
 import logging
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -12,6 +13,9 @@ import time
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+auth_names = ['client.crash.%s' % socket.gethostname(),
+              'client.crash',
+              'client.admin']
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -22,22 +26,31 @@ def parse_args():
         '-d', '--delay', default=10.0, type=float,
         help='minutes to delay between scans (0 to exit after one)',
     )
+    parser.add_argument(
+        '--name', '-n',
+        help='ceph name to authenticate as (default: try client.crash, client.admin)')
     return parser.parse_args()
 
 
 def post_crash(path):
-    pr = subprocess.Popen(
-        args=['timeout', '30', 'ceph', 'crash', 'post', '-i', '-'],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    f = open(os.path.join(path, 'meta'), 'r')
-    stdout, stderr = pr.communicate(input=f.read())
-    rc = pr.wait()
-    f.close()
-    if rc != 0:
-        log.warning('post %s failed: %s' % (path, stderr))
+    rc = 0
+    for n in auth_names:
+        pr = subprocess.Popen(
+            args=['timeout', '30', 'ceph',
+                  '-n', n,
+                  'crash', 'post', '-i', '-'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        f = open(os.path.join(path, 'meta'), 'rb')
+        stdout, stderr = pr.communicate(input=f.read())
+        rc = pr.wait()
+        f.close()
+        if rc != 0:
+            log.warning('post %s as %s failed: %s' % (path, n, stderr))
+        if rc == 0:
+            break
     return rc
 
 
@@ -66,6 +79,8 @@ def scrape_path(path):
 def main():
     args = parse_args()
     postdir = os.path.join(args.path, 'posted')
+    if args.name:
+        auth_names = [args.name]
 
     while not os.path.isdir(postdir):
         log.error("directory %s does not exist; please create" % postdir)

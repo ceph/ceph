@@ -15,16 +15,14 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 export class IscsiTargetIqnSettingsModalComponent implements OnInit {
   target_controls: FormControl;
   target_default_controls: any;
+  target_controls_limits: any;
 
   settingsForm: CdFormGroup;
-  helpText: any;
 
   constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
 
   ngOnInit() {
     const fg = {};
-    this.helpText = this.iscsiService.targetAdvancedSettings;
-
     _.forIn(this.target_default_controls, (_value, key) => {
       fg[key] = new FormControl(this.target_controls.value[key]);
     });
@@ -44,7 +42,14 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
     this.modalRef.hide();
   }
 
-  isRadio(control) {
-    return ['Yes', 'No'].indexOf(this.target_default_controls[control]) !== -1;
+  getTargetControlLimits(setting) {
+    if (this.target_controls_limits) {
+      return this.target_controls_limits[setting];
+    }
+    // backward compatibility
+    if (['Yes', 'No'].includes(this.target_default_controls[setting])) {
+      return { type: 'bool' };
+    }
+    return { type: 'int' };
   }
 }

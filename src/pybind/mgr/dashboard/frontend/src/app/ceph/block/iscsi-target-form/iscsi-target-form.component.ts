@@ -25,11 +25,15 @@ import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settin
   styleUrls: ['./iscsi-target-form.component.scss']
 })
 export class IscsiTargetFormComponent implements OnInit {
+  cephIscsiConfigVersion: number;
   targetForm: CdFormGroup;
   modalRef: BsModalRef;
+  api_version = 0;
   minimum_gateways = 1;
   target_default_controls: any;
+  target_controls_limits: any;
   disk_default_controls: any;
+  disk_controls_limits: any;
   backstores: string[];
   default_backstore: string;
   unsupported_rbd_features: any;
@@ -98,7 +102,8 @@ export class IscsiTargetFormComponent implements OnInit {
       this.iscsiService.listTargets(),
       this.rbdService.list(),
       this.iscsiService.portals(),
-      this.iscsiService.settings()
+      this.iscsiService.settings(),
+      this.iscsiService.version()
     ];
 
     if (this.router.url.startsWith('/block/iscsi/targets/edit')) {
@@ -119,9 +124,14 @@ export class IscsiTargetFormComponent implements OnInit {
         .value();
 
       // iscsiService.settings()
+      if ('api_version' in data[3]) {
+        this.api_version = data[3].api_version;
+      }
       this.minimum_gateways = data[3].config.minimum_gateways;
       this.target_default_controls = data[3].target_default_controls;
+      this.target_controls_limits = data[3].target_controls_limits;
       this.disk_default_controls = data[3].disk_default_controls;
+      this.disk_controls_limits = data[3].disk_controls_limits;
       this.backstores = data[3].backstores;
       this.default_backstore = data[3].default_backstore;
       this.unsupported_rbd_features = data[3].unsupported_rbd_features;
@@ -156,11 +166,14 @@ export class IscsiTargetFormComponent implements OnInit {
       });
       this.portalsSelections = [...portals];
 
+      // iscsiService.version()
+      this.cephIscsiConfigVersion = data[4]['ceph_iscsi_config_version'];
+
       this.createForm();
 
       // iscsiService.getTarget()
-      if (data[4]) {
-        this.resolveModel(data[4]);
+      if (data[5]) {
+        this.resolveModel(data[5]);
       }
     });
   }
@@ -179,11 +192,33 @@ export class IscsiTargetFormComponent implements OnInit {
           })
         ]
       }),
-      disks: new FormControl([]),
+      disks: new FormControl([], {
+        validators: [
+          CdValidators.custom('dupLunId', (value) => {
+            const lunIds = this.getLunIds(value);
+            return lunIds.length !== _.uniq(lunIds).length;
+          }),
+          CdValidators.custom('dupWwn', (value) => {
+            const wwns = this.getWwns(value);
+            return wwns.length !== _.uniq(wwns).length;
+          })
+        ]
+      }),
       initiators: new FormArray([]),
       groups: new FormArray([]),
       acl_enabled: new FormControl(false)
     });
+    // Target level authentication was introduced in ceph-iscsi config v11
+    if (this.cephIscsiConfigVersion > 10) {
+      const authFormGroup = new CdFormGroup({
+        user: new FormControl(''),
+        password: new FormControl(''),
+        mutual_user: new FormControl(''),
+        mutual_password: new FormControl('')
+      });
+      this.setAuthValidator(authFormGroup);
+      this.targetForm.addControl('auth', authFormGroup);
+    }
   }
 
   resolveModel(res) {
@@ -192,7 +227,12 @@ export class IscsiTargetFormComponent implements OnInit {
       target_controls: res.target_controls,
       acl_enabled: res.acl_enabled
     });
-
+    // Target level authentication was introduced in ceph-iscsi config v11
+    if (this.cephIscsiConfigVersion > 10) {
+      this.targetForm.patchValue({
+        auth: res.auth
+      });
+    }
     const portals = [];
     _.forEach(res.portals, (portal) => {
       const id = `${portal.host}:${portal.ip}`;
@@ -210,6 +250,12 @@ export class IscsiTargetFormComponent implements OnInit {
         backstore: disk.backstore
       };
       this.imagesSettings[id][disk.backstore] = disk.controls;
+      if ('lun' in disk) {
+        this.imagesSettings[id]['lun'] = disk.lun;
+      }
+      if ('wwn' in disk) {
+        this.imagesSettings[id]['wwn'] = disk.wwn;
+      }
 
       this.onImageSelection({ option: { name: id, selected: true } });
     });
@@ -272,6 +318,7 @@ export class IscsiTargetFormComponent implements OnInit {
     });
     this.disks.value.splice(index, 1);
     this.removeImageRefs(image);
+    this.targetForm.get('disks').updateValueAndValidity({ emitEvent: false });
     return false;
   }
 
@@ -309,6 +356,30 @@ export class IscsiTargetFormComponent implements OnInit {
     return result;
   }
 
+  isLunIdInUse(lunId, imageId) {
+    const images = this.disks.value.filter((currentImageId) => currentImageId !== imageId);
+    return this.getLunIds(images).includes(lunId);
+  }
+
+  getLunIds(images) {
+    return _.map(images, (image) => this.imagesSettings[image]['lun']);
+  }
+
+  nextLunId(imageId) {
+    const images = this.disks.value.filter((currentImageId) => currentImageId !== imageId);
+    const lunIdsInUse = this.getLunIds(images);
+    let lunIdCandidate = 0;
+    while (lunIdsInUse.includes(lunIdCandidate)) {
+      lunIdCandidate++;
+    }
+    return lunIdCandidate;
+  }
+
+  getWwns(images) {
+    const wwns = _.map(images, (image) => this.imagesSettings[image]['wwn']);
+    return wwns.filter((wwn) => _.isString(wwn) && wwn !== '');
+  }
+
   onImageSelection($event) {
     const option = $event.option;
 
@@ -316,9 +387,13 @@ export class IscsiTargetFormComponent implements OnInit {
       if (!this.imagesSettings[option.name]) {
         const defaultBackstore = this.getDefaultBackstore(option.name);
         this.imagesSettings[option.name] = {
-          backstore: defaultBackstore
+          backstore: defaultBackstore,
+          lun: this.nextLunId(option.name)
         };
         this.imagesSettings[option.name][defaultBackstore] = {};
+      } else if (this.isLunIdInUse(this.imagesSettings[option.name]['lun'], option.name)) {
+        // If the lun id is now in use, we have to generate a new one
+        this.imagesSettings[option.name]['lun'] = this.nextLunId(option.name);
       }
 
       _.forEach(this.imagesInitiatorSelections, (selections, i) => {
@@ -333,6 +408,7 @@ export class IscsiTargetFormComponent implements OnInit {
     } else {
       this.removeImageRefs(option.name);
     }
+    this.targetForm.get('disks').updateValueAndValidity({ emitEvent: false });
   }
 
   // Initiators
@@ -365,6 +441,25 @@ export class IscsiTargetFormComponent implements OnInit {
       cdIsInGroup: new FormControl(false)
     });
 
+    this.setAuthValidator(fg);
+
+    this.initiators.push(fg);
+
+    _.forEach(this.groupMembersSelections, (selections, i) => {
+      selections.push(new SelectOption(false, '', ''));
+      this.groupMembersSelections[i] = [...selections];
+    });
+
+    const disks = _.map(
+      this.targetForm.getValue('disks'),
+      (disk) => new SelectOption(false, disk, '')
+    );
+    this.imagesInitiatorSelections.push(disks);
+
+    return fg;
+  }
+
+  setAuthValidator(fg: CdFormGroup) {
     CdValidators.validateIf(
       fg.get('user'),
       () => fg.getValue('password') || fg.getValue('mutual_user') || fg.getValue('mutual_password'),
@@ -396,21 +491,6 @@ export class IscsiTargetFormComponent implements OnInit {
       [Validators.pattern(this.PASSWORD_REGEX)],
       [fg.get('user'), fg.get('password'), fg.get('mutual_user')]
     );
-
-    this.initiators.push(fg);
-
-    _.forEach(this.groupMembersSelections, (selections, i) => {
-      selections.push(new SelectOption(false, '', ''));
-      this.groupMembersSelections[i] = [...selections];
-    });
-
-    const disks = _.map(
-      this.targetForm.getValue('disks'),
-      (disk) => new SelectOption(false, disk, '')
-    );
-    this.imagesInitiatorSelections.push(disks);
-
-    return fg;
   }
 
   removeInitiator(index) {
@@ -563,6 +643,30 @@ export class IscsiTargetFormComponent implements OnInit {
       groups: []
     };
 
+    // Target level authentication was introduced in ceph-iscsi config v11
+    if (this.cephIscsiConfigVersion > 10) {
+      const targetAuth: CdFormGroup = this.targetForm.get('auth') as CdFormGroup;
+      if (!targetAuth.getValue('user')) {
+        targetAuth.get('user').setValue('');
+      }
+      if (!targetAuth.getValue('password')) {
+        targetAuth.get('password').setValue('');
+      }
+      if (!targetAuth.getValue('mutual_user')) {
+        targetAuth.get('mutual_user').setValue('');
+      }
+      if (!targetAuth.getValue('mutual_password')) {
+        targetAuth.get('mutual_password').setValue('');
+      }
+      const acl_enabled = this.targetForm.getValue('acl_enabled');
+      request['auth'] = {
+        user: acl_enabled ? '' : targetAuth.getValue('user'),
+        password: acl_enabled ? '' : targetAuth.getValue('password'),
+        mutual_user: acl_enabled ? '' : targetAuth.getValue('mutual_user'),
+        mutual_password: acl_enabled ? '' : targetAuth.getValue('mutual_password')
+      };
+    }
+
     // Disks
     formValue.disks.forEach((disk) => {
       const imageSplit = disk.split('/');
@@ -571,7 +675,9 @@ export class IscsiTargetFormComponent implements OnInit {
         pool: imageSplit[0],
         image: imageSplit[1],
         backstore: backstore,
-        controls: this.imagesSettings[disk][backstore]
+        controls: this.imagesSettings[disk][backstore],
+        lun: this.imagesSettings[disk]['lun'],
+        wwn: this.imagesSettings[disk]['wwn']
       });
     });
 
@@ -663,7 +769,8 @@ export class IscsiTargetFormComponent implements OnInit {
   targetSettingsModal() {
     const initialState = {
       target_controls: this.targetForm.get('target_controls'),
-      target_default_controls: this.target_default_controls
+      target_default_controls: this.target_default_controls,
+      target_controls_limits: this.target_controls_limits
     };
 
     this.modalRef = this.modalService.show(IscsiTargetIqnSettingsModalComponent, { initialState });
@@ -673,8 +780,11 @@ export class IscsiTargetFormComponent implements OnInit {
     const initialState = {
       imagesSettings: this.imagesSettings,
       image: image,
+      api_version: this.api_version,
       disk_default_controls: this.disk_default_controls,
-      backstores: this.getValidBackstores(this.getImageById(image))
+      disk_controls_limits: this.disk_controls_limits,
+      backstores: this.getValidBackstores(this.getImageById(image)),
+      control: this.targetForm.get('disks')
     };
 
     this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, {

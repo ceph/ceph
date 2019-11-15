@@ -18,7 +18,7 @@ describe('Filesystems page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Filesystems');
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Filesystems');
     });
   });
 });

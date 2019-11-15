@@ -393,6 +393,25 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Default: True
 
 
+``mon warn on slow ping ratio``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if any heartbeat
+              between OSDs exceeds ``mon warn on slow ping ratio``
+              of ``osd heartbeat grace``.  The default is 5%.
+:Type: Float
+:Default: ``0.05``
+
+
+``mon warn on slow ping time``
+
+:Description: Override ``mon warn on slow ping ratio`` with a specific value.
+              Issue a ``HEALTH_WARN`` in cluster log if any heartbeat
+              between OSDs exceeds ``mon warn on slow ping time``
+              milliseconds.  The default is 0 (disabled).
+:Type: Integer
+:Default: ``0``
+
+
 ``mon cache target full warn ratio``
 
 :Description: Position between pool's ``cache_target_full`` and
@@ -1196,6 +1215,26 @@ Miscellaneous
 :Type: Integer
 :Default: 300
 
+``mon osd cache size min``
+
+:Description: The minimum amount of bytes to be kept mapped in memory for osd
+               monitor caches.
+:Type: 64-bit Integer
+:Default: 134217728
+
+``mon memory target``
+
+:Description: The amount of bytes pertaining to osd monitor caches and kv cache
+              to be kept mapped in memory with cache auto-tuning enabled.
+:Type: 64-bit Integer
+:Default: 2147483648
+
+``mon memory autotune``
+
+:Description: Autotune the cache memory being used for osd monitors and kv
+              database.
+:Type: Boolean
+:Default: True
 
 
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)

@@ -18,7 +18,7 @@ describe('Mirroring page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Mirroring');
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Mirroring');
     });
 
     it('should show three tabs', () => {

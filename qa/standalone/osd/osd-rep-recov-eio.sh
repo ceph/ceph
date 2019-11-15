@@ -27,7 +27,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--osd-objectstore=filestore "
+
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -44,9 +44,10 @@ function run() {
 function setup_osds() {
     local count=$1
     shift
+    local type=$1
 
     for id in $(seq 0 $(expr $count - 1)) ; do
-        run_osd $dir $id || return 1
+        run_osd${type} $dir $id || return 1
     done
     wait_for_clean || return 1
 }
@@ -331,7 +332,7 @@ function TEST_rep_read_unfound() {
     local dir=$1
     local objname=myobject
 
-    setup_osds 3 || return 1
+    setup_osds 3 _filestore || return 1
 
     ceph osd pool delete foo foo --yes-i-really-really-mean-it || return 1
     local poolname=test-pool

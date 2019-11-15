@@ -68,19 +68,10 @@ void PreRemoveRequest<I>::acquire_exclusive_lock() {
     m_image_ctx->set_journal_policy(new journal::DisabledPolicy());
   }
 
-  if (m_force) {
-    auto ctx = create_context_callback<
-      PreRemoveRequest<I>,
-      &PreRemoveRequest<I>::handle_exclusive_lock_force>(this);
+  auto ctx = create_context_callback<
+    PreRemoveRequest<I>, &PreRemoveRequest<I>::handle_exclusive_lock>(this);
 
-    m_exclusive_lock = m_image_ctx->exclusive_lock;
-    m_exclusive_lock->shut_down(ctx);
-  } else {
-    auto ctx = create_context_callback<
-      PreRemoveRequest<I>, &PreRemoveRequest<I>::handle_exclusive_lock>(this);
-
-    m_image_ctx->exclusive_lock->try_acquire_lock(ctx);
-  }
+  m_image_ctx->exclusive_lock->try_acquire_lock(ctx);
 }
 
 template <typename I>
@@ -89,8 +80,14 @@ void PreRemoveRequest<I>::handle_exclusive_lock(int r) {
   ldout(cct, 5) << "r=" << r << dendl;
 
   if (r < 0 || !m_image_ctx->exclusive_lock->is_lock_owner()) {
-    lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
-    finish(-EBUSY);
+    if (!m_force) {
+      lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
+      finish(-EBUSY);
+    } else {
+      ldout(cct, 5) << "cannot obtain exclusive lock - "
+                    << "proceeding due to force flag set" << dendl;
+      shut_down_exclusive_lock();
+    }
     return;
   }
 
@@ -98,7 +95,26 @@ void PreRemoveRequest<I>::handle_exclusive_lock(int r) {
 }
 
 template <typename I>
-void PreRemoveRequest<I>::handle_exclusive_lock_force(int r) {
+void PreRemoveRequest<I>::shut_down_exclusive_lock() {
+  RWLock::RLocker owner_lock(m_image_ctx->owner_lock);
+  if (m_image_ctx->exclusive_lock == nullptr) {
+    validate_image_removal();
+    return;
+  }
+
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = create_context_callback<
+    PreRemoveRequest<I>,
+    &PreRemoveRequest<I>::handle_shut_down_exclusive_lock>(this);
+
+  m_exclusive_lock = m_image_ctx->exclusive_lock;
+  m_exclusive_lock->shut_down(ctx);
+}
+
+template <typename I>
+void PreRemoveRequest<I>::handle_shut_down_exclusive_lock(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "r=" << r << dendl;
 

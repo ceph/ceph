@@ -382,6 +382,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
 
+  opt.env->SetAllowNonOwnerAccess(false);
+
   // caches
   if (!set_cache_flag) {
     cache_size = g_conf()->rocksdb_cache_size;

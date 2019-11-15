@@ -97,6 +97,7 @@ cdef extern from "rbd/librbd.h" nogil:
         RBD_MAX_BLOCK_NAME_SIZE
         RBD_MAX_IMAGE_NAME_SIZE
 
+    ctypedef void* rados_t
     ctypedef void* rados_ioctx_t
     ctypedef void* rbd_image_t
     ctypedef void* rbd_image_options_t
@@ -152,6 +153,11 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
         _RBD_MIRROR_MODE_IMAGE "RBD_MIRROR_MODE_IMAGE"
         _RBD_MIRROR_MODE_POOL "RBD_MIRROR_MODE_POOL"
+
+    ctypedef enum rbd_mirror_peer_direction_t:
+        _RBD_MIRROR_PEER_DIRECTION_RX "RBD_MIRROR_PEER_DIRECTION_RX"
+        _RBD_MIRROR_PEER_DIRECTION_TX "RBD_MIRROR_PEER_DIRECTION_TX"
+        _RBD_MIRROR_PEER_DIRECTION_RX_TX "RBD_MIRROR_PEER_DIRECTION_RX_TX"
 
     ctypedef struct rbd_mirror_peer_t:
         char *uuid
@@ -340,8 +346,18 @@ cdef extern from "rbd/librbd.h" nogil:
                              size_t status_size)
     void rbd_migration_status_cleanup(rbd_image_migration_status_t *status)
 
+    int rbd_mirror_site_name_get(rados_t cluster, char *name, size_t *max_len)
+    int rbd_mirror_site_name_set(rados_t cluster, const char *name)
+
     int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
     int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
+
+    int rbd_mirror_peer_bootstrap_create(rados_ioctx_t io_ctx, char *token,
+                                         size_t *max_len)
+    int rbd_mirror_peer_bootstrap_import(
+        rados_ioctx_t io_ctx, rbd_mirror_peer_direction_t direction,
+        const char *token)
+
     int rbd_mirror_peer_add(rados_ioctx_t io, char *uuid,
                             size_t uuid_max_length, const char *cluster_name,
                             const char *client_name)
@@ -648,6 +664,10 @@ RBD_MIRROR_MODE_DISABLED = _RBD_MIRROR_MODE_DISABLED
 RBD_MIRROR_MODE_IMAGE = _RBD_MIRROR_MODE_IMAGE
 RBD_MIRROR_MODE_POOL = _RBD_MIRROR_MODE_POOL
 
+RBD_MIRROR_PEER_DIRECTION_RX = _RBD_MIRROR_PEER_DIRECTION_RX
+RBD_MIRROR_PEER_DIRECTION_TX = _RBD_MIRROR_PEER_DIRECTION_TX
+RBD_MIRROR_PEER_DIRECTION_RX_TX = _RBD_MIRROR_PEER_DIRECTION_RX_TX
+
 RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
 RBD_MIRROR_IMAGE_DISABLED = _RBD_MIRROR_IMAGE_DISABLED
@@ -851,6 +871,9 @@ cdef make_ex(ret, msg, exception_map=errno_to_exception):
     else:
         return OSError(msg, errno=ret)
 
+
+cdef rados_t convert_rados(rados.Rados rados) except? NULL:
+    return <rados_t>rados.cluster
 
 cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
     return <rados_ioctx_t>ioctx.io
@@ -1644,6 +1667,50 @@ class RBD(object):
 
         return status
 
+    def mirror_site_name_get(self, rados):
+        """
+        Get the local cluster's friendly site name
+
+        :param rados: cluster connection
+        :type rados: :class: rados.Rados
+        :returns: str - local site name
+        """
+        cdef:
+            rados_t _rados = convert_rados(rados)
+            char *_site_name = NULL
+            size_t _max_size = 512
+        try:
+            while True:
+                _site_name = <char *>realloc_chk(_site_name, _max_size)
+                with nogil:
+                    ret = rbd_mirror_site_name_get(_rados, _site_name,
+                                                   &_max_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error getting site name')
+            return decode_cstr(_site_name)
+        finally:
+            free(_site_name)
+
+    def mirror_site_name_set(self, rados, site_name):
+        """
+        Set the local cluster's friendly site name
+
+        :param rados: cluster connection
+        :type rados: :class: rados.Rados
+        :param site_name: friendly site name
+        :type str:
+        """
+        site_name = cstr(site_name, 'site_name')
+        cdef:
+            rados_t _rados = convert_rados(rados)
+            char *_site_name = site_name
+        with nogil:
+            ret = rbd_mirror_site_name_set(_rados, _site_name)
+        if ret != 0:
+            raise make_ex(ret, 'error setting mirror site name')
+
     def mirror_mode_get(self, ioctx):
         """
         Get pool mirror mode.
@@ -1677,6 +1744,55 @@ class RBD(object):
             ret = rbd_mirror_mode_set(_ioctx, _mirror_mode)
         if ret != 0:
             raise make_ex(ret, 'error setting mirror mode')
+
+    def mirror_peer_bootstrap_create(self, ioctx):
+        """
+        Creates a new RBD mirroring bootstrap token for an
+        external cluster.
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: str - bootstrap token
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_token = NULL
+            size_t _max_size = 512
+        try:
+            while True:
+                _token = <char *>realloc_chk(_token, _max_size)
+                with nogil:
+                    ret = rbd_mirror_peer_bootstrap_create(_ioctx, _token,
+                                                           &_max_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error creating bootstrap token')
+            return decode_cstr(_token)
+        finally:
+            free(_token)
+
+    def mirror_peer_bootstrap_import(self, ioctx, direction, token):
+        """
+        Import a bootstrap token from an external cluster to
+        auto-configure the mirror peer.
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param direction: mirror peer direction
+        :type direction: int
+        :param token: bootstrap token
+        :type token: str
+        """
+        token = cstr(token, 'token')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            rbd_mirror_peer_direction_t _direction = direction
+            char *_token = token
+        with nogil:
+            ret = rbd_mirror_peer_bootstrap_import(_ioctx, _direction, _token)
+        if ret != 0:
+            raise make_ex(ret, 'error importing bootstrap token')
 
     def mirror_peer_add(self, ioctx, cluster_name, client_name):
         """
@@ -3030,12 +3146,16 @@ cdef class Image(object):
         """
         return rbd_get_data_pool_id(self.image)
 
-    def parent_info(self):
+    def get_parent_image_spec(self):
         """
-        Get information about a cloned image's parent (if any)
+        Get spec of the cloned image's parent
 
-        :returns: tuple - ``(pool name, image name, snapshot name)`` components
-                  of the parent image
+        :returns: dict - contains the following keys:
+            * ``pool_name`` (str) - parent pool name
+            * ``pool_namespace`` (str) - parent pool namespace
+            * ``image_name`` (str) - parent image name
+            * ``snap_name`` (str) - parent snapshot name
+
         :raises: :class:`ImageNotFound` if the image doesn't have a parent
         """
         cdef:
@@ -3046,13 +3166,27 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error getting parent info for image %s' % self.name)
 
-        result = (decode_cstr(parent_spec.pool_name),
-                  decode_cstr(parent_spec.image_name),
-                  decode_cstr(snap_spec.name))
+        result = {'pool_name': decode_cstr(parent_spec.pool_name),
+                  'pool_namespace': decode_cstr(parent_spec.pool_namespace),
+                  'image_name': decode_cstr(parent_spec.image_name),
+                  'snap_name': decode_cstr(snap_spec.name)}
 
         rbd_linked_image_spec_cleanup(&parent_spec)
         rbd_snap_spec_cleanup(&snap_spec)
         return result
+
+    def parent_info(self):
+        """
+        Deprecated. Use `get_parent_image_spec` instead.
+
+        Get information about a cloned image's parent (if any)
+
+        :returns: tuple - ``(pool name, image name, snapshot name)`` components
+                  of the parent image
+        :raises: :class:`ImageNotFound` if the image doesn't have a parent
+        """
+        parent = self.get_parent_image_spec()
+        return (parent['pool_name'], parent['image_name'], parent['snap_name'])
 
     def parent_id(self):
         """

@@ -4990,7 +4990,7 @@ int main(int argc, const char **argv)
   // RGWUser to use for user operations
   RGWUser user;
   int ret = 0;
-  if (!user_id.empty() || !subuser.empty()) {
+  if (!(user_id.empty() && access_key.empty()) || !subuser.empty()) {
     ret = user.init(store, user_op);
     if (ret < 0) {
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
@@ -5013,8 +5013,8 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT_USER_INFO:
-    if (user_id.empty()) {
-      cerr << "ERROR: uid not specified" << std::endl;
+    if (user_id.empty() && access_key.empty()) {
+      cerr << "ERROR: --uid or --access-key required" << std::endl;
       return EINVAL;
     }
     break;
@@ -6757,13 +6757,20 @@ next:
 
     string user_str = user_id.to_str();
     if (reset_stats) {
-      if (!bucket_name.empty()){
-	cerr << "ERROR: recalculate doesn't work on buckets" << std::endl;
+      if (!bucket_name.empty()) {
+	cerr << "ERROR: --reset-stats does not work on buckets and "
+	  "bucket specified" << std::endl;
+	return EINVAL;
+      }
+      if (sync_stats) {
+	cerr << "ERROR: sync-stats includes the reset-stats functionality, "
+	  "so at most one of the two should be specified" << std::endl;
 	return EINVAL;
       }
       ret = store->cls_user_reset_stats(user_str);
       if (ret < 0) {
-	cerr << "ERROR: could not clear user stats: " << cpp_strerror(-ret) << std::endl;
+	cerr << "ERROR: could not reset user stats: " << cpp_strerror(-ret) <<
+	  std::endl;
 	return -ret;
       }
     }
@@ -6772,13 +6779,15 @@ next:
       if (!bucket_name.empty()) {
         int ret = rgw_bucket_sync_user_stats(store, tenant, bucket_name);
         if (ret < 0) {
-          cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
+          cerr << "ERROR: could not sync bucket stats: " <<
+	    cpp_strerror(-ret) << std::endl;
           return -ret;
         }
       } else {
         int ret = rgw_user_sync_all_stats(store, user_id);
         if (ret < 0) {
-          cerr << "ERROR: failed to sync user stats: " << cpp_strerror(-ret) << std::endl;
+          cerr << "ERROR: could not sync user stats: " <<
+	    cpp_strerror(-ret) << std::endl;
           return -ret;
         }
       }
@@ -7011,8 +7020,12 @@ next:
     }
     RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
-    ret = meta_log->trim(shard_id, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
-    if (ret < 0) {
+    // trim until -ENODATA
+    do {
+      ret = meta_log->trim(shard_id, start_time.to_real_time(),
+                           end_time.to_real_time(), start_marker, end_marker);
+    } while (ret == 0);
+    if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
@@ -7651,9 +7664,20 @@ next:
     if (ret < 0)
       return -ret;
 
-    RGWDataChangesLog *log = store->data_log;
-    ret = log->trim_entries(start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
-    if (ret < 0) {
+    if (!specified_shard_id) {
+      cerr << "ERROR: requires a --shard-id" << std::endl;
+      return EINVAL;
+    }
+
+    // loop until -ENODATA
+    do {
+      auto datalog = store->data_log;
+      ret = datalog->trim_entries(shard_id, start_time.to_real_time(),
+                                  end_time.to_real_time(),
+                                  start_marker, end_marker);
+    } while (ret == 0);
+
+    if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }

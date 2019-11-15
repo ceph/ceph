@@ -1377,7 +1377,7 @@ int FileStore::write_superblock()
   bufferlist bl;
   encode(superblock, bl);
   return safe_write_file(basedir.c_str(), "superblock",
-      bl.c_str(), bl.length());
+			 bl.c_str(), bl.length(), 0600);
 }
 
 int FileStore::read_superblock()
@@ -1462,7 +1462,7 @@ int FileStore::write_version_stamp()
   encode(target_version, bl);
 
   return safe_write_file(basedir.c_str(), "store_version",
-      bl.c_str(), bl.length());
+			 bl.c_str(), bl.length(), 0600);
 }
 
 int FileStore::upgrade()

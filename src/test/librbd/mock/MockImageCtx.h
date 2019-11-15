@@ -139,7 +139,7 @@ struct MockImageCtx {
     ctx.wait();
   }
 
-  MOCK_METHOD0(init_layout, void());
+  MOCK_METHOD1(init_layout, void(int64_t));
 
   MOCK_CONST_METHOD1(get_object_name, std::string(uint64_t));
   MOCK_CONST_METHOD0(get_object_size, uint64_t());

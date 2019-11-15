@@ -14,7 +14,7 @@ describe('Pools page', () => {
 
   it('should open and show breadcrumb', () => {
     page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Pools');
+    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Pools');
   });
 
   it('should show two tabs', () => {

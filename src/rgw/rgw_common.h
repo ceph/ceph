@@ -30,6 +30,7 @@
 #include "rgw_string.h"
 #include "common/async/yield_context.h"
 #include "rgw_website.h"
+#include "rgw_object_lock.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -79,6 +80,12 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_SLO_UINDICATOR RGW_ATTR_META_PREFIX "static-large-object"
 #define RGW_ATTR_X_ROBOTS_TAG	RGW_ATTR_PREFIX "x-robots-tag"
 #define RGW_ATTR_STORAGE_CLASS  RGW_ATTR_PREFIX "storage_class"
+
+/* S3 Object Lock*/
+#define RGW_ATTR_OBJECT_LOCK        RGW_ATTR_PREFIX "object-lock"
+#define RGW_ATTR_OBJECT_RETENTION   RGW_ATTR_PREFIX "object-retention"
+#define RGW_ATTR_OBJECT_LEGAL_HOLD  RGW_ATTR_PREFIX "object-legal-hold"
+
 
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
@@ -208,6 +215,8 @@ using ceph::crypto::MD5;
 #define ERR_NO_SUCH_SUBUSER      2043
 #define ERR_MFA_REQUIRED         2044
 #define ERR_NO_SUCH_CORS_CONFIGURATION 2045
+#define ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION  2046
+#define ERR_INVALID_RETENTION_PERIOD 2047
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -492,6 +501,12 @@ enum RGWOpType {
   RGW_OP_GET_USER_POLICY,
   RGW_OP_LIST_USER_POLICIES,
   RGW_OP_DELETE_USER_POLICY,
+  RGW_OP_PUT_BUCKET_OBJ_LOCK,
+  RGW_OP_GET_BUCKET_OBJ_LOCK,
+  RGW_OP_PUT_OBJ_RETENTION,
+  RGW_OP_GET_OBJ_RETENTION,
+  RGW_OP_PUT_OBJ_LEGAL_HOLD,
+  RGW_OP_GET_OBJ_LEGAL_HOLD,
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
@@ -1335,6 +1350,7 @@ enum RGWBucketFlags {
   BUCKET_VERSIONS_SUSPENDED = 0x4,
   BUCKET_DATASYNC_DISABLED = 0X8,
   BUCKET_MFA_ENABLED = 0X10,
+  BUCKET_OBJ_LOCK_ENABLED = 0X20,
 };
 
 enum RGWBucketIndexType {
@@ -1394,12 +1410,16 @@ struct RGWBucketInfo {
 
   map<string, uint32_t> mdsearch_config;
 
+
+
   /* resharding */
   uint8_t reshard_status;
   string new_bucket_instance_id;
 
+  RGWObjectLock obj_lock;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 4, bl);
+     ENCODE_START(20, 4, bl);
      encode(bucket, bl);
      encode(owner.id, bl);
      encode(flags, bl);
@@ -1426,10 +1446,13 @@ struct RGWBucketInfo {
      encode(mdsearch_config, bl);
      encode(reshard_status, bl);
      encode(new_bucket_instance_id, bl);
+     if (obj_lock_enabled()) {
+       encode(obj_lock, bl);
+     }
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(19, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(20, 4, 4, bl);
      decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -1493,6 +1516,9 @@ struct RGWBucketInfo {
        decode(reshard_status, bl);
        decode(new_bucket_instance_id, bl);
      }
+     if (struct_v >= 20 && obj_lock_enabled()) {
+       decode(obj_lock, bl);
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1505,6 +1531,7 @@ struct RGWBucketInfo {
   bool versioning_enabled() const { return (versioning_status() & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED)) == BUCKET_VERSIONED; }
   bool mfa_enabled() const { return (versioning_status() & BUCKET_MFA_ENABLED) != 0; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
+  bool obj_lock_enabled() const { return (flags & BUCKET_OBJ_LOCK_ENABLED) != 0; }
 
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */

@@ -2169,7 +2169,9 @@ struct pg_stat_t {
     // adding (or subtracting!) invalid stats render our stats invalid too
     stats_invalid |= o.stats_invalid;
     dirty_stats_invalid |= o.dirty_stats_invalid;
+    omap_stats_invalid |= o.omap_stats_invalid;
     hitset_stats_invalid |= o.hitset_stats_invalid;
+    hitset_bytes_stats_invalid |= o.hitset_bytes_stats_invalid;
     pin_stats_invalid |= o.pin_stats_invalid;
     manifest_stats_invalid |= o.manifest_stats_invalid;
   }
@@ -2355,6 +2357,19 @@ struct osd_stat_t {
 
   uint32_t num_osds = 0;
   uint32_t num_per_pool_osds = 0;
+
+  struct Interfaces {
+    uint32_t last_update;  // in seconds
+    uint32_t back_pingtime[3];
+    uint32_t back_min[3];
+    uint32_t back_max[3];
+    uint32_t back_last;
+    uint32_t front_pingtime[3];
+    uint32_t front_min[3];
+    uint32_t front_max[3];
+    uint32_t front_last;
+  };
+  map<int, Interfaces> hb_pingtime;  ///< map of osd id to Interfaces
 
   osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
        num_shards_repaired(0)	{}

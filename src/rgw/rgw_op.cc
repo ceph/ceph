@@ -322,12 +322,13 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
   return policies;
 }
 
-static int get_obj_attrs(RGWRados *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs)
+static int get_obj_attrs(RGWRados *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs, rgw_obj *target_obj = nullptr)
 {
   RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
+  read_op.params.target_obj = target_obj;
 
   return read_op.prepare();
 }
@@ -979,6 +980,11 @@ int RGWGetObj::verify_permission()
     return -EACCES;
   }
 
+  if (s->bucket_info.obj_lock_enabled()) {
+    get_retention = verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention);
+    get_legal_hold = verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold);
+  }
+
   return 0;
 }
 
@@ -1613,7 +1619,7 @@ static int iterate_slo_parts(CephContext *cct,
     ent.meta.etag = part.etag;
 
     uint64_t cur_total_len = obj_ofs;
-    uint64_t start_ofs = 0, end_ofs = ent.meta.size;
+    uint64_t start_ofs = 0, end_ofs = ent.meta.size - 1;
 
     if (!found_start && cur_total_len + ent.meta.size > (uint64_t)ofs) {
       start_ofs = ofs - obj_ofs;
@@ -1623,7 +1629,7 @@ static int iterate_slo_parts(CephContext *cct,
     obj_ofs += ent.meta.size;
 
     if (!found_end && obj_ofs > (uint64_t)end) {
-      end_ofs = end - cur_total_len + 1;
+      end_ofs = end - cur_total_len;
       found_end = true;
     }
 
@@ -1632,6 +1638,12 @@ static int iterate_slo_parts(CephContext *cct,
 
     if (found_start) {
       if (cb) {
+        dout(20) << "iterate_slo_parts()"
+                          << " obj=" << part.obj_name
+                          << " start_ofs=" << start_ofs
+                          << " end_ofs=" << end_ofs
+                          << dendl;
+
 	// SLO is a Swift thing, and Swift has no knowledge of S3 Policies.
         int r = cb(part.bucket, ent, part.bucket_acl,
 		   (part.bucket_policy ?
@@ -1858,8 +1870,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     part.obj_name = obj_name;
     part.size = entry.size_bytes;
     part.etag = entry.etag;
-    ldpp_dout(this, 20) << "slo_part: ofs=" << ofs
-                      << " bucket=" << part.bucket
+    ldpp_dout(this, 20) << "slo_part: bucket=" << part.bucket
                       << " obj=" << part.obj_name
                       << " size=" << part.size
                       << " etag=" << part.etag
@@ -1883,6 +1894,10 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   }
 
   total_len = end - ofs + 1;
+  ldpp_dout(this, 20) << "Requested: ofs=" << ofs
+                    << " end=" << end
+                    << " total=" << total_len
+                    << dendl;
 
   r = iterate_slo_parts(s->cct, store, ofs, end, slo_parts,
         get_obj_user_manifest_iterate_cb, (void *)this);
@@ -2421,6 +2436,11 @@ void RGWSetBucketVersioning::execute()
   op_ret = get_params();
   if (op_ret < 0)
     return;
+
+  if (s->bucket_info.obj_lock_enabled() && versioning_status != VersioningEnabled) {
+    op_ret = -ERR_INVALID_BUCKET_STATE;
+    return;
+  }
 
   bool cur_mfa_status = (s->bucket_info.flags & BUCKET_MFA_ENABLED) != 0;
 
@@ -3035,6 +3055,7 @@ void RGWCreateBucket::execute()
     creation_time = master_info.creation_time;
     pmaster_num_shards = &master_info.num_shards;
     pobjv = &objv;
+    obj_lock_enabled = master_info.obj_lock_enabled();
   } else {
     pmaster_bucket = NULL;
     pmaster_num_shards = NULL;
@@ -3108,6 +3129,10 @@ void RGWCreateBucket::execute()
     s->bucket_info.swift_ver_location = *swift_ver_location;
     s->bucket_info.swift_versioning = (! swift_ver_location->empty());
   }
+  if (obj_lock_enabled) {
+    info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
+  }
+
 
   op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
                                 placement_rule, s->bucket_info.swift_ver_location,
@@ -3657,10 +3682,10 @@ void RGWPutObj::execute()
 
   rgw_placement_rule *pdest_placement;
 
+  multipart_upload_info upload_info;
   if (multipart) {
     RGWMPObj mp(s->object.name, multipart_upload_id);
 
-    multipart_upload_info upload_info;
     op_ret = get_multipart_info(store, s, mp.get_meta(), nullptr, nullptr, &upload_info);
     if (op_ret < 0) {
       if (op_ret != -ENOENT) {
@@ -3737,20 +3762,23 @@ void RGWPutObj::execute()
   boost::optional<RGWPutObj_Compress> compressor;
 
   std::unique_ptr<DataProcessor> encrypt;
-  op_ret = get_encrypt_filter(&encrypt, filter);
-  if (op_ret < 0) {
-    return;
-  }
-  if (encrypt != nullptr) {
-    filter = &*encrypt;
-  } else if (compression_type != "none") {
-    plugin = get_compressor_plugin(s, compression_type);
-    if (!plugin) {
-      ldpp_dout(this, 1) << "Cannot load plugin for compression type "
-          << compression_type << dendl;
-    } else {
-      compressor.emplace(s->cct, plugin, filter);
-      filter = &*compressor;
+
+  if (!append) { // compression and encryption only apply to full object uploads
+    op_ret = get_encrypt_filter(&encrypt, filter);
+    if (op_ret < 0) {
+      return;
+    }
+    if (encrypt != nullptr) {
+      filter = &*encrypt;
+    } else if (compression_type != "none") {
+      plugin = get_compressor_plugin(s, compression_type);
+      if (!plugin) {
+        ldpp_dout(this, 1) << "Cannot load plugin for compression type "
+            << compression_type << dendl;
+      } else {
+        compressor.emplace(s->cct, plugin, filter);
+        filter = &*compressor;
+      }
     }
   }
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
@@ -3891,6 +3919,16 @@ void RGWPutObj::execute()
     bufferlist slo_userindicator_bl;
     slo_userindicator_bl.append("True", 4);
     emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
+  }
+  if (obj_legal_hold) {
+    bufferlist obj_legal_hold_bl;
+    obj_legal_hold->encode(obj_legal_hold_bl);
+    emplace_attr(RGW_ATTR_OBJECT_LEGAL_HOLD, std::move(obj_legal_hold_bl));
+  }
+  if (obj_retention) {
+    bufferlist obj_retention_bl;
+    obj_retention->encode(obj_retention_bl);
+    emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
@@ -4397,6 +4435,7 @@ void RGWPutMetadataObject::pre_exec()
 void RGWPutMetadataObject::execute()
 {
   rgw_obj obj(s->bucket, s->object);
+  rgw_obj target_obj;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
 
   store->set_atomic(s->obj_ctx, obj);
@@ -4412,7 +4451,7 @@ void RGWPutMetadataObject::execute()
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = get_obj_attrs(store, s, obj, orig_attrs);
+  op_ret = get_obj_attrs(store, s, obj, orig_attrs, &target_obj);
   if (op_ret < 0) {
     return;
   }
@@ -4437,7 +4476,7 @@ void RGWPutMetadataObject::execute()
     }
   }
 
-  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattrs);
+  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, target_obj, attrs, &rmattrs);
 }
 
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
@@ -4491,7 +4530,24 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
 
 int RGWDeleteObj::verify_permission()
 {
+  int op_ret = get_params();
+  if (op_ret) {
+    return op_ret;
+  }
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
+    if (s->bucket_info.obj_lock_enabled() && bypass_governance_mode) {
+      auto r = eval_user_policies(s->iam_user_policies, s->env, boost::none,
+                                               rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket, s->object.name));
+      if (r == Effect::Deny) {
+        bypass_perm = false;
+      } else if (r == Effect::Pass && s->iam_policy) {
+        r = s->iam_policy->eval(s->env, *s->auth.identity, rgw::IAM::s3BypassGovernanceRetention,
+                                     ARN(s->bucket, s->object.name));
+        if (r == Effect::Deny) {
+          bypass_perm = false;
+        }
+      }
+    }
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               s->object.instance.empty() ?
@@ -4544,14 +4600,10 @@ void RGWDeleteObj::execute()
     return;
   }
 
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   rgw_obj obj(s->bucket, s->object);
   map<string, bufferlist> attrs;
 
+  bool check_obj_lock = obj.key.have_instance() && s->bucket_info.obj_lock_enabled();
 
   if (!s->object.empty()) {
     if (need_object_expiration() || multipart_delete) {
@@ -4559,6 +4611,54 @@ void RGWDeleteObj::execute()
       op_ret = get_obj_attrs(store, s, obj, attrs);
       if (op_ret < 0) {
         return;
+      }
+    }
+
+    if (check_obj_lock) {
+      /* check if obj exists, read orig attrs */
+      op_ret = get_obj_attrs(store, s, obj, attrs);
+      if (op_ret < 0) {
+        if (op_ret == -ENOENT) {
+          /* object maybe delete_marker, skip check_obj_lock*/
+          check_obj_lock = false;
+        } else {
+          return;
+        }
+      }
+    }
+
+    if (check_obj_lock) {
+      auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+      if (aiter != attrs.end()) {
+        RGWObjectRetention obj_retention;
+        try {
+          decode(obj_retention, aiter->second);
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+          op_ret = -EIO;
+          return;
+        }
+        if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) > ceph_clock_now()) {
+          if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
+            op_ret = -EACCES;
+            return;
+          }
+        }
+      }
+      aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+      if (aiter != attrs.end()) {
+        RGWObjectLegalHold obj_legal_hold;
+        try {
+          decode(obj_legal_hold, aiter->second);
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
+          op_ret = -EIO;
+          return;
+        }
+        if (obj_legal_hold.is_enabled()) {
+          op_ret = -EACCES;
+          return;
+        }
       }
     }
 
@@ -7420,6 +7520,315 @@ void RGWDeleteBucketPolicy::execute()
 				    &s->bucket_info.objv_tracker);
       return op_ret;
     });
+}
+
+void RGWPutBucketObjectLock::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWPutBucketObjectLock::verify_permission()
+{
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketObjectLockConfiguration);
+}
+
+void RGWPutBucketObjectLock::execute()
+{
+  if (!s->bucket_info.obj_lock_enabled()) {
+    ldpp_dout(this, 0) << "ERROR: object Lock configuration cannot be enabled on existing buckets" << dendl;
+    op_ret = -ERR_INVALID_BUCKET_STATE;
+    return;
+  }
+
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("ObjectLockConfiguration", obj_lock, &parser, true);
+  } catch (RGWXMLDecoder::err& err) {
+    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+  if (obj_lock.has_rule() && !obj_lock.retention_period_valid()) {
+    ldpp_dout(this, 0) << "ERROR: retention period must be a positive integer value" << dendl;
+    op_ret = -ERR_INVALID_RETENTION_PERIOD;
+    return;
+  }
+
+  if (!store->svc.zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+    s->bucket_info.obj_lock = obj_lock;
+    op_ret = store->put_bucket_instance_info(s->bucket_info, false,
+                                             real_time(), &s->bucket_attrs);
+    return op_ret;
+  });
+  return;
+}
+
+void RGWGetBucketObjectLock::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWGetBucketObjectLock::verify_permission()
+{
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketObjectLockConfiguration);
+}
+
+void RGWGetBucketObjectLock::execute()
+{
+  if (!s->bucket_info.obj_lock_enabled()) {
+    op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
+    return;
+  }
+}
+
+int RGWPutObjRetention::verify_permission()
+{
+  if (!verify_object_permission(this, s, rgw::IAM::s3PutObjectRetention)) {
+    return -EACCES;
+  }
+  op_ret = get_params();
+  if (op_ret) {
+    return op_ret;
+  }
+  if (bypass_governance_mode) {
+    bypass_perm = verify_object_permission(this, s, rgw::IAM::s3BypassGovernanceRetention);
+  }
+  return 0;
+}
+
+void RGWPutObjRetention::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutObjRetention::execute()
+{
+  if (!s->bucket_info.obj_lock_enabled()) {
+    ldpp_dout(this, 0) << "ERROR: object retention can't be set if bucket object lock not configured" << dendl;
+    op_ret = -ERR_INVALID_REQUEST;
+    return;
+  }
+
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("Retention", obj_retention, &parser, true);
+  } catch (RGWXMLDecoder::err& err) {
+    ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph_clock_now()) {
+    ldpp_dout(this, 0) << "ERROR: the retain until date must be in the future" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+  bufferlist bl;
+  obj_retention.encode(bl);
+  rgw_obj obj(s->bucket, s->object);
+
+  //check old retention
+  map<string, bufferlist> attrs;
+  op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: get obj attr error"<< dendl;
+    return;
+  }
+  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (aiter != attrs.end()) {
+    RGWObjectRetention old_obj_retention;
+    try {
+      decode(old_obj_retention, aiter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date())) {
+      if (old_obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
+        op_ret = -EACCES;
+        return;
+      }
+    }
+  }
+
+  op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_OBJECT_RETENTION, bl);
+
+  return;
+}
+
+int RGWGetObjRetention::verify_permission()
+{
+  if (!verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWGetObjRetention::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetObjRetention::execute()
+{
+  if (!s->bucket_info.obj_lock_enabled()) {
+    ldpp_dout(this, 0) << "ERROR: bucket object lock not configured" << dendl;
+    op_ret = -ERR_INVALID_REQUEST;
+    return;
+  }
+  rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> attrs;
+  op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << obj
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (aiter == attrs.end()) {
+    op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
+    return;
+  }
+
+  bufferlist::const_iterator iter{&aiter->second};
+  try {
+    obj_retention.decode(iter);
+  } catch (const buffer::error& e) {
+    ldout(s->cct, 0) << __func__ <<  "decode object retention config failed" << dendl;
+    op_ret = -EIO;
+    return;
+  }
+  return;
+}
+
+int RGWPutObjLegalHold::verify_permission()
+{
+  if (!verify_object_permission(this, s, rgw::IAM::s3PutObjectLegalHold)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutObjLegalHold::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutObjLegalHold::execute() {
+  if (!s->bucket_info.obj_lock_enabled()) {
+    ldpp_dout(this, 0) << "ERROR: object legal hold can't be set if bucket object lock not configured" << dendl;
+    op_ret = -ERR_INVALID_REQUEST;
+    return;
+  }
+
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("LegalHold", obj_legal_hold, &parser, true);
+  } catch (RGWXMLDecoder::err &err) {
+    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+  bufferlist bl;
+  obj_legal_hold.encode(bl);
+  rgw_obj obj(s->bucket, s->object);
+  //if instance is empty, we should modify the latest object
+  op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_OBJECT_LEGAL_HOLD, bl);
+  return;
+}
+
+int RGWGetObjLegalHold::verify_permission()
+{
+  if (!verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWGetObjLegalHold::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetObjLegalHold::execute()
+{
+  if (!s->bucket_info.obj_lock_enabled()) {
+    ldpp_dout(this, 0) << "ERROR: bucket object lock not configured" << dendl;
+    op_ret = -ERR_INVALID_REQUEST;
+    return;
+  }
+  rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> attrs;
+  op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << obj
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  auto aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (aiter == attrs.end()) {
+    op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
+    return;
+  }
+
+  bufferlist::const_iterator iter{&aiter->second};
+  try {
+    obj_legal_hold.decode(iter);
+  } catch (const buffer::error& e) {
+    ldout(s->cct, 0) << __func__ <<  "decode object legal hold config failed" << dendl;
+    op_ret = -EIO;
+    return;
+  }
+  return;
 }
 
 void RGWGetClusterStat::execute()

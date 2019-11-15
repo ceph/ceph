@@ -18,7 +18,7 @@ describe('Manager modules page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Manager modules');
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Manager modules');
     });
   });
 });

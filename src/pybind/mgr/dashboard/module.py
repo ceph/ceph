@@ -242,7 +242,7 @@ class CherryPyConfig(object):
 
         uri = "{0}://{1}:{2}{3}/".format(
             'https' if ssl else 'http',
-            socket.getfqdn() if server_addr == "::" else server_addr,
+            socket.getfqdn() if server_addr in ['::', '0.0.0.0'] else server_addr,
             server_port,
             self.url_prefix
         )

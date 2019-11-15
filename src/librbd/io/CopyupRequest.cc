@@ -114,6 +114,7 @@ CopyupRequest<I>::CopyupRequest(I *ictx, const std::string &oid,
     m_trace(util::create_trace(*m_image_ctx, "copy-up", parent_trace)),
     m_lock("CopyupRequest", false, false)
 {
+  ceph_assert(m_image_ctx->data_ctx.is_valid());
   m_async_op.start_op(*util::get_image_ctx(m_image_ctx));
 }
 

@@ -1056,6 +1056,10 @@ librados::IoCtx::~IoCtx()
   close();
 }
 
+bool librados::IoCtx::is_valid() const {
+  return io_ctx_impl != nullptr;
+}
+
 void librados::IoCtx::close()
 {
   if (io_ctx_impl)
@@ -2170,6 +2174,16 @@ librados::Rados::Rados(IoCtx &ioctx)
 librados::Rados::~Rados()
 {
   shutdown();
+}
+
+void librados::Rados::from_rados_t(rados_t cluster, Rados &rados) {
+  if (rados.client) {
+    rados.client->put();
+  }
+  rados.client = static_cast<RadosClient*>(cluster);
+  if (rados.client) {
+    rados.client->get();
+  }
 }
 
 int librados::Rados::init(const char * const id)

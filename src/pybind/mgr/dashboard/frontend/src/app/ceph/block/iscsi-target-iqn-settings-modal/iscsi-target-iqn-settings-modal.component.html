@@ -16,32 +16,10 @@
              *ngFor="let setting of settingsForm.controls | keyvalue"
              [ngClass]="{'has-error': settingsForm.showError(setting.key, formDir)}">
           <div class="col-sm-12">
-            <label class="control-label"
-                   for="{{ setting.key }}">{{ setting.key }}</label>
-            <input class="form-control"
-                   *ngIf="!isRadio(setting.key)"
-                   type="number"
-                   [formControlName]="setting.key">
-
-            <ng-container *ngIf="isRadio(setting.key)">
-              <br>
-              <div class="radio radio-inline">
-                <input type="radio"
-                       [id]="setting.key + 'Yes'"
-                       value="Yes"
-                       [formControlName]="setting.key">
-                <label [for]="setting.key + 'Yes'">Yes</label>
-              </div>
-              <div class="radio radio-inline">
-                <input type="radio"
-                       [id]="setting.key + 'No'"
-                       value="No"
-                       [formControlName]="setting.key">
-                <label [for]="setting.key + 'No'">No</label>
-              </div>
-            </ng-container>
-
-            <span class="help-block">{{ helpText[setting.key]?.help }}</span>
+            <cd-iscsi-setting [settingsForm]="settingsForm"
+                              [formDir]="formDir"
+                              [setting]="setting.key"
+                              [limits]="getTargetControlLimits(setting.key)"></cd-iscsi-setting>
           </div>
         </div>
       </div>

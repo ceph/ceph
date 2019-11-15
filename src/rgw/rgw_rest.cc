@@ -1446,6 +1446,21 @@ int RGWPutLC_ObjStore::get_params()
   return op_ret;
 }
 
+int RGWPutBucketObjectLock_ObjStore::get_params()
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+int RGWPutObjLegalHold_ObjStore::get_params()
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+
 static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const uint64_t max_read)
 {
 #define READ_CHUNK 4096

@@ -50,6 +50,18 @@ DeepCopyRequest<I>::~DeepCopyRequest() {
 
 template <typename I>
 void DeepCopyRequest<I>::send() {
+  if (!m_src_image_ctx->data_ctx.is_valid()) {
+    lderr(m_cct) << "missing data pool for source image" << dendl;
+    finish(-ENODEV);
+    return;
+  }
+
+  if (!m_dst_image_ctx->data_ctx.is_valid()) {
+    lderr(m_cct) << "missing data pool for destination image" << dendl;
+    finish(-ENODEV);
+    return;
+  }
+
   int r = validate_copy_points();
   if (r < 0) {
     finish(r);

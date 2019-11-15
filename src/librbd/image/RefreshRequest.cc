@@ -1313,7 +1313,7 @@ void RefreshRequest<I>::apply() {
       m_image_ctx.op_features = 0;
       m_image_ctx.operations_disabled = false;
       m_image_ctx.object_prefix = std::move(m_object_prefix);
-      m_image_ctx.init_layout();
+      m_image_ctx.init_layout(m_image_ctx.md_ctx.get_id());
     } else {
       // HEAD revision doesn't have a defined overlap so it's only
       // applicable to snapshots
@@ -1396,8 +1396,10 @@ void RefreshRequest<I>::apply() {
     if (m_refresh_parent != nullptr) {
       m_refresh_parent->apply();
     }
-    m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
-                                                        m_image_ctx.snaps);
+    if (m_image_ctx.data_ctx.is_valid()) {
+      m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
+                                                          m_image_ctx.snaps);
+    }
 
     // handle dynamically enabled / disabled features
     if (m_image_ctx.exclusive_lock != nullptr &&

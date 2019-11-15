@@ -183,7 +183,7 @@ describe('NfsListComponent', () => {
       scenario = {
         fn: () => tableActions.getCurrentButton().name,
         single: 'Edit',
-        empty: 'Add'
+        empty: 'Create'
       };
     });
 
@@ -192,7 +192,7 @@ describe('NfsListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
       });
 
-      it(`shows 'Edit' for single selection else 'Add' as main action`, () =>
+      it(`shows 'Edit' for single selection else 'Create' as main action`, () =>
         permissionHelper.testScenarios(scenario));
 
       it('shows all actions', () => {
@@ -206,7 +206,7 @@ describe('NfsListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 0);
       });
 
-      it(`shows 'Edit' for single selection else 'Add' as main action`, () =>
+      it(`shows 'Edit' for single selection else 'Create' as main action`, () =>
         permissionHelper.testScenarios(scenario));
 
       it(`shows all actions except for 'Delete'`, () => {
@@ -221,12 +221,12 @@ describe('NfsListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 1);
       });
 
-      it(`shows 'Delete' for single selection else 'Add' as main action`, () => {
+      it(`shows 'Delete' for single selection else 'Create' as main action`, () => {
         scenario.single = 'Delete';
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows 'Add', and 'Delete'  action`, () => {
+      it(`shows 'Create', and 'Delete'  action`, () => {
         expect(tableActions.tableActions.length).toBe(2);
         expect(tableActions.tableActions).toEqual([
           component.tableActions[0],
@@ -259,12 +259,12 @@ describe('NfsListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 0);
       });
 
-      it(`always shows 'Add' as main action`, () => {
-        scenario.single = 'Add';
+      it(`always shows 'Create' as main action`, () => {
+        scenario.single = 'Create';
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows 'Add' action`, () => {
+      it(`shows 'Create' action`, () => {
         expect(tableActions.tableActions.length).toBe(1);
         expect(tableActions.tableActions).toEqual([component.tableActions[0]]);
       });

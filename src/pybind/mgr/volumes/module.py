@@ -37,9 +37,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs volume rm '
-                   'name=vol_name,type=CephString',
-            'desc': "Delete a CephFS volume",
+                   'name=vol_name,type=CephString '
+                   'name=yes-i-really-mean-it,type=CephString,req=false ',
+            'desc': "Delete a FS volume by passing --yes-i-really-mean-it flag",
             'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup ls '
+            'name=vol_name,type=CephString ',
+            'desc': "List subvolumegroups",
+            'perm': 'r'
         },
         {
             'cmd': 'fs subvolumegroup create '
@@ -58,6 +65,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=force,type=CephBool,req=false ',
             'desc': "Delete a CephFS subvolume group in a volume",
             'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume ls '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "List subvolumes",
+            'perm': 'r'
         },
         {
             'cmd': 'fs subvolume create '
@@ -99,6 +113,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup snapshot ls '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString ',
+            'desc': "List subvolumegroup snapshots",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolumegroup snapshot create '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString '
@@ -114,6 +135,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=force,type=CephBool,req=false ',
                    'desc': "Delete a snapshot of a CephFS subvolume group in a volume",
             'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot ls '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "List subvolume snapshots",
+            'perm': 'r'
         },
         {
             'cmd': 'fs subvolume snapshot create '
@@ -194,7 +223,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_fs_volume_rm(self, inbuf, cmd):
         vol_name = cmd['vol_name']
-        return self.vc.delete_volume(vol_name)
+        confirm = cmd.get('yes-i-really-mean-it', None)
+        return self.vc.delete_volume(vol_name, confirm)
 
     def _cmd_fs_volume_ls(self, inbuf, cmd):
         return self.vc.list_volumes()
@@ -214,6 +244,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.remove_subvolume_group(None, vol_name=cmd['vol_name'],
                                               group_name=cmd['group_name'],
                                               force=cmd.get('force', False))
+
+    def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        return self.vc.list_subvolume_groups(None, vol_name=cmd['vol_name'])
 
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
         """
@@ -235,6 +269,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         group_name=cmd.get('group_name', None),
                                         force=cmd.get('force', False))
 
+    def _cmd_fs_subvolume_ls(self, inbuf, cmd):
+        return self.vc.list_subvolumes(None, vol_name=cmd['vol_name'],
+                                       group_name=cmd.get('group_name', None))
+
     def _cmd_fs_subvolumegroup_getpath(self, inbuf, cmd):
         return self.vc.getpath_subvolume_group(
                 None, vol_name=cmd['vol_name'], group_name=cmd['group_name'])
@@ -255,6 +293,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                        snap_name=cmd['snap_name'],
                                                        force=cmd.get('force', False))
 
+    def _cmd_fs_subvolumegroup_snapshot_ls(self, inbuf, cmd):
+        return self.vc.list_subvolume_group_snapshots(None, vol_name=cmd['vol_name'],
+                                                      group_name=cmd['group_name'])
+
     def _cmd_fs_subvolume_snapshot_create(self, inbuf, cmd):
         return self.vc.create_subvolume_snapshot(None, vol_name=cmd['vol_name'],
                                                  sub_name=cmd['sub_name'],
@@ -267,3 +309,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                  snap_name=cmd['snap_name'],
                                                  group_name=cmd.get('group_name', None),
                                                  force=cmd.get('force', False))
+
+    def _cmd_fs_subvolume_snapshot_ls(self, inbuf, cmd):
+        return self.vc.list_subvolume_snapshots(None, vol_name=cmd['vol_name'],
+                                                sub_name=cmd['sub_name'],
+                                                group_name=cmd.get('group_name', None))

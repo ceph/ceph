@@ -11,57 +11,6 @@ import { ApiModule } from './api.module';
 export class IscsiService {
   constructor(private http: HttpClient) {}
 
-  targetAdvancedSettings = {
-    cmdsn_depth: {
-      help: ''
-    },
-    dataout_timeout: {
-      help: ''
-    },
-    first_burst_length: {
-      help: ''
-    },
-    immediate_data: {
-      help: ''
-    },
-    initial_r2t: {
-      help: ''
-    },
-    max_burst_length: {
-      help: ''
-    },
-    max_outstanding_r2t: {
-      help: ''
-    },
-    max_recv_data_segment_length: {
-      help: ''
-    },
-    max_xmit_data_segment_length: {
-      help: ''
-    },
-    nopin_response_timeout: {
-      help: ''
-    },
-    nopin_timeout: {
-      help: ''
-    }
-  };
-
-  imageAdvancedSettings = {
-    hw_max_sectors: {
-      help: ''
-    },
-    max_data_area_mb: {
-      help: ''
-    },
-    osd_op_timeout: {
-      help: ''
-    },
-    qfull_timeout: {
-      help: ''
-    }
-  };
-
   listTargets() {
     return this.http.get(`api/iscsi/target`);
   }
@@ -80,6 +29,10 @@ export class IscsiService {
 
   settings() {
     return this.http.get(`ui-api/iscsi/settings`);
+  }
+
+  version() {
+    return this.http.get(`ui-api/iscsi/version`);
   }
 
   portals() {

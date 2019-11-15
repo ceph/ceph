@@ -22,6 +22,8 @@
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
+#include <boost/algorithm/string/trim.hpp>
+#include <boost/algorithm/string/replace.hpp>
 #include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -33,6 +35,56 @@ namespace api {
 
 namespace {
 
+int get_config_key(librados::Rados& rados, const std::string& key,
+                   std::string* value) {
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key get\", "
+      "\"key\": \"" + key + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r == -EINVAL) {
+    return -EOPNOTSUPP;
+  } else if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  *value = out_bl.to_str();
+  return 0;
+}
+
+int set_config_key(librados::Rados& rados, const std::string& key,
+                   const std::string& value) {
+  std::string cmd;
+  if (value.empty()) {
+    cmd = "{"
+            "\"prefix\": \"config-key rm\", "
+            "\"key\": \"" + key + "\""
+          "}";
+  } else {
+    cmd = "{"
+            "\"prefix\": \"config-key set\", "
+            "\"key\": \"" + key + "\", "
+            "\"val\": \"" + value + "\""
+          "}";
+  }
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r == -EINVAL) {
+    return -EOPNOTSUPP;
+  } else if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 std::string get_peer_config_key_name(int64_t pool_id,
                                      const std::string& peer_uuid) {
   return RBD_MIRROR_PEER_CONFIG_KEY_PREFIX + stringify(pool_id) + "/" +
@@ -42,19 +94,148 @@ std::string get_peer_config_key_name(int64_t pool_id,
 int remove_peer_config_key(librados::IoCtx& io_ctx,
                            const std::string& peer_uuid) {
   int64_t pool_id = io_ctx.get_id();
-  std::string cmd =
-    "{"
-      "\"prefix\": \"config-key rm\", "
-      "\"key\": \"" + get_peer_config_key_name(pool_id, peer_uuid) + "\""
-    "}";
+  auto key = get_peer_config_key_name(pool_id, peer_uuid);
 
-  bufferlist in_bl;
-  bufferlist out_bl;
   librados::Rados rados(io_ctx);
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = set_config_key(rados, key, "");
   if (r < 0 && r != -ENOENT && r != -EPERM) {
     return r;
   }
+  return 0;
+}
+
+int create_bootstrap_user(CephContext* cct, librados::Rados& rados,
+                          std::string* peer_client_id, std::string* cephx_key) {
+  ldout(cct, 20) << dendl;
+
+  // retrieve peer CephX user from config-key
+  int r = get_config_key(rados, RBD_MIRROR_PEER_CLIENT_ID_CONFIG_KEY,
+                         peer_client_id);
+  if (r == -EACCES) {
+      ldout(cct, 5) << "insufficient permissions to get peer-client-id "
+                    << "config-key" << dendl;
+      return r;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve peer client id key: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == -ENOENT || peer_client_id->empty()) {
+    ldout(cct, 20) << "creating new peer-client-id config-key" << dendl;
+
+    *peer_client_id = "rbd-mirror-peer";
+    r = set_config_key(rados, RBD_MIRROR_PEER_CLIENT_ID_CONFIG_KEY,
+                       *peer_client_id);
+    if (r == -EACCES) {
+      ldout(cct, 5) << "insufficient permissions to update peer-client-id "
+                    << "config-key" << dendl;
+      return r;
+    } else if (r < 0) {
+      lderr(cct) << "failed to update peer client id key: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+  ldout(cct, 20) << "peer_client_id=" << *peer_client_id << dendl;
+
+  // create peer client user
+  std::string cmd =
+    R"({)" \
+    R"(  "prefix": "auth get-or-create",)" \
+    R"(  "entity": "client.)" + *peer_client_id + R"(",)" \
+    R"(  "caps": [)" \
+    R"(    "mon", "profile rbd-mirror-peer",)" \
+    R"(    "osd", "profile rbd"],)" \
+    R"(  "format": "json")" \
+    R"(})";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r == -EINVAL) {
+    ldout(cct, 5) << "caps mismatch for existing user" << dendl;
+    return -EEXIST;
+  } else if (r == -EACCES) {
+    ldout(cct, 5) << "insufficient permissions to create user" << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "failed to create or update RBD mirroring bootstrap user: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // extract key from response
+  bool json_valid = false;
+  json_spirit::mValue json_root;
+  if(json_spirit::read(out_bl.to_str(), json_root)) {
+    try {
+      auto& json_obj = json_root.get_array()[0].get_obj();
+      *cephx_key = json_obj["key"].get_str();
+      json_valid = true;
+    } catch (std::runtime_error&) {
+    }
+  }
+
+  if (!json_valid) {
+    lderr(cct) << "invalid auth keyring JSON received" << dendl;
+    return -EBADMSG;
+  }
+
+  return 0;
+}
+
+int create_bootstrap_peer(CephContext* cct, librados::IoCtx& io_ctx,
+                          const std::string& site_name, const std::string& fsid,
+                          const std::string& client_id, const std::string& key,
+                          const std::string& mon_host,
+                          const std::string& cluster1,
+                          const std::string& cluster2) {
+  ldout(cct, 20) << dendl;
+
+  std::string peer_uuid;
+  std::vector<mirror_peer_t> peers;
+  int r = Mirror<>::peer_list(io_ctx, &peers);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to list mirror peers: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (peers.empty()) {
+    r = Mirror<>::peer_add(io_ctx, &peer_uuid, site_name,
+                           "client." + client_id);
+    if (r < 0) {
+      lderr(cct) << "failed to add " << cluster1 << " peer to "
+                 << cluster2 << " " << "cluster: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else if (peers[0].cluster_name != site_name &&
+             peers[0].cluster_name != fsid) {
+    // only support a single peer
+    lderr(cct) << "multiple peers are not currently supported" << dendl;
+    return -EINVAL;
+  } else {
+    peer_uuid = peers[0].uuid;
+
+    if (peers[0].cluster_name != site_name) {
+      r = Mirror<>::peer_set_cluster(io_ctx, peer_uuid, site_name);
+      if (r < 0) {
+        // non-fatal attempt to update site name
+        lderr(cct) << "failed to update peer site name" << dendl;
+      }
+    }
+  }
+
+  Mirror<>::Attributes attributes {
+    {"mon_host", mon_host},
+    {"key", key}};
+  r = Mirror<>::peer_set_attributes(io_ctx, peer_uuid, attributes);
+  if (r < 0) {
+    lderr(cct) << "failed to update " << cluster1 << " cluster connection "
+               << "attributes in " << cluster2 << " cluster: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   return 0;
 }
 
@@ -421,11 +602,6 @@ int Mirror<I>::image_resync(I *ictx) {
     return r;
   }
 
-  r = validate_mirroring_enabled(ictx);
-  if (r < 0) {
-    return r;
-  }
-
   C_SaferCond tag_owner_ctx;
   bool is_tag_owner;
   Journal<I>::is_tag_owner(ictx, &is_tag_owner, &tag_owner_ctx);
@@ -528,6 +704,51 @@ int Mirror<I>::image_get_instance_id(I *ictx, std::string *instance_id) {
   }
 
   *instance_id = stringify(instance.name.num());
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::site_name_get(librados::Rados& rados, std::string* name) {
+  CephContext *cct = reinterpret_cast<CephContext *>(rados.cct());
+  ldout(cct, 20) << dendl;
+
+  int r = get_config_key(rados, RBD_MIRROR_SITE_NAME_CONFIG_KEY, name);
+  if (r == -EOPNOTSUPP) {
+    return r;
+  } else if (r == -ENOENT || name->empty()) {
+    // default to the cluster fsid
+    r = rados.cluster_fsid(name);
+    if (r < 0) {
+      lderr(cct) << "failed to retrieve cluster fsid: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve site name: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::site_name_set(librados::Rados& rados, const std::string& name) {
+  CephContext *cct = reinterpret_cast<CephContext *>(rados.cct());
+
+  std::string site_name{name};
+  boost::algorithm::trim(site_name);
+  ldout(cct, 20) << "site_name=" << site_name << dendl;
+
+  int r = set_config_key(rados, RBD_MIRROR_SITE_NAME_CONFIG_KEY, name);
+  if (r == -EOPNOTSUPP) {
+    return r;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to update site name: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
   return 0;
 }
 
@@ -761,6 +982,234 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 }
 
 template <typename I>
+int Mirror<I>::peer_bootstrap_create(librados::IoCtx& io_ctx,
+                                     std::string* token) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  auto mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
+  int r = cls_client::mirror_mode_get(&io_ctx, &mirror_mode);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring mode: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  } else if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+    return -EINVAL;
+  }
+
+  // retrieve the cluster fsid
+  std::string fsid;
+  librados::Rados rados(io_ctx);
+  r = rados.cluster_fsid(&fsid);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve cluster fsid: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  std::string peer_client_id;
+  std::string cephx_key;
+  r = create_bootstrap_user(cct, rados, &peer_client_id, &cephx_key);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string mon_host = cct->_conf.get_val<std::string>("mon_host");
+  ldout(cct, 20) << "mon_host=" << mon_host << dendl;
+
+  // format the token response
+  bufferlist token_bl;
+  token_bl.append(
+    R"({)" \
+      R"("fsid":")" + fsid + R"(",)" + \
+      R"("client_id":")" + peer_client_id + R"(",)" + \
+      R"("key":")" + cephx_key + R"(",)" + \
+      R"("mon_host":")" + \
+        boost::replace_all_copy(mon_host, "\"", "\\\"") + R"(")" + \
+    R"(})");
+  ldout(cct, 20) << "token=" << token_bl.to_str() << dendl;
+
+  bufferlist base64_bl;
+  token_bl.encode_base64(base64_bl);
+  *token = base64_bl.to_str();
+
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::peer_bootstrap_import(librados::IoCtx& io_ctx,
+                                     rbd_mirror_peer_direction_t direction,
+                                     const std::string& token) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  if (direction != RBD_MIRROR_PEER_DIRECTION_RX &&
+      direction != RBD_MIRROR_PEER_DIRECTION_RX_TX) {
+    lderr(cct) << "invalid mirror peer direction" << dendl;
+    return -EINVAL;
+  }
+
+  bufferlist token_bl;
+  try {
+    bufferlist base64_bl;
+    base64_bl.append(token);
+    token_bl.decode_base64(base64_bl);
+  } catch (buffer::error& err) {
+    lderr(cct) << "failed to decode base64" << dendl;
+    return -EINVAL;
+  }
+
+  ldout(cct, 20) << "token=" << token_bl.to_str() << dendl;
+
+  bool json_valid = false;
+  std::string expected_remote_fsid;
+  std::string remote_client_id;
+  std::string remote_key;
+  std::string remote_mon_host;
+
+  json_spirit::mValue json_root;
+  if(json_spirit::read(token_bl.to_str(), json_root)) {
+    try {
+      auto& json_obj = json_root.get_obj();
+      expected_remote_fsid = json_obj["fsid"].get_str();
+      remote_client_id = json_obj["client_id"].get_str();
+      remote_key = json_obj["key"].get_str();
+      remote_mon_host = json_obj["mon_host"].get_str();
+      json_valid = true;
+    } catch (std::runtime_error&) {
+    }
+  }
+
+  if (!json_valid) {
+    lderr(cct) << "invalid bootstrap token JSON received" << dendl;
+    return -EINVAL;
+  }
+
+  // sanity check import process
+  std::string local_fsid;
+  librados::Rados rados(io_ctx);
+  int r = rados.cluster_fsid(&local_fsid);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve cluster fsid: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  std::string local_site_name;
+  r = site_name_get(rados, &local_site_name);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve cluster site name: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  // attempt to connect to remote cluster
+  librados::Rados remote_rados;
+  remote_rados.init(remote_client_id.c_str());
+
+  auto remote_cct = reinterpret_cast<CephContext*>(remote_rados.cct());
+  remote_cct->_conf.set_val("mon_host", remote_mon_host);
+  remote_cct->_conf.set_val("key", remote_key);
+
+  r = remote_rados.connect();
+  if (r < 0) {
+    lderr(cct) << "failed to connect to peer cluster: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  std::string remote_fsid;
+  r = remote_rados.cluster_fsid(&remote_fsid);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve remote cluster fsid: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (local_fsid == remote_fsid) {
+    lderr(cct) << "cannot import token for local cluster" << dendl;
+    return -EINVAL;
+  } else if (expected_remote_fsid != remote_fsid) {
+    lderr(cct) << "unexpected remote cluster fsid" << dendl;
+    return -EINVAL;
+  }
+
+  std::string remote_site_name;
+  r = site_name_get(remote_rados, &remote_site_name);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve remote cluster site name: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (local_site_name == remote_site_name) {
+    lderr(cct) << "cannot import token for duplicate site name" << dendl;
+    return -EINVAL;
+  }
+
+  librados::IoCtx remote_io_ctx;
+  r = remote_rados.ioctx_create(io_ctx.get_pool_name().c_str(), remote_io_ctx);
+  if (r == -ENOENT) {
+    ldout(cct, 10) << "remote pool does not exist" << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "failed to open remote pool '" << io_ctx.get_pool_name()
+               << "': " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  auto remote_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
+  r = cls_client::mirror_mode_get(&remote_io_ctx, &remote_mirror_mode);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve remote mirroring mode: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (remote_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+    return -ENOSYS;
+  }
+
+  auto local_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
+  r = cls_client::mirror_mode_get(&io_ctx, &local_mirror_mode);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve local mirroring mode: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  } else if (local_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+    // copy mirror mode from remote peer
+    r = mode_set(io_ctx, static_cast<rbd_mirror_mode_t>(remote_mirror_mode));
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (direction == RBD_MIRROR_PEER_DIRECTION_RX_TX) {
+    // create a local mirror peer user and export it to the remote cluster
+    std::string local_client_id;
+    std::string local_key;
+    r = create_bootstrap_user(cct, rados, &local_client_id, &local_key);
+    if (r < 0) {
+      return r;
+    }
+
+    std::string local_mon_host = cct->_conf.get_val<std::string>("mon_host");
+
+    // create local cluster peer in remote cluster
+    r = create_bootstrap_peer(cct, remote_io_ctx, local_site_name, local_fsid,
+                              local_client_id, local_key, local_mon_host,
+                              "local", "remote");
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  // create remote cluster peer in local cluster
+  r = create_bootstrap_peer(cct, io_ctx, remote_site_name, remote_fsid,
+                            remote_client_id, remote_key, remote_mon_host,
+                            "remote", "local");
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
 int Mirror<I>::peer_add(librados::IoCtx& io_ctx, std::string *uuid,
                         const std::string &cluster_name,
                         const std::string &client_name) {
@@ -890,18 +1339,12 @@ int Mirror<I>::peer_get_attributes(librados::IoCtx& io_ctx,
   ldout(cct, 20) << "uuid=" << uuid << dendl;
 
   attributes->clear();
-  std::string cmd =
-    "{"
-      "\"prefix\": \"config-key get\", "
-      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\""
-    "}";
-
-  bufferlist in_bl;
-  bufferlist out_bl;
 
   librados::Rados rados(io_ctx);
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
-  if (r == -ENOENT || out_bl.length() == 0) {
+  std::string value;
+  int r = get_config_key(rados, get_peer_config_key_name(io_ctx.get_id(), uuid),
+                         &value);
+  if (r == -ENOENT || value.empty()) {
     return -ENOENT;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve peer attributes: " << cpp_strerror(r)
@@ -911,7 +1354,7 @@ int Mirror<I>::peer_get_attributes(librados::IoCtx& io_ctx,
 
   bool json_valid = false;
   json_spirit::mValue json_root;
-  if(json_spirit::read(out_bl.to_str(), json_root)) {
+  if(json_spirit::read(value, json_root)) {
     try {
       auto& json_obj = json_root.get_obj();
       for (auto& pairs : json_obj) {
@@ -962,18 +1405,10 @@ int Mirror<I>::peer_set_attributes(librados::IoCtx& io_ctx,
   }
   ss << "}";
 
-  std::string cmd =
-    "{"
-      "\"prefix\": \"config-key set\", "
-      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\", "
-      "\"val\": \"" + ss.str() + "\""
-    "}";
-  bufferlist in_bl;
-  bufferlist out_bl;
-
   librados::Rados rados(io_ctx);
-  r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
-  if (r < 0) {
+  r = set_config_key(rados, get_peer_config_key_name(io_ctx.get_id(), uuid),
+                     ss.str());
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to update peer attributes: " << cpp_strerror(r)
                << dendl;
     return r;

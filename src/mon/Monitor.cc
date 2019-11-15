@@ -6227,7 +6227,7 @@ int Monitor::handle_auth_request(
     }
     dout(10) << __func__ << " bad authorizer on " << con << dendl;
     return -EACCES;
-  } else if (auth_meta->auth_mode < AUTH_MODE_MON &&
+  } else if (auth_meta->auth_mode < AUTH_MODE_MON ||
 	     auth_meta->auth_mode > AUTH_MODE_MON_MAX) {
     derr << __func__ << " unrecognized auth mode " << auth_meta->auth_mode
 	 << dendl;

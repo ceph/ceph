@@ -134,6 +134,7 @@ set(librbd_internal_srcs
   operation/SparsifyRequest.cc
   operation/TrimRequest.cc
   trash/MoveRequest.cc
+  trash/RemoveRequest.cc
   watcher/Notifier.cc
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)

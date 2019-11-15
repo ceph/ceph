@@ -2705,6 +2705,13 @@ function test_mgr_tell()
   ceph tell mgr osd status
 }
 
+function test_mgr_devices()
+{
+  ceph device ls
+  expect_false ceph device info doesnotexist
+  expect_false ceph device get-health-metrics doesnotexist
+}
+
 function test_per_pool_scrub_status()
 {
   ceph osd pool create noscrub_pool 12
@@ -2807,6 +2814,7 @@ MDS_TESTS+=" mon_mds_metadata"
 MDS_TESTS+=" mds_tell_help_command"
 
 MGR_TESTS+=" mgr_tell"
+MGR_TESTS+=" mgr_devices"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS

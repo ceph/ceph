@@ -125,6 +125,8 @@
                        type="text"
                        [value]="image"
                        disabled />
+                <div class="input-group-addon"
+                     *ngIf="api_version >= 1">lun: {{ imagesSettings[image]['lun'] }}</div>
                 <span class="input-group-btn">
                   <button class="btn btn-default"
                           type="button"
@@ -151,9 +153,19 @@
               </span>
             </ng-container>
 
+            <input class="form-control"
+                   type="hidden"
+                   id="disks"
+                   name="disks"
+                   formControlName="disks" />
+
             <span class="help-block"
-                  *ngIf="targetForm.showError('disks', formDir, 'required')"
-                  i18n>At least 1 image is required.</span>
+                  *ngIf="targetForm.showError('disks', formDir, 'dupLunId')"
+                  i18n>Duplicated LUN numbers.</span>
+
+            <span class="help-block"
+                  *ngIf="targetForm.showError('disks', formDir, 'dupWwn')"
+                  i18n>Duplicated WWN.</span>
 
             <div class="row">
               <div class="col-md-12">
@@ -186,6 +198,138 @@
 
             <hr />
           </div>
+        </div>
+
+        <!-- Target level authentication was introduced in ceph-iscsi config v11 -->
+        <div formGroupName="auth" *ngIf="cephIscsiConfigVersion > 10 && !targetForm.getValue('acl_enabled')">
+
+          <!-- Target user -->
+          <div class="form-group"
+               [ngClass]="{'has-error': targetForm.showError('user', formDir)}">
+            <label class="control-label col-sm-3"
+                   for="target_user">
+              <ng-container i18n>User</ng-container>
+            </label>
+            <div class="col-sm-9">
+              <input class="form-control"
+                     type="text"
+                     id="target_user"
+                     name="target_user"
+                     formControlName="user" />
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('user', formDir, 'required')"
+                    i18n>This field is required.</span>
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('user', formDir, 'pattern')"
+                    i18n>Usernames must have a length of 8 to 64 characters and
+                can only contain letters, '.', '@', '-', '_' or ':'.</span>
+            </div>
+          </div>
+
+          <!-- Target password -->
+          <div class="form-group"
+               [ngClass]="{'has-error': targetForm.showError('password', formDir)}">
+            <label class="control-label col-sm-3"
+                   for="target_password">
+              <ng-container i18n>Password</ng-container>
+            </label>
+            <div class="col-sm-9">
+              <div class="input-group">
+                <input class="form-control"
+                       type="password"
+                       autocomplete="new-password"
+                       id="target_password"
+                       name="target_password"
+                       formControlName="password" />
+                <span class="input-group-btn">
+                  <button type="button"
+                          class="btn btn-default"
+                          cdPasswordButton="target_password">
+                  </button>
+                  <button type="button"
+                          class="btn btn-default"
+                          cdCopy2ClipboardButton="target_password">
+                  </button>
+                </span>
+              </div>
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('password', formDir, 'required')"
+                    i18n>This field is required.</span>
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('password', formDir, 'pattern')"
+                    i18n>Passwords must have a length of 12 to 16 characters
+                and can only contain letters, '@', '-', '_' or '/'.</span>
+            </div>
+          </div>
+
+          <!-- Target mutual_user -->
+          <div class="form-group"
+               [ngClass]="{'has-error': targetForm.showError('mutual_user', formDir)}">
+            <label class="control-label col-sm-3"
+                   for="target_mutual_user">
+              <ng-container i18n>Mutual User</ng-container>
+            </label>
+            <div class="col-sm-9">
+              <input class="form-control"
+                     type="text"
+                     id="target_mutual_user"
+                     name="target_mutual_user"
+                     formControlName="mutual_user" />
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('mutual_user', formDir, 'required')"
+                    i18n>This field is required.</span>
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('mutual_user', formDir, 'pattern')"
+                    i18n>Usernames must have a length of 8 to 64 characters and
+                can only contain letters, '.', '@', '-', '_' or ':'.</span>
+            </div>
+          </div>
+
+          <!-- Target mutual_password -->
+          <div class="form-group"
+               [ngClass]="{'has-error': targetForm.showError('mutual_password', formDir)}">
+            <label class="control-label col-sm-3"
+                   for="target_mutual_password">
+              <ng-container i18n>Mutual Password</ng-container>
+            </label>
+            <div class="col-sm-9">
+              <div class="input-group">
+                <input class="form-control"
+                       type="password"
+                       autocomplete="new-password"
+                       id="target_mutual_password"
+                       name="target_mutual_password"
+                       formControlName="mutual_password" />
+
+                <span class="input-group-btn">
+                  <button type="button"
+                          class="btn btn-default"
+                          cdPasswordButton="target_mutual_password">
+                  </button>
+                  <button type="button"
+                          class="btn btn-default"
+                          cdCopy2ClipboardButton="target_mutual_password">
+                  </button>
+                </span>
+              </div>
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('mutual_password', formDir, 'required')"
+                    i18n>This field is required.</span>
+
+              <span class="help-block"
+                    *ngIf="targetForm.showError('mutual_password', formDir, 'pattern')"
+                    i18n>Passwords must have a length of 12 to 16 characters
+                and can only contain letters, '@', '-', '_' or '/'.</span>
+            </div>
+          </div>
+
         </div>
 
         <!-- Initiators -->
