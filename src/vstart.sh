@@ -681,7 +681,8 @@ EOF
         ; rgw crypt s3 kms backend = vault
         ; rgw crypt vault auth = token
         ; rgw crypt vault addr = http://127.0.0.1:8200
-        ; rgw crypt vault token file = /path/to/token.file
+        ; rgw crypt vault prefix = /v1/secret/data
+        ; rgw crypt vault token file = $CEPH_CONF_PATH/vault.token
 
 $extra_conf
 EOF
