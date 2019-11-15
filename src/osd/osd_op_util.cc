@@ -136,7 +136,8 @@ int OpInfo::set_from_op(
             (iter->op.op != CEPH_OSD_OP_RMXATTR) &&
             (iter->op.op != CEPH_OSD_OP_STARTSYNC) &&
             (iter->op.op != CEPH_OSD_OP_COPY_GET) &&
-            (iter->op.op != CEPH_OSD_OP_COPY_FROM)) {
+            (iter->op.op != CEPH_OSD_OP_COPY_FROM) &&
+            (iter->op.op != CEPH_OSD_OP_COPY_FROM2)) {
           set_promote();
         }
       }
