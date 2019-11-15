@@ -513,13 +513,6 @@ class Remote(object):
             self.ssh.close()
 
 
-def getShortName(name):
-    """
-    Extract the name portion from remote name strings.
-    """
-    hostname = name.split('@')[-1]
-    return host_shortname(hostname)
-
 def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
                      logfile=None, timeout=20):
     """
