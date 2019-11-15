@@ -487,7 +487,9 @@ struct Job {
 
   static vector<unsigned> parse_throttle_str(const char *p) {
     vector<unsigned> ret;
-
+    if (p == nullptr) {
+      return ret;
+    }
     ceph::for_each_substr(p, ",\"", [&ret] (auto &&s) mutable {
       if (s.size() > 0) {
 	ret.push_back(std::stoul(std::string(s)));
