@@ -7714,6 +7714,11 @@ std::vector<Option> get_mds_options() {
     .set_default(45)
     .set_description("timeout in seconds to wait for clients to reconnect during MDS reconnect recovery state"),
 
+    Option("mds_deny_all_reconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("flag to deny all client reconnects during failover"),
+
     Option("mds_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("time in seconds between upkeep tasks"),

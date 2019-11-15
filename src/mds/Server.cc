@@ -1339,6 +1339,8 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
     return;
   }
 
+  bool reconnect_all_deny = g_conf().get_val<bool>("mds_deny_all_reconnect");
+
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
     dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
     mds->wait_for_reconnect(new C_MDS_RetryMessage(mds, m));
@@ -1349,9 +1351,13 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
   bool deny = false;
-  if (!mds->is_reconnect() || mds->get_want_state() != CEPH_MDS_STATE_RECONNECT || reconnect_evicting) {
+  if (reconnect_all_deny || !mds->is_reconnect() || mds->get_want_state() != CEPH_MDS_STATE_RECONNECT || reconnect_evicting) {
     // XXX maybe in the future we can do better than this?
-    dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
+    if (reconnect_all_deny) {
+      dout(1) << "mds_deny_all_reconnect was set to speed up reboot phase, ignoring reconnect, sending close" << dendl;
+    } else {
+      dout(1) << "no longer in reconnect state, ignoring reconnect, sending close" << dendl;
+    }
     mds->clog->info() << "denied reconnect attempt (mds is "
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
@@ -1387,8 +1393,9 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
   if (deny) {
     auto r = make_message<MClientSession>(CEPH_SESSION_CLOSE);
     mds->send_message_client(r, session);
-    if (session->is_open())
-      kill_session(session, nullptr);
+    if (session->is_open()) {
+      client_reconnect_denied.insert(session->get_client());
+    }
     return;
   }
 
@@ -1564,17 +1571,33 @@ void Server::reconnect_gather_finish()
 
 void Server::reconnect_tick()
 {
+  bool reject_all_reconnect = false;
   if (reconnect_evicting) {
     dout(7) << "reconnect_tick: waiting for evictions" << dendl;
     return;
   }
 
+  /*
+   * Set mds_deny_all_reconnect to reject all the reconnect req ,
+   * then load less meta information in rejoin phase. This will shorten reboot time.
+   * Moreover, loading less meta increases the chance standby with less memory can failover.
+
+   * Why not shorten reconnect period?
+   * Clients may send unsafe or retry requests, which haven't been
+   * completed before old mds stop, to new mds. These requests may
+   * need to be processed during new mds's clientreplay phase,
+   * see: #https://github.com/ceph/ceph/pull/29059.
+   */
+  bool reconnect_all_deny = g_conf().get_val<bool>("mds_deny_all_reconnect");
   if (client_reconnect_gather.empty())
     return;
 
+  if (reconnect_all_deny && (client_reconnect_gather == client_reconnect_denied))
+    reject_all_reconnect = true;
+ 
   auto now = clock::now();
   auto elapse1 = std::chrono::duration<double>(now - reconnect_start).count();
-  if (elapse1 < g_conf()->mds_reconnect_timeout)
+  if (elapse1 < g_conf()->mds_reconnect_timeout && !reject_all_reconnect)
     return;
 
   vector<Session*> remaining_sessions;
@@ -1589,14 +1612,14 @@ void Server::reconnect_tick()
   }
 
   auto elapse2 = std::chrono::duration<double>(now - reconnect_last_seen).count();
-  if (elapse2 < g_conf()->mds_reconnect_timeout / 2) {
+  if (elapse2 < g_conf()->mds_reconnect_timeout / 2 && !reject_all_reconnect) {
     dout(7) << "reconnect_tick: last seen " << elapse2
             << " seconds ago, extending reconnect interval" << dendl;
     return;
   }
 
   dout(7) << "reconnect timed out, " << remaining_sessions.size()
-	  << " clients have not reconnected in time" << dendl;
+          << " clients have not reconnected in time" << dendl;
 
   // If we're doing blacklist evictions, use this to wait for them before
   // proceeding to reconnect_gather_finish
@@ -1631,6 +1654,7 @@ void Server::reconnect_tick()
     failed_reconnects++;
   }
   client_reconnect_gather.clear();
+  client_reconnect_denied.clear();
 
   if (gather.has_subs()) {
     dout(1) << "reconnect will complete once clients are evicted" << dendl;
