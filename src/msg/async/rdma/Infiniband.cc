@@ -186,6 +186,7 @@ Infiniband::QueuePair::QueuePair(
 int Infiniband::QueuePair::modify_qp_to_error(void)
 {
     ibv_qp_attr qpa;
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(&qpa, 0, sizeof(qpa));
     qpa.qp_state = IBV_QPS_ERR;
     if (ibv_modify_qp(qp, &qpa, IBV_QP_STATE)) {
@@ -200,6 +201,7 @@ int Infiniband::QueuePair::modify_qp_to_rts(void)
 {
   // move from RTR state RTS
   ibv_qp_attr qpa;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpa, 0, sizeof(qpa));
   qpa.qp_state = IBV_QPS_RTS;
   /*
@@ -234,6 +236,7 @@ int Infiniband::QueuePair::modify_qp_to_rtr(void)
 {
   // move from INIT to RTR state
   ibv_qp_attr qpa;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpa, 0, sizeof(qpa));
   qpa.qp_state = IBV_QPS_RTR;
   qpa.path_mtu = IBV_MTU_1024;
@@ -270,6 +273,7 @@ int Infiniband::QueuePair::modify_qp_to_init(void)
 {
   // move from RESET to INIT state
   ibv_qp_attr qpa;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpa, 0, sizeof(qpa));
   qpa.qp_state   = IBV_QPS_INIT;
   qpa.pkey_index = 0;
@@ -306,6 +310,7 @@ int Infiniband::QueuePair::init()
 {
   ldout(cct, 20) << __func__ << " started." << dendl;
   ibv_qp_init_attr qpia;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&qpia, 0, sizeof(qpia));
   qpia.send_cq = txcq->get_cq();
   qpia.recv_cq = rxcq->get_cq();
@@ -478,6 +483,7 @@ int Infiniband::QueuePair::to_dead()
                  << " bound remote QueuePair, qp number: " << local_cm_meta.peer_qpn << dendl;
 
   struct ibv_send_wr *bad_wr = nullptr, beacon;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&beacon, 0, sizeof(beacon));
   beacon.wr_id = BEACON_WRID;
   beacon.opcode = IBV_WR_SEND;
@@ -769,6 +775,7 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
   end = base + bytes;
   ceph_assert(base);
   chunk_base = static_cast<Chunk*>(::malloc(sizeof(Chunk) * num));
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(static_cast<void*>(chunk_base), 0, sizeof(Chunk) * num);
   free_chunks.reserve(num);
   ibv_mr* m = ibv_reg_mr(manager.pd->pd, base, bytes, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
@@ -1128,6 +1135,7 @@ Infiniband::~Infiniband()
 ibv_srq* Infiniband::create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge)
 {
   ibv_srq_init_attr sia;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&sia, 0, sizeof(sia));
   sia.srq_context = device->ctxt;
   sia.attr.max_wr = max_wr;
