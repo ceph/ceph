@@ -297,6 +297,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* tiering */							    \
 	f(COPY_FROM,	__CEPH_OSD_OP(WR, DATA, 26),	"copy-from")	    \
+	f(COPY_FROM2,	__CEPH_OSD_OP(WR, DATA, 45),	"copy-from2")	    \
 	/* was copy-get-classic */					\
 	f(UNDIRTY,	__CEPH_OSD_OP(WR, DATA, 28),	"undirty")	    \
 	f(ISDIRTY,	__CEPH_OSD_OP(RD, DATA, 29),	"isdirty")	    \
@@ -509,8 +510,16 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE = 8, /* map snap direct to
 						     * cloneid */
 	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
-	CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ = 32, /* send truncate_{seq,size} */
+	CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ = 32, /* use provided truncate_{seq,size} (copy-from2 only) */
 };
+
+#define CEPH_OSD_COPY_FROM_FLAGS			\
+	(CEPH_OSD_COPY_FROM_FLAG_FLUSH |		\
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |	\
+	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |		\
+	 CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |	\
+	 CEPH_OSD_COPY_FROM_FLAG_RWORDERED |		\
+	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ)
 
 enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
