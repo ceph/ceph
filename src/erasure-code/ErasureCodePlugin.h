@@ -47,7 +47,7 @@ namespace ceph {
     ceph::mutex lock = ceph::make_mutex("ErasureCodePluginRegistry::lock");
     bool loading = false;
     bool disable_dlclose = false;
-    std::map<std::string,ErasureCodePlugin*> plugins;
+    std::map<std::string,ErasureCodePlugin*, std::less<>> plugins;
 
     static ErasureCodePluginRegistry singleton;
 
@@ -66,9 +66,9 @@ namespace ceph {
 
     int add(const std::string &name, ErasureCodePlugin *plugin);
     int remove(const std::string &name);
-    ErasureCodePlugin *get(const std::string &name);
+    ErasureCodePlugin *get(std::string_view name);
 
-    int load(const std::string &plugin_name,
+    int load(std::string_view plugin_name,
 	     const std::string &directory,
 	     ErasureCodePlugin **plugin,
 	     std::ostream *ss);

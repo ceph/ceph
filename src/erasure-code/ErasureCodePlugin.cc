@@ -17,12 +17,15 @@
 
 #include <errno.h>
 #include <dlfcn.h>
+#include <limits.h>
 
 #include "ceph_ver.h"
 #include "ErasureCodePlugin.h"
 #include "common/errno.h"
 #include "include/str_list.h"
 #include "include/ceph_assert.h"
+
+#include "common/str_util.h"
 
 using namespace std;
 
@@ -78,13 +81,14 @@ int ErasureCodePluginRegistry::add(const std::string &name,
   return 0;
 }
 
-ErasureCodePlugin *ErasureCodePluginRegistry::get(const std::string &name)
+ErasureCodePlugin *ErasureCodePluginRegistry::get(std::string_view name)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
-  if (plugins.find(name) != plugins.end())
-    return plugins[name];
+  auto i = plugins.find(name);
+  if (i != plugins.end())
+    return i->second;
   else
-    return 0;
+    return nullptr;
 }
 
 int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
@@ -121,14 +125,17 @@ static const char *an_older_version() {
   return "an older version";
 }
 
-int ErasureCodePluginRegistry::load(const std::string &plugin_name,
+int ErasureCodePluginRegistry::load(std::string_view plugin_name,
 				    const std::string &directory,
 				    ErasureCodePlugin **plugin,
 				    ostream *ss)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
-  std::string fname = directory + "/" PLUGIN_PREFIX
-    + plugin_name + PLUGIN_SUFFIX;
+  // Use fmt::format?
+  std::string fname = directory;
+  fname.append("/" PLUGIN_PREFIX);
+  fname.append(plugin_name);
+  fname.append(PLUGIN_SUFFIX);
   void *library = dlopen(fname.c_str(), RTLD_NOW);
   if (!library) {
     *ss << "load dlopen(" << fname << "): " << dlerror();
@@ -149,8 +156,10 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
   int (*erasure_code_init)(const char *, const char *) =
     (int (*)(const char *, const char *))dlsym(library, PLUGIN_INIT_FUNCTION);
   if (erasure_code_init) {
-    std::string name = plugin_name;
-    int r = erasure_code_init(name.c_str(), directory.c_str());
+    char name[NAME_MAX + 1];
+    ceph::nul_terminated_copy(plugin_name, name);
+
+    int r = erasure_code_init(name, directory.c_str());
     if (r != 0) {
       *ss << "erasure_code_init(" << plugin_name
 	  << "," << directory
@@ -186,16 +195,18 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
 				       ostream *ss)
 {
   std::lock_guard l{lock};
-  list<string> plugins_list;
-  get_str_list(plugins, plugins_list);
-  for (list<string>::iterator i = plugins_list.begin();
-       i != plugins_list.end();
-       ++i) {
-    ErasureCodePlugin *plugin;
-    int r = load(*i, directory, &plugin, ss);
-    if (r)
-      return r;
-  }
-  return 0;
+  int r = 0;
+  ceph::substr_do(
+    plugins,
+    [&](std::string_view s) {
+      ErasureCodePlugin *plugin;
+      int r = load(s, directory, &plugin, ss);
+      if (r) {
+	r = 0;
+	return ceph::cf::stop;
+      }
+      return ceph::cf::go;
+    });
+  return r;
 }
 }
