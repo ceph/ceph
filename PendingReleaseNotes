@@ -306,3 +306,8 @@
   notably improved by heuristically -- and significantly, in many
   cases -- reducing the number of entries requested from each bucket
   index shard.
+
+* The behaviour of the ``-o`` argument to the rados tool has been reverted to
+  its orignal behaviour of indicating an output file. This reverts it to a more
+  consisten behaviour when compared to other tools. Specifying obect size is now
+  accomplished by using an upper case O ``-O``.
