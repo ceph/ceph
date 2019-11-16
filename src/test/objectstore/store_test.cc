@@ -1320,6 +1320,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     return;
   StartDeferred(65536);
   SetVal(g_conf(), "bluestore_compression_mode", "force");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   // just a big number to disble gc
   SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
@@ -7731,6 +7732,82 @@ TEST_P(StoreTest, mergeRegionTest) {
     ASSERT_EQ(final_len, static_cast<uint64_t>(r));
   }
 }
+  
+TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
+
+  if(string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "4294967296");
+  SetVal(g_conf(), "bluestore_block_size", "12884901888");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid2 = hoid;
+  hoid2.hobj.snap = 1;
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(ch, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(ch, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    uint64_t offs = 0;
+    bufferlist bl;
+    const int size = 0x100;
+    bufferptr ap(size);
+    memset(ap.c_str(), 'a', size);
+    bl.append(ap);
+    int i = 0;
+    uint64_t  blob_size = 524288;
+    uint64_t total = 0;
+    for (i = 0; i <= 512; i++) {
+      offs = 0 + i * size;
+      ObjectStore::Transaction t;
+      ghobject_t hoid2 = hoid;
+      hoid2.hobj.snap = i + 1;
+      while (offs < 128 * 1024 * 1024) {
+
+        t.write(cid, hoid, offs, ap.length(), bl);
+       offs += blob_size;
+       total += ap.length();
+      }
+      t.clone(cid, hoid, hoid2);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    cerr << "Total written = " << total << std::endl;
+  }
+  {
+    cerr << "Finalizing" << std::endl;
+    const PerfCounters* logger = store->get_perf_counters();
+    ASSERT_GE(logger->get(l_bluestore_gc_merged), 1024*1024*1024);
+  }
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {

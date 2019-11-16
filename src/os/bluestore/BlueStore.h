@@ -963,7 +963,7 @@ public:
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
-    const vector<bluestore_pextent_t>& get_extents_to_collect() const {
+    const interval_set<uint64_t>& get_extents_to_collect() const {
       return extents_to_collect;
     }
     GarbageCollector(CephContext* _cct) : cct(_cct) {}
@@ -994,7 +994,7 @@ public:
                                          ///< specific write
 
     ///< protrusive extents that should be collected if GC takes place
-    vector<bluestore_pextent_t> extents_to_collect;
+    interval_set<uint64_t> extents_to_collect;
 
     boost::optional<uint64_t > used_alloc_unit; ///< last processed allocation
                                                 ///<  unit when traversing 
@@ -1016,8 +1016,6 @@ public:
     int64_t expected_for_release = 0;      ///< alloc units currently used by
                                            ///< compressed blobs that might
                                            ///< gone after GC
-    uint64_t gc_start_offset = 0;              ///starting offset for GC
-    uint64_t gc_end_offset = 0;                ///ending offset for GC
 
   protected:
     void process_protrusive_extents(const BlueStore::ExtentMap& extent_map, 
@@ -2770,6 +2768,7 @@ private:
     unsigned csum_order = 0;        ///< target checksum chunk order
 
     old_extent_map_t old_extents;   ///< must deref these blobs
+    interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
@@ -2888,7 +2887,6 @@ private:
   int _do_gc(TransContext *txc,
              CollectionRef& c,
              OnodeRef o,
-             const GarbageCollector& gc,
              const WriteContext& wctx,
              uint64_t *dirty_start,
              uint64_t *dirty_end);

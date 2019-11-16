@@ -1241,8 +1241,8 @@ TEST(GarbageCollector, BasicTest)
     saving = gc.estimate(300, 100, em, old_extents, 4096);
     ASSERT_EQ(saving, 1);
     auto& to_collect = gc.get_extents_to_collect();
-    ASSERT_EQ(to_collect.size(), 1u);
-    ASSERT_EQ(to_collect[0], bluestore_pextent_t(100,10) );
+    ASSERT_EQ(to_collect.num_intervals(), 1u);
+    ASSERT_EQ(*to_collect.begin(), std::make_pair(100ul, 10ul));
 
     em.clear();
     old_extents.clear();
@@ -1311,11 +1311,11 @@ TEST(GarbageCollector, BasicTest)
     saving = gc.estimate(0x30000, 0xf000, em, old_extents, 0x10000);
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
-    ASSERT_EQ(to_collect.size(), 2u);
-    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x0,0x8000) ||
-		  to_collect[1] == bluestore_pextent_t(0x0,0x8000));
-    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x3f000,0x1000) ||
-		  to_collect[1] == bluestore_pextent_t(0x3f000,0x1000));
+    ASSERT_EQ(to_collect.num_intervals(), 2u);
+    ASSERT_TRUE((*to_collect.begin()) == std::make_pair(0x0ul ,0x8000ul) ||
+		  *(++to_collect.begin()) == std::make_pair(0x0ul, 0x8000ul));
+    ASSERT_TRUE((*to_collect.begin()) == std::make_pair(0x3f000ul, 0x1000ul) ||
+		  *(++to_collect.begin()) == std::make_pair(0x3f000ul, 0x1000ul));
 
     em.clear();
     old_extents.clear();
@@ -1357,7 +1357,7 @@ TEST(GarbageCollector, BasicTest)
     saving = gc.estimate(0x3000, 0x4000, em, old_extents, 0x1000);
     ASSERT_EQ(saving, 0);
     auto& to_collect = gc.get_extents_to_collect();
-    ASSERT_EQ(to_collect.size(), 0u);
+    ASSERT_EQ(to_collect.num_intervals(), 0u);
     em.clear();
     old_extents.clear();
   }
@@ -1432,11 +1432,11 @@ TEST(GarbageCollector, BasicTest)
     saving = gc.estimate(0x30000, 0xf000, em, old_extents, 0x10000);
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
-    ASSERT_EQ(to_collect.size(), 2u);
-    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x0,0x8000) ||
-		  to_collect[1] == bluestore_pextent_t(0x0,0x8000));
-    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x3f000,0x1000) ||
-		  to_collect[1] == bluestore_pextent_t(0x3f000,0x1000));
+    ASSERT_EQ(to_collect.num_intervals(), 2u);
+    ASSERT_TRUE(*to_collect.begin() == std::make_pair(0x0ul, 0x8000ul) ||
+		  *(++to_collect.begin()) == std::make_pair(0x0ul, 0x8000ul));
+    ASSERT_TRUE(*to_collect.begin() == std::make_pair(0x3f000ul, 0x1000ul) ||
+		  *(++to_collect.begin()) == std::make_pair(0x3f000ul, 0x1000ul));
 
     em.clear();
     old_extents.clear();
