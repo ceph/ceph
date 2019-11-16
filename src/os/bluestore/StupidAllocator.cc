@@ -10,8 +10,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stupidalloc 0x" << this << " "
 
-StupidAllocator::StupidAllocator(CephContext* cct)
-  : cct(cct), num_free(0),
+StupidAllocator::StupidAllocator(CephContext* cct, const std::string& name)
+  : Allocator(name), cct(cct), num_free(0),
     free(10),
     last_alloc(0)
 {
@@ -287,6 +287,16 @@ void StupidAllocator::dump()
 	 ++p) {
       ldout(cct, 0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
 	      	    << p.get_len() << std::dec << dendl;
+    }
+  }
+}
+
+void StupidAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  std::lock_guard l(lock);
+  for (unsigned bin = 0; bin < free.size(); ++bin) {
+    for (auto p = free[bin].begin(); p != free[bin].end(); ++p) {
+      notify(p.get_start(), p.get_len());
     }
   }
 }

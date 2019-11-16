@@ -287,6 +287,68 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
 }
 
+TEST_P(AllocTest, test_dump_fragmentation_score)
+{
+  uint64_t capacity = 1024 * 1024 * 1024;
+  uint64_t one_alloc_max = 2 * 1024 * 1024;
+  uint64_t alloc_unit = 4096;
+  uint64_t want_size = alloc_unit;
+  uint64_t rounds = 10;
+  uint64_t actions_per_round = 1000;
+  PExtentVector allocated, tmp;
+  gen_type rng;
+
+  init_alloc(capacity, alloc_unit);
+  alloc->init_add_free(0, capacity);
+
+  EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+
+  uint64_t allocated_cnt = 0;
+  for (size_t round = 0; round < rounds ; round++) {
+    for (size_t j = 0; j < actions_per_round ; j++) {
+      //free or allocate ?
+      if ( rng() % capacity >= allocated_cnt ) {
+	//allocate
+	want_size = ( rng() % one_alloc_max ) / alloc_unit * alloc_unit + alloc_unit;
+	tmp.clear();
+	uint64_t r = alloc->allocate(want_size, alloc_unit, 0, 0, &tmp);
+	for (auto& t: tmp) {
+	  if (t.length > 0)
+	    allocated.push_back(t);
+	}
+	allocated_cnt += r;
+      } else {
+	//free
+	ceph_assert(allocated.size() > 0);
+	size_t item = rng() % allocated.size();
+	ceph_assert(allocated[item].length > 0);
+	allocated_cnt -= allocated[item].length;
+	interval_set<uint64_t> release_set;
+	release_set.insert(allocated[item].offset, allocated[item].length);
+	alloc->release(release_set);
+	std::swap(allocated[item], allocated[allocated.size() - 1]);
+	allocated.resize(allocated.size() - 1);
+      }
+    }
+
+    size_t free_sum = 0;
+    auto iterated_allocation = [&](size_t off, size_t len) {
+      ceph_assert(len > 0);
+      free_sum += len;
+    };
+    alloc->dump(iterated_allocation);
+    EXPECT_GT(1, alloc->get_fragmentation_score());
+    EXPECT_EQ(capacity, free_sum + allocated_cnt);
+  }
+
+  for (size_t i = 0; i < allocated.size(); i ++)
+  {
+    interval_set<uint64_t> release_set;
+    release_set.insert(allocated[i].offset, allocated[i].length);
+    alloc->release(release_set);
+  }
+}
+
 TEST_P(AllocTest, test_alloc_bug_24598)
 {
   if (string(GetParam()) != "bitmap")

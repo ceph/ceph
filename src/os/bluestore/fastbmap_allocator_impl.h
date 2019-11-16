@@ -46,6 +46,7 @@ typedef mempool::bluestore_alloc::vector<slot_t> slot_vector_t;
 
 // fitting into cache line on x86_64
 static const size_t slotset_width = 8; // 8 slots per set
+static const size_t slots_per_slotset = 8;
 static const size_t slotset_bytes = sizeof(slot_t) * slotset_width;
 static const size_t bits_per_slot = sizeof(slot_t) * 8;
 static const size_t bits_per_slotset = slotset_bytes * 8;
@@ -141,6 +142,7 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     L1_ENTRY_NOT_USED = 0x02,
     L1_ENTRY_FREE = 0x03,
     CHILD_PER_SLOT = bits_per_slot / L1_ENTRY_WIDTH, // 32
+    L1_ENTRIES_PER_SLOT = bits_per_slot / L1_ENTRY_WIDTH, //32
     CHILD_PER_SLOT_L0 = bits_per_slot, // 64
   };
   uint64_t _children_per_slot() const override
@@ -469,7 +471,12 @@ public:
   }
   void collect_stats(
     std::map<size_t, size_t>& bins_overall) override;
+
+  static inline ssize_t count_0s(slot_t slot_val, size_t start_pos);
+  static inline ssize_t count_1s(slot_t slot_val, size_t start_pos);
+  void dump(std::function<void(uint64_t offset, uint64_t length)> notify);
 };
+
 
 class AllocatorLevel01Compact : public AllocatorLevel01
 {
