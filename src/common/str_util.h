@@ -17,6 +17,7 @@
 #define CEPH_COMMON_STR_UTIL_H
 
 #include <array>
+#include <charconv>
 #include <cstdlib>
 #include <optional>
 #include <string>
@@ -95,6 +96,7 @@ enum class cf {
 
 // Default delimiters for substr_do and associates.
 inline constexpr std::string_view default_delims = ";,= \t";
+inline constexpr std::string_view space = " \f\n\r\t\v";
 
 /// Split a string using the given delimiters, passing each piece as a
 /// (non-null-terminated) std::string_view to the callback.
@@ -152,6 +154,45 @@ Iterator substr_insert(std::string_view s,
 	      ++i;
 	    }, d);
   return i;
+}
+
+// Wrappers around std::from_chars.
+//
+// Why do we want this instead of strtol and friends? Because the
+// string doesn't have to be NUL-terminated! (Also, for a lot of
+// purposes, just putting a string_view in and getting an optional out
+// is friendly.)
+//
+// Returns the found number on success. Returns an empty optional on
+// failure OR on trailing characters.
+template<typename T>
+std::optional<T> parse(std::string_view s, int base = 10)
+{
+  T t;
+  auto r = std::from_chars(s.data(), s.data() + s.size(), t, base);
+  if ((r.ec != std::errc{}) || (r.ptr != s.data() + s.size())) {
+    return std::nullopt;
+  }
+  return t;
+}
+
+// As above, but succeed on trailing characters and trim the supplied
+// string_view to remove the parsed number. Set the supplied
+// string_view to empty if it ends with the number.
+template<typename T>
+std::optional<T> consume(std::string_view& s, int base = 10)
+{
+  T t;
+  auto r = std::from_chars(s.data(), s.data() + s.size(), t, base);
+  if ((r.ec != std::errc{}))
+    return std::nullopt;
+
+  if (r.ptr == s.data() + s.size()) {
+    s = std::string_view{};
+  } else {
+    s.remove_prefix(r.ptr - s.data());
+  }
+  return t;
 }
 }
 #endif // CEPH_COMMON_STR_UTIL_H
