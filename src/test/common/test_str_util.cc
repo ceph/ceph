@@ -23,7 +23,10 @@
 
 using namespace std::literals;
 
+using ceph::cf;
 using ceph::nul_terminated_copy;
+using ceph::substr_do;
+using ceph::substr_insert;
 
 static constexpr auto foo = "foo"sv;
 static constexpr auto fred = "fred"sv;
@@ -96,4 +99,39 @@ TEST(NulCopy, Optional) {
     auto a = nul_terminated_copy<4>(blarg);
     EXPECT_FALSE(a);
   }
+}
+
+inline constexpr auto testlist = "a,b,c,d"sv;
+
+TEST(Do, Unbreaking) {
+  std::string d;
+  substr_do(testlist,
+	    [&](std::string_view s) {
+	      d.append(s);
+	    });
+  EXPECT_EQ(d, "abcd"s);
+}
+
+TEST(Do, Breaking) {
+  std::string d;
+  substr_do(testlist,
+	    [&](std::string_view s) {
+	      if (s == "c")
+		return cf::stop;
+	      d.append(s);
+	      return cf::go;
+	    });
+  EXPECT_EQ(d, "ab"s);
+}
+
+TEST(Insert, View) {
+  std::vector<std::string_view> d;
+  substr_insert(testlist, std::back_inserter(d));
+  EXPECT_EQ(d, std::vector({"a"sv, "b"sv, "c"sv, "d"sv}));
+}
+
+TEST(Insert, String) {
+  std::vector<std::string> d;
+  substr_insert(testlist, std::back_inserter(d));
+  EXPECT_EQ(d, std::vector({"a"s, "b"s, "c"s, "d"s}));
 }
