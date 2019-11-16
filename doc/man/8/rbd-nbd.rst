@@ -50,6 +50,11 @@ Map Options
    Try to use the Linux kernel's netlink inteface. This allows devices to be
    created on demand instead of being limited to ``nbds_max`` devices.
 
+.. option:: --replace
+
+   Replace existing rbd-nbd instance for ``nbd device`` or ``image-spec | snap-spec``
+   with a new daemon.
+
 List Options
 ============
 

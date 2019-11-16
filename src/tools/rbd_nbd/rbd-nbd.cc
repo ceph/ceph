@@ -79,6 +79,7 @@ struct Config {
   bool readonly = false;
   bool set_max_part = false;
   bool try_netlink = false;
+  bool replace_existing = false;
 
   std::string poolname;
   std::string nsname;
@@ -103,6 +104,7 @@ static void usage()
             << "  --exclusive             Forbid writes by other clients\n"
             << "  --timeout <seconds>     Set nbd request timeout\n"
             << "  --try-netlink           Use the nbd netlink interface\n"
+            << "  --replace               Replace rbd-nbd with a new daemon\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -963,6 +965,80 @@ free_sock:
   return -EIO;
 }
 
+static int netlink_set_features(struct nl_msg *msg, Config *cfg, uint64_t flags)
+{
+  if (cfg->timeout >= 0)
+    NLA_PUT_U64(msg, NBD_ATTR_TIMEOUT, cfg->timeout);
+
+  NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
+  return 0;
+
+nla_put_failure:
+  return -EINVAL;
+}
+
+static int netlink_replace_conn(int index, Config *cfg, struct nl_sock *sock,
+                                int nl_id, int fd, uint64_t flags)
+{
+  struct nl_msg *msg;
+  int ret;
+
+  if (index < 0) {
+    if (!find_mapped_dev_by_spec(cfg)) {
+      cerr << "rbd-nbd: Could not match: " << cfg->poolname << "/" <<
+	      cfg->imgname << " to existing device." << std::endl;
+      return -ENODEV;
+    }
+
+    ret = parse_nbd_index(cfg->devpath);
+    if (ret < 0)
+      return ret;
+
+    index = ret;
+  }
+
+  dout(10) << "Trying to add conn to /dev/nbd" << index << dendl;
+
+  nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, genl_handle_msg, NULL);
+
+  msg = nlmsg_alloc();
+  if (!msg) {
+    cerr << "rbd-nbd: Could not allocate netlink message." << std::endl;
+    return -ENOMEM;
+  }
+
+  if (!genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, nl_id, 0, 0,
+                   NBD_CMD_RECONFIGURE, 0)) {
+    cerr << "rbd-nbd: Could not setup reconfig message." << std::endl;
+    goto free_msg;
+  }
+
+  if (index >= 0)
+    NLA_PUT_U32(msg, NBD_ATTR_INDEX, index);
+
+  if (netlink_set_features(msg, cfg, flags))
+    goto free_msg;
+
+  NLA_PUT_U8(msg, NBD_ATTR_SWAP_SOCKETS, 1);
+  if (netlink_setup_sock_attr(msg, fd))
+    goto free_msg;
+
+  ret = nl_send_sync(sock, msg);
+  if (ret < 0) {
+    cerr << "rbd-nbd: netlink add conn failed: " << nl_geterror(ret) << std::endl;
+    return -EIO;
+  }
+
+  nbd_index = index;
+  dout(10) << "netlink add conn complete for nbd" << index << dendl;
+  return 0;
+
+nla_put_failure:
+free_msg:
+  nlmsg_free(msg);
+  return -EIO;
+}
+
 static int netlink_connect_cb(struct nl_msg *msg, void *arg)
 {
   struct genlmsghdr *gnlh = (struct genlmsghdr *)nlmsg_data(nlmsg_hdr(msg));
@@ -990,8 +1066,8 @@ static int netlink_connect_cb(struct nl_msg *msg, void *arg)
   return NL_OK;
 }
 
-static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
-                           uint64_t size, uint64_t flags)
+static int netlink_connect(int index, Config *cfg, struct nl_sock *sock,
+                           int nl_id, int fd, uint64_t size, uint64_t flags)
 {
   struct nl_msg *msg;
   int ret;
@@ -1010,20 +1086,14 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
     goto free_msg;
   }
 
-  if (!cfg->devpath.empty()) {
-    ret = parse_nbd_index(cfg->devpath);
-    if (ret < 0)
-      goto free_msg;
-
-    NLA_PUT_U32(msg, NBD_ATTR_INDEX, ret);
-  }
-
-  if (cfg->timeout >= 0)
-    NLA_PUT_U64(msg, NBD_ATTR_TIMEOUT, cfg->timeout);
+  if (index >= 0)
+    NLA_PUT_U32(msg, NBD_ATTR_INDEX, index);
 
   NLA_PUT_U64(msg, NBD_ATTR_SIZE_BYTES, size);
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
-  NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
+
+  if (netlink_set_features(msg, cfg, flags))
+    goto free_msg;
 
   if (netlink_setup_sock_attr(msg, fd))
     goto free_msg;
@@ -1046,8 +1116,8 @@ free_msg:
 
 static int try_netlink_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
 {
+  int nl_id, ret, index = -1;
   struct nl_sock *sock;
-  int nl_id, ret;
 
   sock = netlink_init(&nl_id);
   if (!sock) {
@@ -1056,21 +1126,33 @@ static int try_netlink_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
     return 1;
   }
 
-  dout(10) << "netlink interface supported." << dendl;
+  if (!cfg->devpath.empty()) {
+    ret = parse_nbd_index(cfg->devpath);
+    if (ret < 0)
+      goto free_sock;
 
-  ret = netlink_connect(cfg, sock, nl_id, fd, size, flags);
-  netlink_cleanup(sock);
+    index = ret;
+  }
+
+  dout(10) << "netlink interface supported." << dendl;
+  if (cfg->replace_existing) {
+    ret = netlink_replace_conn(index, cfg, sock, nl_id, fd, flags);
+  } else {
+    ret = netlink_connect(index, cfg, sock, nl_id, fd, size, flags);
+  }
 
   if (ret != 0)
-    return ret;
+    goto free_sock;
 
   nbd = open(cfg->devpath.c_str(), O_RDWR);
   if (nbd < 0) {
     cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
-    return nbd;
+    ret = -errno;
   }
 
-  return 0;
+free_sock:
+  netlink_cleanup(sock);
+  return ret;
 }
 
 static void handle_signal(int signum)
@@ -1160,6 +1242,11 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   if (ceph_argparse_need_usage(args)) {
     usage();
     exit(0);
+  }
+
+  if (cfg->replace_existing && !cfg->try_netlink) {
+    cerr << "--try-netlink must be used when replacing a daemon." << std::endl;
+    exit(1);
   }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
@@ -1255,6 +1342,12 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     if (r < 0) {
       goto free_server;
     } else if (r == 1) {
+      if (cfg->replace_existing) {
+        cerr << "Kernel must support nbd netlink interface when starting "
+             << "additional daemons." << std::endl;
+        goto free_server;
+      }
+
       use_netlink = false;
     }
   }
@@ -1497,6 +1590,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
       cfg->try_netlink = true;
+    } else if (ceph_argparse_flag(args, i, "--replace", (char *)NULL)) {
+      cfg->replace_existing = true;
     } else {
       ++i;
     }
