@@ -129,6 +129,7 @@ static map<string, string> generic_attrs_map;
 map<int, const char *> http_status_names;
 
 static bool allow_middle_headers = false;
+static bool cache_epoch = false;
 
 /*
  * make attrs look_like_this
@@ -231,6 +232,20 @@ void rgw_rest_init(CephContext *cct, const RGWZoneGroup& zone_group)
    */
 
   allow_middle_headers = cct->_conf.get_val<bool>("rgw_allow_middle_headers");
+  cache_epoch = cct->_conf.get_val<bool>("rgw_cache_epoch_header");
+  if (cache_epoch && !allow_middle_headers) {
+    lderr(cct)
+      << "rgw_cache_epoch_header requires rgw_allow_middle_headers, "
+      << "and I won't set it automatically because rgw_allow_middle_headers "
+      << "has security implications that could prove harmful if you aren't "
+      << "specifically running with a load balancer or application level "
+      << "firewall between your clients and your RGWs. I do my best to be a "
+      << "useful and cooperative piece of software, but since these features "
+      << "are both 'enterprisey' and marked as advanced I feel justified in "
+      << "falling over dead until you fix the problem.\n\n"
+      << "Sorry." << dendl;
+    ceph_abort();
+  }
 }
 
 static bool str_ends_with_nocase(const string& s, const string& suffix, size_t *pos)
@@ -616,6 +631,12 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
     } else if (proposed_content_length != NO_CONTENT_LENGTH) {
       dump_content_length(s, proposed_content_length);
     }
+  }
+
+  if (cache_epoch) {
+    auto e = op->get_epoch();
+    if (e)
+      dump_header(s, epoch_header, *e);
   }
 
   if (content_type) {
@@ -2004,7 +2025,8 @@ int64_t parse_content_length(const char *content_length)
   return len;
 }
 
-int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
+int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio,
+			RGWRados* store)
 {
   req_info& info = s->info;
 
@@ -2256,6 +2278,20 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   }
   s->op = op_from_method(info.method);
 
+  if (cache_epoch) {
+    const char *epoch_s = info.env->get(epoch_header_parse);
+    if (epoch_s) {
+      string err;
+      auto epoch = strict_strtoll(s->length, 10, &err);
+      if (err.empty()) {
+	store->handle_epoch(epoch);
+      } else  {
+	ldout(s->cct, 0) << "Bad epoch. Misconfigured proxy? " << err << dendl;
+      }
+    }
+  }
+
+
   info.init_meta_info(&s->has_bad_meta);
 
   return 0;
@@ -2270,7 +2306,7 @@ RGWHandler_REST* RGWREST::get_handler(
   RGWRESTMgr** const pmgr,
   int* const init_error
 ) {
-  *init_error = preprocess(s, rio);
+  *init_error = preprocess(s, rio, store->getRados());
   if (*init_error < 0) {
     return nullptr;
   }

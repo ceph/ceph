@@ -6886,7 +6886,6 @@ std::vector<Option> get_rgw_options() {
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
 
-
     Option("rgw_allow_middle_headers", Option::TYPE_BOOL,
           Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -6901,6 +6900,22 @@ std::vector<Option> get_rgw_options() {
 			  "without a load balancer or application level "
 			  "firewall that prevents untrusted clients from "
 			  "appending them."),
+
+    Option("rgw_cache_epoch_header", Option::TYPE_BOOL,
+	   Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enable proxy assisted cache consistency.")
+    .add_tag("performance")
+    .add_service("rgw")
+    .set_long_description("When true, add a header, 'X-RGW-Cache-Epoch' to all "
+			  "responses. The cache epoch is updated whenever "
+			  "cache distribution fails. The header allows any "
+			  "node that missed notification through the normal "
+			  "channels to be notified of a new epoch by incoming "
+			  "requests so they can ensure consistent replies. A "
+			  "load balancer or other proxy is required that "
+			  "appends this header to all requests with the "
+			  "highest version of the epoch seen."),
   });
 }
 
