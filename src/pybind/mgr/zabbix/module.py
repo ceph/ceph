@@ -137,7 +137,7 @@ class Module(MgrModule):
 
         pg_states = ['active', 'peering', 'clean', 'scrubbing', 'undersized',
                      'backfilling', 'recovering', 'degraded', 'inconsistent',
-                     'remapped', 'backfill_toofull', 'wait_backfill',
+                     'remapped', 'backfill_toofull', 'backfill_wait',
                      'recovery_wait']
 
         for state in pg_states:
