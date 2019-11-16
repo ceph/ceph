@@ -3741,7 +3741,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_max_omap_entries_per_request", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(131072)
+    .set_default(1024)
     .set_description(""),
 
     Option("osd_max_omap_bytes_per_request", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
