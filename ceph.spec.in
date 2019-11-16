@@ -149,7 +149,11 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
+%ifarch x86_64
+BuildRequires:	devtoolset-8-gcc-c++ >= 8.2.1
+%else
 BuildRequires:	devtoolset-7-gcc-c++ >= 7.3.1-5.13
+%endif
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -1094,7 +1098,7 @@ This package provides Ceph’s default alerts for Prometheus.
 %define _lto_cflags %{nil}
 
 %if 0%{?rhel} == 7
-. /opt/rh/devtoolset-7/enable
+. /opt/rh/devtoolset-8/enable
 %endif
 
 %if 0%{with cephfs_java}

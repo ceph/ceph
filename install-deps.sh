@@ -70,7 +70,7 @@ function ensure_decent_gcc_on_ubuntu {
     local old=$(gcc -dumpfullversion -dumpversion)
     local new=$1
     local codename=$2
-    if dpkg --compare-versions $old ge 7.0; then
+    if dpkg --compare-versions $old ge ${new}.0; then
 	return
     fi
 
@@ -97,7 +97,7 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 -----END PGP PUBLIC KEY BLOCK-----
 ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 
     case "$codename" in
@@ -183,11 +183,11 @@ function ensure_decent_gcc_on_rh {
 	    cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
-scl enable devtoolset-7 bash
+scl enable devtoolset-8 bash
 
 Or add following line to the end of ~/.bashrc to add it permanently:
 
-source scl_source enable devtoolset-7
+source scl_source enable devtoolset-8
 
 see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
 EOF
@@ -274,10 +274,10 @@ else
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
             *Trusty*)
-                ensure_decent_gcc_on_ubuntu 7 trusty
+                ensure_decent_gcc_on_ubuntu 8 trusty
                 ;;
             *Xenial*)
-                ensure_decent_gcc_on_ubuntu 7 xenial
+                ensure_decent_gcc_on_ubuntu 8 xenial
                 install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
@@ -344,7 +344,7 @@ else
 		    case "$ARCH" in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
-			    dts_ver=7
+			    dts_ver=8
 			    ;;
 			aarch64)
 			    $SUDO yum -y install centos-release-scl-rh
@@ -354,8 +354,10 @@ else
 			    ;;
 		    esac
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
-                    $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
-                    dts_ver=7
+                    $SUDO yum-config-manager \
+			  --enable rhel-server-rhscl-7-rpms \
+			  --enable rhel-7-server-devtools-rpms
+                    dts_ver=8
                 fi
                 ;;
         esac
