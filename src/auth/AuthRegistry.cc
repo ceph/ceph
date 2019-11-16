@@ -10,6 +10,7 @@
 #include "none/AuthNoneAuthorizeHandler.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
+#include "common/str_util.h"
 #include "auth/KeyRing.h"
 
 #define dout_subsys ceph_subsys_auth
@@ -61,23 +62,26 @@ void AuthRegistry::handle_conf_change(
 void AuthRegistry::_parse_method_list(const string& s,
 				      std::vector<uint32_t> *v)
 {
-  std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
-  if (sup_list.empty()) {
-    lderr(cct) << "WARNING: empty auth protocol list" << dendl;
-  }
+  bool sup_list_empty = true;
   v->clear();
-  for (auto& i : sup_list) {
-    ldout(cct, 5) << "adding auth protocol: " << i << dendl;
-    if (i == "cephx") {
-      v->push_back(CEPH_AUTH_CEPHX);
-    } else if (i == "none") {
-      v->push_back(CEPH_AUTH_NONE);
-    } else if (i == "gss") {
-      v->push_back(CEPH_AUTH_GSS);
-    } else {
-      lderr(cct) << "WARNING: unknown auth protocol defined: " << i << dendl;
-    }
+  ceph::substr_do(
+    s,
+    [&](auto&& s) {
+      sup_list_empty = false;
+
+      ldout(cct, 5) << "adding auth protocol: " << s << dendl;
+      if (s == "cephx") {
+	v->push_back(CEPH_AUTH_CEPHX);
+      } else if (s == "none") {
+	v->push_back(CEPH_AUTH_NONE);
+      } else if (s == "gss") {
+	v->push_back(CEPH_AUTH_GSS);
+      } else {
+	lderr(cct) << "WARNING: unknown auth protocol defined: " << s << dendl;
+      }
+    });
+  if (sup_list_empty) {
+    lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
   if (v->empty()) {
     lderr(cct) << "WARNING: no auth protocol defined" << dendl;
@@ -88,21 +92,25 @@ void AuthRegistry::_parse_method_list(const string& s,
 void AuthRegistry::_parse_mode_list(const string& s,
 				    std::vector<uint32_t> *v)
 {
-  std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
-  if (sup_list.empty()) {
-    lderr(cct) << "WARNING: empty auth protocol list" << dendl;
-  }
+  bool sup_list_empty = true;
   v->clear();
-  for (auto& i : sup_list) {
-    ldout(cct, 5) << "adding con mode: " << i << dendl;
-    if (i == "crc") {
-      v->push_back(CEPH_CON_MODE_CRC);
-    } else if (i == "secure") {
-      v->push_back(CEPH_CON_MODE_SECURE);
-    } else {
-      lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
-    }
+  ceph::substr_do(
+    s,
+    [&](auto&& s) {
+      if (unlikely(sup_list_empty)) {
+	sup_list_empty = false;
+      }
+      ldout(cct, 5) << "adding con mode: " << s << dendl;
+      if (s == "crc") {
+	v->push_back(CEPH_CON_MODE_CRC);
+      } else if (s == "secure") {
+	v->push_back(CEPH_CON_MODE_SECURE);
+      } else {
+	lderr(cct) << "WARNING: unknown connection mode " << s << dendl;
+      }
+    });
+  if (sup_list_empty) {
+    lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
   if (v->empty()) {
     lderr(cct) << "WARNING: no connection modes defined" << dendl;
