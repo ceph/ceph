@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "common/hostname.h"
 #include "common/dout.h"
+#include "common/str_util.h"
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
@@ -69,21 +70,26 @@ const char *ceph_conf_level_name(int level)
 int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result)
 {
-  list<string> ls;
-  get_str_list(filename_list, ls);
-
   int ret = -ENOENT;
-  list<string>::iterator iter;
-  for (iter = ls.begin(); iter != ls.end(); ++iter) {
-    int fd = ::open(iter->c_str(), O_RDONLY|O_CLOEXEC);
-    if (fd < 0) {
-      ret = -errno;
-      continue;
-    }
-    close(fd);
-    result = *iter;
-    return 0;
-  }
+  char tb[PATH_MAX + 1];
+  ceph::substr_do(
+    filename_list,
+    [&](std::string_view s) {
+      if (!ceph::nul_terminated_copy(s, tb)) {
+	ret = -E2BIG;
+	return ceph::cf::go;
+      }
+
+      int fd = ::open(tb, O_RDONLY | O_CLOEXEC);
+      if (fd < 0) {
+	ret = -errno;
+	return ceph::cf::go;
+      }
+      ::close(fd);
+      result = std::string(s);
+      ret = 0;
+      return ceph::cf::stop;
+    });
 
   return ret;
 }
@@ -354,26 +360,24 @@ int md_config_t::parse_config_files(ConfigValues& values,
     }
   }
 
-  std::list<std::string> conf_files;
-  get_str_list(conf_files_str, conf_files);
-  auto p = conf_files.begin();
-  while (p != conf_files.end()) {
-    string &s = *p;
-    if (s.find("$data_dir") != string::npos &&
-	data_dir_option.empty()) {
-      // useless $data_dir item, skip
-      p = conf_files.erase(p);
-    } else {
-      early_expand_meta(values, s, warnings);
-      ++p;
-    }
-  }
+  std::vector<std::string> conf_files;
+  ceph::substr_do(
+    conf_files_str,
+    [&](std::string_view s) {
+      if (s.find("$data_dir") != string::npos &&
+	  data_dir_option.empty()) {
+      } else {
+	std::string v(s);
+	early_expand_meta(values, v, warnings);
+	conf_files.push_back(std::move(v));
+      }
+    });
 
   // open new conf
-  list<string>::const_iterator c;
-  for (c = conf_files.begin(); c != conf_files.end(); ++c) {
+  auto c = conf_files.begin();
+  for (; c != conf_files.end(); ++c) {
     cf.clear();
-    string fn = *c;
+    const string& fn = *c;
     ostringstream oss;
     int ret = cf.parse_file(fn.c_str(), &oss);
     parse_error = oss.str();
