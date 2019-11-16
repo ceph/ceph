@@ -33,6 +33,8 @@
 #include <grp.h>
 #include <errno.h>
 
+#include "common/str_util.h"
+
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
@@ -553,37 +555,36 @@ int global_init_shutdown_stderr(CephContext *cct)
 
 int global_init_preload_erasure_code(const CephContext *cct)
 {
+  using namespace std::literals;
   const auto& conf = cct->_conf;
   string plugins = conf->osd_erasure_code_plugins;
 
   // validate that this is a not a legacy plugin
-  list<string> plugins_list;
-  get_str_list(plugins, plugins_list);
-  for (list<string>::iterator i = plugins_list.begin();
-       i != plugins_list.end();
-       ++i) {
-	string plugin_name = *i;
-	string replacement = "";
+  ceph::substr_do(
+    plugins,
+    [&](std::string_view plugin_name) {
+      std::string replacement = "";
 
-	if (plugin_name == "jerasure_generic" || 
-	    plugin_name == "jerasure_sse3" ||
-	    plugin_name == "jerasure_sse4" ||
-	    plugin_name == "jerasure_neon") {
-	  replacement = "jerasure";
-	}
-	else if (plugin_name == "shec_generic" ||
-		 plugin_name == "shec_sse3" ||
-		 plugin_name == "shec_sse4" ||
-		 plugin_name == "shec_neon") {
-	  replacement = "shec";
-	}
+      if (plugin_name == "jerasure_generic"sv || 
+	  plugin_name == "jerasure_sse3"sv ||
+	  plugin_name == "jerasure_sse4"sv ||
+	  plugin_name == "jerasure_neon"sv) {
+	replacement = "jerasure";
+      } else if (plugin_name == "shec_generic"sv ||
+		 plugin_name == "shec_sse3"sv ||
+		 plugin_name == "shec_sse4"sv ||
+		 plugin_name == "shec_neon"sv) {
+	replacement = "shec";
+      }
 
-	if (replacement != "") {
-	  dout(0) << "WARNING: osd_erasure_code_plugins contains plugin "
-		  << plugin_name << " that is now deprecated. Please modify the value "
-		  << "for osd_erasure_code_plugins to use "  << replacement << " instead." << dendl;
-	}
-  }
+      if (replacement != "") {
+	dout(0) << "WARNING: osd_erasure_code_plugins contains plugin "
+		<< plugin_name
+		<< " that is now deprecated. Please modify the value "
+		<< "for osd_erasure_code_plugins to use "  << replacement
+		<< " instead." << dendl;
+      }
+    });
 
   stringstream ss;
   int r = ErasureCodePluginRegistry::instance().preload(
