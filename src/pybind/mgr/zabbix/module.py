@@ -37,7 +37,7 @@ class ZabbixSender(object):
         proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
         for key, value in data.items():
-            proc.stdin.write('{0} ceph.{1} {2}\n'.format(hostname, key, value))
+            proc.stdin.write('{0} ceph.{1} {2}\n'.format(hostname, key, value).encode('utf-8'))
 
         stdout, stderr = proc.communicate()
         if proc.returncode != 0:
