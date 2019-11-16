@@ -30,7 +30,8 @@ static const uint32_t MAX_INLINE_DATA = 0;
 static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 static const uint32_t CQ_DEPTH = 30000;
 
-Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn), gid_idx(0)
+Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn),
+  gid_idx(cct->_conf.get_val<int64_t>("ms_async_rdma_gid_idx"))
 {
   int r = ibv_query_port(ctxt, port_num, &port_attr);
   if (r == -1) {
@@ -39,7 +40,7 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
   }
 
   lid = port_attr.lid;
-
+  ceph_assert(gid_idx < port_attr.gid_tbl_len);
 #ifdef HAVE_IBV_EXP
   union ibv_gid cgid;
   struct ibv_exp_gid_attr gid_attr;
@@ -95,7 +96,7 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
     ceph_abort();
   }
 #else
-  r = ibv_query_gid(ctxt, port_num, 0, &gid);
+  r = ibv_query_gid(ctxt, port_num, gid_idx, &gid);
   if (r) {
     lderr(cct) << __func__  << " query gid failed  " << cpp_strerror(errno) << dendl;
     ceph_abort();
