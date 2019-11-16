@@ -25,7 +25,7 @@
 #include "common/Formatter.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
-#include "include/str_list.h"
+#include "common/str_util.h"
 #include "auth/Crypto.h"
 #include "rgw_crypt_sanitize.h"
 
@@ -1984,51 +1984,30 @@ bool match_policy(boost::string_view pattern, boost::string_view input,
  * make attrs look-like-this
  * converts underscores to dashes
  */
-string lowercase_dash_http_attr(const string& orig)
+std::string lowercase_dash_http_attr(std::string_view orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-        buf[i] = '-';
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
+  return ceph::transform(
+    orig,
+    [](char c) {
+      return c == '_' ? '-' : char(tolower(c));
+    });
 }
 
 /*
  * make attrs Look-Like-This
  * converts underscores to dashes
  */
-string camelcase_dash_http_attr(const string& orig)
+std::string camelcase_dash_http_attr(std::string_view orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
   bool last_sep = true;
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-      case '-':
-        buf[i] = '-';
-        last_sep = true;
-        break;
-      default:
-        if (last_sep) {
-          buf[i] = toupper(*s);
-        } else {
-          buf[i] = tolower(*s);
-        }
-        last_sep = false;
-    }
-  }
-  return string(buf);
+  return ceph::transform(
+    orig,
+    [&](char c) {
+      if (c == '_' || c == '-') {
+	last_sep = true;
+	return '-';
+      }
+      last_sep = false;
+      return char(last_sep ? std::toupper(c) : std::tolower(c));
+    });
 }

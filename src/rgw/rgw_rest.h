@@ -28,7 +28,7 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
                                         const uint64_t max_len,
                                         const bool allow_chunked=true);
 
-static inline boost::string_ref rgw_sanitized_hdrval(ceph::buffer::list& raw)
+inline boost::string_ref rgw_sanitized_hdrval(ceph::buffer::list& raw)
 {
   /* std::string and thus boost::string_ref ARE OBLIGED to carry multiple
    * 0x00 and count them to the length of a string. We need to take that

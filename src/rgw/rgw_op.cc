@@ -1,12 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <errno.h>
-#include <stdlib.h>
-#include <system_error>
-#include <unistd.h>
-
+#include <cerrno>
+#include <cstdlib>
 #include <sstream>
+#include <system_error>
+
+#include <unistd.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bind.hpp>
@@ -22,6 +22,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
+#include "common/str_util.h"
 
 #include "rgw_rados.h"
 #include "rgw_zone.h"
@@ -1370,16 +1371,17 @@ int RGWOp::read_bucket_cors()
  * */
 static void get_cors_response_headers(RGWCORSRule *rule, const char *req_hdrs, string& hdrs, string& exp_hdrs, unsigned *max_age) {
   if (req_hdrs) {
-    list<string> hl;
-    get_str_list(req_hdrs, hl);
-    for(list<string>::iterator it = hl.begin(); it != hl.end(); ++it) {
-      if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
-        dout(5) << "Header " << (*it) << " is not registered in this rule" << dendl;
-      } else {
-        if (hdrs.length() > 0) hdrs.append(",");
-        hdrs.append((*it));
-      }
-    }
+    ceph::substr_do(
+      req_hdrs,
+      [&](auto&& s) {
+	if (!rule->is_header_allowed(s.data(), s.length())) {
+	  dout(5) << "Header " << s << " is not registered in this rule"
+		  << dendl;
+	} else {
+	  if (hdrs.length() > 0) hdrs.append(",");
+	  hdrs.append(s);
+	}
+      });
   }
   rule->format_exp_headers(exp_hdrs);
   *max_age = rule->get_max_age();

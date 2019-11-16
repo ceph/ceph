@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 
-#include <errno.h>
+#include <cerrno>
 #include <limits.h>
 
 #include <boost/algorithm/string.hpp>
@@ -10,7 +10,7 @@
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
 #include "common/utf8.h"
-#include "include/str_list.h"
+#include "common/str_util.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_zone.h"
@@ -132,44 +132,43 @@ map<int, const char *> http_status_names;
  * make attrs look_like_this
  * converts dashes to underscores
  */
-string lowercase_underscore_http_attr(const string& orig)
+static std::string lowercase_underscore_http_attr(std::string_view orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
+  std::string dest(orig.size(), char());
 
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+  auto s = orig.begin();
+  auto d = dest.begin();
+  for (; s != orig.end(); ++s, ++d) {
     switch (*s) {
       case '-':
-        buf[i] = '_';
+        *d = '_';
         break;
       default:
-        buf[i] = tolower(*s);
+        *d = std::tolower(*s);
     }
   }
-  return string(buf);
+  return dest;
 }
 
 /*
  * make attrs LOOK_LIKE_THIS
  * converts dashes to underscores
  */
-string uppercase_underscore_http_attr(const string& orig)
+static std::string uppercase_underscore_http_attr(std::string_view orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+  std::string dest(orig.size(), char());
+  auto s = orig.begin();
+  auto d = dest.begin();
+  for (; s != orig.end(); ++s, ++d) {
     switch (*s) {
       case '-':
-        buf[i] = '_';
+        *d = '_';
         break;
       default:
-        buf[i] = toupper(*s);
+        *d = std::toupper(*s);
     }
   }
-  return string(buf);
+  return dest;
 }
 
 /* avoid duplicate hostnames in hostnames lists */
@@ -186,21 +185,16 @@ void rgw_rest_init(CephContext *cct, const RGWZoneGroup& zone_group)
     generic_attrs_map[http2rgw.http_header] = http2rgw.rgw_attr;
   }
 
-  list<string> extended_http_attrs;
-  get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
-
-  list<string>::iterator iter;
-  for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
-    string rgw_attr = RGW_ATTR_PREFIX;
-    rgw_attr.append(lowercase_underscore_http_attr(*iter));
-
-    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
-
-    string http_header = "HTTP_";
-    http_header.append(uppercase_underscore_http_attr(*iter));
-
-    generic_attrs_map[http_header] = rgw_attr;
-  }
+  ceph::substr_do(
+    cct->_conf->rgw_extended_http_attrs,
+    [&](std::string_view s) {
+      std::string rgw_attr = RGW_ATTR_PREFIX;
+      rgw_attr.append(lowercase_underscore_http_attr(s));
+      rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(s);
+      std::string http_header = "HTTP_";
+      http_header.append(uppercase_underscore_http_attr(s));
+      generic_attrs_map[http_header] = rgw_attr;
+    });
 
   for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
     http_status_names[h->code] = h->name;
@@ -2016,17 +2010,25 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   // S3 API.
   // Map the listing of rgw_enable_apis in REVERSE order, so that items near
   // the front of the list have a higher number assigned (and -1 for items not in the list).
-  list<string> apis;
-  get_str_list(g_conf()->rgw_enable_apis, apis);
   int api_priority_s3 = -1;
   int api_priority_s3website = -1;
-  auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
-  auto api_s3_priority_rawpos = std::find(apis.begin(), apis.end(), "s3");
-  if (api_s3_priority_rawpos != apis.end()) {
-    api_priority_s3 = apis.size() - std::distance(apis.begin(), api_s3_priority_rawpos);
+  int api_len = 0;
+  ceph::substr_do(
+    g_conf()->rgw_enable_apis,
+    [&](std::string_view s) {
+      using namespace std::literals;
+      if (s == "s3website"sv) {
+	api_priority_s3website = api_len;
+      } else if (s == "s3"sv) {
+	api_priority_s3 = api_len;
+      }
+      ++api_len;
+    });
+  if (api_priority_s3 != -1) {
+    api_priority_s3 = api_len - api_priority_s3;
   }
-  if (api_s3website_priority_rawpos != apis.end()) {
-    api_priority_s3website = apis.size() - std::distance(apis.begin(), api_s3website_priority_rawpos);
+  if (api_priority_s3website != api_len) {
+    api_priority_s3website = api_len - api_priority_s3website;
   }
   ldout(s->cct, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
   bool s3website_enabled = api_priority_s3website >= 0;
