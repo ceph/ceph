@@ -22,6 +22,7 @@
 #endif
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/str_util.h"
 #include "common/numa.h"
 
 #include <netdb.h>
@@ -36,10 +37,10 @@ const struct sockaddr *find_ip_in_subnet_list(
   const std::string &interfaces,
   int numa_node)
 {
-  std::list<string> nets;
-  get_str_list(networks, nets);
-  std::list<string> ifs;
-  get_str_list(interfaces, ifs);
+  std::vector<std::string_view> nets;
+  ceph::substr_insert(networks, std::back_inserter(nets));
+  std::vector<std::string_view> ifs;
+  ceph::substr_insert(interfaces, std::back_inserter(ifs));
 
   // filter interfaces by name
   const struct ifaddrs *filtered = nullptr;
@@ -55,7 +56,7 @@ const struct sockaddr *find_ip_in_subnet_list(
     while (t) {
       bool match = false;
       for (auto& i : ifs) {
-	if (strcmp(i.c_str(), t->ifa_name) == 0) {
+	if (strncmp(i.data(), t->ifa_name, i.size()) == 0) {
 	  match = true;
 	  break;
 	}
@@ -80,7 +81,7 @@ const struct sockaddr *find_ip_in_subnet_list(
     struct sockaddr_storage net;
     unsigned int prefix_len;
 
-    if (!parse_network(s.c_str(), &net, &prefix_len)) {
+    if (!parse_network(s, &net, &prefix_len)) {
       lderr(cct) << "unable to parse network: " << s << dendl;
       exit(1);
     }

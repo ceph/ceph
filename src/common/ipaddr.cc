@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -9,9 +11,12 @@
 #include <netinet/in.h>
 #endif
 
+#include <boost/asio.hpp>
+
 #include "include/ipaddr.h"
 #include "msg/msg_types.h"
 #include "common/pick_address.h"
+#include "common/str_util.h"
 
 void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
@@ -144,47 +149,49 @@ const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
 }
 
 
-bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int *prefix_len) {
-  char *slash = strchr((char*)s, '/');
-  if (!slash) {
+bool parse_network(std::string_view s, struct sockaddr_storage *network, unsigned int *prefix_len) {
+  auto slash = s.find('/');
+  if (slash == std::string_view::npos) {
     // no slash
     return false;
   }
-  if (*(slash+1) == '\0') {
+  if (slash+1 == s.size()) {
     // slash is the last character
     return false;
   }
 
-  char *end;
-  long int num = strtol(slash+1, &end, 10);
-  if (*end != '\0') {
-    // junk after the prefix_len
+  auto afterslash = s;
+  afterslash.remove_prefix(slash + 1);
+  auto num = ceph::parse<long int>(afterslash);
+  if (!num) {
     return false;
   }
-  if (num < 0) {
+  if (*num < 0) {
     return false;
   }
-  *prefix_len = num;
-
-  // copy the part before slash to get nil termination
-  char *addr = (char*)alloca(slash-s + 1);
-  strncpy(addr, s, slash-s);
-  addr[slash-s] = '\0';
+  *prefix_len = *num;
 
   // caller expects ports etc to be zero
   memset(network, 0, sizeof(*network));
 
   // try parsing as ipv4
-  int ok;
-  ok = inet_pton(AF_INET, addr, &((struct sockaddr_in*)network)->sin_addr);
-  if (ok) {
+  boost::system::error_code ec;
+  s.remove_suffix(s.size() - slash);
+  auto v4 = boost::asio::ip::make_address_v4(s);
+  if (!ec) {
+    auto addr = v4.to_bytes();
+    std::memcpy(addr.data(),
+                &((struct sockaddr_in*)network)->sin_addr,
+                addr.size());
     network->ss_family = AF_INET;
     return true;
   }
-
-  // try parsing as ipv6
-  ok = inet_pton(AF_INET6, addr, &((struct sockaddr_in6*)network)->sin6_addr);
-  if (ok) {
+  auto v6 = boost::asio::ip::make_address_v6(s);
+  if (!ec) {
+    auto addr = v6.to_bytes();
+    std::memcpy(addr.data(),
+                &((struct sockaddr_in6*)network)->sin6_addr,
+                addr.size());
     network->ss_family = AF_INET6;
     return true;
   }
@@ -192,7 +199,7 @@ bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int
   return false;
 }
 
-bool parse_network(const char *s,
+bool parse_network(std::string_view s,
 		   entity_addr_t *network,
 		   unsigned int *prefix_len)
 {

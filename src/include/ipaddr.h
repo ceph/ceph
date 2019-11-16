@@ -1,5 +1,10 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_IPADDR_H
 #define CEPH_IPADDR_H
+
+#include <string_view>
 
 class entity_addr_t;
 
@@ -25,10 +30,10 @@ const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
  *
  * if the network string is invalid, return false.
  */
-bool parse_network(const char *s,
+bool parse_network(std::string_view s,
 		   struct sockaddr_storage *network,
 		   unsigned int *prefix_len);
-bool parse_network(const char *s,
+bool parse_network(std::string_view s,
 		   entity_addr_t *network,
 		   unsigned int *prefix_len);
 
