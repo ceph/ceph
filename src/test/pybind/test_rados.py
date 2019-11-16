@@ -596,6 +596,24 @@ class TestIoctx(object):
         eq(objects, [])
         self.ioctx.set_locator_key("")
 
+    def test_operate_aio_write_op(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        with WriteOpCtx() as write_op:
+            write_op.write(b'rzx')
+            comp = self.ioctx.operate_aio_write_op(write_op, "object", cb, cb)
+            comp.wait_for_complete()
+            with lock:
+                while count[0] < 2:
+                    lock.wait()
+            eq(comp.get_return_value(), 0)
+            eq(self.ioctx.read('object'), b'rzx')
+
     def test_aio_write(self):
         lock = threading.Condition()
         count = [0]
