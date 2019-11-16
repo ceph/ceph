@@ -294,6 +294,7 @@ def iterate_over_backports(r, issues, dry_run=False):
         if len(issue['backports']) == 0:
             logging.error(url(issue) + " the backport field is empty")
         update_relations(r, issue, dry_run)
+    print('                                     \r', end='', flush=True)
     logging.info("Processed {} issues".format(counter))
     return None
 
