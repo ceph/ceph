@@ -178,6 +178,7 @@ BuildRequires:	libxml2-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
 BuildRequires:	parted
+BuildRequires:	patch
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:  procps
