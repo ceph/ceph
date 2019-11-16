@@ -71,11 +71,13 @@ function(do_build_dpdk dpdk_dir)
       "\"${target}\" not listed in ${supported_targets}")
   endif()
 
+  set(EXTRA_CFLAGS "-Wno-unknown-warning-option -Wno-stringop-truncation -Wno-address-of-packed-member -fPIC")
+
   include(ExternalProject)
   ExternalProject_Add(dpdk-ext
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
     CONFIGURE_COMMAND $(MAKE) config O=${dpdk_dir} T=${target}
-    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} $(MAKE) O=${dpdk_dir} EXTRA_CFLAGS=-fPIC
+    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} $(MAKE) O=${dpdk_dir} EXTRA_CFLAGS=${EXTRA_CFLAGS}
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND "true")
   ExternalProject_Add_Step(dpdk-ext patch-config
