@@ -5,7 +5,7 @@
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
 
-#include "include/str_list.h"
+#include "common/str_util.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -23,7 +23,8 @@ public:
 };
 
 void RGWOp_Usage_Get::execute() {
-  map<std::string, bool> categories;
+  std::unordered_set<std::string_view, std::hash<std::string_view>,
+		     std::equal_to<>> categories;
 
   string uid_str;
   string bucket_name;
@@ -44,15 +45,16 @@ void RGWOp_Usage_Get::execute() {
   RESTArgs::get_string(s, "categories", cat_str, &cat_str);
 
   if (!cat_str.empty()) {
-    list<string> cat_list;
-    list<string>::iterator iter;
-    get_str_list(cat_str, cat_list);
-    for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
-      categories[*iter] = true;
-    }
+    ceph::substr_do(
+      cat_str,
+      [&](std::string_view s) {
+	categories.insert(s);
+      });
   }
 
-  http_ret = RGWUsage::show(store->getRados(), uid, bucket_name, start, end, show_entries, show_summary, &categories, flusher);
+  http_ret = RGWUsage::show(store->getRados(), uid, bucket_name, start,
+			    end, show_entries, show_summary, &categories,
+			    flusher);
 }
 
 class RGWOp_Usage_Delete : public RGWRESTOp {

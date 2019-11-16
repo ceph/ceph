@@ -740,7 +740,7 @@ protected:
   string end_date;
   int show_log_entries;
   int show_log_sum;
-  map<string, bool> categories;
+  std::unordered_set<std::string_view, std::hash<std::string_view>, std::equal_to<>> categories;
   map<rgw_user_bucket, rgw_usage_log_entry> usage;
   map<string, rgw_usage_log_entry> summary_map;
   map<string, cls_user_bucket_entry> buckets_usage;

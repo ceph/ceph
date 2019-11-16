@@ -878,7 +878,8 @@ struct rgw_usage_log_entry {
     DECODE_FINISH(bl);
   }
 
-  void aggregate(const rgw_usage_log_entry& e, map<string, bool> *categories = NULL) {
+  void aggregate(const rgw_usage_log_entry& e,
+		 std::unordered_set<std::string_view, std::hash<std::string_view>, std::equal_to<>> *categories = nullptr) {
     if (owner.empty()) {
       owner = e.owner;
       bucket = e.bucket;
@@ -894,7 +895,8 @@ struct rgw_usage_log_entry {
     }
   }
 
-  void sum(rgw_usage_data& usage, map<string, bool>& categories) const {
+  void sum(rgw_usage_data& usage,
+	   std::unordered_set<std::string_view, std::hash<std::string_view>, std::equal_to<>>& categories) const {
     usage = rgw_usage_data();
     for (map<string, rgw_usage_data>::const_iterator iter = usage_map.begin(); iter != usage_map.end(); ++iter) {
       if (!categories.size() || categories.count(iter->first)) {

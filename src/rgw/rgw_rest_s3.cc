@@ -650,7 +650,9 @@ int RGWGetUsage_ObjStore_S3::get_params()
   return 0;
 }
 
-static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
+static void dump_usage_categories_info(
+  Formatter *formatter, const rgw_usage_log_entry& entry,
+  std::unordered_set<std::string_view, std::hash<std::string_view>, std::equal_to<>>* categories)
 {
   formatter->open_array_section("categories");
   map<string, rgw_usage_data>::const_iterator uiter;

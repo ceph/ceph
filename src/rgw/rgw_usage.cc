@@ -10,7 +10,8 @@
 
 
 
-static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
+static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry,
+				       std::unordered_set<std::string_view, std::hash<std::string_view>, std::equal_to<>> *categories)
 {
   formatter->open_array_section("categories");
   map<string, rgw_usage_data>::const_iterator uiter;
@@ -30,7 +31,8 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
 }
 
 int RGWUsage::show(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
-		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum, map<string, bool> *categories,
+		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
+		   std::unordered_set<std::string_view, std::hash<std::string_view>, std::equal_to<>> *categories,
 		   RGWFormatterFlusher& flusher)
 {
   uint32_t max_entries = 1000;

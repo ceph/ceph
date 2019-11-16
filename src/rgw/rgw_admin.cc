@@ -31,7 +31,7 @@ extern "C" {
 #include "global/global_init.h"
 
 #include "include/utime.h"
-#include "include/str_list.h"
+#include "common/str_util.h"
 
 #include "rgw_user.h"
 #include "rgw_bucket.h"
@@ -2778,7 +2778,8 @@ int main(int argc, const char **argv)
   int check_head_obj_locator = false;
   int max_buckets = -1;
   bool max_buckets_specified = false;
-  map<string, bool> categories;
+  std::string cat_str;
+  std::unordered_set<std::string_view, std::hash<std::string_view>, std::equal_to<>> categories;
   string caps;
   int check_objects = false;
   RGWUserAdminOpState user_op;
@@ -3035,13 +3036,12 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
-      string cat_str = val;
-      list<string> cat_list;
-      list<string>::iterator iter;
-      get_str_list(cat_str, cat_list);
-      for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
-	categories[*iter] = true;
-      }
+      cat_str = val;
+      ceph::substr_do(
+	cat_str,
+	[&](std::string_view s) {
+	  categories.insert(s);
+	});
     } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {

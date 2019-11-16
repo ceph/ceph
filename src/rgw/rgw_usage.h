@@ -6,6 +6,7 @@
 
 #include <string>
 #include <map>
+#include <unordered_set>
 
 #include "common/Formatter.h"
 #include "rgw_formats.h"
@@ -18,7 +19,10 @@ class RGWUsage
 public:
   static int show(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
 	          uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
-		  std::map<std::string, bool> *categories, RGWFormatterFlusher& flusher);
+		  std::unordered_set<std::string_view,
+		                     std::hash<std::string_view>,
+		                     std::equal_to<>> *categories,
+		  RGWFormatterFlusher& flusher);
 
   static int trim(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
 	          uint64_t end_epoch);
