@@ -1,5 +1,7 @@
 import contextlib
+import os
 import socket
+import logging
 
 (
     BLACK,
@@ -17,6 +19,8 @@ COLOR_SEQ = "\033[1;%dm"
 COLOR_DARK_SEQ = "\033[0;%dm"
 BOLD_SEQ = "\033[1m"
 UNDERLINE_SEQ = "\033[4m"
+
+logger = logging.getLogger(__name__)
 
 
 def colorize(msg, color, dark=False):
@@ -106,3 +110,69 @@ def get_default_addr():
         get_default_addr.result = result
         return result
 
+
+class ServerConfigException(Exception):
+    pass
+
+def verify_cacrt(cert_fname):
+    """Basic validation of a ca cert"""
+
+    if not cert_fname:
+        raise ServerConfigException("CA cert not configured")
+    if not os.path.isfile(cert_fname):
+        raise ServerConfigException("Certificate {} does not exist".format(cert_fname))
+
+    from OpenSSL import crypto
+    try:
+        with open(cert_fname) as f:
+            x509 = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+            if x509.has_expired():
+                logger.warning(
+                    'Certificate {} has expired'.format(cert_fname))
+    except (ValueError, crypto.Error) as e:
+        raise ServerConfigException(
+            'Invalid certificate {}: {}'.format(cert_fname, str(e)))
+
+
+def verify_tls_files(cert_fname, pkey_fname):
+    """Basic checks for TLS certificate and key files
+
+    Do some validations to the private key and certificate:
+    - Check the type and format
+    - Check the certificate expiration date
+    - Check the consistency of the private key
+    - Check that the private key and certificate match up
+
+    :param cert_fname: Name of the certificate file
+    :param pkey_fname: name of the certificate public key file
+
+    :raises ServerConfigException: An error with a message
+
+    """
+
+    if not cert_fname or not pkey_fname:
+        raise ServerConfigException('no certificate configured')
+
+    verify_cacrt(cert_fname)
+
+    if not os.path.isfile(pkey_fname):
+        raise ServerConfigException('private key %s does not exist' % pkey_fname)
+
+    from OpenSSL import crypto, SSL
+
+    try:
+        with open(pkey_fname) as f:
+            pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
+            pkey.check()
+    except (ValueError, crypto.Error) as e:
+        raise ServerConfigException(
+            'Invalid private key {}: {}'.format(pkey_fname, str(e)))
+    try:
+        context = SSL.Context(SSL.TLSv1_METHOD)
+        context.use_certificate_file(cert_fname, crypto.FILETYPE_PEM)
+        context.use_privatekey_file(pkey_fname, crypto.FILETYPE_PEM)
+        context.check_privatekey()
+    except crypto.Error as e:
+        logger.warning(
+            'Private key {} and certificate {} do not match up: {}'.format(
+                pkey_fname, cert_fname, str(e)))
