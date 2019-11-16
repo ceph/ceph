@@ -14,6 +14,7 @@
  */
 
 #include <array>
+#include <cctype>
 #include <cerrno>
 #include <cstdint>
 #include <string_view>
@@ -31,6 +32,7 @@ using ceph::nul_terminated_copy;
 using ceph::parse;
 using ceph::substr_do;
 using ceph::substr_insert;
+using ceph::transform;
 
 static constexpr auto foo = "foo"sv;
 static constexpr auto fred = "fred"sv;
@@ -374,4 +376,41 @@ TEST(Consume, ULongLong) {
 
 TEST(Consume, LongLong) {
   test_consume<long long>();
+}
+
+TEST(Transform, Vanilla) {
+  EXPECT_EQ(transform("abcd"sv,
+		      [](char c) -> char {
+			return std::toupper(c);
+		      }), "ABCD"s);
+}
+
+TEST(Transform, Drop) {
+  EXPECT_EQ(transform(
+	      "the end"sv,
+	      [](char c) -> std::optional<char> {
+		if (c == ' ')
+		  return std::nullopt;
+		return std::toupper(c);
+	      }), "THEEND"s);
+}
+
+TEST(Transform, MultiS) {
+  EXPECT_EQ(transform(
+	      "'meow'"sv,
+	      [](char c) -> std::string {
+		if (c == '\'')
+		  return "''"s;
+		return "f"s;
+	      }), "''ffff''"s);
+}
+
+TEST(Transform, MultiV) {
+  EXPECT_EQ(transform(
+	      "'meow'"sv,
+	      [](char c) -> std::string_view {
+		if (c == '\'')
+		  return "''"sv;
+		return "f"sv;
+	      }), "''ffff''"s);
 }

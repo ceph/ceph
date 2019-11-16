@@ -194,5 +194,63 @@ std::optional<T> consume(std::string_view& s, int base = 10)
   }
   return t;
 }
+
+// Transformation! Convenience for commonly needed transformations on
+// strings of characters.
+//
+// Transform every character in accord with the supplied function
+template<typename F>
+auto transform(std::string_view source, F&& f)
+  -> std::enable_if_t<std::is_same_v<std::invoke_result_t<F, char>,
+				     char>, std::string>
+{
+  std::string dest(source.size(), char{});
+  auto d = dest.data();
+
+  for (auto c : source) {
+    *d = std::forward<F>(f)(c);
+    ++d;
+  }
+  return dest;
+}
+
+// The same as above, but function returns an optional char, with
+// the option to simply exclude characters from the result.
+template<typename F>
+auto transform(std::string_view source, F&& f)
+  -> std::enable_if_t<std::is_same_v<std::invoke_result_t<F, char>,
+				     std::optional<char>>, std::string>
+{
+  std::string dest(source.size(), char{});
+  auto d = dest.data();
+
+  for (auto c : source) {
+    auto r = std::forward<F>(f)(c);
+    if (r) {
+      *d = *r;
+      ++d;
+    }
+  }
+  dest.resize(d - dest.data());
+  return dest;
+}
+
+// Same as above, but we can turn one character into *more* characters.
+template<typename F>
+auto transform(std::string_view source, F&& f)
+  -> std::enable_if_t<std::is_same_v<std::invoke_result_t<F, char>,
+				     std::string> ||
+		      std::is_same_v<std::invoke_result_t<F, char>,
+				     std::string_view>, std::string>
+{
+  std::string dest;
+  dest.reserve(source.size());
+
+  for (auto c : source) {
+    auto r = std::forward<F>(f)(c);
+    dest.append(r);
+  }
+  return dest;
+}
 }
 #endif // CEPH_COMMON_STR_UTIL_H
