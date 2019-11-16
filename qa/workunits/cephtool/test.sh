@@ -2275,18 +2275,6 @@ function test_mon_osd_pool_set()
 
   ceph osd pool get rbd crush_rule | grep 'crush_rule: '
 
-  # iec vs si units
-  ceph osd pool set $TEST_POOLGETSET target_max_objects 1K
-  ceph osd pool get $TEST_POOLGETSET target_max_objects | grep 1000
-  for o in target_max_bytes target_size_bytes compression_max_blob_size compression_min_blob_size csum_max_block csum_min_block; do
-    ceph osd pool set $TEST_POOLGETSET $o 1Ki  # no i suffix
-    val=$(ceph osd pool get $TEST_POOLGETSET $o --format=json | jq -c ".$o")
-    [[ $val  == 1024 ]]
-    ceph osd pool set $TEST_POOLGETSET $o 1M   # with i suffix
-    val=$(ceph osd pool get $TEST_POOLGETSET $o --format=json | jq -c ".$o")
-    [[ $val  == 1048576 ]]
-  done
-
   ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET compression_mode aggressive
   ceph osd pool get $TEST_POOL_GETSET compression_mode | grep 'aggressive'
@@ -2385,6 +2373,18 @@ function test_mon_osd_tiered_pool_set()
   ceph osd pool set real-tier cache_min_evict_age 234
   ceph osd pool get real-tier cache_min_evict_age | \
     grep 'cache_min_evict_age:[ \t]\+234'
+
+  # iec vs si units
+  ceph osd pool set real-tier target_max_objects 1K
+  ceph osd pool get real-tier target_max_objects | grep 1000
+  for o in target_max_bytes target_size_bytes compression_max_blob_size compression_min_blob_size csum_max_block csum_min_block; do
+    ceph osd pool set real-tier $o 1Ki  # no i suffix
+    val=$(ceph osd pool get real-tier $o --format=json | jq -c ".$o")
+    [[ $val  == 1024 ]]
+    ceph osd pool set real-tier $o 1M   # with i suffix
+    val=$(ceph osd pool get real-tier $o --format=json | jq -c ".$o")
+    [[ $val  == 1048576 ]]
+  done
 
   # this is not a tier pool
   ceph osd pool create fake-tier 2
