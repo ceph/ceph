@@ -318,4 +318,6 @@ add_executable(unittest_rabin_chunk test_rabin_chunk.cc
 target_link_libraries(unittest_rabin_chunk global ceph-common)
 add_ceph_unittest(unittest_rabin_chunk)
 
-
+add_executable(unittest_str_util test_str_util.cc)
+target_link_libraries(unittest_str_util GTest::GTest)
+add_ceph_unittest(unittest_str_util)
