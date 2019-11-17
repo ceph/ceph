@@ -1591,6 +1591,10 @@ static ceph::spinlock debug_lock;
     return s;
   }
 
+  std::string_view buffer::list::to_string_view() {
+    return { c_str(), length() };
+  }
+
   void buffer::list::substr_of(const list& other, unsigned off, unsigned len)
   {
     if (off + len > other.length())

@@ -1235,6 +1235,7 @@ inline namespace v14_2_0 {
     const char& operator[](unsigned n) const;
     char *c_str();
     std::string to_str() const;
+    std::string_view to_string_view();
 
     void substr_of(const list& other, unsigned off, unsigned len);
 
