@@ -27,6 +27,7 @@
 #define SSTRING_HH_
 
 #include <type_traits>
+#include <string_view>
 #include <boost/utility/string_view.hpp>
 
 #include "include/buffer.h"
@@ -529,6 +530,9 @@ public:
     }
     operator boost::basic_string_view<char_type, traits_type>() const {
 		return boost::basic_string_view<char_type, traits_type>(str(), size());
+    }
+    operator std::basic_string_view<char_type, traits_type>() const {
+		return std::basic_string_view<char_type, traits_type>(str(), size());
     }
     template <typename string_type, typename T>
     friend inline string_type to_sstring(T value);
