@@ -33,6 +33,7 @@ using ceph::parse;
 using ceph::substr_do;
 using ceph::substr_insert;
 using ceph::transform;
+using ceph::trim;
 
 static constexpr auto foo = "foo"sv;
 static constexpr auto fred = "fred"sv;
@@ -413,4 +414,26 @@ TEST(Transform, MultiV) {
 		  return "''"sv;
 		return "f"sv;
 	      }), "''ffff''"s);
+}
+
+TEST(Trim, Space) {
+  EXPECT_EQ(trim("foo"sv), "foo"sv);
+  EXPECT_EQ(trim("    foo"sv), "foo"sv);
+  EXPECT_EQ(trim("    foo    "sv), "foo"sv);
+  EXPECT_EQ(trim("foo    "sv), "foo"sv);
+  EXPECT_EQ(trim("foo "sv), "foo"sv);
+  EXPECT_EQ(trim(" foo"sv), "foo"sv);
+  EXPECT_EQ(trim("    "sv), ""sv);
+  EXPECT_EQ(trim(""sv), ""sv);
+}
+
+TEST(Trim, Mix) {
+  EXPECT_EQ(trim("foo"sv, ".,"sv), "foo"sv);
+  EXPECT_EQ(trim(".,.,foo"sv, ",."sv), "foo"sv);
+  EXPECT_EQ(trim(".,.,foo.,.,"sv, ".,"sv), "foo"sv);
+  EXPECT_EQ(trim("foo.,.,"sv, ".,"sv), "foo"sv);
+  EXPECT_EQ(trim("foo."sv, ".,"sv), "foo"sv);
+  EXPECT_EQ(trim(",foo"sv, ".,"sv), "foo"sv);
+  EXPECT_EQ(trim(".,.,"sv, ".,"sv), ""sv);
+  EXPECT_EQ(trim(""sv, ".,"sv), ""sv);
 }

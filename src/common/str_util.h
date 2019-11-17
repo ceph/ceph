@@ -252,5 +252,24 @@ auto transform(std::string_view source, F&& f)
   }
   return dest;
 }
+
+// Trim some kinds of characters off a string_view, most notably
+// whitespace.
+inline std::string_view trim(std::string_view src,
+			     std::string_view exclude = space)
+{
+  if (src.empty())
+    return {};
+
+  auto n = src.find_first_not_of(exclude);
+  if (n == std::string_view::npos)
+    return {};
+  src.remove_prefix(n);
+
+  n = src.find_last_not_of(exclude);
+  src.remove_suffix(src.size() - ++n);
+
+  return src;
+}
 }
 #endif // CEPH_COMMON_STR_UTIL_H
