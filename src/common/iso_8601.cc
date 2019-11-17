@@ -17,14 +17,14 @@ using std::stringstream;
 using std::string;
 using std::uint16_t;
 
-using boost::none;
-using boost::optional;
-using boost::string_ref;
+using std::nullopt;
+using std::optional;
+using std::string_view;
 
 using ceph::real_clock;
 using ceph::real_time;
 
-using sriter = string_ref::const_iterator;
+using sriter = string_view::const_iterator;
 
 namespace {
 // This assumes a contiguous block of numbers in the correct order.
@@ -39,15 +39,15 @@ optional<real_time> calculate(const tm& t, uint32_t n = 0) {
   ceph_assert(n < 1000000000);
   time_t tt = internal_timegm(&t);
   if (tt == static_cast<time_t>(-1)) {
-    return none;
+    return nullopt;
   }
 
-  return boost::make_optional<real_time>(real_clock::from_time_t(tt)
-                                         + nanoseconds(n));
+  return std::make_optional<real_time>(real_clock::from_time_t(tt)
+				       + nanoseconds(n));
 }
 }
 
-optional<real_time> from_iso_8601(const string_ref s,
+optional<real_time> from_iso_8601(const string_view s,
 				  const bool ws_terminates) noexcept {
   auto end = s.cend();
   auto read_digit = [end](sriter& c) mutable {
@@ -98,7 +98,7 @@ optional<real_time> from_iso_8601(const string_ref s,
     {
       auto y = read_digits(c, 4);
       if (y < 1970) {
-	return none;
+	return nullopt;
       }
       t.tm_year = y - 1900;
     }
@@ -146,7 +146,7 @@ optional<real_time> from_iso_8601(const string_ref s,
   } catch (std::invalid_argument& e) {
     // fallthrough
   }
-  return none;
+  return nullopt;
 }
 
 string to_iso_8601(const real_time t,

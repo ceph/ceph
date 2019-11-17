@@ -4,8 +4,9 @@
 #ifndef CEPH_COMMON_ISO_8601_H
 #define CEPH_COMMON_ISO_8601_H
 
-#include <boost/optional.hpp>
-#include <boost/utility/string_ref.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
 
 #include "common/ceph_time.h"
 
@@ -27,10 +28,10 @@ namespace ceph {
 //     *    If there is no day, it is assumed to be the first.
 //     *    If there is no month, it is assumed to be January.
 //
-// If a date is invalid, boost::none is returned.
+// If a date is invalid, std::nullopt is returned.
 
-boost::optional<ceph::real_time> from_iso_8601(
-  boost::string_ref s, const bool ws_terminates = true) noexcept;
+std::optional<ceph::real_time> from_iso_8601(
+  std::string_view s, const bool ws_terminates = true) noexcept;
 
 enum class iso_8601_format {
   Y, YM, YMD, YMDh, YMDhm, YMDhms, YMDhmsn
