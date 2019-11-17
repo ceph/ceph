@@ -480,7 +480,7 @@ add_subdirectory(mgr)
 set(librados_config_srcs
   librados-config.cc)
 add_executable(librados-config ${librados_config_srcs})
-target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+target_link_libraries(librados-config librados Boost::program_options)
 
 install(TARGETS librados-config DESTINATION bin)
 
