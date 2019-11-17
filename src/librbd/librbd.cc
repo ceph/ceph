@@ -3546,6 +3546,7 @@ extern "C" int rbd_list2(rados_ioctx_t p, rbd_image_spec_t *images,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, list_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id());
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(images, 0, sizeof(*images) * *size);
   std::vector<librbd::image_spec_t> cpp_image_specs;
   int r = librbd::api::Image<>::list_images(io_ctx, &cpp_image_specs);
@@ -3734,6 +3735,7 @@ extern "C" int rbd_trash_list(rados_ioctx_t p, rbd_trash_image_info_t *entries,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, trash_list_enter,
              io_ctx.get_pool_name().c_str(), io_ctx.get_id());
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(entries, 0, sizeof(*entries) * *num_entries);
 
   vector<librbd::trash_image_info_t> cpp_entries;
@@ -4910,6 +4912,7 @@ extern "C" int rbd_get_parent(rbd_image_t image,
   int r = librbd::api::Image<>::get_parent(ictx, &cpp_parent_image,
                                            &cpp_parent_snap);
   if (r < 0) {
+    // FIPS zeroization audit 20191117: these memsets are not security related.
     memset(parent_image, 0, sizeof(rbd_linked_image_spec_t));
     memset(parent_snap, 0, sizeof(rbd_snap_spec_t));
   } else {
@@ -5011,6 +5014,7 @@ extern "C" int rbd_lock_get_owners(rbd_image_t image,
 {
   librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx*>(image);
   tracepoint(librbd, lock_get_owners_enter, ictx);
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(lock_owners, 0, sizeof(*lock_owners) * *max_lock_owners);
   std::list<std::string> lock_owner_list;
   int r = librbd::lock_get_owners(ictx, lock_mode, &lock_owner_list);
@@ -5136,6 +5140,7 @@ extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
     tracepoint(librbd, snap_list_exit, -EINVAL, 0);
     return -EINVAL;
   }
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(snaps, 0, sizeof(*snaps) * *max_snaps);
 
   int r = librbd::snap_list(ictx, cpp_snaps);
@@ -5328,6 +5333,7 @@ extern "C" int rbd_list_children2(rbd_image_t image,
   auto ictx = reinterpret_cast<librbd::ImageCtx*>(image);
   tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only);
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(children, 0, sizeof(*children) * *max_children);
 
   if (!max_children) {
@@ -5390,6 +5396,7 @@ extern "C" int rbd_list_children3(rbd_image_t image,
   auto ictx = reinterpret_cast<librbd::ImageCtx*>(image);
   tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only);
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(images, 0, sizeof(*images) * *max_images);
 
   std::vector<librbd::linked_image_spec_t> cpp_children;
@@ -5424,6 +5431,7 @@ extern "C" int rbd_list_descendants(rbd_image_t image,
                                     size_t *max_images)
 {
   auto ictx = reinterpret_cast<librbd::ImageCtx*>(image);
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(images, 0, sizeof(*images) * *max_images);
 
   std::vector<librbd::linked_image_spec_t> cpp_children;
@@ -6476,6 +6484,7 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
   tracepoint(librbd, group_image_list_enter,
              group_ioctx.get_pool_name().c_str(),
 	     group_ioctx.get_id(), group_name);
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(images, 0, sizeof(*images) * *image_size);
 
   if (group_image_info_size != sizeof(rbd_group_image_info_t)) {
@@ -6607,6 +6616,7 @@ extern "C" int rbd_group_snap_list(rados_ioctx_t group_p,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
   tracepoint(librbd, group_snap_list_enter, group_ioctx.get_pool_name().c_str(),
 	     group_ioctx.get_id(), group_name);
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(snaps, 0, sizeof(*snaps) * *snaps_size);
 
   if (group_snap_info_size != sizeof(rbd_group_snap_info_t)) {
@@ -6776,6 +6786,7 @@ extern "C" int rbd_watchers_list(rbd_image_t image,
   librbd::ImageCtx *ictx = (librbd::ImageCtx*)image;
 
   tracepoint(librbd, list_watchers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+  // FIPS zeroization audit 20191117: this memset is not security related.
   memset(watchers, 0, sizeof(*watchers) * *max_watchers);
   int r = librbd::list_watchers(ictx, watcher_list);
   if (r < 0) {
