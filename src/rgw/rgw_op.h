@@ -1433,7 +1433,7 @@ public:
     copy_if_newer = false;
   }
 
-  static bool parse_copy_location(const boost::string_view& src,
+  static bool parse_copy_location(std::string_view src,
                                   string& bucket_name,
                                   rgw_obj_key& object);
 

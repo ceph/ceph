@@ -1723,11 +1723,11 @@ int RGWPutObj_ObjStore_S3::get_params()
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
 
   /* handle x-amz-copy-source */
-  boost::string_view cs_view(copy_source);
+  std::string_view cs_view(copy_source);
   if (! cs_view.empty()) {
     if (cs_view[0] == '/')
       cs_view.remove_prefix(1);
-    copy_source_bucket_name = cs_view.to_string();
+    copy_source_bucket_name = std::string(cs_view);
     pos = copy_source_bucket_name.find("/");
     if (pos == std::string::npos) {
       ret = -EINVAL;
@@ -1960,14 +1960,14 @@ static inline int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state
   return read_op.prepare(s->yield);
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
+inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
 {
   bufferlist bl;
   encode(value,bl);
   attrs.emplace(key, std::move(bl));
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
+inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
 {
   bufferlist bl;
   encode(value,bl);
@@ -3406,10 +3406,12 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
       return -EINVAL;
     }
 
-    string key = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[0]));
+    string key(ceph::transform(ceph::trim(args[0]),
+			       [](char c) { return char(std::tolower(c)); }));
     string val;
     if (args.size() > 1) {
-      val = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[1]));
+      val = ceph::transform(ceph::trim(args[1]),
+			    [](char c) { return char(tolower(c)); });
     }
 
     if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
@@ -4464,7 +4466,7 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
 boost::optional<std::string>
 AWSGeneralAbstractor::get_v4_canonical_headers(
   const req_info& info,
-  const boost::string_view& signedheaders,
+  std::string_view signedheaders,
   const bool using_qs) const
 {
   return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
@@ -4475,13 +4477,13 @@ AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                        const bool using_qs) const
 {
-  boost::string_view access_key_id;
-  boost::string_view signed_hdrs;
+  std::string_view access_key_id;
+  std::string_view signed_hdrs;
 
-  boost::string_view date;
-  boost::string_view credential_scope;
-  boost::string_view client_signature;
-  boost::string_view session_token;
+  std::string_view date;
+  std::string_view credential_scope;
+  std::string_view client_signature;
+  std::string_view session_token;
 
   int ret = rgw::auth::s3::parse_v4_credentials(s->info,
 						access_key_id,
@@ -4689,7 +4691,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 boost::optional<std::string>
 AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
   const req_info& info,
-  const boost::string_view& signedheaders,
+  std::string_view signedheaders,
   const bool using_qs) const
 {
   return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
@@ -4700,9 +4702,9 @@ AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
 AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 {
-  boost::string_view access_key_id;
-  boost::string_view signature;
-  boost::string_view session_token;
+  std::string_view access_key_id;
+  std::string_view signature;
+  std::string_view session_token;
   bool qsr = false;
 
   const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
@@ -4713,7 +4715,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     signature = s->info.args.get("Signature");
     qsr = true;
 
-    boost::string_view expires = s->info.args.get("Expires");
+    std::string_view expires = s->info.args.get("Expires");
     if (expires.empty()) {
       throw -EPERM;
     }
@@ -4736,9 +4738,9 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 
   } else {
     /* The "Authorization" HTTP header is being used. */
-    const boost::string_view auth_str(http_auth + strlen("AWS "));
+    const std::string_view auth_str(http_auth + strlen("AWS "));
     const size_t pos = auth_str.rfind(':');
-    if (pos != boost::string_view::npos) {
+    if (pos != std::string_view::npos) {
       access_key_id = auth_str.substr(0, pos);
       signature = auth_str.substr(pos + 1);
     }
@@ -4795,15 +4797,15 @@ AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
 AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 {
-  const boost::string_view credential = s->auth.s3_postobj_creds.x_amz_credential;
+  const std::string_view credential = s->auth.s3_postobj_creds.x_amz_credential;
 
   /* grab access key id */
   const size_t pos = credential.find("/");
-  const boost::string_view access_key_id = credential.substr(0, pos);
+  const std::string_view access_key_id = credential.substr(0, pos);
   dout(10) << "access key id = " << access_key_id << dendl;
 
   /* grab credential scope */
-  const boost::string_view credential_scope = credential.substr(pos + 1);
+  const std::string_view credential_scope = credential.substr(pos + 1);
   dout(10) << "credential scope = " << credential_scope << dendl;
 
   const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
@@ -4919,9 +4921,9 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
 rgw::auth::Engine::result_t
 rgw::auth::s3::LDAPEngine::authenticate(
   const DoutPrefixProvider* dpp,
-  const boost::string_view& access_key_id,
-  const boost::string_view& signature,
-  const boost::string_view& session_token,
+  std::string_view access_key_id,
+  std::string_view signature,
+  std::string_view session_token,
   const string_to_sign_t& string_to_sign,
   const signature_factory_t&,
   const completer_factory_t& completer_factory,
@@ -4971,9 +4973,9 @@ void rgw::auth::s3::LDAPEngine::shutdown() {
 rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
   const DoutPrefixProvider* dpp,
-  const boost::string_view& _access_key_id,
-  const boost::string_view& signature,
-  const boost::string_view& session_token,
+  std::string_view _access_key_id,
+  std::string_view signature,
+  std::string_view session_token,
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
@@ -4982,7 +4984,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   /* get the user info */
   RGWUserInfo user_info;
   /* TODO(rzarzynski): we need to have string-view taking variant. */
-  const std::string access_key_id = _access_key_id.to_string();
+  const std::string access_key_id(_access_key_id);
   if (rgw_get_user_info_by_access_key(ctl->user, access_key_id, user_info) < 0) {
       ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
@@ -5039,7 +5041,7 @@ rgw::auth::s3::STSEngine::get_creds_info(const STS::SessionToken& token) const n
 }
 
 int
-rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
+rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, std::string_view session_token,
                                             STS::SessionToken& token) const
 {
   string decodedSessionToken = rgw::from_base64(session_token);
@@ -5086,9 +5088,9 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
 rgw::auth::Engine::result_t
 rgw::auth::s3::STSEngine::authenticate(
   const DoutPrefixProvider* dpp,
-  const boost::string_view& _access_key_id,
-  const boost::string_view& signature,
-  const boost::string_view& session_token,
+  std::string_view _access_key_id,
+  std::string_view signature,
+  std::string_view session_token,
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,

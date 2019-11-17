@@ -41,8 +41,8 @@ static void concat_url(std::string &url, std::string path) {
 }
 
 static int get_actual_key_from_conf(CephContext *cct,
-                                    boost::string_view key_id,
-                                    boost::string_view key_selector,
+                                    std::string_view key_id,
+                                    std::string_view key_selector,
                                     std::string& actual_key)
 {
   int res = 0;
@@ -84,7 +84,7 @@ static int get_actual_key_from_conf(CephContext *cct,
 }
 
 static int request_key_from_barbican(CephContext *cct,
-                                     boost::string_view key_id,
+                                     std::string_view key_id,
                                      const std::string& barbican_token,
                                      std::string& actual_key) {
   int res;
@@ -123,7 +123,7 @@ static int request_key_from_barbican(CephContext *cct,
 }
 
 static int get_actual_key_from_barbican(CephContext *cct,
-                                        boost::string_view key_id,
+                                        std::string_view key_id,
                                         std::string& actual_key)
 {
   int res = 0;
@@ -142,7 +142,7 @@ static int get_actual_key_from_barbican(CephContext *cct,
 }
 
 static int request_key_from_vault_with_token(CephContext *cct,
-                                             boost::string_view key_id,
+                                             std::string_view key_id,
                                              bufferlist *secret_bl)
 {
   std::string token_file, secret_url, vault_token;
@@ -213,7 +213,7 @@ static int request_key_from_vault_with_token(CephContext *cct,
 }
 
 static int get_actual_key_from_vault(CephContext *cct,
-                                     boost::string_view key_id,
+                                     std::string_view key_id,
                                      std::string& actual_key)
 {
   int res = 0;
@@ -267,8 +267,8 @@ static int get_actual_key_from_vault(CephContext *cct,
 }
 
 int get_actual_key_from_kms(CephContext *cct,
-                            boost::string_view key_id,
-                            boost::string_view key_selector,
+                            std::string_view key_id,
+                            std::string_view key_selector,
                             std::string& actual_key)
 {
   std::string kms_backend;

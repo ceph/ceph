@@ -270,8 +270,8 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
   CephContext* const cct;
 
-  const boost::string_view date;
-  const boost::string_view credential_scope;
+  const std::string_view date;
+  const std::string_view credential_scope;
   const signing_key_t signing_key;
 
   class ChunkMeta {
@@ -287,8 +287,8 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
         signature(signature.to_string()) {
     }
 
-    explicit ChunkMeta(const boost::string_view& signature)
-      : signature(signature.to_string()) {
+    explicit ChunkMeta(std::string_view signature)
+      : signature(signature) {
     }
 
   public:
@@ -314,7 +314,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
     /* Factory: create an object representing metadata of first, initial chunk
      * in a stream. */
-    static ChunkMeta create_first(const boost::string_view& seed_signature) {
+    static ChunkMeta create_first(std::string_view seed_signature) {
       return ChunkMeta(seed_signature);
     }
 
@@ -339,9 +339,9 @@ public:
   /* We need the constructor to be public because of the std::make_shared that
    * is employed by the create() method. */
   AWSv4ComplMulti(const req_state* const s,
-                  boost::string_view date,
-                  boost::string_view credential_scope,
-                  boost::string_view seed_signature,
+                  std::string_view date,
+                  std::string_view credential_scope,
+                  std::string_view seed_signature,
                   const signing_key_t& signing_key)
     : io_base_t(nullptr),
       cct(s->cct),
@@ -371,9 +371,9 @@ public:
 
   /* Factories. */
   static cmplptr_t create(const req_state* s,
-                          boost::string_view date,
-                          boost::string_view credential_scope,
-                          boost::string_view seed_signature,
+                          std::string_view date,
+                          std::string_view credential_scope,
+                          std::string_view seed_signature,
                           const boost::optional<std::string>& secret_key);
 
 };
@@ -455,12 +455,12 @@ static constexpr char AWS4_STREAMING_PAYLOAD_HASH[] = \
   "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
 
 int parse_v4_credentials(const req_info& info,                     /* in */
-			 boost::string_view& access_key_id,        /* out */
-			 boost::string_view& credential_scope,     /* out */
-			 boost::string_view& signedheaders,        /* out */
-			 boost::string_view& signature,            /* out */
-			 boost::string_view& date,                 /* out */
-			 boost::string_view& session_token,        /* out */
+			 std::string_view& access_key_id,        /* out */
+			 std::string_view& credential_scope,     /* out */
+			 std::string_view& signedheaders,        /* out */
+			 std::string_view& signature,            /* out */
+			 std::string_view& date,                 /* out */
+			 std::string_view& session_token,        /* out */
 			 const bool using_qs);                     /* in */
 
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
@@ -500,7 +500,7 @@ static inline std::string aws4_uri_encode(const std::string& src, bool encode_sl
   return result;
 }
 
-static inline std::string aws4_uri_recode(const boost::string_view& src, bool encode_slash)
+static inline std::string aws4_uri_recode(std::string_view src, bool encode_slash)
 {
   std::string decoded = url_decode(src);
   return aws4_uri_encode(decoded, encode_slash);
@@ -580,30 +580,30 @@ std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
-                         const boost::string_view& signedheaders,
+                         std::string_view signedheaders,
                          bool using_qs,
                          bool force_boto2_compat);
 
 extern sha256_digest_t
 get_v4_canon_req_hash(CephContext* cct,
-                      const boost::string_view& http_verb,
+                      std::string_view http_verb,
                       const std::string& canonical_uri,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
-                      const boost::string_view& signed_hdrs,
-                      const boost::string_view& request_payload_hash);
+                      std::string_view signed_hdrs,
+                      std::string_view request_payload_hash);
 
 AWSEngine::VersionAbstractor::string_to_sign_t
 get_v4_string_to_sign(CephContext* cct,
-                      const boost::string_view& algorithm,
-                      const boost::string_view& request_date,
-                      const boost::string_view& credential_scope,
+                      std::string_view algorithm,
+                      std::string_view request_date,
+                      std::string_view credential_scope,
                       const sha256_digest_t& canonreq_hash);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
-get_v4_signature(const boost::string_view& credential_scope,
+get_v4_signature(std::string_view credential_scope,
                  CephContext* const cct,
-                 const boost::string_view& secret_key,
+                 std::string_view secret_key,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
 
 extern AWSEngine::VersionAbstractor::server_signature_t

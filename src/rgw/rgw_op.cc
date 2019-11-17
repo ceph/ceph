@@ -1756,7 +1756,7 @@ static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
 
 int RGWGetObj::handle_user_manifest(const char *prefix)
 {
-  const boost::string_view prefix_view(prefix);
+  const std::string_view prefix_view(prefix);
   ldpp_dout(this, 2) << "RGWGetObj::handle_user_manifest() prefix="
                    << prefix_view << dendl;
 
@@ -4579,7 +4579,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
     const string& path_str = iter.path;
 
     const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
-    if (boost::string_view::npos == sep_pos) {
+    if (std::string_view::npos == sep_pos) {
       return -EINVAL;
     }
 
@@ -4821,12 +4821,12 @@ void RGWDeleteObj::execute()
   }
 }
 
-bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
+bool RGWCopyObj::parse_copy_location(std::string_view url_src,
 				     string& bucket_name,
 				     rgw_obj_key& key)
 {
-  boost::string_view name_str;
-  boost::string_view params_str;
+  std::string_view name_str;
+  std::string_view params_str;
 
   // search for ? before url-decoding so we don't accidentally match %3F
   size_t pos = url_src.find('?');
@@ -4837,7 +4837,7 @@ bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
     params_str = url_src.substr(pos + 1);
   }
 
-  boost::string_view dec_src{name_str};
+  std::string_view dec_src{name_str};
   if (dec_src[0] == '/')
     dec_src.remove_prefix(1);
 
@@ -4854,7 +4854,7 @@ bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
 
   if (! params_str.empty()) {
     RGWHTTPArgs args;
-    args.set(params_str.to_string());
+    args.set(params_str);
     args.parse();
 
     key.instance = args.get("versionId", NULL);
@@ -5405,7 +5405,7 @@ void RGWPutLC::execute()
 
   std::string content_md5_bin;
   try {
-    content_md5_bin = rgw::from_base64(boost::string_view(content_md5));
+    content_md5_bin = rgw::from_base64(std::string_view(content_md5));
   } catch (...) {
     s->err.message = "Request header Content-MD5 contains character "
                      "that is not base64 encoded.";

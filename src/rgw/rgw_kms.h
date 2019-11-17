@@ -26,8 +26,8 @@ static const std::string RGW_SSE_KMS_VAULT_AUTH_AGENT = "agent";
  * \return
  */
 int get_actual_key_from_kms(CephContext *cct,
-                            boost::string_view key_id,
-                            boost::string_view key_selector,
+                            std::string_view key_id,
+                            std::string_view key_selector,
                             std::string& actual_key);
 
 #endif

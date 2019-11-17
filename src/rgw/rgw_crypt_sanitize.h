@@ -56,8 +56,8 @@ struct auth {
  * Temporary container for suppressing printing if log made from civetweb may contain secret key.
  */
 struct log_content {
-  const boost::string_view buf;
-  explicit log_content(const boost::string_view buf)
+  const std::string_view buf;
+  explicit log_content(const std::string_view buf)
   : buf(buf) {}
 };
 

@@ -1091,11 +1091,11 @@ void RGWPostObj_ObjStore::parse_boundary_params(const std::string& params_str,
     size_t eqpos = param.find('=');
 
     if (std::string::npos != eqpos) {
-      std::string param_name = rgw_trim_whitespace(param.substr(0, eqpos));
+      std::string param_name(rgw_trim_whitespace(param.substr(0, eqpos)));
       std::string val = rgw_trim_quotes(param.substr(eqpos + 1));
       params[std::move(param_name)] = std::move(val);
     } else {
-      params[rgw_trim_whitespace(param)] = "";
+      params[std::string(rgw_trim_whitespace(param))] = "";
     }
 
     pos = end + 1;
@@ -1294,7 +1294,7 @@ int RGWPostObj_ObjStore::read_form_part_header(struct post_form_part* const part
   /*
    * iterate through fields
    */
-    std::string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
+    std::string line(rgw_trim_whitespace(string(bl.c_str(), bl.length())));
 
     if (line.empty()) {
       break;
@@ -1351,7 +1351,7 @@ std::string RGWPostObj_ObjStore::get_part_str(parts_collection_t& parts,
   if (part_str(parts, name, &val)) {
     return val;
   } else {
-    return rgw_trim_whitespace(def_val);
+    return std::string(rgw_trim_whitespace(def_val));
   }
 }
 

@@ -36,7 +36,7 @@ namespace sal {
 struct BucketChangeObserver {
   virtual ~BucketChangeObserver() = default;
 
-  virtual void on_bucket_changed(const boost::string_view& bucket_instance) = 0;
+  virtual void on_bucket_changed(std::string_view bucket_instance) = 0;
 };
 
 /// Configuration for BucketTrimManager
@@ -78,7 +78,7 @@ class BucketTrimManager : public BucketChangeObserver {
   int init();
 
   /// increment a counter for the given bucket instance
-  void on_bucket_changed(const boost::string_view& bucket_instance) override;
+  void on_bucket_changed(std::string_view bucket_instance) override;
 
   /// create a coroutine to run the bucket trim process every trim interval
   RGWCoroutine* create_bucket_trim_cr(RGWHTTPManager *http);
