@@ -830,10 +830,11 @@ int RESTArgs::get_uint64(struct req_state *s, const string& name,
     return 0;
   }
 
-  int r = stringtoull(sval, val);
-  if (r < 0)
-    return r;
+  auto r = ceph::parse<uint64_t>(sval);
+  if (!r)
+    return -EINVAL;
 
+  *val = *r;
   return 0;
 }
 
@@ -851,10 +852,11 @@ int RESTArgs::get_int64(struct req_state *s, const string& name,
     return 0;
   }
 
-  int r = stringtoll(sval, val);
-  if (r < 0)
-    return r;
+  auto r = ceph::parse<int64_t>(sval);
+  if (!r)
+    return -EINVAL;
 
+  *val = *r;
   return 0;
 }
 
@@ -872,10 +874,11 @@ int RESTArgs::get_uint32(struct req_state *s, const string& name,
     return 0;
   }
 
-  int r = stringtoul(sval, val);
-  if (r < 0)
-    return r;
+  auto r = ceph::parse<uint32_t>(sval);
+  if (!r)
+    return -EINVAL;
 
+  *val = *r;
   return 0;
 }
 
@@ -893,10 +896,11 @@ int RESTArgs::get_int32(struct req_state *s, const string& name,
     return 0;
   }
 
-  int r = stringtol(sval, val);
-  if (r < 0)
-    return r;
+  auto r = ceph::parse<int32_t>(sval);
+  if (!r)
+    return -EINVAL;
 
+  *val = *r;
   return 0;
 }
 

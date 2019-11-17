@@ -10,6 +10,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
+#include "common/str_util.h"
 #include "auth/Crypto.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -2487,17 +2488,16 @@ void RGWPostObj_ObjStore_S3::send_response()
     op_ret = STATUS_REDIRECT;
   } else if (op_ret == 0 && parts.count("success_action_status")) {
     string status_string;
-    uint32_t status_int;
 
     part_str(parts, "success_action_status", &status_string);
 
-    int r = stringtoul(status_string, &status_int);
-    if (r < 0) {
-      op_ret = r;
+    auto status_int = ceph::parse<uint32_t>(status_string);
+    if (!status_int) {
+      op_ret = -EINVAL;
       goto done;
     }
 
-    switch (status_int) {
+    switch (*status_int) {
       case 200:
 	break;
       case 201:

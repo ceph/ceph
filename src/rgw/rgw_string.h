@@ -4,8 +4,11 @@
 #ifndef CEPH_RGW_STRING_H
 #define CEPH_RGW_STRING_H
 
-#include <errno.h>
-#include <stdlib.h>
+#include <algorithm>
+#include <cerrno>
+#include <cstdlib>
+#include <type_traits>
+
 #include <limits.h>
 
 #include <boost/container/small_vector.hpp>
@@ -13,96 +16,25 @@
 
 struct ltstr_nocase
 {
-  bool operator()(const std::string& s1, const std::string& s2) const
+  using is_transparent = std::true_type;
+
+  bool operator()(std::string_view s1, std::string_view s2) const
   {
-    return strcasecmp(s1.c_str(), s2.c_str()) < 0;
+    return strncasecmp(s1.data(), s2.data(),
+		       std::min(s1.size(), s2.size())) < 0;
   }
 };
 
-static inline int stringcasecmp(const std::string& s1, const std::string& s2)
+inline int stringcasecmp(std::string_view s1, std::string_view s2)
 {
-  return strcasecmp(s1.c_str(), s2.c_str());
-}
-
-static inline int stringcasecmp(const std::string& s1, const char *s2)
-{
-  return strcasecmp(s1.c_str(), s2);
-}
-
-static inline int stringcasecmp(const std::string& s1, int ofs, int size, const std::string& s2)
-{
-  return strncasecmp(s1.c_str() + ofs, s2.c_str(), size);
-}
-
-static inline int stringtoll(const std::string& s, int64_t *val)
-{
-  char *end;
-
-  long long result = strtoll(s.c_str(), &end, 10);
-  if (result == LLONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
-
-  *val = (int64_t)result;
-
-  return 0;
-}
-
-static inline int stringtoull(const std::string& s, uint64_t *val)
-{
-  char *end;
-
-  unsigned long long result = strtoull(s.c_str(), &end, 10);
-  if (result == ULLONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
-
-  *val = (uint64_t)result;
-
-  return 0;
-}
-
-static inline int stringtol(const std::string& s, int32_t *val)
-{
-  char *end;
-
-  long result = strtol(s.c_str(), &end, 10);
-  if (result == LONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
-
-  *val = (int32_t)result;
-
-  return 0;
-}
-
-static inline int stringtoul(const std::string& s, uint32_t *val)
-{
-  char *end;
-
-  unsigned long result = strtoul(s.c_str(), &end, 10);
-  if (result == ULONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
-
-  *val = (uint32_t)result;
-
-  return 0;
+  return strncasecmp(s1.data(), s2.data(), std::min(s1.size(), s2.size()));
 }
 
 /* A converter between boost::string_view and null-terminated C-strings.
  * It copies memory while trying to utilize the local memory instead of
  * issuing dynamic allocations. */
 template<std::size_t N = 128>
-static inline boost::container::small_vector<char, N>
+inline boost::container::small_vector<char, N>
 sview2cstr(const boost::string_view& sv)
 {
   boost::container::small_vector<char, N> cstr;
@@ -225,12 +157,12 @@ std::string string_join_reserve(char delim, const Args&... args)
 
 
 /// use case-insensitive comparison in match_wildcards()
-static constexpr uint32_t MATCH_CASE_INSENSITIVE = 0x01;
+inline constexpr uint32_t MATCH_CASE_INSENSITIVE = 0x01;
 
 /// attempt to match the given input string with the pattern, which may contain
 /// the wildcard characters * and ?
-extern bool match_wildcards(boost::string_view pattern,
-                            boost::string_view input,
-                            uint32_t flags = 0);
+bool match_wildcards(boost::string_view pattern,
+		     boost::string_view input,
+		     uint32_t flags = 0);
 
 #endif

@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <errno.h>
+#include <cerrno>
 
 #include "common/ceph_json.h"
+#include "common/str_util.h"
 #include "rgw_policy_s3.h"
 #include "rgw_common.h"
 #include "rgw_crypt_sanitize.h"
@@ -146,26 +147,25 @@ int RGWPolicy::add_condition(const string& op, const string& first, const string
   } else if (stringcasecmp(op, "starts-with") == 0) {
     cond = new RGWPolicyCondition_StrStartsWith;
   } else if (stringcasecmp(op, "content-length-range") == 0) {
-    off_t min, max;
-    int r = stringtoll(first, &min);
-    if (r < 0) {
+    auto min = ceph::parse<long long>(first);
+    if (!min) {
       err_msg = "Bad content-length-range param";
       dout(0) << "bad content-length-range param: " << first << dendl;
-      return r;
+      return -EINVAL;
     }
 
-    r = stringtoll(second, &max);
-    if (r < 0) {
+    auto max = ceph::parse<long long>(second);
+    if (!max) {
       err_msg = "Bad content-length-range param";
       dout(0) << "bad content-length-range param: " << second << dendl;
-      return r;
+      return -EINVAL;
     }
 
-    if (min > min_length)
-      min_length = min;
+    if (*min > min_length)
+      min_length = *min;
 
-    if (max < max_length)
-      max_length = max;
+    if (*max < max_length)
+      max_length = *max;
 
     return 0;
   }

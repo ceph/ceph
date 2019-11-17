@@ -559,10 +559,9 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
       str[len - 1] != 'Z')
     return false;
 
-  uint32_t ms;
   boost::string_view nsstr = str.substr(1,  len - 2);
-  int r = stringtoul(nsstr.to_string(), &ms);
-  if (r < 0)
+  auto ms = ceph::parse<uint32_t>({ nsstr.data(), nsstr.size() });
+  if (!ms)
     return false;
 
   if (!pns) {
@@ -585,7 +584,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     1 };
 
 
-  *pns = ms * mul_table[nsstr.size()];
+  *pns = *ms * mul_table[nsstr.size()];
 
   return true;
 }
