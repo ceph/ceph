@@ -876,6 +876,15 @@ def command_version():
 
 def command_bootstrap():
     # type: () -> int
+
+    # verify output files
+    if not args.allow_overwrite:
+        for f in [args.output_config, args.output_keyring, args.output_pub_ssh_key]:
+            if os.path.exists(f):
+                raise RuntimeError('%s already exists; delete or pass '
+                                   '--allow-overwrite to overwrite' % f)
+
+    # initial vars
     fsid = args.fsid or make_fsid()
     hostname = get_hostname()
     mon_id = args.mon_id or hostname
@@ -1103,16 +1112,15 @@ def command_bootstrap():
                  '[client.crash.%s]\n\tkey = %s\n' % (hostname, crash_key))
 
     # output files
-    if args.output_keyring:
-        with open(args.output_keyring, 'w') as f:
-            os.fchmod(f.fileno(), 0o600)
-            f.write('[client.admin]\n'
-                    '\tkey = ' + admin_key + '\n')
-        logger.info('Wrote keyring to %s' % args.output_keyring)
-    if args.output_config:
-        with open(args.output_config, 'w') as f:
-            f.write(config)
-        logger.info('Wrote config to %s' % args.output_config)
+    with open(args.output_keyring, 'w') as f:
+        os.fchmod(f.fileno(), 0o600)
+        f.write('[client.admin]\n'
+                '\tkey = ' + admin_key + '\n')
+    logger.info('Wrote keyring to %s' % args.output_keyring)
+
+    with open(args.output_config, 'w') as f:
+        f.write(config)
+    logger.info('Wrote config to %s' % args.output_config)
 
     logger.info('Waiting for mgr to start...')
     while True:
@@ -1139,10 +1147,9 @@ def command_bootstrap():
         tmp_pub.write(ssh_pub)
         tmp_pub.flush()
 
-        if args.output_pub_ssh_key:
-            with open(args.output_pub_ssh_key, 'w') as f:
-                f.write(ssh_pub)
-            logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
+        with open(args.output_pub_ssh_key, 'w') as f:
+            f.write(ssh_pub)
+        logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
         cli([
             'config-key',
@@ -1205,12 +1212,12 @@ def command_bootstrap():
                         args.initial_dashboard_user,
                         password))
 
-    if args.output_config and args.output_keyring:
-        logger.info('You can access the Ceph CLI with:\n\n'
-                    '\tsudo %s shell -c %s -k %s\n' % (
-                        sys.argv[0],
-                        args.output_config,
-                        args.output_keyring))
+    logger.info('You can access the Ceph CLI with:\n\n'
+                '\tsudo %s shell -c %s -k %s\n' % (
+                    sys.argv[0],
+                    args.output_config,
+                    args.output_keyring))
+
     logger.info('Bootstrap complete.')
     return 0
 
@@ -1826,12 +1833,15 @@ def _get_parser():
         help='cluster FSID')
     parser_bootstrap.add_argument(
         '--output-keyring',
+        default='ceph.client.admin.keyring',
         help='location to write keyring file with new cluster admin and mon keys')
     parser_bootstrap.add_argument(
         '--output-config',
+        default='ceph.conf',
         help='location to write conf file to connect to new cluster')
     parser_bootstrap.add_argument(
         '--output-pub-ssh-key',
+        default='ceph.pub',
         help='location to write the cluster\'s public SSH key')
     parser_bootstrap.add_argument(
         '--skip-ssh',
@@ -1860,6 +1870,10 @@ def _get_parser():
         '--skip-pull',
         action='store_true',
         help='do not pull the latest image before bootstrapping')
+    parser_bootstrap.add_argument(
+        '--allow-overwrite',
+        action='store_true',
+        help='allow overwrite of existing --output-* config/keyring/ssh files')
 
     parser_deploy = subparsers.add_parser(
     'deploy', help='deploy a daemon')

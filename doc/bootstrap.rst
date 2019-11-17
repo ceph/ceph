@@ -35,7 +35,7 @@ To create a new cluster, you need to know:
 
 To bootstrap the cluster,::
 
-  sudo ceph-daemon bootstrap --mon-ip *<mon-ip>* --output-config ceph.conf --output-keyring ceph.keyring --output-pub-ssh-key ceph.pub
+  sudo ceph-daemon bootstrap --mon-ip *<mon-ip>*
 
 This command does a few things:
 
@@ -43,7 +43,7 @@ This command does a few things:
   local host.  A minimal configuration file needed to communicate with
   the new cluster is written to ``ceph.conf`` in the local directory.
 * A copy of the ``client.admin`` administrative (privileged!) secret
-  key is written to ``ceph.keyring`` in the local directory.
+  key is written to ``ceph.client.admin.keyring`` in the local directory.
 * Generates a new SSH key, and adds the public key to the local root user's
   ``/root/.ssh/authorized_keys`` file.  A copy of the public key is written
   to ``ceph.pub`` in the local directory.
