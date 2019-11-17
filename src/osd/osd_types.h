@@ -1932,6 +1932,7 @@ struct object_stat_sum_t {
   }
 
   void clear() {
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(this, 0, sizeof(*this));
   }
 
@@ -5533,6 +5534,7 @@ struct OSDOp {
   errorcode32_t rval;
 
   OSDOp() : rval(0) {
+    // FIPS zeroization audit 20191115: this memset clean for security
     memset(&op, 0, sizeof(ceph_osd_op));
   }
 
