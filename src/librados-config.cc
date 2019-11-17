@@ -20,6 +20,7 @@
 #include <boost/program_options/variables_map.hpp>
 
 #include "include/rados/librados.h"
+#include "ceph_ver.h"
 
 namespace po = boost::program_options;
 
@@ -29,7 +30,8 @@ int main(int argc, const char **argv)
   desc.add_options()
     ("help,h", "print this help message")
     ("version", "library version")
-    ("vernum", "library version code");
+    ("vernum", "library version code")
+    ("release", "print release name");
 
   po::parsed_options parsed =
     po::command_line_parser(argc, argv).options(desc).run();
@@ -45,6 +47,10 @@ int main(int argc, const char **argv)
     std::cout << maj << "." << min << "." << ext << std::endl;
   } else if (vm.count("vernum")) {
     std::cout << std::hex << LIBRADOS_VERSION_CODE << std::dec << std::endl;
+  } else if (vm.count("release")) {
+    std::cout << CEPH_RELEASE_NAME << ' '
+	      << '(' << CEPH_RELEASE_TYPE << ')'
+	      << std::endl;
   } else {
     std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
     return 1;
