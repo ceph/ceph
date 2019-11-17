@@ -608,7 +608,7 @@ class RGWUserCaps
   int add_cap(const string& cap);
   int remove_cap(const string& cap);
 public:
-  static int parse_cap_perm(const string& str, uint32_t *perm);
+  static uint32_t parse_cap_perm(std::string_view str);
   int add_from_string(const string& str);
   int remove_from_string(const string& str);
 
@@ -2640,7 +2640,7 @@ extern void calc_hash_sha256_update_stream(ceph::crypto::SHA256* hash,
 extern std::string calc_hash_sha256_close_stream(ceph::crypto::SHA256** phash);
 extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash);
 
-extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
+uint32_t rgw_parse_op_type_list(std::string_view str);
 
 static constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
 static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;

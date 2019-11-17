@@ -162,14 +162,7 @@ void RGWOp_User_Create::execute()
   op_state.set_secret_key(secret_key);
 
   if (!op_mask_str.empty()) {
-    uint32_t op_mask;
-    int ret = rgw_parse_op_type_list(op_mask_str, &op_mask);
-    if (ret < 0) {
-      ldout(s->cct, 0) << "failed to parse op_mask: " << ret << dendl;
-      http_ret = -EINVAL;
-      return;
-    }
-    op_state.set_op_mask(op_mask);
+    op_state.set_op_mask(rgw_parse_op_type_list(op_mask_str));
   }
 
   if (!key_type_str.empty()) {
@@ -291,12 +284,7 @@ void RGWOp_User_Modify::execute()
   }
 
   if (!op_mask_str.empty()) {
-    uint32_t op_mask;
-    if (rgw_parse_op_type_list(op_mask_str, &op_mask) < 0) {
-        ldout(s->cct, 0) << "failed to parse op_mask" << dendl;
-        http_ret = -EINVAL;
-        return;
-    }   
+    auto op_mask = rgw_parse_op_type_list(op_mask_str);
     op_state.set_op_mask(op_mask);
   }
 
@@ -307,14 +295,7 @@ void RGWOp_User_Modify::execute()
     op_state.set_system(system);
 
   if (!op_mask_str.empty()) {
-    uint32_t op_mask;
-    int ret = rgw_parse_op_type_list(op_mask_str, &op_mask);
-    if (ret < 0) {
-      ldout(s->cct, 0) << "failed to parse op_mask: " << ret << dendl;
-      http_ret = -EINVAL;
-      return;
-    }
-    op_state.set_op_mask(op_mask);
+    op_state.set_op_mask(rgw_parse_op_type_list(op_mask_str));
   }
   
   if (!store->svc()->zone->is_meta_master()) {

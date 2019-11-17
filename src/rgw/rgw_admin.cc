@@ -4960,14 +4960,7 @@ int main(int argc, const char **argv)
   }
 
   if (!op_mask_str.empty()) {
-    uint32_t op_mask;
-    int ret = rgw_parse_op_type_list(op_mask_str, &op_mask);
-    if (ret < 0) {
-      cerr << "failed to parse op_mask: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    user_op.set_op_mask(op_mask);
+    user_op.set_op_mask(rgw_parse_op_type_list(op_mask_str));
   }
 
   if (key_type != KEY_TYPE_UNDEFINED)

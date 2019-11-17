@@ -560,7 +560,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 
   string mask_str;
   JSONDecoder::decode_json("op_mask", mask_str, obj);
-  rgw_parse_op_type_list(mask_str, &op_mask);
+  op_mask = rgw_parse_op_type_list(mask_str);
 
   bool sys = false;
   JSONDecoder::decode_json("system", sys, obj);

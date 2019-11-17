@@ -1654,23 +1654,19 @@ struct rgw_name_to_flag {
   uint32_t flag;
 };
 
-static int parse_list_of_flags(struct rgw_name_to_flag *mapping,
-                               const string& str, uint32_t *perm)
+static uint32_t parse_list_of_flags(struct rgw_name_to_flag *mapping,
+				    std::string_view str)
 {
-  list<string> strs;
-  get_str_list(str, strs);
-  list<string>::iterator iter;
   uint32_t v = 0;
-  for (iter = strs.begin(); iter != strs.end(); ++iter) {
-    string& s = *iter;
-    for (int i = 0; mapping[i].type_name; i++) {
-      if (s.compare(mapping[i].type_name) == 0)
-        v |= mapping[i].flag;
-    }
-  }
+  ceph::substr_do(
+    str,
+    [&](auto&& s) {
+      for (int i = 0; mapping[i].type_name; i++) {
+	if (s.compare(mapping[i].type_name) == 0)
+	  v |= mapping[i].flag;
+      }});
 
-  *perm = v;
-  return 0;
+  return v;
 }
 
 static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
@@ -1678,9 +1674,9 @@ static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
 		  {"write", RGW_CAP_WRITE},
 		  {NULL, 0} };
 
-int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
+uint32_t RGWUserCaps::parse_cap_perm(std::string_view str)
 {
-  return parse_list_of_flags(cap_names, str, perm);
+  return parse_list_of_flags(cap_names, str);
 }
 
 int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
@@ -1697,9 +1693,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
   uint32_t perm = 0;
   if (pos < (int)cap.size() - 1) {
     cap_perm = cap.substr(pos + 1);
-    int r = RGWUserCaps::parse_cap_perm(cap_perm, &perm);
-    if (r < 0)
-      return r;
+    perm = RGWUserCaps::parse_cap_perm(cap_perm);
   }
 
   *pperm = perm;
@@ -1820,9 +1814,7 @@ struct RGWUserCap {
     JSONDecoder::decode_json("type", type, obj);
     string perm_str;
     JSONDecoder::decode_json("perm", perm_str, obj);
-    if (RGWUserCaps::parse_cap_perm(perm_str, &perm) < 0) {
-      throw JSONDecoder::err("failed to parse permissions");
-    }
+    perm = RGWUserCaps::parse_cap_perm(perm_str);
   }
 };
 
@@ -1944,9 +1936,9 @@ static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
 		  {NULL, 0} };
 
 
-int rgw_parse_op_type_list(const string& str, uint32_t *perm)
+uint32_t rgw_parse_op_type_list(std::string_view str)
 {
-  return parse_list_of_flags(op_type_mapping, str, perm);
+  return parse_list_of_flags(op_type_mapping, str);
 }
 
 bool match_policy(boost::string_view pattern, boost::string_view input,
