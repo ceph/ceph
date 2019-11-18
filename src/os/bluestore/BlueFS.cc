@@ -3401,7 +3401,6 @@ void BlueFS::debug_inject_duplicate_gift(unsigned id,
 {
   dout(0) << __func__ << dendl;
   if (id < alloc.size() && alloc[id]) {
-    //log_t.op_alloc_add(id, offset, len);
     alloc[id]->init_add_free(offset, len);
   }
 }
