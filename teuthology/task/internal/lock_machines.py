@@ -3,7 +3,6 @@ import logging
 import time
 import yaml
 
-import teuthology.lock.keys
 import teuthology.lock.ops
 import teuthology.lock.query
 import teuthology.lock.util
@@ -115,7 +114,7 @@ def lock_machines(ctx, config):
                                 full_name = misc.canonicalize_hostname(guest)
                                 provision.destroy_if_vm(ctx, full_name)
                                 provision.create_if_vm(ctx, full_name)
-                if teuthology.lock.keys.do_update_keys(keys_dict)[0]:
+                if teuthology.lock.ops.do_update_keys(keys_dict)[0]:
                     log.info("Error in virtual machine keys")
                 newscandict = {}
                 for dkey in all_locked.keys():
