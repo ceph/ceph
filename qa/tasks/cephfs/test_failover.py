@@ -365,7 +365,7 @@ class TestStandbyReplay(CephFSTestCase):
         self.assertEqual(0, len(list(self.fs.get_replays(status=status))))
         return status
 
-    def _confirm_single_replay(self, full=True, status=None):
+    def _confirm_single_replay(self, full=True, status=None, retries=3):
         status = self.fs.wait_for_daemons(status=status)
         ranks = sorted(self.fs.get_mds_map(status=status)['in'])
         replays = list(self.fs.get_replays(status=status))
@@ -378,7 +378,11 @@ class TestStandbyReplay(CephFSTestCase):
                     has_replay = True
                     checked_replays.add(replay['gid'])
             if full and not has_replay:
-                raise RuntimeError("rank "+str(rank)+" has no standby-replay follower")
+                if retries <= 0:
+                    raise RuntimeError("rank "+str(rank)+" has no standby-replay follower")
+                else:
+                    retries = retries-1
+                    time.sleep(2)
         self.assertEqual(checked_replays, set(info['gid'] for info in replays))
         return status
 
