@@ -1,12 +1,28 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
+#include <array>
+#include <cstdlib>
+#include <cstring>
+
+#include <arpa/inet.h>
+#include <netdb.h>
 
 #include "msg_types.h"
 
-#include <arpa/inet.h>
-#include <stdlib.h>
-#include <string.h>
-#include <netdb.h>
-
 #include "common/Formatter.h"
+#include "common/str_util.h"
 
 void entity_name_t::dump(Formatter *f) const
 {
@@ -172,6 +188,99 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
   type = newtype;
 
   //cout << *this << std::endl;
+  return true;
+}
+
+bool entity_addr_t::parse(std::string_view& s, int default_type)
+{
+  *this = entity_addr_t();
+  int newtype;
+  if (s.compare("v1:"sv) == 0) {
+    s.remove_prefix(3);
+    newtype = TYPE_LEGACY;
+  } else if (s.compare("v2:"sv) == 0) {
+    s.remove_prefix(3);
+    newtype = TYPE_MSGR2;
+  } else if (s.compare("any:"sv) == 0) {
+    s.remove_prefix(4);
+    newtype = TYPE_ANY;
+  } else if (s[0] == '-') {
+    newtype = TYPE_NONE;
+    s.remove_prefix(1);
+    return true;
+  } else {
+    newtype = default_type ? default_type : TYPE_DEFAULT;
+  }
+
+  bool brackets = false;
+  if (s[0] == '[') {
+    s.remove_prefix(1);
+    brackets = true;
+  }
+
+  static constexpr auto v4chars = ".0123456789"sv;
+  static constexpr auto v6chars = ":0123456789abcdefABCDEF"sv;
+  static constexpr size_t v4len = 39;
+  static constexpr size_t v6len = 64; // actually 39 + null is sufficient.
+
+  // inet_pton() requires a null terminated input, so let's fill two
+  // buffers, one with ipv4 allowed characters, and one with ipv6, and
+  // then see which parses.
+  char v4buf[v4len];
+    ceph::nul_terminated_copy(
+      s.substr(0, std::min(s.find_first_not_of(v4chars),
+                           v4len - 1)), v4buf);
+
+  char v6buf[v6len];
+    ceph::nul_terminated_copy(
+      s.substr(0, std::min(s.find_first_not_of(v6chars),
+                           v6len - 1)), v6buf);
+
+  // ipv4?
+  struct in_addr a4;
+  struct in6_addr a6;
+  if (inet_pton(AF_INET, v4buf, &a4)) {
+    u.sin.sin_addr.s_addr = a4.s_addr;
+    u.sa.sa_family = AF_INET;
+    s.remove_prefix(strlen(v4buf));
+  } else if (inet_pton(AF_INET6, v6buf, &a6)) {
+    u.sa.sa_family = AF_INET6;
+    memcpy(&u.sin6.sin6_addr, &a6, sizeof(a6));
+    s.remove_prefix(strlen(v6buf));
+  } else {
+    return false;
+  }
+
+  if (brackets) {
+    if (s[0] != ']')
+      return false;
+    s.remove_prefix(1);
+  }
+
+  if (s[0] == ':') {
+    // parse a port, too!
+    s.remove_prefix(1);
+    auto bt = s;
+    auto port = ceph::consume<int>(s);
+    if (!port || *port > MAX_PORT_NUMBER) {
+      s = bt;
+      return false;
+    }
+    set_port(*port);
+  }
+
+  if (s[0] == '/') {
+    // parse nonce, too
+    s.remove_prefix(1);
+    auto bt = s;
+    auto non = ceph::consume<int>(s);
+    if (!non) {
+      s = bt;
+      return false;
+    }
+    set_nonce(*non);
+  }
+  type = newtype;
   return true;
 }
 

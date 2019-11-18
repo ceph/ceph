@@ -16,6 +16,8 @@
 #define CEPH_MSG_TYPES_H
 
 #include <sstream>
+#include <string>
+#include <string_view>
 
 #include <netinet/in.h>
 
@@ -441,6 +443,7 @@ struct entity_addr_t {
   }
 
   bool parse(const char *s, const char **end = 0, int type=0);
+  bool parse(std::string_view& s, int type = 0);
 
   void decode_legacy_addr_after_marker(ceph::buffer::list::const_iterator& bl)
   {
