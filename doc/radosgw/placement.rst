@@ -147,6 +147,12 @@ Then provide the zone placement info for that storage class:
         --data-pool default.rgw.cold.data \
         --compression lz4
 
+Finally, restart the Ceph Object Gateway:
+
+::
+
+  # systemctl restart ceph-radosgw@rgw.`hostname -s`
+
 Customizing Placement
 =====================
 
