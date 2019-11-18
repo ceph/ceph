@@ -5824,7 +5824,9 @@ WRITE_CLASS_ENCODER(ScrubMap)
 
 struct ScrubMapBuilder {
   bool deep = false;
+private:
   std::vector<hobject_t> ls;
+public:
   size_t pos = 0;
   int64_t data_pos = 0;
   std::string omap_pos;

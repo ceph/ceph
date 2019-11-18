@@ -542,7 +542,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    int objects_list_range(
      const hobject_t &start,
      const hobject_t &end,
-     vector<hobject_t> *ls,
+     vector<ObjectStore::ObjectHandle> *ls,
      vector<ghobject_t> *gen_obs=0);
 
    int objects_get_attr(

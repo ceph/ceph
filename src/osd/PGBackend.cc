@@ -381,12 +381,12 @@ int PGBackend::objects_list_partial(
 int PGBackend::objects_list_range(
   const hobject_t &start,
   const hobject_t &end,
-  vector<hobject_t> *ls,
+  vector<ObjectStore::ObjectHandle> *ls,
   vector<ghobject_t> *gen_obs)
 {
   ceph_assert(ls);
-  vector<ghobject_t> objects;
-  int r = store->collection_list(
+  vector<ObjectStore::ObjectHandle> objects;
+  int r = store->collection_list_plus(
     ch,
     ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
@@ -398,13 +398,13 @@ int PGBackend::objects_list_range(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    if (i->is_pgmeta() || i->hobj.is_temp()) {
+    if (i->get_oid().is_pgmeta() || i->get_oid().hobj.is_temp()) {
       continue;
     }
-    if (i->is_no_gen()) {
-      ls->push_back(i->hobj);
+    if (i->get_oid().is_no_gen()) {
+      ls->push_back(i);
     } else if (gen_obs) {
-      gen_obs->push_back(*i);
+      gen_obs->push_back(i->get_oid());
     }
   }
   return r;
