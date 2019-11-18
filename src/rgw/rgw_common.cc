@@ -2065,7 +2065,7 @@ bool RGWBucketInfo::empty_sync_policy() const
   return sync_policy->empty();
 }
 
-void encode_json(const char *name, const rgw_zone_id& zid, Formatter *f)
+void encode_json_impl(const char *name, const rgw_zone_id& zid, Formatter *f)
 {
   encode_json(name, zid.id, f);
 }

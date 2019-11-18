@@ -920,6 +920,16 @@ void rgw_sync_pipe_acl_translation::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("owner", owner, obj);
 }
 
+void rgw_sync_pipe_source_params::dump(Formatter *f) const
+{
+  encode_json("filter", filter, f);
+}
+
+void rgw_sync_pipe_source_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("filter", filter, obj);
+}
+
 void rgw_sync_pipe_dest_params::dump(Formatter *f) const
 {
   encode_json("acl_translation", acl_translation, f);
@@ -934,15 +944,15 @@ void rgw_sync_pipe_dest_params::decode_json(JSONObj *obj)
 
 void rgw_sync_pipe_params::dump(Formatter *f) const
 {
-  encode_json("filter", filter, f);
-  encode_json("dest_params", dest_params, f);
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
   encode_json("priority", priority, f);
 }
 
 void rgw_sync_pipe_params::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("filter", filter, obj);
-  JSONDecoder::decode_json("dest_params", dest_params, obj);
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
   JSONDecoder::decode_json("priority", priority, obj);
 }
 

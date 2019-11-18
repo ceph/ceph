@@ -272,11 +272,11 @@ void RGWBucketSyncFlowManager::pipe_rules::insert(const rgw_sync_bucket_pipe& pi
   pipes.push_back(pipe);
 
   auto ppipe = &pipes.back();
-  auto prefix = ppipe->params.filter.prefix.value_or(string());
+  auto prefix = ppipe->params.source.filter.prefix.value_or(string());
 
   prefix_refs.insert(make_pair(prefix, ppipe));
 
-  for (auto& t : ppipe->params.filter.tags) {
+  for (auto& t : ppipe->params.source.filter.tags) {
     string tag = t.key + "=" + t.value;
     auto titer = tag_refs.find(tag);
     if (titer != tag_refs.end() &&
@@ -309,7 +309,7 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_obj_params(const rgw_obj_key& ke
     }
 
     auto& rule_params = iter->second->params;
-    auto& filter = rule_params.filter;
+    auto& filter = rule_params.source.filter;
 
     if (!filter.check_tags(tags)) {
       continue;
