@@ -245,8 +245,8 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         # identity
         ssh_key = self.get_store("ssh_identity_key")
         ssh_pub = self.get_store("ssh_identity_pub")
-        tpub = None
-        tkey = None
+        self.ssh_pub = ssh_pub
+        self.ssh_key = ssh_key
         if ssh_key and ssh_pub:
             tkey = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-identity-')
             tkey.write(ssh_key.encode('utf-8'))
@@ -265,6 +265,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         else:
             self._ssh_options = None
         self.log.info('ssh_options %s' % ssh_options)
+
+        # for now, always root
+        self.ssh_user = 'root'
 
     @staticmethod
     def can_run():
@@ -335,6 +338,21 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.set_store("ssh_config", None)
         self.ssh_config_tmp = None
         return 0, "", ""
+
+    @orchestrator._cli_read_command(
+        'ssh get-pub-key',
+        desc='Show SSH public key for connecting to cluster hosts')
+    def _get_pub_key(self):
+        if self.ssh_pub:
+            return 0, self.ssh_pub, ''
+        else:
+            return -errno.ENOENT, '', 'No cluster SSH key defined'
+
+    @orchestrator._cli_read_command(
+        'ssh get-user',
+        desc='Show user for SSHing to cluster hosts')
+    def _get_user(self):
+        return 0, self.ssh_user, ''
 
     def _get_connection(self, host):
         """
