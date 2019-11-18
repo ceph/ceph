@@ -255,6 +255,26 @@ struct rgw_sync_pipe_acl_translation {
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_acl_translation)
 
+struct rgw_sync_pipe_source_params {
+  rgw_sync_pipe_filter filter;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(filter, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(filter, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_pipe_source_params)
+
 struct rgw_sync_pipe_dest_params { 
   std::optional<rgw_sync_pipe_acl_translation> acl_translation;
   std::optional<string> storage_class;
@@ -278,23 +298,23 @@ struct rgw_sync_pipe_dest_params {
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_dest_params)
 
-struct rgw_sync_pipe_params { 
-  rgw_sync_pipe_filter filter;
-  rgw_sync_pipe_dest_params dest_params;
+struct rgw_sync_pipe_params {
+  rgw_sync_pipe_source_params source;
+  rgw_sync_pipe_dest_params dest;
   int32_t priority{0};
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(filter, bl);
-    encode(dest_params, bl);
+    encode(source, bl);
+    encode(dest, bl);
     encode(priority, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(filter, bl);
-    decode(dest_params, bl);
+    decode(source, bl);
+    decode(dest, bl);
     decode(priority, bl);
     DECODE_FINISH(bl);
   }

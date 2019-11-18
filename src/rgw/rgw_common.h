@@ -2725,7 +2725,7 @@ static inline ostream& operator<<(ostream& os, const rgw_zone_id& zid) {
   return os;
 }
 
-void encode_json(const char *name, const rgw_zone_id& zid, Formatter *f);
+void encode_json_impl(const char *name, const rgw_zone_id& zid, Formatter *f);
 void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
 
 #endif

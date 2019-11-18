@@ -2961,6 +2961,37 @@ static vector<rgw_zone_id> zone_ids_from_str(const string& val)
   return result;
 }
 
+class JSONFormatter_PrettyZone : public JSONFormatter {
+  class Handler : public JSONEncodeFilter::Handler<rgw_zone_id> {
+    void encode_json(const char *name, const void *pval, ceph::Formatter *f) const override {
+      auto zone_id = *(static_cast<const rgw_zone_id *>(pval));
+      string zone_name;
+      RGWZone *zone;
+      if (store->svc()->zone->find_zone(zone_id, &zone)) {
+        zone_name = zone->name;
+      } else {
+        cerr << "WARNING: cannot find zone name for id=" << zone_id << std::endl;
+        zone_name = zone_id.id;
+      }
+
+      ::encode_json(name, zone_name, f);
+    }
+  } zone_id_type_handler;
+
+  JSONEncodeFilter encode_filter;
+public:
+  JSONFormatter_PrettyZone(bool pretty_format) : JSONFormatter(pretty_format) {
+    encode_filter.register_type(&zone_id_type_handler);
+  }
+
+  void *get_external_feature_handler(const std::string& feature) override {
+    if (feature != "JSONEncodeFilter") {
+      return nullptr;
+    }
+    return &encode_filter;
+  }
+};
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -3030,6 +3061,7 @@ int main(int argc, const char **argv)
   string bucket_id;
   string new_bucket_name;
   Formatter *formatter = NULL;
+  Formatter *zone_formatter = nullptr;
   int purge_data = false;
   int pretty_format = false;
   int show_log_entries = true;
@@ -3691,6 +3723,8 @@ int main(int argc, const char **argv)
     cerr << "unrecognized format: " << format << std::endl;
     exit(1);
   }
+
+  zone_formatter = new JSONFormatter_PrettyZone(pretty_format);
 
   realm_name = g_conf()->rgw_realm;
   zone_name = g_conf()->rgw_zone;
@@ -7548,7 +7582,7 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_INFO) {
-    sync_info(opt_effective_zone_id, opt_bucket, formatter);
+    sync_info(opt_effective_zone_id, opt_bucket, zone_formatter);
   }
 
   if (opt_cmd == OPT::SYNC_STATUS) {
@@ -8059,7 +8093,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, formatter, cout);
+    show_result(sync_policy, zone_formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_GET) {
@@ -8073,7 +8107,7 @@ next:
     auto& groups = sync_policy.groups;
 
     if (!opt_group_id) {
-      show_result(groups, formatter, cout);
+      show_result(groups, zone_formatter, cout);
     } else {
       auto iter = sync_policy.groups.find(*opt_group_id);
       if (iter == sync_policy.groups.end()) {
@@ -8081,7 +8115,7 @@ next:
         return ENOENT;
       }
 
-      show_result(iter->second, formatter, cout);
+      show_result(iter->second, zone_formatter, cout);
     }
   }
 
@@ -8103,11 +8137,11 @@ next:
     }
 
     {
-      Formatter::ObjectSection os(*formatter, "result");
-      encode_json("sync_policy", sync_policy, formatter);
+      Formatter::ObjectSection os(*zone_formatter, "result");
+      encode_json("sync_policy", sync_policy, zone_formatter);
     }
 
-    formatter->flush(cout);
+    zone_formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_CREATE) {
@@ -8157,7 +8191,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, formatter, cout);
+    show_result(sync_policy, zone_formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_REMOVE) {
@@ -8197,7 +8231,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, formatter, cout);
+    show_result(sync_policy, zone_formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE ||
@@ -8244,8 +8278,8 @@ next:
                             opt_dest_bucket_name,
                             opt_dest_bucket_id);
 
-    pipe->params.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
-    pipe->params.filter.set_tags(tags_add, tags_rm);
+    pipe->params.source.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
+    pipe->params.source.filter.set_tags(tags_add, tags_rm);
     if (opt_priority) {
       pipe->params.priority = *opt_priority;
     }
@@ -8255,7 +8289,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, formatter, cout);
+    show_result(sync_policy, zone_formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_REMOVE) {
@@ -8314,7 +8348,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, formatter, cout);
+    show_result(sync_policy, zone_formatter, cout);
   }
 
   if (opt_cmd == OPT::SYNC_POLICY_GET) {
@@ -8325,7 +8359,7 @@ next:
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    show_result(sync_policy, formatter, cout);
+    show_result(sync_policy, zone_formatter, cout);
   }
 
   if (opt_cmd == OPT::BILOG_TRIM) {
