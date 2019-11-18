@@ -2461,6 +2461,13 @@ function test_mon_osd_misc()
 
   set -e
 
+  local old_bytes_per_osd=$(ceph config get mgr mon_reweight_min_bytes_per_osd)
+  local old_pgs_per_osd=$(ceph config get mgr mon_reweight_min_pgs_per_osd)
+  # otherwise ceph-mgr complains like:
+  # Error EDOM: Refusing to reweight: we only have 5372 kb used across all osds!
+  # Error EDOM: Refusing to reweight: we only have 20 PGs across 3 osds!
+  ceph config set mgr mon_reweight_min_bytes_per_osd 0
+  ceph config set mgr mon_reweight_min_pgs_per_osd 0
   ceph osd reweight-by-utilization 110
   ceph osd reweight-by-utilization 110 .5
   expect_false ceph osd reweight-by-utilization 110 0
@@ -2474,6 +2481,9 @@ function test_mon_osd_misc()
   ceph osd reweight-by-pg 110 rbd
   ceph osd reweight-by-pg 110 .5 rbd
   expect_false ceph osd reweight-by-pg 110 boguspoolasdfasdfasdf
+  # restore the setting
+  ceph config set mgr mon_reweight_min_bytes_per_osd $old_bytes_per_osd
+  ceph config set mgr mon_reweight_min_pgs_per_osd $old_pgs_per_osd
 }
 
 function test_admin_heap_profiler()
