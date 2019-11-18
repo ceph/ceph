@@ -1948,6 +1948,7 @@ fi
 %if %{with lttng}
 %{_libdir}/librados_tp.so.*
 %endif
+%dir %{_sysconfdir}/ceph
 
 %post -n librados2 -p /sbin/ldconfig
 
@@ -2066,6 +2067,7 @@ fi
 
 %files -n libcephfs2
 %{_libdir}/libcephfs.so.*
+%dir %{_sysconfdir}/ceph
 
 %post -n libcephfs2 -p /sbin/ldconfig
 
