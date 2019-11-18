@@ -24,7 +24,8 @@ $CEPH_DAEMON $A \
     --mon-ip $ip \
     --config c \
     --output-keyring k \
-    --output-config c
+    --output-config c \
+    --allow-overwrite
 chmod 644 k c
 
 if [ -n "$ip2" ]; then
