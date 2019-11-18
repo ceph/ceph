@@ -206,7 +206,7 @@ usage=$usage"\t-N, --not-new: reuse existing cluster config (default)\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
 usage=$usage"\t--redirect-output: only useful with nodaemon, directs output to log file\n"
-usage=$usage"\t--smallmds: limit mds cache size\n"
+usage=$usage"\t--smallmds: limit mds cache memory limit\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
@@ -1211,7 +1211,8 @@ if [ "$smallmds" -eq 1 ]; then
     wconf <<EOF
 [mds]
         mds log max segments = 2
-        mds cache size = 10000
+        # Default 'mds cache memory limit' is 1GiB, and here we set it to 100MiB.
+        mds cache memory limit = 100M
 EOF
 fi
 

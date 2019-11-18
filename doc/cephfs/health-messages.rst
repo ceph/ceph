@@ -75,11 +75,11 @@ Message: "Client *name* failing to respond to cache pressure"
 Code: MDS_HEALTH_CLIENT_RECALL, MDS_HEALTH_CLIENT_RECALL_MANY
 Description: Clients maintain a metadata cache.  Items (such as inodes) in the
 client cache are also pinned in the MDS cache, so when the MDS needs to shrink
-its cache (to stay within ``mds_cache_size`` or ``mds_cache_memory_limit``), it
-sends messages to clients to shrink their caches too.  If the client is
-unresponsive or buggy, this can prevent the MDS from properly staying within
-its cache limits and it may eventually run out of memory and crash.  This
-message appears if a client has failed to release more than
+its cache (to stay within ``mds_cache_memory_limit``), it sends messages to
+clients to shrink their caches too.  If the client is unresponsive or buggy,
+this can prevent the MDS from properly staying within its cache limits and it
+may eventually run out of memory and crash.  This message appears if a client
+has failed to release more than
 ``mds_recall_warning_threshold`` capabilities (decaying with a half-life of
 ``mds_recall_max_decay_rate``) within the last
 ``mds_recall_warning_decay_rate`` second.
@@ -126,6 +126,6 @@ Code: MDS_HEALTH_CACHE_OVERSIZED
 Description: The MDS is not succeeding in trimming its cache to comply with the
 limit set by the administrator.  If the MDS cache becomes too large, the daemon
 may exhaust available memory and crash.  By default, this message appears if
-the actual cache size (in inodes or memory) is at least 50% greater than
-``mds_cache_size`` (default 100000) or ``mds_cache_memory_limit`` (default
-1GB). Modify ``mds_health_cache_threshold`` to set the warning ratio.
+the actual cache size (in memory) is at least 50% greater than
+``mds_cache_memory_limit`` (default 1GB). Modify ``mds_health_cache_threshold``
+to set the warning ratio.

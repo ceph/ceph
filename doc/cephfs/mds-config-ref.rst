@@ -13,9 +13,8 @@
 ``mds cache memory limit``
 
 :Description: The memory limit the MDS should enforce for its cache.
-              Administrators should use this instead of ``mds cache size``.
 :Type:  64-bit Integer Unsigned
-:Default: ``1073741824``
+:Default: ``1G``
 
 ``mds cache reservation``
 
@@ -26,14 +25,6 @@
 :Type:  Float
 :Default: ``0.05``
 
-``mds cache size``
-
-:Description: The number of inodes to cache. A value of 0 indicates an
-              unlimited number. It is recommended to use
-              ``mds_cache_memory_limit`` to limit the amount of memory the MDS
-              cache uses.
-:Type:  32-bit Integer
-:Default: ``0``
 
 ``mds cache mid``
 

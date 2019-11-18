@@ -7455,11 +7455,6 @@ std::vector<Option> get_mds_options() {
     .set_description("interval in seconds between heap releases")
     .set_flag(Option::FLAG_RUNTIME),
 
-    Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(0)
-    .set_description("maximum number of inodes in MDS cache (<=0 is unlimited)")
-    .set_long_description("This tunable is no longer recommended. Use mds_cache_memory_limit."),
-
     Option("mds_cache_memory_limit", Option::TYPE_SIZE, Option::LEVEL_BASIC)
     .set_default(1*(1LL<<30))
     .set_description("target maximum memory usage of MDS cache")
