@@ -17,7 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/version.h"
-#include "include/str_list.h"
+#include "common/str_util.h"
 
 /*
  * Ceph argument parsing library
@@ -204,25 +204,23 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
 
 bool parse_ip_port_vec(const char *s, vector<entity_addrvec_t>& vec, int type)
 {
+  bool succ = true;
   // first split by [ ;], which are not valid for an addrvec
-  list<string> items;
-  get_str_list(s, " ;", items);
-
-  for (auto& i : items) {
-    const char *s = i.c_str();
-    while (*s) {
-      const char *end;
-
-      // try parsing as an addr
-      entity_addr_t a;
-      if (a.parse(s, &end, type)) {
-	vec.push_back(entity_addrvec_t(a));
-	s = end;
-	if (*s == ',') {
-	  ++s;
+  ceph::substr_do(
+    s,
+    [&](auto i) {
+      while (!i.empty()) {
+	// try parsing as an addr
+	entity_addr_t a;
+	auto bt = i;
+	if (a.parse(i, type)) {
+	  vec.push_back(entity_addrvec_t(a));
+	  if (i[0] == ',') {
+	    i.remove_prefix(1);
+	  }
+	  return;
 	}
-	continue;
-      }
+	i = bt;
 
       // ok, try parsing as an addrvec
       entity_addrvec_t av;
@@ -235,8 +233,8 @@ bool parse_ip_port_vec(const char *s, vector<entity_addrvec_t>& vec, int type)
 	++s;
       }
     }
-  }
-  return true;
+  }, " ;")
+  return succ
 }
 
 // The defaults for CephInitParameters
