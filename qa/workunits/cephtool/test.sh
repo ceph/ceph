@@ -2546,19 +2546,13 @@ function test_osd_negative_filestore_merge_threshold()
 
 function test_mon_tell()
 {
-  ceph tell mon.a version
-  ceph tell mon.b version
+  for m in mon.a mon.b; do
+    ceph tell $m sessions
+    ceph_watch_start debug audit
+    ceph tell mon.a sessions
+    ceph_watch_wait "${m} \[DBG\] from.*cmd='sessions' args=\[\]: dispatch"
+  done
   expect_false ceph tell mon.foo version
-
-  sleep 1
-
-  ceph_watch_start debug audit
-  ceph tell mon.a version
-  ceph_watch_wait 'mon.a \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
-
-  ceph_watch_start debug audit
-  ceph tell mon.b version
-  ceph_watch_wait 'mon.b \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
 
 function test_mon_ping()
