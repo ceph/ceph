@@ -92,7 +92,7 @@ uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
 }
 
 uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
-                                                const std::string http_referer,
+                                                const std::string_view http_referer,
                                                 const uint32_t perm_mask)
 {
   ldout(cct, 5) << "Searching permissions for referer=" << http_referer
@@ -116,7 +116,7 @@ uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
 uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
                                           const rgw::auth::Identity& auth_identity,
                                           const uint32_t perm_mask,
-                                          const char * const http_referer)
+                                          std::optional<std::string_view> http_referer)
 {
   ldpp_dout(dpp, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
                  << dendl;
@@ -142,8 +142,8 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
   }
 
   /* Should we continue looking up even deeper? */
-  if (nullptr != http_referer && (perm & perm_mask) != perm_mask) {
-    perm = acl.get_referer_perm(perm, http_referer, perm_mask);
+  if (http_referer && (perm & perm_mask) != perm_mask) {
+    perm = acl.get_referer_perm(perm, *http_referer, perm_mask);
   }
 
   ldpp_dout(dpp, 5) << "-- Getting permissions done for identity=" << auth_identity
@@ -157,7 +157,7 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
                                                const rgw::auth::Identity& auth_identity,
                                                const uint32_t user_perm_mask,
                                                const uint32_t perm,
-                                               const char * const http_referer)
+                                               std::optional<std::string_view> http_referer)
 {
   uint32_t test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
@@ -173,7 +173,7 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
   if (policy_perm & RGW_PERM_READ_OBJS) {
     policy_perm |= (RGW_PERM_READ | RGW_PERM_READ_ACP);
   }
-   
+
   uint32_t acl_perm = policy_perm & perm & user_perm_mask;
 
   ldpp_dout(dpp, 10) << " identity=" << auth_identity
@@ -184,5 +184,3 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
 
   return (perm == acl_perm);
 }
-
-

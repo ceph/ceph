@@ -588,7 +588,8 @@ int RGWAsyncFetchRemoteObj::_send_request()
   rgw_obj dest_obj(bucket_info.bucket, dest_key.value_or(key));
 
   std::optional<uint64_t> bytes_transferred;
-  int r = store->getRados()->fetch_remote_obj(obj_ctx,
+  int r = store->getRados()->fetch_remote_obj(
+                       obj_ctx,
                        rgw_user(user_id),
                        NULL, /* req_info */
                        source_zone,
@@ -602,8 +603,8 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* const real_time* mod_ptr, */
                        NULL, /* const real_time* unmod_ptr, */
                        false, /* high precision time */
-                       NULL, /* const char *if_match, */
-                       NULL, /* const char *if_nomatch, */
+		       std::nullopt, /* optional<string_view> if_match, */
+		       std::nullopt, /* optional<string_view> if_nomatch, */
                        RGWRados::ATTRSMOD_NONE,
                        copy_if_newer,
                        attrs,

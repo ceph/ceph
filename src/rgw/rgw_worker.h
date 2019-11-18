@@ -1,5 +1,3 @@
-
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -23,8 +21,9 @@
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
 
+#include "rgw/rgw_rados.h"
+
 class CephContext;
-class RGWRados;
 
 class RGWRadosThread {
   class Worker : public Thread {
@@ -60,12 +59,12 @@ protected:
 
   std::atomic<bool> down_flag = { false };
 
-  string thread_name;
+  std::string thread_name;
 
   virtual uint64_t interval_msec() = 0;
   virtual void stop_process() {}
 public:
-  RGWRadosThread(RGWRados *_store, const string& thread_name = "radosgw")
+  RGWRadosThread(RGWRados *_store, const std::string& thread_name = "radosgw")
     : worker(NULL), cct(_store->ctx()), store(_store), thread_name(thread_name) {}
   virtual ~RGWRadosThread() {
     stop();

@@ -23,25 +23,11 @@
 
 #define SWIFT_GROUP_ALL_USERS ".r:*"
 
-static int parse_list(const char* uid_list,
-                      std::vector<std::string>& uids)           /* out */
+static auto parse_list(std::string_view uid_list)
 {
-  char *s = strdup(uid_list);
-  if (!s) {
-    return -ENOMEM;
-  }
-
-  char *tokctx;
-  const char *p = strtok_r(s, " ,", &tokctx);
-  while (p) {
-    if (*p) {
-      string acl = p;
-      uids.push_back(acl);
-    }
-    p = strtok_r(NULL, " ,", &tokctx);
-  }
-  free(s);
-  return 0;
+  std::vector<std::string> uids;
+  ceph::substr_insert(uid_list, std::back_inserter(uids), " ,"sv);
+  return uids;
 }
 
 static bool is_referrer(const std::string& designator)
@@ -173,12 +159,13 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWUserCtl* const user_ctl,
 }
 
 
-int RGWAccessControlPolicy_SWIFT::create(RGWUserCtl* const user_ctl,
-                                         const rgw_user& id,
-                                         const std::string& name,
-                                         const char* read_list,
-                                         const char* write_list,
-                                         uint32_t& rw_mask)
+int RGWAccessControlPolicy_SWIFT::
+create(RGWUserCtl* const user_ctl,
+       const rgw_user& id,
+       const std::string& name,
+       std::optional<std::string_view> read_list,
+       std::optional<std::string_view> write_list,
+       uint32_t& rw_mask)
 {
   acl.create_default(id, name);
   owner.set_id(id);
@@ -186,15 +173,9 @@ int RGWAccessControlPolicy_SWIFT::create(RGWUserCtl* const user_ctl,
   rw_mask = 0;
 
   if (read_list) {
-    std::vector<std::string> uids;
-    int r = parse_list(read_list, uids);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: parse_list for read returned r="
-                    << r << dendl;
-      return r;
-    }
+    auto uids = parse_list(*read_list);
 
-    r = add_grants(user_ctl, uids, SWIFT_PERM_READ);
+    int r = add_grants(user_ctl, uids, SWIFT_PERM_READ);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: add_grants for read returned r="
                     << r << dendl;
@@ -203,15 +184,9 @@ int RGWAccessControlPolicy_SWIFT::create(RGWUserCtl* const user_ctl,
     rw_mask |= SWIFT_PERM_READ;
   }
   if (write_list) {
-    std::vector<std::string> uids;
-    int r = parse_list(write_list, uids);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: parse_list for write returned r="
-                    << r << dendl;
-      return r;
-    }
+    auto uids = parse_list(*write_list);
 
-    r = add_grants(user_ctl, uids, SWIFT_PERM_WRITE);
+    int r = add_grants(user_ctl, uids, SWIFT_PERM_WRITE);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: add_grants for write returned r="
                     << r << dendl;

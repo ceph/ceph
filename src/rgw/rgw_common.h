@@ -373,41 +373,42 @@ class RGWHTTPArgs {
   }
 }; // RGWHTTPArgs
 
-const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val);
-int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const char *name, int def_val);
-bool rgw_conf_get_bool(const map<string, string, ltstr_nocase>& conf_map, const char *name, bool def_val);
+using RGWConfMap = std::map<std::string, std::string, ltstr_nocase>;
+
+std::optional<std::string_view> rgw_conf_get(const RGWConfMap& conf_map,
+					     std::string_view name);
+std::optional<int> rgw_conf_get_int(const RGWConfMap& conf_map,
+				    std::string_view name);
+std::optional<bool> rgw_conf_get_bool(const RGWConfMap& conf_map,
+				      std::string_view name);
 
 class RGWEnv;
 
 class RGWConf {
   friend class RGWEnv;
-  int enable_ops_log;
-  int enable_usage_log;
-  uint8_t defer_to_bucket_acls;
+  int enable_ops_log = 1;
+  int enable_usage_log = 1;
+  uint8_t defer_to_bucket_acls = 0;
   void init(CephContext *cct);
 public:
-  RGWConf()
-    : enable_ops_log(1),
-      enable_usage_log(1),
-      defer_to_bucket_acls(0) {
-  }
+  RGWConf() = default;
 };
 
 class RGWEnv {
-  std::map<string, string, ltstr_nocase> env_map;
+  RGWConfMap env_map;
   RGWConf conf;
 public:
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
   void set(std::string name, std::string val);
-  const char *get(const char *name, const char *def_val = nullptr) const;
-  int get_int(const char *name, int def_val = 0) const;
-  bool get_bool(const char *name, bool def_val = 0);
-  size_t get_size(const char *name, size_t def_val = 0) const;
-  bool exists(const char *name) const;
-  bool exists_prefix(const char *prefix) const;
-  void remove(const char *name);
-  const std::map<string, string, ltstr_nocase>& get_map() const { return env_map; }
+  std::optional<std::string_view> get(std::string_view name) const;
+  std::optional<int> get_int(std::string_view name) const;
+  std::optional<bool> get_bool(std::string_view name);
+  std::optional<size_t> get_size(std::string_view name) const;
+  bool exists(std::string_view) const;
+  bool exists_prefix(std::string_view) const;
+  void remove(std::string_view name);
+  const auto& get_map() const { return env_map; }
   int get_enable_ops_log() const {
     return conf.enable_ops_log;
   }
@@ -1157,7 +1158,7 @@ struct rgw_bucket_key {
   rgw_bucket_key(const std::string& _tenant,
                  const std::string& _name) : tenant(_tenant),
                                              name(_name) {}
-}; 
+};
 
 struct rgw_bucket {
   std::string tenant;
@@ -1663,7 +1664,7 @@ struct req_info {
   map<string, string> x_meta_map;
 
   string host;
-  const char *method;
+  std::optional<std::string_view> method;
   string script_uri;
   string request_uri;
   string request_uri_aws4;
@@ -1995,7 +1996,7 @@ struct req_state : DoutPrefixProvider {
   ceph::Formatter *formatter{nullptr};
   string decoded_uri;
   string relative_uri;
-  const char *length{nullptr};
+  std::optional<std::string_view> length;
   int64_t content_length{0};
   map<string, string> generic_attrs;
   rgw_err err;
@@ -2358,9 +2359,9 @@ inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.get_oid();
 }
 
-static inline void buf_to_hex(const unsigned char* const buf,
-                              const size_t len,
-                              char* const str)
+inline void buf_to_hex(const unsigned char* const buf,
+		       const size_t len,
+		       char* const str)
 {
   str[0] = '\0';
   for (size_t i = 0; i < len; i++) {
@@ -2388,7 +2389,7 @@ static inline int hexdigit(char c)
   return -EINVAL;
 }
 
-static inline int hex_to_buf(const char *hex, char *buf, int len)
+inline int hex_to_buf(const char *hex, char *buf, int len)
 {
   int i = 0;
   const char *p = hex;
@@ -2413,18 +2414,27 @@ static inline int hex_to_buf(const char *hex, char *buf, int len)
   return i;
 }
 
-static inline int rgw_str_to_bool(const char *s, int def_val)
+inline std::optional<bool> rgw_str_to_bool(std::string_view s)
 {
-  if (!s)
-    return def_val;
+  if (s.empty())
+    return std::nullopt;
 
-  return (strcasecmp(s, "true") == 0 ||
-          strcasecmp(s, "on") == 0 ||
-          strcasecmp(s, "yes") == 0 ||
-          strcasecmp(s, "1") == 0);
+  if (stringcasecmp(s, "true") == 0 ||
+      stringcasecmp(s, "on") == 0 ||
+      stringcasecmp(s, "yes") == 0 ||
+      stringcasecmp(s, "1") == 0)
+    return true;
+
+  if (stringcasecmp(s, "false") == 0 ||
+      stringcasecmp(s, "off") == 0 ||
+      stringcasecmp(s, "no") == 0 ||
+      stringcasecmp(s, "0") == 0)
+    return false;
+
+  return std::nullopt;
 }
 
-static inline void append_rand_alpha(CephContext *cct, const string& src, string& dest, int len)
+inline void append_rand_alpha(CephContext *cct, const string& src, string& dest, int len)
 {
   dest = src;
   char buf[len + 1];
@@ -2433,7 +2443,7 @@ static inline void append_rand_alpha(CephContext *cct, const string& src, string
   dest.append(buf);
 }
 
-static inline const char *rgw_obj_category_name(RGWObjCategory category)
+inline const char *rgw_obj_category_name(RGWObjCategory category)
 {
   switch (category) {
   case RGWObjCategory::None:
@@ -2449,17 +2459,17 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
   return "unknown";
 }
 
-static inline uint64_t rgw_rounded_kb(uint64_t bytes)
+inline uint64_t rgw_rounded_kb(uint64_t bytes)
 {
   return (bytes + 1023) / 1024;
 }
 
-static inline uint64_t rgw_rounded_objsize(uint64_t bytes)
+inline uint64_t rgw_rounded_objsize(uint64_t bytes)
 {
   return ((bytes + 4095) & ~4095);
 }
 
-static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
+inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
 {
   return ((bytes + 4095) & ~4095) / 1024;
 }
@@ -2471,16 +2481,11 @@ void rgw_add_amz_meta_header(
   const std::string& k,
   const std::string& v);
 
-extern string rgw_string_unquote(const string& s);
-extern void parse_csv_string(const string& ival, vector<string>& ovals);
-extern int parse_key_value(string& in_str, string& key, string& val);
-extern int parse_key_value(string& in_str, const char *delim, string& key, string& val);
+std::string_view rgw_string_unquote(std::string_view s);
+void parse_csv_string(const string& ival, vector<string>& ovals);
 
-extern boost::optional<std::pair<std::string_view, std::string_view>>
-parse_key_value(std::string_view in_str,
-                std::string_view delim);
-extern boost::optional<std::pair<std::string_view, std::string_view>>
-parse_key_value(std::string_view in_str);
+std::optional<std::pair<std::string_view, std::string_view>>
+parse_key_value(std::string_view in_str, std::string_view delim = "=");
 
 
 /** time parsing */
@@ -2562,8 +2567,9 @@ extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, st
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);
-extern std::string url_decode(std::string_view src_str,
+std::string url_decode(std::string_view src_str,
                               bool in_query = false);
+
 extern void url_encode(const std::string& src, string& dst,
                        bool encode_slash = true);
 extern std::string url_encode(const std::string& src, bool encode_slash = true);
@@ -2571,7 +2577,7 @@ extern std::string url_encode(const std::string& src, bool encode_slash = true);
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 
-static inline sha1_digest_t
+inline sha1_digest_t
 calc_hmac_sha1(std::string_view key, std::string_view msg) {
   sha1_digest_t dest;
   calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(),
@@ -2584,7 +2590,7 @@ extern void calc_hmac_sha256(const char *key, int key_len,
                              const char *msg, int msg_len,
                              char *dest);
 
-static inline sha256_digest_t
+inline sha256_digest_t
 calc_hmac_sha256(const char *key, const int key_len,
                  const char *msg, const int msg_len) {
   sha256_digest_t dest;
@@ -2593,7 +2599,7 @@ calc_hmac_sha256(const char *key, const int key_len,
   return dest;
 }
 
-static inline sha256_digest_t
+inline sha256_digest_t
 calc_hmac_sha256(std::string_view key, std::string_view msg) {
   sha256_digest_t dest;
   calc_hmac_sha256(key.data(), key.size(),
@@ -2602,7 +2608,7 @@ calc_hmac_sha256(std::string_view key, std::string_view msg) {
   return dest;
 }
 
-static inline sha256_digest_t
+inline sha256_digest_t
 calc_hmac_sha256(const sha256_digest_t &key,
                  std::string_view msg) {
   sha256_digest_t dest;
@@ -2612,7 +2618,7 @@ calc_hmac_sha256(const sha256_digest_t &key,
   return dest;
 }
 
-static inline sha256_digest_t
+inline sha256_digest_t
 calc_hmac_sha256(const std::vector<unsigned char>& key,
                  std::string_view msg) {
   sha256_digest_t dest;
@@ -2623,7 +2629,7 @@ calc_hmac_sha256(const std::vector<unsigned char>& key,
 }
 
 template<size_t KeyLenN>
-static inline sha256_digest_t
+inline sha256_digest_t
 calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
                  std::string_view msg) {
   sha256_digest_t dest;
@@ -2658,8 +2664,8 @@ std::string lowercase_dash_http_attr(std::string_view orig);
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
 
-static inline void rgw_escape_str(const string& s, char esc_char,
-				  char special_char, string *dest)
+inline void rgw_escape_str(const string& s, char esc_char,
+			   char special_char, string *dest)
 {
   const char *src = s.c_str();
   char dest_buf[s.size() * 2 + 1];
@@ -2676,9 +2682,9 @@ static inline void rgw_escape_str(const string& s, char esc_char,
   *dest = dest_buf;
 }
 
-static inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,
-				       char esc_char, char special_char,
-				       string *dest)
+inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,
+				char esc_char, char special_char,
+				string *dest)
 {
   const char *src = s.c_str();
   char dest_buf[s.size() + 1];
@@ -2706,7 +2712,7 @@ static inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,
   return string::npos;
 }
 
-static inline string rgw_bl_str(ceph::buffer::list& raw)
+inline string rgw_bl_str(ceph::buffer::list& raw)
 {
   size_t len = raw.length();
   string s(raw.c_str(), len);

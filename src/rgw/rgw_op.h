@@ -256,11 +256,11 @@ public:
 class RGWGetObj : public RGWOp {
 protected:
   seed torrent; // get torrent
-  const char *range_str;
-  const char *if_mod;
-  const char *if_unmod;
-  const char *if_match;
-  const char *if_nomatch;
+  std::optional<std::string_view> range_str;
+  std::optional<std::string_view> if_mod;
+  std::optional<std::string_view> if_unmod;
+  std::optional<std::string_view> if_match;
+  std::optional<std::string_view> if_nomatch;
   uint32_t mod_zone_id;
   uint64_t mod_pg_ver;
   off_t ofs;
@@ -301,11 +301,6 @@ protected:
   int init_common();
 public:
   RGWGetObj() {
-    range_str = NULL;
-    if_mod = NULL;
-    if_unmod = NULL;
-    if_match = NULL;
-    if_nomatch = NULL;
     mod_zone_id = 0;
     mod_pg_ver = 0;
     start = 0;
@@ -971,7 +966,7 @@ protected:
   bool relaxed_region_enforcement;
   bool obj_lock_enabled;
   RGWCORSConfiguration cors_config;
-  boost::optional<std::string> swift_ver_location;
+  std::optional<std::string> swift_ver_location;
   map<string, buffer::list> attrs;
   set<string> rmattr_names;
 
@@ -1076,12 +1071,12 @@ class RGWPutObj : public RGWOp {
 protected:
   seed torrent;
   off_t ofs;
-  const char *supplied_md5_b64;
-  const char *supplied_etag;
-  const char *if_match;
-  const char *if_nomatch;
+  std::optional<std::string_view> supplied_md5_b64;
+  std::optional<std::string_view> supplied_etag;
+  std::optional<std::string_view> if_match;
+  std::optional<std::string_view> if_nomatch;
   std::string copy_source;
-  const char *copy_source_range;
+  std::optional<std::string_view> copy_source_range;
   RGWBucketInfo copy_source_bucket_info;
   string copy_source_tenant_name;
   string copy_source_bucket_name;
@@ -1093,7 +1088,7 @@ protected:
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   std::unique_ptr <RGWObjTags> obj_tags;
-  const char *dlo_manifest;
+  std::optional<std::string_view> dlo_manifest;
   RGWSLOInfo *slo_info;
   map<string, bufferlist> attrs;
   ceph::real_time mtime;
@@ -1119,15 +1114,9 @@ protected:
 
 public:
   RGWPutObj() : ofs(0),
-                supplied_md5_b64(NULL),
-                supplied_etag(NULL),
-                if_match(NULL),
-                if_nomatch(NULL),
-                copy_source_range(NULL),
                 copy_source_range_fst(0),
                 copy_source_range_lst(0),
                 chunked_upload(0),
-                dlo_manifest(NULL),
                 slo_info(NULL),
                 olh_epoch(0),
                 append(false),
@@ -1186,8 +1175,8 @@ protected:
   off_t max_len;
   int len;
   off_t ofs;
-  const char *supplied_md5_b64;
-  const char *supplied_etag;
+  std::optional<std::string_view> supplied_md5_b64;
+  std::optional<std::string_view> supplied_etag;
   string etag;
   RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
@@ -1203,10 +1192,7 @@ public:
   RGWPostObj() : min_len(0),
                  max_len(LLONG_MAX),
                  len(0),
-                 ofs(0),
-                 supplied_md5_b64(nullptr),
-                 supplied_etag(nullptr) {
-  }
+                 ofs(0) {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
@@ -1281,7 +1267,7 @@ protected:
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
   rgw_placement_rule placement_rule;
-  boost::optional<std::string> swift_ver_location;
+  std::optional<std::string> swift_ver_location;
 
 public:
   RGWPutMetadataBucket()
@@ -1312,12 +1298,10 @@ class RGWPutMetadataObject : public RGWOp {
 protected:
   RGWAccessControlPolicy policy;
   boost::optional<ceph::real_time> delete_at;
-  const char *dlo_manifest;
+  std::optional<std::string_view> dlo_manifest;
 
 public:
-  RGWPutMetadataObject()
-    : dlo_manifest(NULL)
-  {}
+  RGWPutMetadataObject() {}
 
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
@@ -1373,10 +1357,10 @@ public:
 class RGWCopyObj : public RGWOp {
 protected:
   RGWAccessControlPolicy dest_policy;
-  const char *if_mod;
-  const char *if_unmod;
-  const char *if_match;
-  const char *if_nomatch;
+  std::optional<std::string_view> if_mod;
+  std::optional<std::string_view> if_unmod;
+  std::optional<std::string_view> if_match;
+  std::optional<std::string_view> if_nomatch;
   // Required or it is not a copy operation
   std::string_view copy_source;
   // Not actually required
@@ -1418,10 +1402,6 @@ protected:
 
 public:
   RGWCopyObj() {
-    if_mod = NULL;
-    if_unmod = NULL;
-    if_match = NULL;
-    if_nomatch = NULL;
     ofs = 0;
     len = 0;
     end = -1;
@@ -1522,13 +1502,11 @@ public:
 class RGWPutLC : public RGWOp {
 protected:
   bufferlist data;
-  const char *content_md5;
+  std::optional<std::string_view> content_md5;
   string cookie;
 
 public:
-  RGWPutLC() {
-    content_md5 = nullptr;
-  }
+  RGWPutLC() = default;
   ~RGWPutLC() override {}
 
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *dialect_handler) override {
@@ -1627,13 +1605,10 @@ public:
 
 class RGWOptionsCORS : public RGWOp {
 protected:
-  RGWCORSRule *rule;
-  const char *origin, *req_hdrs, *req_meth;
-
+  RGWCORSRule *rule = nullptr;
+  std::optional<std::string_view> origin, req_hdrs, req_meth;
 public:
-  RGWOptionsCORS() : rule(NULL), origin(NULL),
-                     req_hdrs(NULL), req_meth(NULL) {
-  }
+  RGWOptionsCORS() = default;
 
   int verify_permission() override {return 0;}
   int validate_cors_request(RGWCORSConfiguration *cc);
@@ -1932,9 +1907,9 @@ extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
                         map<string, bufferlist>& attrs,
                         const string& tenant);
 
-static inline int get_system_versioning_params(req_state *s,
-					      uint64_t *olh_epoch,
-					      string *version_id)
+inline int get_system_versioning_params(req_state *s,
+					uint64_t *olh_epoch,
+					string *version_id)
 {
   if (!s->system_request) {
     return 0;
@@ -1990,10 +1965,10 @@ static inline void format_xattr(std::string &xattr)
  * On failure returns a negative error code.
  *
  */
-static inline int rgw_get_request_metadata(CephContext* const cct,
-                                           struct req_info& info,
-                                           std::map<std::string, ceph::bufferlist>& attrs,
-                                           const bool allow_empty_attrs = true)
+inline int rgw_get_request_metadata(CephContext* const cct,
+				    struct req_info& info,
+				    std::map<std::string, ceph::bufferlist>& attrs,
+				    const bool allow_empty_attrs = true)
 {
   static const std::set<std::string> blacklisted_headers = {
       "x-amz-server-side-encryption-customer-algorithm",
@@ -2053,8 +2028,8 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
   return 0;
 } /* rgw_get_request_metadata */
 
-static inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
-					map<string, bufferlist>& attrs)
+inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
+				  map<string, bufferlist>& attrs)
 {
   if (delete_at == boost::none) {
     return;
@@ -2065,7 +2040,7 @@ static inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 } /* encode_delete_at_attr */
 
-static inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, bufferlist>& attrs)
+inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, bufferlist>& attrs)
 {
   if (obj_tags == nullptr){
     // we assume the user submitted a tag format which we couldn't parse since
@@ -2079,23 +2054,21 @@ static inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, buffer
   attrs[RGW_ATTR_TAGS] = tagsbl;
 }
 
-static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
-					  map<string, bufferlist>& attrs)
+inline int encode_dlo_manifest_attr(std::string_view dlo_manifest,
+				    map<string, bufferlist>& attrs)
 {
-  string dm = dlo_manifest;
-
-  if (dm.find('/') == string::npos) {
+  if (dlo_manifest.find('/') == string::npos) {
     return -EINVAL;
   }
 
   bufferlist manifest_bl;
-  manifest_bl.append(dlo_manifest, strlen(dlo_manifest) + 1);
+  manifest_bl.append(dlo_manifest);
   attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
 
   return 0;
 } /* encode_dlo_manifest_attr */
 
-static inline void complete_etag(MD5& hash, string *etag)
+inline void complete_etag(MD5& hash, string *etag)
 {
   char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -2215,7 +2188,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   virtual int get_params() = 0;
   const char* name() const override { return "put_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OBJ_LOCK; }
@@ -2227,7 +2200,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   const char* name() const override {return "get_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OBJ_LOCK; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2258,7 +2231,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   const char* name() const override {return "get_obj_retention"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_RETENTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2286,7 +2259,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   const char* name() const override {return "get_obj_legal_hold"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_LEGAL_HOLD; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2352,7 +2325,7 @@ public:
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
 
-static inline int parse_value_and_bound(
+inline int parse_value_and_bound(
     const string &input,
     int &output,
     const long lower_bound,

@@ -644,12 +644,8 @@ static std::string_view get_crypt_attribute(
     std::string_view str = std::string_view(data.c_str(), data.length());
     return rgw_trim_whitespace(str);
   } else {
-    const char* hdr = env->get(crypt_options[option].http_header_name, nullptr);
-    if (hdr != nullptr) {
-      return std::string_view(hdr);
-    } else {
-      return std::string_view();
-    }
+    return env->get(crypt_options[option].http_header_name)
+      .value_or(std::string_view());
   }
 }
 
@@ -900,8 +896,8 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
   ldout(s->cct, 15) << "Encryption mode: " << stored_mode << dendl;
 
-  const char *req_sse = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION", NULL);
-  if (nullptr != req_sse && (s->op == OP_GET || s->op == OP_HEAD)) {
+  auto req_sse = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
+  if (req_sse && (s->op == OP_GET || s->op == OP_HEAD)) {
     return -ERR_INVALID_REQUEST;
   }
 
@@ -911,17 +907,17 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
-    const char *req_cust_alg =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
+    auto req_cust_alg =
+      s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM");
 
-    if (nullptr == req_cust_alg)  {
+    if (!req_cust_alg)  {
       ldout(s->cct, 5) << "ERROR: Request for SSE-C encrypted object missing "
                        << "x-amz-server-side-encryption-customer-algorithm"
                        << dendl;
       s->err.message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide a valid encryption algorithm.";
       return -EINVAL;
-    } else if (strcmp(req_cust_alg, "AES256") != 0) {
+    } else if (*req_cust_alg != "AES256") {
       ldout(s->cct, 5) << "ERROR: The requested encryption algorithm is not valid, must be AES256." << dendl;
       s->err.message = "The requested encryption algorithm is not valid, must be AES256.";
       return -ERR_INVALID_ENCRYPTION_ALGORITHM;
@@ -929,7 +925,9 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
     std::string key_bin;
     try {
-      key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
+      auto r = s->info.env->get(
+	"HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY").value_or("");
+      key_bin = from_base64({r.data(), r.size()});
     } catch (...) {
       ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
                        << "which contains character that is not base64 encoded."
@@ -947,7 +945,8 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     }
 
     std::string keymd5 =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
+      std::string(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5")
+		  .value_or(""));
     std::string keymd5_bin;
     try {
       keymd5_bin = from_base64(keymd5);

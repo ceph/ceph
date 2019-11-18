@@ -804,14 +804,14 @@ int RGWListBucket_ObjStore_S3::get_common_params()
   encoding_type = s->info.args.get("encoding-type");
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
-    const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
-    if (shard_id_str) {  
-      string err;
-      shard_id = strict_strtol(shard_id_str, 10, &err);
-      if (!err.empty()) {
+    auto shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
+    if (shard_id_str) {
+      auto r = ceph::parse<long>(*shard_id_str);
+      if (!r) {
         ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
         return -EINVAL;
       }
+      shard_id = *r;
     } else {
      shard_id = s->bucket_instance_shard_id;
     }
@@ -1719,7 +1719,7 @@ int RGWPutObj_ObjStore_S3::get_params()
 
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
-  copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
+  copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE").value_or(""));
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
 
   /* handle x-amz-copy-source */
@@ -1772,7 +1772,7 @@ int RGWPutObj_ObjStore_S3::get_params()
     /* handle x-amz-copy-source-range */
 
     if (copy_source_range) {
-      string range = copy_source_range;
+      auto range = *copy_source_range;
       pos = range.find("=");
       if (pos == std::string::npos) {
         ret = -EINVAL;
@@ -1786,19 +1786,18 @@ int RGWPutObj_ObjStore_S3::get_params()
         ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
-      string first = range.substr(0, pos);
-      string last = range.substr(pos + 1);
-      copy_source_range_fst = strtoull(first.c_str(), NULL, 10);
-      copy_source_range_lst = strtoull(last.c_str(), NULL, 10);
+      auto first = range.substr(0, pos);
+      auto last = range.substr(pos + 1);
+      copy_source_range_fst = ceph::parse<uint64_t>(first).value_or(0);
+      copy_source_range_lst = ceph::parse<uint64_t>(last).value_or(0);
     }
-
   } /* copy_source */
 
   /* handle object tagging */
   auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
   if (tag_str){
     obj_tags = std::make_unique<RGWObjTags>();
-    ret = obj_tags->set_from_string(tag_str);
+    ret = obj_tags->set_from_string(*tag_str);
     if (ret < 0){
       ldpp_dout(this,0) << "setting obj tags failed with " << ret << dendl;
       if (ret == -ERR_INVALID_TAG){
@@ -1814,30 +1813,31 @@ int RGWPutObj_ObjStore_S3::get_params()
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
   if (obj_lock_mode_str && obj_lock_date_str) {
-    auto date = ceph::from_iso_8601(obj_lock_date_str);
+    auto date = ceph::from_iso_8601(*obj_lock_date_str);
     if (!date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
         ret = -EINVAL;
         ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
         return ret;
     }
-    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
-        ret = -EINVAL;
+    if (*obj_lock_mode_str != "GOVERNANCE" &&
+	*obj_lock_mode_str != "COMPLIANCE") {
+	ret = -EINVAL;
         ldpp_dout(this,0) << "invalid x-amz-object-lock-mode value" << dendl;
         return ret;
     }
-    obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
+    obj_retention = new RGWObjectRetention(std::string(*obj_lock_mode_str), *date);
   } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
     ret = -EINVAL;
     ldpp_dout(this,0) << "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date " << dendl;
     return ret;
   }
   if (obj_legal_hold_str) {
-    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+    if (*obj_legal_hold_str != "ON" && *obj_legal_hold_str != "OFF") {
         ret = -EINVAL;
         ldpp_dout(this,0) << "invalid x-amz-object-lock-legal-hold value" << dendl;
         return ret;
     }
-    obj_legal_hold = new RGWObjectLegalHold(obj_legal_hold_str);
+    obj_legal_hold = new RGWObjectLegalHold(std::string(*obj_legal_hold_str));
   }
   if (!s->bucket_info.obj_lock_enabled() && (obj_retention || obj_legal_hold)) {
     ldpp_dout(this, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
@@ -2563,14 +2563,14 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
 
 int RGWDeleteObj_ObjStore_S3::get_params()
 {
-  const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
+  auto if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
 
   if (s->system_request) {
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
   }
 
   if (if_unmod) {
-    std::string if_unmod_decoded = url_decode(if_unmod);
+    std::string if_unmod_decoded = url_decode(*if_unmod);
     uint64_t epoch;
     uint64_t nsec;
     if (utime_t::parse_date(if_unmod_decoded, &epoch, &nsec) < 0) {
@@ -2580,9 +2580,9 @@ int RGWDeleteObj_ObjStore_S3::get_params()
     unmod_since = utime_t(epoch, nsec).to_real_time();
   }
 
-  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  auto bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
   if (bypass_gov_header) {
-    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    std::string bypass_gov_decoded = url_decode(*bypass_gov_header);
     bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
   }
 
@@ -2639,12 +2639,12 @@ int RGWCopyObj_ObjStore_S3::get_params()
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
   }
 
-  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE").value_or("");
   auto tmp_md_d = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (tmp_md_d) {
-    if (strcasecmp(tmp_md_d, "COPY") == 0) {
+    if (stringcasecmp(*tmp_md_d, "COPY") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_NONE;
-    } else if (strcasecmp(tmp_md_d, "REPLACE") == 0) {
+    } else if (stringcasecmp(*tmp_md_d, "REPLACE") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
       attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
@@ -3517,9 +3517,9 @@ void RGWGetBucketObjectLock_ObjStore_S3::send_response()
 
 int RGWPutObjRetention_ObjStore_S3::get_params()
 {
-  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  auto bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
   if (bypass_gov_header) {
-    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    std::string bypass_gov_decoded = url_decode(*bypass_gov_header);
     bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
   }
 
@@ -3992,9 +3992,9 @@ int RGWHandler_REST_S3::postauth_init()
       return ret;
   }
 
-  const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
+  auto mfa = s->info.env->get("HTTP_X_AMZ_MFA");
   if (mfa) {
-    ret = verify_mfa(store, s->user, string(mfa), &s->mfa_verified, s);
+    ret = verify_mfa(store, s->user, string(*mfa), &s->mfa_verified, s);
   }
 
   return 0;
@@ -4016,19 +4016,19 @@ int RGWHandler_REST_S3::init(rgw::sal::RGWRadosStore *store, struct req_state *s
       return ret;
   }
 
-  const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
+  auto cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)
-    s->canned_acl = cacl;
+    s->canned_acl = *cacl;
 
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
-  const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  auto copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
   if (copy_source &&
-      (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
-      (! s->info.args.exists("uploadId"))) {
+      (!s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
+      (!s->info.args.exists("uploadId"))) {
 
-    ret = RGWCopyObj::parse_copy_location(copy_source,
-                                          s->init_state.src_bucket,
+    ret = RGWCopyObj::parse_copy_location(*copy_source,
+					  s->init_state.src_bucket,
                                           s->src_object);
     if (!ret) {
       ldpp_dout(s, 0) << "failed to parse copy location" << dendl;
@@ -4036,9 +4036,9 @@ int RGWHandler_REST_S3::init(rgw::sal::RGWRadosStore *store, struct req_state *s
     }
   }
 
-  const char *sc = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS");
+  auto sc = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS");
   if (sc) {
-    s->info.storage_class = sc;
+    s->info.storage_class = *sc;
   }
 
   return RGWHandler_REST::init(store, s, cio);
@@ -4072,16 +4072,15 @@ discover_aws_flavour(const req_info& info)
   AwsVersion version = AwsVersion::UNKNOWN;
   AwsRoute route = AwsRoute::UNKNOWN;
 
-  const char* http_auth = info.env->get("HTTP_AUTHORIZATION");
-  if (http_auth && http_auth[0]) {
+  auto http_auth = info.env->get("HTTP_AUTHORIZATION");
+  if (http_auth && !http_auth->empty()) {
     /* Authorization in Header */
     route = AwsRoute::HEADERS;
 
-    if (!strncmp(http_auth, AWS4_HMAC_SHA256_STR,
-                 strlen(AWS4_HMAC_SHA256_STR))) {
+    if (http_auth->compare(AWS4_HMAC_SHA256_STR) != 0) {
       /* AWS v4 */
       version = AwsVersion::V4;
-    } else if (!strncmp(http_auth, "AWS ", 4)) {
+    } else if (http_auth->compare("AWS ") != 0) {
       /* AWS v2 */
       version = AwsVersion::V2;
     }
@@ -4178,7 +4177,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
 }
 
 bool RGWHandler_REST_S3Website::web_dir() const {
-  std::string subdir_name = url_decode(s->object.name);
+  std::string subdir_name = url_decode(std::string_view(s->object.name));
 
   if (subdir_name.empty()) {
     return false;
@@ -4248,12 +4247,12 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
     s->bucket_info.website_conf.should_redirect(new_obj.name, 0, &rrule);
 
   if (should_redirect) {
-    const string& hostname = s->info.env->get("HTTP_HOST", "");
-    const string& protocol =
-      (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    auto hostname = s->info.env->get("HTTP_HOST").value_or("");
+    auto protocol = s->info.env->exists("SERVER_PORT_SECURE") ?
+      "https"sv : "http"sv;
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect,
-		    &redirect_code);
+		     &redirect_code);
     // APply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
@@ -4292,11 +4291,11 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
     return -1; // Trigger double error handler
   }
   getop->init(store, s, this);
-  getop->range_str = NULL;
-  getop->if_mod = NULL;
-  getop->if_unmod = NULL;
-  getop->if_match = NULL;
-  getop->if_nomatch = NULL;
+  getop->range_str = std::nullopt;
+  getop->if_mod = std::nullopt;
+  getop->if_unmod = std::nullopt;
+  getop->if_match = std::nullopt;
+  getop->if_nomatch = std::nullopt;
   s->object = errordoc_key;
 
   ret = init_permissions(getop.get());
@@ -4371,9 +4370,9 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
                                                 http_error_code, &rrule);
 
   if (should_redirect) {
-    const string& hostname = s->info.env->get("HTTP_HOST", "");
-    const string& protocol =
-      (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    auto hostname = s->info.env->get("HTTP_HOST").value_or("");
+    auto protocol = (s->info.env->exists("SERVER_PORT_SECURE") ?
+		     "https"sv : "http"sv);
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, original_object_name,
                      &s->redirect, &redirect_code);
@@ -4528,12 +4527,12 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     is_non_s3_op = true;
   }
 
-  const char* exp_payload_hash = nullptr;
+  std::string_view exp_payload_hash;
   string payload_hash;
   if (is_non_s3_op) {
     //For non s3 ops, we need to calculate the payload hash
     payload_hash = s->info.args.get("PayloadHash");
-    exp_payload_hash = payload_hash.c_str();
+    exp_payload_hash = payload_hash;
   } else {
     /* Get the expected hash. */
     exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(s->info);
@@ -4548,7 +4547,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   /* Craft canonical request. */
   auto canonical_req_hash = \
     rgw::auth::s3::get_v4_canon_req_hash(s->cct,
-                                         s->info.method,
+                                         s->info.method.value_or(""),
                                          std::move(canonical_uri),
                                          std::move(canonical_qs),
                                          std::move(*canonical_headers),
@@ -4707,8 +4706,8 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   std::string_view session_token;
   bool qsr = false;
 
-  const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
-  if (! http_auth || http_auth[0] == '\0') {
+  auto http_auth = s->info.env->get("HTTP_AUTHORIZATION");
+  if (!http_auth || http_auth->empty()) {
     /* Credentials are provided in query string. We also need to verify
      * the "Expires" parameter now. */
     access_key_id = s->info.args.get("AWSAccessKeyId");
@@ -4738,7 +4737,8 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 
   } else {
     /* The "Authorization" HTTP header is being used. */
-    const std::string_view auth_str(http_auth + strlen("AWS "));
+    auto auth_str = *http_auth;
+    auth_str.remove_prefix(strlen("AWS "));
     const size_t pos = auth_str.rfind(':');
     if (pos != std::string_view::npos) {
       access_key_id = auth_str.substr(0, pos);
@@ -4746,7 +4746,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     }
 
     if (s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
-      session_token = s->info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+      session_token = *s->info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
       if (session_token.size() == 0) {
         throw -EPERM;
       }

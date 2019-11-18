@@ -106,7 +106,7 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
     snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
   }
-  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params);
+  RGWRESTSimpleRequest req(cct, std::string(info.method.value_or("")), url, NULL, &params);
   return req.forward_request(key, info, max_response, inbl, outbl);
 }
 

@@ -23,6 +23,7 @@
 #include "rgw_mdlog_types.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "common/str_util.h"
 #include "rgw/rgw_b64.h"
 #include "include/ceph_assert.h"
 
@@ -181,7 +182,7 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
   int read_len;
 
   if (s->length)
-    cl = atoll(s->length);
+    cl = ceph::parse<size_t>(*s->length).value_or(0);
   if (cl) {
     data = (char *)malloc(cl + 1);
     if (!data) {
@@ -198,8 +199,8 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
     bl.append(data, read_len);
   } else {
     int chunk_size = CEPH_PAGE_SIZE;
-    const char *enc = s->info.env->get("HTTP_TRANSFER_ENCODING");
-    if (!enc || strcmp(enc, "chunked")) {
+    auto enc = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    if (!enc || *enc == "chunked"sv) {
       return -ERR_LENGTH_REQUIRED;
     }
     data = (char *)malloc(chunk_size);

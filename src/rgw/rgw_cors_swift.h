@@ -20,7 +20,8 @@
 #include <string>
 #include <vector>
 #include <include/types.h>
-#include <include/str_list.h>
+
+#include "common/str_util.h"
 
 #include "rgw_cors.h"
 
@@ -29,28 +30,27 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
   public:
     RGWCORSConfiguration_SWIFT() {}
     ~RGWCORSConfiguration_SWIFT() {}
-    int create_update(const char *allow_origins, const char *allow_headers, 
-                  const char *expose_headers, const char *max_age) {
-      set<string> o, h, oc;
-      list<string> e;
+  int create_update(std::optional<std::string_view> allow_origins,
+		    std::optional<std::string_view> allow_headers,
+		    std::optional<std::string_view> expose_headers,
+		    std::optional<std::string_view> max_age) {
+      std::set<string, std::less<>> o, h, oc;
+      std::list<string> e;
       unsigned long a = CORS_MAX_AGE_INVALID;
       uint8_t flags = RGW_CORS_ALL;
 
-      string ao = allow_origins;
-      get_str_set(ao, oc);
+      ceph::substr_insert(*allow_origins, std::inserter(oc, oc.end()));
       if (oc.empty())
         return -EINVAL;
-      for(set<string>::iterator it = oc.begin(); it != oc.end(); ++it) {
+      for (auto it = oc.begin(); it != oc.end(); ++it) {
         string host = *it;
         if (validate_name_string(host) != 0)
           return -EINVAL;
         o.insert(o.end(), host);
       }
       if (allow_headers) {
-        string ah = allow_headers;
-        get_str_set(ah, h);
-        for(set<string>::iterator it = h.begin();
-            it != h.end(); ++it) {
+	ceph::substr_insert(*allow_headers, std::inserter(h, h.end()));
+        for(auto it = h.begin(); it != h.end(); ++it) {
           string s = (*it);
           if (validate_name_string(s) != 0)
             return -EINVAL;
@@ -58,12 +58,10 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
       }
 
       if (expose_headers) {
-        string eh = expose_headers;
-        get_str_list(eh, e);
+	ceph::substr_insert(*expose_headers, std::back_inserter(e));
       }
       if (max_age) {
-        char *end = NULL;
-        a = strtoul(max_age, &end, 10);
+        a = ceph::parse<unsigned long>(*max_age).value_or(ULONG_MAX);
         if (a == ULONG_MAX)
           a = CORS_MAX_AGE_INVALID;
       }

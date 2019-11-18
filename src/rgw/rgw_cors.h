@@ -41,15 +41,16 @@ protected:
   uint32_t       max_age;
   uint8_t        allowed_methods;
   std::string         id;
-  std::set<string> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
-  std::set<string> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
-  std::set<string> allowed_origins;
+  std::set<string, std::less<>> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
+  std::set<string, std::less<>> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
+  std::set<string, std::less<>> allowed_origins;
   std::list<string> exposable_hdrs;
 
 public:
   RGWCORSRule() : max_age(CORS_MAX_AGE_INVALID),allowed_methods(0) {}
-  RGWCORSRule(std::set<string>& o, std::set<string>& h, 
-              std::list<string>& e, uint8_t f, uint32_t a)
+  RGWCORSRule(const std::set<string, std::less<>>& o,
+	      const std::set<string, std::less<>>& h,
+              const std::list<string>& e, uint8_t f, uint32_t a)
       :max_age(a),
        allowed_methods(f),
        allowed_hdrs(h),
@@ -82,12 +83,12 @@ public:
     DECODE_FINISH(bl);
   }
   bool has_wildcard_origin();
-  bool is_origin_present(const char *o);
+  bool is_origin_present(std::string_view o);
   void format_exp_headers(std::string& s);
   void erase_origin_if_present(std::string& origin, bool *rule_empty);
   void dump_origins(); 
   void dump(Formatter *f) const;
-  bool is_header_allowed(const char *hdr, size_t len);
+  bool is_header_allowed(std::string_view h);
 };
 WRITE_CLASS_ENCODER(RGWCORSRule)
 
@@ -117,7 +118,7 @@ class RGWCORSConfiguration
     return rules.empty();
   }
   void get_origins_list(const char *origin, std::list<string>& origins);
-  RGWCORSRule * host_name_rule(const char *origin);
+  RGWCORSRule * host_name_rule(std::string_view origin);
   void erase_host_name_rule(std::string& origin);
   void dump();
   void stack_rule(RGWCORSRule& r) {
@@ -126,7 +127,7 @@ class RGWCORSConfiguration
 };
 WRITE_CLASS_ENCODER(RGWCORSConfiguration)
 
-static inline int validate_name_string(string& o) {
+inline int validate_name_string(string& o) {
   if (o.length() == 0)
     return -1;
   if (o.find_first_of("*") != o.find_last_of("*"))

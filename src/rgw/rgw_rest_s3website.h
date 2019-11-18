@@ -87,11 +87,11 @@ public:
   // conditional params for error pages.
   int get_params() override {
       if (is_errordoc_request) {
-        range_str = NULL;
-        if_mod = NULL;
-        if_unmod = NULL;
-        if_match = NULL;
-        if_nomatch = NULL;
+        range_str = std::nullopt;
+        if_mod = std::nullopt;
+        if_unmod = std::nullopt;
+        if_match = std::nullopt;
+        if_nomatch = std::nullopt;
         return 0;
       } else {
         return RGWGetObj_ObjStore_S3::get_params();

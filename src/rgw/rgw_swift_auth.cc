@@ -335,7 +335,7 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
 
   /* Account owner calculates the signature also against a HTTP method. */
   boost::container::static_vector<std::string_view, 3> allowed_methods;
-  if (strcmp("HEAD", s->info.method) == 0) {
+  if ("HEAD" == s->info.method.value_or("")) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting
      * initializers lists), get back to the good notation:
@@ -344,8 +344,8 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
     allowed_methods.emplace_back("HEAD");
     allowed_methods.emplace_back("GET");
     allowed_methods.emplace_back("PUT");
-  } else if (strlen(s->info.method) > 0) {
-    allowed_methods.emplace_back(s->info.method);
+  } else if (s->info.method && !s->info.method->empty()) {
+    allowed_methods.emplace_back(string(s->info.method.value_or("")));
   }
 
   /* Need to try each combination of keys, allowed path and methods. */
@@ -621,8 +621,8 @@ void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
 
-  const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
-  const char *user = s->info.env->get("HTTP_X_AUTH_USER");
+  auto key = s->info.env->get("HTTP_X_AUTH_KEY");
+  auto user = s->info.env->get("HTTP_X_AUTH_USER");
 
   s->prot_flags |= RGW_REST_SWIFT;
 
@@ -654,17 +654,17 @@ void RGW_SWIFT_Auth_Get::execute()
 
   if (swift_url.size() == 0) {
     bool add_port = false;
-    const char *server_port = s->info.env->get("SERVER_PORT_SECURE");
+    auto server_port = s->info.env->get("SERVER_PORT_SECURE");
     const char *protocol;
     if (server_port) {
-      add_port = (strcmp(server_port, "443") != 0);
+      add_port = *server_port != "443";
       protocol = "https";
     } else {
       server_port = s->info.env->get("SERVER_PORT");
-      add_port = (strcmp(server_port, "80") != 0);
+      add_port = server_port && *server_port != "80";
       protocol = "http";
     }
-    const char *host = s->info.env->get("HTTP_HOST");
+    auto host = s->info.env->get("HTTP_HOST");
     if (!host) {
       dout(0) << "NOTICE: server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
       ret = -EINVAL;
@@ -672,17 +672,17 @@ void RGW_SWIFT_Auth_Get::execute()
     }
     swift_url = protocol;
     swift_url.append("://");
-    swift_url.append(host);
-    if (add_port && !strchr(host, ':')) {
+    swift_url.append(*host);
+    if (add_port && host->find(':') != host->npos) {
       swift_url.append(":");
-      swift_url.append(server_port);
+      swift_url.append(*server_port);
     }
   }
 
   if (!key || !user)
     goto done;
 
-  user_str = user;
+  user_str = user.value_or(std::string_view{});
 
   if ((ret = store->ctl()->user->get_info_by_swift(user_str, &info, s->yield)) < 0)
   {
@@ -697,7 +697,7 @@ void RGW_SWIFT_Auth_Get::execute()
   }
   swift_key = &siter->second;
 
-  if (swift_key->key.compare(key) != 0) {
+  if (swift_key->key.compare(key.value_or("")) != 0) {
     dout(0) << "NOTICE: RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
     ret = -EPERM;
     goto done;
@@ -757,4 +757,3 @@ RGWOp *RGWHandler_SWIFT_Auth::op_get()
 {
   return new RGW_SWIFT_Auth_Get;
 }
-

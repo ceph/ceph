@@ -39,7 +39,8 @@ class ObjectProcessor : public DataProcessor {
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
                        ceph::real_time delete_at,
-                       const char *if_match, const char *if_nomatch,
+                       std::optional<std::string_view> if_match,
+		       std::optional<std::string_view> if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y) = 0;
@@ -190,7 +191,8 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                ceph::real_time *mtime, ceph::real_time set_mtime,
                std::map<std::string, bufferlist>& attrs,
                ceph::real_time delete_at,
-               const char *if_match, const char *if_nomatch,
+               std::optional<std::string_view> if_match,
+	       std::optional<std::string_view> if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
                optional_yield y) override;
@@ -237,7 +239,8 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                ceph::real_time *mtime, ceph::real_time set_mtime,
                std::map<std::string, bufferlist>& attrs,
                ceph::real_time delete_at,
-               const char *if_match, const char *if_nomatch,
+               std::optional<std::string_view> if_match,
+	       std::optional<std::string_view> if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
                optional_yield y) override;
@@ -272,11 +275,12 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int complete(size_t accounted_size, const string& etag,
                  ceph::real_time *mtime, ceph::real_time set_mtime,
                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                 const char *if_match, const char *if_nomatch, const string *user_data,
+                 std::optional<std::string_view> if_match,
+		 std::optional<std::string_view> if_nomatch,
+		 const string *user_data,
                  rgw_zone_set *zones_trace, bool *canceled,
                  optional_yield y) override;
   };
 
 } // namespace putobj
 } // namespace rgw
-

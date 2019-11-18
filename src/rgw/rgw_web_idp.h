@@ -4,6 +4,8 @@
 #ifndef CEPH_RGW_WEB_IDP_H
 #define CEPH_RGW_WEB_IDP_H
 
+#include <string>
+
 namespace rgw {
 namespace web_idp {
 
@@ -16,7 +18,7 @@ struct WebTokenClaims {
   //Issuer of this token
   std::string iss;
   //Human-readable id for the resource owner
-  string user_name;
+  std::string user_name;
 };
 
 }; /* namespace web_idp */

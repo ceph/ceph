@@ -87,7 +87,7 @@ template <std::size_t N>
 struct string_traits<char[N]> : string_traits<const char[N]> {};
 
 // helpers for string_cat_reserve()
-static inline void append_to(std::string& s) {}
+inline void append_to(std::string& s) {}
 template <typename... Args>
 void append_to(std::string& s, std::string_view v, Args... args)
 {

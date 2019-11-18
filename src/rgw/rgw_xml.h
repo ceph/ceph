@@ -165,7 +165,7 @@ namespace RGWXMLDecoder {
   void decode_xml(const char *name, T& val, T& default_val, XMLObj* obj);
 }
 
-static inline ostream& operator<<(ostream &out, RGWXMLDecoder::err& err)
+inline ostream& operator<<(ostream &out, RGWXMLDecoder::err& err)
 {
   return out << err.what();
 }
@@ -176,7 +176,7 @@ void decode_xml_obj(T& val, XMLObj *obj)
   val.decode_xml(obj);
 }
 
-static inline void decode_xml_obj(string& val, XMLObj *obj)
+inline void decode_xml_obj(string& val, XMLObj *obj)
 {
   val = obj->get_data();
 }

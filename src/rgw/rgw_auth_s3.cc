@@ -9,6 +9,7 @@
 
 #include "common/armor.h"
 #include "common/utf8.h"
+#include "common/str_util.h"
 #include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
 #include "rgw_common.h"
@@ -113,9 +114,9 @@ get_canon_resource(const char* const request_uri,
  * compute a request's signature
  */
 void rgw_create_s3_canonical_header(
-  const char* const method,
-  const char* const content_md5,
-  const char* const content_type,
+  std::optional<std::string_view> method,
+  std::optional<std::string_view> content_md5,
+  std::optional<std::string_view> content_type,
   const char* const date,
   const std::map<std::string, std::string>& meta_map,
   const std::map<std::string, std::string>& qs_map,
@@ -126,17 +127,17 @@ void rgw_create_s3_canonical_header(
   std::string dest;
 
   if (method) {
-    dest = method;
+    dest = *method;
   }
   dest.append("\n");
-  
+
   if (content_md5) {
-    dest.append(content_md5);
+    dest.append(*content_md5);
   }
   dest.append("\n");
 
   if (content_type) {
-    dest.append(content_type);
+    dest.append(*content_type);
   }
   dest.append("\n");
 
@@ -176,18 +177,18 @@ bool rgw_create_s3_canonical_header(const req_info& info,
                                     std::string& dest,
                                     const bool qsr)
 {
-  const char* const content_md5 = info.env->get("HTTP_CONTENT_MD5");
+  auto content_md5 = info.env->get("HTTP_CONTENT_MD5");
   if (content_md5) {
-    for (const char *p = content_md5; *p; p++) {
-      if (!is_base64_for_content_md5(*p)) {
+    for (auto c : *content_md5) {
+      if (!is_base64_for_content_md5(c)) {
         dout(0) << "NOTICE: bad content-md5 provided (not base64),"
-                << " aborting request p=" << *p << " " << (int)*p << dendl;
+                << " aborting request c=" << c << " " << int(c) << dendl;
         return false;
       }
     }
   }
 
-  const char *content_type = info.env->get("CONTENT_TYPE");
+  auto content_type = info.env->get("CONTENT_TYPE");
 
   std::string date;
   std::map<std::string, std::string> qs_map;
@@ -196,20 +197,25 @@ bool rgw_create_s3_canonical_header(const req_info& info,
     get_v2_qs_map(info, qs_map); // handle qs metadata
     date = info.args.get("Expires");
   } else {
-    const char *str = info.env->get("HTTP_X_AMZ_DATE");
-    const char *req_date = str;
-    if (str == NULL) {
-      req_date = info.env->get("HTTP_DATE");
-      if (!req_date) {
-        dout(0) << "NOTICE: missing date for auth header" << dendl;
-        return false;
+    auto str = info.env->get("HTTP_X_AMZ_DATE");
+    std::string_view req_date;
+    if (!str) {
+      str = info.env->get("HTTP_DATE");
+      if (!str) {
+	dout(0) << "NOTICE: missing date for auth header" << dendl;
+	return false;
       }
+      req_date = *str;
       date = req_date;
+    } else {
+      req_date = *str;
     }
 
     if (header_time) {
       struct tm t;
-      if (!parse_rfc2616(req_date, &t)) {
+      // XXX Return to improve time parsing
+      auto tmp = ceph::nul_terminated_copy<128>(req_date);
+      if (!tmp || !parse_rfc2616(tmp->data(), &t)) {
         dout(0) << "NOTICE: failed to parse date for auth header" << dendl;
         return false;
       }
@@ -372,7 +378,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
                                        std::string_view& date,           /* out */
                                        std::string_view& sessiontoken)   /* out */
 {
-  std::string_view input(info.env->get("HTTP_AUTHORIZATION", ""));
+  auto input = info.env->get("HTTP_AUTHORIZATION").value_or(""sv);
   try {
     input = input.substr(::strlen(AWS4_HMAC_SHA256_STR) + 1);
   } catch (std::out_of_range&) {
@@ -383,16 +389,24 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   }
 
   std::map<std::string_view, std::string_view> kv;
-  for (const auto& s : get_str_vec<4>(input, ",")) {
-    const auto parsed_pair = parse_key_value(s);
-    if (parsed_pair) {
-      kv[parsed_pair->first] = parsed_pair->second;
-    } else {
-      dout(10) << "NOTICE: failed to parse auth header (s=" << s << ")"
-               << dendl;
-      return -EINVAL;
-    }
-  }
+  int r = 0;
+  ceph::substr_do(
+    input,
+    [&](auto&& s) {
+      const auto parsed_pair = parse_key_value(s);
+      if (parsed_pair) {
+	kv[parsed_pair->first] = parsed_pair->second;
+      } else {
+	dout(10) << "NOTICE: failed to parse auth header (s=" << s << ")"
+		 << dendl;
+	r = -EINVAL;
+	return ceph::cf::stop;
+      }
+      return ceph::cf::go;
+    }, ","sv);
+
+  if (r < 0)
+    return r;
 
   static const std::array<std::string_view, 3> required_keys = {
     "Credential",
@@ -419,9 +433,9 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
 
   /* grab date */
 
-  const char *d = info.env->get("HTTP_X_AMZ_DATE");
+  auto d = std::string(info.env->get("HTTP_X_AMZ_DATE").value_or(""s));
   struct tm t;
-  if (!parse_iso8601(d, &t, NULL, false)) {
+  if (!parse_iso8601(d.data(), &t, NULL, false)) {
     dout(10) << "error reading date via http_x_amz_date" << dendl;
     return -EACCES;
   }
@@ -432,7 +446,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   }
 
   if (info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
-    sessiontoken = info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+    sessiontoken = info.env->get("HTTP_X_AMZ_SECURITY_TOKEN")->data();
   }
 
   return 0;
@@ -566,13 +580,13 @@ get_v4_canonical_headers(const req_info& info,
     } else if (token_env == "HTTP_CONTENT_TYPE") {
       token_env = "CONTENT_TYPE";
     }
-    const char* const t = info.env->get(token_env.c_str());
+    auto t = info.env->get(token_env.c_str());
     if (!t) {
       dout(10) << "warning env var not available" << dendl;
       continue;
     }
 
-    std::string token_value(t);
+    std::string token_value(*t);
     if (token_env == "HTTP_CONTENT_MD5" &&
         !std::all_of(std::begin(token_value), std::end(token_value),
                      is_base64_for_content_md5)) {
@@ -582,8 +596,8 @@ get_v4_canonical_headers(const req_info& info,
     }
 
     if (force_boto2_compat && using_qs && token == "host") {
-      std::string_view port = info.env->get("SERVER_PORT", "");
-      std::string_view secure_port = info.env->get("SERVER_PORT_SECURE", "");
+      auto port = info.env->get("SERVER_PORT").value_or(""sv);
+      auto secure_port = info.env->get("SERVER_PORT_SECURE").value_or(""sv);
 
       if (!secure_port.empty()) {
 	if (secure_port != "443")
@@ -1022,14 +1036,13 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
 
 void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
 {
-  const char* const decoded_length = \
-    s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
+  auto decoded_length = s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
 
   if (!decoded_length) {
     throw -EINVAL;
   } else {
-    s_rw->length = decoded_length;
-    s_rw->content_length = parse_content_length(decoded_length);
+    s_rw->length = *decoded_length;
+    s_rw->content_length = parse_content_length(*decoded_length);
 
     if (s_rw->content_length < 0) {
       ldpp_dout(dpp, 10) << "negative AWSv4's content length, aborting" << dendl;

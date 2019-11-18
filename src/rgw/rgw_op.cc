@@ -102,7 +102,7 @@ static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 int RGWGetObj::parse_range(void)
 {
   int r = -ERANGE;
-  string rs(range_str);
+  string rs(range_str.value_or(""));
   string ofs_str;
   string end_str;
 
@@ -527,7 +527,8 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
         if (r == Effect::Deny)
           return -EACCES;
       }
-      if (! bucket_policy.verify_permission(s, *s->auth.identity, s->perm_mask, RGW_PERM_READ))
+      if (! bucket_policy.verify_permission(s, *s->auth.identity, s->perm_mask,
+					    RGW_PERM_READ, std::nullopt))
         ret = -EACCES;
       else
         ret = -ENOENT;
@@ -834,7 +835,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
     for (const auto& c: acl_header_conditionals){
       auto hdr = s->info.env->get(c.first);
       if(hdr) {
-	e[c.second] = hdr;
+	e[c.second] = *hdr;
       }
     }
   }
@@ -1295,19 +1296,21 @@ int RGWOp::init_quota()
   return 0;
 }
 
-static bool validate_cors_rule_method(RGWCORSRule *rule, const char *req_meth) {
+static bool validate_cors_rule_method(RGWCORSRule *rule,
+				      std::optional<std::string_view> req_meth)
+{
   uint8_t flags = 0;
 
-  if (!req_meth) {
+  if (req_meth) {
     dout(5) << "req_meth is null" << dendl;
     return false;
   }
 
-  if (strcmp(req_meth, "GET") == 0) flags = RGW_CORS_GET;
-  else if (strcmp(req_meth, "POST") == 0) flags = RGW_CORS_POST;
-  else if (strcmp(req_meth, "PUT") == 0) flags = RGW_CORS_PUT;
-  else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
-  else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
+  if (req_meth == "GET"sv)  flags = RGW_CORS_GET;
+  else if (req_meth == "POST"sv) flags = RGW_CORS_POST;
+  else if (req_meth == "PUT"sv) flags = RGW_CORS_PUT;
+  else if (req_meth == "DELETE"sv) flags = RGW_CORS_DELETE;
+  else if (req_meth == "HEAD"sv) flags = RGW_CORS_HEAD;
 
   if (rule->get_allowed_methods() & flags) {
     dout(10) << "Method " << req_meth << " is supported" << dendl;
@@ -1319,18 +1322,24 @@ static bool validate_cors_rule_method(RGWCORSRule *rule, const char *req_meth) {
   return true;
 }
 
-static bool validate_cors_rule_header(RGWCORSRule *rule, const char *req_hdrs) {
+static bool validate_cors_rule_header(RGWCORSRule *rule,
+				      std::optional<std::string_view> req_hdrs)
+{
+  bool ret = true;;
   if (req_hdrs) {
-    vector<string> hdrs;
-    get_str_vec(req_hdrs, hdrs);
-    for (const auto& hdr : hdrs) {
-      if (!rule->is_header_allowed(hdr.c_str(), hdr.length())) {
-        dout(5) << "Header " << hdr << " is not registered in this rule" << dendl;
-        return false;
-      }
-    }
+    ceph::substr_do(
+      *req_hdrs,
+      [&](auto&& hdr) {
+	if (!rule->is_header_allowed(hdr)) {
+	  dout(5) << "Header " << hdr << " is not registered in this rule"
+		  << dendl;
+	  ret = false;
+	  return ceph::cf::stop;
+	}
+	return ceph::cf::go;
+      });
   }
-  return true;
+  return ret;
 }
 
 int RGWOp::read_bucket_cors()
@@ -1369,12 +1378,16 @@ int RGWOp::read_bucket_cors()
  * any of the values in list of headers do not set any additional headers and
  * terminate this set of steps.
  * */
-static void get_cors_response_headers(RGWCORSRule *rule, const char *req_hdrs, string& hdrs, string& exp_hdrs, unsigned *max_age) {
+static void get_cors_response_headers(RGWCORSRule *rule,
+				      std::optional<std::string_view> req_hdrs,
+				      string& hdrs, string& exp_hdrs,
+				      unsigned *max_age)
+{
   if (req_hdrs) {
     ceph::substr_do(
-      req_hdrs,
+      *req_hdrs,
       [&](auto&& s) {
-	if (!rule->is_header_allowed(s.data(), s.length())) {
+	if (!rule->is_header_allowed(s)) {
 	  dout(5) << "Header " << s << " is not registered in this rule"
 		  << dendl;
 	} else {
@@ -1395,13 +1408,13 @@ static void get_cors_response_headers(RGWCORSRule *rule, const char *req_hdrs, s
 bool RGWOp::generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age)
 {
   /* CORS 6.2.1. */
-  const char *orig = s->info.env->get("HTTP_ORIGIN");
+  auto orig = s->info.env->get("HTTP_ORIGIN");
   if (!orig) {
     return false;
   }
 
   /* Custom: */
-  origin = orig;
+  origin = *orig;
   op_ret = read_bucket_cors();
   if (op_ret < 0) {
     return false;
@@ -1413,7 +1426,10 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   }
 
   /* CORS 6.2.2. */
-  RGWCORSRule *rule = bucket_cors.host_name_rule(orig);
+  if (!orig)
+    return false;
+
+  RGWCORSRule *rule = bucket_cors.host_name_rule(*orig);
   if (!rule)
     return false;
 
@@ -1425,18 +1441,17 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
    * For requests without credentials, the server may specify "*" as a wildcard,
    * thereby allowing any origin to access the resource.
    */
-  const char *authorization = s->info.env->get("HTTP_AUTHORIZATION");
+  auto authorization = s->info.env->get("HTTP_AUTHORIZATION");
   if (!authorization && rule->has_wildcard_origin())
     origin = "*";
 
   /* CORS 6.2.3. */
-  const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-  if (!req_meth) {
+  auto req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+  if (!req_meth)
     req_meth = s->info.method;
-  }
 
   if (req_meth) {
-    method = req_meth;
+    method = *req_meth;
     /* CORS 6.2.5. */
     if (!validate_cors_rule_method(rule, req_meth)) {
      return false;
@@ -1444,7 +1459,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   }
 
   /* CORS 6.2.4. */
-  const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
+  auto req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
 
   /* CORS 6.2.6. */
   get_cors_response_headers(rule, req_hdrs, headers, exp_headers, max_age);
@@ -2253,14 +2268,17 @@ int RGWGetObj::init_common()
         return r;
     }
   }
+  char tmp[128];
   if (if_mod) {
-    if (parse_time(if_mod, &mod_time) < 0)
+    if (!ceph::nul_terminated_copy(*if_mod, tmp) ||
+	(parse_time(tmp, &mod_time) < 0))
       return -EINVAL;
     mod_ptr = &mod_time;
   }
 
   if (if_unmod) {
-    if (parse_time(if_unmod, &unmod_time) < 0)
+    if (!ceph::nul_terminated_copy(*if_unmod, tmp) ||
+	(parse_time(tmp, &mod_time) < 0))
       return -EINVAL;
     unmod_ptr = &unmod_time;
   }
@@ -3678,7 +3696,7 @@ void RGWPutObj::execute()
   off_t fst;
   off_t lst;
 
-  bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
+  bool need_calc_md5 = (!dlo_manifest && !slo_info);
   perfcounter->inc(l_rgw_put);
   // report latency on return
   auto put_lat = make_scope_guard([&] {
@@ -3708,7 +3726,8 @@ void RGWPutObj::execute()
 
     ldpp_dout(this, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
     op_ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
-                       supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
+			  supplied_md5_b64->data(),
+			  supplied_md5_b64->data() + supplied_md5_b64->size());
     ldpp_dout(this, 15) << "ceph_armor ret=" << op_ret << dendl;
     if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
       op_ret = -ERR_INVALID_DIGEST;
@@ -3730,7 +3749,7 @@ void RGWPutObj::execute()
   }
 
   if (supplied_etag) {
-    strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5) - 1);
+    strncpy(supplied_md5, supplied_etag->data(), sizeof(supplied_md5) - 1);
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
@@ -3960,7 +3979,7 @@ void RGWPutObj::execute()
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (dlo_manifest) {
-    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
+    op_ret = encode_dlo_manifest_attr(*dlo_manifest, attrs);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
       return;
@@ -3973,7 +3992,7 @@ void RGWPutObj::execute()
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
   }
 
-  if (supplied_etag && etag.compare(supplied_etag) != 0) {
+  if (supplied_etag && etag.compare(*supplied_etag) != 0) {
     op_ret = -ERR_UNPROCESSABLE_ENTITY;
     return;
   }
@@ -4115,7 +4134,8 @@ void RGWPostObj::execute()
       char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
       ldpp_dout(this, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
       op_ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
-                            supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
+                            supplied_md5_b64->data(),
+			    supplied_md5_b64->data() + supplied_md5_b64->size());
       ldpp_dout(this, 15) << "ceph_armor ret=" << op_ret << dendl;
       if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
         op_ret = -ERR_INVALID_DIGEST;
@@ -4545,7 +4565,7 @@ void RGWPutMetadataObject::execute()
   encode_delete_at_attr(delete_at, attrs);
 
   if (dlo_manifest) {
-    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
+    op_ret = encode_dlo_manifest_attr(*dlo_manifest, attrs);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
       return;
@@ -5009,8 +5029,10 @@ int RGWCopyObj::verify_permission()
 
 int RGWCopyObj::init_common()
 {
+  char tmp[128];
   if (if_mod) {
-    if (parse_time(if_mod, &mod_time) < 0) {
+    if (!ceph::nul_terminated_copy(*if_mod, tmp) ||
+	(parse_time(tmp, &mod_time) < 0)) {
       op_ret = -EINVAL;
       return op_ret;
     }
@@ -5018,7 +5040,8 @@ int RGWCopyObj::init_common()
   }
 
   if (if_unmod) {
-    if (parse_time(if_unmod, &unmod_time) < 0) {
+    if (!ceph::nul_terminated_copy(*if_unmod, tmp) ||
+	(parse_time(tmp, &mod_time) < 0)) {
       op_ret = -EINVAL;
       return op_ret;
     }
@@ -5396,7 +5419,7 @@ void RGWPutLC::execute()
   RGWLifecycleConfiguration_S3 new_config(s->cct);
 
   content_md5 = s->info.env->get("HTTP_CONTENT_MD5");
-  if (content_md5 == nullptr) {
+  if (!content_md5) {
     op_ret = -ERR_INVALID_REQUEST;
     s->err.message = "Missing required header for this request: Content-MD5";
     ldpp_dout(this, 5) << s->err.message << dendl;
@@ -5405,7 +5428,7 @@ void RGWPutLC::execute()
 
   std::string content_md5_bin;
   try {
-    content_md5_bin = rgw::from_base64(std::string_view(content_md5));
+    content_md5_bin = rgw::from_base64(content_md5.value_or(std::string_view{}));
   } catch (...) {
     s->err.message = "Request header Content-MD5 contains character "
                      "that is not base64 encoded.";
@@ -5603,7 +5626,12 @@ void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigne
 }
 
 int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
-  rule = cc->host_name_rule(origin);
+  if (!origin) {
+    ldpp_dout(this, 10) << "There is no cors rule present for " << origin << dendl;
+    return -ENOENT;
+  }
+
+  rule = cc->host_name_rule(*origin);
   if (!rule) {
     ldpp_dout(this, 10) << "There is no cors rule present for " << origin << dendl;
     return -ENOENT;
@@ -5632,12 +5660,14 @@ void RGWOptionsCORS::execute()
     op_ret = -EINVAL;
     return;
   }
+
   req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
   if (!req_meth) {
     ldpp_dout(this, 0) << "Missing mandatory Access-control-request-method header" << dendl;
     op_ret = -EINVAL;
     return;
   }
+
   if (!cors_exist) {
     ldpp_dout(this, 2) << "No CORS configuration set yet for this bucket" << dendl;
     op_ret = -ENOENT;
@@ -5646,7 +5676,8 @@ void RGWOptionsCORS::execute()
   req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
   op_ret = validate_cors_request(&bucket_cors);
   if (!rule) {
-    origin = req_meth = NULL;
+    origin.reset();
+    req_meth.reset();;
     return;
   }
   return;
@@ -5990,7 +6021,7 @@ void RGWCompleteMultipart::execute()
         op_ret = -ERR_INVALID_PART;
         return;
       }
-      string part_etag = rgw_string_unquote(iter->second);
+      auto part_etag = rgw_string_unquote(iter->second);
       if (part_etag.compare(obj_iter->second.etag) != 0) {
         ldpp_dout(this, 0) << "NOTICE: etag mismatch: part: " << iter->first
 			 << " etag: " << iter->second << dendl;
@@ -6025,9 +6056,9 @@ void RGWCompleteMultipart::execute()
           ldpp_dout(this, 0) << "ERROR: compression type was changed during multipart upload ("
                            << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << ")" << dendl;
           op_ret = -ERR_INVALID_PART;
-          return; 
+          return;
       }
-      
+
       if (part_compressed) {
         int64_t new_ofs; // offset in compression data for new part
         if (cs_info.blocks.size() > 0)
@@ -6041,7 +6072,7 @@ void RGWCompleteMultipart::execute()
           cb.len = block.len;
           cs_info.blocks.push_back(cb);
           new_ofs = cb.new_ofs + cb.len;
-        } 
+        }
         if (!compressed)
           cs_info.compression_type = obj_part.cs_info.compression_type;
         cs_info.orig_size += obj_part.cs_info.orig_size;

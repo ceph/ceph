@@ -206,9 +206,9 @@ static string get_abs_path(const string& request_uri) {
 }
 
 req_info::req_info(CephContext *cct, const class RGWEnv *env) : env(env) {
-  method = env->get("REQUEST_METHOD", "");
-  script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
-  request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
+  method = env->get("REQUEST_METHOD").value_or(""sv);
+  script_uri = env->get("SCRIPT_URI").value_or(cct->_conf->rgw_script_uri);
+  request_uri = env->get("REQUEST_URI").value_or(cct->_conf->rgw_request_uri);
   if (request_uri[0] != '/') {
     request_uri = get_abs_path(request_uri);
   }
@@ -217,9 +217,9 @@ req_info::req_info(CephContext *cct, const class RGWEnv *env) : env(env) {
     request_params = request_uri.substr(pos + 1);
     request_uri = request_uri.substr(0, pos);
   } else {
-    request_params = env->get("QUERY_STRING", "");
+    request_params = env->get("QUERY_STRING").value_or(""sv);
   }
-  host = env->get("HTTP_HOST", "");
+  host = env->get("HTTP_HOST").value_or(""sv);
 
   // strip off any trailing :port from host (added by CrossFTP and maybe others)
   size_t colon_offset = host.find_last_of(':');
@@ -452,7 +452,7 @@ void rgw_add_amz_meta_header(
   }
 }
 
-string rgw_string_unquote(const string& s)
+std::string_view rgw_string_unquote(std::string_view s)
 {
   if (s[0] != '"' || s.size() < 2)
     return s;
@@ -589,46 +589,19 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
   return true;
 }
 
-int parse_key_value(string& in_str, const char *delim, string& key, string& val)
+std::optional<std::pair<std::string_view, std::string_view>>
+parse_key_value(std::string_view in_str, std::string_view delim)
 {
-  if (delim == NULL)
-    return -EINVAL;
-
+  if (delim.empty())
+    return std::nullopt;
   auto pos = in_str.find(delim);
-  if (pos == string::npos)
-    return -EINVAL;
-
-  key = rgw_trim_whitespace(in_str.substr(0, pos));
-  val = rgw_trim_whitespace(in_str.substr(pos + 1));
-
-  return 0;
-}
-
-int parse_key_value(string& in_str, string& key, string& val)
-{
-  return parse_key_value(in_str, "=", key,val);
-}
-
-boost::optional<std::pair<std::string_view, std::string_view>>
-parse_key_value(std::string_view in_str,
-                std::string_view delim)
-{
-  const size_t pos = in_str.find(delim);
   if (pos == std::string_view::npos) {
-    return boost::none;
+    return std::nullopt;
   }
-
-  const auto key = rgw_trim_whitespace(in_str.substr(0, pos));
-  const auto val = rgw_trim_whitespace(in_str.substr(pos + 1));
-
-  return std::make_pair(key, val);
+  return std::make_pair(trim(in_str.substr(0, pos)),
+			trim(in_str.substr(pos + 1)));
 }
 
-boost::optional<std::pair<std::string_view, std::string_view>>
-parse_key_value(std::string_view in_str)
-{
-  return parse_key_value(in_str, "=");
-}
 
 int parse_time(const char *time_str, real_time *time)
 {
@@ -890,9 +863,9 @@ int RGWHTTPArgs::parse()
     int fpos = str.find('&', pos);
     if (fpos  < pos) {
        end = true;
-       fpos = str.size(); 
+       fpos = str.size();
     }
-    std::string nameval = url_decode(str.substr(pos, fpos - pos), true);
+    std::string nameval = url_decode(std::string_view(str.substr(pos, fpos - pos)), true);
     NameVal nv(std::move(nameval));
     int ret = nv.parse();
     if (ret >= 0) {
@@ -1153,7 +1126,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, struct req_
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  return user_acl->verify_permission(dpp, *s->auth.identity, perm, perm);
+  return user_acl->verify_permission(dpp, *s->auth.identity, perm, perm, std::nullopt);
 }
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
@@ -1183,16 +1156,16 @@ bool verify_requester_payer_permission(struct req_state *s)
     return false;
   }
 
-  const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
+  auto request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
   if (!request_payer) {
     bool exists;
-    request_payer = s->info.args.get("x-amz-request-payer", &exists).c_str();
+    request_payer = s->info.args.get("x-amz-request-payer", &exists);
     if (!exists) {
       return false;
     }
   }
 
-  if (strcasecmp(request_payer, "requester") == 0) {
+  if (stringcasecmp(*request_payer, "requester") == 0) {
     return true;
   }
 
@@ -1249,7 +1222,8 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct re
   if (!user_acl)
     return false;
 
-  return user_acl->verify_permission(dpp, *s->auth.identity, perm, perm);
+  return user_acl->verify_permission(dpp, *s->auth.identity, perm, perm,
+				     std::nullopt);
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state * const s, const int perm)

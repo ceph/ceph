@@ -256,7 +256,7 @@ namespace rgw {
     }
 
     /* now expected by rgw_log_op() */
-    rgw_env.set("REQUEST_METHOD", s->info.method);
+    rgw_env.set("REQUEST_METHOD", string(s->info.method.value_or("")));
     rgw_env.set("REQUEST_URI", s->info.request_uri);
     rgw_env.set("QUERY_STRING", "");
 

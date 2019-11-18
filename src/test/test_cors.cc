@@ -333,8 +333,9 @@ size_t cors_read_xml(void *ptr, size_t s, size_t n, void *ud){
   return len;
 }
 
-void send_cors(set<string> o, set<string> h,
-               list<string> e, uint8_t flags, 
+void send_cors(set<string, std::less<>> o,
+               set<string, std::less<>> h,
+               list<string> e, uint8_t flags,
                unsigned max_age){
   if(g_test->get_key_type() == KEY_TYPE_S3){
     RGWCORSRule rule(o, h, e, flags, max_age);
@@ -347,8 +348,8 @@ void send_cors(set<string> o, set<string> h,
 
     g_test->send_request(string("PUT"), string("/" S3_BUCKET_NAME "?cors"), cors_read_xml, 
                          (void *)&ss, ss.str().length());
-  }else if(g_test->get_key_type() == KEY_TYPE_SWIFT){
-    set<string>::iterator it;
+  } else if (g_test->get_key_type() == KEY_TYPE_SWIFT) {
+    set<string, less<>>::iterator it;
     string a_o;
     for(it = o.begin(); it != o.end(); ++it){
       if(a_o.length() > 0)a_o.append(" ");
@@ -395,7 +396,7 @@ TEST(TestCORS, getcors_firsttime){
 
 TEST(TestCORS, putcors_firsttime){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "example.com");
@@ -421,7 +422,7 @@ TEST(TestCORS, putcors_firsttime){
 
 TEST(TestCORS, putcors_invalid_hostname){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "*.example.*");
@@ -441,7 +442,7 @@ TEST(TestCORS, putcors_invalid_hostname){
 
 TEST(TestCORS, putcors_invalid_headers){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "www.example.com");
@@ -463,7 +464,7 @@ TEST(TestCORS, putcors_invalid_headers){
 
 TEST(TestCORS, optionscors_test_options_1){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "*.example.com");
@@ -495,7 +496,7 @@ TEST(TestCORS, optionscors_test_options_1){
 
 TEST(TestCORS, optionscors_test_options_2){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "*.example.com");
@@ -530,12 +531,12 @@ TEST(TestCORS, optionscors_test_options_2){
 
 TEST(TestCORS, optionscors_test_options_3){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "*");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT | RGW_CORS_DELETE | RGW_CORS_HEAD;
-  
+
   send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
   EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
 
@@ -596,7 +597,7 @@ TEST(TestCORS, optionscors_test_options_3){
 
 TEST(TestCORS, optionscors_test_options_4){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "example.com");
@@ -604,10 +605,10 @@ TEST(TestCORS, optionscors_test_options_4){
   h.insert(h.end(), "Header2");
   h.insert(h.end(), "*");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
-  
+
   send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
   EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
@@ -690,17 +691,17 @@ TEST(TestCORS, optionscors_test_options_4){
 
 TEST(TestCORS, optionscors_test_options_5){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "example.com");
   e.insert(e.end(), "Expose1");
   e.insert(e.end(), "Expose2");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
-  
+
   send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
   EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
@@ -718,26 +719,26 @@ TEST(TestCORS, optionscors_test_options_5){
 
 TEST(TestCORS, optionscors_test_options_6){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
   unsigned err = (g_test->get_key_type() == KEY_TYPE_SWIFT)?401U:403U;
 
   origins.insert(origins.end(), "http://www.example.com");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
-  
+
   send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
   EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
   EXPECT_EQ(err, g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: http://example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
   EXPECT_EQ(err, g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: www.example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
@@ -787,12 +788,12 @@ TEST(TestCORS, optionscors_test_options_6){
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
   EXPECT_EQ(200U, g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: http://example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
   EXPECT_EQ(err, g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: www.example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
@@ -808,7 +809,7 @@ TEST(TestCORS, optionscors_test_options_6){
 
 TEST(TestCORS, optionscors_test_options_7){
   ASSERT_EQ(0, create_bucket());
-  set<string> origins, h;
+  set<string, std::less<>> origins, h;
   list<string> e;
 
   origins.insert(origins.end(), "example.com");
@@ -817,10 +818,10 @@ TEST(TestCORS, optionscors_test_options_7){
   h.insert(h.end(), "*-Length");
   h.insert(h.end(), "foo*foo");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
-  
+
   send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
   EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->set_extra_header(string("Access-Control-Allow-Headers: Header1, Header2, Header3, "
@@ -848,13 +849,13 @@ TEST(TestCORS, deletecors_firsttime){
 }
 
 TEST(TestCORS, deletecors_test){
-  set<string> origins, h;
+  set<string, less<>> origins, h;
   list<string> e;
   if(g_test->get_key_type() == KEY_TYPE_SWIFT)return;
   ASSERT_EQ(0, create_bucket());
   origins.insert(origins.end(), "example.com");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
-  
+
   send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
   EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
 

@@ -2709,8 +2709,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* const time_t *mod_ptr */
                NULL, /* const time_t *unmod_ptr */
                false, /* bool high_precision_time */
-               NULL, /* const char *if_match */
-               NULL, /* const char *if_nomatch */
+               std::nullopt, /* optional<string_view> if_match */
+               std::nullopt, /* optional<string_view> if_nomatch */
                RGWRados::ATTRSMOD_NONE,
                true, /* bool copy_if_newer */
                state->attrset,
@@ -2803,8 +2803,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        nullptr,       /* const time_t *mod_ptr */
                        nullptr,       /* const time_t *unmod_ptr */
                        false,         /* bool high_precision_time */
-                       nullptr,       /* const char *if_match */
-                       nullptr,       /* const char *if_nomatch */
+                       std::nullopt,  /* optional<string_view> if_match */
+                       std::nullopt,  /* optional<string_view> if_nomatch */
                        RGWRados::ATTRSMOD_NONE,
                        true,          /* bool copy_if_newer */
                        no_attrs,
@@ -3098,14 +3098,14 @@ done_cancel:
    * - object was removed (ENOENT)
    * should treat it as a success
    */
-  if (meta.if_match == NULL && meta.if_nomatch == NULL) {
+  if (!meta.if_match && !meta.if_nomatch) {
     if (r == -ECANCELED || r == -ENOENT || r == -EEXIST) {
       r = 0;
     }
   } else {
-    if (meta.if_match != NULL) {
+    if (meta.if_match) {
       // only overwrite existing object
-      if (strcmp(meta.if_match, "*") == 0) {
+      if (*meta.if_match == "*"sv) {
         if (r == -ENOENT) {
           r = -ERR_PRECONDITION_FAILED;
         } else if (r == -ECANCELED) {
@@ -3114,9 +3114,9 @@ done_cancel:
       }
     }
 
-    if (meta.if_nomatch != NULL) {
+    if (meta.if_nomatch) {
       // only create a new object
-      if (strcmp(meta.if_nomatch, "*") == 0) {
+      if (*meta.if_nomatch ==  "*") {
         if (r == -EEXIST) {
           r = -ERR_PRECONDITION_FAILED;
         } else if (r == -ENOENT) {
@@ -3137,8 +3137,8 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   RGWRados::Bucket bop(target->get_store(), bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
   index_op.set_zones_trace(meta.zones_trace);
-  
-  bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
+
+  bool assume_noent = (!meta.if_match && !meta.if_nomatch);
   int r;
   if (assume_noent) {
     r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y);
@@ -3576,8 +3576,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const real_time *mod_ptr,
                const real_time *unmod_ptr,
                bool high_precision_time,
-               const char *if_match,
-               const char *if_nomatch,
+	       std::optional<std::string_view> if_match,
+	       std::optional<std::string_view> if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
                map<string, bufferlist>& attrs,
@@ -3893,8 +3893,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const real_time *mod_ptr,
                const real_time *unmod_ptr,
                bool high_precision_time,
-               const char *if_match,
-               const char *if_nomatch,
+	       std::optional<std::string_view> if_match,
+	       std::optional<std::string_view> if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
                map<string, bufferlist>& attrs,
@@ -4843,7 +4843,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
     return -ENOENT;
   }
 
-  r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL, true, false, y);
+  r = target->prepare_atomic_modification(op, false, NULL, std::nullopt,
+					  std::nullopt, true, false, y);
   if (r < 0)
     return r;
 
@@ -4851,7 +4852,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
 
   RGWRados::Bucket bop(store, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
-  
+
   index_op.set_zones_trace(params.zones_trace);
   index_op.set_bilog_flags(params.bilog_flags);
 
@@ -5357,8 +5358,12 @@ void RGWRados::Object::invalidate_state()
   ctx.invalidate(obj);
 }
 
-int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                                  const char *if_match, const char *if_nomatch, bool removal_op,
+int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op,
+						  bool reset_obj,
+						  const string *ptag,
+						  std::optional<std::string_view> if_match,
+						  std::optional<std::string_view> if_nomatch,
+						  bool removal_op,
                                                   bool modify_tail, optional_yield y)
 {
   int r = get_state(&state, false, y);
@@ -5366,8 +5371,7 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
     return r;
 
   bool need_guard = ((state->manifest) || (state->obj_tag.length() != 0) ||
-                     if_match != NULL || if_nomatch != NULL) &&
-                     (!state->fake_tag);
+                     if_match || if_nomatch) && (!state->fake_tag);
 
   if (!state->is_atomic) {
     ldout(store->ctx(), 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *)state << dendl;
@@ -5382,13 +5386,13 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
 
   if (need_guard) {
     /* first verify that the object wasn't replaced under */
-    if (if_nomatch == NULL || strcmp(if_nomatch, "*") != 0) {
+    if (!if_nomatch || (*if_nomatch == "*"sv)) {
       op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag); 
       // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
     }
 
     if (if_match) {
-      if (strcmp(if_match, "*") == 0) {
+      if (if_match == "*"sv) {
         // test the object is existing
         if (!state->exists) {
           return -ERR_PRECONDITION_FAILED;
@@ -5396,14 +5400,14 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
       } else {
         bufferlist bl;
         if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+            *if_match == bl.to_string_view()) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
     }
 
     if (if_nomatch) {
-      if (strcmp(if_nomatch, "*") == 0) {
+      if (if_nomatch == "*"sv) {
         // test the object is NOT existing
         if (state->exists) {
           return -ERR_PRECONDITION_FAILED;
@@ -5411,7 +5415,7 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
       } else {
         bufferlist bl;
         if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
+            *if_nomatch == bl.to_string_view()) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -5676,18 +5680,19 @@ int RGWRados::Object::Read::prepare(optional_yield y)
     if (r < 0)
       return r;
 
-    
+
 
     if (conds.if_match) {
-      string if_match_str = rgw_string_unquote(conds.if_match);
-      ldout(cct, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
+      auto if_match_str = rgw_string_unquote(*conds.if_match);
+      ldout(cct, 10) << "ETag: " << etag.to_string_view() << " "
+		     << " If-Match: " << if_match_str << dendl;
       if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
         return -ERR_PRECONDITION_FAILED;
       }
     }
 
     if (conds.if_nomatch) {
-      string if_nomatch_str = rgw_string_unquote(conds.if_nomatch);
+      auto if_nomatch_str = rgw_string_unquote(*conds.if_nomatch);
       ldout(cct, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-NoMatch: " << if_nomatch_str << dendl;
       if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
         return -ERR_NOT_MODIFIED;

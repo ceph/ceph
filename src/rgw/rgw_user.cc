@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <errno.h>
-
+#include <cerrno>
 #include <string>
 #include <map>
 #include <boost/algorithm/string.hpp>
@@ -2583,7 +2582,7 @@ public:
              RGWMDLogSyncType type) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
-                optional_yield y) {
+                optional_yield y) override {
     RGWUserInfo info;
 
     rgw_user user = RGWSI_User::user_from_meta_key(entry);

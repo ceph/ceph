@@ -30,8 +30,8 @@ public:
   int create(RGWUserCtl *user_ctl,
              const rgw_user& id,
              const std::string& name,
-             const char* read_list,
-             const char* write_list,
+	     std::optional<std::string_view> read_list,
+	     std::optional<std::string_view> write_list,
              uint32_t& rw_mask);
   void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
   void to_str(std::string& read, std::string& write);

@@ -383,7 +383,7 @@ class AWSv4ComplSingle : public rgw::auth::Completer,
   using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
 
   CephContext* const cct;
-  const char* const expected_request_payload_hash;
+  const std::string_view expected_request_payload_hash;
   ceph::crypto::SHA256* sha256_hash = nullptr;
 
 public:
@@ -416,9 +416,9 @@ public:
 } /* namespace rgw */
 
 void rgw_create_s3_canonical_header(
-  const char *method,
-  const char *content_md5,
-  const char *content_type,
+  std::optional<std::string_view> method,
+  std::optional<std::string_view> content_md5,
+  std::optional<std::string_view> content_type,
   const char *date,
   const std::map<std::string, std::string>& meta_map,
   const std::map<std::string, std::string>& qs_map,
@@ -429,7 +429,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
                                     utime_t *header_time,       /* out */
                                     std::string& dest,          /* out */
                                     bool qsr);
-static inline std::tuple<bool, std::string, utime_t>
+inline std::tuple<bool, std::string, utime_t>
 rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
   std::string dest;
   utime_t header_time;
@@ -505,7 +505,7 @@ static inline std::string aws4_uri_recode(std::string_view src, bool encode_slas
   return aws4_uri_encode(decoded, encode_slash);
 }
 
-static inline std::string get_v4_canonical_uri(const req_info& info) {
+inline std::string get_v4_canonical_uri(const req_info& info) {
   /* The code should normalize according to RFC 3986 but S3 does NOT do path
    * normalization that SigV4 typically does. This code follows the same
    * approach that boto library. See auth.py:canonical_uri(...). */
@@ -521,7 +521,7 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
   return canonical_uri;
 }
 
-static inline const string calc_v4_payload_hash(const string& payload)
+inline const string calc_v4_payload_hash(const string& payload)
 {
   ceph::crypto::SHA256* sha256_hash = calc_hash_sha256_open_stream();
   calc_hash_sha256_update_stream(sha256_hash, payload.c_str(), payload.length());
@@ -529,37 +529,33 @@ static inline const string calc_v4_payload_hash(const string& payload)
   return payload_hash;
 }
 
-static inline const char* get_v4_exp_payload_hash(const req_info& info)
+inline std::string_view get_v4_exp_payload_hash(const req_info& info)
 {
   /* In AWSv4 the hash of real, transferred payload IS NOT necessary to form
    * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
    * header lets get the information very early -- before seeing first byte
    * of HTTP body. As a consequence, we can decouple Signature verification
    * from payload's fingerprint check. */
-  const char *expected_request_payload_hash = \
+  auto expected_request_payload_hash =
     info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
 
-  if (!expected_request_payload_hash) {
-    /* An HTTP client MUST send x-amz-content-sha256. The single exception
-     * is the case of using the Query Parameters where "UNSIGNED-PAYLOAD"
-     * literals are used for crafting Canonical Request:
-     *
-     *  You don't include a payload hash in the Canonical Request, because
-     *  when you create a presigned URL, you don't know the payload content
-     *  because the URL is used to upload an arbitrary payload. Instead, you
-     *  use a constant string UNSIGNED-PAYLOAD. */
-    expected_request_payload_hash = AWS4_UNSIGNED_PAYLOAD_HASH;
-  }
-
-  return expected_request_payload_hash;
+  /* An HTTP client MUST send x-amz-content-sha256. The single exception
+   * is the case of using the Query Parameters where "UNSIGNED-PAYLOAD"
+   * literals are used for crafting Canonical Request:
+   *
+   *  You don't include a payload hash in the Canonical Request, because
+   *  when you create a presigned URL, you don't know the payload content
+   *  because the URL is used to upload an arbitrary payload. Instead, you
+   *  use a constant string UNSIGNED-PAYLOAD. */
+  return expected_request_payload_hash.value_or(AWS4_UNSIGNED_PAYLOAD_HASH);
 }
 
-static inline bool is_v4_payload_unsigned(const char* const exp_payload_hash)
+inline bool is_v4_payload_unsigned(std::string_view exp_payload_hash)
 {
-  return boost::equals(exp_payload_hash, AWS4_UNSIGNED_PAYLOAD_HASH);
+  return exp_payload_hash == AWS4_UNSIGNED_PAYLOAD_HASH;
 }
 
-static inline bool is_v4_payload_empty(const req_state* const s)
+inline bool is_v4_payload_empty(const req_state* const s)
 {
   /* from rfc2616 - 4.3 Message Body
    *
@@ -570,9 +566,9 @@ static inline bool is_v4_payload_empty(const req_state* const s)
          s->info.env->get("HTTP_TRANSFER_ENCODING") == nullptr;
 }
 
-static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
+inline bool is_v4_payload_streamed(std::string_view exp_payload_hash)
 {
-  return boost::equals(exp_payload_hash, AWS4_STREAMING_PAYLOAD_HASH);
+  return exp_payload_hash == AWS4_STREAMING_PAYLOAD_HASH;
 }
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);

@@ -6,7 +6,8 @@
 
 #include <string>
 #include <map>
-#include "include/ceph_assert.h"
+
+#include "common/str_util.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
@@ -41,88 +42,80 @@ void RGWEnv::init(CephContext *cct, char **envp)
   init(cct);
 }
 
-const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val)
+std::optional<std::string_view> rgw_conf_get(const RGWConfMap& conf_map,
+					     std::string_view name)
 {
   auto iter = conf_map.find(name);
   if (iter == conf_map.end())
-    return def_val;
+    return std::nullopt;
 
-  return iter->second.c_str();
+  return iter->second;
 }
 
-const char *RGWEnv::get(const char *name, const char *def_val) const
+std::optional<std::string_view> RGWEnv::get(std::string_view name) const
 {
-  return rgw_conf_get(env_map, name, def_val);
+  return rgw_conf_get(env_map, name);
 }
 
-int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const char *name, int def_val)
-{
-  auto iter = conf_map.find(name);
-  if (iter == conf_map.end())
-    return def_val;
-
-  const char *s = iter->second.c_str();
-  return atoi(s);  
-}
-
-int RGWEnv::get_int(const char *name, int def_val) const
-{
-  return rgw_conf_get_int(env_map, name, def_val);
-}
-
-bool rgw_conf_get_bool(const map<string, string, ltstr_nocase>& conf_map, const char *name, bool def_val)
+std::optional<int> rgw_conf_get_int(const RGWConfMap& conf_map,
+				    std::string_view name)
 {
   auto iter = conf_map.find(name);
   if (iter == conf_map.end())
-    return def_val;
+    return std::nullopt;
 
-  const char *s = iter->second.c_str();
-  return rgw_str_to_bool(s, def_val);
+  return ceph::parse<int>(iter->second);
 }
 
-bool RGWEnv::get_bool(const char *name, bool def_val)
+std::optional<int> RGWEnv::get_int(std::string_view name) const
 {
-  return rgw_conf_get_bool(env_map, name, def_val);
+  return rgw_conf_get_int(env_map, name);
 }
 
-size_t RGWEnv::get_size(const char *name, size_t def_val) const
+std::optional<bool> rgw_conf_get_bool(const RGWConfMap& conf_map,
+				      std::string_view name)
+{
+  auto iter = conf_map.find(name);
+  if (iter == conf_map.end())
+    return std::nullopt;
+
+  return rgw_str_to_bool(iter->second);
+}
+
+std::optional<bool> RGWEnv::get_bool(std::string_view name)
+{
+  return rgw_conf_get_bool(env_map, name);
+}
+
+std::optional<std::size_t> RGWEnv::get_size(std::string_view name) const
 {
   const auto iter = env_map.find(name);
   if (iter == env_map.end())
-    return def_val;
+    return std::nullopt;
 
-  size_t sz;
-  try{
-    sz = stoull(iter->second);
-  } catch(...){
-    /* it is very unlikely that we'll ever encounter out_of_range, but let's
-       return the default eitherway */
-    sz = def_val;
-  }
-
-  return sz;
+  return ceph::parse<size_t>(iter->second);
 }
 
-bool RGWEnv::exists(const char *name) const
+bool RGWEnv::exists(std::string_view name) const
 {
-  return env_map.find(name)!= env_map.end();
+  return env_map.find(name) != env_map.end();
 }
 
-bool RGWEnv::exists_prefix(const char *prefix) const
+bool RGWEnv::exists_prefix(std::string_view prefix) const
 {
-  if (env_map.empty() || prefix == NULL)
+  if (env_map.empty() || prefix.empty())
     return false;
 
   const auto iter = env_map.lower_bound(prefix);
   if (iter == env_map.end())
     return false;
 
-  return (strncmp(iter->first.c_str(), prefix, strlen(prefix)) == 0);
+  return iter->first.compare(prefix) == 0;
 }
 
-void RGWEnv::remove(const char *name)
+void RGWEnv::remove(std::string_view name)
 {
-  map<string, string, ltstr_nocase>::iterator iter = env_map.find(name);
+  auto iter = env_map.find(name);
   if (iter != env_map.end())
     env_map.erase(iter);
 }

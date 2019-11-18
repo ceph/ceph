@@ -589,8 +589,8 @@ static int get_swift_container_settings(req_state * const s,
                                         RGWCORSConfiguration * const cors_config,
                                         bool * const has_cors)
 {
-  const char * const read_list = s->info.env->get("HTTP_X_CONTAINER_READ");
-  const char * const write_list = s->info.env->get("HTTP_X_CONTAINER_WRITE");
+  auto read_list = s->info.env->get("HTTP_X_CONTAINER_READ");
+  auto write_list = s->info.env->get("HTTP_X_CONTAINER_WRITE");
 
   *has_policy = false;
 
@@ -613,13 +613,13 @@ static int get_swift_container_settings(req_state * const s,
   *has_cors = false;
 
   /*Check and update CORS configuration*/
-  const char *allow_origins = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_ORIGIN");
-  const char *allow_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
-  const char *expose_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
-  const char *max_age = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
+  auto allow_origins = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_ORIGIN");
+  auto allow_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
+  auto expose_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
+  auto max_age = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
   if (allow_origins) {
     RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
-    int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
+    int r = swift_cors->create_update(*allow_origins, allow_headers, expose_headers, max_age);
     if (r < 0) {
       dout(0) << "Error creating/updating the cors configuration" << dendl;
       delete swift_cors;
@@ -668,27 +668,27 @@ static void get_rmattrs_from_headers(const req_state * const s,
   }
 }
 
-static int get_swift_versioning_settings(
+int get_swift_versioning_settings(
   req_state * const s,
-  boost::optional<std::string>& swift_ver_location)
+  std::optional<std::string>& swift_ver_location)
 {
   /* Removing the Swift's versions location has lower priority than setting
    * a new one. That's the reason why we're handling it first. */
-  const std::string vlocdel =
-    s->info.env->get("HTTP_X_REMOVE_VERSIONS_LOCATION", "");
+  const std::string vlocdel(
+    s->info.env->get("HTTP_X_REMOVE_VERSIONS_LOCATION").value_or(""));
   if (vlocdel.size()) {
-    swift_ver_location = boost::in_place(std::string());
+    swift_ver_location = std::nullopt;
   }
 
-  if (s->info.env->exists("HTTP_X_VERSIONS_LOCATION")) {
+  if (auto xvl = s->info.env->get("HTTP_X_VERSIONS_LOCATION")) {
     /* If the Swift's versioning is globally disabled but someone wants to
      * enable it for a given container, new version of Swift will generate
      * the precondition failed error. */
-    if (! s->cct->_conf->rgw_swift_versioning_enabled) {
+    if (!s->cct->_conf->rgw_swift_versioning_enabled) {
       return -ERR_PRECONDITION_FAILED;
     }
 
-    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+    swift_ver_location.emplace(string(*xvl));
   }
 
   return 0;
@@ -712,7 +712,8 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   location_constraint = store->svc()->zone->get_zonegroup().api_name;
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
-  placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""), s->info.storage_class);
+  placement_rule.init(string(s->info.env->get("HTTP_X_STORAGE_POLICY").value_or("")),
+		      s->info.storage_class);
 
   return get_swift_versioning_settings(s, swift_ver_location);
 }
@@ -774,10 +775,10 @@ static int get_delete_at_param(req_state *s, boost::optional<real_time> &delete_
 {
   /* Handle Swift object expiration. */
   real_time delat_proposal;
-  string x_delete = s->info.env->get("HTTP_X_DELETE_AFTER", "");
+  auto x_delete(s->info.env->get("HTTP_X_DELETE_AFTER").value_or(""));
 
   if (x_delete.empty()) {
-    x_delete = s->info.env->get("HTTP_X_DELETE_AT", "");
+    x_delete = s->info.env->get("HTTP_X_DELETE_AT").value_or("");
   } else {
     /* X-Delete-After HTTP is present. It means we need add its value
      * to the current time. */
@@ -791,14 +792,13 @@ static int get_delete_at_param(req_state *s, boost::optional<real_time> &delete_
     }
     return 0;
   }
-  string err;
-  long ts = strict_strtoll(x_delete.c_str(), 10, &err);
+  auto ts = ceph::parse<long long>(x_delete);
 
-  if (!err.empty()) {
+  if (!ts) {
     return -EINVAL;
   }
 
-  delat_proposal += make_timespan(ts);
+  delat_proposal += make_timespan(*ts);
   if (delat_proposal < real_clock::now()) {
     return -EINVAL;
   }
@@ -915,8 +915,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   }
 
   if (!s->length) {
-    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
-    if (!encoding || strcmp(encoding, "chunked") != 0) {
+    auto encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || *encoding != "chunked") {
       ldpp_dout(this, 20) << "neither length nor chunked encoding" << dendl;
       return -ERR_LENGTH_REQUIRED;
     }
@@ -951,8 +951,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   if (!s->cct->_conf->rgw_swift_custom_header.empty()) {
     string custom_header = s->cct->_conf->rgw_swift_custom_header;
-    if (s->info.env->exists(custom_header.c_str())) {
-      user_data = s->info.env->get(custom_header.c_str());
+    if (auto ud = s->info.env->get(custom_header.c_str())) {
+      user_data = *ud;
     }
   }
 
@@ -967,9 +967,9 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
 #define MAX_SLO_ENTRY_SIZE (1024 + 128) // 1024 - max obj name, 128 - enough extra for other info
     uint64_t max_len = s->cct->_conf->rgw_max_slo_entries * MAX_SLO_ENTRY_SIZE;
-    
+
     slo_info = new RGWSLOInfo;
-    
+
     int r = 0;
     std::tie(r, slo_info->raw_data) = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len);
     if (r < 0) {
@@ -1055,13 +1055,13 @@ static int get_swift_account_settings(req_state * const s,
 {
   *has_policy = false;
 
-  const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
+  auto acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
     RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
     const bool r = swift_acct_policy.create(store->ctl()->user,
-                                     s->user->user_id,
-                                     s->user->display_name,
-                                     string(acl_attr));
+					    s->user->user_id,
+					    s->user->display_name,
+					    string(*acl_attr));
     if (r != true) {
       return -EINVAL;
     }
@@ -1125,7 +1125,8 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX, CONT_REMOVE_ATTR_PREFIX,
 			   rmattr_names);
-  placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""), s->info.storage_class);
+  placement_rule.init(string(s->info.env->get("HTTP_X_STORAGE_POLICY").value_or("")),
+		      s->info.storage_class);
 
   return get_swift_versioning_settings(s, swift_ver_location);
 }
@@ -1393,8 +1394,8 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
   dest_bucket_name = s->bucket_name;
   dest_object = s->object.name;
 
-  const char * const fresh_meta = s->info.env->get("HTTP_X_FRESH_METADATA");
-  if (fresh_meta && strcasecmp(fresh_meta, "TRUE") == 0) {
+  auto fresh_meta = s->info.env->get("HTTP_X_FRESH_METADATA");
+  if (fresh_meta && stringcasecmp(*fresh_meta, "TRUE") == 0) {
     attrs_mod = RGWRados::ATTRSMOD_REPLACE;
   } else {
     attrs_mod = RGWRados::ATTRSMOD_MERGE;
@@ -1724,7 +1725,8 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
     ldpp_dout(this, 20) << "bulk upload: create_stream for length="
                       << s->length << dendl;
 
-    const size_t conlen = atoll(s->length);
+    const size_t conlen = ceph::parse<size_t>(s->length
+					      .value_or("")).value_or(0);
     return std::unique_ptr<SwiftStreamGetter>(new SwiftStreamGetter(this, s, conlen));
   }
 }
@@ -2300,7 +2302,7 @@ bool RGWFormPost::is_formpost_req(req_state* const s)
   std::string content_type;
   std::map<std::string, std::string> params;
 
-  parse_boundary_params(s->info.env->get("CONTENT_TYPE", ""),
+  parse_boundary_params(string(s->info.env->get("CONTENT_TYPE").value_or("")),
                         content_type, params);
 
   return boost::algorithm::iequals(content_type, "multipart/form-data") &&
@@ -2393,7 +2395,7 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
 
 bool RGWSwiftWebsiteHandler::is_web_mode() const
 {
-  const std::string_view webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
+  const std::string_view webmode = s->info.env->get("HTTP_X_WEB_MODE").value_or("");
   return boost::algorithm::iequals(webmode, "true");
 }
 
@@ -2401,7 +2403,7 @@ bool RGWSwiftWebsiteHandler::can_be_website_req() const
 {
   /* Static website works only with the GET or HEAD method. Nothing more. */
   static const std::set<std::string_view> ws_methods = { "GET", "HEAD" };
-  if (ws_methods.count(s->info.method) == 0) {
+  if (ws_methods.count(s->info.method.value_or("")) == 0) {
     return false;
   }
 
@@ -2466,7 +2468,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_index_op()
   }
 
   auto getop = new RGWGetObj_ObjStore_SWIFT;
-  getop->set_get_data(boost::algorithm::equals("GET", s->info.method));
+  getop->set_get_data("GET" == s->info.method);
 
   return getop;
 }
@@ -3007,7 +3009,9 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
 
   if (req.size()) {
     s->object =
-      rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", "")); /* rgw swift extension */
+      rgw_obj_key(req,
+		  string(s->info.env->get("HTTP_X_OBJECT_VERSION_ID")
+			 .value_or(""))); /* rgw swift extension */
     s->info.effective_uri.append("/" + s->object.name);
   }
 
@@ -3021,7 +3025,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
 
   s->dialect = "swift";
 
-  std::string copy_source = s->info.env->get("HTTP_X_COPY_FROM", "");
+  std::string copy_source(s->info.env->get("HTTP_X_COPY_FROM").value_or(""));
   if (! copy_source.empty()) {
     bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket,
 						  s->src_object);
@@ -3030,7 +3034,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
   }
 
   if (s->op == OP_COPY) {
-    std::string req_dest = s->info.env->get("HTTP_DESTINATION", "");
+    std::string req_dest(s->info.env->get("HTTP_DESTINATION").value_or(""));
     if (req_dest.empty())
       return -ERR_BAD_URL;
 
@@ -3052,7 +3056,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
     s->op = OP_PUT;
   }
 
-  s->info.storage_class = s->info.env->get("HTTP_X_OBJECT_STORAGE_CLASS", "");
+  s->info.storage_class = s->info.env->get("HTTP_X_OBJECT_STORAGE_CLASS").value_or("");
 
   return RGWHandler_REST::init(store, s, cio);
 }

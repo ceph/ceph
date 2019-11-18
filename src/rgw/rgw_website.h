@@ -139,9 +139,9 @@ struct RGWBWRoutingRule
     return condition.check_error_code_condition(error_code);
   }
 
-  void apply_rule(const std::string& default_protocol,
-                  const std::string& default_hostname,
-                  const std::string& key,
+  void apply_rule(std::string_view default_protocol,
+                  std::string_view default_hostname,
+                  std::string_view key,
                   std::string *redirect,
                   int *redirect_code);
 };

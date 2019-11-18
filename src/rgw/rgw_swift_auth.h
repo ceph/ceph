@@ -188,7 +188,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
   std::string get_token(const req_state* const s) const override {
     /* Returning a reference here would end in GCC complaining about a reference
      * to temporary. */
-    return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
+    return std::string(s->info.env->get("HTTP_X_AUTH_TOKEN").value_or(""));
   }
 
   aplptr_t create_apl_remote(CephContext* const cct,

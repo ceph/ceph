@@ -5,8 +5,8 @@
 #include <string>
 #include <boost/optional.hpp>
 
-class rgw_obj;
-class rgw_bucket;
+struct rgw_obj;
+struct rgw_bucket;
 
 namespace rgw {
 

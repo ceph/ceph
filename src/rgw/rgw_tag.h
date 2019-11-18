@@ -41,7 +41,7 @@ protected:
   bool emplace_tag(std::string&& key, std::string&& val);
   int check_and_add_tag(const std::string& key, const std::string& val="");
   size_t count() const {return tag_map.size();}
-  int set_from_string(const std::string& input);
+  int set_from_string(std::string_view input);
   void clear() { tag_map.clear(); }
   bool empty() const noexcept { return tag_map.empty(); }
   const tag_map_t& get_tags() const {return tag_map;}

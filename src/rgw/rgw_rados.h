@@ -68,7 +68,7 @@ static inline void prepend_bucket_marker(const rgw_bucket& bucket, const string&
   }
 }
 
-static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& locator)
+inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& locator)
 {
   const rgw_bucket& bucket = obj.bucket;
   prepend_bucket_marker(bucket, obj.get_oid(), oid);
@@ -677,8 +677,12 @@ public:
     int get_state(RGWObjState **pstate, bool follow_olh, optional_yield y, bool assume_noent = false);
     void invalidate_state();
 
-    int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, optional_yield y);
+    int prepare_atomic_modification(librados::ObjectWriteOperation& op,
+				    bool reset_obj, const string *ptag,
+                                    std::optional<std::string_view> ifmatch,
+				    std::optional<std::string_view> ifnomatch,
+				    bool removal_op, bool modify_tail,
+				    optional_yield y);
     int complete_atomic_modification();
 
   public:
@@ -724,19 +728,17 @@ public:
         rgw_obj obj;
         rgw_raw_obj head_obj;
       } state;
-      
+
       struct ConditionParams {
-        const ceph::real_time *mod_ptr;
-        const ceph::real_time *unmod_ptr;
-        bool high_precision_time;
-        uint32_t mod_zone_id;
-        uint64_t mod_pg_ver;
-        const char *if_match;
-        const char *if_nomatch;
-        
-        ConditionParams() : 
-                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
-                 if_match(NULL), if_nomatch(NULL) {}
+        const ceph::real_time *mod_ptr = nullptr;
+        const ceph::real_time *unmod_ptr = nullptr;
+        bool high_precision_time = false;
+        uint32_t mod_zone_id = 0;
+        uint64_t mod_pg_ver = 0;
+	std::optional<std::string_view> if_match;
+	std::optional<std::string_view> if_nomatch;
+
+        ConditionParams() = default;
       } conds;
 
       struct Params {
@@ -760,7 +762,7 @@ public:
 
     struct Write {
       RGWRados::Object *target;
-      
+
       struct MetaParams {
         ceph::real_time *mtime;
         map<std::string, bufferlist>* rmattrs;
@@ -772,8 +774,8 @@ public:
         rgw_user owner;
         RGWObjCategory category;
         int flags;
-        const char *if_match;
-        const char *if_nomatch;
+	std::optional<std::string_view> if_match;
+	std::optional<std::string_view> if_nomatch;
         std::optional<uint64_t> olh_epoch;
         ceph::real_time delete_at;
         bool canceled;
@@ -785,7 +787,7 @@ public:
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
-                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
+                 canceled(false), user_data(nullptr), zones_trace(nullptr),
                  modify_tail(false),  completeMultipart(false), appendable(false) {}
       } meta;
 
@@ -1086,8 +1088,8 @@ public:
                        const ceph::real_time *mod_ptr,
                        const ceph::real_time *unmod_ptr,
                        bool high_precision_time,
-                       const char *if_match,
-                       const char *if_nomatch,
+		       std::optional<std::string_view> if_match,
+		       std::optional<std::string_view> if_nomatch,
                        AttrsMod attrs_mod,
                        bool copy_if_newer,
                        map<string, bufferlist>& attrs,
@@ -1129,8 +1131,8 @@ public:
                const ceph::real_time *mod_ptr,
                const ceph::real_time *unmod_ptr,
                bool high_precision_time,
-               const char *if_match,
-               const char *if_nomatch,
+               std::optional<std::string_view> if_match,
+               std::optional<std::string_view> if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
                map<std::string, bufferlist>& attrs,

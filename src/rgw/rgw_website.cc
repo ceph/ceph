@@ -14,14 +14,17 @@
  * 
  */
 
+#include "acconfig.h"
+
+#include <cerrno>
+#include <string>
+#include <list>
+
+#include <fmt/format.h>
+
 #include "common/debug.h"
 #include "common/ceph_json.h"
 
-#include "acconfig.h"
-
-#include <errno.h>
-#include <string>
-#include <list>
 #include "include/types.h"
 #include "rgw_website.h"
 
@@ -33,15 +36,17 @@ bool RGWBWRoutingRuleCondition::check_key_condition(const string& key) {
 }
 
 
-void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& default_hostname,
-                                           const string& key, string *new_url, int *redirect_code)
+void RGWBWRoutingRule::apply_rule(std::string_view default_protocol,
+				  std::string_view default_hostname,
+				  std::string_view key, string *new_url,
+				  int *redirect_code)
 {
   RGWRedirectInfo& redirect = redirect_info.redirect;
 
-  string protocol = (!redirect.protocol.empty() ? redirect.protocol : default_protocol);
-  string hostname = (!redirect.hostname.empty() ? redirect.hostname : default_hostname);
+  auto protocol = (!redirect.protocol.empty() ? redirect.protocol : default_protocol);
+  auto hostname = (!redirect.hostname.empty() ? redirect.hostname : default_hostname);
 
-  *new_url = protocol + "://" + hostname + "/";
+  *new_url = fmt::format("{}://{}/", protocol, hostname);
 
   if (!redirect_info.replace_key_prefix_with.empty()) {
     *new_url += redirect_info.replace_key_prefix_with;
@@ -52,8 +57,8 @@ void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& 
     *new_url += key;
   }
 
-  if(redirect.http_redirect_code > 0) 
-	  *redirect_code = redirect.http_redirect_code;
+  if (redirect.http_redirect_code > 0)
+    *redirect_code = redirect.http_redirect_code;
 }
 
 bool RGWBWRoutingRules::check_key_and_error_code_condition(const string &key, int error_code, RGWBWRoutingRule **rule)
@@ -118,7 +123,7 @@ bool RGWBucketWebsiteConf::get_effective_key(const string& key, string *effectiv
   } else if (key[key.size() - 1] == '/') {
     *effective_key = key + index_doc_suffix;
   } else if (! is_file) {
-    *effective_key = key + "/" + index_doc_suffix; 
+    *effective_key = key + "/" + index_doc_suffix;
   } else {
     *effective_key = key;
   }

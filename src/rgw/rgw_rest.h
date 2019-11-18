@@ -709,9 +709,9 @@ extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, const rgw_user& id, string& name,
 		       const char *section = NULL);
-extern void dump_header(struct req_state* s,
-                        std::string_view name,
-                        std::string_view val);
+void dump_header(struct req_state* s,
+		 std::string_view name,
+		 std::string_view val);
 extern void dump_header(struct req_state* s,
                         std::string_view name,
                         ceph::buffer::list& bl);
@@ -782,9 +782,9 @@ static inline std::string compute_domain_uri(const struct req_state *s) {
     std::string uri =
     env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
     if (env.exists("SERVER_NAME")) {
-      uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
+      uri.append(env.get("SERVER_NAME").value_or("<SERVER_NAME>"));
     } else {
-      uri.append(env.get("HTTP_HOST", "<HTTP_HOST>"));
+      uri.append(env.get("HTTP_HOST").value_or("<HTTP_HOST>"));
     }
     return uri;
   }();
@@ -792,7 +792,7 @@ static inline std::string compute_domain_uri(const struct req_state *s) {
 }
 
 extern void dump_content_length(struct req_state *s, uint64_t len);
-extern int64_t parse_content_length(const char *content_length);
+int64_t parse_content_length(std::string_view);
 extern void dump_etag(struct req_state *s,
                       std::string_view etag,
                       bool quoted = false);
@@ -810,11 +810,13 @@ extern std::string dump_time_to_str(const real_time& t);
 extern void dump_bucket_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);
 extern bool is_valid_url(const char *url);
-extern void dump_access_control(struct req_state *s, const char *origin,
-				const char *meth,
-				const char *hdr, const char *exp_hdr,
-				uint32_t max_age);
-extern void dump_access_control(req_state *s, RGWOp *op);
+void dump_access_control(struct req_state *s,
+			 std::optional<std::string_view> origin,
+			 std::optional<std::string_view> meth,
+			 std::optional<std::string_view> hdr,
+			 std::optional<std::string_view> exp_hdr,
+			 uint32_t max_age);
+void dump_access_control(req_state *s, RGWOp *op);
 
 extern int dump_body(struct req_state* s, const char* buf, size_t len);
 extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);

@@ -335,6 +335,7 @@ void dump_header(struct req_state* const s,
   }
 }
 
+
 void dump_header(struct req_state* const s,
                  std::string_view name,
                  ceph::buffer::list& bl)
@@ -489,29 +490,31 @@ void dump_owner(struct req_state *s, const rgw_user& id, string& name,
   s->formatter->close_section();
 }
 
-void dump_access_control(struct req_state *s, const char *origin,
-			 const char *meth,
-			 const char *hdr, const char *exp_hdr,
+void dump_access_control(struct req_state *s,
+			 std::optional<std::string_view> origin,
+			 std::optional<std::string_view> meth,
+			 std::optional<std::string_view> hdr,
+			 std::optional<std::string_view> exp_hdr,
 			 uint32_t max_age) {
-  if (origin && (origin[0] != '\0')) {
-    dump_header(s, "Access-Control-Allow-Origin", origin);
+  if (origin && !origin->empty()) {
+    dump_header(s, "Access-Control-Allow-Origin", *origin);
     /* If the server specifies an origin host rather than "*",
      * then it must also include Origin in the Vary response header
      * to indicate to clients that server responses will differ
      * based on the value of the Origin request header.
      */
-    if (strcmp(origin, "*") != 0) {
+    if (*origin != "*") {
       dump_header(s, "Vary", "Origin");
     }
 
-    if (meth && (meth[0] != '\0')) {
-      dump_header(s, "Access-Control-Allow-Methods", meth);
+    if (meth && !meth->empty()) {
+      dump_header(s, "Access-Control-Allow-Methods", *meth);
     }
-    if (hdr && (hdr[0] != '\0')) {
-      dump_header(s, "Access-Control-Allow-Headers", hdr);
+    if (hdr && !hdr->empty()) {
+      dump_header(s, "Access-Control-Allow-Headers", *hdr);
     }
-    if (exp_hdr && (exp_hdr[0] != '\0')) {
-      dump_header(s, "Access-Control-Expose-Headers", exp_hdr);
+    if (exp_hdr && !exp_hdr->empty()) {
+      dump_header(s, "Access-Control-Expose-Headers", *exp_hdr);
     }
     if (max_age != CORS_MAX_AGE_INVALID) {
       dump_header(s, "Access-Control-Max-Age", max_age);
@@ -787,8 +790,8 @@ int RGWGetObj_ObjStore::get_params()
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   if (s->system_request) {
-    mod_zone_id = s->info.env->get_int("HTTP_DEST_ZONE_SHORT_ID", 0);
-    mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
+    mod_zone_id = s->info.env->get_int("HTTP_DEST_ZONE_SHORT_ID").value_or(0);
+    mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER").value_or(0);
     rgwx_stat = s->info.args.exists(RGW_SYS_PARAM_PREFIX "stat");
     get_data &= (!rgwx_stat);
   }
@@ -999,7 +1002,7 @@ void RGWRESTFlusher::do_flush()
 int RGWPutObj_ObjStore::verify_params()
 {
   if (s->length) {
-    off_t len = atoll(s->length);
+    auto len = ceph::parse<off_t>(*s->length).value_or(0);
     if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
       return -ERR_TOO_LARGE;
     }
@@ -1033,7 +1036,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   size_t cl;
   uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
   if (s->length) {
-    cl = atoll(s->length) - ofs;
+    cl = ceph::parse<size_t>(*s->length).value_or(0) - ofs;
     if (cl > chunk_size)
       cl = chunk_size;
   } else {
@@ -1376,8 +1379,8 @@ int RGWPostObj_ObjStore::verify_params()
   if (!s->length) {
     return -ERR_LENGTH_REQUIRED;
   }
-  off_t len = atoll(s->length);
-  if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
+  auto len = ceph::parse<off_t>(*s->length).value_or(0);
+  if (len > off_t(s->cct->_conf->rgw_max_put_size)) {
     return -ERR_TOO_LARGE;
   }
 
@@ -1396,7 +1399,8 @@ int RGWPostObj_ObjStore::get_params()
     s->expect_cont = false;
   }
 
-  std::string req_content_type_str = s->info.env->get("CONTENT_TYPE", "");
+  std::string req_content_type_str
+    = std::string(s->info.env->get("CONTENT_TYPE").value_or(""));
   std::string req_content_type;
   std::map<std::string, std::string> params;
   parse_boundary_params(req_content_type_str, req_content_type, params);
@@ -1507,7 +1511,7 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
   bufferlist bl;
 
   if (s->length)
-    cl = atoll(s->length);
+    cl = ceph::parse<size_t>(*s->length).value_or(0);
   else if (!allow_chunked)
     return std::make_tuple(-ERR_LENGTH_REQUIRED, std::move(bl));
 
@@ -1517,7 +1521,7 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
     }
 
     bufferptr bp(cl + 1);
-  
+
     len = recv_body(s, bp.c_str(), cl);
     if (len < 0) {
       return std::make_tuple(len, std::move(bl));
@@ -1528,8 +1532,8 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
     bl.append(bp);
 
   } else if (allow_chunked && !s->length) {
-    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
-    if (!encoding || strcmp(encoding, "chunked") != 0)
+    auto encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || encoding == "chunked"sv)
       return std::make_tuple(-ERR_LENGTH_REQUIRED, std::move(bl));
 
     int ret = 0;
@@ -1692,12 +1696,13 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
     } else if (format_str.compare("html") == 0) {
       type = RGW_FORMAT_HTML;
     } else {
-      const char *accept = s->info.env->get("HTTP_ACCEPT");
+      auto accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
         char format_buf[64];
         unsigned int i = 0;
-        for (; i < sizeof(format_buf) - 1 && accept[i] && accept[i] != ';'; ++i) {
-          format_buf[i] = accept[i];
+        for (;i < sizeof(format_buf) - 1 && (*accept)[i] && (*accept)[i] != ';';
+	     ++i) {
+	  format_buf[i] = (*accept)[i];
         }
         format_buf[i] = 0;
         if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
@@ -1808,23 +1813,23 @@ int RGWHandler_REST::validate_object_name(const string& object)
   return 0;
 }
 
-static http_op op_from_method(const char *method)
+static http_op op_from_method(std::optional<std::string_view> method)
 {
   if (!method)
     return OP_UNKNOWN;
-  if (strcmp(method, "GET") == 0)
+  if (*method == "GET"sv)
     return OP_GET;
-  if (strcmp(method, "PUT") == 0)
+  if (*method == "PUT")
     return OP_PUT;
-  if (strcmp(method, "DELETE") == 0)
+  if (*method == "DELETE")
     return OP_DELETE;
-  if (strcmp(method, "HEAD") == 0)
+  if (*method == "HEAD")
     return OP_HEAD;
-  if (strcmp(method, "POST") == 0)
+  if (*method == "POST")
     return OP_POST;
-  if (strcmp(method, "COPY") == 0)
+  if (*method == "COPY")
     return OP_COPY;
-  if (strcmp(method, "OPTIONS") == 0)
+  if (*method == "OPTIONS")
     return OP_OPTIONS;
 
   return OP_UNKNOWN;
@@ -1981,21 +1986,13 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
-int64_t parse_content_length(const char *content_length)
+int64_t parse_content_length(std::string_view content_length)
 {
-  int64_t len = -1;
-
-  if (*content_length == '\0') {
-    len = 0;
-  } else {
-    string err;
-    len = strict_strtoll(content_length, 10, &err);
-    if (!err.empty()) {
-      len = -1;
-    }
+  if (content_length.empty()) {
+    return 0;
   }
 
-  return len;
+  return ceph::parse<int64_t>(content_length).value_or(-1);
 }
 
 int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
@@ -2184,8 +2181,8 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
    * nginx/lighttpd/apache setting BOTH headers. As a result, we have to check
    * both headers and can't always simply pick A or B.
    */
-  const char* content_length = info.env->get("CONTENT_LENGTH");
-  const char* http_content_length = info.env->get("HTTP_CONTENT_LENGTH");
+  auto content_length = info.env->get("CONTENT_LENGTH");
+  auto http_content_length = info.env->get("HTTP_CONTENT_LENGTH");
   if (!http_content_length != !content_length) {
     /* Easy case: one or the other is missing */
     s->length = (content_length ? content_length : http_content_length);
@@ -2194,8 +2191,8 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     /* Hard case: Both are set, we have to disambiguate */
     int64_t content_length_i, http_content_length_i;
 
-    content_length_i = parse_content_length(content_length);
-    http_content_length_i = parse_content_length(http_content_length);
+    content_length_i = parse_content_length(*content_length);
+    http_content_length_i = parse_content_length(*http_content_length);
 
     // Now check them:
     if (http_content_length_i < 0) {
@@ -2218,19 +2215,19 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     // http_content_length)
   } else {
     /* no content length was defined */
-    s->length = NULL;
+    s->length = nullptr;
   }
 
   if (s->length) {
-    if (*s->length == '\0') {
+    if (s->length->empty()) {
       s->content_length = 0;
     } else {
-      string err;
-      s->content_length = strict_strtoll(s->length, 10, &err);
-      if (!err.empty()) {
+      auto cl = ceph::parse<long long>(*s->length);
+      if (!cl) {
 	ldout(s->cct, 10) << "bad content length, aborting" << dendl;
 	return -EINVAL;
       }
+      s->content_length = *cl;
     }
   }
 
@@ -2242,15 +2239,15 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   map<string, string>::iterator giter;
   for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end();
        ++giter) {
-    const char *env = info.env->get(giter->first.c_str());
+    auto env = info.env->get(giter->first);
     if (env) {
-      s->generic_attrs[giter->second] = env;
+      s->generic_attrs[giter->second] = *env;
     }
   }
 
   if (g_conf()->rgw_print_continue) {
-    const char *expect = info.env->get("HTTP_EXPECT");
-    s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
+    auto expect = info.env->get("HTTP_EXPECT");
+    s->expect_cont = (expect && !stringcasecmp(*expect, "100-continue"));
   }
   s->op = op_from_method(info.method);
 

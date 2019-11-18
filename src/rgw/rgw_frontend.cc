@@ -32,11 +32,12 @@ int RGWFrontendConfig::parse_config(const string& config,
       continue;
     }
 
-    int ret = parse_key_value(entry, key, val);
-    if (ret < 0) {
+    auto kv = parse_key_value(entry);
+    if (!kv) {
       cerr << "ERROR: can't parse " << entry << std::endl;
-      return ret;
+      return -EINVAL;
     }
+    std::tie(key, val) = std::move(*kv);
 
     dout(0) << "framework conf key: " << key << ", val: " << val << dendl;
     config_map.emplace(std::move(key), std::move(val));

@@ -24,6 +24,7 @@
 #include "common/debug.h"
 #include "include/str_list.h"
 #include "common/Formatter.h"
+#include "common/str_util.h"
 
 #include "rgw_cors.h"
 
@@ -67,32 +68,26 @@ void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty) {
  *
  * @todo When UTF-8 is allowed in HTTP headers, this function will need to change
  */
-string lowercase_http_attr(const string& orig)
+static std::string lowercase_http_attr(std::string_view orig)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-	buf[i] = tolower(*s);
-  }
-  return string(buf);
+  return ceph::transform(orig, [](char c) { return char(std::tolower(c)); });
 }
 
 
-static bool is_string_in_set(set<string>& s, string h) {
-  if ((s.find("*") != s.end()) || 
-          (s.find(h) != s.end())) {
+static bool is_string_in_set(const set<string, std::less<>>& s,
+			     std::string_view h)
+{
+  if ((s.find("*") != s.end()) ||
+      (s.find(h) != s.end())) {
     return true;
   }
   /* The header can be Content-*-type, or Content-* */
-  for(set<string>::iterator it = s.begin();
-      it != s.end(); ++it) {
+  for(auto it = s.begin(); it != s.end(); ++it) {
     size_t off;
     if ((off = (*it).find("*"))!=string::npos) {
       list<string> ssplit;
       unsigned flen = 0;
-      
+
       get_str_list((*it), "* \t", ssplit);
       if (off != 0) {
         string sl = ssplit.front();
@@ -126,20 +121,18 @@ bool RGWCORSRule::has_wildcard_origin() {
   return false;
 }
 
-bool RGWCORSRule::is_origin_present(const char *o) {
-  string origin = o;
-  return is_string_in_set(allowed_origins, origin);
+bool RGWCORSRule::is_origin_present(std::string_view o)
+{
+  return is_string_in_set(allowed_origins, o);
 }
 
-bool RGWCORSRule::is_header_allowed(const char *h, size_t len) {
-  string hdr(h, len);
-  if(lowercase_allowed_hdrs.empty()) {
-    set<string>::iterator iter;
-    for (iter = allowed_hdrs.begin(); iter != allowed_hdrs.end(); ++iter) {
+bool RGWCORSRule::is_header_allowed(std::string_view h) {
+  if (lowercase_allowed_hdrs.empty()) {
+    for (auto iter = allowed_hdrs.begin(); iter != allowed_hdrs.end(); ++iter) {
       lowercase_allowed_hdrs.insert(lowercase_http_attr(*iter));
     }
   }
-  return is_string_in_set(lowercase_allowed_hdrs, lowercase_http_attr(hdr));
+  return is_string_in_set(lowercase_allowed_hdrs, lowercase_http_attr(h));
 }
 
 void RGWCORSRule::format_exp_headers(string& s) {
@@ -152,14 +145,14 @@ void RGWCORSRule::format_exp_headers(string& s) {
   }
 }
 
-RGWCORSRule * RGWCORSConfiguration::host_name_rule(const char *origin) {
-  for(list<RGWCORSRule>::iterator it_r = rules.begin(); 
-      it_r != rules.end(); ++it_r) {
+RGWCORSRule* RGWCORSConfiguration::host_name_rule(std::string_view origin)
+{
+  for(auto it_r = rules.begin(); it_r != rules.end(); ++it_r) {
     RGWCORSRule& r = (*it_r);
     if (r.is_origin_present(origin))
       return &r;
   }
-  return NULL;
+  return nullptr;
 }
 
 void RGWCORSConfiguration::erase_host_name_rule(string& origin) {

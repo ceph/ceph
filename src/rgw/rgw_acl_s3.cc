@@ -282,12 +282,11 @@ struct s3_acl_header {
   const char *http_header;
 };
 
-static const char *get_acl_header(const RGWEnv *env,
-        const struct s3_acl_header *perm)
+static std::optional<std::string_view>
+get_acl_header(const RGWEnv *env,
+	       const struct s3_acl_header *perm)
 {
-  const char *header = perm->http_header;
-
-  return env->get(header, NULL);
+  return env->get(perm->http_header);
 }
 
 static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
@@ -299,9 +298,12 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
 
   RGWUserInfo info;
 
-  ret = parse_key_value(grantee_str, id_type, id_val_quoted);
-  if (ret < 0)
-    return ret;
+
+  auto kv = parse_key_value(std::string_view(grantee_str));
+  if (!kv)
+    return -EINVAL;
+
+  std::tie(id_type, id_val_quoted) = *kv;
 
   string id_val = rgw_trim_quotes(id_val_quoted);
 
@@ -337,11 +339,11 @@ static int parse_acl_header(RGWUserCtl *user_ctl, const RGWEnv *env,
   std::list<string> grantees;
   std::string hacl_str;
 
-  const char *hacl = get_acl_header(env, perm);
-  if (hacl == NULL)
+  auto hacl = get_acl_header(env, perm);
+  if (!hacl)
     return 0;
 
-  hacl_str = hacl;
+  hacl_str = *hacl;
   get_str_list(hacl_str, ",", grantees);
 
   for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {

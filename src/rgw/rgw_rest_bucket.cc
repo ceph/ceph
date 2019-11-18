@@ -276,8 +276,8 @@ void RGWOp_Set_Bucket_Quota::execute()
   if (s->content_length > 0) {
     use_http_params = false;
   } else {
-    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
-    use_http_params = (!encoding || strcmp(encoding, "chunked") != 0);
+    auto encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    use_http_params = (!encoding || *encoding == "chunked");
   }
   RGWQuotaInfo quota;
   if (!use_http_params) {

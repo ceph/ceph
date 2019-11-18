@@ -140,7 +140,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const 
   map<string, string> meta_map;
   map<string, string> sub_resources;
 
-  rgw_create_s3_canonical_header(method.c_str(), NULL, NULL, date_str.c_str(),
+  rgw_create_s3_canonical_header(method, std::nullopt, std::nullopt, date_str.c_str(),
 				 meta_map, meta_map, url.c_str(), sub_resources,
 				 canonical_header);
 
@@ -320,7 +320,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     set_send_length(inbl->length());
   }
 
-  method = new_info.method;
+  method = new_info.method.value_or("");
   url = new_url;
 
   int r = process(null_yield);
@@ -764,7 +764,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
   }
   
 
-  method = new_info.method;
+  method = new_info.method.value_or("");
   url = headers_gen.get_url();
 
   return 0;

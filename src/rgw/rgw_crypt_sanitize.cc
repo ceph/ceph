@@ -65,7 +65,7 @@ std::ostream& operator<<(std::ostream& out, const s3_policy& x) {
 
 std::ostream& operator<<(std::ostream& out, const auth& x) {
   if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
-      x.s->info.env->get(HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY, nullptr) != nullptr)
+      x.s->info.env->exists(HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY))
   {
     out << suppression_message;
     return out;

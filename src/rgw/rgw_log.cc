@@ -21,9 +21,9 @@
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
-  const char *p = s->info.env->get(name);
+  auto p = s->info.env->get(name);
   if (p)
-    str = p;
+    str = *p;
 }
 
 string render_log_object_name(const string& format,
@@ -367,27 +367,26 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     set_param_str(s, "HTTP_REFERER", entry.referrer);
 
   std::string uri;
-  if (s->info.env->exists("REQUEST_METHOD")) {
-    uri.append(s->info.env->get("REQUEST_METHOD"));
+  if (auto rm = s->info.env->get("REQUEST_METHOD")) {
+    uri.append(*rm);
     uri.append(" ");
   }
 
-  if (s->info.env->exists("REQUEST_URI")) {
-    uri.append(s->info.env->get("REQUEST_URI"));
+  if (auto x = s->info.env->get("REQUEST_URI")) {
+    uri.append(*x);
   }
 
-  if (s->info.env->exists("QUERY_STRING")) {
-    const char* qs = s->info.env->get("QUERY_STRING");
-    if(qs && (*qs != '\0')) {
+  if (auto qs = s->info.env->get("QUERY_STRING")) {
+    if (!qs->empty()) {
       uri.append("?");
-      uri.append(qs);
+      uri.append(*qs);
     }
   }
 
-  if (s->info.env->exists("HTTP_VERSION")) {
+  if (auto hv = s->info.env->get("HTTP_VERSION")) {
     uri.append(" ");
     uri.append("HTTP/");
-    uri.append(s->info.env->get("HTTP_VERSION"));
+    uri.append(*hv);
   }
 
   entry.uri = std::move(uri);

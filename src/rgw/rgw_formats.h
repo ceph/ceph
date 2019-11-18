@@ -7,9 +7,13 @@
 #include "common/Formatter.h"
 
 #include <list>
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 #include <ostream>
+
+#include "common/Formatter.h"
+
+#include "cls/rgw/cls_rgw_types.h"
 
 struct plain_stack_entry {
   int size;
@@ -20,7 +24,7 @@ struct plain_stack_entry {
  * FIXME: This was a hack to send certain swift messages.
  * There is a much better way to do this.
  */
-class RGWFormatter_Plain : public Formatter {
+class RGWFormatter_Plain : public ceph::Formatter {
   void reset_buf();
 public:
   explicit RGWFormatter_Plain(bool use_kv = false);
@@ -30,7 +34,7 @@ public:
   void output_header() override {};
   void output_footer() override {};
   void enable_line_break() override {};
-  void flush(ostream& os) override;
+  void flush(std::ostream& os) override;
   void reset() override;
 
   void open_array_section(const char *name) override;

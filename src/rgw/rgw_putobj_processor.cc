@@ -277,8 +277,8 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     ceph::real_time set_mtime,
                                     std::map<std::string, bufferlist>& attrs,
                                     ceph::real_time delete_at,
-                                    const char *if_match,
-                                    const char *if_nomatch,
+                                    std::optional<std::string_view> if_match,
+                                    std::optional<std::string_view> if_nomatch,
                                     const std::string *user_data,
                                     rgw_zone_set *zones_trace,
                                     bool *pcanceled, optional_yield y)
@@ -415,8 +415,8 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        ceph::real_time set_mtime,
                                        std::map<std::string, bufferlist>& attrs,
                                        ceph::real_time delete_at,
-                                       const char *if_match,
-                                       const char *if_nomatch,
+				       std::optional<std::string_view> if_match,
+				       std::optional<std::string_view> if_nomatch,
                                        const std::string *user_data,
                                        rgw_zone_set *zones_trace,
                                        bool *pcanceled, optional_yield y)
@@ -557,7 +557,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
     //get the current obj etag
     iter = astate->attrset.find(RGW_ATTR_ETAG);
     if (iter != astate->attrset.end()) {
-      string s = rgw_string_unquote(iter->second.c_str());
+      auto s = rgw_string_unquote(iter->second.to_string_view());
       size_t pos = s.find("-");
       cur_etag = s.substr(0, pos);
     }
@@ -594,10 +594,15 @@ int AppendObjectProcessor::prepare(optional_yield y)
   return 0;
 }
 
-int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, ceph::real_time *mtime,
-                                    ceph::real_time set_mtime, map <string, bufferlist> &attrs,
-                                    ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
-                                    const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
+int AppendObjectProcessor::complete(size_t accounted_size, const string &etag,
+				    ceph::real_time *mtime,
+				    ceph::real_time set_mtime,
+				    map <string, bufferlist> &attrs,
+                                    ceph::real_time delete_at,
+				    std::optional<std::string_view> if_match,
+				    std::optional<std::string_view> if_nomatch,
+				    const string *user_data,
+				    rgw_zone_set *zones_trace, bool *pcanceled,
                                     optional_yield y)
 {
   int r = writer.drain();

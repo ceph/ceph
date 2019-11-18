@@ -7,6 +7,8 @@
 #include <common/errno.h>
 #include <boost/algorithm/string.hpp>
 
+#include "common/str_util.h"
+
 #include "rgw_tag.h"
 #include "rgw_common.h"
 
@@ -34,22 +36,22 @@ int RGWObjTags::check_and_add_tag(const string&key, const string& val){
   return 0;
 }
 
-int RGWObjTags::set_from_string(const string& input){
-  int ret=0;
-  vector <string> kvs;
-  boost::split(kvs, input, boost::is_any_of("&"));
-  for (const auto& kv: kvs){
-    auto p = kv.find("=");
-    string key,val;
-    if (p != string::npos) {
-      ret = check_and_add_tag(url_decode(kv.substr(0,p)),
-                              url_decode(kv.substr(p+1)));
-    } else {
-      ret = check_and_add_tag(url_decode(kv));
-    }
-
-    if (ret < 0)
-      return ret;
-  }
+int RGWObjTags::set_from_string(std::string_view input) {
+  int ret = 0;
+  ceph::substr_do(
+    input,
+    [&](auto&& kv) {
+      auto p = kv.find("=");
+      std::string_view key, val;
+      if (p != string::npos) {
+	ret = check_and_add_tag(url_decode(kv.substr(0, p)),
+				url_decode(kv.substr(p + 1)));
+      } else {
+	ret = check_and_add_tag(url_decode(kv));
+      }
+      if (ret < 0)
+	return ceph::cf::stop;
+      return ceph::cf::go;
+    }, "&"sv);
   return ret;
 }
