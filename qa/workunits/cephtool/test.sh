@@ -858,8 +858,8 @@ function test_mds_tell()
   fi
 
   remove_all_fs
-  ceph osd pool create fs_data 10
-  ceph osd pool create fs_metadata 10
+  ceph osd pool create fs_data 16
+  ceph osd pool create fs_metadata 16
   ceph fs new $FS_NAME fs_metadata fs_data
   wait_mds_active $FS_NAME
 
@@ -900,8 +900,8 @@ function test_mon_mds()
   local FS_NAME=cephfs
   remove_all_fs
 
-  ceph osd pool create fs_data 10
-  ceph osd pool create fs_metadata 10
+  ceph osd pool create fs_data 16
+  ceph osd pool create fs_metadata 16
   ceph fs new $FS_NAME fs_metadata fs_data
 
   ceph fs set $FS_NAME cluster_down true
@@ -930,8 +930,8 @@ function test_mon_mds()
   [ -s $mdsmapfile ]
   rm $mdsmapfile
 
-  ceph osd pool create data2 10
-  ceph osd pool create data3 10
+  ceph osd pool create data2 16
+  ceph osd pool create data3 16
   data2_pool=$(ceph osd dump | grep "pool.*'data2'" | awk '{print $2;}')
   data3_pool=$(ceph osd dump | grep "pool.*'data3'" | awk '{print $2;}')
   ceph fs add_data_pool cephfs $data2_pool
@@ -973,7 +973,7 @@ function test_mon_mds()
 
   # we should never be able to add EC pools as data or metadata pools
   # create an ec-pool...
-  ceph osd pool create mds-ec-pool 10 10 erasure
+  ceph osd pool create mds-ec-pool 16 16 erasure
   set +e
   ceph fs add_data_pool cephfs mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
@@ -997,8 +997,8 @@ function test_mon_mds()
   ceph fs reset $FS_NAME --yes-i-really-mean-it
 
   # Check that creating a second FS fails by default
-  ceph osd pool create fs_metadata2 10
-  ceph osd pool create fs_data2 10
+  ceph osd pool create fs_metadata2 16
+  ceph osd pool create fs_data2 16
   set +e
   expect_false ceph fs new cephfs2 fs_metadata2 fs_data2
   set -e
@@ -1834,7 +1834,7 @@ function test_mon_osd()
   ceph osd setmaxosd $save
 
   ceph osd ls
-  ceph osd pool create data 10
+  ceph osd pool create data 16
   ceph osd pool application enable data rados
   ceph osd lspools | grep data
   ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
@@ -1898,7 +1898,7 @@ function test_mon_osd_pool()
   #
   # osd pool
   #
-  ceph osd pool create data 10
+  ceph osd pool create data 16
   ceph osd pool application enable data rados
   ceph osd pool mksnap data datasnap
   rados -p data lssnap | grep datasnap
@@ -1906,19 +1906,19 @@ function test_mon_osd_pool()
   expect_false ceph osd pool rmsnap pool_fake snapshot
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
-  ceph osd pool create data2 10
+  ceph osd pool create data2 16
   ceph osd pool application enable data2 rados
   ceph osd pool rename data2 data3
   ceph osd lspools | grep data3
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 
-  ceph osd pool create replicated 12 12 replicated
-  ceph osd pool create replicated 12 12 replicated
-  ceph osd pool create replicated 12 12 # default is replicated
-  ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
+  ceph osd pool create replicated 16 16 replicated
+  ceph osd pool create replicated 1 16 replicated
+  ceph osd pool create replicated 16 16 # default is replicated
+  ceph osd pool create replicated 16    # default is replicated, pgp_num = pg_num
   ceph osd pool application enable replicated rados
   # should fail because the type is not the same
-  expect_false ceph osd pool create replicated 12 12 erasure
+  expect_false ceph osd pool create replicated 16 16 erasure
   ceph osd lspools | grep replicated
   ceph osd pool create ec_test 1 1 erasure
   ceph osd pool application enable ec_test rados
@@ -1939,7 +1939,7 @@ function test_mon_osd_pool()
   ceph osd erasure-code-profile set foo foo
   ceph osd erasure-code-profile ls | grep foo
   ceph osd crush rule create-erasure foo foo
-  ceph osd pool create erasure 12 12 erasure foo
+  ceph osd pool create erasure 16 16 erasure foo
   expect_false ceph osd erasure-code-profile rm foo
   ceph osd pool delete erasure erasure --yes-i-really-really-mean-it
   ceph osd crush rule rm foo
@@ -1954,7 +1954,7 @@ function test_mon_osd_pool_quota()
   #
 
   # create tmp pool
-  ceph osd pool create tmp-quota-pool 36
+  ceph osd pool create tmp-quota-pool 32
   ceph osd pool application enable tmp-quota-pool rados
   #
   # set erroneous quotas
@@ -2617,7 +2617,7 @@ function test_mon_cephdf_commands()
 
 function test_mon_pool_application()
 {
-  ceph osd pool create app_for_test 10
+  ceph osd pool create app_for_test 16
 
   ceph osd pool application enable app_for_test rbd
   expect_false ceph osd pool application enable app_for_test rgw
@@ -2691,8 +2691,8 @@ function test_mds_tell_help_command()
   fi
 
   remove_all_fs
-  ceph osd pool create fs_data 10
-  ceph osd pool create fs_metadata 10
+  ceph osd pool create fs_data 16
+  ceph osd pool create fs_metadata 16
   ceph fs new $FS_NAME fs_metadata fs_data
   wait_mds_active $FS_NAME
 
@@ -2719,8 +2719,8 @@ function test_mgr_devices()
 
 function test_per_pool_scrub_status()
 {
-  ceph osd pool create noscrub_pool 12
-  ceph osd pool create noscrub_pool2 12
+  ceph osd pool create noscrub_pool 16
+  ceph osd pool create noscrub_pool2 16
   ceph -s | expect_false grep -q "Some pool(s) have the.*scrub.* flag(s) set"
   ceph -s --format json | \
     jq .health.checks.POOL_SCRUB_FLAGS.summary.message | \
@@ -2893,7 +2893,7 @@ if [[ $do_list -eq 1 ]]; then
   exit 0
 fi
 
-ceph osd pool create rbd 10
+ceph osd pool create rbd 16
 
 if test -z "$tests_to_run" ; then
   tests_to_run="$TESTS"
