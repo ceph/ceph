@@ -29,7 +29,7 @@ public:
   ScrubHeader(std::string_view tag_, bool is_tag_internal_, bool force_,
               bool recursive_, bool repair_, Formatter *f_)
     : tag(tag_), is_tag_internal(is_tag_internal_), force(force_),
-      recursive(recursive_), repair(repair_), formatter(f_), origin(nullptr)
+      recursive(recursive_), repair(repair_), formatter(f_)
   {
     ceph_assert(formatter != nullptr);
   }
@@ -56,7 +56,7 @@ protected:
   const bool recursive;
   const bool repair;
   Formatter * const formatter;
-  CInode *origin;
+  CInode *origin = nullptr;
 
   bool repaired = false;  // May be set during scrub if repairs happened
 };
