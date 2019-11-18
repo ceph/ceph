@@ -24,6 +24,8 @@
 namespace librbd {
 namespace operation {
 
+using util::create_context_callback;
+
 template <typename I>
 void RebuildObjectMapRequest<I>::send() {
   send_resize_object_map();
