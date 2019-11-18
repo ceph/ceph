@@ -45,6 +45,7 @@ groups:
           description: One or more OSDs down for more than 15 minutes.
       - alert: OSDs near full
         expr: ((ceph_osd_stat_bytes_used / ceph_osd_stat_bytes) and on(ceph_daemon) ceph_osd_up == 1) > 0.8
+        for: 5m
         labels:
           severity: critical
           type: ceph_default
