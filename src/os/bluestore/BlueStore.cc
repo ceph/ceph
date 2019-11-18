@@ -50,6 +50,9 @@
 #include "tracing/bluestore.h"
 #undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #undef TRACEPOINT_DEFINE
+#undef _DEFINE_TRACEPOINT
+#define _DEFINE_TRACEPOINT(_provider, _name, _args)
+#include "tracing/objectstore.h"
 #else
 #define tracepoint(...)
 #endif
@@ -9247,20 +9250,19 @@ void BlueStore::set_collection_commit_queue(
 
 bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
+  tracepoint(objectstore, exists_enter, oid.hobj.oid.name.c_str());
   Collection *c = static_cast<Collection *>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
-  if (!c->exists)
-    return false;
-
   bool r = true;
-
-  {
+  if (!c->exists) {
+    r = false;
+  } else {
     std::shared_lock l(c->lock);
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists)
       r = false;
   }
-
+  tracepoint(objectstore, exists_exit, r);
   return r;
 }
 
@@ -9270,27 +9272,29 @@ int BlueStore::stat(
   struct stat *st,
   bool allow_eio)
 {
+  int r = 0;
+  tracepoint(objectstore, stat_enter, oid.hobj.oid.name.c_str());
   Collection *c = static_cast<Collection *>(c_.get());
-  if (!c->exists)
-    return -ENOENT;
-  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
-
-  {
+  if (!c->exists) {
+    r = -ENOENT;
+  } else {
+    dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
     std::shared_lock l(c->lock);
     OnodeRef o = c->get_onode(oid, false);
-    if (!o || !o->exists)
-      return -ENOENT;
-    st->st_size = o->onode.size;
-    st->st_blksize = 4096;
-    st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
-    st->st_nlink = 1;
+    if (!o || !o->exists) {
+      r = -ENOENT;
+    } else {
+      st->st_size = o->onode.size;
+      st->st_blksize = 4096;
+      st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
+      st->st_nlink = 1;
+    }
   }
-
-  int r = 0;
   if (_debug_mdata_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   }
+  tracepoint(objectstore, stat_exit, r);
   return r;
 }
 int BlueStore::set_collection_opts(
@@ -9314,17 +9318,20 @@ int BlueStore::read(
   bufferlist& bl,
   uint32_t op_flags)
 {
+  tracepoint(objectstore, read_enter, oid.hobj.oid.name.c_str(), offset, length);
   auto start = mono_clock::now();
   Collection *c = static_cast<Collection *>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  int r;
+  if (!c->exists) {
+    r = -ENOENT;
+    goto out2;
+  }
 
   bl.clear();
-  int r;
   {
     std::shared_lock l(c->lock);
     auto start1 = mono_clock::now();
@@ -9365,6 +9372,8 @@ int BlueStore::read(
     l_bluestore_read_lat,
     mono_clock::now() - start,
     cct->_conf->bluestore_log_op_age);
+ out2:
+  tracepoint(objectstore, read_exit, r);
   return r;
 }
 
@@ -9837,15 +9846,20 @@ int BlueStore::_fiemap(
   size_t length,
   interval_set<uint64_t>& destset)
 {
+  int r = 0;
+  tracepoint(objectstore, fiemap_enter, oid.hobj.oid.name.c_str(), offset, length);
   Collection *c = static_cast<Collection *>(c_.get());
-  if (!c->exists)
-    return -ENOENT;
+  if (!c->exists) {
+    r = -ENOENT;
+    goto out;
+  }
   {
     std::shared_lock l(c->lock);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
-      return -ENOENT;
+      r = -ENOENT;
+      goto out;
     }
     _dump_onode<30>(cct, *o);
 
@@ -9896,7 +9910,8 @@ int BlueStore::_fiemap(
  out:
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size = 0x(" << destset << ")" << std::dec << dendl;
-  return 0;
+  tracepoint(objectstore, fiemap_exit, r);
+  return r;
 }
 
 int BlueStore::fiemap(
@@ -10142,12 +10157,14 @@ int BlueStore::getattr(
   const char *name,
   bufferptr& value)
 {
+  tracepoint(objectstore, getattr_enter, oid.hobj.oid.name.c_str());
+  int r = 0;
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->cid << " " << oid << " " << name << dendl;
-  if (!c->exists)
-    return -ENOENT;
-
-  int r;
+  if (!c->exists) {
+    r = -ENOENT;
+    goto out;
+  }
   {
     std::shared_lock l(c->lock);
     mempool::bluestore_cache_other::string k(name);
@@ -10172,6 +10189,7 @@ int BlueStore::getattr(
   }
   dout(10) << __func__ << " " << c->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
+  tracepoint(objectstore, getattr_exit, r);
   return r;
 }
 
@@ -10180,12 +10198,14 @@ int BlueStore::getattrs(
   const ghobject_t& oid,
   map<string,bufferptr>& aset)
 {
+  tracepoint(objectstore, getattrs_enter, oid.hobj.oid.name.c_str());
+  int r = 0;
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
-
-  int r;
+  if (!c->exists) {
+    r = -ENOENT;
+    goto out;
+  }
   {
     std::shared_lock l(c->lock);
 
@@ -10207,28 +10227,38 @@ int BlueStore::getattrs(
   }
   dout(10) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
+  tracepoint(objectstore, getattrs_exit, r);
   return r;
 }
 
 int BlueStore::list_collections(vector<coll_t>& ls)
 {
+  tracepoint(objectstore, list_collections_enter);
   std::shared_lock l(coll_lock);
   ls.reserve(coll_map.size());
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
        p != coll_map.end();
        ++p)
     ls.push_back(p->first);
+  tracepoint(objectstore, list_collections_exit, 0);
   return 0;
 }
 
 bool BlueStore::collection_exists(const coll_t& c)
 {
-  std::shared_lock l(coll_lock);
-  return coll_map.count(c);
+  tracepoint(objectstore, collection_exists_enter, c.c_str());
+  bool ret;
+  {
+    std::shared_lock l(coll_lock);
+    ret = coll_map.count(c);
+  }
+  tracepoint(objectstore, collection_exists_exit, ret);
+  return ret;
 }
 
 int BlueStore::collection_empty(CollectionHandle& ch, bool *empty)
 {
+  tracepoint(objectstore, collection_empty_enter, ch->cid.c_str());
   dout(15) << __func__ << " " << ch->cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
@@ -10237,11 +10267,13 @@ int BlueStore::collection_empty(CollectionHandle& ch, bool *empty)
   if (r < 0) {
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
          << dendl;
-    return r;
+  } else {
+    *empty = ls.empty();
+    dout(10) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
+    r = 0;
   }
-  *empty = ls.empty();
-  dout(10) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
-  return 0;
+  tracepoint(objectstore, collection_empty_exit, r);
+  return r;
 }
 
 int BlueStore::collection_bits(CollectionHandle& ch)
@@ -10406,8 +10438,11 @@ int BlueStore::omap_get(
   map<string, bufferlist> *out /// < [out] Key to value map
   )
 {
+  tracepoint(objectstore, omap_get_enter, oid.hobj.oid.name.c_str());
   Collection *c = static_cast<Collection *>(c_.get());
-  return _omap_get(c, oid, header, out);
+  int ret = _omap_get(c, oid, header, out);
+  tracepoint(objectstore, omap_get_exit, ret);
+  return ret;
 }
 
 int BlueStore::_omap_get(
@@ -10467,21 +10502,24 @@ int BlueStore::omap_get_header(
   bool allow_eio ///< [in] don't assert on eio
   )
 {
+  tracepoint(objectstore, omap_get_header_enter, oid.hobj.oid.name.c_str());
+  int r = 0;
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
-  std::shared_lock l(c->lock);
-  int r = 0;
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
+  if (!c->exists) {
     r = -ENOENT;
-    goto out;
+    goto out2;
   }
-  if (!o->onode.has_omap())
-    goto out;
-  o->flush();
   {
+    std::shared_lock l(c->lock);
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+    if (!o->onode.has_omap())
+      goto out;
+    o->flush();
     string head;
     o->get_omap_header(&head);
     if (db->get(o->get_omap_prefix(), head, header) >= 0) {
@@ -10493,6 +10531,8 @@ int BlueStore::omap_get_header(
  out:
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
+ out2:
+  tracepoint(objectstore, omap_get_header_exit, r);
   return r;
 }
 
@@ -10502,21 +10542,25 @@ int BlueStore::omap_get_keys(
   set<string> *keys      ///< [out] Keys defined on oid
   )
 {
+  tracepoint(objectstore, omap_get_keys_enter, oid.hobj.oid.name.c_str());
+  int r = 0;
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
-  std::shared_lock l(c->lock);
-  int r = 0;
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
+  if (!c->exists) {
     r = -ENOENT;
-    goto out;
+    goto out2;
   }
-  if (!o->onode.has_omap())
-    goto out;
-  o->flush();
   {
+    std::shared_lock l(c->lock);
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+    if (!o->onode.has_omap())
+      goto out;
+    o->flush();
+
     const string& prefix = o->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
@@ -10539,6 +10583,8 @@ int BlueStore::omap_get_keys(
  out:
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
+ out2:
+  tracepoint(objectstore, omap_get_keys_exit, r);
   return r;
 }
 
@@ -10549,23 +10595,27 @@ int BlueStore::omap_get_values(
   map<string, bufferlist> *out ///< [out] Returned keys and values
   )
 {
+  tracepoint(objectstore, omap_get_values_enter, oid.hobj.oid.name.c_str());
+  int r = 0;
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
-  std::shared_lock l(c->lock);
-  int r = 0;
-  string final_key;
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
+  if (!c->exists) {
     r = -ENOENT;
-    goto out;
+    goto out2;
   }
-  if (!o->onode.has_omap()) {
-    goto out;
-  }
-  o->flush();
   {
+    std::shared_lock l(c->lock);
+    string final_key;
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+    if (!o->onode.has_omap()) {
+      goto out;
+    }
+    o->flush();
+
     const string& prefix = o->get_omap_prefix();
     o->get_omap_key(string(), &final_key);
     size_t base_key_len = final_key.size();
@@ -10583,6 +10633,8 @@ int BlueStore::omap_get_values(
  out:
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
+ out2:
+  tracepoint(objectstore, omap_get_values_exit, r);
   return r;
 }
 
@@ -10593,23 +10645,27 @@ int BlueStore::omap_check_keys(
   set<string> *out         ///< [out] Subset of keys defined on oid
   )
 {
+  tracepoint(objectstore, omap_check_keys_enter, oid.hobj.oid.name.c_str());
+  int r = 0;
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
-  std::shared_lock l(c->lock);
-  int r = 0;
-  string final_key;
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
+  if (!c->exists) {
     r = -ENOENT;
-    goto out;
+    goto out2;
   }
-  if (!o->onode.has_omap()) {
-    goto out;
-  }
-  o->flush();
   {
+    std::shared_lock l(c->lock);
+    string final_key;
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+    if (!o->onode.has_omap()) {
+      goto out;
+    }
+    o->flush();
+
     const string& prefix = o->get_omap_prefix();
     o->get_omap_key(string(), &final_key);
     size_t base_key_len = final_key.size();
@@ -10630,6 +10686,8 @@ int BlueStore::omap_check_keys(
  out:
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
+ out2:
+  tracepoint(objectstore, omap_check_keys_exit, r);
   return r;
 }
 
@@ -10638,7 +10696,9 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   const ghobject_t &oid  ///< [in] object
   )
 {
+  ObjectMap::ObjectMapIterator iter;
   Collection *c = static_cast<Collection *>(c_.get());
+  tracepoint(objectstore, get_omap_iterator, c->get_cid().c_str());
   dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
   if (!c->exists) {
     return ObjectMap::ObjectMapIterator();
@@ -12299,7 +12359,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_RMCOLL:
       {
         const coll_t &cid = i.get_cid(op->cid);
+	tracepoint(objectstore, rmcoll_enter, cid.c_str());
 	r = _remove_collection(txc, cid, &c);
+	tracepoint(objectstore, rmcoll_exit, r);
 	if (!r)
 	  continue;
       }
@@ -12309,7 +12371,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
 	ceph_assert(!c);
 	const coll_t &cid = i.get_cid(op->cid);
+	tracepoint(objectstore, mkcoll_enter, cid.c_str());
 	r = _create_collection(txc, cid, op->split_bits, &c);
+	tracepoint(objectstore, mkcoll_exit, r);
 	if (!r)
 	  continue;
       }
@@ -12321,9 +12385,12 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_SPLIT_COLLECTION2:
       {
+	const coll_t &cid = i.get_cid(op->cid);
+	tracepoint(objectstore, split_coll2_enter, cid.c_str());
         uint32_t bits = op->split_bits;
         uint32_t rem = op->split_rem;
 	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+	tracepoint(objectstore, split_coll2_exit, r);
 	if (!r)
 	  continue;
       }
@@ -12331,8 +12398,11 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_MERGE_COLLECTION:
       {
+	const coll_t &cid = i.get_cid(op->cid);
         uint32_t bits = op->split_bits;
+	tracepoint(objectstore, merge_coll_enter, cid.c_str());
 	r = _merge_collection(txc, &c, cvec[op->dest_cid], bits);
+	tracepoint(objectstore, merge_coll_exit, r);
 	if (!r)
 	  continue;
       }
@@ -12406,7 +12476,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     switch (op->op) {
     case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
+      tracepoint(objectstore, touch_enter, o->oid.hobj.oid.name.c_str());
       r = _touch(txc, c, o);
+      tracepoint(objectstore, touch_exit, r);
       break;
 
     case Transaction::OP_WRITE:
@@ -12416,7 +12488,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	uint32_t fadvise_flags = i.get_fadvise_flags();
         bufferlist bl;
         i.decode_bl(bl);
+	tracepoint(objectstore, write_enter, o->oid.hobj.oid.name.c_str(), off, len);
 	r = _write(txc, c, o, off, len, bl, fadvise_flags);
+	tracepoint(objectstore, write_exit, r);
       }
       break;
 
@@ -12424,7 +12498,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         uint64_t off = op->off;
         uint64_t len = op->len;
+	tracepoint(objectstore, zero_enter, o->oid.hobj.oid.name.c_str(), off, len);
 	r = _zero(txc, c, o, off, len);
+	tracepoint(objectstore, zero_exit, r);
       }
       break;
 
@@ -12437,13 +12513,17 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_TRUNCATE:
       {
         uint64_t off = op->off;
+	tracepoint(objectstore, truncate_enter, o->oid.hobj.oid.name.c_str(), off);
 	r = _truncate(txc, c, o, off);
+	tracepoint(objectstore, truncate_exit, r);
       }
       break;
 
     case Transaction::OP_REMOVE:
       {
+	tracepoint(objectstore, remove_enter, o->oid.hobj.oid.name.c_str());
 	r = _remove(txc, c, o);
+	tracepoint(objectstore, remove_exit, r);
       }
       break;
 
@@ -12452,7 +12532,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         string name = i.decode_string();
         bufferptr bp;
         i.decode_bp(bp);
+	tracepoint(objectstore, setattr_enter, o->oid.hobj.oid.name.c_str());
 	r = _setattr(txc, c, o, name, bp);
+	tracepoint(objectstore, setattr_exit, r);
       }
       break;
 
@@ -12460,20 +12542,26 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         map<string, bufferptr> aset;
         i.decode_attrset(aset);
+	tracepoint(objectstore, setattrs_enter, o->oid.hobj.oid.name.c_str());
 	r = _setattrs(txc, c, o, aset);
+	tracepoint(objectstore, setattrs_exit, r);
       }
       break;
 
     case Transaction::OP_RMATTR:
       {
 	string name = i.decode_string();
+	tracepoint(objectstore, rmattr_enter, o->oid.hobj.oid.name.c_str());
 	r = _rmattr(txc, c, o, name);
+	tracepoint(objectstore, rmattr_exit, r);
       }
       break;
 
     case Transaction::OP_RMATTRS:
       {
+	tracepoint(objectstore, rmattrs_enter, o->oid.hobj.oid.name.c_str());
 	r = _rmattrs(txc, c, o);
+	tracepoint(objectstore, rmattrs_exit, r);
       }
       break;
 
@@ -12484,7 +12572,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
           const ghobject_t& noid = i.get_oid(op->dest_oid);
 	  no = c->get_onode(noid, true);
 	}
+	tracepoint(objectstore, clone_enter, o->oid.hobj.oid.name.c_str());
 	r = _clone(txc, c, o, no);
+	tracepoint(objectstore, clone_exit, r);
       }
       break;
 
@@ -12502,7 +12592,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
+	tracepoint(objectstore, clone_range2_enter, o->oid.hobj.oid.name.c_str(), len);
 	r = _clone_range(txc, c, o, no, srcoff, len, dstoff);
+	tracepoint(objectstore, clone_range2_exit, r);
       }
       break;
 
@@ -12523,55 +12615,69 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
 	ceph_assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
+	tracepoint(objectstore, coll_try_rename_enter);
 	OnodeRef& no = ovec[op->dest_oid];
 	if (!no) {
 	  no = c->get_onode(noid, false);
 	}
 	r = _rename(txc, c, o, no, noid);
+	tracepoint(objectstore, coll_try_rename_exit, r);
       }
       break;
 
     case Transaction::OP_OMAP_CLEAR:
       {
+	tracepoint(objectstore, omap_clear_enter, o->oid.hobj.oid.name.c_str());
 	r = _omap_clear(txc, c, o);
+	tracepoint(objectstore, omap_clear_exit, r);
       }
       break;
     case Transaction::OP_OMAP_SETKEYS:
       {
 	bufferlist aset_bl;
+	tracepoint(objectstore, omap_setkeys_enter, o->oid.hobj.oid.name.c_str());
         i.decode_attrset_bl(&aset_bl);
 	r = _omap_setkeys(txc, c, o, aset_bl);
+	tracepoint(objectstore, omap_setkeys_exit, r);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
 	bufferlist keys_bl;
+	tracepoint(objectstore, omap_rmkeys_enter, o->oid.hobj.oid.name.c_str());
         i.decode_keyset_bl(&keys_bl);
 	r = _omap_rmkeys(txc, c, o, keys_bl);
+	tracepoint(objectstore, omap_rmkeys_exit, r);
       }
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
         string first, last;
+	tracepoint(objectstore, omap_rmkeyrange_enter, o->oid.hobj.oid.name.c_str());
         first = i.decode_string();
         last = i.decode_string();
 	r = _omap_rmkey_range(txc, c, o, first, last);
+	tracepoint(objectstore, omap_rmkeyrange_exit, r);
       }
       break;
     case Transaction::OP_OMAP_SETHEADER:
       {
         bufferlist bl;
+	tracepoint(objectstore, omap_setheader_enter, o->oid.hobj.oid.name.c_str());
         i.decode_bl(bl);
 	r = _omap_setheader(txc, c, o, bl);
+	tracepoint(objectstore, omap_setheader_exit, r);
       }
       break;
 
     case Transaction::OP_SETALLOCHINT:
       {
+	tracepoint(objectstore, setallochint_enter, o->oid.hobj.oid.name.c_str());
 	r = _set_alloc_hint(txc, c, o,
 			    op->expected_object_size,
 			    op->expected_write_size,
 			    op->alloc_hint_flags);
+	tracepoint(objectstore, setallochint_exit, r);
       }
       break;
 
