@@ -91,6 +91,8 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
     mon->store->write_meta("min_mon_release",
 			   stringify(ceph_release()));
   }
+
+  mon->notify_new_monmap();
 }
 
 void MonmapMonitor::create_pending()

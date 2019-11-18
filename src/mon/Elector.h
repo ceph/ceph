@@ -345,7 +345,21 @@ class Elector : public ElectionOwner, RankProvider {
    * @post  @p participating is true
    */
   void start_participating();
-
+  /**
+   * Forget everything about our peers. :(
+   */
+  void notify_clear_peer_state();
+  /**
+   * Notify that our local rank has changed
+   * and we may need to update internal data structures.
+   */
+  void notify_rank_changed(int new_rank);
+  /**
+   * There's a new monmap and we need to deal with it.
+   * FIXME: Right now, we just toss out all peer history
+   * data when this happens, but we should stop doing that...
+   */
+  void notify_new_monmap();
   /**
    * @}
    */
