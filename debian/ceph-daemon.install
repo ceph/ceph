@@ -1,1 +1,2 @@
 usr/sbin/ceph-daemon
+etc/sudoers.d/cephdaemon
