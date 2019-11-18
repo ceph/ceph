@@ -16,14 +16,10 @@ class TestInstall(object):
         )
         pkgs = yaml.safe_load(open(path))[project]
         if not debug:
-            pkgs['deb'] = filter(
-                lambda p: not p.endswith('-dbg'),
-                pkgs['deb']
-            )
-            pkgs['rpm'] = filter(
-                lambda p: not p.endswith('-debuginfo'),
-                pkgs['rpm']
-            )
+            pkgs['deb'] = [p for p in pkgs['deb']
+                                        if not p.endswith('-dbg')]
+            pkgs['rpm'] = [p for p in pkgs['rpm']
+                                        if not p.endswith('-debuginfo')]
         return pkgs
 
     def test_get_package_list_debug(self):

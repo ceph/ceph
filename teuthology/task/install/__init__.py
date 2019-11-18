@@ -155,8 +155,8 @@ def get_package_list(ctx, config):
     rpms = config.get('packages', dict()).get('rpm', default_rpms)
     # Optionally include or exclude debug packages
     if not debug:
-        debs = filter(lambda p: not p.endswith('-dbg'), debs)
-        rpms = filter(lambda p: not p.endswith('-debuginfo'), rpms)
+        debs = [p for p in debs if not p.endswith('-dbg')]
+        rpms = [p for p in rpms if not p.endswith('-debuginfo')]
 
     def exclude(pkgs, exclude_list):
         return list(pkg for pkg in pkgs if pkg not in exclude_list)
@@ -275,7 +275,8 @@ def upgrade_remote_to_config(ctx, config):
             if not remotes_dict:
                 # This is a regular config argument, not a role
                 continue
-            remote = remotes_dict.keys()[0]
+            # take any remote in the dict
+            remote = next(iter(remotes_dict))
             if remote in remotes:
                 log.warn('remote %s came up twice (role %s)', remote, role)
                 continue
