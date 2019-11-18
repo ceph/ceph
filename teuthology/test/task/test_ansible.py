@@ -72,7 +72,7 @@ class TestAnsibleTask(TestTask):
         self.stop_patchers()
 
     def stop_patchers(self):
-        for name in self.mocks.keys():
+        for name in list(self.mocks):
             self.stop_patcher(name)
 
     def stop_patcher(self, name):
@@ -416,7 +416,7 @@ class TestAnsibleTask(TestTask):
         assert args.count('--extra-vars') == 1
         vars_str = args[args.index('--extra-vars') + 1].strip("'")
         extra_vars = json.loads(vars_str)
-        assert extra_vars.keys() == ['ansible_ssh_user']
+        assert list(extra_vars) == ['ansible_ssh_user']
 
     def test_build_args_vars(self):
         extra_vars = dict(
