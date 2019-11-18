@@ -809,6 +809,7 @@ public:
   void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_mon_message(Message *m, int rank);
+  void notify_new_monmap();
 
 public:
   struct C_Command : public C_MonOp {
