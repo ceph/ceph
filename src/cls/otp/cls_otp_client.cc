@@ -16,7 +16,7 @@
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
- 
+
 using namespace librados;
 
 #include "cls/otp/cls_otp_ops.h"

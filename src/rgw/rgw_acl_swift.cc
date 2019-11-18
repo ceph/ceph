@@ -75,7 +75,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
 {
   /* This function takes url_spec as non-ref std::string because of the trim
    * operation that is essential to preserve compliance with Swift. It can't
-   * be easily accomplished with boost::string_ref. */
+   * be easily accomplished with std::string_view. */
   try {
     bool is_negative;
     ACLGrant grant;

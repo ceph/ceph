@@ -32,8 +32,6 @@
 #include <sstream>
 #include <memory>
 
-#include <boost/utility/string_ref.hpp>
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 

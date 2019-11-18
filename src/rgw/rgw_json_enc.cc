@@ -1519,24 +1519,15 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
   encode_json("inc_marker", inc_marker, f);
 }
 
-/* This utility function shouldn't conflict with the overload of std::to_string
- * provided by string_ref since Boost 1.54 as it's defined outside of the std
- * namespace. I hope we'll remove it soon - just after merging the Matt's PR
- * for bundled Boost. It would allow us to forget that CentOS 7 has Boost 1.53. */
-static inline std::string to_string(const boost::string_ref& s)
-{
-  return std::string(s.data(), s.length());
-}
-
 void rgw::keystone::AdminTokenRequestVer2::dump(Formatter* const f) const
 {
   f->open_object_section("token_request");
     f->open_object_section("auth");
       f->open_object_section("passwordCredentials");
-        encode_json("username", ::to_string(conf.get_admin_user()), f);
-        encode_json("password", ::to_string(conf.get_admin_password()), f);
+        encode_json("username", conf.get_admin_user(), f);
+        encode_json("password", conf.get_admin_password(), f);
       f->close_section();
-      encode_json("tenantName", ::to_string(conf.get_admin_tenant()), f);
+      encode_json("tenantName", conf.get_admin_tenant(), f);
     f->close_section();
   f->close_section();
 }
@@ -1552,22 +1543,22 @@ void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
         f->open_object_section("password");
           f->open_object_section("user");
             f->open_object_section("domain");
-              encode_json("name", ::to_string(conf.get_admin_domain()), f);
+              encode_json("name", conf.get_admin_domain(), f);
             f->close_section();
-            encode_json("name", ::to_string(conf.get_admin_user()), f);
-            encode_json("password", ::to_string(conf.get_admin_password()), f);
+            encode_json("name", conf.get_admin_user(), f);
+            encode_json("password", conf.get_admin_password(), f);
           f->close_section();
         f->close_section();
       f->close_section();
       f->open_object_section("scope");
         f->open_object_section("project");
           if (! conf.get_admin_project().empty()) {
-            encode_json("name", ::to_string(conf.get_admin_project()), f);
+            encode_json("name", conf.get_admin_project(), f);
           } else {
-            encode_json("name", ::to_string(conf.get_admin_tenant()), f);
+            encode_json("name", conf.get_admin_tenant(), f);
           }
           f->open_object_section("domain");
-            encode_json("name", ::to_string(conf.get_admin_domain()), f);
+            encode_json("name", conf.get_admin_domain(), f);
           f->close_section();
         f->close_section();
       f->close_section();

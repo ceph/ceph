@@ -1686,9 +1686,12 @@ struct rgw_obj_key {
 
   rgw_obj_key() {}
   // cppcheck-suppress noExplicitConstructor
-  rgw_obj_key(const string& n) : name(n) {}
-  rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
-  rgw_obj_key(const string& n, const string& i, const string& _ns) : name(n), instance(i), ns(_ns) {}
+  rgw_obj_key(string n) : name(std::move(n)) {}
+  rgw_obj_key(string n, string i) : name(std::move(n)),
+				    instance(std::move(i)) {}
+  rgw_obj_key(string n, string i, string _ns) : name(std::move(n)),
+						instance(std::move(i)),
+						ns(std::move(_ns)) {}
 
   rgw_obj_key(const rgw_obj_index_key& k) {
     parse_index_key(k.name, &name, &ns);

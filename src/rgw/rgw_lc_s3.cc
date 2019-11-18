@@ -16,8 +16,8 @@
 
 static bool check_date(const string& _date)
 {
-  boost::optional<ceph::real_time> date = ceph::from_iso_8601(_date);
-  if (boost::none == date) {
+  auto date = ceph::from_iso_8601(_date);
+  if (!date) {
     return false;
   }
   struct timespec time = ceph::real_clock::to_timespec(*date);

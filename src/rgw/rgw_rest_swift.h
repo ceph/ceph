@@ -12,8 +12,6 @@
 #include "rgw_swift_auth.h"
 #include "rgw_http_errors.h"
 
-#include <boost/utility/string_ref.hpp>
-
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
   int custom_http_ret = 0;
 public:
@@ -296,11 +294,11 @@ public:
   SignatureHelper() = default;
 
   const char* calc(const std::string& key,
-                   const boost::string_ref& path_info,
-                   const boost::string_ref& redirect,
-                   const boost::string_ref& max_file_size,
-                   const boost::string_ref& max_file_count,
-                   const boost::string_ref& expires) {
+                   std::string_view path_info,
+                   std::string_view redirect,
+                   std::string_view max_file_size,
+                   std::string_view max_file_count,
+                   std::string_view expires) {
     using ceph::crypto::HMACSHA1;
     using UCHARPTR = const unsigned char*;
 

@@ -70,8 +70,8 @@ void RGWObjectRetention::decode_xml(XMLObj *obj) {
   }
   string date_str;
   RGWXMLDecoder::decode_xml("RetainUntilDate", date_str, obj, true);
-  boost::optional<ceph::real_time> date = ceph::from_iso_8601(date_str);
-  if (boost::none == date) {
+  auto date = ceph::from_iso_8601(date_str);
+  if (!date) {
     throw RGWXMLDecoder::err("invalid RetainUntilDate value");
   }
   retain_until_date = *date;

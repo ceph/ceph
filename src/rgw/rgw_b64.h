@@ -4,7 +4,6 @@
 #ifndef RGW_B64_H
 #define RGW_B64_H
 
-#include <boost/utility/string_ref.hpp>
 #include <boost/utility/string_view.hpp>
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>

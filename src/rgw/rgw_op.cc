@@ -6692,26 +6692,26 @@ void RGWBulkUploadOp::pre_exec()
 }
 
 boost::optional<std::pair<std::string, rgw_obj_key>>
-RGWBulkUploadOp::parse_path(const boost::string_ref& path)
+RGWBulkUploadOp::parse_path(std::string_view path)
 {
   /* We need to skip all slashes at the beginning in order to preserve
    * compliance with Swift. */
   const size_t start_pos = path.find_first_not_of('/');
 
-  if (boost::string_ref::npos != start_pos) {
+  if (std::string_view::npos != start_pos) {
     /* Seperator is the first slash after the leading ones. */
     const size_t sep_pos = path.substr(start_pos).find('/');
 
-    if (boost::string_ref::npos != sep_pos) {
+    if (std::string_view::npos != sep_pos) {
       const auto bucket_name = path.substr(start_pos, sep_pos - start_pos);
       const auto obj_name = path.substr(sep_pos + 1);
 
-      return std::make_pair(bucket_name.to_string(),
-                            rgw_obj_key(obj_name.to_string()));
+      return std::make_pair(std::string(bucket_name),
+                            rgw_obj_key(string(obj_name)));
     } else {
       /* It's guaranteed here that bucket name is at least one character
        * long and is different than slash. */
-      return std::make_pair(path.substr(start_pos).to_string(),
+      return std::make_pair(std::string(path.substr(start_pos)),
                             rgw_obj_key());
     }
   }
@@ -6782,7 +6782,7 @@ void RGWBulkUploadOp::init(rgw::sal::RGWRadosStore* const store,
   dir_ctx.emplace(store->svc()->sysobj->init_obj_ctx());
 }
 
-int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
+int RGWBulkUploadOp::handle_dir(const std::string_view path)
 {
   ldpp_dout(this, 20) << "got directory=" << path << dendl;
 
@@ -6976,7 +6976,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
 					    &bacl, RGW_PERM_WRITE);
 }
 
-int RGWBulkUploadOp::handle_file(const boost::string_ref path,
+int RGWBulkUploadOp::handle_file(const std::string_view path,
                                  const size_t size,
                                  AlignedStreamGetter& body)
 {
@@ -7185,9 +7185,10 @@ void RGWBulkUploadOp::execute()
         case rgw::tar::FileType::NORMAL_FILE: {
           ldpp_dout(this, 2) << "handling regular file" << dendl;
 
-          boost::string_ref filename = bucket_path.empty() ? header->get_filename() : \
-                            file_prefix + header->get_filename().to_string();
-          auto body = AlignedStreamGetter(0, header->get_filesize(),
+          auto filename = bucket_path.empty() ?
+	    header->get_filename() :
+	    file_prefix + string(header->get_filename());
+	  auto body = AlignedStreamGetter(0, header->get_filesize(),
                                           rgw::tar::BLOCK_SIZE, *stream);
           op_ret = handle_file(filename,
                                header->get_filesize(),
@@ -7196,17 +7197,17 @@ void RGWBulkUploadOp::execute()
             /* Only regular files counts. */
             num_created++;
           } else {
-            failures.emplace_back(op_ret, filename.to_string());
+            failures.emplace_back(op_ret, string(filename));
           }
           break;
         }
         case rgw::tar::FileType::DIRECTORY: {
           ldpp_dout(this, 2) << "handling regular directory" << dendl;
 
-          boost::string_ref dirname = bucket_path.empty() ? header->get_filename() : bucket_path;
+          std::string_view dirname = bucket_path.empty() ? header->get_filename() : bucket_path;
           op_ret = handle_dir(dirname);
           if (op_ret < 0 && op_ret != -ERR_BUCKET_EXISTS) {
-            failures.emplace_back(op_ret, dirname.to_string());
+            failures.emplace_back(op_ret, string(dirname));
           }
           break;
         }

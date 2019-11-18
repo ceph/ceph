@@ -324,8 +324,8 @@ void dump_errno(struct req_state *s, int http_ret)
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
-                 const boost::string_ref& val)
+                 std::string_view name,
+                 std::string_view val)
 {
   try {
     RESTFUL_IO(s)->send_header(name, val);
@@ -336,24 +336,24 @@ void dump_header(struct req_state* const s,
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
+                 std::string_view name,
                  ceph::buffer::list& bl)
 {
   return dump_header(s, name, rgw_sanitized_hdrval(bl));
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
+                 std::string_view name,
                  const long long val)
 {
   char buf[32];
   const auto len = snprintf(buf, sizeof(buf), "%lld", val);
 
-  return dump_header(s, name, boost::string_ref(buf, len));
+  return dump_header(s, name, std::string_view(buf, len));
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
+                 std::string_view name,
                  const utime_t& ut)
 {
   char buf[32];
@@ -361,7 +361,7 @@ void dump_header(struct req_state* const s,
 	                    static_cast<long long>(ut.sec()),
                             static_cast<int>(ut.usec() / 10));
 
-  return dump_header(s, name, boost::string_ref(buf, len));
+  return dump_header(s, name, std::string_view(buf, len));
 }
 
 void dump_content_length(struct req_state* const s, const uint64_t len)
@@ -386,7 +386,7 @@ static void dump_chunked_encoding(struct req_state* const s)
 }
 
 void dump_etag(struct req_state* const s,
-               const boost::string_ref& etag,
+               std::string_view etag,
                const bool quoted)
 {
   if (etag.empty()) {
@@ -442,7 +442,7 @@ void dump_time_header(struct req_state *s, const char *name, real_time t)
     return;
   }
 
-  return dump_header(s, name, boost::string_ref(timestr, len));
+  return dump_header(s, name, std::string_view(timestr, len));
 }
 
 std::string dump_time_to_str(const real_time& t)
@@ -467,7 +467,7 @@ void dump_epoch_header(struct req_state *s, const char *name, real_time t)
                             (long long)ut.sec(),
                             (long long)ut.nsec());
 
-  return dump_header(s, name, boost::string_ref(buf, len));
+  return dump_header(s, name, std::string_view(buf, len));
 }
 
 void dump_time(struct req_state *s, const char *name, real_time *t)
@@ -742,7 +742,7 @@ void dump_range(struct req_state* const s,
                    static_cast<long long>(total));
   }
 
-  return dump_header(s, "Content-Range", boost::string_ref(range_buf, len));
+  return dump_header(s, "Content-Range", std::string_view(range_buf, len));
 }
 
 

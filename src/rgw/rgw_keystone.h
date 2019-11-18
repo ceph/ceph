@@ -7,7 +7,6 @@
 #include <type_traits>
 
 #include <boost/optional.hpp>
-#include <boost/utility/string_ref.hpp>
 
 #include "rgw_common.h"
 #include "rgw_http_client.h"
@@ -45,11 +44,11 @@ public:
   virtual ApiVersion get_api_version() const noexcept = 0;
 
   virtual std::string get_admin_token() const noexcept = 0;
-  virtual boost::string_ref get_admin_user() const noexcept = 0;
+  virtual std::string_view get_admin_user() const noexcept = 0;
   virtual std::string get_admin_password() const noexcept = 0;
-  virtual boost::string_ref get_admin_tenant() const noexcept = 0;
-  virtual boost::string_ref get_admin_project() const noexcept = 0;
-  virtual boost::string_ref get_admin_domain() const noexcept = 0;
+  virtual std::string_view get_admin_tenant() const noexcept = 0;
+  virtual std::string_view get_admin_project() const noexcept = 0;
+  virtual std::string_view get_admin_domain() const noexcept = 0;
 };
 
 class CephCtxConfig : public Config {
@@ -70,21 +69,21 @@ public:
 
   std::string get_admin_token() const noexcept override;
 
-  boost::string_ref get_admin_user() const noexcept override {
+  std::string_view get_admin_user() const noexcept override {
     return g_ceph_context->_conf->rgw_keystone_admin_user;
   }
 
   std::string get_admin_password() const noexcept override;
 
-  boost::string_ref get_admin_tenant() const noexcept override {
+  std::string_view get_admin_tenant() const noexcept override {
     return g_ceph_context->_conf->rgw_keystone_admin_tenant;
   }
 
-  boost::string_ref get_admin_project() const noexcept override {
+  std::string_view get_admin_project() const noexcept override {
     return g_ceph_context->_conf->rgw_keystone_admin_project;
   }
 
-  boost::string_ref get_admin_domain() const noexcept override {
+  std::string_view get_admin_domain() const noexcept override {
     return g_ceph_context->_conf->rgw_keystone_admin_domain;
   }
 };

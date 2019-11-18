@@ -9,11 +9,12 @@
 #include <include/types.h>
 
 #include <boost/optional.hpp>
-#include <boost/utility/string_ref.hpp>
 
 #include "common/debug.h"
 
 #include "rgw_basic_types.h"
+
+#include "common/str_util.h"
 
 #define RGW_PERM_NONE            0x00
 #define RGW_PERM_READ            0x01
@@ -217,7 +218,7 @@ struct ACLReferer {
       perm(perm) {
   }
 
-  bool is_match(boost::string_ref http_referer) const {
+  bool is_match(std::string_view http_referer) const {
     const auto http_host = get_http_host(http_referer);
     if (!http_host || http_host->length() < url_spec.length()) {
       return false;
@@ -234,7 +235,7 @@ struct ACLReferer {
     if ('.' == url_spec[0]) {
       /* Wildcard support: a referer matches the spec when its last char are
        * perfectly equal to spec. */
-      return http_host->ends_with(url_spec);
+      return ceph::ends_with(*http_host, url_spec);
     }
 
     return false;
@@ -255,19 +256,19 @@ struct ACLReferer {
   void dump(Formatter *f) const;
 
 private:
-  boost::optional<boost::string_ref> get_http_host(const boost::string_ref url) const {
+  boost::optional<std::string_view> get_http_host(const std::string_view url) const {
     size_t pos = url.find("://");
-    if (pos == boost::string_ref::npos || url.starts_with("://") ||
-        url.ends_with("://") || url.ends_with('@')) {
+    if (pos == std::string_view::npos || ceph::starts_with(url, "://") ||
+        ceph::ends_with(url, "://") || ceph::ends_with(url, "@")) {
       return boost::none;
     }
-    boost::string_ref url_sub = url.substr(pos + strlen("://"));  
+    std::string_view url_sub = url.substr(pos + strlen("://"));
     pos = url_sub.find('@');
-    if (pos != boost::string_ref::npos) {
+    if (pos != std::string_view::npos) {
       url_sub = url_sub.substr(pos + 1);
     }
     pos = url_sub.find_first_of("/:");
-    if (pos == boost::string_ref::npos) {
+    if (pos == std::string_view::npos) {
       /* no port or path exists */
       return url_sub;
     }

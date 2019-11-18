@@ -831,10 +831,10 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
                                         const char* const metabuf,
                                         const size_t metabuf_len)
 {
-  boost::string_ref metastr(metabuf, metabuf_len);
+  std::string_view metastr(metabuf, metabuf_len);
 
   const size_t semicolon_pos = metastr.find(";");
-  if (semicolon_pos == boost::string_ref::npos) {
+  if (semicolon_pos == std::string_view::npos) {
     ldout(cct, 20) << "AWSv4ComplMulti cannot find the ';' separator"
                    << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
@@ -852,7 +852,7 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
   /* Parse the chunk_signature=... part. */
   const auto signature_part = metastr.substr(semicolon_pos + 1);
   const size_t eq_sign_pos = signature_part.find("=");
-  if (eq_sign_pos == boost::string_ref::npos) {
+  if (eq_sign_pos == std::string_view::npos) {
     ldout(cct, 20) << "AWSv4ComplMulti: cannot find the '=' separator"
                    << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
@@ -860,7 +860,7 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
 
   /* OK, we have at least the beginning of a signature. */
   const size_t data_sep_pos = signature_part.find("\r\n");
-  if (data_sep_pos == boost::string_ref::npos) {
+  if (data_sep_pos == std::string_view::npos) {
     ldout(cct, 20) << "AWSv4ComplMulti: no new line at signature end"
                    << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());

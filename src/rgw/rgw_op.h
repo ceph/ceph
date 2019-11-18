@@ -576,7 +576,7 @@ protected:
   virtual void send_response() override = 0;
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
-  parse_path(const boost::string_ref& path);
+  parse_path(std::string_view path);
   
   std::pair<std::string, std::string>
   handle_upload_path(struct req_state *s);
@@ -585,12 +585,12 @@ protected:
 				     const rgw_obj& obj,
 				     std::map<std::string, ceph::bufferlist>& battrs,
                                      ACLOwner& bucket_owner /* out */);
-  int handle_file(boost::string_ref path,
+  int handle_file(std::string_view path,
                   size_t size,
                   AlignedStreamGetter& body);
 
   int handle_dir_verify_permission();
-  int handle_dir(boost::string_ref path);
+  int handle_dir(std::string_view path);
 
 public:
   RGWBulkUploadOp()

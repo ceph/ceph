@@ -15,7 +15,6 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/optional.hpp>
 #include <boost/thread/shared_mutex.hpp>
-#include <boost/utility/string_ref.hpp>
 #include <boost/variant.hpp>
 
 #include "common/ceph_time.h"
@@ -285,7 +284,11 @@ struct Condition {
 				  * 1000000000)));
       }
 
-      return from_iso_8601(boost::string_ref(s), false);
+      auto i = from_iso_8601(s, false);
+      if (!i)
+	return boost::none;
+      else
+	return *i;
     } catch (const std::logic_error& e) {
       return boost::none;
     }

@@ -111,8 +111,8 @@ size_t RGWLoadGenIO::send_100_continue()
   return 0;
 }
 
-size_t RGWLoadGenIO::send_header(const boost::string_ref& name,
-                                 const boost::string_ref& value)
+size_t RGWLoadGenIO::send_header(std::string_view name,
+                                 std::string_view value)
 {
   return 0;
 }

@@ -1814,8 +1814,8 @@ int RGWPutObj_ObjStore_S3::get_params()
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
   if (obj_lock_mode_str && obj_lock_date_str) {
-    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
-    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+    auto date = ceph::from_iso_8601(obj_lock_date_str);
+    if (!date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
         ret = -EINVAL;
         ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
         return ret;
@@ -4929,7 +4929,7 @@ rgw::auth::s3::LDAPEngine::authenticate(
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
-  /* boost filters and/or string_ref may throw on invalid input */
+  /* boost filters may throw on invalid input */
   rgw::RGWToken base64_token;
   try {
     base64_token = rgw::from_base64(access_key_id);
@@ -5115,7 +5115,7 @@ rgw::auth::s3::STSEngine::authenticate(
   if (! token.expiration.empty()) {
     std::string expiration = token.expiration;
     if (! expiration.empty()) {
-      boost::optional<real_clock::time_point> exp = ceph::from_iso_8601(expiration, false);
+      auto exp = ceph::from_iso_8601(expiration, false);
       if (exp) {
         real_clock::time_point now = real_clock::now();
         if (now >= *exp) {

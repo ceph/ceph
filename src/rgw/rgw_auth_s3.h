@@ -11,7 +11,6 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/container/static_vector.hpp>
-#include <boost/utility/string_ref.hpp>
 #include <boost/utility/string_view.hpp>
 
 #include "common/sstring.hh"
@@ -281,10 +280,10 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
     ChunkMeta(const size_t data_starts_in_stream,
               const size_t data_length,
-              const boost::string_ref signature)
+              const std::string_view signature)
       : data_offset_in_stream(data_starts_in_stream),
         data_length(data_length),
-        signature(signature.to_string()) {
+        signature(signature) {
     }
 
     explicit ChunkMeta(std::string_view signature)

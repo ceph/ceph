@@ -23,7 +23,6 @@
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
-#include <boost/utility/string_ref.hpp>
 #include <boost/optional.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
@@ -984,7 +983,7 @@ namespace rgw {
 	/* try external authenticators (ldap for now) */
 	rgw::LDAPHelper* ldh = rgwlib.get_ldh(); /* !nullptr */
 	RGWToken token;
-	/* boost filters and/or string_ref may throw on invalid input */
+	/* boost filters may throw on invalid input */
 	try {
 	  token = rgw::from_base64(key.id);
 	} catch(...) {
@@ -1384,7 +1383,7 @@ public:
       return;
     map<string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
     for (const auto& iter : m) {
-      boost::string_ref marker{iter.first};
+      std::string_view marker{iter.first};
       rgw::sal::RGWBucket* ent = iter.second;
       if (! this->operator()(ent->get_name(), marker)) {
 	/* caller cannot accept more */
@@ -1403,8 +1402,8 @@ public:
     // do nothing
   }
 
-  int operator()(const boost::string_ref& name,
-		 const boost::string_ref& marker) {
+  int operator()(std::string_view name,
+		 std::string_view marker) {
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     if (!! ioff) {
       *ioff = off;
@@ -1516,7 +1515,7 @@ public:
     return 0;
   }
 
-  int operator()(const boost::string_ref name, const rgw_obj_key& marker,
+  int operator()(const std::string_view name, const rgw_obj_key& marker,
 		 const ceph::real_time& t, const uint64_t fsz, uint8_t type) {
 
     assert(name.length() > 0); // all cases handled in callers
@@ -1559,7 +1558,7 @@ public:
     struct req_state* s = get_state();
     for (const auto& iter : objs) {
 
-      boost::string_ref sref {iter.key.name};
+      std::string_view sref {iter.key.name};
 
       lsubdout(cct, rgw, 15) << "readdir objects prefix: " << prefix
 			     << " obj: " << sref << dendl;
@@ -1609,12 +1608,12 @@ public:
 	continue;
 
       /* it's safest to modify the element in place--a suffix-modifying
-       * string_ref operation is problematic since ULP rgw_file callers
+       * string_view operation is problematic since ULP rgw_file callers
        * will ultimately need a c-string */
       if (iter.first.back() == '/')
 	const_cast<std::string&>(iter.first).pop_back();
 
-      boost::string_ref sref{iter.first};
+      std::string_view sref{iter.first};
 
       size_t last_del = sref.find_last_of('/');
       if (last_del != string::npos)

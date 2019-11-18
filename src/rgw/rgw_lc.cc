@@ -163,8 +163,8 @@ int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
 }
 
 bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op& second) {
-  if ((first.expiration > 0 || first.expiration_date != boost::none) && 
-    (second.expiration > 0 || second.expiration_date != boost::none)) {
+  if ((first.expiration > 0 || first.expiration_date) &&
+      (second.expiration > 0 || second.expiration_date)) {
     return true;
   } else if (first.noncur_expiration > 0 && second.noncur_expiration > 0) {
     return true;
@@ -440,16 +440,16 @@ static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& o
 static bool is_valid_op(const lc_op& op)
 {
       return (op.status &&
-              (op.expiration > 0 
-               || op.expiration_date != boost::none
+              (op.expiration > 0
+               || op.expiration_date
                || op.noncur_expiration > 0
                || op.dm_expiration
                || !op.transitions.empty()
                || !op.noncur_transitions.empty()));
 }
 
-static inline bool has_all_tags(const lc_op& rule_action,
-				const RGWObjTags& object_tags)
+inline bool has_all_tags(const lc_op& rule_action,
+			 const RGWObjTags& object_tags)
 {
   if(! rule_action.obj_tags)
     return false;
@@ -749,7 +749,7 @@ public:
     bool is_expired;
     auto& op = oc.op;
     if (op.expiration <= 0) {
-      if (op.expiration_date == boost::none) {
+      if (!op.expiration_date) {
         ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": no expiration set in rule, skipping" << dendl;
         return false;
       }
@@ -763,7 +763,7 @@ public:
     return is_expired;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r;
     if (o.is_delete_marker()) {
@@ -797,7 +797,7 @@ public:
     return is_expired && pass_object_lock_check(oc.store->getRados(), oc.bucket_info, oc.obj, oc.rctx);
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc, true);
     if (r < 0) {
@@ -828,7 +828,7 @@ public:
     return true;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc, true);
     if (r < 0) {
@@ -864,7 +864,7 @@ public:
     auto mtime = get_effective_mtime(oc);
     bool is_expired;
     if (transition.days < 0) {
-      if (transition.date == boost::none) {
+      if (!transition.date) {
         ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": no transition day/date set in rule, skipping" << dendl;
         return false;
       }
@@ -885,7 +885,7 @@ public:
     return need_to_process;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
 
     rgw_placement_rule target_placement;
@@ -942,8 +942,7 @@ void LCOpRule::build()
 
   auto& op = env.op;
 
-  if (op.expiration > 0 ||
-      op.expiration_date != boost::none) {
+  if (op.expiration > 0 || op.expiration_date) {
     actions.emplace_back(new LCOpAction_CurrentExpiration);
   }
 
@@ -1572,7 +1571,7 @@ std::string s3_expiration_header(
     }
   }
 
-  boost::optional<ceph::real_time> expiration_date;
+  std::optional<ceph::real_time> expiration_date;
   boost::optional<std::string> rule_id;
 
   const auto& rule_map = config.get_rule_map();
@@ -1636,18 +1635,16 @@ std::string s3_expiration_header(
     }
 
     // compute a uniform expiration date
-    boost::optional<ceph::real_time> rule_expiration_date;
+    std::optional<ceph::real_time> rule_expiration_date;
     const LCExpiration& rule_expiration =
       (obj_key.instance.empty()) ? expiration : noncur_expiration;
 
     if (rule_expiration.has_date()) {
-      rule_expiration_date =
-	boost::optional<ceph::real_time>(
-	  ceph::from_iso_8601(rule.get_expiration().get_date()));
+      rule_expiration_date = ceph::from_iso_8601(rule.get_expiration().get_date());
     } else {
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
-	  boost::optional<ceph::real_time>(
+	  std::optional<ceph::real_time>(
 	    mtime + make_timespan(rule_expiration.get_days()*24*60*60));
       }
     }
@@ -1656,9 +1653,8 @@ std::string s3_expiration_header(
     if (rule_expiration_date) {
       if ((! expiration_date) ||
 	  (*expiration_date > *rule_expiration_date)) {
-      expiration_date =
-	boost::optional<ceph::real_time>(rule_expiration_date);
-      rule_id = boost::optional<std::string>(id);
+	expiration_date = rule_expiration_date;
+	rule_id = boost::optional<std::string>(id);
       }
     }
   }

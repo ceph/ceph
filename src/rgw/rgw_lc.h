@@ -366,7 +366,7 @@ WRITE_CLASS_ENCODER(LCRule)
 struct transition_action
 {
   int days;
-  boost::optional<ceph::real_time> date;
+  std::optional<ceph::real_time> date;
   string storage_class;
   transition_action() : days(0) {}
 };
@@ -380,7 +380,7 @@ struct lc_op
   int expiration{0};
   int noncur_expiration{0};
   int mp_expiration{0};
-  boost::optional<ceph::real_time> expiration_date;
+  std::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
   map<string, transition_action> transitions;
   map<string, transition_action> noncur_transitions;
