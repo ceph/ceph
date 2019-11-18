@@ -32,9 +32,12 @@
 
 namespace librbd {
 
+using librbd::util::create_context_callback;
+
 template <typename I>
 ObjectMap<I>::ObjectMap(I &image_ctx, uint64_t snap_id)
-  : m_image_ctx(image_ctx), m_snap_id(snap_id),
+  : RefCountedObject(image_ctx.cct),
+    m_image_ctx(image_ctx), m_snap_id(snap_id),
     m_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::ObjectMap::lock", this))),
     m_update_guard(new UpdateGuard(m_image_ctx.cct)) {
 }
@@ -144,19 +147,23 @@ bool ObjectMap<I>::update_required(const ceph::BitVector<2>::Iterator& it,
 
 template <typename I>
 void ObjectMap<I>::open(Context *on_finish) {
+  Context *ctx = create_context_callback<Context>(on_finish, this);
+
   auto req = object_map::RefreshRequest<I>::create(
-    m_image_ctx, &m_lock, &m_object_map, m_snap_id, on_finish);
+    m_image_ctx, &m_lock, &m_object_map, m_snap_id, ctx);
   req->send();
 }
 
 template <typename I>
 void ObjectMap<I>::close(Context *on_finish) {
+  Context *ctx = create_context_callback<Context>(on_finish, this);
+
   if (m_snap_id != CEPH_NOSNAP) {
-    m_image_ctx.op_work_queue->queue(on_finish, 0);
+    m_image_ctx.op_work_queue->queue(ctx, 0);
     return;
   }
 
-  auto req = object_map::UnlockRequest<I>::create(m_image_ctx, on_finish);
+  auto req = object_map::UnlockRequest<I>::create(m_image_ctx, ctx);
   req->send();
 }
 
@@ -176,8 +183,10 @@ void ObjectMap<I>::rollback(uint64_t snap_id, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
 
   std::unique_lock locker{m_lock};
+  Context *ctx = create_context_callback<Context>(on_finish, this);
+
   object_map::SnapshotRollbackRequest *req =
-    new object_map::SnapshotRollbackRequest(m_image_ctx, snap_id, on_finish);
+    new object_map::SnapshotRollbackRequest(m_image_ctx, snap_id, ctx);
   req->send();
 }
 
@@ -187,9 +196,11 @@ void ObjectMap<I>::snapshot_add(uint64_t snap_id, Context *on_finish) {
   ceph_assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   ceph_assert(snap_id != CEPH_NOSNAP);
 
+  Context *ctx = create_context_callback<Context>(on_finish, this);
+
   object_map::SnapshotCreateRequest *req =
     new object_map::SnapshotCreateRequest(m_image_ctx, &m_lock, &m_object_map,
-                                          snap_id, on_finish);
+                                          snap_id, ctx);
   req->send();
 }
 
@@ -199,9 +210,11 @@ void ObjectMap<I>::snapshot_remove(uint64_t snap_id, Context *on_finish) {
   ceph_assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   ceph_assert(snap_id != CEPH_NOSNAP);
 
+  Context *ctx = create_context_callback<Context>(on_finish, this);
+
   object_map::SnapshotRemoveRequest *req =
     new object_map::SnapshotRemoveRequest(m_image_ctx, &m_lock, &m_object_map,
-                                          snap_id, on_finish);
+                                          snap_id, ctx);
   req->send();
 }
 
@@ -219,8 +232,10 @@ void ObjectMap<I>::aio_save(Context *on_finish) {
   }
   cls_client::object_map_save(&op, m_object_map);
 
+  Context *ctx = create_context_callback<Context>(on_finish, this);
+
   std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
-  librados::AioCompletion *comp = util::create_rados_callback(on_finish);
+  librados::AioCompletion *comp = util::create_rados_callback(ctx);
 
   int r = m_image_ctx.md_ctx.aio_operate(oid, comp, &op);
   ceph_assert(r == 0);
@@ -238,9 +253,11 @@ void ObjectMap<I>::aio_resize(uint64_t new_size, uint8_t default_object_state,
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
               m_image_ctx.exclusive_lock->is_lock_owner());
 
+  Context *ctx = create_context_callback<Context>(on_finish, this);
+
   object_map::ResizeRequest *req = new object_map::ResizeRequest(
     m_image_ctx, &m_lock, &m_object_map, m_snap_id, new_size,
-    default_object_state, on_finish);
+    default_object_state, ctx);
   req->send();
 }
 

@@ -21,13 +21,15 @@
 namespace librbd {
 
 using namespace exclusive_lock;
+using librbd::util::create_context_callback;
 
 template <typename I>
 using ML = ManagedLock<I>;
 
 template <typename I>
 ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
-  : ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
+  : RefCountedObject(image_ctx.cct),
+    ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
           image_ctx.image_watcher, managed_lock::EXCLUSIVE,
           image_ctx.config.template get_val<bool>("rbd_blacklist_on_break_lock"),
           image_ctx.config.template get_val<uint64_t>("rbd_blacklist_expire_seconds")),
@@ -105,6 +107,9 @@ int ExclusiveLock<I>::get_unlocked_op_error() const {
 template <typename I>
 void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+
+  on_init = create_context_callback<Context>(on_init, this);
+
   ldout(m_image_ctx.cct, 10) << dendl;
 
   {
@@ -119,6 +124,8 @@ void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
 template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << dendl;
+
+  on_shut_down = create_context_callback<Context>(on_shut_down, this);
 
   ML<I>::shut_down(on_shut_down);
 

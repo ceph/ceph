@@ -13,7 +13,6 @@
 #include "journal/ReplayEntry.h"
 #include "journal/Settings.h"
 #include "journal/Utils.h"
-#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
@@ -327,7 +326,8 @@ std::ostream &operator<<(std::ostream &os,
 
 template <typename I>
 Journal<I>::Journal(I &image_ctx)
-  : m_image_ctx(image_ctx), m_journaler(NULL),
+  : RefCountedObject(image_ctx.cct),
+    m_image_ctx(image_ctx), m_journaler(NULL),
     m_state(STATE_UNINITIALIZED),
     m_error_result(0), m_replay_handler(this), m_close_pending(false),
     m_event_tid(0),
@@ -353,6 +353,7 @@ Journal<I>::~Journal() {
     delete m_work_queue;
   }
 
+  std::lock_guard locker{m_lock};
   ceph_assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
   ceph_assert(m_journaler == NULL);
   ceph_assert(m_journal_replay == NULL);
@@ -566,6 +567,8 @@ void Journal<I>::open(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  on_finish = create_context_callback<Context>(on_finish, this);
+
   on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
   // inject our handler into the object dispatcher chain
@@ -583,6 +586,8 @@ void Journal<I>::close(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  on_finish = create_context_callback<Context>(on_finish, this);
+
   on_finish = new LambdaContext([this, on_finish](int r) {
       // remove our handler from object dispatcher chain - preserve error
       auto ctx = new LambdaContext([on_finish, r](int _) {
@@ -598,12 +603,12 @@ void Journal<I>::close(Context *on_finish) {
 
   Listeners listeners(m_listeners);
   m_listener_notify = true;
-  m_lock.unlock();
+  locker.unlock();
   for (auto listener : listeners) {
     listener->handle_close();
   }
 
-  m_lock.lock();
+  locker.lock();
   m_listener_notify = false;
   m_listener_cond.notify_all();
 
@@ -958,6 +963,8 @@ void Journal<I>::flush_event(uint64_t tid, Context *on_safe) {
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  << "on_safe=" << on_safe << dendl;
 
+  on_safe = create_context_callback<Context>(on_safe, this);
+
   Future future;
   {
     std::lock_guard event_locker{m_event_lock};
@@ -974,6 +981,8 @@ void Journal<I>::wait_event(uint64_t tid, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  << "on_safe=" << on_safe << dendl;
+
+  on_safe = create_context_callback<Context>(on_safe, this);
 
   std::lock_guard event_locker{m_event_lock};
   wait_event(m_lock, tid, on_safe);
@@ -1249,6 +1258,8 @@ void Journal<I>::handle_replay_ready() {
     m_processing_entry = true;
   }
 
+  m_async_journal_op_tracker.start_op();
+
   bufferlist data = replay_entry.get_data();
   auto it = data.cbegin();
 
@@ -1310,11 +1321,16 @@ void Journal<I>::handle_replay_complete(int r) {
       // ensure the commit position is flushed to disk
       m_journaler->flush_commit_position(ctx);
     });
+  ctx = create_async_context_callback(m_image_ctx, ctx);
+  ctx = new LambdaContext([this, ctx](int r) {
+      m_async_journal_op_tracker.wait_for_ops(ctx);
+    });
   ctx = new LambdaContext([this, cct, cancel_ops, ctx](int r) {
       ldout(cct, 20) << this << " handle_replay_complete: "
                      << "shut down replay" << dendl;
       m_journal_replay->shut_down(cancel_ops, ctx);
     });
+
   m_journaler->stop_replay(ctx);
 }
 
@@ -1373,16 +1389,21 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
           m_journal_replay->shut_down(true, ctx);
         });
       m_journaler->stop_replay(ctx);
+      m_async_journal_op_tracker.finish_op();
       return;
     } else if (m_state == STATE_FLUSHING_REPLAY) {
       // end-of-replay flush in-progress -- we need to restart replay
       transition_state(STATE_FLUSHING_RESTART, r);
+      locker.unlock();
+      m_async_journal_op_tracker.finish_op();
       return;
     }
   } else {
     // only commit the entry if written successfully
     m_journaler->committed(replay_entry);
   }
+  locker.unlock();
+  m_async_journal_op_tracker.finish_op();
 }
 
 template <typename I>
@@ -1738,7 +1759,7 @@ void Journal<I>::handle_refresh_metadata(uint64_t refresh_sequence,
 
   Listeners listeners(m_listeners);
   m_listener_notify = true;
-  m_lock.unlock();
+  locker.unlock();
 
   if (promoted_to_primary) {
     for (auto listener : listeners) {
@@ -1750,7 +1771,7 @@ void Journal<I>::handle_refresh_metadata(uint64_t refresh_sequence,
     }
   }
 
-  m_lock.lock();
+  locker.lock();
   m_listener_notify = false;
   m_listener_cond.notify_all();
 }

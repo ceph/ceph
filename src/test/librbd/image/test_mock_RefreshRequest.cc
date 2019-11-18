@@ -811,8 +811,8 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLock) {
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
 
-  MockExclusiveLock *mock_exclusive_lock = new MockExclusiveLock();
-  mock_image_ctx.exclusive_lock = mock_exclusive_lock;
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   MockObjectMap mock_object_map;
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
@@ -853,7 +853,7 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLock) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_shut_down_exclusive_lock(mock_image_ctx, *mock_exclusive_lock, 0);
+  expect_shut_down_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
@@ -1058,8 +1058,8 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
     mock_image_ctx.object_map = &mock_object_map;
   }
 
-  MockJournal *mock_journal = new MockJournal();
-  mock_image_ctx.journal = mock_journal;
+  MockJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
 
   if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
     ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
@@ -1083,7 +1083,7 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   if (!mock_image_ctx.clone_copy_on_read) {
     expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_READ, false);
   }
-  expect_close_journal(mock_image_ctx, *mock_journal, 0);
+  expect_close_journal(mock_image_ctx, mock_journal, 0);
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond ctx;
@@ -1186,8 +1186,8 @@ TEST_F(TestMockImageRefreshRequest, DisableObjectMap) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  MockObjectMap *mock_object_map = new MockObjectMap();
-  mock_image_ctx.object_map = mock_object_map;
+  MockObjectMap mock_object_map;
+  mock_image_ctx.object_map = &mock_object_map;
 
   MockJournal mock_journal;
   if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
@@ -1212,7 +1212,7 @@ TEST_F(TestMockImageRefreshRequest, DisableObjectMap) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_close_object_map(mock_image_ctx, *mock_object_map, 0);
+  expect_close_object_map(mock_image_ctx, mock_object_map, 0);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
@@ -1240,7 +1240,7 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapError) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  MockObjectMap *mock_object_map = new MockObjectMap();
+  MockObjectMap mock_object_map;
 
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
@@ -1254,7 +1254,7 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapError) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_open_object_map(mock_image_ctx, mock_object_map, -EBLACKLISTED);
+  expect_open_object_map(mock_image_ctx, &mock_object_map, -EBLACKLISTED);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false,
@@ -1284,7 +1284,7 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapTooLarge) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  MockObjectMap *mock_object_map = new MockObjectMap();
+  MockObjectMap mock_object_map;
 
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
@@ -1298,7 +1298,7 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapTooLarge) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_open_object_map(mock_image_ctx, mock_object_map, -EFBIG);
+  expect_open_object_map(mock_image_ctx, &mock_object_map, -EFBIG);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false,
