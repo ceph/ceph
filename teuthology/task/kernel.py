@@ -77,8 +77,8 @@ def normalize_config(ctx, config):
     :param config: Configuration
     """
     if not config or \
-            len(filter(lambda x: x in VERSION_KEYS + ['kdb', 'flavor'],
-                       config.keys())) == len(config.keys()):
+            len([x for x in config.keys() if x in
+                VERSION_KEYS + ['kdb', 'flavor']]) == len(config.keys()):
         new_config = {}
         if not config:
             config = CONFIG_DEFAULT
