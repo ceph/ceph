@@ -18,7 +18,7 @@
 #include "include/intarith.h"
 
 template <class Bitset, class Func>
-void apply(uint64_t off,
+void apply_for_bitset_range(uint64_t off,
   uint64_t len,
   uint64_t granularity,
   Bitset &bitset,
