@@ -62,25 +62,6 @@ import uuid
 from distutils.spawn import find_executable
 from glob import glob
 
-try:
-    from tempfile import TemporaryDirectory # py3
-except ImportError:
-    # define a minimal (but sufficient) equivalent for <= py 3.2
-    class TemporaryDirectory(object): # type: ignore
-        def __init__(self):
-            self.name = tempfile.mkdtemp()
-
-        def __enter__(self):
-            if not self.name:
-                self.name = tempfile.mkdtemp()
-            return self.name
-
-        def cleanup(self):
-            shutil.rmtree(self.name)
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.cleanup()
-
 
 container_path = None
 
@@ -763,25 +744,6 @@ WantedBy=ceph-{fsid}.target
     data_dir=args.data_dir)
     return u
 
-def gen_ssh_key(fsid):
-    # type: (str) -> Tuple[str, str]
-    tmp_dir = TemporaryDirectory()
-    path = tmp_dir.name + '/key'
-    call_throws([
-        'ssh-keygen',
-        '-C', 'ceph-%s' % fsid,
-        '-N', '',
-        '-f', path
-    ])
-    with open(path, 'r') as f:
-        secret = f.read()
-    with open(path + '.pub', 'r') as f:
-        pub = f.read()
-    os.unlink(path)
-    os.unlink(path + '.pub')
-    tmp_dir.cleanup()
-    return (secret, pub)
-
 ##################################
 
 class CephContainer:
@@ -1133,40 +1095,18 @@ def command_bootstrap():
 
     # ssh
     if not args.skip_ssh:
-        logger.info('Generating ssh key...')
-        (ssh_key, ssh_pub) = gen_ssh_key(fsid)
+        logger.info('Enabling ssh module...')
+        cli(['mgr', 'module', 'enable', 'ssh'])
+        logger.info('Setting orchestrator backend to ssh...')
+        cli(['orchestrator', 'set', 'backend', 'ssh'])
 
-        tmp_key = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_key.fileno(), 0o600)
-        os.fchown(tmp_key.fileno(), uid, gid)
-        tmp_key.write(ssh_key)
-        tmp_key.flush()
-        tmp_pub = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_pub.fileno(), 0o600)
-        os.fchown(tmp_pub.fileno(), uid, gid)
-        tmp_pub.write(ssh_pub)
-        tmp_pub.flush()
+        logger.info('Generating ssh key...')
+        cli(['ssh', 'generate-key'])
+        ssh_pub = cli(['ssh', 'get-pub-key'])
 
         with open(args.output_pub_ssh_key, 'w') as f:
             f.write(ssh_pub)
         logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
-
-        cli([
-            'config-key',
-            'set',
-            'mgr/ssh/ssh_identity_key',
-            '-i', '/tmp/key'
-        ], {
-            tmp_key.name: '/tmp/key:z',
-        })
-        cli([
-            'config-key',
-            'set',
-            'mgr/ssh/ssh_identity_pub',
-            '-i', '/tmp/pub'
-        ], {
-            tmp_pub.name: '/tmp/pub:z',
-        })
 
         logger.info('Adding key to root@localhost\'s authorized_keys...')
         if not os.path.exists('/root/.ssh'):
@@ -1175,10 +1115,6 @@ def command_bootstrap():
             os.fchmod(f.fileno(), 0o600)  # just in case we created it
             f.write(ssh_pub.strip() + '\n')
 
-        logger.info('Enabling ssh module...')
-        cli(['mgr', 'module', 'enable', 'ssh'])
-        logger.info('Setting orchestrator backend to ssh...')
-        cli(['orchestrator', 'set', 'backend', 'ssh'])
         host = get_hostname()
         logger.info('Adding host %s...' % host)
         cli(['orchestrator', 'host', 'add', host])
