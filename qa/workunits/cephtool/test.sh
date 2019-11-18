@@ -11,19 +11,6 @@ PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 SUDO=${SUDO:-sudo}
 export CEPH_DEV=1
 
-function get_admin_socket()
-{
-  local client=$1
-
-  if test -n "$CEPH_ASOK_DIR";
-  then
-    echo $(get_asok_dir)/$client.asok
-  else
-    local cluster=$(echo $CEPH_ARGS | sed  -r 's/.*--cluster[[:blank:]]*([[:alnum:]]*).*/\1/')
-    echo "/var/run/ceph/$cluster-$client.asok"
-  fi
-}
-
 function check_no_osd_down()
 {
     ! ceph osd dump | grep ' down '
@@ -2093,29 +2080,29 @@ function test_mon_pg()
   ceph osd set-backfillfull-ratio .912
 
   # Check injected full results
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull nearfull
+  $SUDO ceph tell osd.0 injectfull nearfull
   wait_for_health "OSD_NEARFULL"
   ceph health detail | grep "osd.0 is near full"
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
+  $SUDO ceph tell osd.0 injectfull none
   wait_for_health_ok
 
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull backfillfull
+  $SUDO ceph tell osd.1 injectfull backfillfull
   wait_for_health "OSD_BACKFILLFULL"
   ceph health detail | grep "osd.1 is backfill full"
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
+  $SUDO ceph tell osd.1 injectfull none
   wait_for_health_ok
 
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull failsafe
+  $SUDO ceph tell osd.2 injectfull failsafe
   # failsafe and full are the same as far as the monitor is concerned
   wait_for_health "OSD_FULL"
   ceph health detail | grep "osd.2 is full"
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
+  $SUDO ceph tell osd.2 injectfull none
   wait_for_health_ok
 
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
+  $SUDO ceph tell osd.0 injectfull full
   wait_for_health "OSD_FULL"
   ceph health detail | grep "osd.0 is full"
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
+  $SUDO ceph tell osd.0 injectfull none
   wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
@@ -2494,7 +2481,7 @@ function test_admin_heap_profiler()
   do_test=1
   set +e
   # expect 'heap' commands to be correctly parsed
-  ceph daemon osd.0 heap stats 2>$TMPFILE
+  ceph tell osd.0 heap stats 2>$TMPFILE
   if [[ $? -eq 22 && `grep 'tcmalloc not enabled' $TMPFILE` ]]; then
     echo "tcmalloc not enabled; skip heap profiler test"
     do_test=0
@@ -2503,12 +2490,10 @@ function test_admin_heap_profiler()
 
   [[ $do_test -eq 0 ]] && return 0
 
-  local admin_socket=$(get_admin_socket osd.0)
-
-  $SUDO ceph --admin-daemon $admin_socket heap start_profiler
-  $SUDO ceph --admin-daemon $admin_socket heap dump
-  $SUDO ceph --admin-daemon $admin_socket heap stop_profiler
-  $SUDO ceph --admin-daemon $admin_socket heap release
+  $SUDO ceph tell osd.0 heap start_profiler
+  $SUDO ceph tell osd.0 heap dump
+  $SUDO ceph tell osd.0 heap stop_profiler
+  $SUDO ceph tell osd.0 heap release
 }
 
 function test_osd_bench()
