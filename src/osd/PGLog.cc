@@ -482,6 +482,9 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
 
     info.last_user_version = oinfo.last_user_version;
     info.purged_snaps = oinfo.purged_snaps;
+    // update num_missing too
+    // we might have appended some more missing objects above
+    info.stats.stats.sum.num_objects_missing = missing.num_missing();
 
     changed = true;
   }
