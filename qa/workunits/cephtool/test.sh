@@ -2489,32 +2489,12 @@ function test_mon_osd_misc()
   expect_false ceph osd reweight-by-pg 110 boguspoolasdfasdfasdf
 }
 
-function test_mon_heap_profiler()
-{
-  do_test=1
-  set +e
-  # expect 'heap' commands to be correctly parsed
-  ceph heap stats 2>$TMPFILE
-  if [[ $? -eq 22 && `grep 'tcmalloc not enabled' $TMPFILE` ]]; then
-    echo "tcmalloc not enabled; skip heap profiler test"
-    do_test=0
-  fi
-  set -e
-
-  [[ $do_test -eq 0 ]] && return 0
-
-  ceph heap start_profiler
-  ceph heap dump
-  ceph heap stop_profiler
-  ceph heap release
-}
-
 function test_admin_heap_profiler()
 {
   do_test=1
   set +e
   # expect 'heap' commands to be correctly parsed
-  ceph heap stats 2>$TMPFILE
+  ceph daemon osd.0 heap stats 2>$TMPFILE
   if [[ $? -eq 22 && `grep 'tcmalloc not enabled' $TMPFILE` ]]; then
     echo "tcmalloc not enabled; skip heap profiler test"
     do_test=0
@@ -2837,7 +2817,6 @@ MON_TESTS+=" mon_osd_pool_set"
 MON_TESTS+=" mon_osd_tiered_pool_set"
 MON_TESTS+=" mon_osd_erasure_code"
 MON_TESTS+=" mon_osd_misc"
-MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
