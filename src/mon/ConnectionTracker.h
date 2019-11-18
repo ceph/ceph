@@ -140,6 +140,15 @@ class ConnectionTracker {
    * For this summation, if a rank reports a peer as down its score is zero.
    */
   void get_total_connection_score(int rank, double *rating, int *live_count) const;
+
+  void notify_reset() {
+    conn_tracker = PeerReportTracker();
+    peer_reports.clear();
+  }
+  void notify_rank_changed(int new_rank) {
+    conn_tracker.peers.erase(new_rank);
+    peer_reports.erase(new_rank);
+  }
   
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);

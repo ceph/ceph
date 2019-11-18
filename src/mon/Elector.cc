@@ -649,3 +649,18 @@ void Elector::start_participating()
 {
   logic.participating = true;
 }
+
+void Elector::notify_clear_peer_state()
+{
+  peer_tracker.notify_reset();
+}
+
+void Elector::notify_rank_changed(int new_rank)
+{
+  peer_tracker.notify_rank_changed(new_rank);
+}
+
+void Elector::notify_new_monmap()
+{
+  notify_clear_peer_state();
+}
