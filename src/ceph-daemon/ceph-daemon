@@ -1000,7 +1000,7 @@ def command_bootstrap():
               '--keyring', '/tmp/keyring',
         ] + get_daemon_args(fsid, 'mon', mon_id),
         volume_mounts={
-            log_dir: '/var/log/ceph:z',
+            log_dir: '/var/log/ceph',
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
             tmp_bootstrap_keyring.name: '/tmp/keyring:z',
             tmp_monmap.name: '/tmp/monmap:z',
