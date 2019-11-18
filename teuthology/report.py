@@ -157,7 +157,7 @@ class ResultsSerializer(object):
         :returns:        A dict like: {'1': '/path/to/1', '2': 'path/to/2'}
         """
         jobs = self.jobs_for_run(run_name)
-        for job_id in jobs.keys():
+        for job_id in list(jobs):
             if os.path.exists(os.path.join(jobs[job_id], 'summary.yaml')):
                 jobs.pop(job_id)
         return jobs
@@ -513,10 +513,13 @@ def try_delete_jobs(run_name, job_ids, delete_empty_run=True):
     """
     log = init_logging()
 
-    if isinstance(job_ids, int):
-        job_ids = [str(job_ids)]
-    elif isinstance(job_ids, basestring):
-        job_ids = [job_ids]
+    if not isinstance(job_ids, list):
+        if isinstance(job_ids, int):
+            job_ids = [str(job_ids)]
+        elif isinstance(job_ids, bytes):
+            job_ids = [str(job_ids.decode())]
+        else:
+            job_ids = [job_ids]
 
     reporter = ResultsReporter()
     if not reporter.base_uri:
