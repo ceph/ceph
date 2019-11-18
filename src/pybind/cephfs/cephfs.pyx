@@ -49,13 +49,21 @@ cdef extern from "sys/statvfs.h":
         unsigned long int f_padding[32]
 
 
-cdef extern from "dirent.h":
-    cdef struct dirent:
-        long int d_ino
-        unsigned long int d_off
-        unsigned short int d_reclen
-        unsigned char d_type
-        char d_name[256]
+IF UNAME_SYSNAME == "FreeBSD":
+    cdef extern from "dirent.h":
+        cdef struct dirent:
+            long int d_ino
+            unsigned short int d_reclen
+            unsigned char d_type
+            char d_name[256]
+ELSE:
+    cdef extern from "dirent.h":
+        cdef struct dirent:
+            long int d_ino
+            unsigned long int d_off
+            unsigned short int d_reclen
+            unsigned char d_type
+            char d_name[256]
 
 
 cdef extern from "time.h":
@@ -316,11 +324,18 @@ cdef class DirResult(object):
         if not dirent:
             return None
 
-        return DirEntry(d_ino=dirent.d_ino,
-                        d_off=dirent.d_off,
-                        d_reclen=dirent.d_reclen,
-                        d_type=dirent.d_type,
-                        d_name=dirent.d_name)
+        IF UNAME_SYSNAME == "FreeBSD":
+            return DirEntry(d_ino=dirent.d_ino,
+                            d_off=0,
+                            d_reclen=dirent.d_reclen,
+                            d_type=dirent.d_type,
+                            d_name=dirent.d_name)
+        ELSE:
+             return DirEntry(d_ino=dirent.d_ino,
+                            d_off=dirent.d_off,
+                            d_reclen=dirent.d_reclen,
+                            d_type=dirent.d_type,
+                            d_name=dirent.d_name)
 
     def close(self):
         if self.handle:

@@ -1,5 +1,7 @@
 #define _FILE_OFFSET_BITS 64
+#if defined(__linux__)
 #include <features.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
