@@ -34,7 +34,7 @@ namespace ceph {
 //
 // Otherwise, returns false.
 template<std::size_t N>
-bool nul_terminated_copy(std::string_view source,
+inline bool nul_terminated_copy(std::string_view source,
 			 char* dest)
 {
   if (source.size() < N) {
@@ -270,6 +270,18 @@ inline std::string_view trim(std::string_view src,
   src.remove_suffix(src.size() - ++n);
 
   return src;
+}
+
+// Because we don't get std::basic_string_view::starts_with and
+// std::basic_string_view::ends_with until C++ 20
+constexpr inline bool starts_with(std::string_view s, std::string_view sub) {
+  return (s.size() >= sub.size() &&
+	  s.compare(0, sub.size(), sub) == 0);
+}
+
+constexpr inline bool ends_with(std::string_view s, std::string_view sub) {
+  return (s.size() >= sub.size() &&
+	  s.compare(s.size() - sub.size(), std::string_view::npos, sub) == 0);
 }
 }
 #endif // CEPH_COMMON_STR_UTIL_H
