@@ -8,7 +8,6 @@
 
 #include "rgw_torrent.h"
 #include "rgw_sal.h"
-#include "include/str_list.h"
 #include "include/rados/librados.hpp"
 
 #include "services/svc_sys_obj.h"
@@ -193,32 +192,32 @@ int seed::get_params()
 
 void seed::set_announce()
 {
-  list<string> announce_list;  // used to get announce list from conf
-  get_str_list(announce, ",", announce_list);
-
-  if (announce_list.empty())
-  {
-    ldout(s->cct, 5) << "NOTICE: announce_list is empty " << dendl;    
-    return;
-  }
-
-  list<string>::iterator iter = announce_list.begin();
+  bool announce_list_empty = true;
+  bool announce_first = true;
   dencode.bencode_key(ANNOUNCE, bl);
-  dencode.bencode_key((*iter), bl);
-
-  dencode.bencode_key(ANNOUNCE_LIST, bl);
-  dencode.bencode_list(bl);
-  for (; iter != announce_list.end(); ++iter)
-  {
-    dencode.bencode_list(bl);
-    dencode.bencode_key((*iter), bl);
-    dencode.bencode_end(bl);
+  ceph::substr_do(
+    announce,
+    [&](auto&& a) {
+      announce_list_empty = false;
+      if (announce_first) {
+	announce_first = false;
+	dencode.bencode_key(a, bl);
+	dencode.bencode_key(ANNOUNCE_LIST, bl);
+	dencode.bencode_list(bl);
+      }
+      dencode.bencode_list(bl);
+      dencode.bencode_key(a, bl);
+      dencode.bencode_end(bl);
+    }, ","sv);
+  if (announce_list_empty) {
+    ldout(s->cct, 5) << "NOTICE: announce_list is empty " << dendl;
+    return;
   }
   dencode.bencode_end(bl);
 }
 
 void seed::do_encode()
-{ 
+{
   /*Only encode create_date and sha1 info*/
   /*Other field will be added if confi is set when run get torrent*/
   dencode.bencode(CREATION_DATE, create_date, bl);

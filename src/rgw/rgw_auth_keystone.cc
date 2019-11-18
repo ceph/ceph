@@ -12,7 +12,6 @@
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "include/types.h"
-#include "include/str_list.h"
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"

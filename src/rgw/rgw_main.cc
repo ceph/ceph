@@ -204,45 +204,48 @@ int main(int argc, const char **argv)
     &defaults, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
     flags);
 
-  list<string> frontends;
   g_conf().early_expand_meta(g_conf()->rgw_frontends, &cerr);
-  get_str_list(g_conf()->rgw_frontends, ",", frontends);
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
-  if (frontends.empty()) {
-    frontends.push_back("civetweb");
-  }
-  for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
-    string& f = *iter;
-
-    if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
-      // If civetweb or beast is configured as a frontend, prevent global_init() from
-      // dropping permissions by setting the appropriate flag.
-      flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
-      if (f.find("port") != string::npos) {
-        // check for the most common ws problems
-        if ((f.find("port=") == string::npos) ||
-            (f.find("port= ") != string::npos)) {
-          derr << "WARNING: radosgw frontend config found unexpected spacing around 'port' "
-               << "(ensure frontend port parameter has the form 'port=80' with no spaces "
-               << "before or after '=')" << dendl;
-        }
+  bool frontends_empty = true;
+  int per_fe_ret = 0;
+  auto per_fe =
+    [&](std::string_view f) {
+      frontends_empty = false;
+      if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
+	// If civetweb or beast is configured as a frontend, prevent global_init() from
+	// dropping permissions by setting the appropriate flag.
+	flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
+	if (f.find("port") != string::npos) {
+	  // check for the most common ws problems
+	  if ((f.find("port=") == string::npos) ||
+	      (f.find("port= ") != string::npos)) {
+	    derr << "WARNING: radosgw frontend config found unexpected spacing around 'port' "
+		 << "(ensure frontend port parameter has the form 'port=80' with no spaces "
+		 << "before or after '=')" << dendl;
+	  }
+	}
       }
-    }
 
-    RGWFrontendConfig *config = new RGWFrontendConfig(f);
-    int r = config->init();
-    if (r < 0) {
-      delete config;
-      cerr << "ERROR: failed to init config: " << f << std::endl;
-      return EINVAL;
-    }
+      RGWFrontendConfig *config = new RGWFrontendConfig(string(f));
+      int r = config->init();
+      if (r < 0) {
+	delete config;
+	cerr << "ERROR: failed to init config: " << f << std::endl;
+	per_fe_ret = EINVAL;
+      }
+      configs.push_back(config);
 
-    configs.push_back(config);
+      string framework = config->get_framework();
+      fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
+    };
+  ceph::substr_do(g_conf()->rgw_frontends, per_fe, ",");
 
-    string framework = config->get_framework();
-    fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
+  if (per_fe_ret == 0 && frontends_empty) {
+    per_fe("civetweb"sv);
   }
+  if (per_fe_ret != 0)
+    return per_fe_ret;
 
   // Now that we've determined which frontend(s) to use, continue with global
   // initialization. Passing false as the final argument ensures that

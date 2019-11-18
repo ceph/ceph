@@ -8,8 +8,11 @@
 
 #include "include/types.h"
 
+#include "common/str_util.h"
+
 #include "rgw_acl_s3.h"
 #include "rgw_user.h"
+
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -289,8 +292,9 @@ get_acl_header(const RGWEnv *env,
   return env->get(perm->http_header);
 }
 
-static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
-        const struct s3_acl_header *perm, ACLGrant& grant)
+static int parse_grantee_str(RGWUserCtl *user_ctl,
+			     std::string_view grantee_str,
+			     const struct s3_acl_header *perm, ACLGrant& grant)
 {
   string id_type, id_val_quoted;
   int rgw_perm = perm->rgw_perm;
@@ -299,7 +303,7 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
   RGWUserInfo info;
 
 
-  auto kv = parse_key_value(std::string_view(grantee_str));
+  auto kv = parse_key_value(grantee_str);
   if (!kv)
     return -EINVAL;
 
@@ -336,26 +340,22 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
 static int parse_acl_header(RGWUserCtl *user_ctl, const RGWEnv *env,
          const struct s3_acl_header *perm, std::list<ACLGrant>& _grants)
 {
-  std::list<string> grantees;
-  std::string hacl_str;
-
   auto hacl = get_acl_header(env, perm);
   if (!hacl)
     return 0;
+  int ret = 0;
+  ceph::substr_do(
+    *hacl,
+    [&](auto&& s) {
+      ACLGrant grant;
+      ret = parse_grantee_str(user_ctl, s, perm, grant);
+      if (ret < 0)
+	return ceph::cf::stop;
+      _grants.push_back(grant);
+      return ceph::cf::go;
+    }, ","sv);
 
-  hacl_str = *hacl;
-  get_str_list(hacl_str, ",", grantees);
-
-  for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
-    ACLGrant grant;
-    int ret = parse_grantee_str(user_ctl, *it, perm, grant);
-    if (ret < 0)
-      return ret;
-
-    _grants.push_back(grant);
-  }
-
-  return 0;
+  return ret;
 }
 
 int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl)

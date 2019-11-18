@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#include "common/str_util.h"
 #include "rgw_notify_event_type.h"
-#include "include/str_list.h"
 
 namespace rgw::notify {
 
@@ -75,8 +75,11 @@ bool operator==(EventType lhs, EventType rhs) {
 
 void from_string_list(const std::string& string_list, EventTypeList& event_list) {
   event_list.clear();
-  ceph::for_each_substr(string_list, ",", [&event_list] (auto token) {
-    event_list.push_back(rgw::notify::from_string(std::string(token.begin(), token.end())));
-  });
+  ceph::substr_do(
+    string_list,
+    [&event_list](std::string_view token) {
+      event_list.push_back(rgw::notify::from_string(std::string(token.begin(),
+								token.end())));
+    }, ",");
 }
 }

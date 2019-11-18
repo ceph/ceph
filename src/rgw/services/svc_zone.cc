@@ -187,7 +187,7 @@ int RGWSI_Zone::do_start()
       continue;
     }
     ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints);
+    auto conn = new RGWRESTConn(cct, this, z.id, z.endpoints);
     zone_conn_map[id] = conn;
     if (zone_syncs_from(*zone_public_config, z) ||
         zone_syncs_from(z, *zone_public_config)) {

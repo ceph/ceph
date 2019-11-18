@@ -25,7 +25,7 @@ extern "C"{
 #include <curl/curl.h>
 }
 #include "common/ceph_crypto.h"
-#include "include/str_list.h"
+#include "common/str_util.h"
 #include "common/ceph_json.h"
 #include "common/code_environment.h"
 #include "common/ceph_argparse.h"
@@ -299,21 +299,20 @@ int run_rgw_admin(string& cmd, string& resp) {
   pid = fork();
   if (pid == 0) {
     /* child */
-    list<string> l;
-    get_str_list(cmd, " \t", l);
+    std::vector<string> l;
+    ceph::substr_insert(cmd, std::back_inserter(l), " \t");
     char *argv[l.size()];
     unsigned loop = 1;
 
-    argv[0] = (char *)"radosgw-admin";
-    for (list<string>::iterator it = l.begin(); 
-         it != l.end(); ++it) {
-      argv[loop++] = (char *)(*it).c_str();
+    argv[0] = "radosgw-admin"s.data();
+    for (auto& arg : l) {
+      argv[loop++] = arg.data();
     }
     argv[loop] = NULL;
     if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout)) {
       cout << "Unable to open stdout file" << std::endl;
     }
-    execv((g_test->get_rgw_admin_path()).c_str(), argv); 
+    execv((g_test->get_rgw_admin_path()).c_str(), argv);
   } else if (pid > 0) {
     int status;
     waitpid(pid, &status, 0);

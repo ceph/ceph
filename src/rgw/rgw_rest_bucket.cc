@@ -5,8 +5,6 @@
 #include "rgw_bucket.h"
 #include "rgw_rest_bucket.h"
 
-#include "include/str_list.h"
-
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
 

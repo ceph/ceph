@@ -177,8 +177,9 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
 }
 
 int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
-                           const list<string>& endpoints, const string *ptier_type,
-                           bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
+                           const vector<string>& endpoints, const string *ptier_type,
+                           bool *psync_from_all, vector<string>& sync_from,
+			   vector<string>& sync_from_rm,
                            string *predirect_zone, RGWSyncModulesManager *sync_mgr)
 {
   auto& zone_id = zone_params.get_id();

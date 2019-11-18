@@ -7,7 +7,6 @@
 #include "rgw_user.h"
 #include "rgw_rest_user.h"
 
-#include "include/str_list.h"
 #include "include/ceph_assert.h"
 
 #include "services/svc_zone.h"

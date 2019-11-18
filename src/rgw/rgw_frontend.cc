@@ -4,7 +4,6 @@
 #include <signal.h>
 
 #include "rgw_frontend.h"
-#include "include/str_list.h"
 
 #include "include/ceph_assert.h"
 

@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <errno.h>
+#include <cerrno>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -22,6 +22,7 @@ extern "C" {
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/str_util.h"
 
 #include "include/util.h"
 
@@ -2736,12 +2737,12 @@ int main(int argc, const char **argv)
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
   std::string redirect_zone;
   bool redirect_zone_set = false;
-  list<string> endpoints;
+  std::vector<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
   bool sync_from_all = false;
-  list<string> sync_from;
-  list<string> sync_from_rm;
+  std::vector<string> sync_from;
+  std::vector<string> sync_from_rm;
   int is_master_int;
   int set_default = 0;
   bool is_master = false;
@@ -2805,9 +2806,9 @@ int main(int argc, const char **argv)
   string object_version;
   string placement_id;
   string storage_class;
-  list<string> tags;
-  list<string> tags_add;
-  list<string> tags_rm;
+  std::vector<string> tags;
+  std::vector<string> tags_add;
+  std::vector<string> tags_rm;
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -3131,11 +3132,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
-      get_str_list(val, tags);
+      ceph::substr_insert(val, std::back_inserter(tags));
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
-      get_str_list(val, tags_add);
+      ceph::substr_insert(val, std::back_inserter(tags_add));
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*)NULL)) {
-      get_str_list(val, tags_rm);
+      ceph::substr_insert(val, std::back_inserter(tags_rm));
     } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*)NULL)) {
       api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
@@ -3143,11 +3144,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
-      get_str_list(val, endpoints);
+      ceph::substr_insert(val, std::back_inserter(endpoints));
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
-      get_str_list(val, sync_from);
+      ceph::substr_insert(val, std::back_inserter(sync_from));
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
-      get_str_list(val, sync_from_rm);
+      ceph::substr_insert(val, std::back_inserter(sync_from_rm));
     } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--sync-from-all", (char*)NULL)) {
       sync_from_all = (bool)tmp_int;
       sync_from_all_specified = true;

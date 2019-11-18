@@ -540,7 +540,7 @@ WRITE_CLASS_ENCODER(RGWZoneParams)
 struct RGWZone {
   std::string id;
   std::string name;
-  list<std::string> endpoints;
+  std::vector<std::string> endpoints;
   bool log_meta;
   bool log_data;
   bool read_only;
@@ -685,7 +685,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 
 struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string api_name;
-  list<std::string> endpoints;
+  std::vector<std::string> endpoints;
   bool is_master = false;
 
   std::string master_zone;
@@ -719,7 +719,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
   RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWSI_SysObj* sysobj_svc,
-	       const std::string& _realm_id, const list<std::string>& _endpoints)
+	       const std::string& _realm_id, const vector<std::string>& _endpoints)
     : RGWSystemMetaObj(_name, cct , sysobj_svc), endpoints(_endpoints), is_master(_is_master),
       realm_id(_realm_id) {}
 
@@ -777,8 +777,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int create_default(bool old_format = false);
   int equals(const std::string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
-               const list<std::string>& endpoints, const std::string *ptier_type,
-               bool *psync_from_all, list<std::string>& sync_from, list<std::string>& sync_from_rm,
+               const vector<std::string>& endpoints, const std::string *ptier_type,
+               bool *psync_from_all, vector<std::string>& sync_from,
+	       vector<std::string>& sync_from_rm,
                std::string *predirect_zone, RGWSyncModulesManager *sync_mgr);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);

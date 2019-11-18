@@ -9,7 +9,6 @@
 #include <iostream>
 #include <include/types.h>
 
-#include "include/str_list.h"
 #include "rgw_lc.h"
 #include "rgw_xml.h"
 #include "rgw_tag_s3.h"

@@ -10,8 +10,6 @@
 #include "rgw_http_client.h"
 #include "rgw_keystone.h"
 
-#include "include/str_list.h"
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 

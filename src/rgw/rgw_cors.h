@@ -40,17 +40,17 @@ class RGWCORSRule
 protected:
   uint32_t       max_age;
   uint8_t        allowed_methods;
-  std::string         id;
+  std::string    id;
   std::set<string, std::less<>> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
   std::set<string, std::less<>> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
   std::set<string, std::less<>> allowed_origins;
-  std::list<string> exposable_hdrs;
+  std::vector<string> exposable_hdrs;
 
 public:
   RGWCORSRule() : max_age(CORS_MAX_AGE_INVALID),allowed_methods(0) {}
   RGWCORSRule(const std::set<string, std::less<>>& o,
 	      const std::set<string, std::less<>>& h,
-              const std::list<string>& e, uint8_t f, uint32_t a)
+              const std::vector<string>& e, uint8_t f, uint32_t a)
       :max_age(a),
        allowed_methods(f),
        allowed_hdrs(h),

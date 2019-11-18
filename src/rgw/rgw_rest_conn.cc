@@ -11,7 +11,7 @@
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
                          const string& _remote_id,
-                         const list<string>& remote_endpoints,
+                         const vector<string>& remote_endpoints,
                          HostStyle _host_style)
   : cct(_cct),
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
@@ -25,7 +25,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
                          const string& _remote_id,
-                         const list<string>& remote_endpoints,
+                         const vector<string>& remote_endpoints,
                          RGWAccessKey _cred,
                          HostStyle _host_style)
   : cct(_cct),

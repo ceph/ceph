@@ -335,7 +335,7 @@ size_t cors_read_xml(void *ptr, size_t s, size_t n, void *ud){
 
 void send_cors(set<string, std::less<>> o,
                set<string, std::less<>> h,
-               list<string> e, uint8_t flags,
+               std::vector<string> e, uint8_t flags,
                unsigned max_age){
   if(g_test->get_key_type() == KEY_TYPE_S3){
     RGWCORSRule rule(o, h, e, flags, max_age);
@@ -367,7 +367,7 @@ void send_cors(set<string, std::less<>> o,
     }
     if(!e.empty()){
       string e_h;
-      for(list<string>::iterator lit = e.begin(); lit != e.end(); ++lit){
+      for(auto lit = e.begin(); lit != e.end(); ++lit){
         if(e_h.length() > 0)e_h.append(" ");
         e_h.append(*lit);
       }
@@ -397,7 +397,7 @@ TEST(TestCORS, getcors_firsttime){
 TEST(TestCORS, putcors_firsttime){
   ASSERT_EQ(0, create_bucket());
   set<string, less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "example.com");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
@@ -423,7 +423,7 @@ TEST(TestCORS, putcors_firsttime){
 TEST(TestCORS, putcors_invalid_hostname){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "*.example.*");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
@@ -443,7 +443,7 @@ TEST(TestCORS, putcors_invalid_hostname){
 TEST(TestCORS, putcors_invalid_headers){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "www.example.com");
   h.insert(h.end(), "*-Header-*");
@@ -465,7 +465,7 @@ TEST(TestCORS, putcors_invalid_headers){
 TEST(TestCORS, optionscors_test_options_1){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "*.example.com");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
@@ -497,7 +497,7 @@ TEST(TestCORS, optionscors_test_options_1){
 TEST(TestCORS, optionscors_test_options_2){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "*.example.com");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT | RGW_CORS_DELETE | RGW_CORS_HEAD;
@@ -532,7 +532,7 @@ TEST(TestCORS, optionscors_test_options_2){
 TEST(TestCORS, optionscors_test_options_3){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "*");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT | RGW_CORS_DELETE | RGW_CORS_HEAD;
@@ -598,7 +598,7 @@ TEST(TestCORS, optionscors_test_options_3){
 TEST(TestCORS, optionscors_test_options_4){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "example.com");
   h.insert(h.end(), "Header1");
@@ -692,7 +692,7 @@ TEST(TestCORS, optionscors_test_options_4){
 TEST(TestCORS, optionscors_test_options_5){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "example.com");
   e.insert(e.end(), "Expose1");
@@ -720,7 +720,7 @@ TEST(TestCORS, optionscors_test_options_5){
 TEST(TestCORS, optionscors_test_options_6){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
   unsigned err = (g_test->get_key_type() == KEY_TYPE_SWIFT)?401U:403U;
 
   origins.insert(origins.end(), "http://www.example.com");
@@ -743,7 +743,7 @@ TEST(TestCORS, optionscors_test_options_6){
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
   EXPECT_EQ(err, g_test->get_resp_code());
-  
+
   g_test->set_extra_header(string("Origin: http://www.example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
@@ -810,7 +810,7 @@ TEST(TestCORS, optionscors_test_options_6){
 TEST(TestCORS, optionscors_test_options_7){
   ASSERT_EQ(0, create_bucket());
   set<string, std::less<>> origins, h;
-  list<string> e;
+  vector<string> e;
 
   origins.insert(origins.end(), "example.com");
   h.insert(h.end(), "Header*");
@@ -850,7 +850,7 @@ TEST(TestCORS, deletecors_firsttime){
 
 TEST(TestCORS, deletecors_test){
   set<string, less<>> origins, h;
-  list<string> e;
+  vector<string> e;
   if(g_test->get_key_type() == KEY_TYPE_SWIFT)return;
   ASSERT_EQ(0, create_bucket());
   origins.insert(origins.end(), "example.com");

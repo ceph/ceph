@@ -75,13 +75,13 @@ public:
   }
 
   //key len
-  void bencode_key(const std::string& key, bufferlist& bl) 
+  void bencode_key(std::string_view key, bufferlist& bl) 
   {
     int len = key.length();
-    char info[100] = { 0 }; 
+    char info[100] = { 0 };
     sprintf(info, "%d:", len);
     bl.append(info, strlen(info));
-    bl.append(key.c_str(), len); 
+    bl.append(key.data(), len);
   }
 };
 

@@ -22,7 +22,7 @@
 
 #include "include/types.h"
 #include "common/debug.h"
-#include "include/str_list.h"
+#include "common/str_util.h"
 #include "common/Formatter.h"
 #include "common/str_util.h"
 
@@ -85,10 +85,10 @@ static bool is_string_in_set(const set<string, std::less<>>& s,
   for(auto it = s.begin(); it != s.end(); ++it) {
     size_t off;
     if ((off = (*it).find("*"))!=string::npos) {
-      list<string> ssplit;
+      std::deque<string> ssplit;
       unsigned flen = 0;
 
-      get_str_list((*it), "* \t", ssplit);
+      ceph::substr_insert((*it), std::back_inserter(ssplit), "* \t");
       if (off != 0) {
         string sl = ssplit.front();
         flen = sl.length();
@@ -99,7 +99,7 @@ static bool is_string_in_set(const set<string, std::less<>>& s,
       }
       if (off != ((*it).length() - 1)) {
         string sl = ssplit.front();
-        dout(10) << "Finding " << sl << ", in " << h 
+        dout(10) << "Finding " << sl << ", in " << h
           << ", at offset not less than " << flen << dendl;
         if (h.size() < sl.size() ||
 	    h.compare((h.size() - sl.size()), sl.size(), sl) != 0)
@@ -137,7 +137,7 @@ bool RGWCORSRule::is_header_allowed(std::string_view h) {
 
 void RGWCORSRule::format_exp_headers(string& s) {
   s = "";
-  for(list<string>::iterator it = exposable_hdrs.begin();
+  for(auto it = exposable_hdrs.begin();
       it != exposable_hdrs.end(); ++it) {
       if (s.length() > 0)
         s.append(",");

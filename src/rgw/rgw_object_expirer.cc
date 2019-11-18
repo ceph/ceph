@@ -19,7 +19,6 @@
 #include "global/global_init.h"
 
 #include "include/utime.h"
-#include "include/str_list.h"
 
 #include "rgw_user.h"
 #include "rgw_bucket.h"

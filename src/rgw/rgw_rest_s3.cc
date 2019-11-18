@@ -19,6 +19,8 @@
 
 #include <liboath/oath.h>
 
+#include <fmt/format.h>
+
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
@@ -3388,55 +3390,60 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
-  list<string> expressions;
-  get_str_list(iter->second, ",", expressions);
+  try {
+    ceph::substr_do(
+      iter->second,
+      [&](auto&& expression) {
+	vector<string> args;
+	ceph::substr_insert(expression, std::back_inserter(args), ";");
 
-  for (auto& expression : expressions) {
-    vector<string> args;
-    get_str_vec(expression, ";", args);
+	if (args.empty()) {
+	  s->err.message = "invalid empty expression";
+	  ldpp_dout(this, 5) << s->err.message << dendl;
+	  throw -EINVAL;
+	}
+	if (args.size() > 2) {
+	  s->err.message = fmt::format("invalid expression: {}",
+				       expression);
+	  ldpp_dout(this, 5) << s->err.message << dendl;
+	  throw -EINVAL;
+	}
 
-    if (args.empty()) {
-      s->err.message = "invalid empty expression";
-      ldpp_dout(this, 5) << s->err.message << dendl;
-      return -EINVAL;
-    }
-    if (args.size() > 2) {
-      s->err.message = string("invalid expression: ") + expression;
-      ldpp_dout(this, 5) << s->err.message << dendl;
-      return -EINVAL;
-    }
+	string key(ceph::transform(ceph::trim(args[0]),
+				 [](char c) { return char(std::tolower(c)); }));
+	string val;
+	if (args.size() > 1) {
+	  val = ceph::transform(ceph::trim(args[1]),
+				[](char c) { return char(tolower(c)); });
+	}
 
-    string key(ceph::transform(ceph::trim(args[0]),
-			       [](char c) { return char(std::tolower(c)); }));
-    string val;
-    if (args.size() > 1) {
-      val = ceph::transform(ceph::trim(args[1]),
-			    [](char c) { return char(tolower(c)); });
-    }
+	if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
+	  s->err.message = fmt::format("invalid expression, key must start"
+				       "with '" RGW_AMZ_META_PREFIX "' : {}",
+				       expression);
+	  ldpp_dout(this, 5) << s->err.message << dendl;
+	  throw -EINVAL;
+	}
 
-    if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
-      s->err.message = string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : ") + expression;
-      ldpp_dout(this, 5) << s->err.message << dendl;
-      return -EINVAL;
-    }
+	key = key.substr(sizeof(RGW_AMZ_META_PREFIX) - 1);
 
-    key = key.substr(sizeof(RGW_AMZ_META_PREFIX) - 1);
+	ESEntityTypeMap::EntityType entity_type;
 
-    ESEntityTypeMap::EntityType entity_type;
-
-    if (val.empty() || val == "str" || val == "string") {
-      entity_type = ESEntityTypeMap::ES_ENTITY_STR;
-    } else if (val == "int" || val == "integer") {
-      entity_type = ESEntityTypeMap::ES_ENTITY_INT;
-    } else if (val == "date" || val == "datetime") {
-      entity_type = ESEntityTypeMap::ES_ENTITY_DATE;
-    } else {
-      s->err.message = string("invalid entity type: ") + val;
-      ldpp_dout(this, 5) << s->err.message << dendl;
-      return -EINVAL;
-    }
-
-    mdsearch_config[key] = entity_type;
+	if (val.empty() || val == "str" || val == "string") {
+	  entity_type = ESEntityTypeMap::ES_ENTITY_STR;
+	} else if (val == "int" || val == "integer") {
+	  entity_type = ESEntityTypeMap::ES_ENTITY_INT;
+	} else if (val == "date" || val == "datetime") {
+	  entity_type = ESEntityTypeMap::ES_ENTITY_DATE;
+	} else {
+	  s->err.message = string("invalid entity type: ") + val;
+	  ldpp_dout(this, 5) << s->err.message << dendl;
+	  throw -EINVAL;
+	}
+	mdsearch_config[key] = entity_type;
+      }, ",");
+  } catch (const int r) {
+    return r;
   }
 
   return 0;

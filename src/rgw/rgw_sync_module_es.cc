@@ -16,8 +16,6 @@
 
 #include "services/svc_zone.h"
 
-#include "include/str_list.h"
-
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -41,31 +39,31 @@ class ItemList {
   void parse(const string& str) {
     list<string> l;
 
-    get_str_list(str, ",", l);
+    ceph::substr_do(
+      str,
+      [&](auto&& entry) {
+	entry = rgw_trim_whitespace(entry);
+	if (entry.empty())
+	  return ceph::cf::go;
 
-    for (auto& entry : l) {
-      entry = rgw_trim_whitespace(entry);
-      if (entry.empty()) {
-        continue;
-      }
+	if (entry == "*") {
+	  approve_all = true;
+	  return ceph::cf::stop;
+	}
 
-      if (entry == "*") {
-        approve_all = true;
-        return;
-      }
+	if (entry[0] == '*') {
+	  suffixes.emplace(string(entry.substr(1)));
+	  return ceph::cf::go;
+	}
 
-      if (entry[0] == '*') {
-        suffixes.insert(entry.substr(1));
-        continue;
-      }
+	if (entry.back() == '*') {
+	  prefixes.emplace(string(entry.substr(0, entry.size() - 1)));
+	  return ceph::cf::go;
+	}
 
-      if (entry.back() == '*') {
-        prefixes.insert(entry.substr(0, entry.size() - 1));
-        continue;
-      }
-
-      entries.insert(entry);
-    }
+	entries.emplace(string(entry));
+	return ceph::cf::go;
+      }, ",");
   }
 
 public:

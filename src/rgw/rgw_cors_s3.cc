@@ -65,8 +65,7 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
     f.dump_unsigned("MaxAgeSeconds", max_age);
   }
   /*ExposeHeader*/
-  for(list<string>::iterator it = exposable_hdrs.begin(); 
-      it != exposable_hdrs.end(); ++it) {
+  for(auto it = exposable_hdrs.begin(); it != exposable_hdrs.end(); ++it) {
     f.dump_string("ExposeHeader", *it);
   }
   f.close_section();

@@ -24,7 +24,6 @@
 
 #include "include/types.h"
 #include "include/rgw/librgw_admin_user.h"
-#include "include/str_list.h"
 #include "include/stringify.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"

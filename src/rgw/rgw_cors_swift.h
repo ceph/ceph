@@ -35,7 +35,8 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
 		    std::optional<std::string_view> expose_headers,
 		    std::optional<std::string_view> max_age) {
       std::set<string, std::less<>> o, h, oc;
-      std::list<string> e;
+      std::vector<std::string> e;
+
       unsigned long a = CORS_MAX_AGE_INVALID;
       uint8_t flags = RGW_CORS_ALL;
 
