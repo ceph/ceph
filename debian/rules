@@ -60,6 +60,7 @@ override_dh_auto_install:
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
 	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
 	install -D -m 600 sudoers.d/ceph-osd-smartctl $(DESTDIR)/etc/sudoers.d/ceph-osd-smartctl
+	install -D -m 600 sudoers.d/cephdaemon $(DESTDIR)/etc/sudoers.d/cephdaemon
 
 	install -m 755 src/ceph-daemon/ceph-daemon $(DESTDIR)/usr/sbin/ceph-daemon
 
