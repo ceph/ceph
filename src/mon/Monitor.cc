@@ -418,7 +418,17 @@ int Monitor::do_admin_command(
       cmd_vec.push_back(val);
     }
     ceph_heap_profiler_handle_command(cmd_vec, out);
-  } else {
+  } else if (command == "compact" || command == "mon compact") {
+    dout(1) << "triggering manual compaction" << dendl;
+    auto start = ceph::coarse_mono_clock::now();
+    store->compact_async();
+    auto end = ceph::coarse_mono_clock::now();
+    auto duration = ceph::to_seconds<double>(end - start);
+    dout(1) << "finished manual compaction in "
+	    << duration << " seconds" << dendl;
+    out << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb")
+	<< " in " << duration << " seconds";
+ } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -841,6 +851,14 @@ int Monitor::preinit()
   // unlock while registering to avoid mon_lock -> admin socket lock dependency.
   l.unlock();
 
+  r = admin_socket->register_command("compact", admin_hook,
+				     "cause compaction of monitor's "
+				     "leveldb/rocksdb storage");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("mon compact", admin_hook,
+				     "cause compaction of monitor's "
+				     "leveldb/rocksdb storage");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("mon_status", admin_hook,
 				     "show current monitor status");
   ceph_assert(r == 0);
@@ -3495,18 +3513,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  if (prefix == "compact" || prefix == "mon compact") {
-    dout(1) << "triggering manual compaction" << dendl;
-    auto start = ceph::coarse_mono_clock::now();
-    store->compact_async();
-    auto end = ceph::coarse_mono_clock::now();
-    double duration = std::chrono::duration<double>(end-start).count();
-    dout(1) << "finished manual compaction in " << duration << " seconds" << dendl;
-    ostringstream oss;
-    oss << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb") << " in " << duration << " seconds";
-    rs = oss.str();
-    r = 0;
-  } else if (prefix == "time-sync-status") {
+  if (prefix == "time-sync-status") {
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     f->open_object_section("time_sync");
