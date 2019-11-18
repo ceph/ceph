@@ -1213,8 +1213,9 @@ def command_bootstrap():
                         password))
 
     logger.info('You can access the Ceph CLI with:\n\n'
-                '\tsudo %s shell -c %s -k %s\n' % (
+                '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
                     sys.argv[0],
+                    fsid,
                     args.output_config,
                     args.output_keyring))
 
