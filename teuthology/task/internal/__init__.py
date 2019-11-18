@@ -206,11 +206,12 @@ def buildpackages_prep(ctx, config):
     buildpackages_index = None
     buildpackages_prep_index = None
     for task in ctx.config['tasks']:
-        if task.keys()[0] == 'install':
+        t = list(task)[0]
+        if t == 'install':
             install_index = index
-        if task.keys()[0] == 'buildpackages':
+        if t == 'buildpackages':
             buildpackages_index = index
-        if task.keys()[0] == 'internal.buildpackages_prep':
+        if t == 'internal.buildpackages_prep':
             buildpackages_prep_index = index
         index += 1
     if (buildpackages_index is not None and
