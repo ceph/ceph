@@ -142,6 +142,13 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'default': 60,
             'desc': 'seconds to cache service (daemon) inventory',
         },
+        {
+            'name': 'mode',
+            'type': 'str',
+            'enum_allowed': ['root', 'ceph-daemon-package'],
+            'default': 'root',
+            'desc': 'mode for remote execution of ceph-daemon',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -266,8 +273,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self._ssh_options = None
         self.log.info('ssh_options %s' % ssh_options)
 
-        # for now, always root
-        self.ssh_user = 'root'
+        if self.mode == 'root':
+            self.ssh_user = 'root'
+        elif self.mode == 'ceph-daemon-package':
+            self.ssh_user = 'cephdaemon'
 
     @staticmethod
     def can_run():
@@ -358,12 +367,12 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         Setup a connection for running commands on remote host.
         """
-        self.log.info("opening connection to host '{}' with ssh "
-                "options '{}'".format(host, self._ssh_options))
-
+        n = self.ssh_user + '@' + host
+        self.log.info("Opening connection to {} with ssh options '{}'".format(
+            n, self._ssh_options))
         conn = remoto.Connection(
-            'root@' + host,
-            logger=self.log,
+            n,
+            logger=self.log.getChild(n),
             ssh_options=self._ssh_options)
 
         conn.import_module(remotes)
@@ -414,19 +423,23 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
-            self.log.debug('args: %s' % final_args)
-            self.log.debug('stdin: %s' % stdin)
 
-            script = 'injected_argv = ' + json.dumps(final_args) + '\n'
-            if stdin:
-                script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-            script += self._ceph_daemon
-            #self.log.debug('script is %s' % script)
-
-            out, err, code = remoto.process.check(
-                conn,
-                ['/usr/bin/python', '-u'],
-                stdin=script.encode('utf-8'))
+            if self.mode == 'root':
+                self.log.debug('args: %s' % final_args)
+                self.log.debug('stdin: %s' % stdin)
+                script = 'injected_argv = ' + json.dumps(final_args) + '\n'
+                if stdin:
+                    script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
+                script += self._ceph_daemon
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['/usr/bin/python', '-u'],
+                    stdin=script.encode('utf-8'))
+            elif self.mode == 'ceph-daemon-package':
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['sudo', '/usr/bin/ceph-daemon'] + final_args,
+                    stdin=stdin)
             self.log.debug('exit code %s out %s err %s' % (code, out, err))
             if code and not error_ok:
                 raise RuntimeError(
