@@ -93,8 +93,6 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
     ceph_assert(set_result == 0);
   }
 
-  monc->set_messenger(messenger);
-
   mdsmap.reset(new MDSMap);
 }
 
