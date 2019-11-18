@@ -2574,14 +2574,14 @@ function test_mon_deprecated_commands()
   # 'mon_debug_deprecated_as_obsolete = true' and expecting ENOTSUP for
   # each one of these commands.
 
-  ceph tell mon.a injectargs '--mon-debug-deprecated-as-obsolete'
-  expect_false ceph tell mon.a compact 2> $TMPFILE
+  ceph tell mon.* injectargs '--mon-debug-deprecated-as-obsolete'
+  expect_false ceph compact 2> $TMPFILE
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
-  expect_false ceph tell mon.a scrub 2> $TMPFILE
+  expect_false ceph scrub 2> $TMPFILE
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
-  ceph tell mon.a injectargs '--no-mon-debug-deprecated-as-obsolete'
+  ceph tell mon.* injectargs '--no-mon-debug-deprecated-as-obsolete'
 }
 
 function test_mon_cephdf_commands()
