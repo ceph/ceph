@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SSH_CONFIG = ('Host *\n'
                       'User root\n'
-                      'StrictHostKeyChecking no\n')
+                      'StrictHostKeyChecking no\n'
+                      'UserKnownHostsFile /dev/null\n')
 
 # high-level TODO:
 #  - bring over some of the protections from ceph-deploy that guard against
