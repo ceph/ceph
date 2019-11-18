@@ -144,19 +144,6 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         },
     ]
 
-    COMMANDS = [
-        {
-            'cmd': 'ssh set-ssh-config',
-            'desc': 'Set the ssh_config file (use -i <ssh_config>)',
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'ssh clear-ssh-config',
-            'desc': 'Clear the ssh_config file',
-            'perm': 'rw'
-        },
-    ]
-
     def __init__(self, *args, **kwargs):
         super(SSHOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid = self.get('mon_map')['fsid']
@@ -279,14 +266,6 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self._ssh_options = None
         self.log.info('ssh_options %s' % ssh_options)
 
-    def handle_command(self, inbuf, command):
-        if command["prefix"] == "ssh set-ssh-config":
-            return self._set_ssh_config(inbuf)
-        elif command["prefix"] == "ssh clear-ssh-config":
-            return self._clear_ssh_config()
-        else:
-            raise NotImplementedError(command["prefix"])
-
     @staticmethod
     def can_run():
         if remoto is not None:
@@ -331,18 +310,24 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 ", ".join(map(lambda h: "'{}'".format(h),
                     unregistered_hosts))))
 
-    def _set_ssh_config(self, inbuf):
+    @orchestrator._cli_write_command(
+        prefix='ssh set-ssh-config',
+        desc='Set the ssh_config file (use -i <ssh_config>)')
+    def _set_ssh_config(self, inbuf=None):
         """
         Set an ssh_config file provided from stdin
 
         TODO:
           - validation
         """
-        if len(inbuf) == 0:
-            return errno.EINVAL, "", "empty ssh config provided"
+        if inbuf is None or len(inbuf) == 0:
+            return -errno.EINVAL, "", "empty ssh config provided"
         self.set_store("ssh_config", inbuf)
         return 0, "", ""
 
+    @orchestrator._cli_write_command(
+        prefix='ssh clear-ssh-config',
+        desc='Clear the ssh_config file')
     def _clear_ssh_config(self):
         """
         Clear the ssh_config file provided from stdin
