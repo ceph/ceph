@@ -1122,7 +1122,7 @@ void PG::clear_primary_state()
 }
 
 PG::Scrubber::Scrubber()
- : reserved(false), reserve_failed(false),
+ : local_reserved(false), remote_reserved(false), reserve_failed(false),
    epoch_start(0),
    active(false),
    shallow_errors(0), deep_errors(0), fixed(0),
@@ -4341,22 +4341,24 @@ void PG::requeue_map_waiters()
 /*
  * when holding pg and sched_scrub_lock, then the states are:
  *   scheduling:
- *     scrubber.reserved = true
- *     scrub_rserved_peers includes whoami
- *     osd->scrub_pending++
+ *     scrubber.local_reserved = true
+ *     scrubber.active = false
+ *     scrubber.reserved_peers includes whoami
+ *     osd->scrubs_local++
  *   scheduling, replica declined:
- *     scrubber.reserved = true
+ *     scrubber.local_reserved = true
  *     scrubber.reserved_peers includes -1
- *     osd->scrub_pending++
+ *     osd->scrub_local++
  *   pending:
- *     scrubber.reserved = true
+ *     scrubber.local_reserved = true
+ *     scrubber.active = false
  *     scrubber.reserved_peers.size() == acting.size();
  *     pg on scrub_wq
- *     osd->scrub_pending++
+ *     osd->scrub_local++
  *   scrubbing:
- *     scrubber.reserved = false;
+ *     scrubber.local_reserved = true;
+ *     scrubber.active = true
  *     scrubber.reserved_peers empty
- *     osd->scrubber.active++
  */
 
 // returns true if a scrub has been newly kicked off
@@ -4370,7 +4372,7 @@ bool PG::sched_scrub()
 
   // All processing the first time through commits us to whatever
   // choices are made.
-  if (!scrubber.reserved) {
+  if (!scrubber.local_reserved) {
     dout(20) << __func__ << ": Start processing pg " << info.pgid << dendl;
 
     bool allow_deep_scrub = !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
@@ -4460,9 +4462,9 @@ bool PG::sched_scrub()
                           (cct->_conf->osd_repair_during_recovery && scrubber.must_repair) ||
                           !osd->is_recovery_active();
     if (allow_scrubing &&
-         osd->inc_scrubs_pending()) {
+         osd->inc_scrubs_local()) {
       dout(20) << __func__ << ": reserved locally, reserving replicas" << dendl;
-      scrubber.reserved = true;
+      scrubber.local_reserved = true;
       scrubber.reserved_peers.insert(pg_whoami);
       scrub_reserve_replicas();
     } else {
@@ -4471,7 +4473,7 @@ bool PG::sched_scrub()
     }
   }
 
-  if (scrubber.reserved) {
+  if (scrubber.local_reserved) {
     if (scrubber.reserve_failed) {
       dout(20) << __func__ << ": failed, a peer declined" << dendl;
       clear_scrub_reserved();
@@ -4624,24 +4626,24 @@ void PG::handle_scrub_reserve_request(OpRequestRef op)
 {
   dout(7) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
-  if (scrubber.reserved) {
+  if (scrubber.local_reserved) {
     dout(10) << __func__ << " ignoring reserve request: Already reserved"
 	     << dendl;
     return;
   }
   if ((cct->_conf->osd_scrub_during_recovery || !osd->is_recovery_active()) &&
-      osd->inc_scrubs_pending()) {
-    scrubber.reserved = true;
+      osd->inc_scrubs_remote()) {
+    scrubber.remote_reserved = true;
   } else {
     dout(20) << __func__ << ": failed to reserve remotely" << dendl;
-    scrubber.reserved = false;
+    scrubber.remote_reserved = false;
   }
   const MOSDScrubReserve *m =
     static_cast<const MOSDScrubReserve*>(op->get_req());
   Message *reply = new MOSDScrubReserve(
     spg_t(info.pgid.pgid, primary.shard),
     m->map_epoch,
-    scrubber.reserved ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
+    scrubber.remote_reserved ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
     pg_whoami);
   osd->send_message_osd_cluster(reply, op->get_req()->get_connection());
 }
@@ -4650,7 +4652,7 @@ void PG::handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from)
 {
   dout(7) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
-  if (!scrubber.reserved) {
+  if (!scrubber.local_reserved) {
     dout(10) << "ignoring obsolete scrub reserve reply" << dendl;
     return;
   }
@@ -4667,7 +4669,7 @@ void PG::handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from)
 {
   dout(7) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
-  if (!scrubber.reserved) {
+  if (!scrubber.local_reserved) {
     dout(10) << "ignoring obsolete scrub reserve reply" << dendl;
     return;
   }
@@ -4741,9 +4743,13 @@ void PG::clear_scrub_reserved()
   scrubber.reserved_peers.clear();
   scrubber.reserve_failed = false;
 
-  if (scrubber.reserved) {
-    scrubber.reserved = false;
-    osd->dec_scrubs_pending();
+  if (scrubber.local_reserved) {
+    scrubber.local_reserved = false;
+    osd->dec_scrubs_local();
+  }
+  if (scrubber.remote_reserved) {
+    scrubber.remote_reserved = false;
+    osd->dec_scrubs_remote();
   }
 }
 
@@ -5317,12 +5323,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
 
-	osd->inc_scrubs_active(scrubber.reserved);
-	if (scrubber.reserved) {
-	  scrubber.reserved = false;
-	  scrubber.reserved_peers.clear();
-	}
-
 	{
 	  ObjectStore::Transaction t;
 	  scrubber.cleanup_store(&t);
@@ -5682,9 +5682,12 @@ void PG::scrub_clear_state(bool has_error)
   state_clear(PG_STATE_DEEP_SCRUB);
   publish_stats_to_osd();
 
-  // active -> nothing.
-  if (scrubber.active)
-    osd->dec_scrubs_active();
+  // local -> nothing.
+  if (scrubber.local_reserved) {
+    osd->dec_scrubs_local();
+    scrubber.local_reserved = false;
+    scrubber.reserved_peers.clear();
+  }
 
   requeue_ops(waiting_for_scrub);
 

@@ -104,3 +104,9 @@
   value determined by the config options, for the average for any of the 3 intervals.
   New admin command ``ceph daemon osd.# dump_osd_network [threshold]`` will
   do the same but only including heartbeats initiated by the specified OSD.
+
+* New OSD daemon command dump_recovery_reservations which reveals the
+  recovery locks held (in_progress) and waiting in priority queues.
+
+* New OSD daemon command dump_scrub_reservations which reveals the
+  scrub reservations that are held for local (primary) and remote (replica) PGs.

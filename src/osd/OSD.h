@@ -433,8 +433,8 @@ public:
 private:
   // -- scrub scheduling --
   Mutex sched_scrub_lock;
-  int scrubs_pending;
-  int scrubs_active;
+  int scrubs_local;
+  int scrubs_remote;
 
 public:
   struct ScrubJob {
@@ -509,11 +509,12 @@ public:
     f->close_section();
   }
 
-  bool can_inc_scrubs_pending();
-  bool inc_scrubs_pending();
-  void inc_scrubs_active(bool reserved);
-  void dec_scrubs_pending();
-  void dec_scrubs_active();
+  bool can_inc_scrubs();
+  bool inc_scrubs_local();
+  void dec_scrubs_local();
+  bool inc_scrubs_remote();
+  void dec_scrubs_remote();
+  void dump_scrub_reservations(Formatter *f);
 
   void reply_op_error(OpRequestRef op, int err);
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv);

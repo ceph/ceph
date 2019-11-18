@@ -229,8 +229,9 @@ OSDService::OSDService(OSD *osd) :
   pre_publish_lock{ceph::make_mutex("OSDService::pre_publish_lock")},
   max_oldest_map(0),
   peer_map_epoch_lock("OSDService::peer_map_epoch_lock"),
-  sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
-  scrubs_active(0),
+  sched_scrub_lock("OSDService::sched_scrub_lock"),
+  scrubs_local(0),
+  scrubs_remote(0),
   agent_lock("OSDService::agent_lock"),
   agent_valid_iterator(false),
   agent_ops(0),
@@ -1349,78 +1350,77 @@ void OSDService::share_map_peer(int peer, Connection *con, OSDMapRef map)
   }
 }
 
-bool OSDService::can_inc_scrubs_pending()
+bool OSDService::can_inc_scrubs()
 {
   bool can_inc = false;
   std::lock_guard l(sched_scrub_lock);
 
-  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
-    dout(20) << __func__ << " " << scrubs_pending << " -> " << (scrubs_pending+1)
-	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active
-	     << ")" << dendl;
+  if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
+    dout(20) << __func__ << " == true " << scrubs_local << " local + " << scrubs_remote
+	     << " remote < max " << cct->_conf->osd_max_scrubs << dendl;
     can_inc = true;
   } else {
-    dout(20) << __func__ << " " << scrubs_pending << " + " << scrubs_active
-	     << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
+    dout(20) << __func__ << " == false " << scrubs_local << " local + " << scrubs_remote
+	     << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
 
   return can_inc;
 }
 
-bool OSDService::inc_scrubs_pending()
+bool OSDService::inc_scrubs_local()
 {
   bool result = false;
-
-  sched_scrub_lock.Lock();
-  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
-    dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
-	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+  std::lock_guard l{sched_scrub_lock};
+  if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
+    dout(20) << __func__ << " " << scrubs_local << " -> " << (scrubs_local+1)
+	     << " (max " << cct->_conf->osd_max_scrubs << ", remote " << scrubs_remote << ")" << dendl;
     result = true;
-    ++scrubs_pending;
+    ++scrubs_local;
   } else {
-    dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
+    dout(20) << __func__ << " " << scrubs_local << " local + " << scrubs_remote << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
-  sched_scrub_lock.Unlock();
-
   return result;
 }
 
-void OSDService::dec_scrubs_pending()
+void OSDService::dec_scrubs_local()
 {
-  sched_scrub_lock.Lock();
-  dout(20) << "dec_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending-1)
-	   << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
-  --scrubs_pending;
-  ceph_assert(scrubs_pending >= 0);
-  sched_scrub_lock.Unlock();
+  std::lock_guard l{sched_scrub_lock};
+  dout(20) << __func__ << " " << scrubs_local << " -> " << (scrubs_local-1)
+	   << " (max " << cct->_conf->osd_max_scrubs << ", remote " << scrubs_remote << ")" << dendl;
+  --scrubs_local;
+  ceph_assert(scrubs_local >= 0);
 }
 
-void OSDService::inc_scrubs_active(bool reserved)
+bool OSDService::inc_scrubs_remote()
 {
-  sched_scrub_lock.Lock();
-  ++(scrubs_active);
-  if (reserved) {
-    --(scrubs_pending);
-    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
-	     << " (max " << cct->_conf->osd_max_scrubs
-	     << ", pending " << (scrubs_pending+1) << " -> " << scrubs_pending << ")" << dendl;
-    ceph_assert(scrubs_pending >= 0);
+  bool result = false;
+  std::lock_guard l{sched_scrub_lock};
+  if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
+    dout(20) << __func__ << " " << scrubs_remote << " -> " << (scrubs_remote+1)
+	     << " (max " << cct->_conf->osd_max_scrubs << ", local " << scrubs_local << ")" << dendl;
+    result = true;
+    ++scrubs_remote;
   } else {
-    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
-	     << " (max " << cct->_conf->osd_max_scrubs
-	     << ", pending " << scrubs_pending << ")" << dendl;
+    dout(20) << __func__ << " " << scrubs_local << " local + " << scrubs_remote << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
-  sched_scrub_lock.Unlock();
+  return result;
 }
 
-void OSDService::dec_scrubs_active()
+void OSDService::dec_scrubs_remote()
 {
-  sched_scrub_lock.Lock();
-  dout(20) << "dec_scrubs_active " << scrubs_active << " -> " << (scrubs_active-1)
-	   << " (max " << cct->_conf->osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
-  --scrubs_active;
-  ceph_assert(scrubs_active >= 0);
-  sched_scrub_lock.Unlock();
+  std::lock_guard l{sched_scrub_lock};
+  dout(20) << __func__ << " " << scrubs_remote << " -> " << (scrubs_remote-1)
+	   << " (max " << cct->_conf->osd_max_scrubs << ", local " << scrubs_local << ")" << dendl;
+  --scrubs_remote;
+  ceph_assert(scrubs_remote >= 0);
+}
+
+void OSDService::dump_scrub_reservations(Formatter *f)
+{
+  std::lock_guard l{sched_scrub_lock};
+  f->dump_int("scrubs_local", scrubs_local);
+  f->dump_int("scrubs_remote", scrubs_remote);
+  f->dump_int("osd_max_scrubs", cct->_conf->osd_max_scrubs);
 }
 
 void OSDService::retrieve_epochs(epoch_t *_boot_epoch, epoch_t *_up_epoch,
@@ -2623,7 +2623,7 @@ will start to track new ops received afterwards.";
     }
 
     f->close_section(); //watchers
-  } else if (admin_command == "dump_reservations") {
+  } else if (admin_command == "dump_recovery_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
     service.local_reserver.dump(f);
@@ -2631,6 +2631,10 @@ will start to track new ops received afterwards.";
     f->open_object_section("remote_reservations");
     service.remote_reserver.dump(f);
     f->close_section();
+    f->close_section();
+  } else if (admin_command == "dump_scrub_reservations") {
+    f->open_object_section("scrub_reservations");
+    service.dump_scrub_reservations(f);
     f->close_section();
   } else if (admin_command == "get_latest_osdmap") {
     get_latest_osdmap();
@@ -3457,9 +3461,13 @@ void OSD::final_init()
 				     "show clients which have active watches,"
 				     " and on which objects");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_reservations", "dump_reservations",
+  r = admin_socket->register_command("dump_recovery_reservations", "dump_recovery_reservations",
 				     asok_hook,
 				     "show recovery reservations");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("dump_scrub_reservations", "dump_scrub_reservations",
+				     asok_hook,
+				     "show scrub reservations");
   ceph_assert(r == 0);
   r = admin_socket->register_command("get_latest_osdmap", "get_latest_osdmap",
 				     asok_hook,
@@ -7901,7 +7909,7 @@ bool OSD::scrub_load_below_threshold()
 void OSD::sched_scrub()
 {
   // if not permitted, fail fast
-  if (!service.can_inc_scrubs_pending()) {
+  if (!service.can_inc_scrubs()) {
     return;
   }
   bool allow_requested_repair_only = false;
@@ -7958,7 +7966,7 @@ void OSD::sched_scrub()
         continue;
       }
       // If it is reserving, let it resolve before going to the next scrub job
-      if (pg->scrubber.reserved) {
+      if (pg->scrubber.local_reserved && !pg->scrubber.active) {
 	pg->unlock();
 	dout(30) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
 	break;
