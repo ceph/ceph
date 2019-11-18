@@ -6,7 +6,6 @@ import pexpect
 import yaml
 import shutil
 
-from cStringIO import StringIO
 from tempfile import mkdtemp, NamedTemporaryFile
 
 from teuthology.config import config as teuth_config
@@ -249,16 +248,12 @@ class Ansible(Task):
         Generate a playbook file to use. This should not be called if we're
         using an existing file.
         """
-        pb_buffer = StringIO()
-        pb_buffer.write('---\n')
-        yaml.safe_dump(self.playbook, pb_buffer)
-        pb_buffer.seek(0)
         playbook_file = NamedTemporaryFile(
             prefix="teuth_ansible_playbook_",
             dir=self.repo_path,
             delete=False,
         )
-        playbook_file.write(pb_buffer.read())
+        yaml.safe_dump(self.playbook, playbook_file, explicit_start=True)
         playbook_file.flush()
         self.playbook_file = playbook_file
         self.generated_playbook = True

@@ -4,7 +4,11 @@ import yaml
 
 from mock import patch, DEFAULT, Mock
 from pytest import raises, mark
-from StringIO import StringIO
+from teuthology.util.compat import PY3
+if PY3:
+    from io import StringIO as StringIO
+else:
+    from io import BytesIO as StringIO
 
 from teuthology.config import config, FakeNamespace
 from teuthology.exceptions import CommandFailedError
@@ -262,7 +266,7 @@ class TestAnsibleTask(TestTask):
         self.mocks['mkdtemp'].return_value = inventory_dir
         m_file = self.mocks['file']
         fake_files = [hosts_file_obj]
-        # Create StringIOs for each group_vars file
+        # Create StringIO object for each group_vars file
         if group_vars:
             fake_files += [StringIO() for i in sorted(group_vars)]
         m_file.side_effect = fake_files
