@@ -161,6 +161,19 @@ public:
   int get_num_fwd() const { return head.num_fwd; }
   int get_retry_attempt() const { return head.num_retry; }
   int get_op() const { return head.op; }
+  bool is_snap_op() const
+  {
+    switch (get_op()) {
+    case CEPH_MDS_OP_LOOKUPSNAP:
+    case CEPH_MDS_OP_LSSNAP:
+    case CEPH_MDS_OP_MKSNAP:
+    case CEPH_MDS_OP_RMSNAP:
+    case CEPH_MDS_OP_RENAMESNAP:
+      return true;
+    }
+    return false;
+  }
+
   unsigned get_caller_uid() const { return head.caller_uid; }
   unsigned get_caller_gid() const { return head.caller_gid; }
   const vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
