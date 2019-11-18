@@ -7023,7 +7023,7 @@ int BlueStore::_fsck_check_extents(
     }
     if (depth != FSCK_SHALLOW) {
       bool already = false;
-      apply(
+      apply_for_bitset_range(
         e.offset, e.length, granularity, used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	  ceph_assert(pos < bs.size());
@@ -8083,7 +8083,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   _fsck_collections(&errors);
   used_blocks.resize(fm->get_alloc_units());
-  apply(
+  apply_for_bitset_range(
     0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	ceph_assert(pos < bs.size());
@@ -8124,7 +8124,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     }
 
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-      apply(
+      apply_for_bitset_range(
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	ceph_assert(pos < bs.size());
@@ -8598,7 +8598,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	         << " ops " << wt.ops.size()
 	         << " released 0x" << std::hex << wt.released << std::dec << dendl;
         for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
-          apply(
+          apply_for_bitset_range(
             e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
             [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	  ceph_assert(pos < bs.size());
@@ -8614,7 +8614,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       // remove bluefs_extents from used set since the freelist doesn't
       // know they are allocated.
       for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-        apply(
+        apply_for_bitset_range(
           e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	    ceph_assert(pos < bs.size());
@@ -8626,7 +8626,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       uint64_t offset, length;
       while (fm->enumerate_next(db, &offset, &length)) {
         bool intersects = false;
-        apply(
+        apply_for_bitset_range(
           offset, length, fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	    ceph_assert(pos < bs.size());
