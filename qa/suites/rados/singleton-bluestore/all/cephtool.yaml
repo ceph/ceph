@@ -37,6 +37,7 @@ tasks:
     - \(POOL_NEARFULL\)
     - \(POOL_APP_NOT_ENABLED\)
     - \(AUTH_BAD_CAPS\)
+    - \(FS_INLINE_DATA_DEPRECATED\)
 - workunit:
     clients:
       all:
