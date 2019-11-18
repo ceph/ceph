@@ -769,7 +769,6 @@ int BlueFS::_check_new_allocations(const bluefs_fnode_t& fnode,
     ceph_assert(id < dev_count);
     apply_for_bitset_range(e.offset, e.length, alloc_size[id], owned_blocks[id],
       [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-        ceph_assert(pos < bs.size());
         if (!bs.test(pos)) {
           fail = true;
         }
@@ -786,7 +785,6 @@ int BlueFS::_check_new_allocations(const bluefs_fnode_t& fnode,
 
     apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
       [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-        ceph_assert(pos < bs.size());
         if (bs.test(pos)) {
           fail = true;
         }
@@ -1030,7 +1028,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               bool fail = false;
               apply_for_bitset_range(offset, length, alloc_size[id], owned_blocks[id],
                 [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                  ceph_assert(pos < bs.size());
                   if (bs.test(pos)) {
                     fail = true;
                   } else {
@@ -1046,8 +1043,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               }
               apply_for_bitset_range(offset, length, alloc_size[id], used_blocks[id],
                 [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                  ceph_assert(pos < bs.size());
-                  
                   if (bs.test(pos)) {
                     fail = true;
                   }
@@ -1089,7 +1084,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               bool fail = false;
               apply_for_bitset_range(offset, length, alloc_size[id], owned_blocks[id],
                 [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                  ceph_assert(pos < bs.size());
                   if (!bs.test(pos)) {
                     fail = true;
                   } else {
@@ -1106,7 +1100,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
               apply_for_bitset_range(offset, length, alloc_size[id], used_blocks[id],
                 [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                  ceph_assert(pos < bs.size());
                   if (bs.test(pos)) {
                     fail = true;
                   }
@@ -1248,7 +1241,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                 auto id = e.bdev;
                 apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
                   [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                    ceph_assert(pos < bs.size());
                     ceph_assert(bs.test(pos));
                     bs.reset(pos);
                   }
@@ -1292,7 +1284,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                 bool fail = false;
                 apply_for_bitset_range(e.offset, e.length, alloc_size[id], owned_blocks[id],
                   [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                    ceph_assert(pos < bs.size());
                     if (!bs.test(pos)) {
                       fail = true;
                     }
@@ -1309,7 +1300,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
                 apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
                   [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                    ceph_assert(pos < bs.size());
                     if (!bs.test(pos)) {
                       fail = true;
                     }
