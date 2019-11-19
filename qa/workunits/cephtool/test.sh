@@ -2578,7 +2578,6 @@ function test_mon_deprecated_commands()
 {
   # current DEPRECATED commands are:
   #  ceph compact
-  #  ceph scrub
   #
   # Testing should be accomplished by setting
   # 'mon_debug_deprecated_as_obsolete = true' and expecting ENOTSUP for
@@ -2588,7 +2587,7 @@ function test_mon_deprecated_commands()
   expect_false ceph compact 2> $TMPFILE
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
-  expect_false ceph scrub 2> $TMPFILE
+  expect_false ceph config-key list 2> $TMPFILE
   check_response "\(EOPNOTSUPP\|ENOTSUP\): command is obsolete"
 
   ceph tell mon.* injectargs '--no-mon-debug-deprecated-as-obsolete'

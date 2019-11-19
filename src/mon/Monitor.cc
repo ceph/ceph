@@ -3449,7 +3449,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  if (prefix == "scrub" || prefix == "mon scrub") {
+  if (prefix == "mon scrub") {
     wait_for_paxos_write();
     if (is_leader()) {
       int r = scrub_start();
