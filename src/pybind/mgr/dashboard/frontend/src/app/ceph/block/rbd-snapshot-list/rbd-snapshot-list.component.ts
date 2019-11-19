@@ -274,6 +274,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: this.i18n('RBD snapshot'),
+        itemNames: [snapshotName],
         submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)
       }
     });

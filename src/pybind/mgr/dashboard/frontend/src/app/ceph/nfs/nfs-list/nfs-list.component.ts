@@ -205,7 +205,8 @@ export class NfsListComponent implements OnInit, OnDestroy {
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
-        itemDescription: this.i18n('NFS'),
+        itemDescription: this.i18n('NFS export'),
+        itemNames: [`${cluster_id}:${export_id}`],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('nfs/delete', {

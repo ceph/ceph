@@ -177,7 +177,8 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
-        itemDescription: this.i18n('iSCSI'),
+        itemDescription: this.i18n('iSCSI target'),
+        itemNames: [target_iqn],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('iscsi/target/delete', {

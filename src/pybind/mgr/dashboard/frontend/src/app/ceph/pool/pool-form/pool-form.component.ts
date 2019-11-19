@@ -502,6 +502,7 @@ export class PoolFormComponent implements OnInit {
     this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: this.i18n('erasure code profile'),
+        itemNames: [name],
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
             task: new FinishedTask('ecp/delete', { name: name }),

@@ -184,6 +184,7 @@ export class RbdTrashListComponent implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'RBD',
+        itemNames: [`${poolName}/${imageName}`],
         bodyTemplate: this.deleteTpl,
         bodyContext: { $implicit: expiresAt },
         submitActionObservable: () =>
