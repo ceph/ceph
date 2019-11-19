@@ -1305,7 +1305,7 @@ private:
 class StandaloneClient : public Client
 {
 public:
-  StandaloneClient(Messenger *m, MonClient *mc);
+  StandaloneClient(Messenger *m, MonClient *mc, boost::asio::io_context& ictx);
 
   ~StandaloneClient() override;
 

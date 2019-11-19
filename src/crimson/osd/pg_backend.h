@@ -12,11 +12,13 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
 #include "crimson/common/shared_lru.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
+#include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
 struct hobject_t;
-class MOSDRepOpReply;
 
 namespace ceph::os {
   class Transaction;
