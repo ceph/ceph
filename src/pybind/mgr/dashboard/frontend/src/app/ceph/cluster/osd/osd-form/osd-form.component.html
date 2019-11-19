@@ -6,7 +6,7 @@
   <a href="{{ docsUrl }}"
      target="_blank">documentation</a> on how to
   configure and enable the orchestrator functionality.</cd-alert-panel>
-<div class="col-sm-10"
+<div class="cd-col-form"
      *ngIf="!loading && orchestratorExist">
   <form name="form"
         #formDir="ngForm"
@@ -44,7 +44,7 @@
           <!-- WAL slots -->
           <div class="form-group row"
                *ngIf="walDeviceSelectionGroups.devices.length !== 0">
-            <label class="col-sm-3 col-form-label"
+            <label class="cd-col-form-label"
                    for="walSlots">
               <ng-container i18n>WAL slots</ng-container>
               <cd-helper>
@@ -53,7 +53,7 @@
                 <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="walSlots"
                      name="walSlots"
@@ -79,7 +79,7 @@
           <!-- DB slots -->
           <div class="form-group row"
                *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
-            <label class="col-sm-3 col-form-label"
+            <label class="cd-col-form-label"
                    for="dbSlots">
               <ng-container i18n>DB slots</ng-container>
               <cd-helper>
@@ -88,7 +88,7 @@
                 <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="dbSlots"
                      name="dbSlots"
@@ -110,9 +110,9 @@
           <div class="form-group row"
                formGroupName="features">
             <label i18n
-                   class="col-sm-3 col-form-label"
+                   class="cd-col-form-label"
                    for="features">Features</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="custom-control custom-checkbox"
                    *ngFor="let feature of featureList">
                 <input type="checkbox"

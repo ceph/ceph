@@ -306,6 +306,41 @@ a {
   padding-top: 7px;
 }
 
+.cd-col-form {
+  @extend .col-12;
+  @extend .col-lg-8;
+  @extend .col-xl-6;
+}
+
+.cd-col-form-label {
+  @extend .col-form-label;
+  @extend .col-sm-4;
+  @extend .col-md-4;
+  @extend .col-lg-3;
+}
+
+.cd-col-form-input {
+  @extend .col-sm-8;
+  @extend .col-md-8;
+  @extend .col-lg-9;
+}
+
+.cd-col-form-offset {
+  @extend .offset-sm-4;
+  @extend .offset-lg-3;
+  @extend .cd-col-form-input;
+}
+
+cd-modal {
+  .cd-col-form-label {
+    @extend .col-lg-4;
+  }
+
+  .cd-col-form-input {
+    @extend .col-lg-8;
+  }
+}
+
 /* Card */
 .card-footer button.btn:not(:first-child) {
   margin-left: 5px;

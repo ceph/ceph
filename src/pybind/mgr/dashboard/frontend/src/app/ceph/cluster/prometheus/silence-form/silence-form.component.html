@@ -55,7 +55,7 @@
   <span class="help-block"></span>
 </ng-template>
 
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form">
   <form #formDir="ngForm"
         [formGroup]="form"
         class="form"
@@ -73,12 +73,12 @@
       <!-- Creator -->
       <div class="card-body">
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="created-by">
             <ng-container i18n>Creator</ng-container>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    formControlName="createdBy"
                    id="created-by"
@@ -92,12 +92,12 @@
 
         <!-- Comment -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="comment">
             <ng-container i18n>Comment</ng-container>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <textarea class="form-control"
                       formControlName="comment"
                       id="comment"
@@ -112,13 +112,13 @@
 
         <!-- Start time -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="starts-at">
             <ng-container i18n>Start time</ng-container>
             <cd-helper i18n>If the start time lies in the past the creation time will be used</cd-helper>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input [bsConfig]="bsConfig"
                    bsDatepicker
                    class="form-control"
@@ -133,12 +133,12 @@
 
         <!-- Duration -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="duration">
             <ng-container i18n>Duration</ng-container>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    formControlName="duration"
                    id="duration"
@@ -152,12 +152,12 @@
 
         <!-- End time -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="ends-at">
             <ng-container i18n>End time</ng-container>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input [bsConfig]="bsConfig"
                    bsDatepicker
                    class="form-control"
@@ -174,7 +174,7 @@
         <fieldset>
           <legend i18n>Matchers<span class="required">*</span></legend>
 
-          <div class="offset-sm-3 col-sm-9">
+          <div class="cd-col-form-offset">
             <h5 *ngIf="matchers.length === 0"
                 [ngClass]="{'text-warning': !formDir.submitted, 'text-danger': formDir.submitted}">
               <strong i18n>A silence requires at least one matcher</strong>
@@ -199,7 +199,7 @@
           </div>
 
           <div *ngIf="matchers.length && matcherMatch"
-               class="offset-sm-3 col-sm-9 {{matcherMatch.cssClass}}"
+               class="cd-col-form-offset {{matcherMatch.cssClass}}"
                id="match-state">
             <span class="text-muted {{matcherMatch.cssClass}}">
               {{ matcherMatch.status }}

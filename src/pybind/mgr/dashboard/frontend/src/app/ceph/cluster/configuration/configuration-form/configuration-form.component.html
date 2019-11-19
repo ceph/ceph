@@ -1,4 +1,4 @@
-<div class="col-sm-12 col-md-12 col-lg-6">
+<div class="cd-col-form">
   <form name="configForm"
         #formDir="ngForm"
         [formGroup]="configForm"
@@ -12,8 +12,8 @@
         <!-- Name -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3">Name</label>
-          <div class="col-sm-9">
+                 class="cd-col-form-label">Name</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    id="name"
@@ -26,8 +26,8 @@
         <div class="form-group row"
              *ngIf="configForm.getValue('desc')">
           <label i18n
-                 class="col-form-label col-sm-3">Description</label>
-          <div class="col-sm-9">
+                 class="cd-col-form-label">Description</label>
+          <div class="cd-col-form-input">
             <textarea class="form-control resize-vertical"
                       id="desc"
                       formControlName="desc"
@@ -40,8 +40,8 @@
         <div class="form-group row"
              *ngIf="configForm.getValue('long_desc')">
           <label i18n
-                 class="col-form-label col-sm-3">Long description</label>
-          <div class="col-sm-9">
+                 class="cd-col-form-label">Long description</label>
+          <div class="cd-col-form-input">
             <textarea class="form-control resize-vertical"
                       id="long_desc"
                       formControlName="long_desc"
@@ -54,8 +54,8 @@
         <div class="form-group row"
              *ngIf="configForm.getValue('default') !== ''">
           <label i18n
-                 class="col-form-label col-sm-3">Default</label>
-          <div class="col-sm-9">
+                 class="cd-col-form-label">Default</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    id="default"
@@ -68,8 +68,8 @@
         <div class="form-group row"
              *ngIf="configForm.getValue('daemon_default') !== ''">
           <label i18n
-                 class="col-form-label col-sm-3">Daemon default</label>
-          <div class="col-sm-9">
+                 class="cd-col-form-label">Daemon default</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    id="daemon_default"
@@ -82,8 +82,8 @@
         <div class="form-group row"
              *ngIf="configForm.getValue('services').length > 0">
           <label i18n
-                 class="col-form-label col-sm-3">Services</label>
-          <div class="col-sm-9">
+                 class="cd-col-form-label">Services</label>
+          <div class="cd-col-form-input">
             <span *ngFor="let service of configForm.getValue('services')"
                   class="form-component-badge">
               <span class="badge badge-dark">{{ service }}</span>
@@ -98,10 +98,10 @@
           <ng-container *ngFor="let section of availSections">
             <div class="form-group row"
                  *ngIf="type === 'bool'">
-              <label class="col-form-label col-sm-3"
+              <label class="cd-col-form-label"
                      [for]="section">{{ section }}
               </label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <select id="pool"
                         name="pool"
                         class="form-control custom-select"
@@ -118,10 +118,10 @@
 
             <div class="form-group row"
                  *ngIf="type !== 'bool'">
-              <label class="col-form-label col-sm-3"
+              <label class="cd-col-form-label"
                      [for]="section">{{ section }}
               </label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input class="form-control"
                        [type]="inputType"
                        [id]="section"

@@ -37,7 +37,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
     }
   ];
 
-  const buttonSelector = '.col-sm-9 button';
+  const buttonSelector = '.cd-col-form-input button';
   const getButton = () => {
     const debugElement = fixtureHelper.getElementByCss(buttonSelector);
     return debugElement.nativeElement;

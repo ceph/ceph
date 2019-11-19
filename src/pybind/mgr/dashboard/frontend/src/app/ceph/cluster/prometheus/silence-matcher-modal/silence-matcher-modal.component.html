@@ -16,12 +16,12 @@
   <div class="modal-body">
     <!-- Name -->
     <div class="form-group row">
-      <label class="col-form-label col-sm-3"
+      <label class="cd-col-form-label"
              for="name">
         <ng-container i18n>Name</ng-container>
         <span class="required"></span>
       </label>
-      <div class="col-sm-9">
+      <div class="cd-col-form-input">
         <select class="form-control"
                 id="name"
                 formControlName="name"
@@ -41,12 +41,12 @@
 
     <!-- Value -->
     <div class="form-group row">
-      <label class="col-form-label col-sm-3"
+      <label class="cd-col-form-label"
              for="value">
         <ng-container i18n>Value</ng-container>
         <span class="required"></span>
       </label>
-      <div class="col-sm-9">
+      <div class="cd-col-form-input">
         <input id="value"
                class="form-control"
                type="text"
@@ -58,7 +58,7 @@
               i18n>This field is required!</span>
       </div>
       <div *ngIf="form.getValue('value') && !form.getValue('isRegex') && matcherMatch"
-           class="offset-sm-3 col-sm-9 {{matcherMatch.cssClass}}"
+           class="cd-col-form-offset {{matcherMatch.cssClass}}"
            id="match-state">
         <span class="text-muted {{matcherMatch.cssClass}}">
           {{matcherMatch.status}}
@@ -68,7 +68,7 @@
 
     <!-- isRegex -->
     <div class="form-group row">
-      <div class="offset-sm-3 col-sm-9">
+      <div class="cd-col-form-offset">
         <div class="custom-control custom-checkbox">
           <input type="checkbox"
                  class="custom-control-input"
