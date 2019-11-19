@@ -8446,9 +8446,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
 		   << dendl;
 	} else {
-	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
 	  assert(r == 0);
+	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  _txc_applied_kv(txc);
 	}
       }
@@ -9076,9 +9076,9 @@ void BlueStore::_kv_sync_thread()
 	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
 	  assert(r == 0);
+	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  _txc_applied_kv(txc);
 	  --txc->osr->kv_committing_serially;
-	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  if (txc->osr->kv_submitted_waiters) {
 	    std::lock_guard<std::mutex> l(txc->osr->qlock);
 	    if (txc->osr->_is_all_kv_submitted()) {
