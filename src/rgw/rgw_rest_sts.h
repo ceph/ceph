@@ -1,17 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_STS_H
-#define CEPH_RGW_REST_STS_H
+#pragma once
 
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_sts.h"
 #include "rgw_web_idp.h"
 
-namespace rgw {
-namespace auth {
-namespace sts   {
+namespace rgw::auth::sts {
 
 class WebTokenEngine : public rgw::auth::Engine {
   CephContext* const cct;
@@ -93,9 +90,7 @@ public:
   }
 };
 
-}; /* namespace sts */
-}; /* namespace auth */
-};
+} // namespace rgw::auth::sts
 
 class RGWREST_STS : public RGWRESTOp {
 protected:
@@ -200,6 +195,3 @@ public:
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;
 };
-
-#endif /* CEPH_RGW_REST_STS_H */
-

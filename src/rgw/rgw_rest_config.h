@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef RGW_REST_CONFIG_H
-#define RGW_REST_CONFIG_H
+#pragma once
 
 #include "rgw_zone.h"
 
@@ -84,5 +83,3 @@ public:
     return new RGWHandler_Config(auth_registry);
   }
 };
-
-#endif /* RGW_REST_CONFIG_H */

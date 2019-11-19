@@ -13,8 +13,7 @@
  * 
  */
 
-#ifndef CEPH_RGW_REST_S3WEBSITE_H
-#define CEPH_RGW_REST_S3WEBSITE_H
+#pragma once
  
 #include "rgw_rest_s3.h"
 
@@ -99,5 +98,3 @@ public:
       }
   }
 };
- 
-#endif

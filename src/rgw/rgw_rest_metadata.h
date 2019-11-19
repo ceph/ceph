@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef RGW_REST_METADATA_H
-#define RGW_REST_METADATA_H
+#pragma once
 
 class RGWOp_Metadata_List : public RGWRESTOp {
 public:
@@ -102,5 +101,3 @@ public:
     return new RGWHandler_Metadata(auth_registry);
   }
 };
-
-#endif /* RGW_REST_METADATA_H */

@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef RGW_REST_LOG_H
-#define RGW_REST_LOG_H
+#pragma once
 
 #include "rgw_metadata.h"
 #include "rgw_mdlog.h"
@@ -305,5 +304,3 @@ public:
     return new RGWHandler_Log(auth_registry);
   }
 };
-
-#endif /* RGW_REST_LOG_H */
