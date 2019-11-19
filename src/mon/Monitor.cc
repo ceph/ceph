@@ -850,81 +850,23 @@ int Monitor::preinit()
 
   // unlock while registering to avoid mon_lock -> admin socket lock dependency.
   l.unlock();
-
-  r = admin_socket->register_command("compact", admin_hook,
-				     "cause compaction of monitor's "
-				     "leveldb/rocksdb storage");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("mon compact", admin_hook,
-				     "cause compaction of monitor's "
-				     "leveldb/rocksdb storage");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("mon_status", admin_hook,
-				     "show current monitor status");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("quorum_status",
-				     admin_hook, "show current quorum status");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command(
-    "sync_force "
-    //"name=yes_i_really_mean_it,type=CephBool,req=false",
-    "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
-    admin_hook,
-    "force sync of and clear monitor store");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("add_bootstrap_peer_hint name=addr,"
-				     "type=CephIPAddr",
-				     admin_hook,
-				     "add peer address as potential bootstrap"
-				     " peer for cluster bringup");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("add_bootstrap_peer_hintv name=addrv,"
-				     "type=CephString",
-				     admin_hook,
-				     "add peer address vector as potential bootstrap"
-				     " peer for cluster bringup");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("quorum enter",
-                                     admin_hook,
-                                     "force monitor back into quorum");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("quorum exit",
-                                     admin_hook,
-                                     "force monitor out of the quorum");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("ops",
-                                     admin_hook,
-                                     "show the ops currently in flight");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("sessions",
-                                     admin_hook,
-                                     "list existing sessions");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops",
-                                     admin_hook,
-                                    "show recent ops");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops_by_duration",
-                                     admin_hook,
-                                    "show recent ops, sorted by duration");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_slow_ops",
-                                     admin_hook,
-                                    "show recent slow ops");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command("smart name=devid,type=CephString,req=false",
-                                     admin_hook,
-                                     "probe OSD devices for SMART data.");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command(
-    "heap " \
-    "name=heapcmd,type=CephChoices,strings="				\
-    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
-    "name=value,type=CephString,req=false",
-    admin_hook,
-    "show heap usage info (available only if compiled with tcmalloc)");
-  ceph_assert(r == 0);
-
+  // register tell/asock commands
+  for (const auto& command : local_mon_commands) {
+    // all asock commands are noforward, vice versa
+    if (!command.is_noforward()) {
+      continue;
+    }
+    const auto prefix = cmddesc_get_prefix(command.cmdstring);
+    if (prefix == "injectargs" ||
+	prefix == "version" ||
+	prefix == "tell") {
+      // not registerd by me
+      continue;
+    }
+    r = admin_socket->register_command(prefix, admin_hook,
+				       command.helpstring);
+    ceph_assert(r == 0);
+  }
   l.lock();
 
   // add ourselves as a conf observer
