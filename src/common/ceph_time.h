@@ -18,6 +18,7 @@
 #include <chrono>
 #include <iostream>
 #include <string>
+#include <optional>
 #include <sys/time.h>
 
 #include "include/ceph_assert.h"
@@ -433,6 +434,9 @@ namespace ceph {
     inline timespan make_timespan(const double d) {
       return std::chrono::duration_cast<timespan>(
 	std::chrono::duration<double>(d));
+    }
+    inline std::optional<timespan> maybe_timespan(const double d) {
+      return d ? std::make_optional(make_timespan(d)) : std::nullopt;
     }
   }
 

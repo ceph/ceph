@@ -292,6 +292,7 @@ if(NOT fmt_FOUND)
   message(STATUS "Could not find fmt, will build it")
   add_subdirectory(fmt)
 endif()
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 
 if(WITH_SEASTAR)
   find_package(c-ares 1.13.0 QUIET)
@@ -326,11 +327,13 @@ set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   xxHash/xxhash.c
+  common/error_code.cc
   log/Log.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
   mon/MonSub.cc
+  mon/error_code.cc
   mgr/MgrClient.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
@@ -339,10 +342,12 @@ set(libcommon_files
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
   osd/osd_types.cc
+  osd/error_code.cc
   osd/PGPeeringEvent.cc
   osd/OpRequest.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
 set_source_files_properties(ceph_ver.c
@@ -470,6 +475,7 @@ option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
 add_subdirectory(include)
 add_subdirectory(librados)
+add_subdirectory(RADOS)
 
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
