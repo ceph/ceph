@@ -1,6 +1,6 @@
 # Orchestrator CLI
 
-See also [../../../doc/mgr/orchestrator_cli.rst](../../../doc/mgr/orchestrator_cli.rst).
+See also [orchestrator cli doc](https://docs.ceph.com/docs/master/mgr/orchestrator_cli/).
 
 ## Running the Teuthology tests
 
@@ -11,6 +11,4 @@ framework and the `test_orchestrator` backend.
 
     $ pushd ../dashboard ; source ./run-backend-api-tests.sh ; popd
     $ run_teuthology_tests tasks.mgr.test_orchestrator_cli
-    $ cleanup_teuthology  
-
- 
+    $ cleanup_teuthology
