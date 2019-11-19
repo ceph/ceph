@@ -1,4 +1,2 @@
 tasks:
-- install:
-- ceph:
 - kclient:
