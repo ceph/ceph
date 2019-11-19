@@ -274,6 +274,7 @@ function cherry_pick_phase {
             fi
         else
             set +x
+            maybe_restore_set_x
             error "Cannot initialize $local_branch - local branch already exists"
             false
         fi
@@ -284,6 +285,7 @@ function cherry_pick_phase {
     git fetch "$upstream_remote" "pull/$original_pr/head:pr-$original_pr"
 
     set +x
+    maybe_restore_set_x
     info "Attempting to cherry pick $number_of_commits commits from ${original_pr_url} into local branch $local_branch"
     offset="$((number_of_commits - 1))" || true
     for ((i=offset; i>=0; i--)) ; do
@@ -292,8 +294,10 @@ function cherry_pick_phase {
         set -x
         if git cherry-pick -x "$sha1_to_cherry_pick" ; then
             set +x
+            maybe_restore_set_x
         else
             set +x
+            maybe_restore_set_x
             [ "$VERBOSE" ] && git status
             error "Cherry pick failed"
             info "Next, manually fix conflicts and complete the current cherry-pick"
@@ -791,12 +795,19 @@ function maybe_delete_deprecated_backport_common {
                 set -x
                 rm -f "$deprecated_backport_common"
                 set +x
+                maybe_restore_set_x
             fi
         fi
         if [ -e "$deprecated_backport_common" ] ; then
             error "$deprecated_backport_common still exists. Bailing out!"
             false
         fi
+    fi
+}
+
+function maybe_restore_set_x {
+    if [ "$DEBUG" ] ; then
+        set -x
     fi
 }
 
@@ -1619,11 +1630,13 @@ if [ "$PR_PHASE" ] ; then
         set -x
         git checkout "$local_branch"
         set +x
+        maybe_restore_set_x
     fi
     
     set -x
     git push -u "$fork_remote" "$local_branch"
     set +x
+    maybe_restore_set_x
     
     original_issue=""
     original_pr=""
