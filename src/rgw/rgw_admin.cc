@@ -3467,11 +3467,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
-      get_str_list(val, tags);
+      get_str_list(val, ",", tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
-      get_str_list(val, tags_add);
+      get_str_list(val, ",", tags_add);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*)NULL)) {
-      get_str_list(val, tags_rm);
+      get_str_list(val, ",", tags_rm);
     } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*)NULL)) {
       api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
