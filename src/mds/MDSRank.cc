@@ -2416,6 +2416,23 @@ bool MDSRankDispatcher::handle_asok_command(
       ss << dss.str();
     }
     mds_lock.Unlock();
+  } else if (command == "session config") {
+    int64_t client_id;
+    std::string option;
+    std::string value;
+
+    cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+    cmd_getval(g_ceph_context, cmdmap, "option", option);
+    bool got_value = cmd_getval(g_ceph_context, cmdmap, "value", value);
+
+    mds_lock.Lock();
+    std::stringstream dss;
+    int ret = config_client(client_id, !got_value, option, value, dss);
+    if (ret < 0) {
+      dout(15) << dss.str() << dendl;
+      ss << dss.str();
+    }
+    mds_lock.Unlock();
   } else if (command == "scrub_path") {
     string path;
     vector<string> scrubop_vec;
@@ -3104,6 +3121,42 @@ void MDSRankDispatcher::handle_osd_map()
   objecter->maybe_request_map();
 }
 
+int MDSRank::config_client(int64_t session_id, bool remove,
+			   const std::string& option, const std::string& value,
+			   std::stringstream& ss)
+{
+  Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+  if (!session) {
+    ss << "session " << session_id << " not in sessionmap!";
+    return -ENOENT;
+  }
+
+  if (option == "timeout") {
+    if (remove) {
+      auto it = session->info.client_metadata.find("timeout");
+      if (it == session->info.client_metadata.end()) {
+	ss << "Nonexistent config: " << option;
+	return -ENODATA;
+      }
+      session->info.client_metadata.erase(it);
+    } else {
+      char *end;
+      strtoul(value.c_str(), &end, 0);
+      if (*end) {
+	ss << "Invalid config for timeout: " << value;
+	return -EINVAL;
+      }
+      session->info.client_metadata[option] = value;
+    }
+    //sessionmap._mark_dirty(session, true);
+  } else {
+    ss << "Invalid config option: " << option;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 bool MDSRank::evict_client(int64_t session_id,
     bool wait, bool blacklist, std::stringstream& err_ss,
     Context *on_killed)
@@ -3296,6 +3349,17 @@ bool MDSRankDispatcher::handle_command(
     evict_clients(filter, m);
 
     *need_reply = false;
+    return true;
+  } else if (prefix == "session config" || prefix == "client config") {
+    int64_t client_id;
+    std::string option;
+    std::string value;
+
+    cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+    cmd_getval(g_ceph_context, cmdmap, "option", option);
+    bool got_value = cmd_getval(g_ceph_context, cmdmap, "value", value);
+
+    *r = config_client(client_id, !got_value, option, value, *ss);
     return true;
   } else if (prefix == "damage ls") {
     JSONFormatter f(true);

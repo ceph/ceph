@@ -14081,6 +14081,15 @@ void Client::clear_filer_flags(int flags)
   objecter->clear_global_op_flag(flags);
 }
 
+// called before mount. 0 means infinite
+void Client::set_session_timeout(unsigned timeout)
+{
+  Mutex::Locker l(client_lock);
+  assert(initialized);
+
+  metadata["timeout"] = stringify(timeout);
+}
+
 /**
  * This is included in cap release messages, to cause
  * the MDS to wait until this OSD map epoch.  It is necessary
