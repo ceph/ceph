@@ -10,10 +10,6 @@ from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand
 from mgr_util import CephfsConnectionException
 from rados import ObjectNotFound
 from threading import Event
-try:
-    import queue as Queue
-except ImportError:
-    import Queue
 
 
 class Module(MgrModule):
@@ -23,7 +19,16 @@ class Module(MgrModule):
         self._initialized = Event()
         self.client = SnapSchedClient(self)
 
-        self._background_jobs = Queue.Queue()
+    def resolve_subvolume_path(self, fs, subvol, path):
+        if not subvol:
+            return path
+
+        rc, subvol_path, err = self.remote('fs', 'subvolume', 'getpath',
+                                           fs, subvol)
+        if rc != 0:
+            # TODO custom exception
+            raise Exception(f'Could not resolve {path} in {fs}, {subvol}')
+        return subvol_path + path
 
     @property
     def default_fs(self):
@@ -70,19 +75,11 @@ class Module(MgrModule):
             return -1, '', f'SnapSchedule for {path} not found'
         return 0, str(sched), ''
 
-    prune_schedule_options = ('name=keep-minutely,type=CephString,req=false '
-                              'name=keep-hourly,type=CephString,req=false '
-                              'name=keep-daily,type=CephString,req=false '
-                              'name=keep-weekly,type=CephString,req=false '
-                              'name=keep-monthly,type=CephString,req=false '
-                              'name=keep-yearly,type=CephString,req=false '
-                              'name=keep-last,type=CephString,req=false '
-                              'name=keep-within,type=CephString,req=false')
-
     @CLIWriteCommand('fs snap-schedule set',
                      'name=path,type=CephString '
                      'name=snap-schedule,type=CephString '
                      'name=retention-policy,type=CephString,req=false '
+                     'name=start,type=CephString,req=false '
                      'name=fs,type=CephString,req=false '
                      'name=subvol,type=CephString,req=false',
                      'Set a snapshot schedule for <path>')
@@ -90,15 +87,16 @@ class Module(MgrModule):
                           path,
                           snap_schedule,
                           retention_policy='',
+                          start='now',
                           fs=None,
                           subvol=None):
         try:
             use_fs = fs if fs else self.default_fs
-            # TODO should we allow empty retention policies?
-            sched = Schedule(path, snap_schedule, retention_policy,
-                             use_fs, subvol)
+            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            sched = Schedule(abs_path, snap_schedule, retention_policy,
+                             start, use_fs, subvol, path)
             # TODO allow schedules on non-existent paths?
-            # self.client.validate_schedule(None, sched=sched, fs_name=fs)
+            # self.client.validate_schedule(fs, sched)
             self.client.store_snap_schedule(use_fs, sched)
             suc_msg = f'Schedule set for path {path}'
         except sqlite3.IntegrityError:
