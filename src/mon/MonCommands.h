@@ -1251,6 +1251,36 @@ COMMAND_WITH_FLAG("smart name=devid,type=CephString,req=false",
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
 		  FLAG(NOFORWARD)|FLAG(HIDDEN))
 COMMAND_WITH_FLAG("heap "						\
-            "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
+            "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats "
+            "name=value,type=CephString,req=false",
             "show heap usage info (available only if compiled with tcmalloc)", \
 		  "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("sync_force "						\
+            "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
+            "force sync of and clear monitor store",
+            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("add_bootstrap_peer_hint "
+            "name=addr,type=CephIPAddr",
+            "add peer address as potential bootstrap "
+            "peer for cluster bringup",
+            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("add_bootstrap_peer_hintv "
+            "name=addrv,type=CephString",
+            "add peer address vector as potential bootstrap "
+            "peer for cluster bringup",
+            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("quorum enter ",
+            "force monitor back into quorum",
+            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("quorum exit",
+            "force monitor out of the quorum",
+            "mon", "rw", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("ops",
+            "show the ops currently in flight",
+            "mon", "r", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("sessions",
+            "list existing sessions",
+            "mon", "r", FLAG(NOFORWARD)|FLAG(HIDDEN))
+COMMAND_WITH_FLAG("dump_historic_ops",
+            "dump_historic_ops",
+            "mon", "r", FLAG(NOFORWARD)|FLAG(HIDDEN))
