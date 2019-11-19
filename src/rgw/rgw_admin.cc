@@ -5179,7 +5179,7 @@ int main(int argc, const char **argv)
 	  return EINVAL;
 	}
 	if (zone_id.empty() && zone_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
+	  cerr << "no zone name or id provided" << std::endl;
 	  return EINVAL;
 	}
 	RGWZoneParams zone(zone_id,zone_name);
