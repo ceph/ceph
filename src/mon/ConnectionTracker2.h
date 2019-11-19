@@ -16,7 +16,56 @@
 #define CEPH_MON_CONNECTIONTRACKER2_H
 
 #include "include/types.h"
-#include "ConnectionTracker.h"
+
+struct ConnectionReport {
+  int rank = -1; // mon rank this state belongs to
+  std::map<int, bool> current; // true if connected to the other mon
+  std::map<int, double> history; // [0-1]; the connection reliability
+  epoch_t epoch = 0; // the (local) election epoch the ConnectionReport came from
+  uint64_t epoch_version = 0; // version of the ConnectionReport within the epoch
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(rank, bl);
+    encode(current, bl);
+    encode(history, bl);
+    encode(epoch, bl);
+    encode(epoch_version, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(rank, bl);
+    decode(current, bl);
+    decode(history, bl);
+    decode(epoch, bl);
+    decode(epoch_version, bl);
+    DECODE_FINISH(bl);
+  }
+  bool operator==(const ConnectionReport& o) const {
+    return o.rank == rank && o.current == current &&
+      o.history == history && o.epoch == epoch &&
+      o.epoch_version == epoch_version;
+  }
+};
+WRITE_CLASS_ENCODER(ConnectionReport);
+
+class RankProvider {
+ public:
+  /**
+   * Get the rank of the running daemon.
+   * It can be -1, meaning unknown/invalid, or it
+   * can be >1.
+   * You should not invoke the functions generate_report_of_peers()
+   * or get_total_connection_score() with an unknown rank.
+   */
+  virtual int get_my_rank() const = 0;
+  /**
+   * Asks our owner to encode us and persist it to disk.
+   * Presently we do this every tenth update.
+   */
+  virtual void persist_connectivity_scores() = 0;
+  virtual ~RankProvider() {}
+};
 
 class ConnectionTracker2 {
  public:
