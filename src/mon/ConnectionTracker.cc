@@ -16,6 +16,7 @@
 
 void ConnectionTracker::receive_peer_report(const ConnectionReport& report)
 {
+  extra_tracker.receive_peer_report(report);
   ConnectionReport& existing = peer_reports[report.rank];
   if (report.epoch > existing.epoch ||
       (report.epoch == existing.epoch && report.epoch_version > existing.epoch_version)) {
@@ -25,6 +26,7 @@ void ConnectionTracker::receive_peer_report(const ConnectionReport& report)
 
 bool ConnectionTracker::increase_epoch(epoch_t e)
 {
+  extra_tracker.increase_epoch(e);
   if (e > epoch) {
     version = 0;
     epoch = e;
@@ -50,17 +52,24 @@ void ConnectionTracker::generate_report_of_peers(ConnectionReport *report) const
   for (const auto i : conn_tracker.peers) {
     get_connection_score(i.first, &report->history[i.first], &report->current[i.first]);
   }
+
+  ConnectionReport dup;
+  extra_tracker.generate_report_of_peers(&dup);
+  assert(dup == *report);
 }
 
 const ConnectionReport *ConnectionTracker::get_peer_view(int peer) const
 {
+  const ConnectionReport *dup = extra_tracker.get_peer_view(peer);
   if (peer == get_my_rank()) {
     ceph_assert(0);
   }
   const auto& i = peer_reports.find(peer);
   if (i != peer_reports.end()) {
+    assert(*dup == i->second);
     return &(i->second);
   }
+  assert(dup == NULL);
   return NULL;
 }
 
@@ -71,6 +80,7 @@ void ConnectionTracker::forget_peer(int peer)
 
 void ConnectionTracker::report_live_connection(int rank, double units_alive)
 {
+  extra_tracker.report_live_connection(rank, units_alive);
   PeerReportTracker::PeerConnection& conn = conn_tracker.peers[rank];
   conn.score = conn.score * ( 1 - units_alive / (2*half_life)) +
     ( units_alive / (2*half_life) );
@@ -81,6 +91,7 @@ void ConnectionTracker::report_live_connection(int rank, double units_alive)
 
 void ConnectionTracker::report_dead_connection(int rank, double units_dead)
 {
+  extra_tracker.report_dead_connection(rank, units_dead);
   PeerReportTracker::PeerConnection& conn = conn_tracker.peers[rank];
   conn.score = conn.score * ( 1 - units_dead / (2*half_life)) -
     ( units_dead / (2*half_life) );
@@ -100,6 +111,11 @@ void ConnectionTracker::get_connection_score(int rank, double *rating, bool *ali
   const PeerReportTracker::PeerConnection& conn = i->second;
   *rating = conn.score;
   *alive = conn.alive;
+
+  double dup_rating;
+  bool dup_alive;
+  extra_tracker.get_connection_score(rank, &dup_rating, &dup_alive);
+  assert(dup_rating == *rating && dup_alive == *alive);
 }
 
 void ConnectionTracker::get_total_connection_score(int rank, double *rating, int *live_count) const
@@ -133,6 +149,12 @@ void ConnectionTracker::get_total_connection_score(int rank, double *rating, int
   }
   *rating = rate;
   *live_count = live;
+
+
+  double dup_rating;
+  int dup_live;
+  extra_tracker.get_total_connection_score(rank, &dup_rating, &dup_live);
+  assert(dup_rating == rate && dup_live == live);
 }
 
 void ConnectionTracker::encode(bufferlist &bl) const
@@ -145,6 +167,7 @@ void ConnectionTracker::encode(bufferlist &bl) const
   encode(version, bl);
   encode(half_life, bl);
   encode(peer_copy, bl);
+  encode(extra_tracker, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -155,6 +178,7 @@ void ConnectionTracker::decode(bufferlist::const_iterator& bl) {
   decode(version, bl);
   decode(half_life, bl);
   decode(peer_reports, bl);
+  decode(extra_tracker, bl);
   DECODE_FINISH(bl);
 
   ConnectionReport& my_report = peer_reports[get_my_rank()];
