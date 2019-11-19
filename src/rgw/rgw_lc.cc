@@ -1644,22 +1644,21 @@ std::string s3_expiration_header(
       rule_expiration_date =
 	boost::optional<ceph::real_time>(
 	  ceph::from_iso_8601(rule.get_expiration().get_date()));
-      rule_id = boost::optional<std::string>(id);
     } else {
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
 	  boost::optional<ceph::real_time>(
 	    mtime + make_timespan(rule_expiration.get_days()*24*60*60));
-	rule_id = boost::optional<std::string>(id);
       }
     }
 
     // update earliest expiration
     if (rule_expiration_date) {
       if ((! expiration_date) ||
-	  (*expiration_date < *rule_expiration_date)) {
+	  (*expiration_date > *rule_expiration_date)) {
       expiration_date =
 	boost::optional<ceph::real_time>(rule_expiration_date);
+      rule_id = boost::optional<std::string>(id);
       }
     }
   }
