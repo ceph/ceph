@@ -60,6 +60,7 @@ except ImportError:
 import uuid
 
 from distutils.spawn import find_executable
+from functools import wraps
 from glob import glob
 
 try:
@@ -225,6 +226,35 @@ def is_fsid(s):
     except ValueError:
         return False
     return True
+
+def infer_fsid(func):
+    """
+    If we only find a single fsid in /var/lib/ceph/*, use that
+    """
+    @wraps(func)
+    def _infer_fsid():
+        if args.fsid:
+            logger.debug('Using specified fsid: %s' % args.fsid)
+            return
+
+        fsid_list = []
+        for i in os.listdir(args.data_dir):
+            if is_fsid(i):
+                fsid_list.append(i)
+
+        logger.debug('Found fsids %s' % str(fsid_list))
+
+        if not fsid_list:
+            # TODO: raise?
+            return
+
+        if len(fsid_list) > 1:
+            raise RuntimeError('Cannot infer fsid, must specify --fsid')
+
+        logger.info('Inferring fsid %s' % fsid_list[0])
+        args.fsid = fsid_list[0]
+        return func()
+    return _infer_fsid
 
 def makedirs(dir, uid, gid, mode):
     # type: (str, int, int, int) -> None
@@ -1258,6 +1288,7 @@ def command_run():
 
 ##################################
 
+@infer_fsid
 def command_shell():
     # type: () -> int
     if args.fsid:
@@ -1296,6 +1327,7 @@ def command_shell():
 
 ##################################
 
+@infer_fsid
 def command_enter():
     # type: () -> int
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -1315,6 +1347,7 @@ def command_enter():
 
 ##################################
 
+@infer_fsid
 def command_ceph_volume():
     # type: () -> None
     make_log_dir(args.fsid)
@@ -1357,6 +1390,7 @@ def command_ceph_volume():
 
 ##################################
 
+@infer_fsid
 def command_unit():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -1368,6 +1402,7 @@ def command_unit():
 
 ##################################
 
+@infer_fsid
 def command_logs():
     # type: () -> None
     cmd = [container_path, 'logs']
@@ -1751,7 +1786,6 @@ def _get_parser():
     parser_enter.set_defaults(func=command_enter)
     parser_enter.add_argument(
         '--fsid',
-        required=True,
         help='cluster FSID')
     parser_enter.add_argument(
         '--name', '-n',
@@ -1766,7 +1800,6 @@ def _get_parser():
     parser_ceph_volume.set_defaults(func=command_ceph_volume)
     parser_ceph_volume.add_argument(
         '--fsid',
-        required=True,
         help='cluster FSID')
     parser_ceph_volume.add_argument(
         '--config-and-keyring',
@@ -1783,7 +1816,6 @@ def _get_parser():
         help='systemd command (start, stop, restart, enable, disable, ...)')
     parser_unit.add_argument(
         '--fsid',
-        required=True,
         help='cluster FSID')
     parser_unit.add_argument(
         '--name', '-n',
@@ -1795,7 +1827,6 @@ def _get_parser():
     parser_logs.set_defaults(func=command_logs)
     parser_logs.add_argument(
         '--fsid',
-        required=True,
         help='cluster FSID')
     parser_logs.add_argument(
         '--name', '-n',
