@@ -1084,6 +1084,7 @@ Options (not needed in normal operation):
     --debug               (turns on "set -x")
     --existing-pr BACKPORT_PR_ID
                           (use this when the backport PR is already open)
+    --force               (exercise caution!)
     --fork EXPLICIT_FORK  (use EXPLICIT_FORK instead of personal GitHub fork)
     --milestones          (vet all backport PRs for correct milestone setting)
     --setup/-s            (run the interactive setup routine - NOTE: this can 
