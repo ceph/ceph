@@ -154,6 +154,9 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
         }
       }
 
+  void set_tail_placement(const rgw_placement_rule& tpr) {
+    tail_placement_rule = tpr;
+  }
   void set_tail_placement(const rgw_placement_rule&& tpr) {
     tail_placement_rule = tpr;
   }

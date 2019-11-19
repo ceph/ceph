@@ -180,6 +180,14 @@ struct rgw_sync_pipe_filter_tag {
   string key;
   string value;
 
+  rgw_sync_pipe_filter_tag() {}
+  rgw_sync_pipe_filter_tag(const string& s) {
+    from_str(s);
+  }
+  rgw_sync_pipe_filter_tag(const string& _key,
+                           const string& _value) : key(_key),
+                                                   value(_value) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(key, bl);
@@ -231,7 +239,9 @@ struct rgw_sync_pipe_filter {
   bool is_subset_of(const rgw_sync_pipe_filter& f) const;
 
   bool check_tag(const string& s) const;
+  bool check_tag(const string& k, const string& v) const;
   bool check_tags(const std::vector<string>& tags) const;
+  bool check_tags(const RGWObjTags::tag_map_t& tags) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_filter)
 

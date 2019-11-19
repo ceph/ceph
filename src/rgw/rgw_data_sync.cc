@@ -1971,13 +1971,78 @@ int RGWDefaultSyncModule::create_instance(CephContext *cct, const JSONFormattabl
   return 0;
 }
 
+class RGWFetchObjFilter_Sync : public RGWFetchObjFilter_Default {
+  rgw_bucket_sync_pipe sync_pipe;
+
+public:
+  RGWFetchObjFilter_Sync(rgw_bucket_sync_pipe& _sync_pipe) : sync_pipe(_sync_pipe) {
+  }
+
+  int filter(CephContext *cct,
+             const rgw_obj_key& source_key,
+             const RGWBucketInfo& dest_bucket_info,
+             std::optional<rgw_placement_rule> dest_placement_rule,
+             const map<string, bufferlist>& obj_attrs,
+             const rgw_placement_rule **prule) override;
+};
+
+int RGWFetchObjFilter_Sync::filter(CephContext *cct,
+                                   const rgw_obj_key& source_key,
+                                   const RGWBucketInfo& dest_bucket_info,
+                                   std::optional<rgw_placement_rule> dest_placement_rule,
+                                   const map<string, bufferlist>& obj_attrs,
+                                   const rgw_placement_rule **prule)
+{
+  rgw_sync_pipe_params params;
+
+  RGWObjTags obj_tags;
+
+  auto iter = obj_attrs.find(RGW_ATTR_TAGS);
+  if (iter != obj_attrs.end()) {
+    try{
+      auto it = iter->second.cbegin();
+      obj_tags.decode(it);
+    } catch (buffer::error &err) {
+      ldout(cct, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+    }
+  }
+
+  if (!sync_pipe.info.handler.find_obj_params(source_key,
+                                              obj_tags.get_tags(),
+                                              &params)) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+
+  if (!dest_placement_rule &&
+      params.dest.storage_class) {
+    dest_rule.storage_class = *params.dest.storage_class;
+    dest_rule.inherit_from(dest_bucket_info.placement_rule);
+    dest_placement_rule = dest_rule;
+    *prule = &dest_rule;
+  }
+
+  return RGWFetchObjFilter_Default::filter(cct,
+                                           source_key,
+                                           dest_bucket_info,
+                                           dest_placement_rule,
+                                           obj_attrs,
+                                           prule);
+}
+
+
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
   auto sync_env = sc->env;
-  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone, sync_pipe.info.source_bs.bucket,
+
+  auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe);
+
+  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
+                                 sync_pipe.info.source_bs.bucket,
 				 std::nullopt, sync_pipe.dest_bucket_info,
                                  key, std::nullopt, versioned_epoch,
-                                 true, zones_trace, sync_env->counters, sync_env->dpp);
+                                 true,
+                                 std::static_pointer_cast<RGWFetchObjFilter>(filter),
+                                 zones_trace, sync_env->counters, sync_env->dpp);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
@@ -2054,10 +2119,14 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_buck
     }
   }
 
+  auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe);
+
   return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
                                  sync_pipe.info.source_bs.bucket, std::nullopt, sync_pipe.dest_bucket_info,
                                  key, dest_key, versioned_epoch,
-                                 true, zones_trace, nullptr, sync_env->dpp);
+                                 true,
+                                 std::static_pointer_cast<RGWFetchObjFilter>(filter),
+                                 zones_trace, nullptr, sync_env->dpp);
 }
 
 RGWCoroutine *RGWArchiveDataSyncModule::remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
