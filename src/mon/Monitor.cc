@@ -3180,27 +3180,24 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
     dout(5) << __func__ << " dropping stray message " << *m << dendl;
     return;
   }
-  if (!session->caps.is_allow_all()) {
-    // see if command is whitelisted
-    cmdmap_t cmdmap;
-    stringstream ss;
-    if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-      return reply_tell_command(op, -EINVAL, ss.str());
-    }
-    map<string,string> param_str_map;
-    _generate_command_map(cmdmap, param_str_map);
-    string prefix;
-    if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
-      return reply_tell_command(op, -EINVAL, "no prefix");
-    }
-    if (!session->caps.is_capable(
-	  g_ceph_context,
-	  session->entity_name,
-	  "mon", prefix, param_str_map,
-	  true, true, true,
-	  session->get_peer_socket_addr())) {
-      return reply_tell_command(op, -EACCES, "insufficient caps");
-    }
+  cmdmap_t cmdmap;
+  if (stringstream ss; !cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    return reply_tell_command(op, -EINVAL, ss.str());
+  }
+  map<string,string> param_str_map;
+  _generate_command_map(cmdmap, param_str_map);
+  string prefix;
+  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+    return reply_tell_command(op, -EINVAL, "no prefix");
+  }
+  // see if command is whitelisted
+  if (!session->caps.is_capable(
+      g_ceph_context,
+      session->entity_name,
+      "mon", prefix, param_str_map,
+      true, true, true,
+      session->get_peer_socket_addr())) {
+    return reply_tell_command(op, -EACCES, "insufficient caps");
   }
   // pass it to asok
   cct->get_admin_socket()->queue_tell_command(m);
