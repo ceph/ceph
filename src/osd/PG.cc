@@ -2088,34 +2088,40 @@ void PG::clear_scrub_reserved()
 void PG::scrub_reserve_replicas()
 {
   ceph_assert(recovery_state.get_backfill_targets().empty());
+  std::vector<std::pair<int, Message*>> messages;
+  messages.reserve(get_actingset().size());
+  epoch_t  e = get_osdmap_epoch();
   for (set<pg_shard_t>::iterator i = get_actingset().begin();
-       i != get_actingset().end();
-       ++i) {
+      i != get_actingset().end();
+      ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting reserve from osd." << *i << dendl;
-    osd->send_message_osd_cluster(
-      i->osd,
-      new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
-			   get_osdmap_epoch(),
-			   MOSDScrubReserve::REQUEST, pg_whoami),
-      get_osdmap_epoch());
+    Message* m =  new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard), e,
+					MOSDScrubReserve::REQUEST, pg_whoami);
+    messages.push_back(std::make_pair(i->osd, m));
+  }
+  if (!messages.empty()) {
+    osd->send_message_osd_cluster(messages, e);
   }
 }
 
 void PG::scrub_unreserve_replicas()
 {
   ceph_assert(recovery_state.get_backfill_targets().empty());
+  std::vector<std::pair<int, Message*>> messages;
+  messages.reserve(get_actingset().size());
+  epoch_t e = get_osdmap_epoch();
   for (set<pg_shard_t>::iterator i = get_actingset().begin();
        i != get_actingset().end();
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting unreserve from osd." << *i << dendl;
-    osd->send_message_osd_cluster(
-      i->osd,
-      new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
-			   get_osdmap_epoch(),
-			   MOSDScrubReserve::RELEASE, pg_whoami),
-      get_osdmap_epoch());
+    Message* m =  new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard), e,
+					MOSDScrubReserve::RELEASE, pg_whoami);
+    messages.push_back(std::make_pair(i->osd, m));
+  }
+  if (!messages.empty()) {
+    osd->send_message_osd_cluster(messages, e);
   }
 }
 
