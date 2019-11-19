@@ -60,6 +60,7 @@ except ImportError:
 import uuid
 
 from distutils.spawn import find_executable
+from functools import wraps
 from glob import glob
 
 try:
@@ -225,6 +226,34 @@ def is_fsid(s):
     except ValueError:
         return False
     return True
+
+def infer_fsid(func):
+    """
+    If we only find a single fsid in /var/lib/ceph/*, use that
+    """
+    @wraps(func)
+    def _infer_fsid():
+        if args.fsid:
+            logger.debug('Using specified fsid: %s' % args.fsid)
+            return
+
+        fsid_list = []
+        for i in os.listdir(args.data_dir):
+            if is_fsid(i):
+                fsid_list.append(i)
+
+        logger.debug('Found fsids %s' % str(fsid_list))
+
+        if not fsid_list:
+            # TODO: raise?
+            return
+
+        if len(fsid_list) > 1:
+            raise RuntimeError('Cannot infer fsid, must specify --fsid')
+
+        logger.info('Inferring fsid %s' % fsid_list[0])
+        args.fsid = fsid_list[0]
+    return _infer_fsid
 
 def makedirs(dir, uid, gid, mode):
     # type: (str, int, int, int) -> None
@@ -1258,6 +1287,7 @@ def command_run():
 
 ##################################
 
+@infer_fsid
 def command_shell():
     # type: () -> int
     if args.fsid:
@@ -1296,6 +1326,7 @@ def command_shell():
 
 ##################################
 
+@infer_fsid
 def command_enter():
     # type: () -> int
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -1315,6 +1346,7 @@ def command_enter():
 
 ##################################
 
+@infer_fsid
 def command_ceph_volume():
     # type: () -> None
     make_log_dir(args.fsid)
@@ -1357,6 +1389,7 @@ def command_ceph_volume():
 
 ##################################
 
+@infer_fsid
 def command_unit():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -1368,6 +1401,7 @@ def command_unit():
 
 ##################################
 
+@infer_fsid
 def command_logs():
     # type: () -> None
     cmd = [container_path, 'logs']
