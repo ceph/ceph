@@ -147,7 +147,7 @@ public:
     void insert(const rgw_sync_bucket_pipe& pipe);
 
     bool find_obj_params(const rgw_obj_key& key, 
-                         const vector<string>& tags,
+                         const RGWObjTags::tag_map_t& tags,
                          rgw_sync_pipe_params *params) const;
 
     void scan_prefixes(std::vector<string> *prefixes) const;
@@ -178,7 +178,7 @@ public:
     }
     
     bool find_obj_params(const rgw_obj_key& key,
-                         const std::vector<string>& tags,
+                         const RGWObjTags::tag_map_t& tags,
                          rgw_sync_pipe_params *params) const {
       if (!rules) {
         return false;

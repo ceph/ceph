@@ -290,22 +290,31 @@ void RGWBucketSyncFlowManager::pipe_rules::insert(const rgw_sync_bucket_pipe& pi
 
 #warning add support for tags
 bool RGWBucketSyncFlowManager::pipe_rules::find_obj_params(const rgw_obj_key& key,
-                                                           const vector<string>& tags,
+                                                           const RGWObjTags::tag_map_t& tags,
                                                            rgw_sync_pipe_params *params) const
 {
-  auto iter = prefix_refs.lower_bound(key.name);
+  if (prefix_refs.empty()) {
+    return false;
+  }
+
+  auto iter = prefix_refs.upper_bound(key.name);
+  if (iter != prefix_refs.begin()) {
+    --iter;
+  }
   if (iter == prefix_refs.end()) {
     return false;
   }
 
-  auto max = prefix_refs.end();
+  auto end = prefix_refs.upper_bound(key.name);
+  auto max = end;
 
   std::optional<int> priority;
 
-  for (; iter != prefix_refs.end(); ++iter) {
+  for (; iter != end; ++iter) {
+#warning this is not the most efficient way to do it, need trie maybe
     auto& prefix = iter->first;
     if (!boost::starts_with(key.name, prefix)) {
-      break;
+      continue;
     }
 
     auto& rule_params = iter->second->params;
@@ -321,7 +330,7 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_obj_params(const rgw_obj_key& ke
     }
   }
 
-  if (max == prefix_refs.end()) {
+  if (max == end) {
     return false;
   }
 
