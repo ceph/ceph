@@ -2908,8 +2908,7 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
 
   s->dialect = "swift";
 
-  std::string copy_source =
-    url_decode(s->info.env->get("HTTP_X_COPY_FROM", ""));
+  std::string copy_source = s->info.env->get("HTTP_X_COPY_FROM", "");
   if (! copy_source.empty()) {
     bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket,
 						  s->src_object);
@@ -2918,8 +2917,7 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
   }
 
   if (s->op == OP_COPY) {
-    std::string req_dest =
-      url_decode(s->info.env->get("HTTP_DESTINATION", ""));
+    std::string req_dest = s->info.env->get("HTTP_DESTINATION", "");
     if (req_dest.empty())
       return -ERR_BAD_URL;
 
