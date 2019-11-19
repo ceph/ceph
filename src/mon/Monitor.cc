@@ -3173,8 +3173,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
   MCommand *m = static_cast<MCommand*>(op->get_req());
   if (m->fsid != monmap->fsid) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
-    reply_command(op, -EACCES, "wrong fsid", 0);
-    return;
+    return reply_tell_command(op, -EACCES, "wrong fsid");
   }
   MonSession *session = op->get_session();
   if (!session) {
@@ -3186,13 +3185,13 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
     cmdmap_t cmdmap;
     stringstream ss;
     if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-      reply_command(op, -EINVAL, ss.str(), 0);
+      return reply_tell_command(op, -EINVAL, ss.str());
     }
     map<string,string> param_str_map;
     _generate_command_map(cmdmap, param_str_map);
     string prefix;
     if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
-      reply_command(op, -EINVAL, "no prefix", 0);
+      return reply_tell_command(op, -EINVAL, "no prefix");
     }
     if (!session->caps.is_capable(
 	  g_ceph_context,
@@ -3200,7 +3199,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
 	  "mon", prefix, param_str_map,
 	  true, true, true,
 	  session->get_peer_socket_addr())) {
-      reply_tell_command(op, -EACCES, "insufficient caps");
+      return reply_tell_command(op, -EACCES, "insufficient caps");
     }
   }
   // pass it to asok
