@@ -947,6 +947,15 @@ void rgw_sync_pipe_params::dump(Formatter *f) const
   encode_json("source", source, f);
   encode_json("dest", dest, f);
   encode_json("priority", priority, f);
+  string s;
+  switch (mode) {
+    case MODE_SYSTEM:
+      s = "system";
+      break;
+    default:
+      s = "user";
+  }
+  encode_json("mode", s, f);
 }
 
 void rgw_sync_pipe_params::decode_json(JSONObj *obj)
@@ -954,6 +963,13 @@ void rgw_sync_pipe_params::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("source", source, obj);
   JSONDecoder::decode_json("dest", dest, obj);
   JSONDecoder::decode_json("priority", priority, obj);
+  string s;
+  JSONDecoder::decode_json("mode", s, obj);
+  if (s == "system") {
+    mode = MODE_SYSTEM;
+  } else {
+    mode = MODE_USER;
+  }
 }
 
 

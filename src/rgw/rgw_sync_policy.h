@@ -301,6 +301,10 @@ WRITE_CLASS_ENCODER(rgw_sync_pipe_dest_params)
 struct rgw_sync_pipe_params {
   rgw_sync_pipe_source_params source;
   rgw_sync_pipe_dest_params dest;
+  enum Mode {
+    MODE_SYSTEM = 0,
+    MODE_USER = 1,
+  } mode{MODE_SYSTEM};
   int32_t priority{0};
 
   void encode(bufferlist& bl) const {
@@ -308,6 +312,7 @@ struct rgw_sync_pipe_params {
     encode(source, bl);
     encode(dest, bl);
     encode(priority, bl);
+    encode((uint8_t)mode, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -316,6 +321,9 @@ struct rgw_sync_pipe_params {
     decode(source, bl);
     decode(dest, bl);
     decode(priority, bl);
+    uint8_t m;
+    decode(m, bl);
+    mode = (Mode)m;
     DECODE_FINISH(bl);
   }
 
