@@ -16,51 +16,7 @@
 #define CEPH_MON_CONNECTIONTRACKER_H
 
 #include "include/types.h"
-
-struct ConnectionReport {
-  int rank = -1; // mon rank this state belongs to
-  std::map<int, bool> current; // true if connected to the other mon
-  std::map<int, double> history; // [0-1]; the connection reliability
-  epoch_t epoch = 0; // the (local) election epoch the ConnectionReport came from
-  uint64_t epoch_version = 0; // version of the ConnectionReport within the epoch
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(rank, bl);
-    encode(current, bl);
-    encode(history, bl);
-    encode(epoch, bl);
-    encode(epoch_version, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(rank, bl);
-    decode(current, bl);
-    decode(history, bl);
-    decode(epoch, bl);
-    decode(epoch_version, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(ConnectionReport);
-
-class RankProvider {
- public:
-  /**
-   * Get the rank of the running daemon.
-   * It can be -1, meaning unknown/invalid, or it
-   * can be >1.
-   * You should not invoke the functions generate_report_of_peers()
-   * or get_total_connection_score() with an unknown rank.
-   */
-  virtual int get_my_rank() const = 0;
-  /**
-   * Asks our owner to encode us and persist it to disk.
-   * Presently we do this every tenth update.
-   */
-  virtual void persist_connectivity_scores() = 0;
-  virtual ~RankProvider() {}
-};
+#include "ConnectionTracker2.h"
 
 class ConnectionTracker {
  public:
@@ -141,15 +97,6 @@ class ConnectionTracker {
    */
   void get_total_connection_score(int rank, double *rating, int *live_count) const;
 
-  void notify_reset() {
-    conn_tracker = PeerReportTracker();
-    peer_reports.clear();
-  }
-  void notify_rank_changed(int new_rank) {
-    conn_tracker.peers.erase(new_rank);
-    peer_reports.erase(new_rank);
-  }
-  
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);
 
@@ -169,12 +116,27 @@ class ConnectionTracker {
   map<int,ConnectionReport> peer_reports; // keep latest reports of peers
   double half_life;
   RankProvider *owner;
+  ConnectionTracker2 extra_tracker;
   int get_my_rank() const { return owner->get_my_rank(); }
 
  public:
   ConnectionTracker(RankProvider *o, double hl) : epoch(0), version(0),
-						  half_life(hl), owner(o) {}
-};
+						  half_life(hl), owner(o),
+						  extra_tracker(o, o->get_my_rank(), hl)
+  {}
+  void notify_reset() {
+    conn_tracker = PeerReportTracker();
+    peer_reports.clear();
+
+    extra_tracker.notify_reset();
+  }
+  void notify_rank_changed(int new_rank) {
+    conn_tracker.peers.erase(new_rank);
+    peer_reports.erase(new_rank);
+
+    extra_tracker.notify_rank_changed(new_rank);
+  }
+  };
 
 WRITE_CLASS_ENCODER(ConnectionTracker);
 
