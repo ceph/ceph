@@ -153,6 +153,7 @@ smallmds=0
 short=0
 ec=0
 ssh=0
+parallel=true
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
@@ -237,6 +238,7 @@ usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--ssh: enable ssh orchestrator with ~/.ssh/id_rsa[.pub]\n"
+usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
 
 usage_exit() {
     printf "$usage"
@@ -299,6 +301,9 @@ case $1 in
         ;;
     --ssh )
         ssh=1
+        ;;
+    --no-parallel )
+        parallel=false
         ;;
     --valgrind )
         [ -z "$2" ] && usage_exit
@@ -825,6 +830,7 @@ start_osd() {
         start=0
         end=$(($CEPH_NUM_OSD-1))
     fi
+    local osds_wait
     for osd in `seq $start $end`
     do
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
@@ -877,10 +883,23 @@ EOF
             # designate a single CPU node $osd for osd.$osd
             extra_seastar_args="--smp 1 --cpuset $osd"
         fi
+        local osd_pid
         run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
             $extra_seastar_args $extra_osd_args \
-            -i $osd $ARGS $COSD_ARGS
+            -i $osd $ARGS $COSD_ARGS &
+        osd_pid=$!
+        if $parallel; then
+            osds_wait=$osd_pid
+        else
+            wait $osd_pid
+        fi
     done
+    if $parallel; then
+        for p in $osds_wait; do
+            wait $p
+        done
+        debug echo OSDs started
+    fi
     if [ $inc_osd_num -gt 0 ]; then
         # update num osd
         new_maxosd=$($CEPH_BIN/ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
