@@ -10035,10 +10035,15 @@ int RGWRados::set_attr(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj
   return set_attrs(ctx, bucket_info, obj, attrs, NULL);
 }
 
-int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj,
+int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& src_obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs)
 {
+  rgw_obj obj = src_obj;
+  if (obj.key.instance == "null") {
+    obj.key.instance.clear();
+  }
+
   rgw_rados_ref ref;
   int r = get_obj_head_ref(bucket_info, obj, &ref);
   if (r < 0) {
@@ -10052,6 +10057,11 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
   r = append_atomic_test(rctx, bucket_info, obj, op, &state);
   if (r < 0)
     return r;
+
+  // ensure null version object exist
+  if (src_obj.key.instance == "null" && !state->has_manifest) {
+    return -ENOENT;
+  }
 
   map<string, bufferlist>::iterator iter;
   if (rmattrs) {
