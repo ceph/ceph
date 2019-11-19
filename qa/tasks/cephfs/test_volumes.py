@@ -677,6 +677,31 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "rm", self.volname, group1)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group2)
 
+    def test_subvolume_group_create_with_desired_uid_gid(self):
+        """
+        That the subvolume group can be created with the desired uid and gid and its uid and gid matches the
+        expected values.
+        """
+        uid = 1000
+        gid = 1000
+
+        # create subvolume group
+        subvolgroupname = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, subvolgroupname, "--uid", str(uid), "--gid", str(gid))
+
+        # make sure it exists
+        subvolgrouppath = self._get_subvolume_group_path(self.volname, subvolgroupname)
+        self.assertNotEqual(subvolgrouppath, None)
+
+        # verify the uid and gid
+        suid = int(self.mount_a.run_shell(['stat', '-c' '%u', subvolgrouppath]).stdout.getvalue().strip())
+        sgid = int(self.mount_a.run_shell(['stat', '-c' '%g', subvolgrouppath]).stdout.getvalue().strip())
+        self.assertEqual(uid, suid)
+        self.assertEqual(gid, sgid)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, subvolgroupname)
+
     def test_subvolume_create_with_desired_mode_in_group(self):
         subvol1 = self._generate_random_subvolume_name()
         subvol2 = self._generate_random_subvolume_name()
@@ -712,6 +737,31 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
         self._fs_cmd("subvolume", "rm", self.volname, subvol3, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_create_with_desired_uid_gid(self):
+        """
+        That the subvolume can be created with the desired uid and gid and its uid and gid matches the
+        expected values.
+        """
+        uid = 1000
+        gid = 1000
+
+        # create subvolume
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--uid", str(uid), "--gid", str(gid))
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname)
+        self.assertNotEqual(subvolpath, None)
+
+        # verify the uid and gid
+        suid = int(self.mount_a.run_shell(['stat', '-c' '%u', subvolpath]).stdout.getvalue().strip())
+        sgid = int(self.mount_a.run_shell(['stat', '-c' '%g', subvolpath]).stdout.getvalue().strip())
+        self.assertEqual(uid, suid)
+        self.assertEqual(gid, sgid)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
 
     def test_nonexistent_subvolme_group_rm(self):
         group = "non_existent_group"
