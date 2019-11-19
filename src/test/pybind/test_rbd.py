@@ -809,13 +809,13 @@ class TestImage(object):
         eq([], list(self.image.list_snaps()))
 
     def test_remove_snap_by_id(self):
-	eq([], list(self.image.list_snaps()))
-	self.image.create_snap('snap1')
-	eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
-	for snap in self.image.list_snaps():
-	    snap_id = snap["id"]
-	self.image.remove_snap_by_id(snap_id)
-	eq([], list(self.image.list_snaps()))
+        eq([], list(self.image.list_snaps()))
+        self.image.create_snap('snap1')
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+        for snap in self.image.list_snaps():
+            snap_id = snap["id"]
+        self.image.remove_snap_by_id(snap_id)
+        eq([], list(self.image.list_snaps()))
 
     def test_rename_snap(self):
         eq([], list(self.image.list_snaps()))
