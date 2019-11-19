@@ -1,5 +1,6 @@
 #!/bin/bash -ex
 
+SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 FSID='00000000-0000-0000-0000-0000deadbeef'
@@ -9,7 +10,14 @@ FSID_LEGACY='00000000-0000-0000-0000-ffffdeadbeef'
 IMAGE_MASTER=${IMAGE_MASTER:-'ceph/daemon-base:latest-master-devel'}
 IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'ceph/daemon-base:latest-mimic'}
+
 TEST_TARS=${SCRIPT_DIR}/test_ceph_daemon/*.tgz
+
+OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
+OSD_IMAGE_SIZE='6G'
+OSD_TO_CREATE=6
+OSD_VG_NAME=${SCRIPT_NAME%.*}
+OSD_LV_NAME=${SCRIPT_NAME%.*}
 
 [ -z "$SUDO" ] && SUDO=sudo
 
@@ -52,6 +60,11 @@ fi
 # clean up previous run(s)?
 $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID --force
 $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID_LEGACY --force
+vgchange -an $OSD_VG_NAME || true
+loopdev=$(losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
+if ! [ "$loopdev" = "" ]; then
+    losetup -d $loopdev
+fi
 
 TMPDIR=`mktemp -d -p .`
 trap "rm -rf $TMPDIR" TERM HUP INT
@@ -155,6 +168,18 @@ done
 $SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       ceph -s -f json-pretty \
     | jq '.mgrmap.num_standbys' | grep -q 1
+
+# add osd.{1,2,..}
+dd if=/dev/zero of=$TMPDIR/$OSD_IMAGE_NAME bs=1 count=0 seek=$OSD_IMAGE_SIZE
+loop_dev=$(losetup -f)
+losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
+pvcreate $loop_dev && vgcreate $OSD_VG_NAME $loop_dev
+for id in `seq 0 $((--OSD_TO_CREATE))`; do
+    lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
+    $SUDO $CEPH_DAEMON shell --config $CONFIG --keyring $KEYRING -- \
+            ceph orchestrator osd create \
+                $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
+done
 
 ## run
 # WRITE ME
