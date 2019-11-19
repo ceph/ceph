@@ -108,11 +108,22 @@ describe('SilenceFormComponent', () => {
     );
     ifPrometheusSpy = spyOn(prometheusService, 'ifPrometheusConfigured').and.callFake((fn) => fn());
     rulesSpy = spyOn(prometheusService, 'getRules').and.callFake(() =>
-      of([
-        prometheus.createRule('alert0', 'someSeverity', [prometheus.createAlert('alert0')]),
-        prometheus.createRule('alert1', 'someSeverity', []),
-        prometheus.createRule('alert2', 'someOtherSeverity', [prometheus.createAlert('alert2')])
-      ])
+      of({
+        groups: [
+          {
+            file: '',
+            interval: 0,
+            name: '',
+            rules: [
+              prometheus.createRule('alert0', 'someSeverity', [prometheus.createAlert('alert0')]),
+              prometheus.createRule('alert1', 'someSeverity', []),
+              prometheus.createRule('alert2', 'someOtherSeverity', [
+                prometheus.createAlert('alert2')
+              ])
+            ]
+          }
+        ]
+      })
     );
 
     router = TestBed.get(Router);

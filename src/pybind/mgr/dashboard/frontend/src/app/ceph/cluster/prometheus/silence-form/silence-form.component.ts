@@ -186,7 +186,12 @@ export class SilenceFormComponent {
     this.prometheusService.ifPrometheusConfigured(
       () =>
         this.prometheusService.getRules().subscribe(
-          (rules) => (this.rules = rules),
+          (groups) => {
+            this.rules = groups['groups'].reduce(
+              (acc, group) => _.concat<PrometheusRule>(acc, group.rules),
+              []
+            );
+          },
           () => {
             this.prometheusService.disablePrometheusConfig();
             this.rules = [];
