@@ -193,7 +193,7 @@ COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb stor
              FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("scrub", "scrub the monitor stores",
              "mon", "rw",
-             FLAG(DEPRECATED))
+             FLAG(OBSOLETE))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r")
 COMMAND("log name=logtext,type=CephString,n=N",
 	"log supplied text to the monitor log", "mon", "rw")
