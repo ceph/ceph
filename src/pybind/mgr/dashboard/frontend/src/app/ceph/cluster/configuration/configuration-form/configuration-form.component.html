@@ -98,16 +98,21 @@
           <ng-container *ngFor="let section of availSections">
             <div class="form-group row"
                  *ngIf="type === 'bool'">
-              <div class="offset-sm-3 col-sm-9">
-                <div class="custom-control custom-checkbox">
-                  <input type="checkbox"
-                         class="custom-control-input"
-                         [id]="section"
-                         [formControlName]="section">
-                  <label class="custom-control-label"
-                         [for]="section">{{ section }}
-                  </label>
-                </div>
+              <label class="col-form-label col-sm-3"
+                     [for]="section">{{ section }}
+              </label>
+              <div class="col-sm-9">
+                <select id="pool"
+                        name="pool"
+                        class="form-control custom-select"
+                        [formControlName]="section">
+                  <option [ngValue]="null"
+                          i18n>-- Default --</option>
+                  <option [ngValue]="true"
+                          i18n>true</option>
+                  <option [ngValue]="false"
+                          i18n>false</option>
+                </select>
               </div>
             </div>
 
