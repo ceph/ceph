@@ -135,7 +135,7 @@ export class ConfigurationFormComponent implements OnInit {
 
     this.availSections.forEach((section) => {
       const sectionValue = this.configForm.getValue(section);
-      if (sectionValue) {
+      if (sectionValue !== null && sectionValue !== '') {
         values.push({ section: section, value: sectionValue });
       }
     });
