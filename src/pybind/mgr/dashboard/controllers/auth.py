@@ -23,7 +23,6 @@ class Auth(RESTController):
             logger.debug('Login successful')
             token = JwtManager.gen_token(username)
             token = token.decode('utf-8')
-            logger.debug("JWT Token: %s", token)
             cherrypy.response.headers['Authorization'] = "Bearer: {}".format(token)
             return {
                 'token': token,

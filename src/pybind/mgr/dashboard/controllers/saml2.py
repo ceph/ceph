@@ -13,7 +13,7 @@ try:
 except ImportError:
     python_saml_imported = False
 
-from .. import mgr, logger
+from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
 from ..tools import prepare_url_prefix
@@ -73,7 +73,6 @@ class Saml2(BaseController):
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
             token = token.decode('utf-8')
-            logger.debug("JWT Token: %s", token)
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
         else:
             return {
