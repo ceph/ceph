@@ -91,12 +91,12 @@ class OpenStackProvider(Provider):
     def sizes(self):
         if not hasattr(self, '_sizes'):
             allow_sizes = self.conf.get('allow_sizes', '.*')
-            if isinstance(allow_sizes, basestring):
+            if not isinstance(allow_sizes, list):
                 allow_sizes = [allow_sizes]
             allow_re = [re.compile(x) for x in allow_sizes]
             # By default, exclude instance types meant for Windows
             exclude_sizes = self.conf.get('exclude_sizes', 'win-.*')
-            if isinstance(exclude_sizes, basestring):
+            if not isinstance(exclude_sizes, list):
                 exclude_sizes = [exclude_sizes]
             exclude_re = [re.compile(x) for x in exclude_sizes]
             sizes = retry(self.driver.list_sizes)
@@ -113,7 +113,7 @@ class OpenStackProvider(Provider):
     def networks(self):
         if not hasattr(self, '_networks'):
             allow_networks = self.conf.get('allow_networks', '.*')
-            if isinstance(allow_networks, basestring):
+            if not isinstance(allow_networks, list):
                 allow_networks=[allow_networks]
             networks_re = [re.compile(x) for x in allow_networks]
             try:
