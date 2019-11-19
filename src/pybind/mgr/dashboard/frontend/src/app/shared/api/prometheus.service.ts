@@ -7,7 +7,7 @@ import { AlertmanagerSilence } from '../models/alertmanager-silence';
 import {
   AlertmanagerAlert,
   AlertmanagerNotification,
-  PrometheusRule
+  PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import { ApiModule } from './api.module';
 import { SettingsService } from './settings.service';
@@ -48,8 +48,8 @@ export class PrometheusService {
     return this.http.get<AlertmanagerSilence[]>(`${this.baseURL}/silences`, { params });
   }
 
-  getRules(params = {}): Observable<PrometheusRule[]> {
-    return this.http.get<PrometheusRule[]>(`${this.baseURL}/rules`, { params });
+  getRules(params = {}): Observable<{ groups: PrometheusRuleGroup[] }> {
+    return this.http.get<{ groups: PrometheusRuleGroup[] }>(`${this.baseURL}/rules`, { params });
   }
 
   setSilence(silence: AlertmanagerSilence) {
