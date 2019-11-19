@@ -1,7 +1,7 @@
 <cd-loading-panel *ngIf="!(info && ecProfiles)"
                   i18n>Loading...</cd-loading-panel>
 
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form">
   <form name="form"
         *ngIf="info && ecProfiles"
         #formDir="ngForm"
@@ -14,12 +14,12 @@
       <div class="card-body">
         <!-- Name -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="name">
             <ng-container i18n>Name</ng-container>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input id="name"
                    name="name"
                    type="text"
@@ -46,12 +46,12 @@
 
         <!-- Pool type selection -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
+          <label class="cd-col-form-label"
                  for="poolType">
             <ng-container i18n>Pool type</ng-container>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     id="poolType"
                     formControlName="poolType"
@@ -73,9 +73,9 @@
           <!-- PG Autoscale Mode -->
           <div class="form-group row">
             <label i18n
-                   class="col-form-label col-sm-3"
+                   class="cd-col-form-label"
                    for="pgAutoscaleMode">PG Autoscale</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       id="pgAutoscaleMode"
                       name="pgAutoscaleMode"
@@ -91,12 +91,12 @@
           <!-- Pg number -->
           <div class="form-group row"
                *ngIf="form.getValue('pgAutoscaleMode') !== 'on'">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="pgNum">
               <ng-container i18n>Placement groups</ng-container>
               <span class="required"></span>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="pgNum"
                      name="pgNum"
@@ -130,12 +130,12 @@
           <!-- Replica Size -->
           <div class="form-group row"
                *ngIf="form.getValue('poolType') === 'replicated'">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="size">
               <ng-container i18n>Replicated size</ng-container>
               <span class="required"></span>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="size"
                      [max]="getMaxSize()"
@@ -161,8 +161,8 @@
           <div class="form-group row"
                *ngIf="info.is_all_bluestore && form.getValue('poolType') === 'erasure'">
             <label i18n
-                   class="col-form-label col-sm-3">Flags</label>
-            <div class="col-sm-9">
+                   class="cd-col-form-label">Flags</label>
+            <div class="cd-col-form-input">
               <div class="custom-control custom-checkbox">
                 <input type="checkbox"
                        class="custom-control-input"
@@ -179,9 +179,9 @@
         <!-- Applications -->
         <div class="form-group row">
           <label i18n
-                 class="col-sm-3 col-form-label"
+                 class="cd-col-form-label"
                  for="applications">Applications</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <cd-select-badges id="applications"
                               [customBadges]="true"
                               [customBadgeValidators]="data.applications.validators"
@@ -203,9 +203,9 @@
           <div class="form-group row"
                *ngIf="form.getValue('poolType') === 'erasure'">
             <label i18n
-                   class="col-form-label col-sm-3"
+                   class="cd-col-form-label"
                    for="erasureProfile">Erasure code profile</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="input-group">
                 <select class="form-control custom-select"
                         id="erasureProfile"
@@ -263,10 +263,10 @@
 
           <!-- Crush ruleset selection -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="crushRule"
                    i18n>Crush ruleset</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <ng-template #noRules>
                 <span class="form-text text-muted">
                   <span i18n>There are no rules.</span>&nbsp;
@@ -339,9 +339,9 @@
           <!-- Compression Mode -->
           <div class="form-group row">
             <label i18n
-                   class="col-form-label col-sm-3"
+                   class="cd-col-form-label"
                    for="mode">Mode</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       id="mode"
                       name="mode"
@@ -357,9 +357,9 @@
             <!-- Compression algorithm selection -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="algorithm">Algorithm</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <select class="form-control custom-select"
                         id="algorithm"
                         name="algorithm"
@@ -381,9 +381,9 @@
             <!-- Compression min blob size -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="minBlobSize">Minimum blob size</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input id="minBlobSize"
                        name="minBlobSize"
                        formControlName="minBlobSize"
@@ -406,9 +406,9 @@
             <!-- Compression max blob size -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="maxBlobSize">Maximum blob size</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input id="maxBlobSize"
                        type="text"
                        min="0"
@@ -430,9 +430,9 @@
             <!-- Compression ratio -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="ratio">Ratio</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input id="ratio"
                        name="ratio"
                        formControlName="ratio"
@@ -458,7 +458,7 @@
 
           <!-- Max Bytes -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="max_bytes">
               <ng-container i18n>Max bytes</ng-container>
               <cd-helper>
@@ -467,7 +467,7 @@
                 <span i18n>A valid quota should be greater than 0.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="max_bytes"
                      name="max_bytes"
@@ -482,7 +482,7 @@
 
           <!-- Max Objects -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="max_objects">
               <ng-container i18n>Max objects</ng-container>
               <cd-helper>
@@ -491,7 +491,7 @@
                 <span i18n>A valid quota should be greater than 0.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="max_objects"
                      min="0"

@@ -12,11 +12,11 @@
         <ng-container *ngFor="let field of fields">
           <div class="form-group row cd-{{field.name}}-form-group">
             <label *ngIf="field.label"
-                   class="col-form-label col-sm-3"
+                   class="cd-col-form-label"
                    [for]="field.name">
               {{ field.label }}
             </label>
-            <div [ngClass]="{'col-sm-9': field.label, 'col-sm-12': !field.label}">
+            <div [ngClass]="{'cd-col-form-input': field.label, 'col-sm-12': !field.label}">
               <input *ngIf="['text', 'number'].includes(field.type)"
                      [type]="field.type"
                      class="form-control"

@@ -89,7 +89,7 @@ describe('InputModalComponent', () => {
   });
 
   it('has one defined label field', () => {
-    fh.expectTextToBe('.col-form-label', 'Optional');
+    fh.expectTextToBe('.cd-col-form-label', 'Optional');
   });
 
   it('has a predefined values for requiredField', () => {

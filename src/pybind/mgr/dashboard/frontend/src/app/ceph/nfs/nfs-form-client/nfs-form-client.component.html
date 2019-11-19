@@ -1,8 +1,8 @@
 <div class="form-group row">
-  <label class="col-sm-3 col-form-label"
+  <label class="cd-col-form-label"
          i18n>Clients</label>
 
-  <div class="col-sm-9"
+  <div class="cd-col-form-input"
        [formGroup]="form"
        #formDir="ngForm">
     <span *ngIf="form.get('clients').value.length === 0"
@@ -26,9 +26,9 @@
             <!-- Addresses -->
             <div class="form-group row">
               <label i18n
-                     class="col-sm-3 col-form-label"
+                     class="cd-col-form-label"
                      for="addresses">Addresses</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input type="text"
                        class="form-control"
                        name="addresses"
@@ -51,9 +51,9 @@
             <!-- Access Type-->
             <div class="form-group row">
               <label i18n
-                     class="col-sm-3 col-form-label"
+                     class="cd-col-form-label"
                      for="access_type">Access Type</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <select class="form-control custom-select"
                         name="access_type"
                         id="access_type"
@@ -72,9 +72,9 @@
             <!-- Squash -->
             <div class="form-group row">
               <label i18n
-                     class="col-sm-3 col-form-label"
+                     class="cd-col-form-label"
                      for="squash">Squash</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <select class="form-control custom-select"
                         name="squash"
                         id="squash"
