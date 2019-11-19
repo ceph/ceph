@@ -202,6 +202,32 @@ struct RGWObjState {
   }
 };
 
+class RGWFetchObjFilter {
+public:
+  virtual ~RGWFetchObjFilter() {}
+
+  virtual int filter(CephContext *cct,
+                     const rgw_obj_key& source_key,
+                     const RGWBucketInfo& dest_bucket_info,
+                     std::optional<rgw_placement_rule> dest_placement_rule,
+                     const map<string, bufferlist>& obj_attrs,
+                     const rgw_placement_rule **prule) = 0;
+};
+
+class RGWFetchObjFilter_Default : public RGWFetchObjFilter {
+protected:
+  rgw_placement_rule dest_rule;
+public:
+  RGWFetchObjFilter_Default() {}
+
+  int filter(CephContext *cct,
+             const rgw_obj_key& source_key,
+             const RGWBucketInfo& dest_bucket_info,
+             std::optional<rgw_placement_rule> dest_placement_rule,
+             const map<string, bufferlist>& obj_attrs,
+             const rgw_placement_rule **prule) override;
+};
+
 class RGWObjectCtx {
   rgw::sal::RGWRadosStore *store;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
@@ -1101,6 +1127,7 @@ public:
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
                        const DoutPrefixProvider *dpp,
+                       RGWFetchObjFilter *filter,
                        rgw_zone_set *zones_trace= nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0);
   /**

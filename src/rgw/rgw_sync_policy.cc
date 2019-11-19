@@ -121,18 +121,42 @@ bool rgw_sync_pipe_filter::check_tag(const string& s) const
     return true;
   }
 
-  for (auto& t : tags) {
-    if (t == s) {
+  auto iter = tags.find(rgw_sync_pipe_filter_tag(s));
+  return (iter != tags.end());
+}
+
+bool rgw_sync_pipe_filter::check_tag(const string& k, const string& v) const
+{
+  if (tags.empty()) { /* tag filter wasn't defined */
+    return true;
+  }
+
+  auto iter = tags.find(rgw_sync_pipe_filter_tag(k, v));
+  return (iter != tags.end());
+}
+
+bool rgw_sync_pipe_filter::check_tags(const std::vector<string>& _tags) const
+{
+  if (tags.empty()) {
+    return true;
+  }
+
+  for (auto& t : _tags) {
+    if (check_tag(t)) {
       return true;
     }
   }
   return false;
 }
 
-bool rgw_sync_pipe_filter::check_tags(const std::vector<string>& tags) const
+bool rgw_sync_pipe_filter::check_tags(const RGWObjTags::tag_map_t& _tags) const
 {
-  for (auto& t : tags) {
-    if (check_tag(t)) {
+  if (tags.empty()) {
+    return true;
+  }
+
+  for (auto& item : _tags) {
+    if (check_tag(item.first, item.second)) {
       return true;
     }
   }
