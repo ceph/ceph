@@ -3143,15 +3143,17 @@ public:
             tn->log(10, SSTR("removing obj: " << sc->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
             call(data_sync_module->remove_object(sc, sync_pipe, key, timestamp, versioned, versioned_epoch.value_or(0), &zones_trace));
             // our copy of the object is more recent, continue as if it succeeded
-            if (retcode == -ERR_PRECONDITION_FAILED) {
-              retcode = 0;
-            }
           } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
             set_status("creating delete marker");
             tn->log(10, SSTR("creating delete marker: obj: " << sc->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
             call(data_sync_module->create_delete_marker(sc, sync_pipe, key, timestamp, owner, versioned, versioned_epoch.value_or(0), &zones_trace));
           }
           tn->set_resource_name(SSTR(bucket_str_noinstance(bs.bucket) << "/" << key));
+        }
+        if (retcode == -ERR_PRECONDITION_FAILED) {
+          set_status("Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
+          tn->log(0, "Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
+          retcode = 0;
         }
       } while (marker_tracker->need_retry(key));
       {
