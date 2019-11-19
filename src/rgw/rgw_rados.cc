@@ -9388,7 +9388,7 @@ int RGWRados::delete_system_obj(rgw_raw_obj& obj, RGWObjVersionTracker *objv_tra
   return 0;
 }
 
-int RGWRados::delete_obj_index(const rgw_obj& obj)
+int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime)
 {
   std::string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
@@ -9405,10 +9405,7 @@ int RGWRados::delete_obj_index(const rgw_obj& obj)
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
-  real_time removed_mtime;
-  int r = index_op.complete_del(-1 /* pool */, 0, removed_mtime, NULL);
-
-  return r;
+  return index_op.complete_del(-1 /* pool */, 0, mtime, NULL);
 }
 
 static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
@@ -13752,7 +13749,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 
       if (loc.key.ns == RGW_OBJ_NS_MULTIPART) {
 	dout(10) << "check_disk_state(): removing manifest part from index: " << loc << dendl;
-	r = delete_obj_index(loc);
+	r = delete_obj_index(loc, astate->mtime);
 	if (r < 0) {
 	  dout(0) << "WARNING: delete_obj_index() returned r=" << r << dendl;
 	}
@@ -14619,7 +14616,7 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   handles.push_back(c);
 
   if (keep_index_consistent) {
-    ret = delete_obj_index(obj);
+    ret = delete_obj_index(obj, astate->mtime);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to delete obj index with ret=" << ret << dendl;
       return ret;
