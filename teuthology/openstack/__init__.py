@@ -64,7 +64,7 @@ class NoFlavorException(Exception):
     pass
 
 def enforce_json_dictionary(something):
-    if type(something) is not types.DictType:
+    if not isinstance(something, dict):
         raise Exception(
             'Please pip uninstall --yes cliff-tablib and try again.'
             ' Details about this error can be found at'
