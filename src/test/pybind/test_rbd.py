@@ -34,7 +34,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
-                 RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX)
+                 RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                 RBD_SNAP_REMOVE_UNPROTECT)
 
 rados = None
 ioctx = None
@@ -801,11 +802,12 @@ class TestImage(object):
     def test_remove_snap_not_found(self):
         assert_raises(ImageNotFound, self.image.remove_snap, 'snap1')
 
+    @require_features([RBD_FEATURE_LAYERING])
     def test_remove_snap2(self):
         self.image.create_snap('snap1')
         self.image.protect_snap('snap1')
         assert(self.image.is_protected_snap('snap1'))
-        self.image.remove_snap2('snap1',1)
+        self.image.remove_snap2('snap1', RBD_SNAP_REMOVE_UNPROTECT)
         eq([], list(self.image.list_snaps()))
 
     def test_remove_snap_by_id(self):
