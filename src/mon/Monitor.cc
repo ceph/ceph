@@ -3190,6 +3190,17 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
   if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
     return reply_tell_command(op, -EINVAL, "no prefix");
   }
+  if (auto cmd = _get_moncommand(prefix,
+				 get_local_commands(quorum_mon_features));
+      cmd) {
+    if (cmd->is_obsolete() ||
+	(cct->_conf->mon_debug_deprecated_as_obsolete &&
+	 cmd->is_deprecated())) {
+      return reply_tell_command(op, -ENOTSUP,
+				"command is obsolete; "
+				"please check usage and/or man page");
+    }
+  }
   // see if command is whitelisted
   if (!session->caps.is_capable(
       g_ceph_context,
