@@ -553,11 +553,12 @@ Usage:
 
         if num <= 0:
             return HandleCommandResult(-errno.EINVAL,
-                    stderr="Invalid number of mgrs: require {} > 0".format(num))
+                                       stderr="Invalid number of mgrs: require {} > 0".format(num))
 
         if hosts:
             try:
-                hosts = list(map(orchestrator.split_host, hosts))
+                hosts = [orchestrator.parse_host_specs(host_spec, require_network=False)
+                         for host_spec in hosts]
             except Exception as e:
                 msg = "Failed to parse host list: '{}': {}".format(hosts, e)
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
@@ -576,11 +577,12 @@ Usage:
 
         if num <= 0:
             return HandleCommandResult(-errno.EINVAL,
-                    stderr="Invalid number of mons: require {} > 0".format(num))
+                                       stderr="Invalid number of mons: require {} > 0".format(num))
 
         if hosts:
             try:
-                hosts = list(map(orchestrator.split_host_with_network, hosts))
+                hosts = [orchestrator.parse_host_specs(host_spec)
+                         for host_spec in hosts]
             except Exception as e:
                 msg = "Failed to parse host list: '{}': {}".format(hosts, e)
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)

@@ -13,6 +13,7 @@ import string
 import random
 import datetime
 import copy
+import re
 
 from ceph.deployment import inventory
 
@@ -28,40 +29,72 @@ try:
 except ImportError:
     T, G = object, object
 
-def split_host(host):
-    """
-    Split host into host and (optional) daemon name parts
-    e.g.,
-      "myhost=name" -> ('myhost', 'name')
-      "myhost" -> ('myhost', None)
-    """
-    # TODO: stricter validation
-    a = host.split('=', 1)
-    if len(a) == 1:
-        return (a[0], None)
-    else:
-        assert len(a) == 2
-        return tuple(a)
 
-def split_host_with_network(host):
+def parse_host_specs(host, require_network=True):
     """
     Split host into host, network, and (optional) daemon name parts.  The network
-    part can be an IP, CIDR, or ceph addrvec like
-    '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
+    part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
     e.g.,
-      "myhost:1.2.3.4=name" -> ('myhost', '1.2.3.4', 'name')
-      "myhost:1.2.3.0/24" -> ('myhost', '1.2.3.0/24', None)
+      "myhost"
+      "myhost=name"
+      "myhost:1.2.3.4"
+      "myhost:1.2.3.4=name"
+      "myhost:1.2.3.0/24"
+      "myhost:1.2.3.0/24=name"
+      "myhost:[v2:1.2.3.4:3000]=name"
+      "myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
     """
-    # TODO: stricter validation
-    (host, name) = host.split('=', 1)
-    parts = host.split(":", 1)
-    if len(parts) == 1:
-        return (parts[0], None, name)
-    elif len(parts) == 2:
-        return (parts[0], parts[1], name)
+    # Matches from start to : or = or until end of string
+    host_re = r'^(.*?)(:|=|$)'
+    # Matches from : to = or until end of string
+    ip_re = r':(.*?)(=|$)'
+    # Matches from = to end of string
+    name_re = r'=(.*?)$'
+
+    from collections import namedtuple
+    HostSpec = namedtuple('HostSpec', ['hostname', 'network', 'name'])
+    # assign defaults
+    host_spec = HostSpec('', '', '')
+
+    match_host = re.search(host_re, host)
+    if match_host:
+        host_spec = host_spec._replace(hostname=match_host.group(1))
+
+    name_match = re.search(name_re, host)
+    if name_match:
+        host_spec = host_spec._replace(name=name_match.group(1))
+
+    ip_match = re.search(ip_re, host)
+    if ip_match:
+        host_spec = host_spec._replace(network=ip_match.group(1))
+
+    if not require_network:
+        return host_spec
+
+    from ipaddress import ip_network, ip_address
+    networks = list()
+    network = host_spec.network
+    # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
+    if ',' in network:
+        networks = [x for x in network.split(',')]
     else:
-        raise RuntimeError("Invalid host specification: "
-                           "'{}'".format(host))
+        networks.append(network)
+    for network in networks:
+        # only if we have versioned network configs
+        if network.startswith('v') or network.startswith('[v'):
+            network = network.split(':')[1]
+        try:
+            # if subnets are defined, also verify the validity
+            if '/' in network:
+                ip_network(network)
+            else:
+                ip_address(network)
+        except ValueError as e:
+            # logging?
+            raise e
+
+    return host_spec
+
 
 class OrchestratorError(Exception):
     """
@@ -636,7 +669,7 @@ class PlacementSpec(object):
     def __init__(self, label=None, nodes=[]):
         self.label = label
 
-        self.nodes = list(map(split_host, nodes))
+        self.nodes = [parse_host_specs(x, require_network=False) for x in nodes]
 
 def handle_type_error(method):
     @wraps(method)
