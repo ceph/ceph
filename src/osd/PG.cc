@@ -1576,7 +1576,14 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     dout(10) << "choose_acting failed, not recoverable" << dendl;
     return false;
   }
-
+  while (want.size() > pool.info.size) {
+    // async recovery should have taken out as many osds as it can.
+    // if not, then always evict the last peer
+    // (will get synchronously recovered later)
+    dout(10) << __func__ << " evicting osd." << want.back()
+               << " from oversized want " << want << dendl;
+    want.pop_back();
+  }
   if (want != acting) {
     dout(10) << "choose_acting want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
