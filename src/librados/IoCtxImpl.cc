@@ -52,10 +52,11 @@ struct CB_notify_Finish {
       preply_buf_len(_preply_buf_len) {}
 
 
+  // move-only
   CB_notify_Finish(const CB_notify_Finish&) = delete;
-  CB_notify_Finish operator =(const CB_notify_Finish&) = delete;
-  CB_notify_Finish(CB_notify_Finish&&) = delete;
-  CB_notify_Finish operator =(CB_notify_Finish&&) = delete;
+  CB_notify_Finish& operator =(const CB_notify_Finish&) = delete;
+  CB_notify_Finish(CB_notify_Finish&&) = default;
+  CB_notify_Finish& operator =(CB_notify_Finish&&) = default;
 
   void operator()(bs::error_code ec, bufferlist&& reply_bl) {
     ldout(cct, 10) << __func__ << " completed notify (linger op "
@@ -1784,12 +1785,9 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   linger_op->on_notify_finish =
     Objecter::LingerOp::OpComp::create(
       objecter->service.get_executor(),
-      [c = std::make_unique<CB_notify_Finish>(client->cct, &notify_finish_cond,
-					      objecter, linger_op, preply_bl,
-					      preply_buf, preply_buf_len)]
-      (bs::error_code ec, cb::list bl) {
-	std::move(*c)(ec, std::move(bl));
-      });
+      CB_notify_Finish(client->cct, &notify_finish_cond,
+                       objecter, linger_op, preply_bl,
+                       preply_buf, preply_buf_len));
   uint32_t timeout = notify_timeout;
   if (timeout_ms)
     timeout = timeout_ms / 1000;
@@ -1842,13 +1840,10 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   linger_op->on_notify_finish =
     Objecter::LingerOp::OpComp::create(
       objecter->service.get_executor(),
-      [c = std::make_unique<CB_notify_Finish>(client->cct, oncomplete,
-					      objecter, linger_op,
-					      preply_bl, preply_buf,
-					      preply_buf_len)]
-      (bs::error_code ec, cb::list&& bl) {
-	std::move(*c)(ec, std::move(bl));
-      });
+      CB_notify_Finish(client->cct, oncomplete,
+                       objecter, linger_op,
+                       preply_bl, preply_buf,
+                       preply_buf_len));
   Context *onack = new C_aio_notify_Ack(client->cct, oncomplete);
 
   uint32_t timeout = notify_timeout;
