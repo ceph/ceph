@@ -248,6 +248,7 @@ int main(int argc, char **argv)
     ("command", po::value<string>(&action),
         "fsck, "
         "repair, "
+        "quick-fix, "
         "bluefs-export, "
         "bluefs-bdev-sizes, "
         "bluefs-bdev-expand, "
@@ -293,7 +294,7 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  if (action == "fsck" || action == "repair") {
+  if (action == "fsck" || action == "repair" || action == "quick-fix") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -417,14 +418,17 @@ int main(int argc, char **argv)
   common_init_finish(cct.get());
 
   if (action == "fsck" ||
-      action == "repair") {
+      action == "repair" ||
+      action == "quick-fix") {
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
     int r;
     if (action == "fsck") {
       r = bluestore.fsck(fsck_deep);
-    } else {
+    } else if (action == "repair") {
       r = bluestore.repair(fsck_deep);
+    } else {
+      r = bluestore.quick_fix();
     }
     if (r < 0) {
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;

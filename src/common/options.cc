@@ -4734,6 +4734,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Run deep fsck at mount when bluestore_fsck_on_mount is set to true"),
 
+    Option("bluestore_fsck_quick_fix_on_mount", Option::TYPE_BOOL, Option::LEVEL_DEV)
+      .set_default(true)
+      .set_description("Do quick-fix for the store at mount"),
+
     Option("bluestore_fsck_on_umount", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Run fsck at umount"),
@@ -4758,6 +4762,10 @@ std::vector<Option> get_global_options() {
     .set_default(64_M)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes read at once by deep fsck"),
+
+    Option("bluestore_fsck_quick_fix_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+      .set_default(2)
+      .set_description("Number of additional threads to perform quick-fix (shallow fsck) command"),
 
     Option("bluestore_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
@@ -4886,15 +4894,9 @@ std::vector<Option> get_global_options() {
     .set_default(0.0)
     .set_description("inject crc verification errors into bluestore device reads"),
 
-    Option("bluestore_no_per_pool_stats_tolerance", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("until_repair")
-    .set_flag(Option::FLAG_RUNTIME)
-    .set_enum_allowed({"enforce", "until_repair", "until_fsck"})
-    .set_description("Specified how to treat lack of per-pool stats, e.g. caused by an upgrade")
-    .set_long_description(
-      "'until_fsck' will tolerate the case for regular ops and fail on fsck or repair, the latter will fix the issue, "
-      "'until_repair' will tolerate for regular ops and fsck. Repair indicates and fixes the issue, "
-      "'enforce' will unconditionally use global stats mode."),
+    Option("bluestore_fsck_error_on_no_per_pool_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Make fsck error (instead of warn) when bluestore lacks per-pool stats, e.g., after an upgrade"),
 
     Option("bluestore_warn_on_bluefs_spillover", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

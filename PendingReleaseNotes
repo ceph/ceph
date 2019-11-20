@@ -17,6 +17,12 @@
   multiply your current "objecter_inflight_ops" and
   "objecter_inflight_op_bytes" paramaeters by the old
   "num_rados_handles" to get the same throttle behavior.
+  
+* The ``bluestore_no_per_pool_stats_tolerance`` config option has been
+  replaced with ``bluestore_fsck_error_on_no_per_pool_stats``
+  (default: false).  The overall default behavior has not changed:
+  fsck will warn but not fail on legacy stores, and repair will
+  convert to per-pool stats.
 
 14.2.2
 ------

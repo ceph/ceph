@@ -29,6 +29,8 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 
+#include "include/cpp-btree/btree_set.h"
+
 #include "include/ceph_assert.h"
 #include "include/unordered_map.h"
 #include "include/mempool.h"
@@ -155,6 +157,7 @@ public:
   class TransContext;
 
   typedef map<uint64_t, bufferlist> ready_regions_t;
+
 
   struct BufferSpace;
   struct Collection;
@@ -1063,6 +1066,30 @@ public:
 	exists(false),
 	extent_map(this) {
     }
+    Onode(Collection* c, const ghobject_t& o,
+      const string& k)
+      : nref(0),
+      c(c),
+      oid(o),
+      key(k),
+      exists(false),
+      extent_map(this) {
+    }
+    Onode(Collection* c, const ghobject_t& o,
+      const char* k)
+      : nref(0),
+      c(c),
+      oid(o),
+      key(k),
+      exists(false),
+      extent_map(this) {
+    }
+
+    static Onode* decode(
+      CollectionRef c,
+      const ghobject_t& oid,
+      const string& key,
+      const bufferlist& v);
 
     void flush();
     void get() {
@@ -1904,6 +1931,7 @@ private:
 
   RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
   mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
+  bool collections_had_errors = false;
   map<coll_t,CollectionRef> new_coll_map;
 
   vector<Cache*> cache_shards;
@@ -2218,7 +2246,8 @@ private:
   void _close_fm();
   int _open_alloc();
   void _close_alloc();
-  int _open_collections(int *errors=0);
+  int _open_collections();
+  void _fsck_collections(int64_t* errors);
   void _close_collections();
 
   int _setup_block_symlink_or_file(string name, string path, uint64_t size,
@@ -2302,6 +2331,14 @@ public:
   using mempool_dynamic_bitset =
     boost::dynamic_bitset<uint64_t,
 			  mempool::bluestore_fsck::pool_allocator<uint64_t>>;
+  using  per_pool_statfs =
+    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
+
+  enum FSCKDepth {
+    FSCK_REGULAR,
+    FSCK_DEEP,
+    FSCK_SHALLOW
+  };
 
 private:
   int _fsck_check_extents(
@@ -2312,15 +2349,17 @@ private:
     mempool_dynamic_bitset &used_blocks,
     uint64_t granularity,
     BlueStoreRepairer* repairer,
-    store_statfs_t& expected_statfs);
+    store_statfs_t& expected_statfs,
+    FSCKDepth depth);
 
-  using  per_pool_statfs =
-    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
   void _fsck_check_pool_statfs(
     per_pool_statfs& expected_pool_statfs,
-    bool need_per_pool_stats,
-    int& errors,
+    int64_t& errors,
+    int64_t &warnings,
     BlueStoreRepairer* repairer);
+
+  int _fsck(FSCKDepth depth, bool repair);
+  int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair);
 
   void _buffer_cache_write(
     TransContext *txc,
@@ -2429,12 +2468,14 @@ public:
   int cold_close();
 
   int fsck(bool deep) override {
-    return _fsck(deep, false);
+    return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, false);
   }
   int repair(bool deep) override {
-    return _fsck(deep, true);
+    return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, true);
   }
-  int _fsck(bool deep, bool repair);
+  int quick_fix() override {
+    return _fsck(FSCK_SHALLOW, true);
+  }
 
   void set_cache_shards(unsigned num) override;
   void dump_cache_stats(Formatter *f) override {
@@ -2650,6 +2691,7 @@ public:
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
   void inject_statfs(const string& key, const store_statfs_t& new_statfs);
+  void inject_global_statfs(const store_statfs_t& new_statfs);
   void inject_misreference(coll_t cid1, ghobject_t oid1,
 			   coll_t cid2, ghobject_t oid2,
 			   uint64_t offset);
@@ -3023,6 +3065,93 @@ private:
     return allocate_bluefs_freespace(min_size, size, &extents);
   };
   size_t available_freespace(uint64_t alloc_size) override;
+
+public:
+  struct sb_info_t {
+    coll_t cid;
+    int64_t pool_id = INT64_MIN;
+    list<ghobject_t> oids;
+    BlueStore::SharedBlobRef sb;
+    bluestore_extent_ref_map_t ref_map;
+    bool compressed = false;
+    bool passed = false;
+    bool updated = false;
+  };
+  typedef btree::btree_set<
+    uint64_t, std::less<uint64_t>,
+    mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
+
+  typedef mempool::bluestore_fsck::map<uint64_t, sb_info_t> sb_info_map_t;
+  struct FSCK_ObjectCtx {
+    int64_t& errors;
+    int64_t& warnings;
+    uint64_t& num_objects;
+    uint64_t& num_extents;
+    uint64_t& num_blobs;
+    uint64_t& num_sharded_objects;
+    uint64_t& num_spanning_blobs;
+
+    mempool_dynamic_bitset* used_blocks;
+    uint64_t_btree_t* used_omap_head;
+    uint64_t_btree_t* used_per_pool_omap_head;
+    uint64_t_btree_t* used_pgmeta_omap_head;
+
+    ceph::mutex* sb_info_lock;
+    sb_info_map_t& sb_info;
+
+    store_statfs_t& expected_store_statfs;
+    per_pool_statfs& expected_pool_statfs;
+    BlueStoreRepairer* repairer;
+
+    FSCK_ObjectCtx(int64_t& e,
+                   int64_t& w,
+                   uint64_t& _num_objects,
+                   uint64_t& _num_extents,
+                   uint64_t& _num_blobs,
+                   uint64_t& _num_sharded_objects,
+                   uint64_t& _num_spanning_blobs,
+                   mempool_dynamic_bitset* _ub,
+                   uint64_t_btree_t* _used_omap_head,
+                   uint64_t_btree_t* _used_per_pool_omap_head,
+                   uint64_t_btree_t* _used_pgmeta_omap_head,
+                   ceph::mutex* _sb_info_lock,
+                   sb_info_map_t& _sb_info,
+                   store_statfs_t& _store_statfs,
+                   per_pool_statfs& _pool_statfs,
+                   BlueStoreRepairer* _repairer) :
+      errors(e),
+      warnings(w),
+      num_objects(_num_objects),
+      num_extents(_num_extents),
+      num_blobs(_num_blobs),
+      num_sharded_objects(_num_sharded_objects),
+      num_spanning_blobs(_num_spanning_blobs),
+      used_blocks(_ub),
+      used_omap_head(_used_omap_head),
+      used_per_pool_omap_head(_used_per_pool_omap_head),
+      used_pgmeta_omap_head(_used_pgmeta_omap_head),
+      sb_info_lock(_sb_info_lock),
+      sb_info(_sb_info),
+      expected_store_statfs(_store_statfs),
+      expected_pool_statfs(_pool_statfs),
+      repairer(_repairer) {
+    }
+  };
+
+  OnodeRef fsck_check_objects_shallow(
+    FSCKDepth depth,
+    int64_t pool_id,
+    CollectionRef c,
+    const ghobject_t& oid,
+    const string& key,
+    const bufferlist& value,
+    mempool::bluestore_fsck::list<string>& expecting_shards,
+    map<BlobRef, bluestore_blob_t::unused_t>* referenced,
+    const BlueStore::FSCK_ObjectCtx& ctx);
+
+private:
+  void _fsck_check_objects(FSCKDepth depth,
+    FSCK_ObjectCtx& ctx);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {
@@ -3210,6 +3339,9 @@ public:
       ++to_repair_cnt;
     }
   }
+  void inc_repaired() {
+    ++to_repair_cnt;
+  }  
 
   StoreSpaceTracker& get_space_usage_tracker() {
     return space_usage_tracker;

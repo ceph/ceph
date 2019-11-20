@@ -1487,6 +1487,9 @@ public:
   virtual int repair(bool deep) {
     return -EOPNOTSUPP;
   }
+  virtual int quick_fix() {
+    return -EOPNOTSUPP;
+  }
 
   virtual void set_cache_shards(unsigned num) { }
 
