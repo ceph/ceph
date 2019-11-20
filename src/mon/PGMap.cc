@@ -1134,14 +1134,16 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 
     auto pool_statfs_iter =
       pool_statfs.find(std::make_pair(update_pool, update_osd));
-    pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
-    if (pool_statfs_iter == pool_statfs.end()) {
-      pool_statfs.emplace(std::make_pair(update_pool, update_osd), statfs_inc);
-    } else {
-      pool_sum_ref.sub(pool_statfs_iter->second);
-      pool_statfs_iter->second = statfs_inc;
+    if (pg_pool_sum.count(update_pool)) { 
+      pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
+      if (pool_statfs_iter == pool_statfs.end()) {
+        pool_statfs.emplace(std::make_pair(update_pool, update_osd), statfs_inc);
+      } else {
+        pool_sum_ref.sub(pool_statfs_iter->second);
+        pool_statfs_iter->second = statfs_inc;
+      }
+      pool_sum_ref.add(statfs_inc);
     }
-    pool_sum_ref.add(statfs_inc);
   }
 
   for (auto p = inc.get_osd_stat_updates().begin();
