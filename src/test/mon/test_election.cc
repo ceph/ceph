@@ -170,7 +170,7 @@ struct Owner : public ElectionOwner, RankProvider {
     quorum = members;
     victory_accepters = 1;
   }
-  bool is_current_member(int rank) const { return quorum.count(rank) != 0; }
+  bool is_current_member(int r) const { return quorum.count(r) != 0; }
   void receive_propose(int from, epoch_t e) {
     logic.receive_propose(from, e);
   }
@@ -197,20 +197,20 @@ struct Owner : public ElectionOwner, RankProvider {
       parent->report_quorum(quorum);
     }
   }
-  void receive_ping(int rank, bufferlist bl) {
+  void receive_ping(int from_rank, bufferlist bl) {
     map<int,ConnectionReport> crs;
     bufferlist::const_iterator bi = bl.begin();
     decode(crs, bi);
-    ldout(g_ceph_context, 6) << "receive ping from " << rank << dendl;
-    peer_tracker.report_live_connection(rank, parent->ping_interval);
+    ldout(g_ceph_context, 6) << "receive ping from " << from_rank << dendl;
+    peer_tracker.report_live_connection(from_rank, parent->ping_interval);
     for (auto& i : crs) {
       peer_tracker.receive_peer_report(i.second);
     }
     
   }
-  void receive_ping_timeout(int rank) {
-    ldout(g_ceph_context, 6) << "timeout ping from " << rank << dendl;
-    peer_tracker.report_dead_connection(rank, parent->ping_interval);
+  void receive_ping_timeout(int from_rank) {
+    ldout(g_ceph_context, 6) << "timeout ping from " << from_rank << dendl;
+    peer_tracker.report_dead_connection(from_rank, parent->ping_interval);
   }
   void election_timeout() {
     ldout(g_ceph_context, 2) << "election epoch " << logic.get_epoch()
