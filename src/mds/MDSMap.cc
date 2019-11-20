@@ -656,7 +656,6 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     encode(data_pools, bl);
     encode(cas_pool, bl);
 
-    // kclient ignores everything from here
     __u16 ev = 5;
     encode(ev, bl);
     encode(compat, bl);
@@ -686,7 +685,6 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  // kclient ignores everything from here
   __u16 ev = 15;
   encode(ev, bl);
   encode(compat, bl);
