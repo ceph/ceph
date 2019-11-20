@@ -785,6 +785,7 @@ function destroy_osd() {
 
     ceph osd out osd.$id || return 1
     kill_daemons $dir TERM osd.$id || return 1
+    ceph osd down osd.$id || return 1
     ceph osd purge osd.$id --yes-i-really-mean-it || return 1
     teardown $dir/$id || return 1
     rm -fr $dir/$id
