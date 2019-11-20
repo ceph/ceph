@@ -508,6 +508,7 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
+            osd_dev_node = None
             if obj_store == "filestore":
             # collect filestore backend device
                 osd_dev_node = osd_metadata.get('backend_filestore_dev_node', None)
