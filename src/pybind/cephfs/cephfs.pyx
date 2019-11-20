@@ -865,7 +865,7 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
-    def chown(self, path, int uid, int gid):
+    def chown(self, path, uid, gid):
         """
         Change directory ownership
         :param path: the path of the directory to change.
