@@ -1,0 +1,46 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container *ngIf="titleText"
+                class="modal-title">
+    {{ titleText }}
+  </ng-container>
+  <ng-container class="modal-content">
+    <form [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+        <p *ngIf="message">{{ message }}</p>
+        <ng-container *ngFor="let field of fields">
+          <div class="form-group row">
+            <ng-container [ngSwitch]="field.type">
+              <ng-template [ngSwitchCase]="'inputText'">
+                <label *ngIf="field.label"
+                       class="col-form-label col-sm-3"
+                       [for]="field.name">
+                  {{ field.label }}
+                </label>
+                <div [ngClass]="{'col-sm-9': field.label, 'col-sm-12': !field.label}">
+                  <input type="text"
+                         class="form-control"
+                         [id]="field.name"
+                         [name]="field.name"
+                         [formControlName]="field.name">
+                  <span *ngIf="formGroup.hasError('required', field.name)"
+                        class="invalid-feedback"
+                        i18n>This field is required.</span>
+                </div>
+              </ng-template>
+            </ng-container>
+          </div>
+        </ng-container>
+      </div>
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="formGroup"
+                            (submitAction)="onSubmitForm(formGroup.value)">
+            {{ submitButtonText }}
+          </cd-submit-button>
+          <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
