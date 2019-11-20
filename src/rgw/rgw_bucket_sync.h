@@ -146,6 +146,11 @@ public:
 
     void insert(const rgw_sync_bucket_pipe& pipe);
 
+    bool find_basic_info_without_tags(const rgw_obj_key& key,
+                                      std::optional<rgw_user> *acl_translation,
+                                      std::optional<string> *storage_class,
+                                      rgw_sync_pipe_params::Mode *mode,
+                                      bool *need_more_info) const;
     bool find_obj_params(const rgw_obj_key& key, 
                          const RGWObjTags::tag_map_t& tags,
                          rgw_sync_pipe_params *params) const;
@@ -177,6 +182,17 @@ public:
       return source.specific() && dest.specific();
     }
     
+    bool find_basic_info_without_tags(const rgw_obj_key& key,
+                                      std::optional<rgw_user> *acl_translation,
+                                      std::optional<string> *storage_class,
+                                      rgw_sync_pipe_params::Mode *mode,
+                                      bool *need_more_info) const {
+      if (!rules) {
+        return false;
+      }
+      return rules->find_basic_info_without_tags(key, acl_translation, storage_class, mode, need_more_info);
+    }
+
     bool find_obj_params(const rgw_obj_key& key,
                          const RGWObjTags::tag_map_t& tags,
                          rgw_sync_pipe_params *params) const {

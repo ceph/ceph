@@ -135,6 +135,11 @@ bool rgw_sync_pipe_filter::check_tag(const string& k, const string& v) const
   return (iter != tags.end());
 }
 
+bool rgw_sync_pipe_filter::has_tags() const
+{
+  return !tags.empty();
+}
+
 bool rgw_sync_pipe_filter::check_tags(const std::vector<string>& _tags) const
 {
   if (tags.empty()) {

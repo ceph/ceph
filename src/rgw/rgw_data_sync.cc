@@ -1993,13 +1993,15 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
                                    const map<string, bufferlist>& obj_attrs,
                                    const rgw_placement_rule **prule)
 {
+  int abort_err = -ERR_PRECONDITION_FAILED;
+
   rgw_sync_pipe_params params;
 
   RGWObjTags obj_tags;
 
   auto iter = obj_attrs.find(RGW_ATTR_TAGS);
   if (iter != obj_attrs.end()) {
-    try{
+    try {
       auto it = iter->second.cbegin();
       obj_tags.decode(it);
     } catch (buffer::error &err) {
@@ -2010,7 +2012,27 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
   if (!sync_pipe.info.handler.find_obj_params(source_key,
                                               obj_tags.get_tags(),
                                               &params)) {
-    return -ERR_PRECONDITION_FAILED;
+    return abort_err;
+  }
+
+  std::optional<std::map<string, bufferlist> > new_attrs;
+
+  if (params.mode == rgw_sync_pipe_params::MODE_USER) {
+    RGWAccessControlPolicy policy;
+    auto iter = obj_attrs.find(RGW_ATTR_ACL);
+    if (iter == obj_attrs.end()) {
+      ldout(cct, 0) << "ERROR: " << __func__ << ": No policy header to object: aborting sync" << dendl;
+      return abort_err;
+    }
+    try {
+      auto it = iter->second.cbegin();
+      decode(policy, it);
+    } catch (buffer::error &err) {
+      ldout(cct, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode policy " << dendl;
+      return abort_err;
+    }
+
+    
   }
 
   if (!dest_placement_rule &&
@@ -2030,19 +2052,121 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
 }
 
 
+class RGWObjFetchCR : public RGWCoroutine {
+  RGWDataSyncCtx *sc;
+  RGWDataSyncEnv *sync_env;
+  rgw_bucket_sync_pipe& sync_pipe;
+  rgw_obj_key& key;
+  std::optional<uint64_t> versioned_epoch;
+  rgw_zone_set *zones_trace;
+
+  bool need_more_info{false};
+
+  ceph::real_time src_mtime;
+  uint64_t src_size;
+  string src_etag;
+  map<string, bufferlist> src_attrs;
+  map<string, string> src_headers;
+
+  std::optional<rgw_user> param_acl_translation;
+  std::optional<string> param_storage_class;
+  rgw_sync_pipe_params::Mode param_mode;
+public:
+  RGWObjFetchCR(RGWDataSyncCtx *_sc,
+                rgw_bucket_sync_pipe& _sync_pipe,
+                rgw_obj_key& _key,
+                std::optional<uint64_t> _versioned_epoch,
+                rgw_zone_set *_zones_trace) : RGWCoroutine(_sc->cct),
+                                              sc(_sc), sync_env(_sc->env),
+                                              sync_pipe(_sync_pipe),
+                                              key(_key),
+                                              versioned_epoch(_versioned_epoch),
+                                              zones_trace(_zones_trace) {}
+
+
+  int operate() override {
+    reenter(this) {
+
+      {
+        if (!sync_pipe.info.handler.find_basic_info_without_tags(key,
+                                                                 &param_acl_translation,
+                                                                 &param_storage_class,
+                                                                 &param_mode,
+                                                                 &need_more_info)) {
+          if (!need_more_info) {
+            return set_cr_error(-ERR_PRECONDITION_FAILED);
+          }
+        }
+      }
+
+      if (need_more_info) {
+        ldout(cct, 20) << "Could not determine exact policy rule for obj=" << key << ", will read source object attributes" << dendl;
+        /*
+         * we need to fetch info about source object, so that we can determine
+         * the correct policy configuration. This can happen if there are multiple
+         * policy rules, and some depend on the object tagging */
+        yield call(new RGWStatRemoteObjCR(sync_env->async_rados,
+                                          sync_env->store,
+                                          sc->source_zone,
+                                          sync_pipe.info.source_bs.bucket,
+                                          key,
+                                          &src_mtime,
+                                          &src_size,
+                                          &src_etag,
+                                          &src_attrs,
+                                          &src_headers));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+    
+        RGWObjTags obj_tags;
+
+        auto iter = src_attrs.find(RGW_ATTR_TAGS);
+        if (iter != src_attrs.end()) {
+          try {
+            auto it = iter->second.cbegin();
+            obj_tags.decode(it);
+          } catch (buffer::error &err) {
+            ldout(cct, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+          }
+        }
+
+        rgw_sync_pipe_params params;
+        if (!sync_pipe.info.handler.find_obj_params(key,
+                                                    obj_tags.get_tags(),
+                                                    &params)) {
+          return set_cr_error(-ERR_PRECONDITION_FAILED);
+        }
+      }
+
+      yield {
+        auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe);
+
+        call(new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
+                                     sync_pipe.info.source_bs.bucket,
+                                     std::nullopt, sync_pipe.dest_bucket_info,
+                                     key, std::nullopt, versioned_epoch,
+                                     true,
+                                     std::static_pointer_cast<RGWFetchObjFilter>(filter),
+                                     zones_trace, sync_env->counters, sync_env->dpp));
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+
+      return set_cr_done();
+    }
+    return 0;
+  }
+};
+
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
   auto sync_env = sc->env;
 
   auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe);
 
-  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
-                                 sync_pipe.info.source_bs.bucket,
-				 std::nullopt, sync_pipe.dest_bucket_info,
-                                 key, std::nullopt, versioned_epoch,
-                                 true,
-                                 std::static_pointer_cast<RGWFetchObjFilter>(filter),
-                                 zones_trace, sync_env->counters, sync_env->dpp);
+  return new RGWObjFetchCR(sc, sync_pipe, key, versioned_epoch, zones_trace);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
