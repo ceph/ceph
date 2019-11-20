@@ -96,24 +96,27 @@ def get_pythonlib_dir():
     return "lib.{version[0]}".format(version=sys.version_info)
 
 
-def get_cmake_variables(names):
+def get_cmake_variables(*names):
     vars = dict((name, None) for name in names)
     for line in open(os.path.join(MYPDIR, "CMakeCache.txt")):
         # parse lines like "WITH_ASAN:BOOL=ON"
         for name in names:
             if line.startswith("{}:".format(name)):
-                vars[name] = line.split("=")[1].strip()
+                type_value = line.split(":")[1].strip()
+                t, v = type_value.split("=")
+                if t == 'BOOL':
+                    v = v.upper() in ('TRUE', '1', 'Y', 'YES', 'ON')
+                vars[name] = v
                 break
         if all(vars.values()):
             break
-    return vars
+    return [vars[name] for name in names]
 
 
 if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
      and os.path.exists(os.path.join(MYPDIR, "bin/init-ceph")):
-    vars = get_cmake_variables(["ceph_SOURCE_DIR", "ASAN_LIBRARY"])
-    src_path = vars["ceph_SOURCE_DIR"]
-    asan_lib_path = vars["ASAN_LIBRARY"]
+    src_path, with_asan, asan_lib_path = \
+        get_cmake_variables("ceph_SOURCE_DIR", "WITH_ASAN", "ASAN_LIBRARY")
     if src_path is None:
         # Huh, maybe we're not really in a cmake environment?
         pass
@@ -125,8 +128,8 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
         pythonlib_path = os.path.join(lib_path,
                                       "cython_modules",
                                       get_pythonlib_dir())
-
-        respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path)
+        respawn_in_path(lib_path, pybind_path, pythonlib_path,
+                        asan_lib_path if with_asan else None)
 
         if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
             os.environ['PATH'] = os.pathsep.join([bin_path, os.environ['PATH']])
