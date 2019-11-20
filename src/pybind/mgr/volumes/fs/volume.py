@@ -281,7 +281,7 @@ class VolumeClient(object):
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
             return 0, "", "Volume created successfully (no MDS daemons created)"
-        except RuntimeError as e:
+        except orchestrator.OrchestratorValidationError as e:
             return 0, "", "{} (Volume created successfully)".format(str(e))
         except Exception as e:
             # Don't let detailed orchestrator exceptions (python backtraces)
@@ -292,7 +292,7 @@ class VolumeClient(object):
 
     ### volume operations -- create, rm, ls
 
-    def create_volume(self, volname, host):
+    def create_volume(self, volname, mds_host):
         """
         create volume  (pool, filesystem and mds)
         """
@@ -313,7 +313,7 @@ class VolumeClient(object):
             log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
             return r, outb, outs
         # create mds
-        return self.create_mds(volname, host)
+        return self.create_mds(volname, mds_host)
 
     def delete_volume(self, volname, confirm):
         """

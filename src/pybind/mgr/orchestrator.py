@@ -670,7 +670,7 @@ class PlacementSpec(object):
     def __init__(self, label=None, nodes=[]):
         self.label = label
 
-        self.nodes = [parse_host_specs(x, require_network=False) for x in nodes]
+        self.nodes = [parse_host_specs(x, require_network=False) for x in nodes if x]
 
 def handle_type_error(method):
     @wraps(method)
