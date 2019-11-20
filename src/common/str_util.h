@@ -166,7 +166,8 @@ Iterator substr_insert(std::string_view s,
 // Returns the found number on success. Returns an empty optional on
 // failure OR on trailing characters.
 template<typename T>
-std::optional<T> parse(std::string_view s, int base = 10)
+auto parse(std::string_view s, int base = 10)
+  -> std::enable_if_t<std::is_integral_v<T>, std::optional<T>>
 {
   T t;
   auto r = std::from_chars(s.data(), s.data() + s.size(), t, base);
@@ -180,7 +181,8 @@ std::optional<T> parse(std::string_view s, int base = 10)
 // string_view to remove the parsed number. Set the supplied
 // string_view to empty if it ends with the number.
 template<typename T>
-std::optional<T> consume(std::string_view& s, int base = 10)
+auto consume(std::string_view& s, int base = 10)
+  -> std::enable_if_t<std::is_integral_v<T>, std::optional<T>>
 {
   T t;
   auto r = std::from_chars(s.data(), s.data() + s.size(), t, base);
