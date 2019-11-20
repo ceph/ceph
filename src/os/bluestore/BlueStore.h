@@ -103,6 +103,7 @@ enum {
   l_bluestore_compressed_allocated,
   l_bluestore_compressed_original,
   l_bluestore_onodes,
+  l_bluestore_pinned_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
   l_bluestore_onode_shard_hits,
@@ -1049,20 +1050,22 @@ public:
   };
 
   struct OnodeSpace;
-
+  struct OnodeCacheShard;
   /// an in-memory object
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
+    // Not persisted and updated on cache insertion/removal
+    OnodeCacheShard *s;
+    bool pinned = false; // Only to be used by the onode cache shard
 
     std::atomic_int nref;  ///< reference count
     Collection *c;
-
     ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
     mempool::bluestore_cache_other::string key;
 
-    boost::intrusive::list_member_hook<> lru_item;
+    boost::intrusive::list_member_hook<> lru_item, pin_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
@@ -1079,7 +1082,8 @@ public:
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_other::string& k)
-      : nref(0),
+      : s(nullptr),
+        nref(0),
 	c(c),
 	oid(o),
 	key(k),
@@ -1088,7 +1092,8 @@ public:
     }
     Onode(Collection* c, const ghobject_t& o,
       const string& k)
-      : nref(0),
+      : s(nullptr),
+      nref(0),
       c(c),
       oid(o),
       key(k),
@@ -1097,7 +1102,8 @@ public:
     }
     Onode(Collection* c, const ghobject_t& o,
       const char* k)
-      : nref(0),
+      : s(nullptr),
+      nref(0),
       c(c),
       oid(o),
       key(k),
@@ -1115,11 +1121,18 @@ public:
 
     void flush();
     void get() {
-      ++nref;
+      if (++nref == 2 && s != nullptr) {
+        s->pin(*this);
+      }
     }
     void put() {
-      if (--nref == 0)
+      int n = --nref;
+      if (n == 1 && s != nullptr) {
+        s->unpin(*this);
+      }
+      if (n == 0) {
 	delete this;
+      }
     }
 
     const string& get_omap_prefix();
@@ -1154,7 +1167,7 @@ public:
       return num;
     }
 
-    virtual void _trim_to(uint64_t max) = 0;
+    virtual void _trim_to(uint64_t new_size) = 0;
     void _trim() {
       if (cct->_conf->objectstore_blackhole) {
 	// do not trim if we are throwing away IOs a layer down
@@ -1162,6 +1175,7 @@ public:
       }
       _trim_to(max);
     }
+
     void trim() {
       std::lock_guard l(lock);
       _trim();    
@@ -1182,6 +1196,8 @@ public:
 
   /// A Generic onode Cache Shard
   struct OnodeCacheShard : public CacheShard {
+    std::atomic<uint64_t> num_pinned = {0};
+
     std::array<std::pair<ghobject_t, mono_clock::time_point>, 64> dumped_onodes;
   public:
     OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
@@ -1190,8 +1206,20 @@ public:
     virtual void _add(OnodeRef& o, int level) = 0;
     virtual void _rm(OnodeRef& o) = 0;
     virtual void _touch(OnodeRef& o) = 0;
-    virtual void add_stats(uint64_t *onodes) = 0;
+    virtual void _pin(Onode& o) = 0;
+    virtual void _unpin(Onode& o) = 0;
 
+    void pin(Onode& o) {
+      std::lock_guard l(lock);
+      _pin(o);
+    }
+
+    void unpin(Onode& o) {
+      std::lock_guard l(lock);
+      _unpin(o);
+    }
+
+    virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
     bool empty() {
       return _get_num() == 0;
     }
