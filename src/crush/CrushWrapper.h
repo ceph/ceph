@@ -1595,7 +1595,8 @@ public:
     std::vector<int>::const_iterator& i,
     std::set<int>& used,
     std::vector<int> *pw,
-    int root_bucket) const;
+    int root_bucket,
+    int rule) const;
 
   int try_remap_rule(
     CephContext *cct,
