@@ -63,6 +63,7 @@ class Module(MgrModule):
         raise NotImplementedError(cmd['prefix'])
 
     def self_test(self):
+        self.log.debug('self_test enter')
         ret, out, err = self.predict_all_devices()
         assert ret == 0
         return 0, 'self test succeed', ''
@@ -259,12 +260,14 @@ class Module(MgrModule):
         return ret
 
     def predict_all_devices(self):
+        self.log.debug('predict_all_devices')
         devices = self.get('devices').get('devices', [])
         for devInfo in devices:
             if not devInfo.get('daemons'):
                 continue
             if not devInfo.get('devid'):
                 continue
+            self.log.debug('%s' % devInfo)
             result = self._predict_life_expentancy(devInfo['devid'])
             if result == 'unknown':
                 self._reset_device_life_expectancy(devInfo['devid'])
