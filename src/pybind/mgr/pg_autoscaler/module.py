@@ -491,7 +491,7 @@ class PgAutoscaler(MgrModule):
         too_much_target_ratio = []
         for root_id, total in iteritems(total_ratio):
             total_target = total_target_ratio[root_id]
-            if total > 1.0:
+            if total_target > 0 and total > 1.0:
                 too_much_target_ratio.append(
                     'Pools %s overcommit available storage by %.03fx due to '
                     'target_size_ratio %.03f on pools %s' % (
@@ -519,7 +519,7 @@ class PgAutoscaler(MgrModule):
         too_much_target_bytes = []
         for root_id, total in iteritems(total_bytes):
             total_target = total_target_bytes[root_id]
-            if total > root_map[root_id].capacity:
+            if total_target > 0 and total > root_map[root_id].capacity:
                 too_much_target_bytes.append(
                     'Pools %s overcommit available storage by %.03fx due to '
                     'target_size_bytes %s on pools %s' % (
