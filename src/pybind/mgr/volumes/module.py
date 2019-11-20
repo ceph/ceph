@@ -15,7 +15,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs volume create '
-                   'name=name,type=CephString ',
+                   'name=name,type=CephString,req=true '
+                   'name=host,type=CephString,req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
         },
@@ -203,8 +204,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_volume_create(self, inbuf, cmd):
         # TODO: validate name against any rules for pool/fs names
         # (...are there any?)
-        vol_id = cmd['name']
-        return self.vc.create_volume(vol_id)
+        vol_id = cmd.get('name')
+        host = cmd.get('host', '')
+        return self.vc.create_volume(vol_id, host)
 
     def _cmd_fs_volume_rm(self, inbuf, cmd):
         vol_name = cmd['vol_name']

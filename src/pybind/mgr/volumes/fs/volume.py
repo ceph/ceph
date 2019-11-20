@@ -272,24 +272,27 @@ class VolumeClient(object):
         command = {'prefix': 'fs rm', 'fs_name': fs_name, 'yes_i_really_mean_it': True}
         return self.mgr.mon_command(command)
 
-    def create_mds(self, fs_name):
-        spec = orchestrator.StatelessServiceSpec(fs_name)
+    def create_mds(self, fs_name, host):
+        spec = orchestrator.StatelessServiceSpec(fs_name,
+            placement=orchestrator.PlacementSpec(nodes=[host]))
         try:
             completion = self.mgr.add_mds(spec)
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
             return 0, "", "Volume created successfully (no MDS daemons created)"
+        except RuntimeError as e:
+            return 0, "", "{} (Volume created successfully)".format(str(e))
         except Exception as e:
             # Don't let detailed orchestrator exceptions (python backtraces)
             # bubble out to the user
             log.exception("Failed to create MDS daemons")
             return -errno.EINVAL, "", str(e)
-        return 0, "", ""
+        return 0, "", "Created MDS daemon"
 
     ### volume operations -- create, rm, ls
 
-    def create_volume(self, volname):
+    def create_volume(self, volname, host):
         """
         create volume  (pool, filesystem and mds)
         """
@@ -310,7 +313,7 @@ class VolumeClient(object):
             log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
             return r, outb, outs
         # create mds
-        return self.create_mds(volname)
+        return self.create_mds(volname, host)
 
     def delete_volume(self, volname, confirm):
         """
