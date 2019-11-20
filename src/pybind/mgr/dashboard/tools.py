@@ -579,6 +579,7 @@ class Task(object):
         return str(self)
 
     def _run(self):
+        NotificationQueue.register(self._handle_task_finished, 'cd_task_finished', 100)
         with self.lock:
             assert not self.running
             self.executor.init(self)
@@ -604,9 +605,13 @@ class Task(object):
             if not self.exception:
                 self.set_progress(100, True)
         NotificationQueue.new_notification('cd_task_finished', self)
-        self.event.set()
         logger.debug("TK: execution of %s finished in: %s s", self,
                      self.duration)
+
+    def _handle_task_finished(self, task):
+        if self == task:
+            NotificationQueue.deregister(self._handle_task_finished)
+            self.event.set()
 
     def wait(self, timeout=None):
         with self.lock:
