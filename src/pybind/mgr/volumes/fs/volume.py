@@ -261,13 +261,7 @@ class VolumeClient(object):
                    'data': data_pool}
         return self.mgr.mon_command(command)
 
-    def remove_filesystem(self, fs_name, confirm):
-        if confirm != "--yes-i-really-mean-it":
-            return -errno.EPERM, "", "WARNING: this will *PERMANENTLY DESTROY* all data " \
-                "stored in the filesystem '{0}'. If you are *ABSOLUTELY CERTAIN* " \
-                "that is what you want, re-issue the command followed by " \
-                "--yes-i-really-mean-it.".format(fs_name)
-
+    def remove_filesystem(self, fs_name):
         command = {'prefix': 'fs fail', 'fs_name': fs_name}
         r, outb, outs = self.mgr.mon_command(command)
         if r != 0:
@@ -324,6 +318,12 @@ class VolumeClient(object):
         if self.stopping.isSet():
             return -errno.ESHUTDOWN, "", "shutdown in progress"
 
+        if confirm != "--yes-i-really-mean-it":
+            return -errno.EPERM, "", "WARNING: this will *PERMANENTLY DESTROY* all data " \
+                "stored in the filesystem '{0}'. If you are *ABSOLUTELY CERTAIN* " \
+                "that is what you want, re-issue the command followed by " \
+                "--yes-i-really-mean-it.".format(volname)
+
         self.purge_queue.cancel_purge_job(volname)
         self.connection_pool.del_fs_handle(volname, wait=True)
         # Tear down MDS daemons
@@ -342,7 +342,7 @@ class VolumeClient(object):
         # In case orchestrator didn't tear down MDS daemons cleanly, or
         # there was no orchestrator, we force the daemons down.
         if self.volume_exists(volname):
-            r, outb, outs = self.remove_filesystem(volname, confirm)
+            r, outb, outs = self.remove_filesystem(volname)
             if r != 0:
                 return r, outb, outs
         else:
