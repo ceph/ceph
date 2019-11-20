@@ -1974,6 +1974,10 @@ int RGWDefaultSyncModule::create_instance(CephContext *cct, const JSONFormattabl
 class RGWFetchObjFilter_Sync : public RGWFetchObjFilter_Default {
   rgw_bucket_sync_pipe sync_pipe;
 
+  std::optional<ceph::real_time> mtime;
+  std::optional<string> etag;
+  std::optional<uint64_t> obj_size;
+
 public:
   RGWFetchObjFilter_Sync(rgw_bucket_sync_pipe& _sync_pipe) : sync_pipe(_sync_pipe) {
   }
@@ -2018,6 +2022,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
   std::optional<std::map<string, bufferlist> > new_attrs;
 
   if (params.mode == rgw_sync_pipe_params::MODE_USER) {
+#if 0
     RGWAccessControlPolicy policy;
     auto iter = obj_attrs.find(RGW_ATTR_ACL);
     if (iter == obj_attrs.end()) {
@@ -2031,7 +2036,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
       ldout(cct, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode policy " << dendl;
       return abort_err;
     }
-
+#endif
     
   }
 
@@ -2061,6 +2066,7 @@ class RGWObjFetchCR : public RGWCoroutine {
   rgw_zone_set *zones_trace;
 
   bool need_more_info{false};
+  bool check_change{false};
 
   ceph::real_time src_mtime;
   uint64_t src_size;
@@ -2068,6 +2074,7 @@ class RGWObjFetchCR : public RGWCoroutine {
   map<string, bufferlist> src_attrs;
   map<string, string> src_headers;
 
+  std::optional<rgw_user> param_user;
   std::optional<rgw_user> param_acl_translation;
   std::optional<string> param_storage_class;
   rgw_sync_pipe_params::Mode param_mode;
@@ -2089,6 +2096,7 @@ public:
 
       {
         if (!sync_pipe.info.handler.find_basic_info_without_tags(key,
+                                                                 &param_user,
                                                                  &param_acl_translation,
                                                                  &param_storage_class,
                                                                  &param_mode,
@@ -2137,12 +2145,25 @@ public:
                                                     &params)) {
           return set_cr_error(-ERR_PRECONDITION_FAILED);
         }
+
+        param_user = params.user;
+        if (params.dest.acl_translation) {
+          param_acl_translation = params.dest.acl_translation->owner;
+        }
+        param_storage_class = params.dest.storage_class;
+        param_mode = params.mode;
       }
 
       yield {
         auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe);
 
+        std::optional<rgw_user> uid;
+        if (param_mode == rgw_sync_pipe_params::MODE_USER) {
+          uid = param_user;
+        }
+#warning FIXME: race guard
         call(new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
+                                     uid,
                                      sync_pipe.info.source_bs.bucket,
                                      std::nullopt, sync_pipe.dest_bucket_info,
                                      key, std::nullopt, versioned_epoch,
@@ -2245,7 +2266,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_buck
 
   auto filter = make_shared<RGWFetchObjFilter_Sync>(sync_pipe);
 
-  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
+  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sc->source_zone, nullopt,
                                  sync_pipe.info.source_bs.bucket, std::nullopt, sync_pipe.dest_bucket_info,
                                  key, dest_key, versioned_epoch,
                                  true,

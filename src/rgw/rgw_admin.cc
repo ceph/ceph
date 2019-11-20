@@ -2864,6 +2864,8 @@ class SyncPolicyContext
 
   rgw_sync_policy_info *policy{nullptr};
 
+  std::optional<rgw_user> owner;
+
 public:
   SyncPolicyContext(const string& zonegroup_id,
                     const string& zonegroup_name,
@@ -2887,6 +2889,8 @@ public:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
+
+    owner = bucket_info.owner;
 
     if (!bucket_info.sync_policy) {
       rgw_sync_policy_info new_policy;
@@ -2921,6 +2925,9 @@ public:
     return *policy;
   }
 
+  std::optional<rgw_user>& get_owner() {
+    return owner;
+  }
 };
 
 void resolve_zone_id_opt(std::optional<string>& zone_name, std::optional<rgw_zone_id>& zone_id)
@@ -3203,6 +3210,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_prefix_rm;
 
   std::optional<int> opt_priority;
+  std::optional<string> opt_mode;
 
   rgw::notify::EventTypeList event_types;
 
@@ -3610,6 +3618,8 @@ int main(int argc, const char **argv)
       opt_prefix_rm = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--priority", (char*)NULL)) {
       opt_priority = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--mode", (char*)NULL)) {
+      opt_mode = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -8282,6 +8292,25 @@ next:
     pipe->params.source.filter.set_tags(tags_add, tags_rm);
     if (opt_priority) {
       pipe->params.priority = *opt_priority;
+    }
+    if (opt_mode) {
+      if (*opt_mode == "system") {
+        pipe->params.mode = rgw_sync_pipe_params::MODE_SYSTEM;
+      } else if (*opt_mode == "user") {
+        pipe->params.mode = rgw_sync_pipe_params::MODE_USER;
+      } else {
+        cerr << "ERROR: bad mode value: should be one of the following: system, user" << std::endl;
+        return EINVAL;
+      }
+    }
+
+    if (!user_id.empty()) {
+      pipe->params.user = user_id;
+    } else if (pipe->params.user.empty()) {
+      auto owner = sync_policy_ctx.get_owner();
+      if (owner) {
+        pipe->params.user = *owner;
+      }
     }
 
     ret = sync_policy_ctx.write_policy();

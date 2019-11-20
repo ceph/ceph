@@ -289,6 +289,7 @@ void RGWBucketSyncFlowManager::pipe_rules::insert(const rgw_sync_bucket_pipe& pi
 }
 
 bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rgw_obj_key& key,
+                                                                        std::optional<rgw_user> *user,
                                                                         std::optional<rgw_user> *acl_translation_owner,
                                                                         std::optional<string> *storage_class,
                                                                         rgw_sync_pipe_params::Mode *mode,
@@ -345,6 +346,7 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
 
   bool conflict = false;
 
+  std::optional<rgw_user> _user;
   std::optional<rgw_sync_pipe_acl_translation> _acl_translation;
   std::optional<string> _storage_class;
   rgw_sync_pipe_params::Mode _mode;
@@ -353,13 +355,15 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
   for (auto& iter : iters) {
     auto& rule_params = iter->second->params;
     if (++i == 0) {
+      _user = rule_params.user;
       _acl_translation = rule_params.dest.acl_translation;
       _storage_class = rule_params.dest.storage_class;
       _mode = rule_params.mode;
       continue;
     }
 
-    conflict = !(_acl_translation == rule_params.dest.acl_translation &&
+    conflict = !(_user == rule_params.user &&
+                 _acl_translation == rule_params.dest.acl_translation &&
                  _storage_class == rule_params.dest.storage_class &&
                  _mode == rule_params.mode);
     if (conflict) {
@@ -368,6 +372,7 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
     }
   }
 
+  *user = _user;
   if (_acl_translation) {
     *acl_translation_owner = _acl_translation->owner;
   }
@@ -668,6 +673,15 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicy
                                                                                             bucket_info(_bucket_info) {
   if (_bucket_info.sync_policy) {
     sync_policy = *_bucket_info.sync_policy;
+
+    for (auto& entry : sync_policy.groups) {
+      for (auto& pipe : entry.second.pipes) {
+        if (pipe.params.mode == rgw_sync_pipe_params::MODE_USER &&
+            pipe.params.user.empty()) {
+          pipe.params.user = _bucket_info.owner;
+        }
+      }
+    }
   }
   bucket = _bucket_info.bucket;
   zone_svc = parent->zone_svc;

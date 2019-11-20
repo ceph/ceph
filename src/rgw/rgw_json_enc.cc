@@ -956,6 +956,7 @@ void rgw_sync_pipe_params::dump(Formatter *f) const
       s = "user";
   }
   encode_json("mode", s, f);
+  encode_json("user", user, f);
 }
 
 void rgw_sync_pipe_params::decode_json(JSONObj *obj)
@@ -970,6 +971,7 @@ void rgw_sync_pipe_params::decode_json(JSONObj *obj)
   } else {
     mode = MODE_USER;
   }
+  JSONDecoder::decode_json("user", user, obj);
 }
 
 
