@@ -332,8 +332,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   ceph_assert(id < alloc.size());
   ceph_assert(alloc[id]);
 
-  int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
-				    extents);
+  int64_t got = alloc[id]->allocate(want, alloc_size[id], 0, extents);
   ceph_assert(got != 0);
   if (got < 0) {
     derr << __func__ << " failed to allocate space to return to bluestore"
@@ -510,7 +509,26 @@ void BlueFS::_init_alloc()
 {
   dout(20) << __func__ << dendl;
   alloc.resize(MAX_BDEV);
+  alloc_size.resize(MAX_BDEV, 0);
   pending_release.resize(MAX_BDEV);
+
+  if (bdev[BDEV_WAL]) {
+    alloc_size[BDEV_WAL] = cct->_conf->bluefs_alloc_size;
+  }
+  if (bdev[BDEV_SLOW]) {
+    alloc_size[BDEV_DB] = cct->_conf->bluefs_alloc_size;
+    alloc_size[BDEV_SLOW] = cct->_conf->bluefs_shared_alloc_size;
+  } else {
+    alloc_size[BDEV_DB] = cct->_conf->bluefs_shared_alloc_size;
+  }
+  // new wal and db devices are never shared
+  if (bdev[BDEV_NEWWAL]) {
+    alloc_size[BDEV_NEWWAL] = cct->_conf->bluefs_alloc_size;
+  }
+  if (bdev[BDEV_NEWDB]) {
+    alloc_size[BDEV_NEWDB] = cct->_conf->bluefs_alloc_size;
+  }
+
   for (unsigned id = 0; id < bdev.size(); ++id) {
     if (!bdev[id]) {
       continue;
@@ -522,9 +540,13 @@ void BlueFS::_init_alloc()
       name += devnames[id];
     else
       name += to_string(uintptr_t(this));
+    ceph_assert(alloc_size[id]);
+    dout(1) << __func__ << " id " << id
+	     << " alloc_size 0x" << std::hex << alloc_size[id]
+	     << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
     alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				  bdev[id]->get_size(),
-				  cct->_conf->bluefs_alloc_size, name);
+				  alloc_size[id], name);
     interval_set<uint64_t>& p = block_all[id];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
       alloc[id]->init_add_free(q.get_start(), q.get_len());
@@ -1125,6 +1147,8 @@ int BlueFS::device_migrate_to_existing(
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
 
+  dout(10) << __func__ << " devs_source " << devs_source
+	   << " dev_target " << dev_target << dendl;
   assert(dev_target < (int)MAX_BDEV);
 
   int flags = 0;
@@ -1145,71 +1169,90 @@ int BlueFS::device_migrate_to_existing(
     if (p.second->fnode.ino == 1) {
       continue;
     }
+    dout(10) << __func__ << " " << p.first << " " << p.second->fnode << dendl;
+
     auto& fnode_extents = p.second->fnode.extents;
 
+    bool rewrite = false;
     for (auto ext_it = fnode_extents.begin();
-      ext_it != p.second->fnode.extents.end();
-      ++ext_it) {
+	 ext_it != p.second->fnode.extents.end();
+	 ++ext_it) {
       if (ext_it->bdev != dev_target && devs_source.count(ext_it->bdev)) {
-       bluefs_extent_t old_ext = *ext_it;
-	PExtentVector extents;
-	auto l =
-	  _allocate_without_fallback(dev_target, old_ext.length, &extents);
-	if (l == 0) {
-	  buf.resize(old_ext.length);
-	  int r = bdev[old_ext.bdev]->read_random(
-	    old_ext.offset,
-	    old_ext.length,
-	    (char*)&buf.at(0),
-	    buffered);
-	  if (r != 0) {
-	    derr << __func__ << " failed to read 0x" << std::hex
-	      << old_ext.offset << "~" <<old_ext.length << std::dec
-	      << " from " << (int)dev_target << dendl;
-	    return -EIO;
-	  }
+	rewrite = true;
+	break;
+      }
+    }
+    if (rewrite) {
+      dout(10) << __func__ << "  migrating" << dendl;
 
-	  assert(extents.size() > 0);
-	  uint64_t src_buf_pos = 0;
-	  {
-	    // overwrite existing extent
-	    *ext_it=
-	      bluefs_extent_t(dev_target_new, extents[0].offset, extents[0].length);
-	    bufferlist bl;
-	    bl.append((char*)&buf.at(src_buf_pos), extents[0].length);
-	    int r = bdev[dev_target]->write(extents[0].offset, bl, buffered);
-	    ceph_assert(r == 0);
-	    src_buf_pos += extents[0].length;
-	  }
-	  // then insert more extents if needed
-	  for( size_t i = 1; i < extents.size(); ++i) {
-	    bufferlist bl;
-	    bl.append((char*)&buf.at(src_buf_pos), extents[i].length);
-	    ++ext_it;
-	    ext_it = fnode_extents.emplace(ext_it, dev_target_new,
-	      extents[i].offset, extents[i].length);
-	    int r = bdev[dev_target]->write(extents[i].offset, bl, buffered);
-	    ceph_assert(r == 0);
-	    src_buf_pos += extents[i].length;
-	  }
-	  {
-	    PExtentVector to_release;
-	    to_release.emplace_back(old_ext.offset, old_ext.length);
-	    alloc[old_ext.bdev]->release(to_release);
-	  }
-
-	} else {
-	  derr << __func__ << " unable to allocate len 0x" << std::hex
-	    << old_ext.length << std::dec << " from " << (int)dev_target
-	    << dendl;
-	  return -ENOSPC;
+      // read entire file
+      bufferlist bl;
+      for (auto old_ext : fnode_extents) {
+	buf.resize(old_ext.length);
+	int r = bdev[old_ext.bdev]->read_random(
+	  old_ext.offset,
+	  old_ext.length,
+	  (char*)&buf.at(0),
+	  buffered);
+	if (r != 0) {
+	  derr << __func__ << " failed to read 0x" << std::hex
+	       << old_ext.offset << "~" << old_ext.length << std::dec
+	       << " from " << (int)dev_target << dendl;
+	  return -EIO;
 	}
-      } else if (dev_target != dev_target_new && ext_it->bdev == dev_target) {
-	ext_it->bdev = dev_target_new;
+	bl.append((char*)&buf[0], old_ext.length);
+      }
+
+      // write entire file
+      PExtentVector extents;
+      auto l = _allocate_without_fallback(dev_target, bl.length(), &extents);
+      if (l < 0) {
+	derr << __func__ << " unable to allocate len 0x" << std::hex
+	     << bl.length() << std::dec << " from " << (int)dev_target
+	     << ": " << cpp_strerror(l) << dendl;
+	return -ENOSPC;
+      }
+
+      uint64_t off = 0;
+      for (auto& i : extents) {
+	bufferlist cur;
+	uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
+	ceph_assert(cur_len > 0);
+	cur.substr_of(bl, off, cur_len);
+	int r = bdev[dev_target]->write(i.offset, cur, buffered);
+	ceph_assert(r == 0);
+	off += cur_len;
+      }
+
+      // release old extents
+      for (auto old_ext : fnode_extents) {
+	PExtentVector to_release;
+	to_release.emplace_back(old_ext.offset, old_ext.length);
+	alloc[old_ext.bdev]->release(to_release);
+      }
+
+      // update fnode
+      fnode_extents.clear();
+      for (auto& i : extents) {
+	fnode_extents.emplace_back(dev_target_new, i.offset, i.length);
+      }
+    } else {
+      for (auto ext_it = fnode_extents.begin();
+	   ext_it != p.second->fnode.extents.end();
+	   ++ext_it) {
+	if (dev_target != dev_target_new && ext_it->bdev == dev_target) {
+	  dout(20) << __func__ << "  " << " ... adjusting extent 0x"
+		   << std::hex << ext_it->offset << std::dec
+		   << " bdev " << dev_target << " -> " << dev_target_new
+		   << dendl;
+	  ext_it->bdev = dev_target_new;
+	}
       }
     }
     auto& prefer_bdev = p.second->fnode.prefer_bdev;
     if (prefer_bdev != dev_target && devs_source.count(prefer_bdev)) {
+      dout(20) << __func__ << "  " << " ... adjusting prefer_bdev "
+	       << prefer_bdev << " -> " << dev_target_new << dendl;
       prefer_bdev = dev_target_new;
     }
   }
@@ -1253,6 +1296,8 @@ int BlueFS::device_migrate_to_new(
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
 
+  dout(10) << __func__ << " devs_source " << devs_source
+	   << " dev_target " << dev_target << dendl;
   assert(dev_target == (int)BDEV_NEWDB || (int)BDEV_NEWWAL);
 
   int flags = 0;
@@ -1268,71 +1313,78 @@ int BlueFS::device_migrate_to_new(
     if (p.second->fnode.ino == 1) {
       continue;
     }
+    dout(10) << __func__ << " " << p.first << " " << p.second->fnode << dendl;
+
     auto& fnode_extents = p.second->fnode.extents;
 
+    bool rewrite = false;
     for (auto ext_it = fnode_extents.begin();
-      ext_it != p.second->fnode.extents.end();
-      ++ext_it) {
+	 ext_it != p.second->fnode.extents.end();
+	 ++ext_it) {
       if (ext_it->bdev != dev_target && devs_source.count(ext_it->bdev)) {
-       bluefs_extent_t old_ext = *ext_it;
-	PExtentVector extents;
-	auto l =
-	  _allocate_without_fallback(dev_target, old_ext.length, &extents);
-	if (l == 0) {
-	  buf.resize(old_ext.length);
-	  int r = bdev[old_ext.bdev]->read_random(
-	    old_ext.offset,
-	    old_ext.length,
-	    (char*)&buf.at(0),
-	    buffered);
-	  dout(10)<<__func__<<" read = "<<r<<dendl;
-	  if (r != 0) {
-	    derr << __func__ << " failed to read 0x" << std::hex
-	      << old_ext.offset << "~" <<old_ext.length << std::dec
-	      << " from " << (int)dev_target << dendl;
-	    return -EIO;
-	  }
+	rewrite = true;
+	break;
+      }
+    }
+    if (rewrite) {
+      dout(10) << __func__ << "  migrating" << dendl;
 
-	  assert(extents.size() > 0);
-	  uint64_t src_buf_pos = 0;
-	  {
-	    // overwrite existing extent
-	    *ext_it=
-	      bluefs_extent_t(dev_target_new, extents[0].offset, extents[0].length);
-	    bufferlist bl;
-	    bl.append((char*)&buf.at(src_buf_pos), extents[0].length);
-	    int r = bdev[dev_target]->write(extents[0].offset, bl, buffered);
-	    ceph_assert(r == 0);
-	    src_buf_pos += extents[0].length;
-	  }
-	  // then insert more extents if needed
-	  for( size_t i = 1; i < extents.size(); ++i) {
-	    bufferlist bl;
-	    bl.append((char*)&buf.at(src_buf_pos), extents[i].length);
-	    ++ext_it;
-	    ext_it = fnode_extents.emplace(ext_it, dev_target_new,
-	      extents[i].offset, extents[i].length);
-	    int r = bdev[dev_target]->write(extents[i].offset, bl, buffered);
-	    ceph_assert(r == 0);
-	    src_buf_pos += extents[i].length;
-	  }
-	  {
-	    PExtentVector to_release;
-	    to_release.emplace_back(old_ext.offset, old_ext.length);
-	    alloc[old_ext.bdev]->release(to_release);
-	  }
-	} else {
-	  derr << __func__ << " unable to allocate len 0x" << std::hex
-	    << old_ext.length << std::dec << " from " << (int)dev_target
-	    << dendl;
-	  return -ENOSPC;
+      // read entire file
+      bufferlist bl;
+      for (auto old_ext : fnode_extents) {
+	buf.resize(old_ext.length);
+	int r = bdev[old_ext.bdev]->read_random(
+	  old_ext.offset,
+	  old_ext.length,
+	  (char*)&buf.at(0),
+	  buffered);
+	if (r != 0) {
+	  derr << __func__ << " failed to read 0x" << std::hex
+	       << old_ext.offset << "~" << old_ext.length << std::dec
+	       << " from " << (int)dev_target << dendl;
+	  return -EIO;
 	}
-      } else if (dev_target != dev_target_new && ext_it->bdev == dev_target) {
-	ext_it->bdev = dev_target_new;
+	bl.append((char*)&buf[0], old_ext.length);
+      }
+
+      // write entire file
+      PExtentVector extents;
+      auto l = _allocate_without_fallback(dev_target, bl.length(), &extents);
+      if (l < 0) {
+	derr << __func__ << " unable to allocate len 0x" << std::hex
+	     << bl.length() << std::dec << " from " << (int)dev_target
+	     << ": " << cpp_strerror(l) << dendl;
+	return -ENOSPC;
+      }
+
+      uint64_t off = 0;
+      for (auto& i : extents) {
+	bufferlist cur;
+	uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
+	ceph_assert(cur_len > 0);
+	cur.substr_of(bl, off, cur_len);
+	int r = bdev[dev_target]->write(i.offset, cur, buffered);
+	ceph_assert(r == 0);
+	off += cur_len;
+      }
+
+      // release old extents
+      for (auto old_ext : fnode_extents) {
+	PExtentVector to_release;
+	to_release.emplace_back(old_ext.offset, old_ext.length);
+	alloc[old_ext.bdev]->release(to_release);
+      }
+
+      // update fnode
+      fnode_extents.clear();
+      for (auto& i : extents) {
+	fnode_extents.emplace_back(dev_target_new, i.offset, i.length);
       }
     }
     auto& prefer_bdev = p.second->fnode.prefer_bdev;
     if (prefer_bdev != dev_target && devs_source.count(prefer_bdev)) {
+      dout(20) << __func__ << "  " << " ... adjusting prefer_bdev "
+	       << prefer_bdev << " -> " << dev_target_new << dendl;
       prefer_bdev = dev_target_new;
     }
   }
@@ -1905,9 +1957,13 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
   log_t.clear();
   _compact_log_dump_metadata(&t, 0);
 
+  uint64_t max_alloc_size = std::max(alloc_size[BDEV_WAL],
+				     std::max(alloc_size[BDEV_DB],
+					      alloc_size[BDEV_SLOW]));
+
   // conservative estimate for final encoded size
   new_log_jump_to = round_up_to(t.op_bl.length() + super.block_size * 2,
-                                cct->_conf->bluefs_alloc_size);
+                                max_alloc_size);
   t.op_jump(log_seq, new_log_jump_to);
 
   // allocate
@@ -2539,8 +2595,8 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
 {
   int r = -ENOSPC;
   if (slow_dev_expander) {
-    auto min_alloc_size = cct->_conf->bluefs_alloc_size;
     int id = _get_slow_device_id();
+    auto min_alloc_size = alloc_size[id];
     ceph_assert(id <= (int)alloc.size() && alloc[id]);
     auto min_need = round_up_to(need, min_alloc_size);
     need = std::max(need,
@@ -2562,17 +2618,15 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << (int)id << dendl;
   assert(id < alloc.size());
-  uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
-
-  uint64_t left = round_up_to(len, min_alloc_size);
-
   if (!alloc[id]) {
     return -ENOENT;
   }
   extents->reserve(4);  // 4 should be (more than) enough for most allocations
+  uint64_t min_alloc_size = alloc_size[id];
+  uint64_t left = round_up_to(len, min_alloc_size);
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, 0, extents);
-  if (alloc_len < (int64_t)left) {
-    if (alloc_len != 0) {
+  if (alloc_len < 0 || alloc_len < (int64_t)left) {
+    if (alloc_len > 0) {
       alloc[id]->release(*extents);
     }
     if (bdev[id])
@@ -2596,27 +2650,26 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << (int)id << dendl;
   ceph_assert(id < alloc.size());
-  uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
-
-  uint64_t left = round_up_to(len, min_alloc_size);
   int64_t alloc_len = 0;
   PExtentVector extents;
-  
   uint64_t hint = 0;
   if (alloc[id]) {
     if (!node->extents.empty() && node->extents.back().bdev == id) {
       hint = node->extents.back().end();
     }   
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
-    alloc_len = alloc[id]->allocate(left, min_alloc_size, hint, &extents);
+    alloc_len = alloc[id]->allocate(round_up_to(len, alloc_size[id]),
+				    alloc_size[id], hint, &extents);
   }
-  if (alloc_len < (int64_t)left) {
+  if (!alloc[id] ||
+      alloc_len < 0 ||
+      alloc_len < (int64_t)round_up_to(len, alloc_size[id])) {
     if (alloc_len > 0) {
       alloc[id]->release(extents);
     }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {
-	dout(1) << __func__ << " failed to allocate 0x" << std::hex << left
+	dout(1) << __func__ << " failed to allocate 0x" << std::hex << len
 		<< " on bdev " << (int)id
 		<< ", free 0x" << alloc[id]->get_free()
 		<< "; fallback to bdev " << (int)id + 1
@@ -2624,13 +2677,13 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
       }
       return _allocate(id + 1, len, node);
     }
-    dout(1) << __func__ << " unable to allocate 0x" << std::hex << left
+    dout(1) << __func__ << " unable to allocate 0x" << std::hex << len
 	    << " on bdev " << (int)id << ", free 0x"
 	    << (alloc[id] ? alloc[id]->get_free() : (uint64_t)-1)
 	    << "; fallback to slow device expander "
 	    << std::dec << dendl;
     extents.clear();
-    if (_expand_slow_device(left, extents) == 0) {
+    if (_expand_slow_device(len, extents) == 0) {
       id = _get_slow_device_id();
       for (auto& e : extents) {
 	_add_block_extent(id, e.offset, e.length);
@@ -2639,19 +2692,20 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
       auto* last_alloc = alloc[id];
       ceph_assert(last_alloc);
       // try again
-      alloc_len = last_alloc->allocate(left, min_alloc_size, hint, &extents);
-      if (alloc_len < (int64_t)left) {
+      alloc_len = last_alloc->allocate(round_up_to(len, alloc_size[id]),
+				       alloc_size[id], hint, &extents);
+      if (alloc_len < 0 || alloc_len < (int64_t)len) {
 	if (alloc_len > 0) {
 	  last_alloc->release(extents);
 	}
-	derr << __func__ << " failed to allocate 0x" << std::hex << left
+	derr << __func__ << " failed to allocate 0x" << std::hex << len
 	      << " on bdev " << (int)id
 	      << ", free 0x" << last_alloc->get_free() << std::dec << dendl;
         return -ENOSPC;
       }
     } else {
       derr << __func__ << " failed to expand slow device to fit +0x"
-	   << std::hex << left << std::dec
+	   << std::hex << len << std::dec
 	   << dendl;
       return -ENOSPC;
     }

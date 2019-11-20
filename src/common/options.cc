@@ -4299,7 +4299,11 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_alloc_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
-    .set_description(""),
+    .set_description("Allocation unit size for DB and WAL devices"),
+
+    Option("bluefs_shared_alloc_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(64_K)
+    .set_description("Allocation unit size for primary/shared device"),
 
     Option("bluefs_max_prefetch", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
