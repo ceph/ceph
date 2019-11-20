@@ -25,22 +25,12 @@
 #define dout_prefix *_dout << "librbd::cache::ReplicatedWriteLog: " << this << " " \
                            <<  __func__ << ": "
 
-const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
-const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
-
-/**** Write log entries ****/
-const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
-const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
-constexpr double USABLE_SIZE = (7.0 / 10);
-const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
-const uint8_t RWL_POOL_VERSION = 1;
-const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
-
 namespace librbd {
 namespace cache {
 
 using namespace librbd::cache::rwl;
 
+typedef ReplicatedWriteLog<ImageCtx>::Extent Extent;
 typedef ReplicatedWriteLog<ImageCtx>::Extents Extents;
 
 template <typename I>

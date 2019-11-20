@@ -7,6 +7,7 @@
 #include <vector>
 #include <libpmemobj.h>
 #include "librbd/BlockGuard.h"
+#include "librbd/io/Types.h"
 
 class Context;
 
@@ -136,6 +137,18 @@ enum {
   l_librbd_rwl_last,
 };
 
+const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
+const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
+
+/**** Write log entries ****/
+
+const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
+const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
+constexpr double USABLE_SIZE = (7.0 / 10);
+const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
+const uint8_t RWL_POOL_VERSION = 1;
+const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
+
 namespace librbd {
 namespace cache {
 namespace rwl {
@@ -218,6 +231,29 @@ struct WriteBufferAllocation {
   TOID(uint8_t) buffer_oid = OID_NULL;
   bool allocated = false;
   utime_t allocation_lat;
+};
+
+template <typename ExtentsType>
+class ExtentsSummary {
+public:
+  uint64_t total_bytes;
+  uint64_t first_image_byte;
+  uint64_t last_image_byte;
+  ExtentsSummary(const ExtentsType &extents);
+  template <typename U>
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const ExtentsSummary<U> &s);
+  const BlockExtent block_extent() {
+    return BlockExtent(first_image_byte, last_image_byte);
+  }
+  const io::Extent image_extent(const BlockExtent& block_extent)
+  {
+    return io::Extent(block_extent.block_start,
+                  block_extent.block_end - block_extent.block_start + 1);
+  }
+  const io::Extent image_extent() {
+    return image_extent(block_extent());
+  }
 };
 
 } // namespace rwl 

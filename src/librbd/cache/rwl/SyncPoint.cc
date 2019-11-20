@@ -26,9 +26,9 @@ SyncPoint<T>::SyncPoint(T &rwl, const uint64_t sync_gen_num)
 
 template <typename T>
 SyncPoint<T>::~SyncPoint() {
-  assert(on_sync_point_appending.empty());
-  assert(on_sync_point_persisted.empty());
-  assert(!earlier_sync_point);
+  ceph_assert(on_sync_point_appending.empty());
+  ceph_assert(on_sync_point_persisted.empty());
+  ceph_assert(!earlier_sync_point);
 }
 
 template <typename T>

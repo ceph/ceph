@@ -92,6 +92,40 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 };
 
+template <typename ExtentsType>
+ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents) {
+  total_bytes = 0;
+  first_image_byte = 0;
+  last_image_byte = 0;
+  if (extents.empty()) return;
+  /* These extents refer to image offsets between first_image_byte
+   * and last_image_byte, inclusive, but we don't guarantee here
+   * that they address all of those bytes. There may be gaps. */
+  first_image_byte = extents.front().first;
+  last_image_byte = first_image_byte + extents.front().second;
+  for (auto &extent : extents) {
+    /* Ignore zero length extents */
+    if (extent.second) {
+      total_bytes += extent.second;
+      if (extent.first < first_image_byte) {
+        first_image_byte = extent.first;
+      }
+      if ((extent.first + extent.second) > last_image_byte) {
+        last_image_byte = extent.first + extent.second;
+      }
+    }
+  }
+}
+
+template <typename T>
+std::ostream &operator<<(std::ostream &os,
+                                const ExtentsSummary<T> &s) {
+  os << "total_bytes=" << s.total_bytes << ", "
+     << "first_image_byte=" << s.first_image_byte << ", "
+     << "last_image_byte=" << s.last_image_byte << "";
+  return os;
+};
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd

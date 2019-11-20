@@ -46,6 +46,7 @@ template <typename> class ImageCacheState;
 template <typename ImageCtxT>
 class ReplicatedWriteLog : public ImageCache<ImageCtxT> {
 public:
+  using typename ImageCache<ImageCtxT>::Extent;
   using typename ImageCache<ImageCtxT>::Extents;
 
   ReplicatedWriteLog(ImageCtxT &image_ctx, librbd::cache::rwl::ImageCacheState<ImageCtxT>* cache_state);
