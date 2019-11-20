@@ -25,10 +25,15 @@ namespace ceph {
 
 // This is for error categories we define, so we can specify the
 // equivalent integral value at the point of definition.
+// Ignoring non-virtual-dtor warnings because the base dtor is
+// defined protected
+#pragma diagnostic push
+#pragma diagnostic ignored "-Wnon-virtual-dtor"
 class converting_category : public boost::system::error_category {
 public:
   virtual int from_code(int code) const noexcept = 0;
 };
+#pragma diagnostic pop
 
 const boost::system::error_category& ceph_category() noexcept;
 
