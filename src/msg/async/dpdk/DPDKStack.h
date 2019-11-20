@@ -25,6 +25,7 @@
 #include "const.h"
 #include "IP.h"
 #include "Packet.h"
+#include "dpdk_rte.h"
 
 class interface;
 
@@ -246,6 +247,7 @@ class DPDKWorker : public Worker {
   friend class DPDKServerSocketImpl<tcp4>;
 };
 
+using namespace dpdk;
 class DPDKStack : public NetworkStack {
   std::vector<std::function<void()> > funcs;
 
@@ -254,13 +256,15 @@ class DPDKStack : public NetworkStack {
   }
 
  public:
-  explicit DPDKStack(CephContext *cct): NetworkStack(cct) {
+  explicit DPDKStack(CephContext *cct): NetworkStack(cct), eal(cct) {
     funcs.reserve(cct->_conf->ms_async_op_threads);
   }
   virtual bool support_local_listen_table() const override { return true; }
 
   virtual void spawn_worker(std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;
+ private:
+  dpdk::eal eal;
 };
 
 #endif
