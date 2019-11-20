@@ -581,7 +581,7 @@ describe('PoolFormComponent', () => {
       testAddApp('g', ['rgw']);
       testAddApp('b', ['rbd', 'rgw']);
       testAddApp('c', ['cephfs', 'rbd', 'rgw']);
-      testAddApp('something', ['cephfs', 'rbd', 'rgw', 'something']);
+      testAddApp('ownApp', ['cephfs', 'ownApp', 'rbd', 'rgw']);
     });
 
     it('only allows 4 apps to be added to the array', () => {
@@ -1025,7 +1025,7 @@ describe('PoolFormComponent', () => {
       pool.options.compression_max_blob_size = 1024 * 1024;
       pool.options.compression_required_ratio = 0.8;
       pool.flags_names = 'someFlag1,someFlag2';
-      pool.application_metadata = ['rbd', 'rgw'];
+      pool.application_metadata = ['rbd', 'ownApp'];
       pool.quota_max_bytes = 1024 * 1024 * 1024;
       pool.quota_max_objects = 3000;
 
@@ -1068,6 +1068,15 @@ describe('PoolFormComponent', () => {
         enabled.forEach((controlName) => {
           return expect(form.get(controlName).enabled).toBeTruthy();
         });
+      });
+
+      it('should include the custom app as valid option', () => {
+        expect(component.data.applications.available.map((app) => app.name)).toEqual([
+          'cephfs',
+          'ownApp',
+          'rbd',
+          'rgw'
+        ]);
       });
 
       it('set all control values to the given pool', () => {
@@ -1124,7 +1133,7 @@ describe('PoolFormComponent', () => {
           formHelper.setValue('ratio', '').markAsDirty();
           expectValidSubmit(
             {
-              application_metadata: ['rbd', 'rgw'],
+              application_metadata: ['ownApp', 'rbd'],
               compression_max_blob_size: 0,
               compression_min_blob_size: 0,
               compression_required_ratio: 0,
@@ -1139,7 +1148,7 @@ describe('PoolFormComponent', () => {
           formHelper.setValue('mode', 'none').markAsDirty();
           expectValidSubmit(
             {
-              application_metadata: ['rbd', 'rgw'],
+              application_metadata: ['ownApp', 'rbd'],
               compression_mode: 'unset',
               pool: 'somePoolName'
             },
