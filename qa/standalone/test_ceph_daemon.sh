@@ -105,7 +105,8 @@ $SUDO $CEPH_DAEMON --image $IMAGE_MASTER bootstrap \
       --fsid $FSID \
       --config $ORIG_CONFIG \
       --output-config $CONFIG \
-      --output-keyring $KEYRING
+      --output-keyring $KEYRING \
+      --allow-overwrite
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
