@@ -118,7 +118,8 @@ public:
     Handler m_handler;
   };
 
-  journal::AppendBuffer create_append_buffer(uint64_t tag_tid, uint64_t entry_tid,
+  journal::AppendBuffer create_append_buffer(uint64_t tag_tid,
+                                             uint64_t entry_tid,
                                              const std::string &payload) {
     auto future = ceph::make_ref<journal::FutureImpl>(tag_tid, entry_tid, 456);
     future->init(ceph::ref_t<journal::FutureImpl>());
@@ -237,7 +238,7 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
-  ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 0, 0.1, -1);
+  ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 0, 0.0005, -1);
   auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
@@ -248,12 +249,20 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   ASSERT_FALSE(object->append(std::move(append_buffers)));
   lock.unlock();
 
-  journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
-                                                              "payload");
-  append_buffers = {append_buffer2};
-  lock.lock();
-  ASSERT_FALSE(object->append(std::move(append_buffers)));
-  lock.unlock();
+  uint32_t offset  = 0;
+  journal::AppendBuffer append_buffer2;
+  while (!append_buffer1.first->is_flush_in_progress() &&
+         !append_buffer1.first->is_complete()) {
+    usleep(1000);
+
+    append_buffer2 = create_append_buffer(234, 124 + offset, "payload");
+    ++offset;
+    append_buffers = {append_buffer2};
+
+    lock.lock();
+    ASSERT_FALSE(object->append(std::move(append_buffers)));
+    lock.unlock();
+  }
 
   C_SaferCond cond;
   append_buffer2.first->wait(&cond);
@@ -269,7 +278,7 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
-  ObjectRecorderFlusher flusher(m_ioctx, m_work_queue);
+  ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 0, 0.0, -1);
   auto object = flusher.create_object(oid, 12, &lock);
 
   std::string payload(2048, '1');
@@ -439,8 +448,6 @@ TEST_F(TestObjectRecorder, Overflow) {
   append_buffer2.first->wait(&cond);
   ASSERT_EQ(0, cond.wait());
   ASSERT_EQ(0U, object1->get_pending_appends());
-
-  ASSERT_TRUE(flusher.wait_for_overflow());
 
   auto object2 = flusher.create_object(oid, 12, &lock2);
 
