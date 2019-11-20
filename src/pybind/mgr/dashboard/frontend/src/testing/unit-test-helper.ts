@@ -237,6 +237,10 @@ export class FixtureHelper {
     expect(props['value'] || props['checked'].toString()).toBe(value);
   }
 
+  expectTextToBe(css: string, value: string) {
+    expect(this.getText(css)).toBe(value);
+  }
+
   clickElement(css: string) {
     this.getElementByCss(css).triggerEventHandler('click', null);
     this.fixture.detectChanges();
