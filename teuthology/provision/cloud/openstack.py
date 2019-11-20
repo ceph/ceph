@@ -100,13 +100,13 @@ class OpenStackProvider(Provider):
                 exclude_sizes = [exclude_sizes]
             exclude_re = [re.compile(x) for x in exclude_sizes]
             sizes = retry(self.driver.list_sizes)
-            self._sizes = filter(
+            self._sizes = list(filter(
                 lambda s:
                     any(x.match(s.name) for x in allow_re)
                     and not
                     all(x.match(s.name) for x in exclude_re),
                 sizes
-            )
+            ))
         return self._sizes
 
     @property
