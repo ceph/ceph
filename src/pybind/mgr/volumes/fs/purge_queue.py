@@ -1,9 +1,14 @@
 import sys
 import time
+import errno
 import logging
 import threading
 import traceback
 from collections import deque
+
+from .exception import VolumeException
+from .operations.volume import open_volume, open_volume_lockless
+from .operations.trash import open_trashcan
 
 log = logging.getLogger(__name__)
 
@@ -138,20 +143,32 @@ class PurgeQueueBase(object):
         log.debug("fetching trash entry for volume '{0}'".format(volname))
 
         exclude_entries = [v[0] for v in self.jobs[volname]]
-        ret = self.vc.get_subvolume_trash_entry(
-            None, vol_name=volname, exclude_entries=exclude_entries)
-        if not ret[0] == 0:
-            log.error("error fetching trash entry for volume '{0}': {1}".format(volname), ret[0])
-            return ret[0], None
-        return 0, ret[1]
+        fs_handle = None
+        try:
+            with open_volume(self.vc, volname) as fs_handle:
+                with open_trashcan(fs_handle, self.vc.volspec) as trashcan:
+                    path = trashcan.get_trash_entry(exclude_entries)
+                    ret = 0, path
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT and fs_handle:
+                ret = 0, None
+            else:
+                log.error("error fetching trash entry for volume '{0}' ({1})".format(volname), ve)
+                ret = ve.errno, None
+        return ret
 
     def purge_trash_entry_for_volume(self, volname, purge_dir):
         log.debug("purging trash entry '{0}' for volume '{1}'".format(purge_dir, volname))
 
+        ret = 0
         thread_id = threading.currentThread()
-        ret = self.vc.purge_subvolume_trash_entry(
-            None, vol_name=volname, purge_dir=purge_dir, should_cancel=lambda: thread_id.should_cancel())
-        return ret[0]
+        try:
+            with open_volume_lockless(self.vc, volname) as fs_handle:
+                with open_trashcan(fs_handle, self.vc.volspec) as trashcan:
+                    trashcan.purge(purge_dir, should_cancel=lambda: thread_id.should_cancel())
+        except VolumeException as ve:
+            ret = ve.errno
+        return ret
 
 class ThreadPoolPurgeQueueMixin(PurgeQueueBase):
     """
@@ -223,7 +240,7 @@ class ThreadPoolPurgeQueueMixin(PurgeQueueBase):
                 self.register_job(volname, purge_dir)
             ret = self.purge_trash_entry_for_volume(volname, purge_dir)
             if ret != 0:
-                log.warn("failed to purge {0}.{1}".format(volname, purge_dir))
+                log.warn("failed to purge {0}.{1} ({2})".format(volname, purge_dir, ret))
             with self.lock:
                 self.unregister_job(volname, purge_dir)
             time.sleep(1)
