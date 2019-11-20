@@ -77,7 +77,6 @@ struct CB_notify_Finish {
       preply_bl->claim(reply_bl);
 
     ctx->complete(ceph::from_error_code(ec));
-    linger_op->on_notify_finish.reset();
   }
 };
 
