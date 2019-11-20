@@ -337,7 +337,7 @@ int main(int argc, const char **argv)
   int upmap_fd = STDOUT_FILENO;
   if (upmap || upmap_cleanup) {
     if (upmap_file != "-") {
-      upmap_fd = ::open(upmap_file.c_str(), O_CREAT|O_WRONLY, 0644);
+      upmap_fd = ::open(upmap_file.c_str(), O_CREAT|O_WRONLY|O_TRUNC, 0644);
       if (upmap_fd < 0) {
 	cerr << "error opening " << upmap_file << ": " << cpp_strerror(errno)
 	     << std::endl;
