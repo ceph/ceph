@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 
 import { MonitorService } from '../../../shared/api/monitor.service';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
@@ -16,10 +17,6 @@ export class MonitorComponent {
   notInQuorum: any;
 
   interval: any;
-  sparklineStyle = {
-    height: '30px',
-    width: '50%'
-  };
 
   constructor(private monitorService: MonitorService, private i18n: I18n) {
     this.inQuorum = {
@@ -30,7 +27,18 @@ export class MonitorComponent {
         {
           prop: 'cdOpenSessions',
           name: this.i18n('Open Sessions'),
-          cellTransformation: CellTemplate.sparkline
+          cellTransformation: CellTemplate.sparkline,
+          comparator: (dataA, dataB) => {
+            // We get the last value of time series to compare:
+            const lastValueA = _.last(dataA);
+            const lastValueB = _.last(dataB);
+
+            if (!lastValueA || !lastValueB || lastValueA === lastValueB) {
+              return 0;
+            }
+
+            return lastValueA > lastValueB ? 1 : -1;
+          }
         }
       ],
       data: []
