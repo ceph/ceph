@@ -35,6 +35,7 @@ namespace dpdk {
   }
 
   bool eal::initialized = false;
+  bool eal::exit_thread = false;
   std::thread eal::t;
   std::mutex eal::lock;
   std::condition_variable eal::cond;
@@ -122,12 +123,14 @@ namespace dpdk {
           funcs.pop_front();
           f();
           cond.notify_all();
+          if (exit_thread) {
+            pthread_exit(NULL);
+          }
         } else {
           cond.wait(l);
         }
       }
     });
-    t.detach();
     std::unique_lock<std::mutex> l(lock);
     while (!done)
       cond.wait(l);
@@ -149,6 +152,16 @@ namespace dpdk {
     memsize += (64UL << 20);
 
     return memsize;
+  }
+
+  void eal::exit()
+  {
+    if (initialized == false || exit_thread)
+      return ;
+    dpdk::eal::execute_on_master([&exit_thread]() {
+      exit_thread = true;
+    });
+    t.join();
   }
 
 } // namespace dpdk

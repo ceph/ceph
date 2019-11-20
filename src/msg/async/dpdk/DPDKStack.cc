@@ -242,6 +242,12 @@ int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
   return r;
 }
 
+DPDKStack::~DPDKStack()
+{
+  lderr(cct) << __func__ << " destructing DPDKStack..." << dendl;
+  dpdk::eal::exit();
+}
+
 void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 {
   // create a extra master thread

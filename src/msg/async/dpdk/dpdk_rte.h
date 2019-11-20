@@ -51,6 +51,7 @@ class eal {
   static std::condition_variable cond;
   static std::list<std::function<void()>> funcs;
   static int init(CephContext *c);
+  static void exit();
   static void execute_on_master(std::function<void()> &&f) {
     bool done = false;
     std::unique_lock<std::mutex> l(lock);
@@ -67,6 +68,7 @@ class eal {
    */
   static size_t mem_size(int num_cpus);
   static bool initialized;
+  static bool exit_thread;
   static std::thread t;
 };
 
