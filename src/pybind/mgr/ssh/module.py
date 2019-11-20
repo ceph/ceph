@@ -1036,7 +1036,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
     def add_mds(self, spec):
         if not spec.placement.nodes or len(spec.placement.nodes) < spec.count:
-            raise RuntimeError("must specify at least %d hosts" % spec.count)
+            raise RuntimeError("Must specify at least %d hosts when using the SSH-Orchestrator." % spec.count)
         daemons = self._get_services('mds')
         results = []
         num_added = 0
