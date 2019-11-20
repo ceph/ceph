@@ -66,7 +66,7 @@ template <typename T>
 void SyncPointLogOperation<T>::appending() {
   std::vector<Context*> appending_contexts;
 
-  assert(sync_point);
+  ceph_assert(sync_point);
   {
     std::lock_guard locker(rwl.m_lock);
     if (!sync_point->m_appending) {
@@ -85,7 +85,7 @@ template <typename T>
 void SyncPointLogOperation<T>::complete(int result) {
   std::vector<Context*> persisted_contexts;
 
-  assert(sync_point);
+  ceph_assert(sync_point);
   if (RWL_VERBOSE_LOGGING) {
     ldout(rwl.m_image_ctx.cct, 20) << "Sync point op =[" << *this
                                    << "] completed" << dendl;
@@ -93,8 +93,8 @@ void SyncPointLogOperation<T>::complete(int result) {
   {
     std::lock_guard locker(rwl.m_lock);
     /* Remove link from next sync point */
-    assert(sync_point->later_sync_point);
-    assert(sync_point->later_sync_point->earlier_sync_point ==
+    ceph_assert(sync_point->later_sync_point);
+    ceph_assert(sync_point->later_sync_point->earlier_sync_point ==
            sync_point);
     sync_point->later_sync_point->earlier_sync_point = nullptr;
   }

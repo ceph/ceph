@@ -117,7 +117,7 @@ buffer::list& WriteLogEntry::get_pmem_bl(ceph::mutex &entry_bl_lock) {
     if (0 == bl_refs) {
       init_pmem_bl();
     }
-    assert(0 != bl_refs);
+    ceph_assert(0 != bl_refs);
   }
   return pmem_bl;
 };
