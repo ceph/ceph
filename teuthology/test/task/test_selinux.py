@@ -30,6 +30,6 @@ class TestSELinux(object):
             self.ctx.cluster.add(remote2, ['role2'])
             task_config = dict()
             with SELinux(self.ctx, task_config) as task:
-                remotes = task.cluster.remotes.keys()
+                remotes = list(task.cluster.remotes)
                 assert remotes == [remote1]
 

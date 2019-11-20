@@ -44,7 +44,7 @@ class TestTask(object):
             end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
-                task_hosts = task.cluster.remotes.keys()
+                task_hosts = list(task.cluster.remotes)
                 assert len(task_hosts) == 2
                 assert sorted(host.shortname for host in task_hosts) == \
                     ['remote1', 'remote2']
@@ -77,7 +77,7 @@ class TestTask(object):
             end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
-                task_hosts = task.cluster.remotes.keys()
+                task_hosts = list(task.cluster.remotes)
                 assert len(task_hosts) == 1
                 assert task_hosts[0].shortname == 'remote1'
 
@@ -95,7 +95,7 @@ class TestTask(object):
             end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
-                task_hosts = task.cluster.remotes.keys()
+                task_hosts = list(task.cluster.remotes)
                 assert len(task_hosts) == 2
                 hostnames = [host.shortname for host in task_hosts]
                 assert sorted(hostnames) == ['remote1', 'remote3']
@@ -114,7 +114,7 @@ class TestTask(object):
             end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
-                task_hosts = task.cluster.remotes.keys()
+                task_hosts = list(task.cluster.remotes)
                 assert len(task_hosts) == 2
                 hostnames = [host.hostname for host in task_hosts]
                 assert sorted(hostnames) == ['remote1.example.com',
@@ -134,7 +134,7 @@ class TestTask(object):
             end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
-                task_hosts = task.cluster.remotes.keys()
+                task_hosts = list(task.cluster.remotes)
                 assert len(task_hosts) == 2
                 hostnames = [host.hostname for host in task_hosts]
                 assert sorted(hostnames) == ['remote1.example.com',

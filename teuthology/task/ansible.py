@@ -6,7 +6,6 @@ import pexpect
 import yaml
 import shutil
 
-from cStringIO import StringIO
 from tempfile import mkdtemp, NamedTemporaryFile
 
 from teuthology.config import config as teuth_config
@@ -249,16 +248,12 @@ class Ansible(Task):
         Generate a playbook file to use. This should not be called if we're
         using an existing file.
         """
-        pb_buffer = StringIO()
-        pb_buffer.write('---\n')
-        yaml.safe_dump(self.playbook, pb_buffer)
-        pb_buffer.seek(0)
         playbook_file = NamedTemporaryFile(
             prefix="teuth_ansible_playbook_",
             dir=self.repo_path,
             delete=False,
         )
-        playbook_file.write(pb_buffer.read())
+        yaml.safe_dump(self.playbook, playbook_file, explicit_start=True)
         playbook_file.flush()
         self.playbook_file = playbook_file
         self.generated_playbook = True
@@ -295,7 +290,7 @@ class Ansible(Task):
             self._handle_failure(command, status)
 
         if self.config.get('reconnect', True) is True:
-            remotes = self.cluster.remotes.keys()
+            remotes = list(self.cluster.remotes)
             log.debug("Reconnecting to %s", remotes)
             for remote in remotes:
                 remote.reconnect()
@@ -343,7 +338,7 @@ class Ansible(Task):
         """
         fqdns = [r.hostname for r in self.cluster.remotes.keys()]
         # Assume all remotes use the same username
-        user = self.cluster.remotes.keys()[0].user
+        user = list(self.cluster.remotes)[0].user
         extra_vars = dict(ansible_ssh_user=user)
         extra_vars.update(self.config.get('vars', dict()))
         args = [

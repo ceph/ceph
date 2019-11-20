@@ -4,8 +4,6 @@ import re
 import logging
 import yaml
 
-from cStringIO import StringIO
-
 from teuthology.task import Task
 from tempfile import NamedTemporaryFile
 from teuthology.config import config as teuth_config
@@ -85,15 +83,11 @@ class CephAnsible(Task):
         # generate playbook file if it exists in config
         self.playbook_file = None
         if self.playbook is not None:
-            pb_buffer = StringIO()
-            pb_buffer.write('---\n')
-            yaml.safe_dump(self.playbook, pb_buffer)
-            pb_buffer.seek(0)
             playbook_file = NamedTemporaryFile(
                prefix="ceph_ansible_playbook_", dir='/tmp/',
                delete=False,
             )
-            playbook_file.write(pb_buffer.read())
+            yaml.safe_dump(self.playbook, playbook_file, explicit_start=True)
             playbook_file.flush()
             self.playbook_file = playbook_file.name
         # everything from vars in config go into group_vars/all file
@@ -148,9 +142,9 @@ class CephAnsible(Task):
                 elif hostname not in hosts_dict[group]:
                     hosts_dict[group][hostname] = host_vars
 
-        hosts_stringio = StringIO()
+        hosts_content = ''
         for group in sorted(hosts_dict.keys()):
-            hosts_stringio.write('[%s]\n' % group)
+            hosts_content += '[%s]\n' % group
             for hostname in sorted(hosts_dict[group].keys()):
                 vars = hosts_dict[group][hostname]
                 if vars:
@@ -165,11 +159,10 @@ class CephAnsible(Task):
                     )
                 else:
                     host_line = hostname
-                hosts_stringio.write('%s\n' % host_line)
-            hosts_stringio.write('\n')
-        hosts_stringio.seek(0)
+                hosts_content += '%s\n' % host_line
+            hosts_content += '\n'
         self.inventory = self._write_hosts_file(prefix='teuth_ansible_hosts_',
-                                                content=hosts_stringio.read().strip())
+                                                content=hosts_content.strip())
         self.generated_inventory = True
 
     def begin(self):
@@ -180,7 +173,7 @@ class CephAnsible(Task):
         """
         Actually write the hosts file
         """
-        hosts_file = NamedTemporaryFile(prefix=prefix,
+        hosts_file = NamedTemporaryFile(prefix=prefix, mode='w+',
                                         delete=False)
         hosts_file.write(content)
         hosts_file.flush()
@@ -302,15 +295,10 @@ class CephAnsible(Task):
             log.info("Waiting for Ceph health to reach HEALTH_OK \
                         or HEALTH WARN")
             while proceed():
-                out = StringIO()
-                remote.run(
-                    args=['sudo', 'ceph', '--cluster', self.cluster_name,
-                          'health'], 
-                    stdout=out,
-                )
-                out = out.getvalue().split(None, 1)[0]
-                log.info("cluster in state: %s", out)
-                if out in ('HEALTH_OK', 'HEALTH_WARN'):
+                out = remote.sh('sudo ceph --cluster %s health' % self.cluster_name)
+                state = out.split(None, 1)[0]
+                log.info("cluster in state: %s", state)
+                if state in ('HEALTH_OK', 'HEALTH_WARN'):
                     break
 
     def get_host_vars(self, remote):
@@ -339,10 +327,9 @@ class CephAnsible(Task):
             '.'
         ])
         self._copy_and_print_config()
-        out = StringIO()
         str_args = ' '.join(args)
-        ceph_installer.run(
-            args=[
+        out = ceph_installer.sh(
+            [
                 'cd',
                 'ceph-ansible',
                 run.Raw(';'),
@@ -350,10 +337,9 @@ class CephAnsible(Task):
             ],
             timeout=4200,
             check_status=False,
-            stdout=out
         )
-        log.info(out.getvalue())
-        if re.search(r'all hosts have already failed', out.getvalue()):
+        log.info(out)
+        if re.search(r'all hosts have already failed', out):
             log.error("Failed during ceph-ansible execution")
             raise CephAnsibleError("Failed during ceph-ansible execution")
         self._create_rbd_pool()

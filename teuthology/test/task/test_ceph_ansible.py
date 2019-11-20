@@ -1,6 +1,10 @@
 from mock import patch, MagicMock
 from pytest import skip
-from StringIO import StringIO
+from teuthology.util.compat import PY3
+if PY3:
+    from io import StringIO as StringIO
+else:
+    from io import BytesIO as StringIO
 
 from teuthology.config import FakeNamespace
 from teuthology.orchestra.cluster import Cluster
@@ -91,6 +95,7 @@ class TestCephAnsibleTask(TestTask):
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
+                                          mode='w+',
                                           delete=False)
         assert task.generated_inventory is True
         assert task.inventory == hosts_file_path
@@ -123,6 +128,7 @@ class TestCephAnsibleTask(TestTask):
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
+                                          mode='w+',
                                           delete=False)
         assert task.generated_inventory is True
         assert task.inventory == hosts_file_path
@@ -153,6 +159,7 @@ class TestCephAnsibleTask(TestTask):
             m_NTF.return_value = hosts_file_obj
             task.generate_hosts_file()
             m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
+                                          mode='w+',
                                           delete=False)
         assert task.generated_inventory is True
         assert task.inventory == hosts_file_path
