@@ -22,7 +22,10 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <thread>
+#include <tuple>
 #include <unistd.h>
+#include <utility>
 
 #include "auth/KeyRing.h"
 #include "common/errno.h"
@@ -33,6 +36,7 @@
 #include "common/secret.h"
 #include "common/TextTable.h"
 #include "include/assert.h"
+#include "include/compat.h"
 #include "include/stringify.h"
 #include "include/krbd.h"
 #include "mon/MonMap.h"
@@ -42,7 +46,7 @@
 
 using namespace std;
 
-const static int POLL_TIMEOUT=120000;
+static const int UDEV_BUF_SIZE = 1 << 20;  /* doubled to 2M (SO_RCVBUFFORCE) */
 
 struct krbd_ctx {
   CephContext *cct;
@@ -176,86 +180,158 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
   return 0;
 }
 
-static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
-                             const char *image, const char *snap,
-                             string *pname)
+/*
+ * Return:
+ *   <kernel error, false> - didn't map
+ *   <0 or udev error, true> - mapped
+ */
+template <typename F>
+static std::pair<int, bool> wait_for_mapping(int sysfs_r_fd, udev_monitor *mon,
+                                             F udev_device_handler)
 {
-  struct udev_device *bus_dev = NULL;
+  struct pollfd fds[2];
+  int sysfs_r = INT_MAX, udev_r = INT_MAX;
+  int r;
+
+  fds[0].fd = sysfs_r_fd;
+  fds[0].events = POLLIN;
+  fds[1].fd = udev_monitor_get_fd(mon);
+  fds[1].events = POLLIN;
+
+  for (;;) {
+    if (poll(fds, 2, -1) < 0) {
+      ceph_abort();
+    }
+
+    if (fds[0].revents) {
+      r = safe_read_exact(sysfs_r_fd, &sysfs_r, sizeof(sysfs_r));
+      if (r < 0) {
+        ceph_abort();
+      }
+      if (sysfs_r < 0) {
+        return std::make_pair(sysfs_r, false);
+      }
+      if (udev_r != INT_MAX) {
+        assert(!sysfs_r);
+        return std::make_pair(udev_r, true);
+      }
+      fds[0].fd = -1;
+    }
+
+    if (fds[1].revents) {
+      for (;;) {
+        struct udev_device *dev;
+
+        dev = udev_monitor_receive_device(mon);
+        if (!dev) {
+          if (errno != EINTR && errno != EAGAIN) {
+            udev_r = -errno;
+            if (sysfs_r != INT_MAX) {
+              assert(!sysfs_r);
+              return std::make_pair(udev_r, true);
+            }
+            fds[1].fd = -1;
+          }
+          break;
+        }
+        if (udev_device_handler(dev)) {
+          udev_r = 0;
+          if (sysfs_r != INT_MAX) {
+            assert(!sysfs_r);
+            return std::make_pair(udev_r, true);
+          }
+          fds[1].fd = -1;
+          break;
+        }
+      }
+    }
+  }
+}
+
+class UdevMapHandler {
+public:
+  UdevMapHandler(const char *pool, const char *image, const char *snap,
+                 std::string *pdevnode) :
+      m_pool(pool), m_image(image), m_snap(snap), m_pdevnode(pdevnode) {}
 
   /*
    * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
    * block device to show up.  This is necessary because rbd devices
    * and block devices aren't linked together in our sysfs layout.
    */
-  for (;;) {
-    struct pollfd fds[1];
-    struct udev_device *dev;
-    int r;
-
-    fds[0].fd = udev_monitor_get_fd(mon);
-    fds[0].events = POLLIN;
-    r = poll(fds, 1, POLL_TIMEOUT);
-    if (r < 0)
-      return -errno;
-
-    if (r == 0)
-      return -ETIMEDOUT;
-
-    dev = udev_monitor_receive_device(mon);
-    if (!dev)
-      continue;
-
-    if (strcmp(udev_device_get_action(dev), "add") != 0)
+  bool operator()(udev_device *dev) {
+    if (strcmp(udev_device_get_action(dev), "add")) {
       goto next;
+    }
+    if (!strcmp(udev_device_get_subsystem(dev), "rbd")) {
+      if (!m_bus_dev) {
+        const char *pool = udev_device_get_sysattr_value(dev, "pool");
+        const char *image = udev_device_get_sysattr_value(dev, "name");
+        const char *snap = udev_device_get_sysattr_value(dev, "current_snap");
 
-    if (!bus_dev) {
-      if (strcmp(udev_device_get_subsystem(dev), "rbd") == 0) {
-        const char *this_pool = udev_device_get_sysattr_value(dev, "pool");
-        const char *this_image = udev_device_get_sysattr_value(dev, "name");
-        const char *this_snap = udev_device_get_sysattr_value(dev,
-                                                              "current_snap");
-
-        if (this_pool && strcmp(this_pool, pool) == 0 &&
-            this_image && strcmp(this_image, image) == 0 &&
-            this_snap && strcmp(this_snap, snap) == 0) {
-          bus_dev = dev;
-          continue;
+        if (pool && strcmp(pool, m_pool) == 0 &&
+            image && strcmp(image, m_image) == 0 &&
+            snap && strcmp(snap, m_snap) == 0) {
+          m_bus_dev = dev;
+          goto check;
         }
       }
-    } else {
-      if (strcmp(udev_device_get_subsystem(dev), "block") == 0) {
-        const char *major = udev_device_get_sysattr_value(bus_dev, "major");
-        const char *minor = udev_device_get_sysattr_value(bus_dev, "minor");
-        const char *this_major = udev_device_get_property_value(dev, "MAJOR");
-        const char *this_minor = udev_device_get_property_value(dev, "MINOR");
+    } else if (!strcmp(udev_device_get_subsystem(dev), "block")) {
+      m_block_devs.push_back(dev);
+      goto check;
+    }
 
-        assert(!minor ^ have_minor_attr());
+next:
+    udev_device_unref(dev);
+    return false;
+
+check:
+    if (m_bus_dev && !m_block_devs.empty()) {
+      const char *major = udev_device_get_sysattr_value(m_bus_dev, "major");
+      const char *minor = udev_device_get_sysattr_value(m_bus_dev, "minor");
+      assert(!minor ^ have_minor_attr());
+
+      for (auto p : m_block_devs) {
+        const char *this_major = udev_device_get_property_value(p, "MAJOR");
+        const char *this_minor = udev_device_get_property_value(p, "MINOR");
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
-          string name = get_kernel_rbd_name(udev_device_get_sysname(bus_dev));
+          string name = get_kernel_rbd_name(udev_device_get_sysname(m_bus_dev));
 
-          assert(strcmp(udev_device_get_devnode(dev), name.c_str()) == 0);
-          *pname = name;
-
-          udev_device_unref(dev);
-          udev_device_unref(bus_dev);
-          break;
+          assert(strcmp(udev_device_get_devnode(p), name.c_str()) == 0);
+          *m_pdevnode = name;
+          return true;
         }
       }
     }
-
-  next:
-    udev_device_unref(dev);
+    return false;
   }
 
-  return 0;
-}
+  ~UdevMapHandler() {
+    if (m_bus_dev) {
+      udev_device_unref(m_bus_dev);
+    }
+
+    for (auto p : m_block_devs) {
+      udev_device_unref(p);
+    }
+  }
+
+private:
+  udev_device *m_bus_dev = nullptr;
+  std::vector<udev_device *> m_block_devs;
+  const char *m_pool, *m_image, *m_snap;
+  std::string *m_pdevnode;
+};
 
 static int do_map(struct udev *udev, const char *pool, const char *image,
                   const char *snap, const string& buf, string *pname)
 {
   struct udev_monitor *mon;
+  std::thread mapper;
+  bool mapped;
+  int fds[2];
   int r;
 
   mon = udev_monitor_new_from_netlink(udev, "udev");
@@ -270,21 +346,45 @@ static int do_map(struct udev *udev, const char *pool, const char *image,
   if (r < 0)
     goto out_mon;
 
+  r = udev_monitor_set_receive_buffer_size(mon, UDEV_BUF_SIZE);
+  if (r < 0) {
+    std::cerr << "rbd: failed to set udev buffer size: " << cpp_strerror(r)
+              << std::endl;
+    /* not fatal */
+  }
+
   r = udev_monitor_enable_receiving(mon);
   if (r < 0)
     goto out_mon;
 
-  r = sysfs_write_rbd_add(buf);
-  if (r < 0) {
-    cerr << "rbd: sysfs write failed" << std::endl;
+  if (pipe2(fds, O_NONBLOCK) < 0) {
+    r = -errno;
     goto out_mon;
   }
 
-  r = wait_for_udev_add(mon, pool, image, snap, pname);
+  mapper = std::thread([&buf, &fds]() {
+    ceph_pthread_setname(pthread_self(), "mapper");
+    int sysfs_r = sysfs_write_rbd_add(buf);
+    int r = safe_write(fds[1], &sysfs_r, sizeof(sysfs_r));
+    if (r < 0) {
+      ceph_abort();
+    }
+  });
+
+  std::tie(r, mapped) = wait_for_mapping(
+      fds[0], mon, UdevMapHandler(pool, image, snap, pname));
   if (r < 0) {
-    cerr << "rbd: wait failed" << std::endl;
-    goto out_mon;
+    if (!mapped) {
+      std::cerr << "rbd: sysfs write failed" << std::endl;
+    } else {
+      std::cerr << "rbd: udev wait failed" << std::endl;
+      /* TODO: fall back to enumeration */
+    }
   }
+
+  mapper.join();
+  close(fds[0]);
+  close(fds[1]);
 
 out_mon:
   udev_monitor_unref(mon);
@@ -334,6 +434,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   struct udev_device *dev;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -355,8 +456,14 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   }
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   l = udev_enumerate_get_list_entry(enm);
   if (!l) {
@@ -392,6 +499,7 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
   string err;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -413,8 +521,14 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
     goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   l = udev_enumerate_get_list_entry(enm);
   if (!l) {
@@ -474,41 +588,31 @@ static string build_unmap_buf(const string& id, const char *options)
   return buf;
 }
 
-static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
-{
-  for (;;) {
-    struct pollfd fds[1];
-    struct udev_device *dev;
-    int r;
+class UdevUnmapHandler {
+public:
+  UdevUnmapHandler(dev_t devno) : m_devno(devno) {}
 
-    fds[0].fd = udev_monitor_get_fd(mon);
-    fds[0].events = POLLIN;
-    r = poll(fds, 1, POLL_TIMEOUT);
-    if (r < 0)
-      return -errno;
+  bool operator()(udev_device *dev) {
+    bool match = false;
 
-    if (r == 0)
-      return -ETIMEDOUT;
-
-    dev = udev_monitor_receive_device(mon);
-    if (!dev)
-      continue;
-
-    if (strcmp(udev_device_get_action(dev), "remove") == 0 &&
-        udev_device_get_devnum(dev) == devno) {
-      udev_device_unref(dev);
-      break;
+    if (!strcmp(udev_device_get_action(dev), "remove") &&
+        udev_device_get_devnum(dev) == m_devno) {
+      match = true;
     }
-
     udev_device_unref(dev);
+    return match;
   }
 
-  return 0;
-}
+private:
+  dev_t m_devno;
+};
 
 static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
 {
   struct udev_monitor *mon;
+  std::thread unmapper;
+  bool unmapped;
+  int fds[2];
   int r;
 
   mon = udev_monitor_new_from_netlink(udev, "udev");
@@ -519,43 +623,69 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
   if (r < 0)
     goto out_mon;
 
+  r = udev_monitor_set_receive_buffer_size(mon, UDEV_BUF_SIZE);
+  if (r < 0) {
+    std::cerr << "rbd: failed to set udev buffer size: " << cpp_strerror(r)
+              << std::endl;
+    /* not fatal */
+  }
+
   r = udev_monitor_enable_receiving(mon);
   if (r < 0)
     goto out_mon;
 
-  /*
-   * On final device close(), kernel sends a block change event, in
-   * response to which udev apparently runs blkid on the device.  This
-   * makes unmap fail with EBUSY, if issued right after final close().
-   * Try to circumvent this with a retry before turning to udev.
-   */
-  for (int tries = 0; ; tries++) {
-    r = sysfs_write_rbd_remove(buf);
-    if (r >= 0) {
-      break;
-    } else if (r == -EBUSY && tries < 2) {
-      if (!tries) {
-        usleep(250 * 1000);
+  if (pipe2(fds, O_NONBLOCK) < 0) {
+    r = -errno;
+    goto out_mon;
+  }
+
+  unmapper = std::thread([&buf, &fds]() {
+    ceph_pthread_setname(pthread_self(), "unmapper");
+    /*
+     * On final device close(), kernel sends a block change event, in
+     * response to which udev apparently runs blkid on the device.  This
+     * makes unmap fail with EBUSY, if issued right after final close().
+     * Try to circumvent this with a retry before turning to udev.
+     */
+    for (int tries = 0; ; tries++) {
+      int sysfs_r = sysfs_write_rbd_remove(buf);
+      if (sysfs_r == -EBUSY && tries < 2) {
+        if (!tries) {
+          usleep(250 * 1000);
+        } else {
+          /*
+           * libudev does not provide the "wait until the queue is empty"
+           * API or the sufficient amount of primitives to build it from.
+           */
+          std::string err = run_cmd("udevadm", "settle", "--timeout", "10",
+                                    (char *)NULL);
+          if (!err.empty())
+            std::cerr << "rbd: " << err << std::endl;
+        }
       } else {
-        /*
-         * libudev does not provide the "wait until the queue is empty"
-         * API or the sufficient amount of primitives to build it from.
-         */
-        string err = run_cmd("udevadm", "settle", "--timeout", "10", NULL);
-        if (!err.empty())
-          cerr << "rbd: " << err << std::endl;
+        int r = safe_write(fds[1], &sysfs_r, sizeof(sysfs_r));
+        if (r < 0) {
+          ceph_abort();
+        }
+        break;
       }
+    }
+  });
+
+  std::tie(r, unmapped) = wait_for_mapping(fds[0], mon,
+                                           UdevUnmapHandler(devno));
+  if (r < 0) {
+    if (!unmapped) {
+      std::cerr << "rbd: sysfs write failed" << std::endl;
     } else {
-      cerr << "rbd: sysfs write failed" << std::endl;
-      goto out_mon;
+      std::cerr << "rbd: udev wait failed: " << cpp_strerror(r) << std::endl;
+      r = 0;
     }
   }
 
-  r = wait_for_udev_remove(mon, devno);
-  if (r < 0) {
-    cerr << "rbd: wait failed" << std::endl;
-    goto out_mon;
-  }
+  unmapper.join();
+  close(fds[0]);
+  close(fds[1]);
 
 out_mon:
   udev_monitor_unref(mon);
@@ -586,13 +716,25 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
     wholedevno = sb.st_rdev;
   }
 
-  r = devno_to_krbd_id(ctx->udev, wholedevno, &id);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      cerr << "rbd: '" << devnode << "' is not an rbd device" << std::endl;
-      r = -EINVAL;
+  for (int tries = 0; ; tries++) {
+    r = devno_to_krbd_id(ctx->udev, wholedevno, &id);
+    if (r == -ENOENT && tries < 2) {
+      usleep(250 * 1000);
+    } else {
+      if (r < 0) {
+        if (r == -ENOENT) {
+          std::cerr << "rbd: '" << devnode << "' is not an rbd device"
+                    << std::endl;
+          r = -EINVAL;
+        }
+        return r;
+      }
+      if (tries) {
+        std::cerr << "rbd: udev enumerate missed a device, tries = " << tries
+                  << std::endl;
+      }
+      break;
     }
-    return r;
   }
 
   return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
@@ -609,14 +751,25 @@ static int unmap_image(struct krbd_ctx *ctx, const char *pool,
   if (!snap)
     snap = "-";
 
-  r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      cerr << "rbd: " << pool << "/" << image << "@" << snap
-           << ": not a mapped image or snapshot" << std::endl;
-      r = -EINVAL;
+  for (int tries = 0; ; tries++) {
+    r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
+    if (r == -ENOENT && tries < 2) {
+      usleep(250 * 1000);
+    } else {
+      if (r < 0) {
+        if (r == -ENOENT) {
+          std::cerr << "rbd: " << pool << "/" << image << "@" << snap
+                    << ": not a mapped image or snapshot" << std::endl;
+          r = -EINVAL;
+        }
+        return r;
+      }
+      if (tries) {
+        std::cerr << "rbd: udev enumerate missed a device, tries = " << tries
+                  << std::endl;
+      }
+      break;
     }
-    return r;
   }
 
   return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
@@ -655,6 +808,7 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
   bool have_output = false;
   int r;
 
+retry:
   enm = udev_enumerate_new(udev);
   if (!enm)
     return -ENOMEM;
@@ -664,8 +818,14 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
     goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ENOENT || r == -ENODEV) {
+      std::cerr << "rbd: udev enumerate failed, retrying" << std::endl;
+      udev_enumerate_unref(enm);
+      goto retry;
+    }
     goto out_enm;
+  }
 
   udev_list_entry_foreach(l, udev_enumerate_get_list_entry(enm)) {
     struct udev_device *dev;
