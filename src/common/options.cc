@@ -4125,13 +4125,13 @@ std::vector<Option> get_global_options() {
     .set_long_description("A smaller allocation size generally means less data is read and then rewritten when a copy-on-write operation is triggered (e.g., when writing to something that was recently snapshotted).  Similarly, less data is journaled before performing an overwrite (writes smaller than min_alloc_size must first pass through the BlueStore journal).  Larger values of min_alloc_size reduce the amount of metadata required to describe the on-disk layout and reduce overall fragmentation."),
 
     Option("bluestore_min_alloc_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(64_K)
+    .set_default(4_K)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for rotational media")
     .add_see_also("bluestore_min_alloc_size"),
 
     Option("bluestore_min_alloc_size_ssd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(16_K)
+    .set_default(4_K)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for non-rotational (solid state)  media")
     .add_see_also("bluestore_min_alloc_size"),
