@@ -146,7 +146,7 @@ export class PoolListComponent implements OnInit {
       },
       {
         prop: 'last_change',
-        name: this.i18n('Last Change'),
+        name: this.i18n('Latest Edit'),
         flexGrow: 1,
         cellClass: 'text-right'
       },
