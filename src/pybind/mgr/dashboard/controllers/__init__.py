@@ -8,6 +8,7 @@ import inspect
 import json
 import os
 import pkgutil
+import re
 import sys
 
 if sys.version_info >= (3, 0):
@@ -294,24 +295,32 @@ ENDPOINT_MAP = collections.defaultdict(list)
 def generate_controller_routes(endpoint, mapper, base_url):
     inst = endpoint.inst
     ctrl_class = endpoint.ctrl
-    endp_base_url = None
 
     if endpoint.proxy:
         conditions = None
     else:
         conditions = dict(method=[endpoint.method])
 
-    endp_url = endpoint.url
-    if base_url == "/":
-        base_url = ""
-    if endp_url == "/" and base_url:
-        endp_url = ""
-    url = "{}{}".format(base_url, endp_url)
+    # base_url can be empty or a URL path that starts with "/"
+    # we will remove the trailing "/" if exists to help with the
+    # concatenation with the endpoint url below
+    if base_url.endswith("/"):
+        base_url = base_url[:-1]
 
-    if '/' in url[len(base_url)+1:]:
-        endp_base_url = url[:len(base_url)+1+endp_url[1:].find('/')]
+    endp_url = endpoint.url
+
+    if endp_url.find("/", 1) == -1:
+        parent_url = "{}{}".format(base_url, endp_url)
     else:
-        endp_base_url = url
+        parent_url = "{}{}".format(base_url, endp_url[:endp_url.find("/", 1)])
+
+    # parent_url might be of the form "/.../{...}" where "{...}" is a path parameter
+    # we need to remove the path parameter definition
+    parent_url = re.sub(r'(?:/\{[^}]+\})$', '', parent_url)
+    if not parent_url:  # root path case
+        parent_url = "/"
+
+    url = "{}{}".format(base_url, endp_url)
 
     logger.debug("Mapped [%s] to %s:%s restricted to %s",
                  url, ctrl_class.__name__, endpoint.action,
@@ -329,7 +338,7 @@ def generate_controller_routes(endpoint, mapper, base_url):
     mapper.connect(name, url, controller=inst, action=endpoint.action,
                    conditions=conditions)
 
-    return endp_base_url
+    return parent_url
 
 
 def generate_routes(url_prefix):
@@ -502,10 +511,13 @@ class BaseController(object):
 
         @property
         def url(self):
+            ctrl_path = self.ctrl.get_path()
+            if ctrl_path == "/":
+                ctrl_path = ""
             if self.config['path'] is not None:
-                url = "{}{}".format(self.ctrl.get_path(), self.config['path'])
+                url = "{}{}".format(ctrl_path, self.config['path'])
             else:
-                url = "{}/{}".format(self.ctrl.get_path(), self.func.__name__)
+                url = "{}/{}".format(ctrl_path, self.func.__name__)
 
             ctrl_path_params = self.ctrl.get_path_param_names(
                 self.config['path'])

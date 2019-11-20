@@ -690,6 +690,9 @@ if(WITH_SYSTEM_NPM)
     message(FATAL_ERROR "Can't find npm.")
   endif()
 endif()
+set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
+  "List of comma separated ceph-dashboard frontend languages to build. \
+  Use value `ALL` to build all languages")
 
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 

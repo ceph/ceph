@@ -11,6 +11,9 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
+            "aot": true,
+            "i18nFormat": "xlf",
+            "i18nMissingTranslation": "ignore",
             "outputPath": "dist",
             "index": "src/index.html",
             "main": "src/main.ts",
@@ -41,7 +44,6 @@
               "sourceMap": false,
               "extractCss": true,
               "namedChunks": false,
-              "aot": true,
               "extractLicenses": true,
               "vendorChunk": false,
               "buildOptimizer": true,
@@ -51,6 +53,66 @@
                   "with": "src/environments/environment.prod.ts"
                 }
               ]
+            },
+            "cs": {
+              "outputPath": "dist/cs/",
+              "i18nFile": "src/locale/messages.cs.xlf",
+              "i18nLocale": "cs"
+            },
+            "de-DE": {
+              "outputPath": "dist/de-DE/",
+              "i18nFile": "src/locale/messages.de-DE.xlf",
+              "i18nLocale": "de-DE"
+            },
+            "en-US": {
+              "outputPath": "dist/en-US/",
+              "i18nFile": "src/locale/messages.en-US.xlf",
+              "i18nLocale": "en-US"
+            },
+            "es-ES": {
+              "outputPath": "dist/es-ES/",
+              "i18nFile": "src/locale/messages.es-ES.xlf",
+              "i18nLocale": "es-ES"
+            },
+            "fr-FR": {
+              "outputPath": "dist/fr-FR/",
+              "i18nFile": "src/locale/messages.fr-FR.xlf",
+              "i18nLocale": "fr-FR"
+            },
+            "id-ID": {
+              "outputPath": "dist/id-ID/",
+              "i18nFile": "src/locale/messages.id-ID.xlf",
+              "i18nLocale": "id-ID"
+            },
+            "it-IT": {
+              "outputPath": "dist/it-IT/",
+              "i18nFile": "src/locale/messages.it-IT.xlf",
+              "i18nLocale": "it-IT"
+            },
+            "ja-JP": {
+              "outputPath": "dist/ja-JP/",
+              "i18nFile": "src/locale/messages.ja-JP.xlf",
+              "i18nLocale": "ja-JP"
+            },
+            "pl-PL": {
+              "outputPath": "dist/pl-PL/",
+              "i18nFile": "src/locale/messages.pl-PL.xlf",
+              "i18nLocale": "pl-PL"
+            },
+            "pt-BR": {
+              "outputPath": "dist/pt-BR/",
+              "i18nFile": "src/locale/messages.pt-BR.xlf",
+              "i18nLocale": "pt-BR"
+            },
+            "zh-CN": {
+              "outputPath": "dist/zh-CN/",
+              "i18nFile": "src/locale/messages.zh-CN.xlf",
+              "i18nLocale": "zh-CN"
+            },
+            "zh-TW": {
+              "outputPath": "dist/zh-TW/",
+              "i18nFile": "src/locale/messages.zh-TW.xlf",
+              "i18nLocale": "zh-TW"
             }
           }
         },
@@ -63,6 +125,42 @@
           "configurations": {
             "production": {
               "browserTarget": "ceph-dashboard:build:production"
+            },
+            "cs": {
+              "browserTarget": "ceph-dashboard:build:cs"
+            },
+            "de-DE": {
+              "browserTarget": "ceph-dashboard:build:de-DE"
+            },
+            "en-US": {
+              "browserTarget": "ceph-dashboard:build:en-US"
+            },
+            "es-ES": {
+              "browserTarget": "ceph-dashboard:build:es-ES"
+            },
+            "fr-FR": {
+              "browserTarget": "ceph-dashboard:build:fr-FR"
+            },
+            "id-ID": {
+              "browserTarget": "ceph-dashboard:build:id-ID"
+            },
+            "it-IT": {
+              "browserTarget": "ceph-dashboard:build:it-IT"
+            },
+            "ja-JP": {
+              "browserTarget": "ceph-dashboard:build:ja-JP"
+            },
+            "pl-PL": {
+              "browserTarget": "ceph-dashboard:build:pl-PL"
+            },
+            "pt-BR": {
+              "browserTarget": "ceph-dashboard:build:pt-BR"
+            },
+            "zh-CN": {
+              "browserTarget": "ceph-dashboard:build:zh-CN"
+            },
+            "zh-TW": {
+              "browserTarget": "ceph-dashboard:build:zh-TW"
             }
           }
         },
