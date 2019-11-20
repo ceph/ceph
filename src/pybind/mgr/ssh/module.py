@@ -1074,6 +1074,7 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
     def remove_mds(self, name):
         daemons = self._get_services('mds')
         results = []
+        self.log.debug("Attempting to remove volume: {}".format(name))
         for d in daemons:
             if d.service_instance == name or d.service_instance.startswith(name + '.'):
                 results.append(self._worker_pool.apply_async(
