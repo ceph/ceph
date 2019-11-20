@@ -14,6 +14,7 @@ import random
 import datetime
 import copy
 import re
+import six
 
 from ceph.deployment import inventory
 
@@ -86,9 +87,9 @@ def parse_host_specs(host, require_network=True):
         try:
             # if subnets are defined, also verify the validity
             if '/' in network:
-                ip_network(network)
+                ip_network(six.text_type(network))
             else:
-                ip_address(network)
+                ip_address(six.text_type(network))
         except ValueError as e:
             # logging?
             raise e
