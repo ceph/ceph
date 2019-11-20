@@ -135,20 +135,25 @@ private:
   InFlightTids m_in_flight_tids;
   InFlightAppends m_in_flight_appends;
   uint64_t m_object_bytes = 0;
+
   bool m_overflowed = false;
+
   bool m_object_closed = false;
+  bool m_object_closed_notify = false;
 
   bufferlist m_prefetch_bl;
 
-  bool m_in_flight_flushes = false;
-  ceph::condition_variable m_in_flight_flushes_cond;
+  bool m_in_flight_callbacks = false;
+  ceph::condition_variable m_in_flight_callbacks_cond;
   uint64_t m_in_flight_bytes = 0;
 
   bool send_appends(bool force, ceph::ref_t<FutureImpl> flush_sentinal);
   void handle_append_flushed(uint64_t tid, int r);
   void append_overflowed();
 
-  void notify_handler_unlock();
+  void wake_up_flushes();
+  void notify_handler_unlock(std::unique_lock<ceph::mutex>& locker,
+                             bool notify_overflowed);
 };
 
 } // namespace journal
