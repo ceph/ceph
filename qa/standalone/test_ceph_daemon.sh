@@ -188,7 +188,7 @@ done
 ## adopt
 for tarball in $TEST_TARS; do
     TMP_TAR_DIR=`mktemp -d -p $TMPDIR`
-    tar xzvf $tarball -C $TMP_TAR_DIR
+    $SUDO tar xzvf $tarball -C $TMP_TAR_DIR
     NAMES=$($SUDO $CEPH_DAEMON ls --legacy-dir $TMP_TAR_DIR | jq -r '.[].name')
     for name in $NAMES; do
         # TODO: skip osd test for now
@@ -207,7 +207,7 @@ for tarball in $TEST_TARS; do
     done
     # clean-up before next iter
     $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID_LEGACY --force
-    rm -rf $TMP_TAR_DIR
+    $SUDO rm -rf $TMP_TAR_DIR
 done
 
 ## unit
