@@ -20,7 +20,6 @@ set(lib_mon_srcs
   Elector.cc
   ElectionLogic.cc
   ConnectionTracker.cc
-  ConnectionTracker2.cc
   HealthMonitor.cc
   ConfigKeyService.cc
   ../mds/MDSAuthCaps.cc
