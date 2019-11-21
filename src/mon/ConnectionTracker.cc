@@ -14,22 +14,42 @@
 
 #include "ConnectionTracker.h"
 
+ConnectionReport *ConnectionTracker::reports(int p)
+{
+  auto i = peer_reports.find(p);
+  if (i == peer_reports.end()) {
+    ceph_assert(p != rank);
+    auto[j,k] = peer_reports.insert(std::pair<int,ConnectionReport*>(p,new ConnectionReport()));
+    i = j;
+  }
+  return i->second;
+}
+
+const ConnectionReport *ConnectionTracker::reports(int p) const
+{
+  auto i = peer_reports.find(p);
+  if (i == peer_reports.end()) {
+    return NULL;
+  }
+  return i->second;
+}
+
 void ConnectionTracker::receive_peer_report(const ConnectionReport& report)
 {
-  extra_tracker.receive_peer_report(report);
-  ConnectionReport& existing = peer_reports[report.rank];
+  if (report.rank == rank) return;
+  ConnectionReport& existing = *reports(report.rank);
   if (report.epoch > existing.epoch ||
-      (report.epoch == existing.epoch && report.epoch_version > existing.epoch_version)) {
+      (report.epoch == existing.epoch &&
+       report.epoch_version > existing.epoch_version)) {
     existing = report;
   }
 }
 
 bool ConnectionTracker::increase_epoch(epoch_t e)
 {
-  extra_tracker.increase_epoch(e);
   if (e > epoch) {
-    version = 0;
-    epoch = e;
+    my_reports.epoch_version = version = 0;
+    my_reports.epoch = epoch = e;
     return true;
   }
   return false;
@@ -38,6 +58,7 @@ bool ConnectionTracker::increase_epoch(epoch_t e)
 void ConnectionTracker::increase_version()
 {
   ++version;
+  my_reports->epoch_version = version;
   if ((version % 10) == 0 ) { // TODO: make this configurable?
     owner->persist_connectivity_scores();
   }
@@ -45,80 +66,65 @@ void ConnectionTracker::increase_version()
 
 void ConnectionTracker::generate_report_of_peers(ConnectionReport *report) const
 {
-  assert(report != NULL);
-  report->rank = get_my_rank();
-  report->epoch = epoch;
-  report->epoch_version = version;
-  for (const auto i : conn_tracker.peers) {
-    get_connection_score(i.first, &report->history[i.first], &report->current[i.first]);
-  }
-
-  ConnectionReport dup;
-  extra_tracker.generate_report_of_peers(&dup);
-  assert(dup == *report);
+  ceph_assert(report != NULL);
+  *report = my_reports;
 }
 
 const ConnectionReport *ConnectionTracker::get_peer_view(int peer) const
 {
-  const ConnectionReport *dup = extra_tracker.get_peer_view(peer);
-  if (peer == get_my_rank()) {
-    ceph_assert(0);
-  }
-  const auto& i = peer_reports.find(peer);
-  if (i != peer_reports.end()) {
-    assert(*dup == i->second);
-    return &(i->second);
-  }
-  assert(dup == NULL);
-  return NULL;
+  ceph_assert(peer != rank);
+  return reports(peer);
 }
 
-void ConnectionTracker::forget_peer(int peer)
+void ConnectionTracker::report_live_connection(int peer_rank, double units_alive)
 {
-  conn_tracker.peers.erase(peer);
-}
+  // we need to "auto-initialize" to 1, do shenanigans
+  auto i = my_reports.history.find(peer_rank);
+  if (i == my_reports.history.end()) {
+    auto[j,k] = my_reports.history.insert(std::pair<int,double>(peer_rank,1.0));
+    i = j;
+  }
+  double& pscore = i->second;
+  pscore = pscore * (1 - units_alive / (2 * half_life)) +
+    (units_alive / (2 * half_life));
+  pscore = std::min(pscore, 1.0);
+  my_reports.current[peer_rank] = true;
 
-void ConnectionTracker::report_live_connection(int rank, double units_alive)
-{
-  extra_tracker.report_live_connection(rank, units_alive);
-  PeerReportTracker::PeerConnection& conn = conn_tracker.peers[rank];
-  conn.score = conn.score * ( 1 - units_alive / (2*half_life)) +
-    ( units_alive / (2*half_life) );
-  conn.score = std::min(conn.score, 1.0);
-  conn.alive = true;
   increase_version();
 }
 
-void ConnectionTracker::report_dead_connection(int rank, double units_dead)
+void ConnectionTracker::report_dead_connection(int peer_rank, double units_dead)
 {
-  extra_tracker.report_dead_connection(rank, units_dead);
-  PeerReportTracker::PeerConnection& conn = conn_tracker.peers[rank];
-  conn.score = conn.score * ( 1 - units_dead / (2*half_life)) -
-    ( units_dead / (2*half_life) );
-  conn.score = std::max(conn.score, 0.0);
-  conn.alive = false;
+  // we need to "auto-initialize" to 1, do shenanigans
+  auto i = my_reports.history.find(peer_rank);
+  if (i == my_reports.history.end()) {
+    auto[j,k] = my_reports.history.insert(std::pair<int,double>(peer_rank,1.0));
+    i = j;
+  }
+  double& pscore = i->second;
+  pscore = pscore * (1 - units_dead / (2 * half_life)) -
+    (units_dead / (2*half_life));
+  pscore = std::max(pscore, 0.0);
+  my_reports.current[peer_rank] = false;
+  
   increase_version();
 }
 
-void ConnectionTracker::get_connection_score(int rank, double *rating, bool *alive) const
+void ConnectionTracker::get_connection_score(int peer_rank, double *rating,
+					      bool *alive) const
 {
   *rating = 0;
   *alive = false;
-  const auto& i = conn_tracker.peers.find(rank);
-  if (i == conn_tracker.peers.end()) {
+  const auto& i = my_reports.history.find(peer_rank);
+  if (i == my_reports.history.end()) {
     return;
   }
-  const PeerReportTracker::PeerConnection& conn = i->second;
-  *rating = conn.score;
-  *alive = conn.alive;
-
-  double dup_rating;
-  bool dup_alive;
-  extra_tracker.get_connection_score(rank, &dup_rating, &dup_alive);
-  assert(dup_rating == *rating && dup_alive == *alive);
+  *rating = i->second;
+  *alive = my_reports.current[peer_rank];
 }
 
-void ConnectionTracker::get_total_connection_score(int rank, double *rating, int *live_count) const
+void ConnectionTracker::get_total_connection_score(int peer_rank, double *rating,
+						    int *live_count) const
 {
   *rating = 0;
   *live_count = 0;
@@ -126,21 +132,23 @@ void ConnectionTracker::get_total_connection_score(int rank, double *rating, int
   int live = 0;
 
   bool alive;
-  get_connection_score(rank, &rate, &alive); // check my scores for the rank
+  get_connection_score(peer_rank, &rate, &alive); //check my scores for the rank
   if (!alive) {
     rate = 0;
   } else {
     ++live;
   }
-  for (const auto i : peer_reports) { // and then add everyone else's scores on
-    if (i.first == get_my_rank() ||
-	i.first == rank) {
+
+
+  for (const auto i : peer_reports) { // loop through all the scores
+    if (i.first == rank ||
+	i.first == peer_rank) { // ... except the ones it has for itself, of course!
       continue;
     }
     const auto& report = i.second;
-    auto score_i = report.history.find(rank);
-    auto live_i = report.current.find(rank);
-    if (score_i != report.history.end()) {
+    auto score_i = report->history.find(peer_rank);
+    auto live_i = report->current.find(peer_rank);
+    if (score_i != report->history.end()) {
       if (live_i->second) {
 	rate += score_i->second;
 	++live;
@@ -149,43 +157,38 @@ void ConnectionTracker::get_total_connection_score(int rank, double *rating, int
   }
   *rating = rate;
   *live_count = live;
-
-
-  double dup_rating;
-  int dup_live;
-  extra_tracker.get_total_connection_score(rank, &dup_rating, &dup_live);
-  assert(dup_rating == rate && dup_live == live);
 }
 
 void ConnectionTracker::encode(bufferlist &bl) const
 {
-  map<int,ConnectionReport> peer_copy = peer_reports;
-  generate_report_of_peers(&peer_copy[get_my_rank()]);
-
+  map<int,ConnectionReport> reports;
+  for (const auto& i : peer_reports) {
+    reports[i.first] = *i.second;
+  }
   ENCODE_START(1, 1, bl);
+  encode(rank, bl);
   encode(epoch, bl);
   encode(version, bl);
   encode(half_life, bl);
-  encode(peer_copy, bl);
-  encode(extra_tracker, bl);
+  encode(reports, bl);
   ENCODE_FINISH(bl);
 }
 
 void ConnectionTracker::decode(bufferlist::const_iterator& bl) {
-  peer_reports.clear();
+  clear_peer_reports();
+
+  map<int,ConnectionReport> reports;
   DECODE_START(1, bl);
+  decode(rank, bl);
   decode(epoch, bl);
   decode(version, bl);
   decode(half_life, bl);
-  decode(peer_reports, bl);
-  decode(extra_tracker, bl);
+  decode(reports, bl);
   DECODE_FINISH(bl);
 
-  ConnectionReport& my_report = peer_reports[get_my_rank()];
-  // TODO should we validate epoch/version matches here?
-  for (auto &i : my_report.history) {
-    auto& peer_con = conn_tracker.peers[i.first];
-    peer_con.alive = my_report.current[i.first];
-    peer_con.score = i.second;
+  my_reports = reports[rank];
+  for (const auto& i : reports) {
+    if (i.first == rank) continue;
+    peer_reports[i.first] = new ConnectionReport(i.second);
   }
 }
