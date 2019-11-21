@@ -29,20 +29,16 @@ namespace cache {
 namespace rwl {
 
 class SyncPointLogEntry;
-class GeneralWriteLogEntry;
+class GenericWriteLogEntry;
 class WriteLogEntry;
 class GenericLogEntry;
 
-typedef std::list<std::shared_ptr<GeneralWriteLogEntry>> GeneralWriteLogEntries;
 typedef std::list<std::shared_ptr<WriteLogEntry>> WriteLogEntries;
 typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
 
 /**** Write log entries end ****/
 
 typedef librbd::BlockGuard<GuardedRequest> WriteLogGuard;
-
-template <typename T>
-struct C_GuardedBlockIORequest;
 
 class DeferredContexts;
 template <typename> class ImageCacheState;
@@ -53,8 +49,7 @@ struct C_BlockIORequest;
 template <typename T>
 struct C_WriteRequest;
 
-template <typename T>
-using GenericLogOperations = std::list<GenericLogOperationSharedPtr<T>>;
+using GenericLogOperations = std::list<GenericLogOperationSharedPtr>;
 
 } // namespace rwl
 
@@ -93,35 +88,46 @@ public:
   void invalidate(Context *on_finish);
   void flush(Context *on_finish) override;
 
-private:
   using This = ReplicatedWriteLog<ImageCtxT>;
-  using SyncPointT = rwl::SyncPoint<This>;
-  using GenericLogOperationT = rwl::GenericLogOperation<This>;
-  using GenericLogOperationSharedPtrT = rwl::GenericLogOperationSharedPtr<This>;
-  using WriteLogOperationT = rwl::WriteLogOperation<This>;
-  using WriteLogOperationSetT = rwl::WriteLogOperationSet<This>;
-  using SyncPointLogOperationT = rwl::SyncPointLogOperation<This>;
-  using GenericLogOperationsT = rwl::GenericLogOperations<This>;
-  using GenericLogOperationsVectorT = rwl::GenericLogOperationsVector<This>;
-  using C_BlockIORequestT = rwl::C_BlockIORequest<This>;
   using C_WriteRequestT = rwl::C_WriteRequest<This>;
-
-  friend class rwl::SyncPoint<This>;
-  friend class rwl::GenericLogOperation<This>;
-  friend class rwl::GeneralWriteLogOperation<This>;
-  friend class rwl::WriteLogOperation<This>;
-  friend class rwl::WriteLogOperationSet<This>;
-  friend class rwl::SyncPointLogOperation<This>;
-  friend struct rwl::C_GuardedBlockIORequest<This>;
-  friend struct rwl::C_BlockIORequest<This>;
-  friend struct rwl::C_WriteRequest<This>;
+  using C_BlockIORequestT = rwl::C_BlockIORequest<This>;
+  CephContext * get_context();
+  void release_guarded_request(BlockGuardCell *cell);
+  void release_write_lanes(C_BlockIORequestT *req);
+  bool alloc_resources(C_BlockIORequestT *req);
+  template <typename V>
+  void flush_pmem_buffer(V& ops);
+  void schedule_append(rwl::GenericLogOperationsVector &ops);
+  void schedule_flush_and_append(rwl::GenericLogOperationsVector &ops);
+  std::shared_ptr<rwl::SyncPoint> get_current_sync_point() {
+    return m_current_sync_point;
+  }
+  bool get_persist_on_flush() {
+    return m_persist_on_flush;
+  }
+  void inc_last_op_sequence_num() {
+    m_perfcounter->inc(l_librbd_rwl_log_ops, 1);
+    ++m_last_op_sequence_num;
+  }
+  uint64_t get_last_op_sequence_num() {
+    return m_last_op_sequence_num;
+  }
+  uint64_t get_current_sync_gen() {
+    return m_current_sync_gen;
+  }
+  unsigned int get_free_lanes() {
+    return m_free_lanes;
+  }
+  uint32_t get_free_log_entries() {
+    return m_free_log_entries;
+  }
+private:
   typedef std::list<rwl::C_WriteRequest<This> *> C_WriteRequests;
   typedef std::list<rwl::C_BlockIORequest<This> *> C_BlockIORequests;
 
   BlockGuardCell* detain_guarded_request_helper(rwl::GuardedRequest &req);
   BlockGuardCell* detain_guarded_request_barrier_helper(rwl::GuardedRequest &req);
-  void detain_guarded_request(rwl::GuardedRequest &&req);
-  void release_guarded_request(BlockGuardCell *cell);
+  void detain_guarded_request(C_BlockIORequestT *request, rwl::GuardedRequestFunctionContext *guarded_ctx);
 
   librbd::cache::rwl::ImageCacheState<ImageCtxT>* m_cache_state = nullptr;
 
@@ -159,7 +165,6 @@ private:
 
   /* Starts at 0 for a new write log. Incremented on every flush. */
   uint64_t m_current_sync_gen = 0;
-  std::shared_ptr<SyncPointT> m_current_sync_point = nullptr;
   /* Starts at 0 on each sync gen increase. Incremented before applied
      to an operation */
   uint64_t m_last_op_sequence_num = 0;
@@ -167,12 +172,6 @@ private:
   uint64_t m_flushed_sync_gen = 0;
 
   bool m_persist_on_write_until_flush = true;
-  /* True if it's safe to complete a user request in persist-on-flush
-   * mode before the write is persisted. This is only true if there is
-   * a local copy of the write data, or if local write failure always
-   * causes local node failure. */
-  bool m_persist_on_flush_early_user_comp = false; /* Assume local write failure does not cause node failure */
-  bool m_persist_on_flush = false; /* If false, persist each write before completion */
   bool m_flush_seen = false;
 
   AsyncOpTracker m_async_op_tracker;
@@ -187,13 +186,11 @@ private:
   mutable ceph::mutex m_deferred_dispatch_lock;
   /* Hold m_log_append_lock while appending or retiring log entries. */
   mutable ceph::mutex m_log_append_lock;
-
   /* Used for most synchronization */
   mutable ceph::mutex m_lock;
+
   /* Used in release/detain to make BlockGuard preserve submission order */
   mutable ceph::mutex m_blockguard_lock;
-  /* Used in WriteLogEntry::get_pmem_bl() to syncronize between threads making entries readable */
-  mutable ceph::mutex m_entry_bl_lock;
 
   /* Use m_blockguard_lock for the following 3 things */
   rwl::WriteLogGuard::BlockOperations m_awaiting_barrier;
@@ -203,19 +200,23 @@ private:
   bool m_appending = false;
   bool m_dispatching_deferred_ops = false;
 
-  GenericLogOperationsT m_ops_to_flush; /* Write ops needing flush in local log */
-  GenericLogOperationsT m_ops_to_append; /* Write ops needing event append in local log */
+  rwl::GenericLogOperations m_ops_to_flush; /* Write ops needing flush in local log */
+  rwl::GenericLogOperations m_ops_to_append; /* Write ops needing event append in local log */
 
   /* New entries are at the back. Oldest at the front */
   rwl::GenericLogEntries m_log_entries;
   rwl::GenericLogEntries m_dirty_log_entries;
 
+  PerfCounters *m_perfcounter = nullptr;
+
+  std::shared_ptr<rwl::SyncPoint> m_current_sync_point = nullptr;
+  bool m_persist_on_flush = false; /* If false, persist each write before completion */
+
   /* Writes that have left the block guard, but are waiting for resources */
   C_BlockIORequests m_deferred_ios;
   /* Throttle writes concurrently allocating & replicating */
-  unsigned int m_free_lanes = MAX_CONCURRENT_WRITES;
+  unsigned int m_free_lanes = rwl::MAX_CONCURRENT_WRITES;
   unsigned int m_unpublished_reserves = 0;
-  PerfCounters *m_perfcounter = nullptr;
 
   /* Initialized from config, then set false during shutdown */
   std::atomic<bool> m_periodic_stats_enabled = {false};
@@ -234,26 +235,20 @@ private:
 
   void rwl_init(Context *on_finish, rwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
-  void start_workers();
   void wake_up();
 
   void dispatch_deferred_writes(void);
-  void release_write_lanes(C_WriteRequestT *write_req);
   void alloc_and_dispatch_io_req(C_BlockIORequestT *write_req);
   void append_scheduled_ops(void);
   void enlist_op_appender();
-  void schedule_append(GenericLogOperationsVectorT &ops);
-  void schedule_append(GenericLogOperationsT &ops);
+  void schedule_append(rwl::GenericLogOperations &ops);
   void flush_then_append_scheduled_ops(void);
   void enlist_op_flusher();
-  void schedule_flush_and_append(GenericLogOperationsVectorT &ops);
-  template <typename V>
-  void flush_pmem_buffer(V& ops);
-  void alloc_op_log_entries(GenericLogOperationsT &ops);
-  void flush_op_log_entries(GenericLogOperationsVectorT &ops);
-  int append_op_log_entries(GenericLogOperationsT &ops);
-  void complete_op_log_entries(GenericLogOperationsT &&ops, const int r);
-  void schedule_complete_op_log_entries(GenericLogOperationsT &&ops, const int r);
+  void alloc_op_log_entries(rwl::GenericLogOperations &ops);
+  void flush_op_log_entries(rwl::GenericLogOperationsVector &ops);
+  int append_op_log_entries(rwl::GenericLogOperations &ops);
+  void complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
+  void schedule_complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
 };
 
 } // namespace cache
