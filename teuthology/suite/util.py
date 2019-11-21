@@ -310,8 +310,8 @@ def get_install_task_flavor(job_config):
     project_overrides = install_overrides.get(project, dict())
     first_install_config = dict()
     for task in tasks:
-        if task.keys()[0] == 'install':
-            first_install_config = task.values()[0] or dict()
+        if list(task.keys())[0] == 'install':
+            first_install_config = list(task.values())[0] or dict()
             break
     first_install_config = copy.deepcopy(first_install_config)
     deep_merge(first_install_config, install_overrides)
