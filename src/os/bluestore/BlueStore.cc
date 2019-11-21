@@ -855,8 +855,15 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
 
   void _add(BlueStore::OnodeRef& o, int level) override
   {
-    (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
+    ceph_assert(o->s == nullptr);
     o->s = this;
+    if (o->nref > 1) {
+      pin_list.push_front(*o);
+      o->pinned = true;
+      num_pinned = pin_list.size();
+    } else {
+      (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
+    }
     num = lru.size();
   }
   void _rm(BlueStore::OnodeRef& o) override
