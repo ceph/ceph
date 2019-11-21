@@ -274,6 +274,7 @@ function cherry_pick_phase {
             fi
         else
             set +x
+            maybe_restore_set_x
             error "Cannot initialize $local_branch - local branch already exists"
             false
         fi
@@ -284,6 +285,7 @@ function cherry_pick_phase {
     git fetch "$upstream_remote" "pull/$original_pr/head:pr-$original_pr"
 
     set +x
+    maybe_restore_set_x
     info "Attempting to cherry pick $number_of_commits commits from ${original_pr_url} into local branch $local_branch"
     offset="$((number_of_commits - 1))" || true
     for ((i=offset; i>=0; i--)) ; do
@@ -292,8 +294,10 @@ function cherry_pick_phase {
         set -x
         if git cherry-pick -x "$sha1_to_cherry_pick" ; then
             set +x
+            maybe_restore_set_x
         else
             set +x
+            maybe_restore_set_x
             [ "$VERBOSE" ] && git status
             error "Cherry pick failed"
             info "Next, manually fix conflicts and complete the current cherry-pick"
@@ -514,6 +518,7 @@ function init_endpoints {
 
 function init_fork_remote {
     [ "$github_user" ] || assert_fail "github_user not set"
+    [ "$EXPLICIT_FORK" ] && info "Using explicit fork ->$EXPLICIT_FORK<- instead of personal fork."
     fork_remote="${fork_remote:-$(maybe_deduce_remote fork)}"
 }
 
@@ -756,7 +761,11 @@ function maybe_deduce_remote {
     if [ "$remote_type" = "upstream" ] ; then
         url_component="ceph"
     elif [ "$remote_type" = "fork" ] ; then
-        url_component="$github_user"
+        if [ "$EXPLICIT_FORK" ] ; then
+            url_component="$EXPLICIT_FORK"
+        else
+            url_component="$github_user"
+        fi
     else
         assert_fail "bad remote_type ->$remote_type<- in maybe_deduce_remote"
     fi
@@ -786,12 +795,19 @@ function maybe_delete_deprecated_backport_common {
                 set -x
                 rm -f "$deprecated_backport_common"
                 set +x
+                maybe_restore_set_x
             fi
         fi
         if [ -e "$deprecated_backport_common" ] ; then
             error "$deprecated_backport_common still exists. Bailing out!"
             false
         fi
+    fi
+}
+
+function maybe_restore_set_x {
+    if [ "$DEBUG" ] ; then
+        set -x
     fi
 }
 
@@ -1079,6 +1095,8 @@ Options (not needed in normal operation):
     --debug               (turns on "set -x")
     --existing-pr BACKPORT_PR_ID
                           (use this when the backport PR is already open)
+    --force               (exercise caution!)
+    --fork EXPLICIT_FORK  (use EXPLICIT_FORK instead of personal GitHub fork)
     --milestones          (vet all backport PRs for correct milestone setting)
     --setup/-s            (run the interactive setup routine - NOTE: this can 
                            be done any number of times)
@@ -1236,7 +1254,11 @@ function vet_remotes {
         verbose "Fork remote is $fork_remote"
     else
         error "Cannot auto-determine fork remote"
-        info "(Could not find GitHub user ${github_user}'s fork of ceph/ceph in \"git remote -v\")"
+        if [ "$EXPLICIT_FORK" ] ; then
+            info "(Could not find $EXPLICIT_FORK fork of ceph/ceph in \"git remote -v\")"
+        else
+            info "(Could not find GitHub user ${github_user}'s fork of ceph/ceph in \"git remote -v\")"
+        fi
         setup_ok=""
     fi
 }
@@ -1258,6 +1280,7 @@ function vet_setup {
         [ "$github_token" ] && [ "$setup_ok" ] && set_github_user_from_github_token
         init_upstream_remote
         [ "$github_token" ] && [ "$setup_ok" ] && init_fork_remote
+        vet_remotes
         [ "$redmine_key" ] && set_redmine_user_from_redmine_key
     fi
     if [ "$github_token" ] ; then
@@ -1353,7 +1376,7 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,existing-pr:,force,help,milestones,prepare,setup,setup-report,troubleshooting,update-version,usage,verbose,version" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,existing-pr:,force,fork:,help,milestones,prepare,setup,setup-report,troubleshooting,update-version,usage,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
@@ -1363,6 +1386,7 @@ CHERRY_PICK_PHASE="yes"
 DEBUG=""
 EXISTING_PR=""
 EXPLICIT_COMPONENT=""
+EXPLICIT_FORK=""
 FORCE=""
 HELP=""
 INTERACTIVE_SETUP_ROUTINE=""
@@ -1380,6 +1404,7 @@ while true ; do
         --debug|-d) DEBUG="$1" ; shift ;;
         --existing-pr) shift ; EXISTING_PR="$1" ; CHERRY_PICK_PHASE="" ; PR_PHASE="" ; shift ;;
         --force) FORCE="$1" ; shift ;;
+        --fork) shift ; EXPLICIT_FORK="$1" ; shift ;;
         --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
         --milestones) CHECK_MILESTONES="$1" ; shift ;;
         --prepare) CHERRY_PICK_PHASE="yes" ; PR_PHASE="" ; TRACKER_PHASE="" ; shift ;;
@@ -1444,6 +1469,13 @@ if [ "$SETUP_OPTION" ] ; then
         [ "$yes_or_no_answer" ] && yes_or_no_answer="${yes_or_no_answer:0:1}"
         if [ "$yes_or_no_answer" = "y" ] ; then
             INTERACTIVE_SETUP_ROUTINE="yes"
+        else
+            if [ "$FORCE" ] ; then
+                warning "--force was given; proceeding with broken setup"
+            else
+                info "Bailing out!"
+                exit 1
+            fi
         fi
     fi
 fi
@@ -1598,11 +1630,13 @@ if [ "$PR_PHASE" ] ; then
         set -x
         git checkout "$local_branch"
         set +x
+        maybe_restore_set_x
     fi
     
     set -x
     git push -u "$fork_remote" "$local_branch"
     set +x
+    maybe_restore_set_x
     
     original_issue=""
     original_pr=""
@@ -1634,7 +1668,12 @@ if [ "$PR_PHASE" ] ; then
     fi
     
     debug "Opening backport PR"
-    remote_api_output=$(curl --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${github_user}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "https://api.github.com/repos/ceph/ceph/pulls?access_token=${github_token}")
+    if [ "$EXPLICIT_FORK" ] ; then
+        source_repo="$EXPLICIT_FORK"
+    else
+        source_repo="$github_user"
+    fi
+    remote_api_output=$(curl --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${source_repo}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "https://api.github.com/repos/ceph/ceph/pulls?access_token=${github_token}")
     backport_pr_number=$(echo "$remote_api_output" | jq -r .number)
     if [ -z "$backport_pr_number" ] || [ "$backport_pr_number" = "null" ] ; then
         error "failed to open backport PR"
