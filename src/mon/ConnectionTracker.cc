@@ -14,6 +14,18 @@
 
 #include "ConnectionTracker.h"
 
+std::ostream& operator<<(std::ostream&o, const ConnectionReport& c) {
+  o << "rank=" << c.rank << ",epoch=" << c.epoch << ",version=" << c.epoch_version
+    << ", current links: " << c.current << ", history: " << c.history;
+  return o;
+}
+
+std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c) {
+  o << "rank=" << c.rank << ", epoch=" << c.epoch << ", version=" << c.version
+    << ", half_life=" << c.half_life << ", reports: " << c.peer_reports;
+  return o;
+}
+
 ConnectionReport *ConnectionTracker::reports(int p)
 {
   auto i = peer_reports.find(p);

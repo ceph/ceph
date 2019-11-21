@@ -341,6 +341,9 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch)
     leader_score = connectivity_election_score(leader_acked);
   }
 
+  ldout(cct, 30) << "propose from rank=" << from << ", tracker: "
+		 << (stable_peer_tracker ? *stable_peer_tracker : *peer_tracker) << dendl;
+
   ldout(cct, 10) << "propose from rank=" << from << ",score=" << from_score
 		 << "; my score=" << my_score
 		 << "; currently acked " << leader_acked
