@@ -2,6 +2,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { ImageSpec } from '../models/image-spec';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
 import { RbdService } from './rbd.service';
 
@@ -35,20 +36,20 @@ describe('RbdService', () => {
   });
 
   it('should call delete', () => {
-    service.delete('poolName', null, 'rbdName').subscribe();
+    service.delete(new ImageSpec('poolName', null, 'rbdName')).subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName');
     expect(req.request.method).toBe('DELETE');
   });
 
   it('should call update', () => {
-    service.update('poolName', null, 'rbdName', 'foo').subscribe();
+    service.update(new ImageSpec('poolName', null, 'rbdName'), 'foo').subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName');
     expect(req.request.body).toEqual('foo');
     expect(req.request.method).toBe('PUT');
   });
 
   it('should call get', () => {
-    service.get('poolName', null, 'rbdName').subscribe();
+    service.get(new ImageSpec('poolName', null, 'rbdName')).subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName');
     expect(req.request.method).toBe('GET');
   });
@@ -60,14 +61,14 @@ describe('RbdService', () => {
   });
 
   it('should call copy', () => {
-    service.copy('poolName', null, 'rbdName', 'foo').subscribe();
+    service.copy(new ImageSpec('poolName', null, 'rbdName'), 'foo').subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/copy');
     expect(req.request.body).toEqual('foo');
     expect(req.request.method).toBe('POST');
   });
 
   it('should call flatten', () => {
-    service.flatten('poolName', null, 'rbdName').subscribe();
+    service.flatten(new ImageSpec('poolName', null, 'rbdName')).subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/flatten');
     expect(req.request.body).toEqual(null);
     expect(req.request.method).toBe('POST');
@@ -80,7 +81,7 @@ describe('RbdService', () => {
   });
 
   it('should call createSnapshot', () => {
-    service.createSnapshot('poolName', null, 'rbdName', 'snapshotName').subscribe();
+    service.createSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName').subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/snap');
     expect(req.request.body).toEqual({
       snapshot_name: 'snapshotName'
@@ -89,7 +90,9 @@ describe('RbdService', () => {
   });
 
   it('should call renameSnapshot', () => {
-    service.renameSnapshot('poolName', null, 'rbdName', 'snapshotName', 'foo').subscribe();
+    service
+      .renameSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName', 'foo')
+      .subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/snap/snapshotName');
     expect(req.request.body).toEqual({
       new_snap_name: 'foo'
@@ -98,7 +101,9 @@ describe('RbdService', () => {
   });
 
   it('should call protectSnapshot', () => {
-    service.protectSnapshot('poolName', null, 'rbdName', 'snapshotName', true).subscribe();
+    service
+      .protectSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName', true)
+      .subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/snap/snapshotName');
     expect(req.request.body).toEqual({
       is_protected: true
@@ -107,7 +112,9 @@ describe('RbdService', () => {
   });
 
   it('should call rollbackSnapshot', () => {
-    service.rollbackSnapshot('poolName', null, 'rbdName', 'snapshotName').subscribe();
+    service
+      .rollbackSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName')
+      .subscribe();
     const req = httpTesting.expectOne(
       'api/block/image/poolName%2FrbdName/snap/snapshotName/rollback'
     );
@@ -116,20 +123,22 @@ describe('RbdService', () => {
   });
 
   it('should call cloneSnapshot', () => {
-    service.cloneSnapshot('poolName', null, 'rbdName', 'snapshotName', null).subscribe();
+    service
+      .cloneSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName', null)
+      .subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/snap/snapshotName/clone');
     expect(req.request.body).toEqual(null);
     expect(req.request.method).toBe('POST');
   });
 
   it('should call deleteSnapshot', () => {
-    service.deleteSnapshot('poolName', null, 'rbdName', 'snapshotName').subscribe();
+    service.deleteSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName').subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/snap/snapshotName');
     expect(req.request.method).toBe('DELETE');
   });
 
   it('should call moveTrash', () => {
-    service.moveTrash('poolName', null, 'rbdName', 1).subscribe();
+    service.moveTrash(new ImageSpec('poolName', null, 'rbdName'), 1).subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/move_trash');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ delay: 1 });
@@ -137,27 +146,27 @@ describe('RbdService', () => {
 
   describe('should compose image spec', () => {
     it('with namespace', () => {
-      expect(service.getImageSpec('mypool', 'myns', 'myimage')).toBe('mypool/myns/myimage');
+      expect(new ImageSpec('mypool', 'myns', 'myimage').toString()).toBe('mypool/myns/myimage');
     });
 
     it('without namespace', () => {
-      expect(service.getImageSpec('mypool', null, 'myimage')).toBe('mypool/myimage');
+      expect(new ImageSpec('mypool', null, 'myimage').toString()).toBe('mypool/myimage');
     });
   });
 
   describe('should parse image spec', () => {
     it('with namespace', () => {
-      const [poolName, namespace, rbdName] = service.parseImageSpec('mypool/myns/myimage');
-      expect(poolName).toBe('mypool');
-      expect(namespace).toBe('myns');
-      expect(rbdName).toBe('myimage');
+      const imageSpec = ImageSpec.fromString('mypool/myns/myimage');
+      expect(imageSpec.poolName).toBe('mypool');
+      expect(imageSpec.namespace).toBe('myns');
+      expect(imageSpec.imageName).toBe('myimage');
     });
 
     it('without namespace', () => {
-      const [poolName, namespace, rbdName] = service.parseImageSpec('mypool/myimage');
-      expect(poolName).toBe('mypool');
-      expect(namespace).toBeNull();
-      expect(rbdName).toBe('myimage');
+      const imageSpec = ImageSpec.fromString('mypool/myimage');
+      expect(imageSpec.poolName).toBe('mypool');
+      expect(imageSpec.namespace).toBeNull();
+      expect(imageSpec.imageName).toBe('myimage');
     });
   });
 });

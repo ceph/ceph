@@ -39,6 +39,8 @@ describe('RbdTrashMoveModalComponent', () => {
     component.metaType = 'RBD';
     component.poolName = 'foo';
     component.imageName = 'bar';
+
+    fixture.detectChanges();
   });
 
   it('should create', () => {
@@ -47,7 +49,6 @@ describe('RbdTrashMoveModalComponent', () => {
   });
 
   it('should finish running ngOnInit', () => {
-    fixture.detectChanges();
     expect(component.pattern).toEqual('foo/bar');
   });
 
@@ -88,7 +89,6 @@ describe('RbdTrashMoveModalComponent', () => {
       const oldDate = moment()
         .add(24, 'hour')
         .toISOString();
-      fixture.detectChanges();
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
