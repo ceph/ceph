@@ -227,3 +227,43 @@ def test_fail():
     c = Completion().then(lambda _: 3)
     c._first_promise.fail(KeyError())
     assert isinstance(c.exception, KeyError)
+
+
+def test_pretty_print():
+    mgr = mock.MagicMock()
+    mgr.process = lambda cs: [c.finalize(None) for c in cs]
+
+    def add_one(x):
+        return x+1
+
+    c = Completion(value=1, on_complete=add_one).then(
+        str
+    ).add_progress('message', mgr)
+
+    assert c.pretty_print() == """<Completion>[
+       add_one(1),
+       str(...),
+       ProgressReference(...),
+]"""
+    c.finalize()
+    assert c.pretty_print() == """<Completion>[
+(done) add_one(1),
+(done) str(2),
+(done) ProgressReference('2'),
+]"""
+
+    p = some_complex_completion()
+    assert p.pretty_print() == """<Completion>[
+       <lambda>(3),
+       lambda x: x(...),
+]"""
+    p.finalize()
+    assert p.pretty_print() == """<Completion>[
+(done) <lambda>(3),
+(done) <lambda>(4),
+(done) lambda x: x(5),
+(done) lambda x: x(5),
+]"""
+
+    assert p.result == 5
+

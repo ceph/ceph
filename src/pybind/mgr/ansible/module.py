@@ -287,10 +287,8 @@ class Module(MgrModule, orchestrator.Orchestrator):
         :Returns          : True if everything is done.
         """
 
-        # Check progress and update status in each operation
-        # Access completion.status property do the trick
-        for operation in completions:
-            self.log.info("<%s> is_finished:%s", operation, operation.is_finished)
+        if completions:
+            self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 
     def serve(self):
         """ Mandatory for standby modules

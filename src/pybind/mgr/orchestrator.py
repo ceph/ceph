@@ -198,6 +198,25 @@ class _Promise(object):
             self.__class__, self._state, val, self._on_complete, id(self), name, getattr(next, '_progress_reference', 'NA'), repr(self._next_promise)
         )
 
+    def pretty_print_1(self):
+        if self._name:
+            name = self._name
+        elif self._on_complete is None:
+            name = 'lambda x: x'
+        elif hasattr(self._on_complete, '__name__'):
+            name = getattr(self._on_complete, '__name__')
+        else:
+            name = self._on_complete.__class__.__name__
+        val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
+        if hasattr(val, 'debug_str'):
+            val = val.debug_str()
+        prefix = {
+            self.INITIALIZED: '      ',
+            self.RUNNING:     '   >>>',
+            self.FINISHED:    '(done)'
+        }[self._state]
+        return '{} {}({}),'.format(prefix, name, val)
+
     def then(self, on_complete):
         # type: (Any, Callable) -> Any
         """
@@ -475,14 +494,22 @@ class Completion(_Promise):
             _first_promise=_first_promise,
             value=value,
             on_complete=on_complete
-        ).then(
+        ).add_progress(message, mgr, calc_percent)
+
+        return c._first_promise
+
+    def add_progress(self,
+                     message,  # type: str
+                     mgr,
+                     calc_percent=None  # type: Optional[Callable[[], Any]]
+                     ):
+        return self.then(
             on_complete=ProgressReference(
                 message=message,
                 mgr=mgr,
                 completion=calc_percent
             )
         )
-        return c._first_promise
 
     def fail(self, e):
         super(Completion, self).fail(e)
@@ -560,6 +587,16 @@ class Completion(_Promise):
         We must wait for a read operation only if it is not complete.
         """
         return self.is_errored or (self.has_result)
+
+    def pretty_print(self):
+
+        reprs = '\n'.join(p.pretty_print_1() for p in iter(self._first_promise))
+        return """<{}>[\n{}\n]""".format(self.__class__.__name__, reprs)
+
+
+def pretty_print(completions):
+    # type: (List[Completion]) -> str
+    return ', '.join(c.pretty_print() for c in completions)
 
 
 def raise_if_exception(c):
