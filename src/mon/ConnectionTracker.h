@@ -148,8 +148,8 @@ class ConnectionTracker {
  private:
   epoch_t epoch;
   uint64_t version;
-  map<int,ConnectionReport*> peer_reports;
-  mutable ConnectionReport my_reports;
+  map<int,ConnectionReport> peer_reports;
+  mutable ConnectionReport *my_reports;
   double half_life;
   RankProvider *owner;
   int rank;
@@ -158,39 +158,31 @@ class ConnectionTracker {
   const ConnectionReport *reports(int p) const;
 
   void clear_peer_reports() {
-    peer_reports.erase(rank);
-    for (auto i : peer_reports) {
-      delete i.second;
-    }
     peer_reports.clear();
+    my_reports = &peer_reports[rank];
   }
 
  public:
   ConnectionTracker(RankProvider *o, int rank, double hl) :
     epoch(0), version(0),
     half_life(hl), owner(o), rank(rank) {
-    peer_reports[rank] = &my_reports;
-    my_reports.rank = rank;
+    my_reports = &peer_reports[rank];
+    my_reports->rank = rank;
   }
   ConnectionTracker(const ConnectionTracker& o) :
     epoch(o.epoch), version(o.version),
     half_life(o.half_life), owner(o.owner), rank(o.rank)
   {
-    my_reports = o.my_reports;
-    for (const auto& i : o.peer_reports) {
-      if (i.first == rank) continue;
-      peer_reports[i.first] = new ConnectionReport(*i.second);
-    }
-    peer_reports[rank] = &my_reports;
+    peer_reports = o.peer_reports;
+    my_reports = &peer_reports[rank];
   }
   void notify_reset() { clear_peer_reports(); }
   void notify_rank_changed(int new_rank) {
     if (new_rank == rank) return;
-    delete peer_reports[new_rank];
-    peer_reports.erase(new_rank);
+    peer_reports[new_rank] = *my_reports;
     peer_reports.erase(rank);
-    peer_reports[new_rank] = &my_reports;
-    my_reports.rank = new_rank;
+    my_reports = &peer_reports[new_rank];
+    my_reports->rank = new_rank;
     rank = new_rank;
   }
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
