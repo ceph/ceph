@@ -405,21 +405,21 @@ def ceph_mons(ctx, config):
                     started=True,
                 )
 
-                while True:
-                    log.info('Waiting for %d mons in monmap...' % (num_mons))
-                    r = shell(
-                        ctx=ctx,
-                        cluster_name=cluster_name,
-                        remote=remote,
-                        args=[
-                            'ceph', 'mon', 'dump', '-f', 'json',
-                        ],
-                        stdout=StringIO(),
-                    )
-                    j = json.loads(r.stdout.getvalue())
-                    if len(j['mons']) == num_mons:
-                        break
-                    time.sleep(1)
+                with contextutil.safe_while(sleep=1, tries=180) as proceed:
+                    while proceed():
+                        log.info('Waiting for %d mons in monmap...' % (num_mons))
+                        r = shell(
+                            ctx=ctx,
+                            cluster_name=cluster_name,
+                            remote=remote,
+                            args=[
+                                'ceph', 'mon', 'dump', '-f', 'json',
+                            ],
+                            stdout=StringIO(),
+                        )
+                        j = json.loads(r.stdout.getvalue())
+                        if len(j['mons']) == num_mons:
+                            break
 
         # refresh ceph.conf files for all mons + first mgr
         """
