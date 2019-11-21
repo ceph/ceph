@@ -175,7 +175,6 @@ export class RbdTrashListComponent implements OnInit {
 
   restoreModal() {
     const initialState = {
-      metaType: 'RBD',
       poolName: this.selection.first().pool_name,
       namespace: this.selection.first().namespace,
       imageName: this.selection.first().name,

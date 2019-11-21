@@ -16,7 +16,6 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   styleUrls: ['./rbd-trash-restore-modal.component.scss']
 })
 export class RbdTrashRestoreModalComponent implements OnInit {
-  metaType: string;
   poolName: string;
   namespace: string;
   imageName: string;
