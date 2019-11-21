@@ -480,8 +480,10 @@ void ActivePyModules::notify_all(const std::string &notify_type,
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "queuing notify to " << name << dendl;
-    finisher.queue(new LambdaContext([module, notify_type, notify_id](int r){
-      module->notify(notify_type, notify_id);
+    // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
+    finisher.queue(new LambdaContext([module=module, notify_type, notify_id]
+      (int r){ 
+        module->notify(notify_type, notify_id); 
     }));
   }
 }
@@ -499,7 +501,8 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
     // log_entry: we take a copy because caller's instance is
     // probably ephemeral.
     dout(15) << "queuing notify (clog) to " << name << dendl;
-    finisher.queue(new LambdaContext([module, log_entry](int r){
+    // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
+    finisher.queue(new LambdaContext([module=module, log_entry](int r){
       module->notify_clog(log_entry);
     }));
   }
@@ -991,9 +994,10 @@ void ActivePyModules::config_notify()
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "notify (config) " << name << dendl;
-    finisher.queue(new LambdaContext([module](int r){
-					 module->config_notify();
-				       }));
+    // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
+    finisher.queue(new LambdaContext([module=module](int r){ 
+      module->config_notify();
+    }));
   }
 }
 
