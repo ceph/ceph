@@ -105,7 +105,8 @@ $SUDO $CEPH_DAEMON --image $IMAGE_MASTER bootstrap \
       --fsid $FSID \
       --config $ORIG_CONFIG \
       --output-config $CONFIG \
-      --output-keyring $KEYRING
+      --output-keyring $KEYRING \
+      --allow-overwrite
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
@@ -172,10 +173,11 @@ $SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
 # add osd.{1,2,..}
 dd if=/dev/zero of=$TMPDIR/$OSD_IMAGE_NAME bs=1 count=0 seek=$OSD_IMAGE_SIZE
 loop_dev=$(losetup -f)
-losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
-pvcreate $loop_dev && vgcreate $OSD_VG_NAME $loop_dev
+$SUDO vgremove -f $OSD_VG_NAME || true
+$SUDO losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
+$SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
-    lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
+    $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
     $SUDO $CEPH_DAEMON shell --config $CONFIG --keyring $KEYRING -- \
             ceph orchestrator osd create \
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
@@ -187,7 +189,7 @@ done
 ## adopt
 for tarball in $TEST_TARS; do
     TMP_TAR_DIR=`mktemp -d -p $TMPDIR`
-    tar xzvf $tarball -C $TMP_TAR_DIR
+    $SUDO tar xzvf $tarball -C $TMP_TAR_DIR
     NAMES=$($SUDO $CEPH_DAEMON ls --legacy-dir $TMP_TAR_DIR | jq -r '.[].name')
     for name in $NAMES; do
         # TODO: skip osd test for now
@@ -206,7 +208,7 @@ for tarball in $TEST_TARS; do
     done
     # clean-up before next iter
     $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID_LEGACY --force
-    rm -rf $TMP_TAR_DIR
+    $SUDO rm -rf $TMP_TAR_DIR
 done
 
 ## unit
