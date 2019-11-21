@@ -9,6 +9,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/mirror/snapshot/WriteImageStateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 
@@ -136,11 +137,45 @@ void CreateNonPrimaryRequest<I>::handle_create_snapshot(int r) {
     return;
   }
 
-  if (m_snap_id != nullptr) {
+  write_image_state();
+}
+
+template <typename I>
+void CreateNonPrimaryRequest<I>::write_image_state() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  uint64_t snap_id;
+  {
     std::shared_lock image_locker{m_image_ctx->image_lock};
     cls::rbd::MirrorNonPrimarySnapshotNamespace ns{m_primary_mirror_uuid,
                                                    m_primary_snap_id};
-    *m_snap_id = m_image_ctx->get_snap_id(ns, m_snap_name);
+    snap_id = m_image_ctx->get_snap_id(ns, m_snap_name);
+  }
+
+  if (m_snap_id != nullptr) {
+    *m_snap_id = snap_id;
+  }
+
+  auto ctx = create_context_callback<
+    CreateNonPrimaryRequest<I>,
+    &CreateNonPrimaryRequest<I>::handle_write_image_state>(this);
+
+  auto req = WriteImageStateRequest<I>::create(m_image_ctx, snap_id,
+                                               m_image_state, ctx);
+  req->send();
+}
+
+template <typename I>
+void CreateNonPrimaryRequest<I>::handle_write_image_state(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to write image state: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
   }
 
   finish(0);
