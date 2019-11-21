@@ -63,10 +63,10 @@ class Module(MgrModule):
         """
         Format a number without units, so as to fit into `width` characters, substituting
         an appropriate unit suffix.
-        
+
         Use decimal for dimensionless things, use base 2 (decimal=False) for byte sizes/rates.
         """
-        
+
         factor = 1000 if decimal else 1024
         units = [' ', 'k', 'M', 'G', 'T', 'P']
         unit = 0
@@ -91,12 +91,12 @@ class Module(MgrModule):
         else:
             return formatted
 
-    def format_dimless(self, n, width, colored=True):
+    def format_dimless(self, n, width, colored=False):
         return self.format_units(n, width, colored, decimal=True)
-    
-    def format_bytes(self, n, width, colored=True):
+
+    def format_bytes(self, n, width, colored=False):
         return self.format_units(n, width, colored, decimal=False)
-        
+
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         #self.log.error("get_latest {0} data={1}".format(stat, data))
