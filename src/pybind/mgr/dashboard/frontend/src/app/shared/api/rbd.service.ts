@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import { map } from 'rxjs/operators';
 
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
+import { ImageSpec } from '../models/image-spec';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
 import { ApiModule } from './api.module';
 import { RbdPool } from './rbd.model';
@@ -16,19 +17,6 @@ import { RbdPool } from './rbd.model';
 export class RbdService {
   constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {}
 
-  getImageSpec(poolName: string, namespace: string, rbdName: string) {
-    namespace = namespace ? `${namespace}/` : '';
-    return `${poolName}/${namespace}${rbdName}`;
-  }
-
-  parseImageSpec(@cdEncodeNot imageSpec: string) {
-    const imageSpecSplited = imageSpec.split('/');
-    const poolName = imageSpecSplited[0];
-    const namespace = imageSpecSplited.length >= 3 ? imageSpecSplited[1] : null;
-    const imageName = imageSpecSplited.length >= 3 ? imageSpecSplited[2] : imageSpecSplited[1];
-    return [poolName, namespace, imageName];
-  }
-
   isRBDPool(pool) {
     return _.indexOf(pool.application_metadata, 'rbd') !== -1 && !pool.pool_name.includes('/');
   }
@@ -37,23 +25,20 @@ export class RbdService {
     return this.http.post('api/block/image', rbd, { observe: 'response' });
   }
 
-  delete(poolName, namespace, rbdName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
-    return this.http.delete(`api/block/image/${encodeURIComponent(imageSpec)}`, {
+  delete(imageSpec: ImageSpec) {
+    return this.http.delete(`api/block/image/${imageSpec.toStringEncoded()}`, {
       observe: 'response'
     });
   }
 
-  update(poolName, namespace, rbdName, rbd) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
-    return this.http.put(`api/block/image/${encodeURIComponent(imageSpec)}`, rbd, {
+  update(imageSpec: ImageSpec, rbd) {
+    return this.http.put(`api/block/image/${imageSpec.toStringEncoded()}`, rbd, {
       observe: 'response'
     });
   }
 
-  get(poolName, namespace, rbdName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
-    return this.http.get(`api/block/image/${encodeURIComponent(imageSpec)}`);
+  get(imageSpec: ImageSpec) {
+    return this.http.get(`api/block/image/${imageSpec.toStringEncoded()}`);
   }
 
   list() {
@@ -75,16 +60,14 @@ export class RbdService {
     );
   }
 
-  copy(poolName, namespace, rbdName, rbd) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
-    return this.http.post(`api/block/image/${encodeURIComponent(imageSpec)}/copy`, rbd, {
+  copy(imageSpec: ImageSpec, rbd) {
+    return this.http.post(`api/block/image/${imageSpec.toStringEncoded()}/copy`, rbd, {
       observe: 'response'
     });
   }
 
-  flatten(poolName, namespace, rbdName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
-    return this.http.post(`api/block/image/${encodeURIComponent(imageSpec)}/flatten`, null, {
+  flatten(imageSpec: ImageSpec) {
+    return this.http.post(`api/block/image/${imageSpec.toStringEncoded()}/flatten`, null, {
       observe: 'response'
     });
   }
@@ -93,23 +76,21 @@ export class RbdService {
     return this.http.get('api/block/image/default_features');
   }
 
-  createSnapshot(poolName, namespace, rbdName, @cdEncodeNot snapshotName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
+  createSnapshot(imageSpec: ImageSpec, @cdEncodeNot snapshotName) {
     const request = {
       snapshot_name: snapshotName
     };
-    return this.http.post(`api/block/image/${encodeURIComponent(imageSpec)}/snap`, request, {
+    return this.http.post(`api/block/image/${imageSpec.toStringEncoded()}/snap`, request, {
       observe: 'response'
     });
   }
 
-  renameSnapshot(poolName, namespace, rbdName, snapshotName, @cdEncodeNot newSnapshotName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
+  renameSnapshot(imageSpec: ImageSpec, snapshotName, @cdEncodeNot newSnapshotName) {
     const request = {
       new_snap_name: newSnapshotName
     };
     return this.http.put(
-      `api/block/image/${encodeURIComponent(imageSpec)}/snap/${snapshotName}`,
+      `api/block/image/${imageSpec.toStringEncoded()}/snap/${snapshotName}`,
       request,
       {
         observe: 'response'
@@ -117,13 +98,12 @@ export class RbdService {
     );
   }
 
-  protectSnapshot(poolName, namespace, rbdName, snapshotName, @cdEncodeNot isProtected) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
+  protectSnapshot(imageSpec: ImageSpec, snapshotName, @cdEncodeNot isProtected) {
     const request = {
       is_protected: isProtected
     };
     return this.http.put(
-      `api/block/image/${encodeURIComponent(imageSpec)}/snap/${snapshotName}`,
+      `api/block/image/${imageSpec.toStringEncoded()}/snap/${snapshotName}`,
       request,
       {
         observe: 'response'
@@ -131,32 +111,26 @@ export class RbdService {
     );
   }
 
-  rollbackSnapshot(poolName, namespace, rbdName, snapshotName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
+  rollbackSnapshot(imageSpec: ImageSpec, snapshotName) {
     return this.http.post(
-      `api/block/image/${encodeURIComponent(imageSpec)}/snap/${snapshotName}/rollback`,
+      `api/block/image/${imageSpec.toStringEncoded()}/snap/${snapshotName}/rollback`,
       null,
       { observe: 'response' }
     );
   }
 
-  cloneSnapshot(poolName, namespace, rbdName, snapshotName, request) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
+  cloneSnapshot(imageSpec: ImageSpec, snapshotName, request) {
     return this.http.post(
-      `api/block/image/${encodeURIComponent(imageSpec)}/snap/${snapshotName}/clone`,
+      `api/block/image/${imageSpec.toStringEncoded()}/snap/${snapshotName}/clone`,
       request,
       { observe: 'response' }
     );
   }
 
-  deleteSnapshot(poolName, namespace, rbdName, snapshotName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
-    return this.http.delete(
-      `api/block/image/${encodeURIComponent(imageSpec)}/snap/${snapshotName}`,
-      {
-        observe: 'response'
-      }
-    );
+  deleteSnapshot(imageSpec: ImageSpec, snapshotName) {
+    return this.http.delete(`api/block/image/${imageSpec.toStringEncoded()}/snap/${snapshotName}`, {
+      observe: 'response'
+    });
   }
 
   listTrash() {
@@ -180,10 +154,9 @@ export class RbdService {
     });
   }
 
-  moveTrash(poolName, namespace, rbdName, delay) {
-    const imageSpec = this.getImageSpec(poolName, namespace, rbdName);
+  moveTrash(imageSpec: ImageSpec, delay) {
     return this.http.post(
-      `api/block/image/${encodeURIComponent(imageSpec)}/move_trash`,
+      `api/block/image/${imageSpec.toStringEncoded()}/move_trash`,
       { delay: delay },
       { observe: 'response' }
     );
@@ -195,19 +168,17 @@ export class RbdService {
     });
   }
 
-  restoreTrash(poolName, namespace, imageId, @cdEncodeNot newImageName) {
-    const imageSpec = this.getImageSpec(poolName, namespace, imageId);
+  restoreTrash(imageSpec: ImageSpec, @cdEncodeNot newImageName: string) {
     return this.http.post(
-      `api/block/image/trash/${encodeURIComponent(imageSpec)}/restore`,
+      `api/block/image/trash/${imageSpec.toStringEncoded()}/restore`,
       { new_image_name: newImageName },
       { observe: 'response' }
     );
   }
 
-  removeTrash(poolName, namespace, imageId, force = false) {
-    const imageSpec = this.getImageSpec(poolName, namespace, imageId);
+  removeTrash(imageSpec: ImageSpec, force = false) {
     return this.http.delete(
-      `api/block/image/trash/${encodeURIComponent(imageSpec)}/?force=${force}`,
+      `api/block/image/trash/${imageSpec.toStringEncoded()}/?force=${force}`,
       { observe: 'response' }
     );
   }

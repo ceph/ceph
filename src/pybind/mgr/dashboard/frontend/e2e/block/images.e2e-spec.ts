@@ -37,8 +37,8 @@ describe('Images page', () => {
 
   describe('create, edit & delete image test', () => {
     const poolName = 'e2e_images_pool';
-    const imageName = 'e2e_images_image';
-    const newImageName = 'e2e_images_image_new';
+    const imageName = 'e2e_images#image';
+    const newImageName = 'e2e_images#image_new';
 
     beforeAll(async () => {
       await pools.navigateTo('create'); // Need pool for image testing
@@ -70,9 +70,9 @@ describe('Images page', () => {
   });
 
   describe('move to trash, restore and purge image tests', () => {
-    const poolName = 'trashpool';
-    const imageName = 'trashimage';
-    const newImageName = 'newtrashimage';
+    const poolName = 'trash_pool';
+    const imageName = 'trash#image';
+    const newImageName = 'newtrash#image';
 
     beforeAll(async () => {
       await pools.navigateTo('create'); // Need pool for image testing

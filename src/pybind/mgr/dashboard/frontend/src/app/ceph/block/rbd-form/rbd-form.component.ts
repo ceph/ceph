@@ -18,6 +18,7 @@ import {
   RbdConfigurationSourceField
 } from '../../../shared/models/configuration';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -235,13 +236,11 @@ export class RbdFormComponent implements OnInit {
       this.mode === this.rbdFormMode.copying
     ) {
       this.route.params.subscribe((params: { image_spec: string; snap: string }) => {
-        const [poolName, namespace, rbdName] = this.rbdService.parseImageSpec(
-          decodeURIComponent(params.image_spec)
-        );
+        const imageSpec = ImageSpec.fromString(decodeURIComponent(params.image_spec));
         if (params.snap) {
           this.snapName = decodeURIComponent(params.snap);
         }
-        promisses[Promisse.RbdServiceGet] = this.rbdService.get(poolName, namespace, rbdName);
+        promisses[Promisse.RbdServiceGet] = this.rbdService.get(imageSpec);
       });
     } else {
       // New image
@@ -496,11 +495,11 @@ export class RbdFormComponent implements OnInit {
 
   setResponse(response: RbdFormResponseModel, snapName: string) {
     this.response = response;
-    const imageSpec = this.rbdService.getImageSpec(
+    const imageSpec = new ImageSpec(
       response.pool_name,
       response.namespace,
       response.name
-    );
+    ).toString();
     if (this.mode === this.rbdFormMode.cloning) {
       this.rbdForm.get('parent').setValue(`${imageSpec}@${snapName}`);
     } else if (this.mode === this.rbdFormMode.copying) {
@@ -618,44 +617,35 @@ export class RbdFormComponent implements OnInit {
   }
 
   editAction(): Observable<any> {
+    const imageSpec = new ImageSpec(
+      this.response.pool_name,
+      this.response.namespace,
+      this.response.name
+    );
     return this.taskWrapper.wrapTaskAroundCall({
       task: new FinishedTask('rbd/edit', {
-        image_spec: this.rbdService.getImageSpec(
-          this.response.pool_name,
-          this.response.namespace,
-          this.response.name
-        )
+        image_spec: imageSpec.toString()
       }),
-      call: this.rbdService.update(
-        this.response.pool_name,
-        this.response.namespace,
-        this.response.name,
-        this.editRequest()
-      )
+      call: this.rbdService.update(imageSpec, this.editRequest())
     });
   }
 
   cloneAction(): Observable<any> {
     const request = this.cloneRequest();
+    const imageSpec = new ImageSpec(
+      this.response.pool_name,
+      this.response.namespace,
+      this.response.name
+    );
     return this.taskWrapper.wrapTaskAroundCall({
       task: new FinishedTask('rbd/clone', {
-        parent_image_spec: this.rbdService.get(
-          this.response.pool_name,
-          this.response.namespace,
-          this.response.name
-        ),
+        parent_image_spec: imageSpec.toString(),
         parent_snap_name: this.snapName,
         child_pool_name: request.child_pool_name,
         child_namespace: request.child_namespace,
         child_image_name: request.child_image_name
       }),
-      call: this.rbdService.cloneSnapshot(
-        this.response.pool_name,
-        this.response.namespace,
-        this.response.name,
-        this.snapName,
-        request
-      )
+      call: this.rbdService.cloneSnapshot(imageSpec, this.snapName, request)
     });
   }
 
@@ -690,24 +680,19 @@ export class RbdFormComponent implements OnInit {
 
   copyAction(): Observable<any> {
     const request = this.copyRequest();
-
+    const imageSpec = new ImageSpec(
+      this.response.pool_name,
+      this.response.namespace,
+      this.response.name
+    );
     return this.taskWrapper.wrapTaskAroundCall({
       task: new FinishedTask('rbd/copy', {
-        src_image_spec: this.rbdService.getImageSpec(
-          this.response.pool_name,
-          this.response.namespace,
-          this.response.name
-        ),
+        src_image_spec: imageSpec.toString(),
         dest_pool_name: request.dest_pool_name,
         dest_namespace: request.dest_namespace,
         dest_image_name: request.dest_image_name
       }),
-      call: this.rbdService.copy(
-        this.response.pool_name,
-        this.response.namespace,
-        this.response.name,
-        request
-      )
+      call: this.rbdService.copy(imageSpec, request)
     });
   }
 
