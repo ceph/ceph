@@ -131,18 +131,8 @@ void ConnectionTracker::get_total_connection_score(int peer_rank, double *rating
   double rate = 0;
   int live = 0;
 
-  bool alive;
-  get_connection_score(peer_rank, &rate, &alive); //check my scores for the rank
-  if (!alive) {
-    rate = 0;
-  } else {
-    ++live;
-  }
-
-
   for (const auto i : peer_reports) { // loop through all the scores
-    if (i.first == rank ||
-	i.first == peer_rank) { // ... except the ones it has for itself, of course!
+    if (i.first == peer_rank) { // ... except the ones it has for itself, of course!
       continue;
     }
     const auto& report = i.second;
