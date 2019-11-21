@@ -105,7 +105,7 @@ struct Owner : public ElectionOwner, RankProvider {
  Owner(int r, ElectionLogic::election_strategy es, double tracker_halflife,
        Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
-    peer_tracker(this, tracker_halflife),
+    peer_tracker(this, rank, tracker_halflife),
     logic(this, es, &peer_tracker, g_ceph_context),
     victory_accepters(0),
     timer_steps(-1), timer_election(true) {

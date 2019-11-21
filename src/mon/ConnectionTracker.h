@@ -12,11 +12,60 @@
  * 
  */
 
-#ifndef CEPH_MON_CONNECTIONTRACKER_H
-#define CEPH_MON_CONNECTIONTRACKER_H
+#ifndef CEPH_MON_CONNECTIONTRACKER2_H
+#define CEPH_MON_CONNECTIONTRACKER2_H
 
 #include "include/types.h"
-#include "ConnectionTracker2.h"
+
+struct ConnectionReport {
+  int rank = -1; // mon rank this state belongs to
+  std::map<int, bool> current; // true if connected to the other mon
+  std::map<int, double> history; // [0-1]; the connection reliability
+  epoch_t epoch = 0; // the (local) election epoch the ConnectionReport came from
+  uint64_t epoch_version = 0; // version of the ConnectionReport within the epoch
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(rank, bl);
+    encode(current, bl);
+    encode(history, bl);
+    encode(epoch, bl);
+    encode(epoch_version, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(rank, bl);
+    decode(current, bl);
+    decode(history, bl);
+    decode(epoch, bl);
+    decode(epoch_version, bl);
+    DECODE_FINISH(bl);
+  }
+  bool operator==(const ConnectionReport& o) const {
+    return o.rank == rank && o.current == current &&
+      o.history == history && o.epoch == epoch &&
+      o.epoch_version == epoch_version;
+  }
+};
+WRITE_CLASS_ENCODER(ConnectionReport);
+
+class RankProvider {
+ public:
+  /**
+   * Get the rank of the running daemon.
+   * It can be -1, meaning unknown/invalid, or it
+   * can be >1.
+   * You should not invoke the functions generate_report_of_peers()
+   * or get_total_connection_score() with an unknown rank.
+   */
+  virtual int get_my_rank() const = 0;
+  /**
+   * Asks our owner to encode us and persist it to disk.
+   * Presently we do this every tenth update.
+   */
+  virtual void persist_connectivity_scores() = 0;
+  virtual ~RankProvider() {}
+};
 
 class ConnectionTracker {
  public:
@@ -53,12 +102,6 @@ class ConnectionTracker {
    * Get our current report from a peer of what it sees.
    */
   const ConnectionReport *get_peer_view(int peer) const;
-  /**
-   * Remove the scores for a given peer. Use this
-   * when it gets removed from the cluster.
-   */
-  // TODO: This isn't used anywhere yet and needs to be
-  void forget_peer(int peer);
   
   /**
    * Report a connection to a peer rank has been considered alive for
@@ -69,12 +112,12 @@ class ConnectionTracker {
    * passed -- you can report a 10-second death immediately followed
    * by reporting 5 seconds of liveness if your metrics are delayed.)
    */
-  void report_live_connection(int rank, double units_alive);
+  void report_live_connection(int peer_rank, double units_alive);
   /**
    * Report a connection to a peer rank has been considered dead for
    * the given time duration, analogous to that above.
    */
-  void report_dead_connection(int rank, double units_dead);
+  void report_dead_connection(int peer_rank, double units_dead);
   /**
    * Set the half-life for dropping connection state
    * out of the ongoing score.
@@ -89,54 +132,68 @@ class ConnectionTracker {
    * Get the connection score and whether it has most recently
    * been reported alive for a peer rank.
    */
-  void get_connection_score(int rank, double *rating, bool *alive) const;
+  void get_connection_score(int peer_rank, double *rating, bool *alive) const;
   /**
    * Get the total connection score of a rank across
    * all peers, and the count of how many electors think it's alive.
    * For this summation, if a rank reports a peer as down its score is zero.
    */
-  void get_total_connection_score(int rank, double *rating, int *live_count) const;
+  void get_total_connection_score(int peer_rank, double *rating,
+				  int *live_count) const;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);
 
  private:
-  struct PeerReportTracker {
-    struct PeerConnection {
-      double score;
-      bool alive;
-      PeerConnection() : score(1), alive(false) {}
-    };
-    map<int, PeerConnection> peers;
-  };
-
   epoch_t epoch;
   uint64_t version;
-  PeerReportTracker conn_tracker; // track my view of peer reliability
-  map<int,ConnectionReport> peer_reports; // keep latest reports of peers
+  map<int,ConnectionReport*> peer_reports;
+  mutable ConnectionReport my_reports;
   double half_life;
   RankProvider *owner;
-  ConnectionTracker2 extra_tracker;
-  int get_my_rank() const { return owner->get_my_rank(); }
+  int rank;
+  int get_my_rank() const { return rank; }
+  ConnectionReport *reports(int p);
+  const ConnectionReport *reports(int p) const;
+
+  void clear_peer_reports() {
+    peer_reports.erase(rank);
+    for (auto i : peer_reports) {
+      delete i.second;
+    }
+    peer_reports.clear();
+  }
 
  public:
-  ConnectionTracker(RankProvider *o, double hl) : epoch(0), version(0),
-						  half_life(hl), owner(o),
-						  extra_tracker(o, o->get_my_rank(), hl)
-  {}
-  void notify_reset() {
-    conn_tracker = PeerReportTracker();
-    peer_reports.clear();
-
-    extra_tracker.notify_reset();
+  ConnectionTracker(RankProvider *o, int rank, double hl) :
+    epoch(0), version(0),
+    half_life(hl), owner(o), rank(rank) {
+    peer_reports[rank] = &my_reports;
+    my_reports.rank = rank;
   }
+  ConnectionTracker(const ConnectionTracker& o) :
+    epoch(o.epoch), version(o.version),
+    half_life(o.half_life), owner(o.owner), rank(o.rank)
+  {
+    my_reports = o.my_reports;
+    for (const auto& i : o.peer_reports) {
+      if (i.first == rank) continue;
+      peer_reports[i.first] = new ConnectionReport(*i.second);
+    }
+    peer_reports[rank] = &my_reports;
+  }
+  void notify_reset() { clear_peer_reports(); }
   void notify_rank_changed(int new_rank) {
-    conn_tracker.peers.erase(new_rank);
+    if (new_rank == rank) return;
+    delete peer_reports[new_rank];
     peer_reports.erase(new_rank);
-
-    extra_tracker.notify_rank_changed(new_rank);
+    peer_reports.erase(rank);
+    peer_reports[new_rank] = &my_reports;
+    my_reports.rank = new_rank;
+    rank = new_rank;
   }
-  };
+  
+};
 
 WRITE_CLASS_ENCODER(ConnectionTracker);
 
