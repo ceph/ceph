@@ -52,18 +52,38 @@ public:
   friend std::ostream &operator<<(std::ostream &os,
                                   const GenericLogOperation<U> &op);
   virtual const std::shared_ptr<GenericLogEntry> get_log_entry() = 0;
-  virtual const std::shared_ptr<SyncPointLogEntry> get_sync_point_log_entry() { return nullptr; }
-  virtual const std::shared_ptr<GeneralWriteLogEntry> get_gen_write_log_entry() { return nullptr; }
-  virtual const std::shared_ptr<WriteLogEntry> get_write_log_entry() { return nullptr; }
+  virtual const std::shared_ptr<SyncPointLogEntry> get_sync_point_log_entry() {
+    return nullptr;
+  }
+  virtual const std::shared_ptr<GeneralWriteLogEntry> get_gen_write_log_entry() {
+    return nullptr;
+  }
+  virtual const std::shared_ptr<WriteLogEntry> get_write_log_entry() {
+    return nullptr;
+  }
   virtual void appending() = 0;
   virtual void complete(int r) = 0;
-  virtual bool is_write() { return false; }
-  virtual bool is_sync_point() { return false; }
-  virtual bool is_discard() { return false; }
-  virtual bool is_writesame() { return false; }
-  virtual bool is_writing_op() { return false; }
-  virtual GeneralWriteLogOperation<T> *get_gen_write_op() { return nullptr; };
-  virtual WriteLogOperation<T> *get_write_op() { return nullptr; };
+  virtual bool is_write() {
+    return false;
+  }
+  virtual bool is_sync_point() {
+    return false;
+  }
+  virtual bool is_discard() {
+    return false;
+  }
+  virtual bool is_writesame() {
+    return false;
+  }
+  virtual bool is_writing_op() {
+    return false;
+  }
+  virtual GeneralWriteLogOperation<T> *get_gen_write_op() {
+    return nullptr;
+  };
+  virtual WriteLogOperation<T> *get_write_op() {
+    return nullptr;
+  };
 };
 
 template <typename T>
@@ -81,9 +101,15 @@ public:
   template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const SyncPointLogOperation<U> &op);
-  const std::shared_ptr<GenericLogEntry> get_log_entry() { return get_sync_point_log_entry(); }
-  const std::shared_ptr<SyncPointLogEntry> get_sync_point_log_entry() { return sync_point->log_entry; }
-  bool is_sync_point() { return true; }
+  const std::shared_ptr<GenericLogEntry> get_log_entry() {
+    return get_sync_point_log_entry();
+  }
+  const std::shared_ptr<SyncPointLogEntry> get_sync_point_log_entry() {
+    return sync_point->log_entry;
+  }
+  bool is_sync_point() {
+    return true;
+  }
   void appending();
   void complete(int r);
 };
@@ -110,8 +136,12 @@ public:
   template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const GeneralWriteLogOperation<U> &op);
-  GeneralWriteLogOperation<T> *get_gen_write_op() { return this; };
-  bool is_writing_op() { return true; }
+  GeneralWriteLogOperation<T> *get_gen_write_op() {
+    return this;
+  }
+  bool is_writing_op() {
+    return true;
+  }
   void appending();
   void complete(int r);
 };
@@ -135,10 +165,18 @@ public:
   template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const WriteLogOperation<T> &op);
-  const std::shared_ptr<GenericLogEntry> get_log_entry() { return get_write_log_entry(); }
-  const std::shared_ptr<WriteLogEntry> get_write_log_entry() { return log_entry; }
-  WriteLogOperation<T> *get_write_op() override { return this; }
-  bool is_write() { return true; }
+  const std::shared_ptr<GenericLogEntry> get_log_entry() {
+    return get_write_log_entry();
+  }
+  const std::shared_ptr<WriteLogEntry> get_write_log_entry() {
+    return log_entry;
+  }
+  WriteLogOperation<T> *get_write_op() override {
+    return this;
+  }
+  bool is_write() {
+    return true;
+  }
 };
 
 

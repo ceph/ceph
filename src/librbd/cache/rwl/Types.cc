@@ -22,7 +22,7 @@ DeferredContexts::~DeferredContexts() {
 }
 
 void DeferredContexts::add(Context* ctx) {
-    contexts.push_back(ctx);
+  contexts.push_back(ctx);
 }
 
 /*

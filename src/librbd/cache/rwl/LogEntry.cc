@@ -62,7 +62,7 @@ std::ostream& SyncPointLogEntry::format(std::ostream &os) const {
 };
 
 std::ostream &operator<<(std::ostream &os,
-                                const SyncPointLogEntry &entry) {
+                         const SyncPointLogEntry &entry) {
   return entry.format(os);
 }
 
@@ -83,7 +83,7 @@ std::ostream& GeneralWriteLogEntry::format(std::ostream &os) const {
 };
 
 std::ostream &operator<<(std::ostream &os,
-                                const GeneralWriteLogEntry &entry) {
+                         const GeneralWriteLogEntry &entry) {
   return entry.format(os);
 }
 
@@ -143,7 +143,7 @@ std::ostream& WriteLogEntry::format(std::ostream &os) const {
 };
 
 std::ostream &operator<<(std::ostream &os,
-                                const WriteLogEntry &entry) {
+                         const WriteLogEntry &entry) {
   return entry.format(os);
 }
 

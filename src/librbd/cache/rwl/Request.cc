@@ -177,6 +177,18 @@ std::ostream &operator<<(std::ostream &os,
 };
 
 template <typename T>
+void C_WriteRequest<T>::blockguard_acquired(GuardedRequestFunctionContext &guard_ctx) {
+  if (RWL_VERBOSE_LOGGING) {
+    ldout(rwl.m_image_ctx.cct, 20) << __func__ << " write_req=" << this << " cell=" << guard_ctx.m_cell << dendl;
+  }
+
+  ceph_assert(guard_ctx.m_cell);
+  this->detained = guard_ctx.m_state.detained; /* overlapped */
+  this->m_queued = guard_ctx.m_state.queued; /* queued behind at least one barrier */
+  this->set_cell(guard_ctx.m_cell);
+}
+
+template <typename T>
 void C_WriteRequest<T>::finish_req(int r) {
   if (RWL_VERBOSE_LOGGING) {
     ldout(rwl.m_image_ctx.cct, 15) << "write_req=" << this << " cell=" << this->get_cell() << dendl;
@@ -216,7 +228,17 @@ void C_WriteRequest<T>::setup_log_operations() {
 
 template <typename T>
 void C_WriteRequest<T>::schedule_append() {
-  // TODO: call rwl to complete it
+  ceph_assert(++m_appended == 1);
+  if (m_do_early_flush) {
+    /* This caller is waiting for persist, so we'll use their thread to
+     * expedite it */
+    rwl.flush_pmem_buffer(this->m_op_set->operations);
+    rwl.schedule_append(this->m_op_set->operations);
+  } else {
+    /* This is probably not still the caller's thread, so do the payload
+     * flushing/replicating later. */
+    rwl.schedule_flush_and_append(this->m_op_set->operations);
+  }
 }
 
 /**
@@ -237,7 +259,6 @@ bool C_WriteRequest<T>::alloc_resources()
   uint64_t bytes_cached = 0;
   uint64_t bytes_dirtied = 0;
 
-  ceph_assert(!rwl.m_lock.is_locked_by_me());
   ceph_assert(!resources.allocated);
   resources.buffers.reserve(this->image_extents.size());
   {
@@ -502,6 +523,33 @@ void C_WriteRequest<T>::dispatch()
     this->schedule_append();
   }
 }
+
+std::ostream &operator<<(std::ostream &os,
+                         const BlockGuardReqState &r) {
+  os << "barrier=" << r.barrier << ", "
+     << "current_barrier=" << r.current_barrier << ", "
+     << "detained=" << r.detained << ", "
+     << "queued=" << r.queued;
+  return os;
+};
+
+GuardedRequestFunctionContext::GuardedRequestFunctionContext(boost::function<void(GuardedRequestFunctionContext&)> &&callback)
+  : m_callback(std::move(callback)){ }
+
+GuardedRequestFunctionContext::~GuardedRequestFunctionContext(void) { }
+
+void GuardedRequestFunctionContext::finish(int r) {
+  ceph_assert(m_cell);
+  m_callback(*this);
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const GuardedRequest &r) {
+  os << "guard_ctx->m_state=[" << r.guard_ctx->m_state << "], "
+     << "block_extent.block_start=" << r.block_extent.block_start << ", "
+     << "block_extent.block_start=" << r.block_extent.block_end;
+  return os;
+};
 
 } // namespace rwl 
 } // namespace cache 

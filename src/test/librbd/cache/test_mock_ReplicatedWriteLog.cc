@@ -41,6 +41,10 @@ inline ImageCtx *get_image_ctx(MockImageCtx *image_ctx) {
 // template definitions
 #include "librbd/cache/ImageWriteback.cc"
 #include "librbd/cache/rwl/ImageCacheState.cc"
+#include "librbd/cache/rwl/SyncPoint.cc"
+#include "librbd/cache/rwl/Request.cc"
+#include "librbd/cache/rwl/Types.cc"
+#include "librbd/cache/rwl/LogOperation.cc"
 
 template class librbd::cache::ImageWriteback<librbd::MockImageCtx>;
 template class librbd::cache::rwl::ImageCacheState<librbd::MockImageCtx>;
@@ -65,8 +69,8 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
   void validate_cache_state(librbd::ImageCtx *image_ctx,
                             MockImageCacheStateRWL &state,
                             bool present, bool empty, bool clean,
-			    string host="", string path="",
-			    uint64_t size=0) {
+                            string host="", string path="",
+                            uint64_t size=0) {
     ConfigProxy &config = image_ctx->config;
     ASSERT_EQ(present, state.present);
     ASSERT_EQ(empty, state.empty);
@@ -96,8 +100,8 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
   void expect_context_complete(MockContextRWL& mock_context, int r) {
     EXPECT_CALL(mock_context, complete(r))
       .WillRepeatedly(Invoke([&mock_context](int r) {
-                  mock_context.do_complete(r);
-                }));
+                       mock_context.do_complete(r);
+                     }));
   }
 
   void expect_metadata_set(MockImageCtx& mock_image_ctx) {
