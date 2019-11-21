@@ -42,6 +42,7 @@ DISTRO_CODENAME_MAP = {
     "opensuse": {
         "15.0": "leap",
         "15.1": "leap",
+        "15.2": "leap",
         "42.2": "leap",
         "42.3": "leap",
     },
@@ -51,6 +52,7 @@ DISTRO_CODENAME_MAP = {
         "12.3": "sle",
         "15.0": "sle",
         "15.1": "sle",
+        "15.2": "sle",
     },
 }
 
