@@ -409,7 +409,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         Does nothing, as completions are processed in another thread.
         """
         if completions:
-            self.log.info("wait: promises={0}".format(completions))
+            self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 
             for p in completions:
                 p.finalize()

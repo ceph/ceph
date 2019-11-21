@@ -103,7 +103,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: (List[RookCompletion]) -> None
 
         if completions:
-            self.log.info("wait: promises={0}".format(completions))
+            self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 
             for p in completions:
                 p.evaluate()
