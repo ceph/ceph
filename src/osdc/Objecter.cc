@@ -1911,10 +1911,10 @@ void Objecter::close_session(OSDSession *s)
   logger->set(l_osdc_osd_sessions, osd_sessions.size());
 }
 
-void Objecter::wait_for_osd_map()
+void Objecter::wait_for_osd_map(epoch_t e)
 {
   unique_lock l(rwlock);
-  if (osdmap->get_epoch()) {
+  if (osdmap->get_epoch() >= e) {
     l.unlock();
     return;
   }
@@ -1925,7 +1925,7 @@ void Objecter::wait_for_osd_map()
   bool done;
   std::unique_lock mlock{lock};
   C_SafeCond *context = new C_SafeCond(lock, cond, &done, NULL);
-  waiting_for_map[0].push_back(pair<Context*, int>(context, 0));
+  waiting_for_map[e].push_back(pair<Context*, int>(context, 0));
   l.unlock();
   cond.wait(mlock, [&done] { return done; });
 }

@@ -2185,7 +2185,7 @@ private:
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
-  void wait_for_osd_map();
+  void wait_for_osd_map(epoch_t e=0);
 
   /**
    * Get std::list of entities blacklisted since this was last called,
