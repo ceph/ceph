@@ -24,6 +24,9 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/Types.h"
+#include "librbd/mirror/snapshot/GetImageStateRequest.h"
+#include "librbd/mirror/snapshot/RemoveImageStateRequest.h"
+#include "librbd/mirror/snapshot/SetImageStateRequest.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
@@ -1288,4 +1291,108 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer1_uuid));
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer2_uuid));
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+}
+
+TEST_F(TestMirroring, SnapshotImageState)
+{
+  REQUIRE_FORMAT_V2();
+
+  uint64_t features;
+  ASSERT_TRUE(get_features(&features));
+  features &= ~RBD_FEATURE_JOURNALING;
+  int order = 20;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
+                             &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
+  ASSERT_EQ(0, image.snap_create("snap"));
+
+  auto ictx = new librbd::ImageCtx(image_name, "", nullptr, m_ioctx, false);
+  ASSERT_EQ(0, ictx->state->open(0));
+  BOOST_SCOPE_EXIT(&ictx) {
+    if (ictx != nullptr) {
+      ictx->state->close();
+    }
+  } BOOST_SCOPE_EXIT_END;
+
+  {
+    C_SaferCond cond;
+    auto req = librbd::mirror::snapshot::SetImageStateRequest<>::create(
+      ictx, 123, &cond);
+    req->send();
+    ASSERT_EQ(0, cond.wait());
+  }
+
+  librbd::mirror::snapshot::ImageState image_state;
+  {
+    C_SaferCond cond;
+    auto req = librbd::mirror::snapshot::GetImageStateRequest<>::create(
+      ictx, 123, &image_state, &cond);
+    req->send();
+    ASSERT_EQ(0, cond.wait());
+  }
+
+  ASSERT_EQ(image_name, image_state.name);
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_EQ(features, image_state.features);
+  ASSERT_EQ(1U, image_state.snapshots.size());
+  ASSERT_EQ("snap", image_state.snapshots.begin()->second.name);
+  ASSERT_TRUE(image_state.metadata.empty());
+
+  {
+    C_SaferCond cond;
+    auto req = librbd::mirror::snapshot::RemoveImageStateRequest<>::create(
+      ictx, 123, &cond);
+    req->send();
+    ASSERT_EQ(0, cond.wait());
+  }
+
+  // test storing "large" image state in multiple objects
+
+  ASSERT_EQ(0, ictx->config.set_val("rbd_default_order", "8"));
+
+  for (int i = 0; i < 10; i++) {
+    ASSERT_EQ(0, image.metadata_set(stringify(i), std::string(1024, 'A' + i)));
+  }
+
+  {
+    C_SaferCond cond;
+    auto req = librbd::mirror::snapshot::SetImageStateRequest<>::create(
+      ictx, 123, &cond);
+    req->send();
+    ASSERT_EQ(0, cond.wait());
+  }
+
+  {
+    C_SaferCond cond;
+    auto req = librbd::mirror::snapshot::GetImageStateRequest<>::create(
+      ictx, 123, &image_state, &cond);
+    req->send();
+    ASSERT_EQ(0, cond.wait());
+  }
+
+  ASSERT_EQ(image_name, image_state.name);
+  ASSERT_EQ(features, image_state.features);
+  ASSERT_EQ(10U, image_state.metadata.size());
+  for (int i = 0; i < 10; i++) {
+    auto &bl = image_state.metadata[stringify(i)];
+    ASSERT_EQ(0, strncmp(std::string(1024, 'A' + i).c_str(), bl.c_str(),
+                         bl.length()));
+  }
+
+  {
+    C_SaferCond cond;
+    auto req = librbd::mirror::snapshot::RemoveImageStateRequest<>::create(
+      ictx, 123, &cond);
+    req->send();
+    ASSERT_EQ(0, cond.wait());
+  }
+
+  ASSERT_EQ(0, ictx->state->close());
+  ictx = nullptr;
+
+  ASSERT_EQ(0, image.snap_remove("snap"));
+  ASSERT_EQ(0, image.close());
+  ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
 }
