@@ -1352,7 +1352,8 @@ def command_enter():
 @infer_fsid
 def command_ceph_volume():
     # type: () -> None
-    make_log_dir(args.fsid)
+    if args.fsid:
+        make_log_dir(args.fsid)
 
     mounts = get_container_mounts(args.fsid, 'osd', None)
 
