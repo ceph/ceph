@@ -75,6 +75,10 @@ function expect_false()
         if "$@"; then return 1; else return 0; fi
 }
 
+## prepare + check host
+$SUDO $CEPH_DAEMON prepare-host
+$SUDO $CEPH_DAEMON check-host
+
 ## version + --image
 $SUDO CEPH_DAEMON_IMAGE=$IMAGE_NAUTILUS $CEPH_DAEMON version \
     | grep 'ceph version 14'
