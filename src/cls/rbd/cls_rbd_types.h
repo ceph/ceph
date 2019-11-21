@@ -637,6 +637,9 @@ struct SnapshotNamespace : public SnapshotNamespaceVariant {
   inline bool operator<(const SnapshotNamespaceVariant& sn) const {
     return static_cast<const SnapshotNamespaceVariant&>(*this) < sn;
   }
+  inline bool operator!=(const SnapshotNamespaceVariant& sn) const {
+    return !(*this == sn);
+  }
 };
 WRITE_CLASS_ENCODER(SnapshotNamespace);
 
