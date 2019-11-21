@@ -9,6 +9,7 @@ import os
 import random
 import tempfile
 import multiprocessing.pool
+import subprocess
 
 from ceph.deployment import inventory
 from mgr_module import MgrModule
@@ -347,6 +348,43 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.set_store("ssh_config", None)
         self.ssh_config_tmp = None
         return 0, "", ""
+
+    @orchestrator._cli_write_command(
+        'ssh generate-key',
+        desc='Generate a cluster SSH key (if not present)')
+    def _generate_key(self):
+        if not self.ssh_pub or not self.ssh_key:
+            self.log.info('Generating ssh key...')
+            tmp_dir = tempfile.TemporaryDirectory()
+            path = tmp_dir.name + '/key'
+            try:
+                subprocess.call([
+                    '/usr/bin/ssh-keygen',
+                    '-C', 'ceph-%s' % self._cluster_fsid,
+                    '-N', '',
+                    '-f', path
+                ])
+                with open(path, 'r') as f:
+                    secret = f.read()
+                with open(path + '.pub', 'r') as f:
+                    pub = f.read()
+            finally:
+                os.unlink(path)
+                os.unlink(path + '.pub')
+                tmp_dir.cleanup()
+            self.set_store('ssh_identity_key', secret)
+            self.set_store('ssh_identity_pub', pub)
+            self._reconfig_ssh()
+        return 0, '', ''
+
+    @orchestrator._cli_write_command(
+        'ssh clear-key',
+        desc='Clear cluster SSH key')
+    def _clear_key(self):
+        self.set_store('ssh_identity_key', None)
+        self.set_store('ssh_identity_pub', None)
+        self._reconfig_ssh()
+        return 0, '', ''
 
     @orchestrator._cli_read_command(
         'ssh get-pub-key',
