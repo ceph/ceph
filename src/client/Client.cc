@@ -610,7 +610,8 @@ void Client::trim_cache(bool trim_kernel_dcache)
 {
   uint64_t max = cct->_conf->client_cache_size;
   ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << max << dendl;
-  unsigned last = 0;
+  uint64_t before = lru.lru_get_size();
+  uint64_t last = 0;
   while (lru.lru_get_size() != last) {
     last = lru.lru_get_size();
 
@@ -624,7 +625,7 @@ void Client::trim_cache(bool trim_kernel_dcache)
     trim_dentry(dn);
   }
 
-  if (trim_kernel_dcache && lru.lru_get_size() > max)
+  if (trim_kernel_dcache && before > max)
     _invalidate_kernel_dcache();
 
   // hose root?
