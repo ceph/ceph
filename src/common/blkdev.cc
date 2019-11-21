@@ -222,15 +222,6 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return ioctl(fd, BLKDISCARD, range);
 }
 
-bool BlkDev::is_nvme() const
-{
-  char vendor[80];
-  // nvme has a device/device/vendor property; infer from that.  There is
-  // probably a better way?
-  int r = get_string_property(BLKDEV_PROP_VENDOR, vendor, 80);
-  return (r == 0);
-}
-
 bool BlkDev::is_rotational() const
 {
   return get_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
@@ -830,11 +821,6 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return -EOPNOTSUPP;
 }
 
-bool BlkDev::is_nvme() const
-{
-  return false;
-}
-
 bool BlkDev::is_rotational() const
 {
   return false;
@@ -952,25 +938,6 @@ bool BlkDev::support_discard() const
 int BlkDev::discard(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
-}
-
-bool BlkDev::is_nvme() const
-{
-  // FreeBSD doesn't have a good way to tell if a device's underlying protocol
-  // is NVME, especially since multiple GEOM transforms may be involved.  So
-  // we'll just guess based on the device name.
-  struct fiodgname_arg arg;
-  const char *nda = "nda";        //CAM-based attachment
-  const char *nvd = "nvd";        //CAM-less attachment
-  char devname[PATH_MAX];
-
-  arg.buf = devname;
-  arg.len = sizeof(devname);
-  if (ioctl(fd, FIODGNAME, &arg) < 0)
-    return false; //When in doubt, it's probably not NVME
-
-  return (strncmp(nvd, devname, strlen(nvd)) == 0 ||
-          strncmp(nda, devname, strlen(nda)) == 0);
 }
 
 bool BlkDev::is_rotational() const
@@ -1161,11 +1128,6 @@ bool BlkDev::support_discard() const
 int BlkDev::discard(int fd, int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
-}
-
-bool BlkDev::is_nvme(const char *devname) const
-{
-  return false;
 }
 
 bool BlkDev::is_rotational(const char *devname) const
