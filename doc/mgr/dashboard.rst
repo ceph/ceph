@@ -425,6 +425,12 @@ The format of url is : `<protocol>:<IP-address>:<port>`
   above, check your browser's documentation on how to unblock mixed content.
   Alternatively, consider enabling SSL/TLS support in Grafana.
 
+If you are using a self-signed certificate in your Grafana setup, then you should
+disable certificate verification in the dashboard to avoid refused connections,
+e.g. caused by certificates signed by unknown CA or not matching the host name::
+
+  $ ceph dashboard set-grafana-api-ssl-verify False
+
 You can directly access Grafana Instance as well to monitor your cluster.
 
 .. _dashboard-sso-support:
