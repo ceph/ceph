@@ -6,7 +6,7 @@
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::rwl::SyncPoint: " << this << " " \
-			   <<  __func__ << ": "
+                           <<  __func__ << ": "
 
 namespace librbd {
 namespace cache {

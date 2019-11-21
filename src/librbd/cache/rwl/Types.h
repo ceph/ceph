@@ -141,6 +141,9 @@ const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
 const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 
 /**** Write log entries ****/
+const unsigned long int MAX_ALLOC_PER_TRANSACTION = 8;
+const unsigned long int MAX_FREE_PER_TRANSACTION = 1;
+const unsigned int MAX_CONCURRENT_WRITES = 256;
 
 const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
 const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
@@ -246,10 +249,9 @@ public:
   const BlockExtent block_extent() {
     return BlockExtent(first_image_byte, last_image_byte);
   }
-  const io::Extent image_extent(const BlockExtent& block_extent)
-  {
+  const io::Extent image_extent(const BlockExtent& block_extent) {
     return io::Extent(block_extent.block_start,
-                  block_extent.block_end - block_extent.block_start + 1);
+                      block_extent.block_end - block_extent.block_start + 1);
   }
   const io::Extent image_extent() {
     return image_extent(block_extent());

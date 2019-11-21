@@ -15,6 +15,8 @@ class BlockGuardCell;
 namespace cache {
 namespace rwl {
 
+class GuardedRequestFunctionContext;
+
 /**
  * A request that can be deferred in a BlockGuard to sequence
  * overlapping operations.
@@ -117,6 +119,8 @@ public:
 
   ~C_WriteRequest();
 
+  void blockguard_acquired(GuardedRequestFunctionContext &guard_ctx);
+
   /* Common finish to plain write and compare-and-write (if it writes) */
   virtual void finish_req(int r);
 
@@ -150,6 +154,43 @@ private:
   template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const C_WriteRequest<U> &req);
+};
+
+struct BlockGuardReqState {
+  bool barrier = false; /* This is a barrier request */
+  bool current_barrier = false; /* This is the currently active barrier */
+  bool detained = false;
+  bool queued = false; /* Queued for barrier */
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const BlockGuardReqState &r);
+};
+
+class GuardedRequestFunctionContext : public Context {
+public:
+  BlockGuardCell *m_cell = nullptr;
+  BlockGuardReqState m_state;
+  GuardedRequestFunctionContext(boost::function<void(GuardedRequestFunctionContext&)> &&callback);
+  ~GuardedRequestFunctionContext(void);
+  GuardedRequestFunctionContext(const GuardedRequestFunctionContext&) = delete;
+  GuardedRequestFunctionContext &operator=(const GuardedRequestFunctionContext&) = delete;
+
+private:
+  boost::function<void(GuardedRequestFunctionContext&)> m_callback;
+  void finish(int r) override;
+};
+
+class GuardedRequest {
+public:
+  const BlockExtent block_extent;
+  GuardedRequestFunctionContext *guard_ctx; /* Work to do when guard on range obtained */
+
+  GuardedRequest(const BlockExtent block_extent,
+                 GuardedRequestFunctionContext *on_guard_acquire, bool barrier = false)
+    : block_extent(block_extent), guard_ctx(on_guard_acquire) {
+    guard_ctx->m_state.barrier = barrier;
+  }
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const GuardedRequest &r);
 };
 
 } // namespace rwl 
