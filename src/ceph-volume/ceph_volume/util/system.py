@@ -33,7 +33,21 @@ def generate_uuid():
 
 def which(executable):
     """find the location of an executable"""
-    locations = (
+    def _get_path(executable, locations):
+        for location in locations:
+            executable_path = os.path.join(location, executable)
+            if os.path.exists(executable_path) and os.path.isfile(executable_path):
+                return executable_path
+        return None
+
+    path = os.getenv('PATH', '')
+    path_locations = path.split(':')
+    exec_in_path = _get_path(executable, path_locations)
+    if exec_in_path:
+        return exec_in_path
+    mlogger.warning('Executable {} not in PATH: {}'.format(executable, path))
+
+    static_locations = (
         '/usr/local/bin',
         '/bin',
         '/usr/bin',
@@ -41,13 +55,10 @@ def which(executable):
         '/usr/sbin',
         '/sbin',
     )
-
-    for location in locations:
-        executable_path = os.path.join(location, executable)
-        if os.path.exists(executable_path) and os.path.isfile(executable_path):
-            return executable_path
-    mlogger.warning('Absolute path not found for executable: %s', executable)
-    mlogger.warning('Ensure $PATH environment variable contains common executable locations')
+    exec_in_static_locations = _get_path(executable, static_locations)
+    if exec_in_static_locations:
+        mlogger.warning('Found executable under {}, please ensure $PATH is set correctly!'.format(exec_in_static_locations))
+        return exec_in_static_locations
     # fallback to just returning the argument as-is, to prevent a hard fail,
     # and hoping that the system might have the executable somewhere custom
     return executable
