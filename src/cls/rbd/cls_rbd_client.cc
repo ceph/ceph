@@ -916,24 +916,36 @@ void set_protection_status(librados::ObjectWriteOperation *op,
   op->exec("rbd", "set_protection_status", in);
 }
 
+void snapshot_get_limit_start(librados::ObjectReadOperation *op)
+{
+  bufferlist bl;
+  op->exec("rbd", "snapshot_get_limit", bl);
+}
+
+int snapshot_get_limit_finish(bufferlist::const_iterator *it, uint64_t *limit)
+{
+  try {
+    decode(*limit, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 int snapshot_get_limit(librados::IoCtx *ioctx, const std::string &oid,
                        uint64_t *limit)
 {
-  bufferlist in, out;
-  int r =  ioctx->exec(oid, "rbd", "snapshot_get_limit", in, out);
+  librados::ObjectReadOperation op;
+  snapshot_get_limit_start(&op);
 
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
   if (r < 0) {
     return r;
   }
 
-  try {
-    auto iter = out.cbegin();
-    decode(*limit, iter);
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
-  }
-
-  return 0;
+  auto it = out_bl.cbegin();
+  return snapshot_get_limit_finish(&it, limit);
 }
 
 void snapshot_set_limit(librados::ObjectWriteOperation *op, uint64_t limit)
