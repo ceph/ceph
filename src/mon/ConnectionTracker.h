@@ -46,6 +46,7 @@ struct ConnectionReport {
       o.history == history && o.epoch == epoch &&
       o.epoch_version == epoch_version;
   }
+  friend std::ostream& operator<<(std::ostream&o, const ConnectionReport& c);
 };
 WRITE_CLASS_ENCODER(ConnectionReport);
 
@@ -192,9 +193,8 @@ class ConnectionTracker {
     my_reports.rank = new_rank;
     rank = new_rank;
   }
-  
+  friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
 };
 
 WRITE_CLASS_ENCODER(ConnectionTracker);
-
 #endif
