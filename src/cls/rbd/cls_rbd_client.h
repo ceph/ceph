@@ -191,6 +191,8 @@ int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 void set_protection_status(librados::ObjectWriteOperation *op,
                            snapid_t snap_id, uint8_t protection_status);
 
+void snapshot_get_limit_start(librados::ObjectReadOperation *op);
+int snapshot_get_limit_finish(bufferlist::const_iterator *it, uint64_t *limit);
 int snapshot_get_limit(librados::IoCtx *ioctx, const std::string &oid,
                        uint64_t *limit);
 void snapshot_set_limit(librados::ObjectWriteOperation *op,
