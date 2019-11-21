@@ -1330,6 +1330,8 @@ def command_shell():
 @infer_fsid
 def command_enter():
     # type: () -> int
+    if not args.fsid:
+        raise RuntimeError('must pass --fsid to specify cluster')
     (daemon_type, daemon_id) = args.name.split('.', 1)
     container_args = [] # type: List[str]
     if args.command:
@@ -1393,6 +1395,8 @@ def command_ceph_volume():
 @infer_fsid
 def command_unit():
     # type: () -> None
+    if not args.fsid:
+        raise RuntimeError('must pass --fsid to specify cluster')
     (daemon_type, daemon_id) = args.name.split('.', 1)
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
     call_throws([
@@ -1405,6 +1409,8 @@ def command_unit():
 @infer_fsid
 def command_logs():
     # type: () -> None
+    if not args.fsid:
+        raise RuntimeError('must pass --fsid to specify cluster')
     cmd = [container_path, 'logs']
     if args.follow:
         cmd.append('-f')
