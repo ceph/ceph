@@ -13,6 +13,7 @@ e.g.
     python ci/<script> frontend/src/app /ceph/monitoring/grafana/dashboards
 """
 import argparse
+import codecs
 import copy
 import json
 import os
@@ -34,7 +35,7 @@ class TemplateParser(HTMLParser):
         self.parsed_data = []
 
     def parse(self):
-        with open(self.file) as f:
+        with codecs.open(self.file, encoding='UTF-8') as f:
             self.feed(f.read())
 
     def handle_starttag(self, tag, attrs):
