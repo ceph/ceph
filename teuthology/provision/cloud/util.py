@@ -57,7 +57,7 @@ def selective_update(a, b, func):
             continue
         if isinstance(value, dict):
             selective_update(a[key], value, func)
-        if func(value, a[key]):
+        elif func(value, a[key]):
             a[key] = value
 
 

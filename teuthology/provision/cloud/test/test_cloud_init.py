@@ -35,7 +35,7 @@ class TestInit(object):
         del cloud.supported_drivers['dummy']
 
     def test_get_types(self):
-        assert cloud.get_types() == ['my_provider']
+        assert list(cloud.get_types()) == ['my_provider']
 
     def test_get_provider_conf(self):
         expected = dummy_config['providers']['my_provider']
