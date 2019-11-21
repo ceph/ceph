@@ -1699,6 +1699,83 @@ def command_rm_cluster():
 
 ##################################
 
+def check_time_sync():
+    units = ['chronyd.service', 'systemd-timesyncd.service', 'ntpd.service']
+    for u in units:
+        (enabled, state) = check_unit(u)
+        if enabled and state == 'running':
+            logger.info('Time sync unit %s is enabled and running' % u)
+            return True
+    logger.warning('No time sync service is running; checked for %s' % units)
+    return False
+
+def command_check_host():
+    # caller already checked for docker/podman
+    logger.info('podman|docker (%s) is present' % container_path)
+
+    if not find_program('systemctl'):
+        raise RuntimeError('unable to location systemctl')
+    logger.info('systemctl is present')
+
+    if not find_program('lvcreate'):
+        raise RuntimeError('LVM does not appear to be installed')
+    logger.info('LVM2 is present')
+
+    # check for configured+running chronyd or ntp
+    if not check_time_sync():
+        raise RuntimeError('No time synchronization is active (checked all of %s)' %
+                           units)
+
+    logger.info('Host looks OK')
+
+def command_prepare_host():
+    # if there is no systemd we're SOL
+    if not find_program('systemctl'):
+        raise RuntimeError('unable to location systemctl')
+
+    if not container_path:
+        logger.info('Trying to install podman or docker...')
+        out, err, ret = call(['dnf', 'install', '-y', 'podman'])
+        if err:
+            out, err, ret = call(['yum', 'install', '-y', 'podman'])
+        if err:
+            out, err, ret = call(['apt', 'install', '-y', 'podman'])
+        if err:
+            out, err, ret = call(['apt', 'install', '-y', 'docker.io'])
+        if err:
+            out, err, ret = call(['zypper', '-n', 'install', 'podman'])
+        if err:
+            out, err, ret = call(['zypper', '-n', 'install', 'docker'])
+        if err:
+            raise RuntimeError('unable to install podman|docker via dnf|yum|apt|zypper')
+
+    if not find_program('lvcreate'):
+        logger.info('Trying to install LVM2...')
+        out, err, ret = call(['dnf', 'install', '-y', 'lvm2'])
+        if err:
+            out, err, ret = call(['yum', 'install', '-y', 'lvm2'])
+        if err:
+            out, err, ret = call(['apt', 'install', '-y', 'lvm2'])
+        if err:
+            out, err, ret = call(['zypper', '-n', 'install', 'lvm2'])
+        if err:
+            raise RuntimeError('unable to install lvm2 via dnf|yum|apt|zypper')
+
+    if not check_time_sync():
+        # install chrony
+        logger.info('Trying to install chrony...')
+        out, err, ret = call(['dnf', 'install', '-y', 'chrony'])
+        if err:
+            out, err, ret = call(['yum', 'install', '-y', 'chrony'])
+        if err:
+            out, err, ret = call(['apt', 'install', '-y', 'chrony'])
+        if err:
+            out, err, ret = call(['zypper', '-n', 'install', 'chrony'])
+        if err:
+            raise RuntimeError('unable to install chrony via dnf|yum|apt|zypper')
+
+##################################
+
 def _get_parser():
     # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser(
@@ -1965,7 +2042,7 @@ def _get_parser():
         help='allow overwrite of existing --output-* config/keyring/ssh files')
 
     parser_deploy = subparsers.add_parser(
-    'deploy', help='deploy a daemon')
+        'deploy', help='deploy a daemon')
     parser_deploy.set_defaults(func=command_deploy)
     parser_deploy.add_argument(
         '--name',
@@ -2007,6 +2084,14 @@ def _get_parser():
         action='store_true',
         help='Do not configure firewalld')
 
+    parser_check_host = subparsers.add_parser(
+        'check-host', help='check host configuration')
+    parser_check_host.set_defaults(func=command_check_host)
+
+    parser_prepare_host = subparsers.add_parser(
+        'prepare-host', help='prepare host')
+    parser_prepare_host.set_defaults(func=command_prepare_host)
+
     return parser
 
 
@@ -2040,7 +2125,7 @@ if __name__ == "__main__":
                 break
             except Exception as e:
                 logger.debug('Could not locate %s: %s' % (i, e))
-        if not container_path:
+        if not container_path and args.func != command_prepare_host:
             sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
             sys.exit(1)
 
