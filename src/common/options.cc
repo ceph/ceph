@@ -2086,7 +2086,8 @@ std::vector<Option> get_global_options() {
     .set_min(1_hr)
     .add_service("mon")
     .set_description("Duration in seconds that blacklist entries for MDS "
-                     "daemons remain in the OSD map"),
+                     "daemons remain in the OSD map")
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("mon_osd_crush_smoke_test", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
