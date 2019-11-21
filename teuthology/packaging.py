@@ -657,7 +657,7 @@ class GitbuilderProject(object):
 
         :returns: A string URI. Ex: ref/master
         """
-        ref_name, ref_val = self._choose_reference().items()[0]
+        ref_name, ref_val = next(iter(self._choose_reference().items()))
         if ref_name == 'sha1':
             return 'sha1/%s' % ref_val
         else:
@@ -691,7 +691,7 @@ class GitbuilderProject(object):
             names = ('ref', 'tag', 'branch', 'sha1')
             vars = (ref, tag, branch, sha1)
             # filter(None,) filters for truth
-            if len(filter(None, vars)) > 1:
+            if sum(1 for _ in vars if _) > 1:
                 log.warning(
                     "More than one of ref, tag, branch, or sha1 supplied; "
                     "using %s",
@@ -880,7 +880,7 @@ class ShamanProject(GitbuilderProject):
         req_obj['project'] = self.project
         req_obj['flavor'] = flavor
         req_obj['distros'] = '%s/%s' % (self.distro, self.arch)
-        ref_name, ref_val = self._choose_reference().items()[0]
+        ref_name, ref_val = list(self._choose_reference().items())[0]
         if ref_name == 'tag':
             req_obj['sha1'] = self._sha1 = self._tag_to_sha1()
         elif ref_name == 'sha1':
