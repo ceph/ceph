@@ -1286,6 +1286,7 @@ class MDCache {
   ceph::mutex upkeep_mutex = ceph::make_mutex("MDCache::upkeep_mutex");
   ceph::condition_variable upkeep_cvar;
   time upkeep_last_trim = time::min();
+  time upkeep_last_release = time::min();
   std::atomic<bool> upkeep_trim_shutdown{false};
 };
 
