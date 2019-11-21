@@ -232,7 +232,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                               force=cmd.get('force', False))
 
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
-        vol_name = cmd['vol_name']
         return self.vc.list_subvolume_groups(None, vol_name=cmd['vol_name'])
 
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
