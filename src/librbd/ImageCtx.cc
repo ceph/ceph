@@ -814,6 +814,12 @@ public:
       RBD_QOS_WRITE_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_write_bps_burst"));
+
+    if (!disable_zero_copy &&
+        config.get_val<bool>("rbd_disable_zero_copy_writes")) {
+      ldout(cct, 5) << this << ": disabling zero-copy writes" << dendl;
+      disable_zero_copy = true;
+    }
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
