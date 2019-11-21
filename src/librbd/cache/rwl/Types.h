@@ -137,6 +137,13 @@ enum {
   l_librbd_rwl_last,
 };
 
+namespace librbd {
+namespace cache {
+namespace rwl {
+
+/* Limit work between sync points */
+const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
+
 const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
 const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 
@@ -151,12 +158,6 @@ constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
 const uint8_t RWL_POOL_VERSION = 1;
 const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
-
-namespace librbd {
-namespace cache {
-namespace rwl {
-
-static const bool RWL_VERBOSE_LOGGING = false;
 
 /* Defer a set of Contexts until destruct/exit. Used for deferring
  * work on a given thread until a required lock is dropped. */
@@ -197,14 +198,9 @@ struct WriteLogPmemEntry {
     : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes),
       entry_valid(0), sync_point(0), sequenced(0), has_data(0), discard(0), writesame(0) {
   }
-  const BlockExtent block_extent();
-  bool is_sync_point();
-  bool is_discard();
-  bool is_writesame();
-  bool is_write();
-  bool is_writer();
-  const uint64_t get_offset_bytes();
-  const uint64_t get_write_bytes();
+  BlockExtent block_extent();
+  uint64_t get_offset_bytes();
+  uint64_t get_write_bytes();
   friend std::ostream& operator<<(std::ostream& os,
                                   const WriteLogPmemEntry &entry);
 };
@@ -236,30 +232,31 @@ struct WriteBufferAllocation {
   utime_t allocation_lat;
 };
 
+static inline io::Extent image_extent(const BlockExtent& block_extent) {
+  return io::Extent(block_extent.block_start,
+                    block_extent.block_end - block_extent.block_start + 1);
+}
+
 template <typename ExtentsType>
 class ExtentsSummary {
 public:
   uint64_t total_bytes;
   uint64_t first_image_byte;
   uint64_t last_image_byte;
-  ExtentsSummary(const ExtentsType &extents);
+  explicit ExtentsSummary(const ExtentsType &extents);
   template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const ExtentsSummary<U> &s);
-  const BlockExtent block_extent() {
+  BlockExtent block_extent() {
     return BlockExtent(first_image_byte, last_image_byte);
   }
-  const io::Extent image_extent(const BlockExtent& block_extent) {
-    return io::Extent(block_extent.block_start,
-                      block_extent.block_end - block_extent.block_start + 1);
-  }
-  const io::Extent image_extent() {
+  io::Extent image_extent() {
     return image_extent(block_extent());
   }
 };
 
-} // namespace rwl 
-} // namespace cache 
-} // namespace librbd 
+} // namespace rwl
+} // namespace cache
+} // namespace librbd
 
 #endif // CEPH_LIBRBD_CACHE_RWL_TYPES_H

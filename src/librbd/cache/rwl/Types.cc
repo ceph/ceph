@@ -6,7 +6,7 @@
 #include "common/ceph_context.h"
 #include "include/Context.h"
 
-#define dout_subsys ceph_subsys_rbd
+#define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::rwl::Types: " << this << " " \
                            <<  __func__ << ": "
@@ -35,43 +35,21 @@ void DeferredContexts::add(Context* ctx) {
  * convert between image and block extents here using a "block size"
  * of 1.
  */
-const BlockExtent block_extent(const uint64_t offset_bytes, const uint64_t length_bytes)
+BlockExtent convert_to_block_extent(const uint64_t offset_bytes, const uint64_t length_bytes)
 {
   return BlockExtent(offset_bytes,
                      offset_bytes + length_bytes - 1);
 }
 
-const BlockExtent WriteLogPmemEntry::block_extent() {
-  return BlockExtent(librbd::cache::rwl::block_extent(image_offset_bytes, write_bytes));
+BlockExtent WriteLogPmemEntry::block_extent() {
+  return convert_to_block_extent(image_offset_bytes, write_bytes);
 }
 
-bool WriteLogPmemEntry::is_sync_point() {
-  return sync_point;
-}
-
-bool WriteLogPmemEntry::is_discard() {
-  return discard;
-}
-
-bool WriteLogPmemEntry::is_writesame() {
-  return writesame;
-}
-
-bool WriteLogPmemEntry::is_write() {
-  /* Log entry is a basic write */
-  return !is_sync_point() && !is_discard() && !is_writesame();
-}
-
-bool WriteLogPmemEntry::is_writer() {
-  /* Log entry is any type that writes data */
-  return is_write() || is_discard() || is_writesame();
-}
-
-const uint64_t WriteLogPmemEntry::get_offset_bytes() {
+uint64_t WriteLogPmemEntry::get_offset_bytes() {
   return image_offset_bytes;
 }
 
-const uint64_t WriteLogPmemEntry::get_write_bytes() {
+uint64_t WriteLogPmemEntry::get_write_bytes() {
   return write_bytes;
 }
 
@@ -93,10 +71,9 @@ std::ostream& operator<<(std::ostream& os,
 };
 
 template <typename ExtentsType>
-ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents) {
-  total_bytes = 0;
-  first_image_byte = 0;
-  last_image_byte = 0;
+ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents)
+  : total_bytes(0), first_image_byte(0), last_image_byte(0)
+{
   if (extents.empty()) return;
   /* These extents refer to image offsets between first_image_byte
    * and last_image_byte, inclusive, but we don't guarantee here
@@ -119,7 +96,7 @@ ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents) {
 
 template <typename T>
 std::ostream &operator<<(std::ostream &os,
-                                const ExtentsSummary<T> &s) {
+                         const ExtentsSummary<T> &s) {
   os << "total_bytes=" << s.total_bytes << ", "
      << "first_image_byte=" << s.first_image_byte << ", "
      << "last_image_byte=" << s.last_image_byte << "";

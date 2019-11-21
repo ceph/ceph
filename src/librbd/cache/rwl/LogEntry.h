@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CACHE_RWL_LOG_ENTRY_H
 #define CEPH_LIBRBD_CACHE_RWL_LOG_ENTRY_H
 
+#include "common/ceph_mutex.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/rwl/Types.h"
 #include <atomic>
@@ -14,7 +15,7 @@ namespace cache {
 namespace rwl {
 
 class SyncPointLogEntry;
-class GeneralWriteLogEntry;
+class GenericWriteLogEntry;
 class WriteLogEntry;
 
 class GenericLogEntry {
@@ -29,22 +30,6 @@ public:
   virtual ~GenericLogEntry() { };
   GenericLogEntry(const GenericLogEntry&) = delete;
   GenericLogEntry &operator=(const GenericLogEntry&) = delete;
-  virtual unsigned int write_bytes() = 0;
-  bool is_sync_point();
-  bool is_discard();
-  bool is_writesame();
-  bool is_write();
-  bool is_writer();
-  virtual const GenericLogEntry* get_log_entry() = 0;
-  virtual const SyncPointLogEntry* get_sync_point_log_entry() {
-    return nullptr;
-  }
-  virtual const GeneralWriteLogEntry* get_gen_write_log_entry() {
-    return nullptr;
-  }
-  virtual const WriteLogEntry* get_write_log_entry() {
-    return nullptr;
-  }
   virtual std::ostream& format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const GenericLogEntry &entry);
@@ -67,36 +52,29 @@ public:
     ram_entry.sync_gen_number = sync_gen_number;
     ram_entry.sync_point = 1;
   };
+  ~SyncPointLogEntry() override {};
   SyncPointLogEntry(const SyncPointLogEntry&) = delete;
   SyncPointLogEntry &operator=(const SyncPointLogEntry&) = delete;
-  virtual inline unsigned int write_bytes() {
-    return 0;
-  }
-  const GenericLogEntry* get_log_entry() override {
-    return get_sync_point_log_entry();
-  }
-  const SyncPointLogEntry* get_sync_point_log_entry() override {
-    return this;
-  }
   std::ostream& format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const SyncPointLogEntry &entry);
 };
 
-class GeneralWriteLogEntry : public GenericLogEntry {
+class GenericWriteLogEntry : public GenericLogEntry {
 public:
   uint32_t referring_map_entries = 0;
   bool flushing = false;
   bool flushed = false; /* or invalidated */
   std::shared_ptr<SyncPointLogEntry> sync_point_entry;
-  GeneralWriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
+  GenericWriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
                        const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericLogEntry(image_offset_bytes, write_bytes), sync_point_entry(sync_point_entry) { }
-  GeneralWriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
+  GenericWriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericLogEntry(image_offset_bytes, write_bytes), sync_point_entry(nullptr) { }
-  GeneralWriteLogEntry(const GeneralWriteLogEntry&) = delete;
-  GeneralWriteLogEntry &operator=(const GeneralWriteLogEntry&) = delete;
-  virtual inline unsigned int write_bytes() {
+  ~GenericWriteLogEntry() override {};
+  GenericWriteLogEntry(const GenericWriteLogEntry&) = delete;
+  GenericWriteLogEntry &operator=(const GenericWriteLogEntry&) = delete;
+  inline unsigned int write_bytes() {
     /* The valid bytes in this ops data buffer. Discard and WS override. */
     return ram_entry.write_bytes;
   };
@@ -104,14 +82,8 @@ public:
     /* The bytes in the image this op makes dirty. Discard and WS override. */
     return write_bytes();
   };
-  const BlockExtent block_extent() {
+  BlockExtent block_extent() {
     return ram_entry.block_extent();
-  }
-  const GenericLogEntry* get_log_entry() override {
-    return get_gen_write_log_entry();
-  }
-  const GeneralWriteLogEntry* get_gen_write_log_entry() override {
-    return this;
   }
   uint32_t get_map_ref() {
     return(referring_map_entries);
@@ -120,14 +92,16 @@ public:
   void dec_map_ref() { referring_map_entries--; }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
-                                  const GeneralWriteLogEntry &entry);
+                                  const GenericWriteLogEntry &entry);
 };
 
-class WriteLogEntry : public GeneralWriteLogEntry {
+class WriteLogEntry : public GenericWriteLogEntry {
 protected:
   buffer::ptr pmem_bp;
   buffer::list pmem_bl;
   std::atomic<int> bl_refs = {0}; /* The refs held on pmem_bp by pmem_bl */
+  /* Used in WriteLogEntry::get_pmem_bl() to syncronize between threads making entries readable */
+  mutable ceph::mutex m_entry_bl_lock;
 
   void init_pmem_bp();
 
@@ -142,30 +116,33 @@ public:
   uint8_t *pmem_buffer = nullptr;
   WriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
                 const uint64_t image_offset_bytes, const uint64_t write_bytes)
-    : GeneralWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes) { }
+    : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
+      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+        "librbd::cache::rwl::WriteLogEntry::m_entry_bl_lock", this)))
+  { }
   WriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
-    : GeneralWriteLogEntry(nullptr, image_offset_bytes, write_bytes) { }
+    : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes),
+      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+        "librbd::cache::rwl::WriteLogEntry::m_entry_bl_lock", this)))
+  { }
+  ~WriteLogEntry() override {};
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
-  const BlockExtent block_extent();
+  void init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
+            uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush);
+  BlockExtent block_extent();
   unsigned int reader_count();
   /* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */
-  buffer::list &get_pmem_bl(ceph::mutex &entry_bl_lock);
+  buffer::list &get_pmem_bl();
   /* Constructs a new bl containing copies of pmem_bp */
-  void copy_pmem_bl(ceph::mutex &entry_bl_lock, bufferlist *out_bl);
-  virtual const GenericLogEntry* get_log_entry() override {
-    return get_write_log_entry();
-  }
-  const WriteLogEntry* get_write_log_entry() override {
-    return this;
-  }
+  void copy_pmem_bl(bufferlist *out_bl);
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const WriteLogEntry &entry);
 };
 
-} // namespace rwl 
-} // namespace cache 
-} // namespace librbd 
+} // namespace rwl
+} // namespace cache
+} // namespace librbd
 
 #endif // CEPH_LIBRBD_CACHE_RWL_LOG_ENTRY_H

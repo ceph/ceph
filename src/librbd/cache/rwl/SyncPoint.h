@@ -11,17 +11,13 @@
 namespace librbd {
 namespace cache {
 namespace rwl {
-/* Limit work between sync points */
-static const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
 
-template <typename T>
 class SyncPoint {
 public:
-  T &rwl;
   std::shared_ptr<SyncPointLogEntry> log_entry;
-  /* Use m_lock for earlier/later links */
-  std::shared_ptr<SyncPoint<T>> earlier_sync_point; /* NULL if earlier has completed */
-  std::shared_ptr<SyncPoint<T>> later_sync_point;
+  /* Use lock for earlier/later links */
+  std::shared_ptr<SyncPoint> earlier_sync_point; /* NULL if earlier has completed */
+  std::shared_ptr<SyncPoint> later_sync_point;
   uint64_t final_op_sequence_num = 0;
   /* A sync point can't appear in the log until all the writes bearing
    * it and all the prior sync points have been appended and
@@ -46,15 +42,15 @@ public:
    * aio_flush() calls are added to this. */
   std::vector<Context*> on_sync_point_persisted;
 
-  SyncPoint(T &rwl, const uint64_t sync_gen_num);
+  SyncPoint(uint64_t sync_gen_num, CephContext *cct);
   ~SyncPoint();
   SyncPoint(const SyncPoint&) = delete;
   SyncPoint &operator=(const SyncPoint&) = delete;
-  std::ostream &format(std::ostream &os) const;
+
+private:
+  CephContext *m_cct;
   friend std::ostream &operator<<(std::ostream &os,
-                                  const SyncPoint &p) {
-    return p.format(os);
-  }
+                                  const SyncPoint &p);
 };
 
 } // namespace rwl

@@ -17,50 +17,43 @@ namespace rwl {
 
 class GuardedRequestFunctionContext;
 
-/**
- * A request that can be deferred in a BlockGuard to sequence
- * overlapping operations.
- */
-template <typename T>
-class C_GuardedBlockIORequest : public Context {
-public:
-  T &rwl;
-  C_GuardedBlockIORequest(T &rwl);
-  ~C_GuardedBlockIORequest();
-  C_GuardedBlockIORequest(const C_GuardedBlockIORequest&) = delete;
-  C_GuardedBlockIORequest &operator=(const C_GuardedBlockIORequest&) = delete;
-
-  virtual const char *get_name() const = 0;
-  void set_cell(BlockGuardCell *cell);
-  BlockGuardCell *get_cell(void);
-  void release_cell();
-  
-private:
-  std::atomic<bool> m_cell_released = {false};
-  BlockGuardCell* m_cell = nullptr;
+struct WriteRequestResources {
+  bool allocated = false;
+  std::vector<WriteBufferAllocation> buffers;
 };
 
 /**
+ * A request that can be deferred in a BlockGuard to sequence
+ * overlapping operations.
  * This is the custodian of the BlockGuard cell for this IO, and the
  * state information about the progress of this IO. This object lives
  * until the IO is persisted in all (live) log replicas.  User request
  * may be completed from here before the IO persists.
  */
 template <typename T>
-class C_BlockIORequest : public C_GuardedBlockIORequest<T> {
+class C_BlockIORequest : public Context {
 public:
-  using C_GuardedBlockIORequest<T>::rwl;
-
+  T &rwl;
   io::Extents image_extents;
   bufferlist bl;
   int fadvise_flags;
   Context *user_req; /* User write request */
   ExtentsSummary<io::Extents> image_extents_summary;
   bool detained = false;                /* Detained in blockguard (overlapped with a prior IO) */
+  utime_t allocated_time;               /* When allocation began */
+  bool waited_lanes = false;            /* This IO waited for free persist/replicate lanes */
+  bool waited_entries = false;          /* This IO waited for free log entries */
+  bool waited_buffers = false;          /* This IO waited for data buffers (pmemobj_reserve() failed) */
 
   C_BlockIORequest(T &rwl, const utime_t arrived, io::Extents &&extents,
                    bufferlist&& bl, const int fadvise_flags, Context *user_req);
-  virtual ~C_BlockIORequest();
+  ~C_BlockIORequest() override;
+  C_BlockIORequest(const C_BlockIORequest&) = delete;
+  C_BlockIORequest &operator=(const C_BlockIORequest&) = delete;
+
+  void set_cell(BlockGuardCell *cell);
+  BlockGuardCell *get_cell(void);
+  void release_cell();
 
   void complete_user_request(int r);
   void finish(int r);
@@ -74,32 +67,57 @@ public:
 
   virtual void dispatch()  = 0;
 
-  virtual const char *get_name() const override {
+  virtual const char *get_name() const {
     return "C_BlockIORequest";
   }
+  uint64_t get_image_extents_size() {
+    return image_extents.size();
+  }
+  void set_io_waited_for_lanes(bool waited) {
+    waited_lanes = waited;
+  }
+  void set_io_waited_for_entries(bool waited) {
+    waited_entries = waited;
+  }
+  void set_io_waited_for_buffers(bool waited) {
+    waited_buffers = waited;
+  }
+  bool has_io_waited_for_buffers() {
+    return waited_buffers;
+  }
+  std::vector<WriteBufferAllocation>& get_resources_buffers() {
+    return m_resources.buffers;
+  }
+
+  void set_allocated(bool allocated) {
+    if (allocated) {
+      m_resources.allocated = true;
+    } else {
+      m_resources.buffers.clear();
+    }
+  }
+
+  virtual void setup_buffer_resources(
+      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
+      uint64_t &number_lanes, uint64_t &number_log_entries,
+      uint64_t &number_unpublished_reserves) {};
 
 protected:
   utime_t m_arrived_time;
-  utime_t m_allocated_time;               /* When allocation began */
   utime_t m_dispatched_time;              /* When dispatch began */
   utime_t m_user_req_completed_time;
-  bool m_waited_lanes = false;            /* This IO waited for free persist/replicate lanes */
-  bool m_waited_entries = false;          /* This IO waited for free log entries */
-  bool m_waited_buffers = false;          /* This IO waited for data buffers (pmemobj_reserve() failed) */
   std::atomic<bool> m_deferred = {false}; /* Deferred because this or a prior IO had to wait for write resources */
+  WriteRequestResources m_resources;
 
 private:
   std::atomic<bool> m_user_req_completed = {false};
   std::atomic<bool> m_finish_called = {false};
+  std::atomic<bool> m_cell_released = {false};
+  BlockGuardCell* m_cell = nullptr;
 
   template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const C_BlockIORequest<U> &req);
-};
-
-struct WriteRequestResources {
-  bool allocated = false;
-  std::vector<WriteBufferAllocation> buffers;
 };
 
 /**
@@ -112,26 +130,24 @@ template <typename T>
 class C_WriteRequest : public C_BlockIORequest<T> {
 public:
   using C_BlockIORequest<T>::rwl;
-  WriteRequestResources resources;
+  unique_ptr<WriteLogOperationSet> op_set = nullptr;
 
   C_WriteRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
-                 bufferlist&& bl, const int fadvise_flags, Context *user_req);
+                 bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,
+                 PerfCounters *perfcounter, Context *user_req);
 
-  ~C_WriteRequest();
+  ~C_WriteRequest() override;
 
   void blockguard_acquired(GuardedRequestFunctionContext &guard_ctx);
 
   /* Common finish to plain write and compare-and-write (if it writes) */
-  virtual void finish_req(int r);
+  void finish_req(int r) override;
 
   /* Compare and write will override this */
   virtual void update_req_stats(utime_t &now) {
     // TODO: Add in later PRs
   }
-  virtual bool alloc_resources() override;
-
-  /* Plain writes will allocate one buffer per request extent */
-  virtual void setup_buffer_resources(uint64_t &bytes_cached, uint64_t &bytes_dirtied);
+  bool alloc_resources() override;
 
   void deferred_handler() override { }
 
@@ -139,18 +155,28 @@ public:
 
   virtual void setup_log_operations();
 
+  bool append_write_request(std::shared_ptr<SyncPoint> sync_point);
+
   virtual void schedule_append();
 
   const char *get_name() const override {
     return "C_WriteRequest";
   }
 
+protected:
+  using C_BlockIORequest<T>::m_resources;
+  /* Plain writes will allocate one buffer per request extent */
+  void setup_buffer_resources(
+      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
+      uint64_t &number_lanes, uint64_t &number_log_entries,
+      uint64_t &number_unpublished_reserves) override;
+
 private:
-  unique_ptr<WriteLogOperationSet<T>> m_op_set = nullptr;
   bool m_do_early_flush = false;
   std::atomic<int> m_appended = {0};
   bool m_queued = false;
-
+  ceph::mutex &m_lock;
+  PerfCounters *m_perfcounter = nullptr;
   template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const C_WriteRequest<U> &req);
@@ -167,10 +193,10 @@ struct BlockGuardReqState {
 
 class GuardedRequestFunctionContext : public Context {
 public:
-  BlockGuardCell *m_cell = nullptr;
-  BlockGuardReqState m_state;
+  BlockGuardCell *cell = nullptr;
+  BlockGuardReqState state;
   GuardedRequestFunctionContext(boost::function<void(GuardedRequestFunctionContext&)> &&callback);
-  ~GuardedRequestFunctionContext(void);
+  ~GuardedRequestFunctionContext(void) override;
   GuardedRequestFunctionContext(const GuardedRequestFunctionContext&) = delete;
   GuardedRequestFunctionContext &operator=(const GuardedRequestFunctionContext&) = delete;
 
@@ -187,14 +213,14 @@ public:
   GuardedRequest(const BlockExtent block_extent,
                  GuardedRequestFunctionContext *on_guard_acquire, bool barrier = false)
     : block_extent(block_extent), guard_ctx(on_guard_acquire) {
-    guard_ctx->m_state.barrier = barrier;
+    guard_ctx->state.barrier = barrier;
   }
   friend std::ostream &operator<<(std::ostream &os,
                                   const GuardedRequest &r);
 };
 
-} // namespace rwl 
-} // namespace cache 
-} // namespace librbd 
+} // namespace rwl
+} // namespace cache
+} // namespace librbd
 
-#endif // CEPH_LIBRBD_CACHE_RWL_REQUEST_H 
+#endif // CEPH_LIBRBD_CACHE_RWL_REQUEST_H
