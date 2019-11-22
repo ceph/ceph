@@ -12,6 +12,8 @@ class TcmuService(object):
         images = {}
         for service in CephService.get_service_list(SERVICE_TYPE):
             metadata = service['metadata']
+            if metadata is None:
+                continue
             status = service['status']
             hostname = service['hostname']
 

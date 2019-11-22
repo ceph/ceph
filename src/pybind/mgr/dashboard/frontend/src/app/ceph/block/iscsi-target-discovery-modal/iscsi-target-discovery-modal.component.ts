@@ -116,7 +116,7 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
         this.bsModalRef.hide();
       },
       () => {
-        this.bsModalRef.hide();
+        this.discoveryForm.setErrors({ cdSubmitButton: true });
       }
     );
   }
