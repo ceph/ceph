@@ -8,6 +8,12 @@ import uuid
 from ceph_volume import process, terminal
 from . import as_string
 
+# python2 has no FileNotFoundError
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = OSError
+
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
 
@@ -297,7 +303,13 @@ def set_context(path, recursive=False):
         )
         return
 
-    stdout, stderr, code = process.call(['selinuxenabled'], verbose_on_failure=False)
+    try:
+        stdout, stderr, code = process.call(['selinuxenabled'],
+                                            verbose_on_failure=False)
+    except FileNotFoundError:
+        logger.info('No SELinux found, skipping call to restorecon')
+        return
+
     if code != 0:
         logger.info('SELinux is not enabled, will not call restorecon')
         return
