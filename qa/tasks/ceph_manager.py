@@ -33,6 +33,22 @@ DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
 
 log = logging.getLogger(__name__)
 
+# this is for ceph-daemon clusters
+def shell(ctx, cluster_name, remote, args, **kwargs):
+    testdir = teuthology.get_testdir(ctx)
+    return remote.run(
+        args=[
+            'sudo',
+            '{}/ceph-daemon'.format(testdir),
+            '--image', ctx.image,
+            'shell',
+            '-c', '{}/{}.conf'.format(testdir, cluster_name),
+            '-k', '{}/{}.keyring'.format(testdir, cluster_name),
+            '--fsid', ctx.ceph[cluster_name].fsid,
+            '--',
+            ] + args,
+        **kwargs
+    )
 
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
     conf_fp = StringIO()
@@ -1200,13 +1216,14 @@ class CephManager:
     """
 
     def __init__(self, controller, ctx=None, config=None, logger=None,
-                 cluster='ceph'):
+                 cluster='ceph', ceph_daemon=False):
         self.lock = threading.RLock()
         self.ctx = ctx
         self.config = config
         self.controller = controller
         self.next_pool_id = 0
         self.cluster = cluster
+        self.ceph_daemon = ceph_daemon
         if (logger):
             self.log = lambda x: logger.info(x)
         else:
@@ -1231,22 +1248,27 @@ class CephManager:
         """
         Start ceph on a raw cluster.  Return count
         """
-        testdir = teuthology.get_testdir(self.ctx)
-        ceph_args = [
-            'sudo',
-            'adjust-ulimits',
-            'ceph-coverage',
-            '{tdir}/archive/coverage'.format(tdir=testdir),
-            'timeout',
-            '120',
-            'ceph',
-            '--cluster',
-            self.cluster,
-        ]
-        ceph_args.extend(args)
-        proc = self.controller.run(
-            args=ceph_args,
-            stdout=StringIO(),
+        if self.ceph_daemon:
+            proc = shell(self.ctx, self.cluster, self.controller,
+                         args=['ceph'] + list(args),
+                         stdout=StringIO())
+        else:
+            testdir = teuthology.get_testdir(self.ctx)
+            ceph_args = [
+                'sudo',
+                'adjust-ulimits',
+                'ceph-coverage',
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                'timeout',
+                '120',
+                'ceph',
+                '--cluster',
+                self.cluster,
+            ]
+            ceph_args.extend(args)
+            proc = self.controller.run(
+                args=ceph_args,
+                stdout=StringIO(),
             )
         return proc.stdout.getvalue()
 
@@ -1254,22 +1276,27 @@ class CephManager:
         """
         Start ceph on a cluster.  Return success or failure information.
         """
-        testdir = teuthology.get_testdir(self.ctx)
-        ceph_args = [
-            'sudo',
-            'adjust-ulimits',
-            'ceph-coverage',
-            '{tdir}/archive/coverage'.format(tdir=testdir),
-            'timeout',
-            '120',
-            'ceph',
-            '--cluster',
-            self.cluster,
-        ]
-        ceph_args.extend(args)
-        kwargs['args'] = ceph_args
-        kwargs['check_status'] = False
-        proc = self.controller.run(**kwargs)
+        if self.ceph_daemon:
+            proc = shell(self.ctx, self.cluster, self.controller,
+                         args=['ceph'] + list(args),
+                         check_status=False)
+        else:
+            testdir = teuthology.get_testdir(self.ctx)
+            ceph_args = [
+                'sudo',
+                'adjust-ulimits',
+                'ceph-coverage',
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                'timeout',
+                '120',
+                'ceph',
+                '--cluster',
+                self.cluster,
+            ]
+            ceph_args.extend(args)
+            kwargs['args'] = ceph_args
+            kwargs['check_status'] = False
+            proc = self.controller.run(**kwargs)
         return proc.exitstatus
 
     def run_ceph_w(self, watch_channel=None):
@@ -2704,6 +2731,16 @@ class CephManager:
         if debug:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
+
+    def wait_until_healthy(self, timeout=None):
+        self.log("wait_until_healthy")
+        start = time.time()
+        while self.get_mon_health()['status'] != 'HEALTH_OK':
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_until_healthy'
+            time.sleep(3)
+        self.log("wait_until_healthy done")
 
     def get_filepath(self):
         """
