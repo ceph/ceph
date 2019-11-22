@@ -13384,7 +13384,10 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 
   /* We can't return bytes written larger than INT_MAX, clamp len to that */
   len = std::min(len, (loff_t)INT_MAX);
-  return _read(fh, off, len, bl);
+  int r = _read(fh, off, len, bl);
+  ldout(cct, 3) << "ll_read " << fh << " " << off << "~" << len << " = " << r
+		<< dendl;
+  return r;
 }
 
 int Client::ll_read_block(Inode *in, uint64_t blockid,
