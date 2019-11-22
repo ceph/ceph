@@ -42,22 +42,22 @@ to_cstr() const
 }
 
 bool EntityName::
-from_str(std::string_view s)
+from_str(const string& s)
 {
   size_t pos = s.find('.');
 
   if (pos == string::npos)
     return false;
-
-  auto type_ = s.substr(0, pos);
-  auto id_ = s.substr(pos + 1);
+ 
+  string type_ = s.substr(0, pos);
+  string id_ = s.substr(pos + 1);
   if (set(type_, id_))
     return false;
   return true;
 }
 
 void EntityName::
-set(uint32_t type_, std::string_view id_)
+set(uint32_t type_, const std::string &id_)
 {
   type = type_;
   id = id_;
@@ -72,9 +72,9 @@ set(uint32_t type_, std::string_view id_)
 }
 
 int EntityName::
-set(std::string_view type_, std::string_view id_)
+set(const std::string &type_, const std::string &id_)
 {
-  uint32_t t = str_to_ceph_entity_type(type_);
+  uint32_t t = str_to_ceph_entity_type(type_.c_str());
   if (t == CEPH_ENTITY_TYPE_ANY)
     return -EINVAL;
   set(t, id_);
@@ -88,13 +88,13 @@ set_type(uint32_t type_)
 }
 
 int EntityName::
-set_type(std::string_view type_)
+set_type(const char *type_)
 {
   return set(type_, id);
 }
 
 void EntityName::
-set_id(std::string_view id_)
+set_id(const std::string &id_)
 {
   set(type, id_);
 }
@@ -106,13 +106,13 @@ void EntityName::set_name(entity_name_t n)
   set(n.type(), s);
 }
 
-std::string_view EntityName::
+const char* EntityName::
 get_type_str() const
 {
   return ceph_entity_type_name(type);
 }
 
-std::string_view EntityName::
+const char *EntityName::
 get_type_name() const
 {
   return ceph_entity_type_name(type);

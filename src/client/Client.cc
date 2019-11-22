@@ -29,8 +29,6 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 
-#include "common/async/waiter.h"
-
 #if defined(__FreeBSD__)
 #define XATTR_CREATE    0x1
 #define XATTR_REPLACE   0x2
@@ -46,7 +44,6 @@
 
 #include "common/config.h"
 #include "common/version.h"
-#include "common/async/waiter.h"
 
 #include "mon/MonClient.h"
 
@@ -126,9 +123,6 @@
 #endif
 
 #define DEBUG_GETATTR_CAPS (CEPH_CAP_XATTR_SHARED)
-
-namespace bs = boost::system;
-using ceph::async::waiter;
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
@@ -5649,22 +5643,22 @@ int Client::authenticate()
 
 int Client::fetch_fsmap(bool user)
 {
+  int r;
   // Retrieve FSMap to enable looking up daemon addresses.  We need FSMap
   // rather than MDSMap because no one MDSMap contains all the daemons, and
   // a `tell` can address any daemon.
   version_t fsmap_latest;
-  boost::system::error_code ec;
   do {
-    waiter<bs::error_code, version_t, version_t> w;
-    monclient->get_version("fsmap", w);
+    C_SaferCond cond;
+    monclient->get_version("fsmap", &fsmap_latest, NULL, &cond);
     client_lock.unlock();
-    std::tie(ec, fsmap_latest, std::ignore) = w.wait();
+    r = cond.wait();
     client_lock.lock();
-  } while (ec == boost::system::errc::resource_unavailable_try_again);
+  } while (r == -EAGAIN);
 
-  if (ec) {
-    lderr(cct) << "Failed to learn FSMap version: " << ec << dendl;
-    return ceph::from_error_code(ec);
+  if (r < 0) {
+    lderr(cct) << "Failed to learn FSMap version: " << cpp_strerror(r) << dendl;
+    return r;
   }
 
   ldout(cct, 10) << __func__ << " learned FSMap version " << fsmap_latest << dendl;
@@ -11604,9 +11598,9 @@ void Client::_setxattr_maybe_wait_for_osdmap(const char *name, const void *value
     });
 
     if (r == -ENOENT) {
-      waiter<bs::error_code> w;
-      objecter->wait_for_latest_osdmap(w);
-      w.wait();
+      C_SaferCond ctx;
+      objecter->wait_for_latest_osdmap(&ctx);
+      ctx.wait();
     }
   }
 }
@@ -14205,7 +14199,7 @@ int Client::check_pool_perm(Inode *in, int need)
 
     C_SaferCond rd_cond;
     ObjectOperation rd_op;
-    rd_op.stat(nullptr, nullptr, nullptr);
+    rd_op.stat(NULL, (ceph::real_time*)nullptr, NULL);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), rd_op,
 		     nullsnapc, ceph::real_clock::now(), 0, &rd_cond);
@@ -14392,7 +14386,7 @@ void Client::set_session_timeout(unsigned timeout)
 int Client::start_reclaim(const std::string& uuid, unsigned flags,
 			  const std::string& fs_name)
 {
-  std::unique_lock l(client_lock);
+  std::lock_guard l(client_lock);
   if (!initialized)
     return -ENOTCONN;
 
@@ -14468,15 +14462,13 @@ int Client::start_reclaim(const std::string& uuid, unsigned flags,
 
   // use blacklist to check if target session was killed
   // (config option mds_session_blacklist_on_evict needs to be true)
-  ldout(cct, 10) << __func__ << ": waiting for OSD epoch " << reclaim_osd_epoch << dendl;
-  waiter<bs::error_code> w;
-  objecter->wait_for_map(reclaim_osd_epoch, w);
-  l.unlock();
-  auto ec = w.wait();
-  l.lock();
-
-  if (ec)
-    return ceph::from_error_code(ec);
+  C_SaferCond cond;
+  if (!objecter->wait_for_map(reclaim_osd_epoch, &cond)) {
+    ldout(cct, 10) << __func__ << ": waiting for OSD epoch " << reclaim_osd_epoch << dendl;
+    client_lock.unlock();
+    cond.wait();
+    client_lock.lock();
+  }
 
   bool blacklisted = objecter->with_osdmap(
       [this](const OSDMap &osd_map) -> bool {
@@ -14600,9 +14592,8 @@ mds_rank_t Client::_get_random_up_mds() const
 }
 
 
-StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
-				   boost::asio::io_context& ictx)
-  : Client(m, mc, new Objecter(m->cct, m, mc, ictx, 0, 0))
+StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc)
+    : Client(m, mc, new Objecter(m->cct, m, mc, NULL, 0, 0))
 {
   monclient->set_messenger(m);
   objecter->set_client_incarnation(0);

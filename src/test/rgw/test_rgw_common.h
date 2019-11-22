@@ -414,7 +414,7 @@ public:
       } else {
         ssize_t pos = object.find('_', 1);
         if (pos < 0) {
-          throw buffer::malformed_input();
+          throw buffer::error();
         }
         orig_obj = object.substr(pos);
       }

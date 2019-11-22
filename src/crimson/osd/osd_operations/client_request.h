@@ -6,7 +6,8 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/common/type_helpers.h"
-#include "messages/MOSDOp.h"
+
+class MOSDOp;
 
 namespace crimson::osd {
 class PG;

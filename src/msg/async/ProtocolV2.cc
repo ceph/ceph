@@ -44,7 +44,7 @@ void ProtocolV2::run_continuation(CtRef continuation) {
   try {
     CONTINUATION_RUN(continuation)
   } catch (const buffer::error &e) {
-    lderr(cct) << __func__ << " failed decoding of frame header: " << e.what()
+    lderr(cct) << __func__ << " failed decoding of frame header: " << e
                << dendl;
     _fault();
   } catch (const ceph::crypto::onwire::MsgAuthError &e) {

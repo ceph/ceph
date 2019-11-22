@@ -1903,9 +1903,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       decode(got_fnode, p);
     } catch (const buffer::error &err) {
       derr << "Corrupt fnode in dirfrag " << dirfrag()
-	   << ": " << err.what() << dendl;
+        << ": " << err << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
-		   << err.what() << " (" << get_path() << ")";
+		  << err << " (" << get_path() << ")";
       go_bad(complete);
       return;
     }
@@ -1971,7 +1971,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     } catch (const buffer::error &err) {
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
-                               << err.what() << "(" << get_path() << ")";
+                               << err << "(" << get_path() << ")";
 
       // Remember that this dentry is damaged.  Subsequent operations
       // that try to act directly on it will get their EIOs, but this
@@ -2200,7 +2200,7 @@ void CDir::_omap_commit(int op_prio)
 
       // don't create new dirfrag blindly
       if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
-	op.stat(nullptr, nullptr, nullptr);
+	op.stat(NULL, (ceph::real_time*) NULL, NULL);
 
       if (!to_set.empty())
 	op.omap_set(to_set);
@@ -2238,7 +2238,7 @@ void CDir::_omap_commit(int op_prio)
 
   // don't create new dirfrag blindly
   if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
-    op.stat(nullptr, nullptr, nullptr);
+    op.stat(NULL, (ceph::real_time*)NULL, NULL);
 
   /*
    * save the header at the last moment.. If we were to send it off before other
