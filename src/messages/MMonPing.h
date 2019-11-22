@@ -38,17 +38,17 @@ private:
 
   __u8 op = 0;
   utime_t stamp;
-  map<string,ConnectionReport> peer_reports;
+  bufferlist tracker_bl;
   uint32_t min_message_size = 0;
 
-  MMonPing(__u8 o, utime_t s, const map<string,ConnectionReport>& reports,
+  MMonPing(__u8 o, utime_t s, bufferlist& tbl,
 	   uint32_t min_message)
     : Message{MSG_MON_PING, HEAD_VERSION, COMPAT_VERSION},
-      op(o), stamp(s), peer_reports(reports), min_message_size(min_message)
+      op(o), stamp(s), tracker_bl(tbl), min_message_size(min_message)
   {}
-  MMonPing(__u8 o, utime_t s, const map<string,ConnectionReport>& reports)
+  MMonPing(__u8 o, utime_t s, bufferlist& tbl)
     : Message{MSG_MON_PING, HEAD_VERSION, COMPAT_VERSION},
-      op(o), stamp(s), peer_reports(reports) {}
+      op(o), stamp(s), tracker_bl(tbl) {}
   MMonPing()
     : Message{MSG_MON_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
@@ -60,7 +60,7 @@ public:
     auto p = payload.cbegin();
     decode(op, p);
     decode(stamp, p);
-    decode(peer_reports, p);
+    decode(tracker_bl, p);
 
     int payload_mid_length = p.get_off();
     uint32_t size;
@@ -72,7 +72,7 @@ public:
     using ceph::encode;
     encode(op, payload);
     encode(stamp, payload);
-    encode(peer_reports, payload);
+    encode(tracker_bl, payload);
 
     size_t s = 0;
     if (min_message_size > payload.length()) {
