@@ -60,11 +60,18 @@ function(build_rocksdb)
   set(rocksdb_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rocksdb")
   set(rocksdb_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/rocksdb")
   set(rocksdb_LIBRARY "${rocksdb_BINARY_DIR}/librocksdb.a")
+  if(CMAKE_MAKE_PROGRAM MATCHES "make")
+    # try to inherit command line arguments passed by parent "make" job
+    set(make_cmd $(MAKE) rocksdb)
+  else()
+    set(make_cmd ${CMAKE_COMMAND} --build <BINARY_DIR> --target rocksdb)
+  endif()
+
   ExternalProject_Add(rocksdb_ext
     SOURCE_DIR "${rocksdb_SOURCE_DIR}"
     CMAKE_ARGS ${rocksdb_CMAKE_ARGS}
     BINARY_DIR "${rocksdb_BINARY_DIR}"
-    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target rocksdb
+    BUILD_COMMAND "${make_cmd}"
     BUILD_ALWAYS TRUE
     BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
     INSTALL_COMMAND "true")
