@@ -227,6 +227,11 @@ struct Owner : public ElectionOwner, RankProvider {
     reset_election();
   }
   void send_pings() {
+    if (!parent->ping_interval ||
+	parent->timesteps_run % parent->ping_interval != 0) {
+      return;
+    }
+
     bufferlist bl;
     map<int,ConnectionReport> crs;
     peer_tracker.generate_report_of_peers(&crs[rank]);
@@ -263,10 +268,7 @@ struct Owner : public ElectionOwner, RankProvider {
 	victory_timeout();
       }
     }
-
-    if (parent->timesteps_run % parent->ping_interval == 0) {
-      send_pings();
-    }
+    send_pings();
   }
   const char *prefix_name() {
     return prefix_str.c_str();
@@ -788,6 +790,49 @@ void handles_singly_connected_peon(ElectionLogic::election_strategy strategy)
   ASSERT_TRUE(election.check_epoch_agreement());
 }
 
+ConnectionReport *get_connection_reports(ConnectionTracker& ct) { return ct.my_reports; }
+map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct) { return &ct.peer_reports; }
+void handles_outdated_scoring(ElectionLogic::election_strategy strategy)
+{
+  Election election(3, strategy, 5); // ping every 5 timesteps so they start elections before settling scores!
+
+  // start everybody up and run for a bit
+  election.start_all();
+  election.run_timesteps(20);
+  ASSERT_TRUE(election.quorum_stable(5));
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+
+  // now mess up the scores to disagree
+  ConnectionTracker& ct0 = election.electors[0]->peer_tracker;
+  ConnectionReport& cr0 = *get_connection_reports(ct0);
+  cr0.history[1] = 0.5;
+  cr0.history[2] = 0.5;
+  ct0.increase_version();
+  ConnectionTracker& ct1 = election.electors[1]->peer_tracker;
+  ConnectionReport& cr1 = *get_connection_reports(ct1);
+  cr1.history[0] = 0.5;
+  cr1.history[2] = 0.5;
+  ct1.increase_version();
+  ConnectionTracker& ct2 = election.electors[2]->peer_tracker;
+  ConnectionReport& cr2 = *get_connection_reports(ct2);
+  cr2.history[0] = 0.5;
+  map<int,ConnectionReport>&cp2 = *get_peer_reports(ct2);
+  cp2[0].history[2] = 0;
+  cp2[1].history[2] = 0;
+  ct2.increase_version();
+  election.ping_interval = 0; // disable pinging to update the scores
+  ldout(g_ceph_context, 5) << "mangled the scores to be different" << dendl;
+
+  election.start_all();
+  election.run_timesteps(50);
+  ASSERT_TRUE(election.quorum_stable(30));
+  ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
+}
+
 void handles_disagreeing_connectivity(ElectionLogic::election_strategy strategy)
 {
   Election election(5, strategy, 5); // ping every 5 timesteps so they start elections before settling scores!
@@ -862,3 +907,4 @@ test_connectivity(converges_while_flapping)
 test_connectivity(netsplit_with_disallowed_tiebreaker_converges)
 test_connectivity(handles_singly_connected_peon)
 test_connectivity(handles_disagreeing_connectivity)
+test_connectivity(handles_outdated_scoring)
