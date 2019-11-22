@@ -41,12 +41,12 @@ private:
   bufferlist tracker_bl;
   uint32_t min_message_size = 0;
 
-  MMonPing(__u8 o, utime_t s, bufferlist& tbl,
+  MMonPing(__u8 o, utime_t s, const bufferlist& tbl,
 	   uint32_t min_message)
     : Message{MSG_MON_PING, HEAD_VERSION, COMPAT_VERSION},
       op(o), stamp(s), tracker_bl(tbl), min_message_size(min_message)
   {}
-  MMonPing(__u8 o, utime_t s, bufferlist& tbl)
+  MMonPing(__u8 o, utime_t s, const bufferlist& tbl)
     : Message{MSG_MON_PING, HEAD_VERSION, COMPAT_VERSION},
       op(o), stamp(s), tracker_bl(tbl) {}
   MMonPing()

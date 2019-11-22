@@ -223,7 +223,7 @@ class Elector : public ElectionOwner, RankProvider {
   /* Retrieve rank from the Monitor */
   int get_my_rank() const;
   /* Send MMonElection OP_PROPOSE to every monitor in the map. */
-  void propose_to_peers(epoch_t e);
+  void propose_to_peers(epoch_t e, bufferlist &bl);
   /* bootstrap() the Monitor */
   void reset_election();
   /* Retrieve the Monitor::has_ever_joined member */

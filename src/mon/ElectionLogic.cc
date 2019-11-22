@@ -92,6 +92,8 @@ void ElectionLogic::clear_live_election_state()
   electing_me = false;
   delete stable_peer_tracker;
   stable_peer_tracker = new ConnectionTracker(*peer_tracker);
+  delete leader_peer_tracker;
+  leader_peer_tracker = NULL;
 }
 
 void ElectionLogic::start()
@@ -115,7 +117,11 @@ void ElectionLogic::start()
   clear_live_election_state();
   electing_me = true;
 
-  elector->propose_to_peers(epoch);
+  bufferlist bl;
+  if (strategy == CONNECTIVITY) {
+    stable_peer_tracker->encode(bl);
+  }
+    elector->propose_to_peers(epoch, bl);
   elector->_start();
 }
 
@@ -196,7 +202,8 @@ bool ElectionLogic::propose_classic_prefix(int from, epoch_t mepoch)
   return false;
 }
 
-void ElectionLogic::receive_propose(int from, epoch_t mepoch)
+void ElectionLogic::receive_propose(int from, epoch_t mepoch,
+				    const ConnectionTracker *ct)
 {
   switch (strategy) {
   case CLASSIC:
@@ -206,7 +213,7 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
     propose_disallow_handler(from, mepoch);
     break;
   case CONNECTIVITY:
-    propose_connectivity_handler(from, mepoch);
+    propose_connectivity_handler(from, mepoch, ct);
     break;
   default:
     ceph_assert(0 == "how did election strategy become an invalid value?");
@@ -295,7 +302,8 @@ double ElectionLogic::connectivity_election_score(int rank)
   return score;
 }
 
-void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch)
+void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
+						 const ConnectionTracker *ct)
 {
   if ((epoch % 2 == 0) &&
       last_election_winner != elector->get_my_rank() &&
@@ -373,7 +381,36 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch)
   } else {
     // they would win over me
     if (their_win) {
-      defer(from);
+      if (leader_acked >= 0) {
+	// we have to make sure our acked leader will ALSO defer to them, or else
+	// we can't, to maintain guarantees!
+	double leader_from_score;
+	int leader_from_liveness;
+	leader_peer_tracker->
+	  get_total_connection_score(from, &leader_from_score,
+				     &leader_from_liveness);
+	double leader_leader_score;
+	int leader_leader_liveness;
+	leader_peer_tracker->
+	  get_total_connection_score(leader_acked, &leader_leader_score,
+				     &leader_leader_liveness);
+	if ((from < leader_acked && leader_from_score >= leader_leader_score) ||
+	    (leader_from_score > leader_leader_score)) {
+	  defer(from);
+	  delete leader_peer_tracker;
+	  leader_peer_tracker = ct;
+	} else { // we have to ignore them this round even though they should win
+	  /*	  double cur_leader_score, cur_from_score;
+	  int cur_leader_live, cur_from_live;
+	  peer_tracker->get_total_connection_score(leader_acked */
+	  ldout(cct, 5) << "not deferring despite better score due to leader "
+			<< leader_acked << " score disagreement!" << dendl;
+	}
+      } else {
+	defer(from);
+	delete leader_peer_tracker;
+	leader_peer_tracker = ct;
+      }
     } else {
       // ignore them!
       ldout(cct, 5) << "no, we already acked " << leader_acked << " with score >=" << from_score << dendl;
