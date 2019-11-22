@@ -214,12 +214,10 @@ void Elector::cancel_timer()
   }
 }
 
-void Elector::assimilate_connection_reports(const map<string,ConnectionReport>& reports)
+void Elector::assimilate_connection_reports(const bufferlist& tbl)
 {
-  for (auto i : reports) {
-    peer_tracker.receive_peer_report(i.second);
-  }
-  return;
+  ConnectionTracker pct(tbl);
+  peer_tracker.receive_peer_report(pct);
 }
 
 void Elector::message_victory(const std::set<int>& quorum)
@@ -459,18 +457,8 @@ void Elector::begin_peer_ping(int peer)
 void Elector::send_peer_ping(int peer, const utime_t *n)
 {
   dout(10) << __func__ << " to peer " << peer << dendl;
-  map<string, ConnectionReport> reports;
-  
-  for (int i = 0; i < static_cast<int>(mon->monmap->size()); ++i) {
-    if (i == get_my_rank()) {
-      continue;
-    }
-    const ConnectionReport *view = peer_tracker.get_peer_view(i);
-    if (view != NULL) {
-      reports[mon->monmap->get_name(i)] = *view;
-    }
-  }
-  peer_tracker.generate_report_of_peers(&reports[mon->monmap->get_name(get_my_rank())]);
+  bufferlist tracker_bl;
+  encode(peer_tracker, tracker_bl);
 
   utime_t now;
   if (n != NULL) {
@@ -478,7 +466,7 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
   } else {
     now = ceph_clock_now();
   }
-  MMonPing *ping = new MMonPing(MMonPing::PING, now, reports);
+  MMonPing *ping = new MMonPing(MMonPing::PING, now, tracker_bl);
   mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer)); // TODO: this is deprecated, figure out using Connection
   peer_sent_ping[peer] = now;
 }
@@ -512,22 +500,13 @@ void Elector::handle_ping(MonOpRequestRef op)
 
   int prank = mon->monmap->get_rank(m->get_source_addr());
   begin_peer_ping(prank);
-  assimilate_connection_reports(m->peer_reports);
+  assimilate_connection_reports(m->tracker_bl);
   switch(m->op) {
   case MMonPing::PING:
     {
-      map<string, ConnectionReport> reports;
-      for (int i = 0; i < static_cast<int>(mon->monmap->size()); ++i) {
-	if (i == get_my_rank()) {
-	  continue;
-	}
-	const ConnectionReport *r = peer_tracker.get_peer_view(i);
-	if (r != NULL) {
-	  reports[mon->monmap->get_name(i)] = *r;
-	}
-      }
-      peer_tracker.generate_report_of_peers(&reports[mon->monmap->get_name(get_my_rank())]);
-      MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, reports);
+      bufferlist tracker_bl;
+      encode(peer_tracker, tracker_bl);
+      MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, tracker_bl);
       m->get_connection()->send_message(reply);
     }
     break;
