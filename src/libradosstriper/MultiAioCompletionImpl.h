@@ -20,9 +20,7 @@
 #include "common/ceph_mutex.h"
 #include "include/radosstriper/libradosstriper.hpp"
 
-namespace libradosstriper {
-
-struct MultiAioCompletionImpl {
+struct libradosstriper::MultiAioCompletionImpl {
 
   ceph::mutex lock = ceph::make_mutex("MultiAioCompletionImpl lock", false);
   ceph::condition_variable cond;
@@ -153,17 +151,10 @@ struct MultiAioCompletionImpl {
   void complete_request(ssize_t r);
   void safe_request(ssize_t r);
   void finish_adding_requests();
+
 };
 
-inline void intrusive_ptr_add_ref(MultiAioCompletionImpl* ptr)
-{
-  ptr->get();
-}
-
-inline void intrusive_ptr_release(MultiAioCompletionImpl* ptr)
-{
-  ptr->put();
-}
-}
+void intrusive_ptr_add_ref(libradosstriper::MultiAioCompletionImpl*);
+void intrusive_ptr_release(libradosstriper::MultiAioCompletionImpl*);
 
 #endif // CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H

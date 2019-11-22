@@ -154,9 +154,10 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     // can wait for those.
     auto c = new LambdaContext([command_c, self](int command_r){
       self->py_modules->get_objecter().wait_for_latest_osdmap(
-	[command_c, command_r](boost::system::error_code) {
-	  command_c->complete(command_r);
-	});
+          new LambdaContext([command_c, command_r](int wait_r){
+            command_c->complete(command_r);
+          })
+      );
     });
 
     self->py_modules->get_monc().start_mon_command(
@@ -184,12 +185,9 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         {cmd_json},
         {},
         &tid,
-	[command_c, f = &self->py_modules->cmd_finisher]
-	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {
-	  command_c->outs = std::move(s);
-	  command_c->outbl = std::move(bl);
-	  f->queue(command_c);
-	});
+        &command_c->outbl,
+        &command_c->outs,
+        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
   } else if (std::string(type) == "mds") {
     int r = self->py_modules->get_client().mds_command(
         name,
@@ -222,12 +220,9 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         {cmd_json},
         {},
         &tid,
-	[command_c, f = &self->py_modules->cmd_finisher]
-	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {
-	  command_c->outs = std::move(s);
-	  command_c->outbl = std::move(bl);
-	  f->queue(command_c);
-	});
+        &command_c->outbl,
+        &command_c->outs,
+        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
     PyEval_RestoreThread(tstate);
     return nullptr;
   } else {

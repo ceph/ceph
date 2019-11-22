@@ -61,8 +61,7 @@
 #define dout_prefix *_dout << "mds." << name << ' '
 
 // cons/des
-MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
-		     boost::asio::io_context& ioctx) :
+MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
@@ -70,7 +69,6 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
   name(n),
   messenger(m),
   monc(mc),
-  ioctx(ioctx),
   mgrc(m->cct, m, &mc->monmap),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   starttime(mono_clock::now())
@@ -847,12 +845,10 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(
-	whoami, mds_lock, clog,
-	timer, beacon, mdsmap, messenger, monc, &mgrc,
-	new LambdaContext([this](int r){respawn();}),
-	new LambdaContext([this](int r){suicide();}),
-	ioctx);
+      mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
+          timer, beacon, mdsmap, messenger, monc, &mgrc,
+          new LambdaContext([this](int r){respawn();}),
+          new LambdaContext([this](int r){suicide();}));
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();

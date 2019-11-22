@@ -13,8 +13,6 @@
 
 #include "common/dout.h"
 #include "crimson/net/Fwd.h"
-#include "messages/MOSDRepOpReply.h"
-#include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"

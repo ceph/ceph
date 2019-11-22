@@ -21,7 +21,6 @@
 #include "common/common_init.h"
 #include "common/TracepointProvider.h"
 #include "common/hobject.h"
-#include "common/async/waiter.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
@@ -156,11 +155,10 @@ void librados::ObjectOperation::assert_exists()
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
-  o->stat(nullptr, nullptr, nullptr);
+  o->stat(NULL, (ceph::real_time*) NULL, NULL);
 }
 
-void librados::ObjectOperation::exec(const char *cls, const char *method,
-				     bufferlist& inbl)
+void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -1972,7 +1970,7 @@ struct AioGetxattrDataPP {
   AioGetxattrDataPP(librados::AioCompletionImpl *c, bufferlist *_bl) :
     bl(_bl), completion(c) {}
   bufferlist *bl;
-  struct librados::CB_AioCompleteAndSafe completion;
+  struct librados::C_AioCompleteAndSafe completion;
 };
 
 static void rados_aio_getxattr_completepp(rados_completion_t c, void *arg) {
@@ -1981,7 +1979,7 @@ static void rados_aio_getxattr_completepp(rados_completion_t c, void *arg) {
   if (rc >= 0) {
     rc = cdata->bl->length();
   }
-  cdata->completion(rc);
+  cdata->completion.finish(rc);
   delete cdata;
 }
 
@@ -3004,9 +3002,9 @@ int librados::IoCtx::object_list(const ObjectCursor &start,
   ceph_assert(next != nullptr);
   result->clear();
 
-  ceph::async::waiter<boost::system::error_code,
-		      std::vector<librados::ListObjectImpl>,
-		      hobject_t>  w;
+  C_SaferCond cond;
+  hobject_t next_hash;
+  std::list<librados::ListObjectImpl> obj_result;
   io_ctx_impl->objecter->enumerate_objects(
       io_ctx_impl->poolid,
       io_ctx_impl->oloc.nspace,
@@ -3014,17 +3012,19 @@ int librados::IoCtx::object_list(const ObjectCursor &start,
       *((hobject_t*)finish.c_cursor),
       result_item_count,
       filter,
-      w);
+      &obj_result,
+      &next_hash,
+      &cond);
 
-  auto [ec, obj_result, next_hash] = w.wait();
-  if (ec) {
+  int r = cond.wait();
+  if (r < 0) {
     next->set((rados_object_list_cursor)(new hobject_t(hobject_t::get_max())));
-    return ceph::from_error_code(ec);
+    return r;
   }
 
   next->set((rados_object_list_cursor)(new hobject_t(next_hash)));
 
-  for (auto i = obj_result.begin();
+  for (std::list<librados::ListObjectImpl>::iterator i = obj_result.begin();
        i != obj_result.end(); ++i) {
     ObjectItem oi;
     oi.oid = i->oid;
