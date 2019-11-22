@@ -6,7 +6,7 @@ A new Ceph cluster is deployed by bootstrapping a cluster on a single
 node, and then adding additional nodes and daemons via the CLI or GUI
 dashboard.
 
-In the example here, we will install a basic three-node cluster. Each
+The following example installs a basic three-node cluster. Each
 node will be identified by its prompt. For example, "[monitor 1]"
 identifies the first monitor, "[monitor 2]" identifies the second
 monitor, and "[monitor 3]" identifies the third monitor. This
