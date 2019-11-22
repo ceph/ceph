@@ -62,7 +62,7 @@ struct Election {
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
   const set<int>& get_disallowed_leaders() { return disallowed_leaders; }
-  void propose_to(int from, int to, epoch_t e);
+  void propose_to(int from, int to, epoch_t e, bufferlist& cbl);
   void defer_to(int from, int to, epoch_t e);
   void claim_victory(int from, int to, epoch_t e, const set<int>& members);
   void accept_victory(int from, int to, epoch_t e);
@@ -126,10 +126,10 @@ struct Owner : public ElectionOwner, RankProvider {
   int get_my_rank() const { return rank; }
   // we don't need to persist scores as we don't reset and lose memory state
   void persist_connectivity_scores() {}
-  void propose_to_peers(epoch_t e) {
+  void propose_to_peers(epoch_t e, bufferlist& bl) {
     for (int i = 0; i < parent->get_paxos_size(); ++i) {
       if (i == rank) continue;
-      parent->propose_to(rank, i, e);
+      parent->propose_to(rank, i, e, bl);
     }
   }
   void reset_election() {
@@ -170,8 +170,8 @@ struct Owner : public ElectionOwner, RankProvider {
     victory_accepters = 1;
   }
   bool is_current_member(int r) const { return quorum.count(r) != 0; }
-  void receive_propose(int from, epoch_t e) {
-    logic.receive_propose(from, e);
+  void receive_propose(int from, epoch_t e, ConnectionTracker *oct) {
+    logic.receive_propose(from, e, oct);
   }
   void receive_ack(int from, epoch_t e) {
     if (e < logic.get_epoch())
@@ -298,8 +298,11 @@ void Election::queue_election_message(int from, int to, function<void()> m)
     last_leader = -1;
   }
   if (!blocked_messages[from].count(to)) {
-    messages.push_back([this,m] {
+    bufferlist bl;
+    electors[from]->encode_scores(bl);
+    messages.push_back([this,m,to,bl] {
 	--this->pending_election_messages;
+	electors[to]->receive_scores(bl);
 	m();
       });
     ++pending_election_messages;
@@ -330,11 +333,15 @@ void Election::defer_to(int from, int to, epoch_t e)
     });
 }
 
-void Election::propose_to(int from, int to, epoch_t e)
+void Election::propose_to(int from, int to, epoch_t e, bufferlist& cbl)
 {
   Owner *o = electors[to];
-  queue_election_message(from, to, [o, from, e] {
-      o->receive_propose(from, e);
+  ConnectionTracker *oct;
+  if (cbl.length()) {
+    oct = new ConnectionTracker(cbl); // we leak these on blocked cons, meh
+  }
+  queue_election_message(from, to, [o, from, e, oct] {
+      o->receive_propose(from, e, oct);
     });
 }
 

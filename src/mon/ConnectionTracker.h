@@ -139,7 +139,12 @@ class ConnectionTracker {
    */
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);
-
+  /**
+   * Get a bufferlist containing the ConnectionTracker.
+   * This is like encode() but holds a copy so it
+   * doesn't re-encode on every invocation.
+   */
+  const bufferlist& get_encoded_bl();
  private:
   epoch_t epoch;
   uint64_t version;
@@ -148,11 +153,13 @@ class ConnectionTracker {
   double half_life;
   RankProvider *owner;
   int rank;
+  bufferlist encoding;
   int get_my_rank() const { return rank; }
   ConnectionReport *reports(int p);
   const ConnectionReport *reports(int p) const;
 
   void clear_peer_reports() {
+    encoding.clear();
     peer_reports.clear();
     my_reports = &peer_reports[rank];
   }
@@ -186,6 +193,7 @@ class ConnectionTracker {
     my_reports = &peer_reports[new_rank];
     my_reports->rank = new_rank;
     rank = new_rank;
+    encoding.clear();
   }
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
