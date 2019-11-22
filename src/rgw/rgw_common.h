@@ -2427,6 +2427,75 @@ extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
 extern void rgw_to_iso8601(const real_time& t, string *dest);
 extern std::string rgw_to_asctime(const utime_t& t);
 
+struct perm_state_base {
+  CephContext *cct;
+  const rgw::IAM::Environment& env;
+  rgw::auth::Identity *identity;
+  const RGWBucketInfo& bucket_info;
+  int perm_mask;
+  bool defer_to_bucket_acls;
+
+  perm_state_base(CephContext *_cct,
+                  const rgw::IAM::Environment& _env,
+                  rgw::auth::Identity *_identity,
+                  const RGWBucketInfo& _bucket_info,
+                  int _perm_mask,
+                  bool _defer_to_bucket_acls) : cct(_cct),
+                                                env(_env),
+                                                identity(_identity),
+                                                bucket_info(_bucket_info),
+                                                perm_mask(_perm_mask),
+                                                defer_to_bucket_acls(_defer_to_bucket_acls) {}
+  virtual ~perm_state_base() {}
+
+  virtual const char *get_referer() const = 0;
+  virtual std::optional<bool> get_request_payer() const = 0;
+
+};
+
+struct perm_state : public perm_state_base {
+  const char *referer;
+  bool request_payer;
+
+  perm_state(CephContext *_cct,
+             const rgw::IAM::Environment& _env,
+             rgw::auth::Identity *_identity,
+             const RGWBucketInfo& _bucket_info,
+             int _perm_mask,
+             bool _defer_to_bucket_acls,
+             const char *_referer,
+             bool _request_payer) : perm_state_base(_cct,
+                                                    _env,
+                                                    _identity,
+                                                    _bucket_info,
+                                                    _perm_mask,
+                                                    _defer_to_bucket_acls),
+                                    referer(_referer),
+                                    request_payer(_request_payer) {}
+
+  const char *get_referer() const override {
+    return referer;
+  }
+
+  std::optional<bool> get_request_payer() const override {
+    return request_payer;
+  }
+};
+
+/** Check if the req_state's user has the necessary permissions
+ * to do the requested action  */
+bool verify_bucket_permission_no_policy(
+  const DoutPrefixProvider* dpp,
+  struct perm_state_base * const s,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  const int perm);
+
+bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
+                                      struct perm_state_base * const s,
+                                      RGWAccessControlPolicy * const user_acl,
+                                      const int perm);
+
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
 rgw::IAM::Effect eval_user_policies(const vector<rgw::IAM::Policy>& user_policies,
