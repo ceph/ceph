@@ -41,11 +41,7 @@ def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
         args=[
             'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
             'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'python',
-            '-c',
-            ('import shutil, sys; '
-             'shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))'),
-            conf_path,
+            "sudo", "sh", "-c", "cat > %s" % conf_path,
             run.Raw('&&'),
             'sudo', 'chmod', '0644', conf_path,
         ],
