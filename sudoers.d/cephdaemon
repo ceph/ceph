@@ -1,0 +1,7 @@
+# allow cephdaemon user to sudo ceph-daemon
+cephdaemon ALL=NOPASSWD: /usr/bin/ceph-daemon --image * ls
+cephdaemon ALL=NOPASSWD: /usr/bin/ceph-daemon --image * unit *
+cephdaemon ALL=NOPASSWD: /usr/bin/ceph-daemon --image * shell *
+cephdaemon ALL=NOPASSWD: /usr/bin/ceph-daemon --image * deploy *
+cephdaemon ALL=NOPASSWD: /usr/bin/ceph-daemon --image * ceph-volume *
+cephdaemon ALL=NOPASSWD: /usr/bin/ceph-daemon --image * rm-daemon *

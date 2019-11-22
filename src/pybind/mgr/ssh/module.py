@@ -9,6 +9,7 @@ import os
 import random
 import tempfile
 import multiprocessing.pool
+import subprocess
 
 from ceph.deployment import inventory
 from mgr_module import MgrModule
@@ -142,18 +143,12 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             'default': 60,
             'desc': 'seconds to cache service (daemon) inventory',
         },
-    ]
-
-    COMMANDS = [
         {
-            'cmd': 'ssh set-ssh-config',
-            'desc': 'Set the ssh_config file (use -i <ssh_config>)',
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'ssh clear-ssh-config',
-            'desc': 'Clear the ssh_config file',
-            'perm': 'rw'
+            'name': 'mode',
+            'type': 'str',
+            'enum_allowed': ['root', 'ceph-daemon-package'],
+            'default': 'root',
+            'desc': 'mode for remote execution of ceph-daemon',
         },
     ]
 
@@ -258,8 +253,8 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         # identity
         ssh_key = self.get_store("ssh_identity_key")
         ssh_pub = self.get_store("ssh_identity_pub")
-        tpub = None
-        tkey = None
+        self.ssh_pub = ssh_pub
+        self.ssh_key = ssh_key
         if ssh_key and ssh_pub:
             tkey = tempfile.NamedTemporaryFile(prefix='ceph-mgr-ssh-identity-')
             tkey.write(ssh_key.encode('utf-8'))
@@ -279,13 +274,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self._ssh_options = None
         self.log.info('ssh_options %s' % ssh_options)
 
-    def handle_command(self, inbuf, command):
-        if command["prefix"] == "ssh set-ssh-config":
-            return self._set_ssh_config(inbuf)
-        elif command["prefix"] == "ssh clear-ssh-config":
-            return self._clear_ssh_config()
-        else:
-            raise NotImplementedError(command["prefix"])
+        if self.mode == 'root':
+            self.ssh_user = 'root'
+        elif self.mode == 'ceph-daemon-package':
+            self.ssh_user = 'cephdaemon'
 
     @staticmethod
     def can_run():
@@ -331,18 +323,24 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 ", ".join(map(lambda h: "'{}'".format(h),
                     unregistered_hosts))))
 
-    def _set_ssh_config(self, inbuf):
+    @orchestrator._cli_write_command(
+        prefix='ssh set-ssh-config',
+        desc='Set the ssh_config file (use -i <ssh_config>)')
+    def _set_ssh_config(self, inbuf=None):
         """
         Set an ssh_config file provided from stdin
 
         TODO:
           - validation
         """
-        if len(inbuf) == 0:
-            return errno.EINVAL, "", "empty ssh config provided"
+        if inbuf is None or len(inbuf) == 0:
+            return -errno.EINVAL, "", "empty ssh config provided"
         self.set_store("ssh_config", inbuf)
         return 0, "", ""
 
+    @orchestrator._cli_write_command(
+        prefix='ssh clear-ssh-config',
+        desc='Clear the ssh_config file')
     def _clear_ssh_config(self):
         """
         Clear the ssh_config file provided from stdin
@@ -351,16 +349,68 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         self.ssh_config_tmp = None
         return 0, "", ""
 
+    @orchestrator._cli_write_command(
+        'ssh generate-key',
+        desc='Generate a cluster SSH key (if not present)')
+    def _generate_key(self):
+        if not self.ssh_pub or not self.ssh_key:
+            self.log.info('Generating ssh key...')
+            tmp_dir = tempfile.TemporaryDirectory()
+            path = tmp_dir.name + '/key'
+            try:
+                subprocess.call([
+                    '/usr/bin/ssh-keygen',
+                    '-C', 'ceph-%s' % self._cluster_fsid,
+                    '-N', '',
+                    '-f', path
+                ])
+                with open(path, 'r') as f:
+                    secret = f.read()
+                with open(path + '.pub', 'r') as f:
+                    pub = f.read()
+            finally:
+                os.unlink(path)
+                os.unlink(path + '.pub')
+                tmp_dir.cleanup()
+            self.set_store('ssh_identity_key', secret)
+            self.set_store('ssh_identity_pub', pub)
+            self._reconfig_ssh()
+        return 0, '', ''
+
+    @orchestrator._cli_write_command(
+        'ssh clear-key',
+        desc='Clear cluster SSH key')
+    def _clear_key(self):
+        self.set_store('ssh_identity_key', None)
+        self.set_store('ssh_identity_pub', None)
+        self._reconfig_ssh()
+        return 0, '', ''
+
+    @orchestrator._cli_read_command(
+        'ssh get-pub-key',
+        desc='Show SSH public key for connecting to cluster hosts')
+    def _get_pub_key(self):
+        if self.ssh_pub:
+            return 0, self.ssh_pub, ''
+        else:
+            return -errno.ENOENT, '', 'No cluster SSH key defined'
+
+    @orchestrator._cli_read_command(
+        'ssh get-user',
+        desc='Show user for SSHing to cluster hosts')
+    def _get_user(self):
+        return 0, self.ssh_user, ''
+
     def _get_connection(self, host):
         """
         Setup a connection for running commands on remote host.
         """
-        self.log.info("opening connection to host '{}' with ssh "
-                "options '{}'".format(host, self._ssh_options))
-
+        n = self.ssh_user + '@' + host
+        self.log.info("Opening connection to {} with ssh options '{}'".format(
+            n, self._ssh_options))
         conn = remoto.Connection(
-            'root@' + host,
-            logger=self.log,
+            n,
+            logger=self.log.getChild(n),
             ssh_options=self._ssh_options)
 
         conn.import_module(remotes)
@@ -411,19 +461,23 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
-            self.log.debug('args: %s' % final_args)
-            self.log.debug('stdin: %s' % stdin)
 
-            script = 'injected_argv = ' + json.dumps(final_args) + '\n'
-            if stdin:
-                script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-            script += self._ceph_daemon
-            #self.log.debug('script is %s' % script)
-
-            out, err, code = remoto.process.check(
-                conn,
-                ['/usr/bin/python', '-u'],
-                stdin=script.encode('utf-8'))
+            if self.mode == 'root':
+                self.log.debug('args: %s' % final_args)
+                self.log.debug('stdin: %s' % stdin)
+                script = 'injected_argv = ' + json.dumps(final_args) + '\n'
+                if stdin:
+                    script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
+                script += self._ceph_daemon
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['/usr/bin/python', '-u'],
+                    stdin=script.encode('utf-8'))
+            elif self.mode == 'ceph-daemon-package':
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['sudo', '/usr/bin/ceph-daemon'] + final_args,
+                    stdin=stdin)
             self.log.debug('exit code %s out %s err %s' % (code, out, err))
             if code and not error_ok:
                 raise RuntimeError(
