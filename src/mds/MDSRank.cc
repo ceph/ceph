@@ -1704,7 +1704,13 @@ public:
   explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
   void finish(int r) override {
     ceph_assert(!r);
-    mds->standby_replay_restart();
+    auto pos = mds->mdlog->get_journaler()->get_read_pos();
+    auto finish = new C_MDS_StandbyReplayRestartFinish(this, pos);
+    mds->mdlog->get_journaler()->reread_head_and_probe(finish);
+    dout(1) << " opening purge_queue (async)" << dendl;
+    mds->purge_queue.open(NULL);
+    dout(1) << " opening open_file_table (async)" << dendl;
+    mds->mdcache->open_file_table.load(nullptr);
   }
 };
 
