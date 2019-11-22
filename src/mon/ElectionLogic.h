@@ -66,8 +66,9 @@ public:
    * override a current one).
    *
    * @param e The election epoch of our proposal.
+   * @param bl A bufferlist containing data the logic wishes to share
    */
-  virtual void propose_to_peers(epoch_t e) = 0;
+  virtual void propose_to_peers(epoch_t e, bufferlist& bl) = 0;
   /**
    * The election has failed and we aren't sure what the state of the
    * quorum is, so reset the entire system as if from scratch.
@@ -163,6 +164,7 @@ class ElectionLogic {
    * throughout an election period.
    */
   const ConnectionTracker *stable_peer_tracker;
+  const ConnectionTracker *leader_peer_tracker;
   /**
    * Indicates who we have acked
    */
@@ -207,6 +209,7 @@ public:
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
 				  last_election_winner(-1), last_voted_for(-1),
 				  stable_peer_tracker(NULL),
+				  leader_peer_tracker(NULL),
 				  leader_acked(-1),
 				  strategy(es),
 				  participating(true),
@@ -267,12 +270,15 @@ public:
    *
    * We pass the propose off to a propose_*_handler function based
    * on the election strategy we're using.
+   * Only the Connectivity strategy cares about the ConnectionTracker; it should
+   * be NULL if other strategies are in use. Otherwise, it will take ownership
+   * of the underlying data and delete it as needed.
    *
    * @pre   Message epoch is from the current or a newer epoch
    * @param mepoch The epoch of the proposal
    * @param from The rank proposing itself as leader
    */
-  void receive_propose(int from, epoch_t mepoch);
+  void receive_propose(int from, epoch_t mepoch, const ConnectionTracker *ct);
   /**
    * Handle a message from some other participant Acking us as the Leader.
    *
@@ -379,7 +385,7 @@ private:
    * @li Whether the other monitor or ourself has the most connectivity to peers
    * @li Whether the other monitor or ourself has the lower rank
    */
-  void propose_connectivity_handler(int from, epoch_t mepoch);
+  void propose_connectivity_handler(int from, epoch_t mepoch, const ConnectionTracker *ct);
   /**
    * Helper function for connectivity handler. Combines the disallowed list
    * with ConnectionTracker scores.

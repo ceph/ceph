@@ -76,18 +76,14 @@ void Elector::persist_epoch(epoch_t e)
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_epoch", e);
-  bufferlist bl;
-  encode(peer_tracker, bl);
-  t->put(Monitor::MONITOR_NAME, "connectivity_scores", bl);
+  t->put(Monitor::MONITOR_NAME, "connectivity_scores", peer_tracker.get_encoded_bl());
   mon->store->apply_transaction(t);
 }
 
 void Elector::persist_connectivity_scores()
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
-  bufferlist bl;
-  encode(peer_tracker, bl);
-  t->put(Monitor::MONITOR_NAME, "connectivity_scores", bl);
+  t->put(Monitor::MONITOR_NAME, "connectivity_scores", peer_tracker.get_encoded_bl());
   mon->store->apply_transaction(t);
 }
 
@@ -144,13 +140,15 @@ void Elector::notify_bump_epoch()
   mon->join_election();
 }
 
-void Elector::propose_to_peers(epoch_t e)
+void Elector::propose_to_peers(epoch_t e, bufferlist& logic_bl)
 {
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
     if ((int)i == mon->rank) continue;
     MMonElection *m =
-      new MMonElection(MMonElection::OP_PROPOSE, e, mon->monmap);
+      new MMonElection(MMonElection::OP_PROPOSE, e,
+		       peer_tracker.get_encoded_bl(), mon->monmap);
+    m->sharing_bl = logic_bl;
     m->mon_features = ceph::features::mon::get_supported();
     m->mon_release = ceph_release();
     mon->send_mon_message(m, i);
@@ -169,7 +167,9 @@ void Elector::_start()
 
 void Elector::_defer_to(int who)
 {
-  MMonElection *m = new MMonElection(MMonElection::OP_ACK, get_epoch(), mon->monmap);
+  MMonElection *m = new MMonElection(MMonElection::OP_ACK, get_epoch(),
+				     peer_tracker.get_encoded_bl(),
+				     mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
   m->mon_release = ceph_release();
   mon->collect_metadata(&m->metadata);
@@ -248,6 +248,7 @@ void Elector::message_victory(const std::set<int>& quorum)
        ++p) {
     if (*p == mon->rank) continue;
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, get_epoch(),
+				       peer_tracker.get_encoded_bl(),
 				       mon->monmap);
     m->quorum = quorum;
     m->quorum_features = cluster_features;
@@ -302,7 +303,11 @@ void Elector::handle_propose(MonOpRequestRef op)
             << dendl;
     nak_old_peer(op);
   }
-  logic.receive_propose(from, m->epoch);
+  ConnectionTracker *oct = NULL;
+  if (m->sharing_bl.length()) {
+    oct = new ConnectionTracker(m->sharing_bl);
+  }
+  logic.receive_propose(from, m->epoch, oct);
 }
 
 void Elector::handle_ack(MonOpRequestRef op)
@@ -398,7 +403,8 @@ void Elector::nak_old_peer(MonOpRequestRef op)
 	   << " vs required " << (int)mon->monmap->min_mon_release
 	   << dendl;
   MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
-                                         mon->monmap);
+                                         peer_tracker.get_encoded_bl(),
+					 mon->monmap);
   reply->quorum_features = required_features;
   reply->mon_features = required_mon_features;
   reply->mon_release = mon->monmap->min_mon_release;
@@ -457,8 +463,6 @@ void Elector::begin_peer_ping(int peer)
 void Elector::send_peer_ping(int peer, const utime_t *n)
 {
   dout(10) << __func__ << " to peer " << peer << dendl;
-  bufferlist tracker_bl;
-  encode(peer_tracker, tracker_bl);
 
   utime_t now;
   if (n != NULL) {
@@ -466,7 +470,7 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
   } else {
     now = ceph_clock_now();
   }
-  MMonPing *ping = new MMonPing(MMonPing::PING, now, tracker_bl);
+  MMonPing *ping = new MMonPing(MMonPing::PING, now, peer_tracker.get_encoded_bl());
   mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer)); // TODO: this is deprecated, figure out using Connection
   peer_sent_ping[peer] = now;
 }
@@ -504,9 +508,7 @@ void Elector::handle_ping(MonOpRequestRef op)
   switch(m->op) {
   case MMonPing::PING:
     {
-      bufferlist tracker_bl;
-      encode(peer_tracker, tracker_bl);
-      MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, tracker_bl);
+      MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, peer_tracker.get_encoded_bl());
       m->get_connection()->send_message(reply);
     }
     break;
