@@ -171,50 +171,49 @@ seastar::future<std::vector<coll_t>> CyanStore::list_collections()
   return seastar::make_ready_future<std::vector<coll_t>>(std::move(collections));
 }
 
-seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef ch,
-                                            const ghobject_t& oid,
-                                            uint64_t offset,
-                                            size_t len,
-                                            uint32_t op_flags)
+CyanStore::read_errorator::future<ceph::bufferlist> CyanStore::read(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  uint32_t op_flags)
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {}~{}",
                 __func__, c->get_cid(), oid, offset, len);
   if (!c->exists) {
-    throw std::runtime_error(fmt::format("collection does not exist: {}",
-					 c->get_cid()));
+    return crimson::ct_error::enoent::make();
   }
   ObjectRef o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return crimson::ct_error::enoent::make();
   }
   if (offset >= o->get_size())
-    return seastar::make_ready_future<ceph::bufferlist>();
+    return read_errorator::make_ready_future<ceph::bufferlist>();
   size_t l = len;
   if (l == 0 && offset == 0)  // note: len == 0 means read the entire object
     l = o->get_size();
   else if (offset + l > o->get_size())
     l = o->get_size() - offset;
-  return seastar::make_ready_future<ceph::bufferlist>(o->read(offset, l));
+  return read_errorator::make_ready_future<ceph::bufferlist>(o->read(offset, l));
 }
 
-seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef ch,
-                                                     const ghobject_t& oid,
-                                                     std::string_view name) const
+CyanStore::get_attr_errorator::future<ceph::bufferptr> CyanStore::get_attr(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  std::string_view name) const
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
                 __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
-    return seastar::make_exception_future<ceph::bufferptr>(
-      EnoentException(fmt::format("object does not exist: {}", oid)));
+    return crimson::ct_error::enoent::make();
   }
   if (auto found = o->xattr.find(name); found != o->xattr.end()) {
-    return seastar::make_ready_future<ceph::bufferptr>(found->second);
+    return get_attr_errorator::make_ready_future<ceph::bufferptr>(found->second);
   } else {
-    return seastar::make_exception_future<ceph::bufferptr>(
-      EnodataException(fmt::format("attr does not exist: {}/{}", oid, name)));
+    return crimson::ct_error::enodata::make();
   }
 }
 
