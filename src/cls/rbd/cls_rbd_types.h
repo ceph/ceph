@@ -869,6 +869,8 @@ inline void decode(AssertSnapcSeqState &state, bufferlist::const_iterator& it) {
 
 std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
 
+void sanitize_entity_inst(entity_inst_t* entity_inst);
+
 } // namespace rbd
 } // namespace cls
 
