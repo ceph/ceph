@@ -1,6 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ReactiveFormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -57,6 +57,7 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
       }
     };
     component.backstores = ['backstore:1', 'backstore:2'];
+    component.control = new FormControl();
 
     component.ngOnInit();
     fixture.detectChanges();
@@ -68,6 +69,8 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
 
   it('should fill the form', () => {
     expect(component.settingsForm.value).toEqual({
+      lun: null,
+      wwn: null,
       backstore: 'backstore:1',
       foo: null,
       bar: null,
@@ -83,6 +86,8 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
     component.save();
     expect(component.imagesSettings).toEqual({
       'rbd/disk_1': {
+        lun: null,
+        wwn: null,
         backstore: 'backstore:1',
         'backstore:1': {
           foo: 1234

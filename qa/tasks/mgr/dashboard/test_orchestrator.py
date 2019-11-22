@@ -12,10 +12,7 @@ test_data = {
             'name': 'test-host0',
             'devices': [
                 {
-                    'type': 'hdd',
-                    'id': '/dev/sda',
-                    'size': 1024**4 * 4,
-                    'rotates': True
+                    'path': '/dev/sda',
                 }
             ]
         },
@@ -23,10 +20,7 @@ test_data = {
             'name': 'test-host1',
             'devices': [
                 {
-                    'type': 'hdd',
-                    'id': '/dev/sda',
-                    'size': 1024**4 * 4,
-                    'rotates': True
+                    'path': '/dev/sdb',
                 }
             ]
         }
@@ -94,8 +88,8 @@ class OrchestratorControllerTest(DashboardTestCase):
 
         if not data['devices']:
             return
-        test_devices = sorted(data['devices'], key=lambda d: d['id'])
-        resp_devices = sorted(resp_data['devices'], key=lambda d: d['id'])
+        test_devices = sorted(data['devices'], key=lambda d: d['path'])
+        resp_devices = sorted(resp_data['devices'], key=lambda d: d['path'])
 
         for test, resp in zip(test_devices, resp_devices):
             self._validate_device(test, resp)
@@ -121,7 +115,7 @@ class OrchestratorControllerTest(DashboardTestCase):
         data = self._get(self.URL_STATUS)
         self.assertTrue(data['available'])
 
-    def test_iventory_list(self):
+    def test_inventory_list(self):
         # get all inventory
         data = self._get(self.URL_INVENTORY)
         self.assertStatus(200)

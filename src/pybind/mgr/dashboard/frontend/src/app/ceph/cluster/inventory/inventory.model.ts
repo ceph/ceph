@@ -1,15 +1,22 @@
+export class SysAPI {
+  vendor: string;
+  model: string;
+  size: number;
+  rotational: string;
+  human_readable_size: string;
+}
+
 export class Device {
   hostname: string;
   uid: string;
+  osd_ids: number[];
 
-  blank: boolean;
-  type: string;
-  id: string;
-  size: number;
-  rotates: boolean;
+  path: string;
+  sys_api: SysAPI;
   available: boolean;
-  dev_id: string;
-  extended: any;
+  rejected_reasons: string[];
+  device_id: string;
+  human_readable_type: string;
 }
 
 export class InventoryNode {

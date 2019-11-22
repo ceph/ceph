@@ -175,6 +175,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
@@ -188,10 +189,10 @@ class OSError(Error):
     def __init__(self, errno, strerror):
         super(OSError, self).__init__(errno, strerror)
         self.errno = errno
-        self.strerror = strerror
+        self.strerror = "%s: %s" % (strerror, os.strerror(errno))
 
     def __str__(self):
-        return '{0}: {1} [Errno {2}]'.format(self.strerror, os.strerror(self.errno), self.errno)
+        return '{} [Errno {}]'.format(self.strerror, self.errno)
 
 
 class PermissionError(OSError):
@@ -241,6 +242,8 @@ class OutOfRange(OSError):
 class ObjectNotEmpty(OSError):
     pass
 
+class NotDirectory(OSError):
+    pass
 
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
@@ -269,6 +272,7 @@ ELSE:
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
         errno.ENOTEMPTY  : ObjectNotEmpty,
+        errno.ENOTDIR    : NotDirectory
     }
 
 
@@ -860,6 +864,29 @@ cdef class LibCephFS(object):
             ret = ceph_chmod(self.cluster, _path, _mode)
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
+
+    def chown(self, path, int uid, int gid):
+        """
+        Change directory ownership
+        :param path: the path of the directory to change.
+        :param uid: the uid to set
+        :param gid: the gid to set
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if not isinstance(uid, int):
+            raise TypeError('uid must be an int')
+        elif not isinstance(gid, int):
+            raise TypeError('gid must be an int')
+
+        cdef:
+            char* _path = path
+            int _uid = uid
+            int _gid = gid
+        with nogil:
+            ret = ceph_chown(self.cluster, _path, _uid, _gid)
+        if ret < 0:
+            raise make_ex(ret, "error in chown {}".format(path.decode('utf-8')))
 
     def mkdirs(self, path, mode):
         """

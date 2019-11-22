@@ -21,13 +21,15 @@
 namespace librbd {
 
 using namespace exclusive_lock;
+using librbd::util::create_context_callback;
 
 template <typename I>
 using ML = ManagedLock<I>;
 
 template <typename I>
 ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
-  : ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
+  : RefCountedObject(image_ctx.cct),
+    ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
           image_ctx.image_watcher, managed_lock::EXCLUSIVE,
           image_ctx.config.template get_val<bool>("rbd_blacklist_on_break_lock"),
           image_ctx.config.template get_val<uint64_t>("rbd_blacklist_expire_seconds")),
@@ -37,18 +39,22 @@ ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
 }
 
 template <typename I>
-bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
+bool ExclusiveLock<I>::accept_request(OperationRequestType request_type,
+                                      int *ret_val) const {
   std::lock_guard locker{ML<I>::m_lock};
 
-  bool accept_requests = (!ML<I>::is_state_shutdown() &&
-                          ML<I>::is_state_locked() &&
-                          m_request_blocked_count == 0);
+  bool accept_request =
+    (!ML<I>::is_state_shutdown() && ML<I>::is_state_locked() &&
+     (m_request_blocked_count == 0 ||
+      m_image_ctx.get_exclusive_lock_policy()->accept_blocked_request(
+        request_type)));
   if (ret_val != nullptr) {
-    *ret_val = m_request_blocked_ret_val;
+    *ret_val = accept_request ? 0 : m_request_blocked_ret_val;
   }
 
-  ldout(m_image_ctx.cct, 20) << "=" << accept_requests << dendl;
-  return accept_requests;
+  ldout(m_image_ctx.cct, 20) << "=" << accept_request << " (request_type="
+                             << request_type << ")" << dendl;
+  return accept_request;
 }
 
 template <typename I>
@@ -74,7 +80,7 @@ void ExclusiveLock<I>::block_requests(int r) {
     m_request_blocked_ret_val = r;
   }
 
-  ldout(m_image_ctx.cct, 20) << dendl;
+  ldout(m_image_ctx.cct, 20) << "r=" << r << dendl;
 }
 
 template <typename I>
@@ -101,6 +107,9 @@ int ExclusiveLock<I>::get_unlocked_op_error() const {
 template <typename I>
 void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+
+  on_init = create_context_callback<Context>(on_init, this);
+
   ldout(m_image_ctx.cct, 10) << dendl;
 
   {
@@ -115,6 +124,8 @@ void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
 template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << dendl;
+
+  on_shut_down = create_context_callback<Context>(on_shut_down, this);
 
   ML<I>::shut_down(on_shut_down);
 

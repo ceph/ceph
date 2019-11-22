@@ -133,8 +133,6 @@ class MOSDForceRecovery;
 class MOSDFull;
 class MOSDMap;
 class MOSDMarkMeDown;
-class MOSDOp;
-class MOSDOpReply;
 class MOSDPeeringOp;
 class MOSDPGBackfill;
 class MOSDPGBackfillRemove;

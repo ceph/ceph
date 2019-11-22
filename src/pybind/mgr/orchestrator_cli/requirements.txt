@@ -1,2 +1,0 @@
-tox==2.9.1
--e ../../../python-common

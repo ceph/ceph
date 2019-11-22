@@ -23,21 +23,22 @@ describe('Images page', () => {
       await images.waitTextToBePresent(images.getBreadcrumb(), 'Images');
     });
 
-    it('should show three tabs', async () => {
-      await expect(images.getTabsCount()).toEqual(3);
+    it('should show four tabs', async () => {
+      await expect(images.getTabsCount()).toEqual(4);
     });
 
     it('should show text for all tabs', async () => {
       await expect(images.getTabText(0)).toEqual('Images');
-      await expect(images.getTabText(1)).toEqual('Trash');
-      await expect(images.getTabText(2)).toEqual('Overall Performance');
+      await expect(images.getTabText(1)).toEqual('Namespaces');
+      await expect(images.getTabText(2)).toEqual('Trash');
+      await expect(images.getTabText(3)).toEqual('Overall Performance');
     });
   });
 
   describe('create, edit & delete image test', () => {
     const poolName = 'e2e_images_pool';
-    const imageName = 'e2e_images_image';
-    const newImageName = 'e2e_images_image_new';
+    const imageName = 'e2e_images#image';
+    const newImageName = 'e2e_images#image_new';
 
     beforeAll(async () => {
       await pools.navigateTo('create'); // Need pool for image testing
@@ -69,9 +70,9 @@ describe('Images page', () => {
   });
 
   describe('move to trash, restore and purge image tests', () => {
-    const poolName = 'trashpool';
-    const imageName = 'trashimage';
-    const newImageName = 'newtrashimage';
+    const poolName = 'trash_pool';
+    const imageName = 'trash#image';
+    const newImageName = 'newtrash#image';
 
     beforeAll(async () => {
       await pools.navigateTo('create'); // Need pool for image testing

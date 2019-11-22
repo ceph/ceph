@@ -485,7 +485,6 @@ class TestIoctx(object):
             self.ioctx.set_omap(write_op, keys, values)
             comp = self.ioctx.operate_aio_write_op(write_op, "hw", cb, cb)
             comp.wait_for_complete()
-            comp.wait_for_safe()
             with lock:
                 while count[0] < 2:
                     lock.wait()
@@ -496,7 +495,6 @@ class TestIoctx(object):
             eq(ret, 0)
             comp = self.ioctx.operate_aio_read_op(read_op, "hw", cb, cb)
             comp.wait_for_complete()
-            comp.wait_for_safe()
             with lock:
                 while count[0] < 4:
                     lock.wait()
@@ -529,6 +527,12 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op, "write_ops")
             with assert_raises(ObjectNotFound):
                 self.ioctx.read('write_ops')
+
+    def test_execute_op(self):
+        with WriteOpCtx() as write_op:
+            write_op.execute("hello", "record_hello", "ebs")
+            self.ioctx.operate_write_op(write_op, "object")
+        eq(self.ioctx.read('object'), b"Hello, ebs!")
 
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
@@ -598,6 +602,24 @@ class TestIoctx(object):
         eq(objects, [])
         self.ioctx.set_locator_key("")
 
+    def test_operate_aio_write_op(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        with WriteOpCtx() as write_op:
+            write_op.write(b'rzx')
+            comp = self.ioctx.operate_aio_write_op(write_op, "object", cb, cb)
+            comp.wait_for_complete()
+            with lock:
+                while count[0] < 2:
+                    lock.wait()
+            eq(comp.get_return_value(), 0)
+            eq(self.ioctx.read('object'), b'rzx')
+
     def test_aio_write(self):
         lock = threading.Condition()
         count = [0]
@@ -608,7 +630,6 @@ class TestIoctx(object):
             return 0
         comp = self.ioctx.aio_write("foo", b"bar", 0, cb, cb)
         comp.wait_for_complete()
-        comp.wait_for_safe()
         with lock:
             while count[0] < 2:
                 lock.wait()
@@ -666,7 +687,6 @@ class TestIoctx(object):
         self.ioctx.aio_write("foo", b"barbaz", 0, cb, cb)
         comp = self.ioctx.aio_write_full("foo", b"bar", cb, cb)
         comp.wait_for_complete()
-        comp.wait_for_safe()
         with lock:
             while count[0] < 2:
                 lock.wait()

@@ -681,7 +681,8 @@ EOF
         ; rgw crypt s3 kms backend = vault
         ; rgw crypt vault auth = token
         ; rgw crypt vault addr = http://127.0.0.1:8200
-        ; rgw crypt vault token file = /path/to/token.file
+        ; rgw crypt vault prefix = /v1/secret/data
+        ; rgw crypt vault token file = $CEPH_CONF_PATH/vault.token
 
 $extra_conf
 EOF
@@ -697,7 +698,7 @@ $extra_conf
 [mgr]
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        ceph daemon path = $CEPH_ROOT/src/ceph-daemon
+        ceph daemon path = $CEPH_ROOT/src/ceph-daemon/ceph-daemon
 $DAEMONOPTS
 $extra_conf
 [osd]

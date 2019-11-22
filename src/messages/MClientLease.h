@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MClientLease : public Message {
+class MClientLease : public SafeMessage {
 public:
   struct ceph_mds_lease h;
   std::string dname;
@@ -33,13 +33,13 @@ public:
   snapid_t get_last() const { return snapid_t(h.last); }
 
 protected:
-  MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
+  MClientLease() : SafeMessage(CEPH_MSG_CLIENT_LEASE) {}
   MClientLease(const MClientLease& m) :
-    Message(CEPH_MSG_CLIENT_LEASE),
+    SafeMessage(CEPH_MSG_CLIENT_LEASE),
     h(m.h),
     dname(m.dname) {}
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl) :
-    Message(CEPH_MSG_CLIENT_LEASE) {
+    SafeMessage(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;
     h.seq = seq;
     h.mask = m;
@@ -49,7 +49,7 @@ protected:
     h.duration_ms = 0;
   }
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl, std::string_view d) :
-    Message(CEPH_MSG_CLIENT_LEASE),
+    SafeMessage(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;
     h.seq = seq;

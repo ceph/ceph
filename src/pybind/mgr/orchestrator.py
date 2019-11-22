@@ -4,17 +4,19 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
-import copy
 import sys
 import time
-import fnmatch
+from collections import namedtuple
 from functools import wraps
 import uuid
 import string
 import random
 import datetime
-
+import copy
+import re
 import six
+
+from ceph.deployment import inventory
 
 from mgr_module import MgrModule, PersistentStoreDict
 from mgr_util import format_bytes
@@ -27,6 +29,72 @@ try:
     G = Generic[T]
 except ImportError:
     T, G = object, object
+
+
+def parse_host_specs(host, require_network=True):
+    """
+    Split host into host, network, and (optional) daemon name parts.  The network
+    part can be an IP, CIDR, or ceph addrvec like '[v2:1.2.3.4:3300,v1:1.2.3.4:6789]'.
+    e.g.,
+      "myhost"
+      "myhost=name"
+      "myhost:1.2.3.4"
+      "myhost:1.2.3.4=name"
+      "myhost:1.2.3.0/24"
+      "myhost:1.2.3.0/24=name"
+      "myhost:[v2:1.2.3.4:3000]=name"
+      "myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
+    """
+    # Matches from start to : or = or until end of string
+    host_re = r'^(.*?)(:|=|$)'
+    # Matches from : to = or until end of string
+    ip_re = r':(.*?)(=|$)'
+    # Matches from = to end of string
+    name_re = r'=(.*?)$'
+
+    from collections import namedtuple
+    HostSpec = namedtuple('HostSpec', ['hostname', 'network', 'name'])
+    # assign defaults
+    host_spec = HostSpec('', '', '')
+
+    match_host = re.search(host_re, host)
+    if match_host:
+        host_spec = host_spec._replace(hostname=match_host.group(1))
+
+    name_match = re.search(name_re, host)
+    if name_match:
+        host_spec = host_spec._replace(name=name_match.group(1))
+
+    ip_match = re.search(ip_re, host)
+    if ip_match:
+        host_spec = host_spec._replace(network=ip_match.group(1))
+
+    if not require_network:
+        return host_spec
+
+    from ipaddress import ip_network, ip_address
+    networks = list()
+    network = host_spec.network
+    # in case we have [v2:1.2.3.4:3000,v1:1.2.3.4:6478]
+    if ',' in network:
+        networks = [x for x in network.split(',')]
+    else:
+        networks.append(network)
+    for network in networks:
+        # only if we have versioned network configs
+        if network.startswith('v') or network.startswith('[v'):
+            network = network.split(':')[1]
+        try:
+            # if subnets are defined, also verify the validity
+            if '/' in network:
+                ip_network(six.text_type(network))
+            else:
+                ip_address(six.text_type(network))
+        except ValueError as e:
+            # logging?
+            raise e
+
+    return host_spec
 
 
 class OrchestratorError(Exception):
@@ -119,11 +187,15 @@ def raise_if_exception(c):
         # This is something like `return pickle.loads(pickle.dumps(r_obj))`
         # Without importing anything.
         r_cls = r_obj.__class__
-        if r_cls.__module__ == '__builtin__':
+        if r_cls.__module__ in ('__builtin__', 'builtins'):
             return r_obj
         my_cls = getattr(sys.modules[r_cls.__module__], r_cls.__name__)
         if id(my_cls) == id(r_cls):
             return r_obj
+        if hasattr(r_obj, '__reduce__'):
+            reduce_tuple = r_obj.__reduce__()
+            if len(reduce_tuple) >= 2:
+                return my_cls(*[copy_to_this_subinterpreter(a) for a in reduce_tuple[1]])
         my_obj = my_cls.__new__(my_cls)
         for k,v in r_obj.__dict__.items():
             setattr(my_obj, k, copy_to_this_subinterpreter(v))
@@ -234,9 +306,11 @@ class WriteCompletion(_Completion):
         """
         return not self.is_persistent
 
+
 def _hide_in_features(f):
     f._hide_in_features = True
     return f
+
 
 class Orchestrator(object):
     """
@@ -330,7 +404,6 @@ class Orchestrator(object):
                 ... except (OrchestratorError, NotImplementedError):
                 ...     ...
 
-
         :returns: Dict of API method names to ``{'available': True or False}``
         """
         module = self.__class__
@@ -405,13 +478,13 @@ class Orchestrator(object):
         * If using service_id, perform the action on a single specific daemon
           instance.
 
-        :param action: one of "start", "stop", "reload"
+        :param action: one of "start", "stop", "reload", "restart", "redeploy"
         :param service_type: e.g. "mds", "rgw", ...
         :param service_name: name of logical service ("cephfs", "us-east", ...)
         :param service_id: service daemon instance (usually a short hostname)
         :rtype: WriteCompletion
         """
-        assert action in ["start", "stop", "reload"]
+        assert action in ["start", "stop", "reload", "restart", "redeploy"]
         assert service_name or service_id
         assert not (service_name and service_id)
         raise NotImplementedError()
@@ -445,6 +518,17 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def blink_device_light(self, ident_fault, on, locations):
+        # type: (str, bool, List[DeviceLightLoc]) -> WriteCompletion
+        """
+        Instructs the orchestrator to enable or disable either the ident or the fault LED.
+
+        :param ident_fault: either ``"ident"`` or ``"fault"``
+        :param on: ``True`` = on.
+        :param locations: See :class:`orchestrator.DeviceLightLoc`
+        """
+        raise NotImplementedError()
+
     def update_mgrs(self, num, hosts):
         # type: (int, List[str]) -> WriteCompletion
         """
@@ -461,7 +545,7 @@ class Orchestrator(object):
         Update the number of cluster monitors.
 
         :param num: requested number of monitors.
-        :param hosts: list of hosts + network (optional)
+        :param hosts: list of hosts + network + name (optional)
         """
         raise NotImplementedError()
 
@@ -479,6 +563,24 @@ class Orchestrator(object):
         # type: (StatelessServiceSpec) -> WriteCompletion
         """
         Update / redeploy existing MDS cluster
+        Like for example changing the number of service instances.
+        """
+        raise NotImplementedError()
+
+    def add_rbd_mirror(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """Create rbd-mirror cluster"""
+        raise NotImplementedError()
+
+    def remove_rbd_mirror(self):
+        # type: (str) -> WriteCompletion
+        """Remove rbd-mirror cluster"""
+        raise NotImplementedError()
+
+    def update_rbd_mirror(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy rbd-mirror cluster
         Like for example changing the number of service instances.
         """
         raise NotImplementedError()
@@ -545,6 +647,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+
 class UpgradeSpec(object):
     # Request to orchestrator to initiate an upgrade to a particular
     # version of Ceph
@@ -566,8 +669,8 @@ class PlacementSpec(object):
     """
     def __init__(self, label=None, nodes=[]):
         self.label = label
-        self.nodes = nodes
 
+        self.nodes = [parse_host_specs(x, require_network=False) for x in nodes]
 
 def handle_type_error(method):
     @wraps(method)
@@ -639,6 +742,15 @@ class ServiceDescription(object):
 
         # Service status description when status == -1.
         self.status_desc = status_desc
+
+    def name(self):
+        if self.service_instance:
+            return '%s.%s' % (self.service_type, self.service_instance)
+        return self.service_type
+
+    def __repr__(self):
+        return "<ServiceDescription>({n_name}:{s_type})".format(n_name=self.nodename,
+                                                                  s_type=self.name())
 
     def to_json(self):
         out = {
@@ -713,6 +825,7 @@ class RGWSpec(StatelessServiceSpec):
     """
     def __init__(self,
                  rgw_zone,  # type: str
+                 placement=None,
                  hosts=None,  # type: Optional[List[str]]
                  rgw_multisite=None,  # type: Optional[bool]
                  rgw_zonemaster=None,  # type: Optional[bool]
@@ -730,10 +843,12 @@ class RGWSpec(StatelessServiceSpec):
         # default values that makes sense for Ansible. Rook has default values implemented
         # in Rook itself. Thus we don't set any defaults here in this class.
 
-        super(RGWSpec, self).__init__(name=rgw_zone, count=count)
+        super(RGWSpec, self).__init__(name=rgw_zone, count=count,
+                                      placement=placement)
 
         #: List of hosts where RGWs should run. Not for Rook.
-        self.hosts = hosts
+        if hosts:
+            self.placement.hosts = hosts
 
         #: is multisite
         self.rgw_multisite = rgw_multisite
@@ -802,107 +917,6 @@ class InventoryFilter(object):
         self.nodes = nodes  # Optional: get info about certain named nodes only
 
 
-class InventoryDevice(object):
-    """
-    When fetching inventory, block devices are reported in this format.
-
-    Note on device identifiers: the format of this is up to the orchestrator,
-    but the same identifier must also work when passed into StatefulServiceSpec.
-    The identifier should be something meaningful like a device WWID or
-    stable device node path -- not something made up by the orchestrator.
-
-    "Extended" is for reporting any special configuration that may have
-    already been done out of band on the block device.  For example, if
-    the device has already been configured for encryption, report that
-    here so that it can be indicated to the user.  The set of
-    extended properties may differ between orchestrators.  An orchestrator
-    is permitted to support no extended properties (only normal block
-    devices)
-    """
-    def __init__(self, blank=False, type=None, id=None, size=None,
-                 rotates=False, available=False, dev_id=None, extended=None,
-                 metadata_space_free=None):
-        # type: (bool, str, str, int, bool, bool, str, dict, bool) -> None
-
-        self.blank = blank
-
-        #: 'ssd', 'hdd', 'nvme'
-        self.type = type
-
-        #: unique within a node (or globally if you like).
-        self.id = id
-
-        #: byte integer.
-        self.size = size
-
-        #: indicates if it is a spinning disk
-        self.rotates = rotates
-
-        #: can be used to create a new OSD?
-        self.available = available
-
-        #: vendor/model
-        self.dev_id = dev_id
-
-        #: arbitrary JSON-serializable object
-        self.extended = extended if extended is not None else extended
-
-        # If this drive is not empty, but is suitable for appending
-        # additional journals, wals, or bluestore dbs, then report
-        # how much space is available.
-        self.metadata_space_free = metadata_space_free
-
-    def to_json(self):
-        return dict(type=self.type, blank=self.blank, id=self.id,
-                    size=self.size, rotates=self.rotates,
-                    available=self.available, dev_id=self.dev_id,
-                    extended=self.extended)
-
-    @classmethod
-    @handle_type_error
-    def from_json(cls, data):
-        return cls(**data)
-
-    @classmethod
-    def from_ceph_volume_inventory(cls, data):
-        # TODO: change InventoryDevice itself to mirror c-v inventory closely!
-
-        dev = InventoryDevice()
-        dev.id = data["path"]
-        dev.type = 'hdd' if data["sys_api"]["rotational"] == "1" else 'ssd/nvme'
-        dev.size = data["sys_api"]["size"]
-        dev.rotates = data["sys_api"]["rotational"] == "1"
-        dev.available = data["available"]
-        dev.dev_id = "%s/%s" % (data["sys_api"]["vendor"],
-                                data["sys_api"]["model"])
-        dev.extended = data
-        return dev
-
-    @classmethod
-    def from_ceph_volume_inventory_list(cls, datas):
-        return [cls.from_ceph_volume_inventory(d) for d in datas]
-
-    def pretty_print(self, only_header=False):
-        """Print a human friendly line with the information of the device
-
-        :param only_header: Print only the name of the device attributes
-
-        Ex::
-
-            Device Path           Type       Size    Rotates  Available Model
-            /dev/sdc            hdd   50.00 GB       True       True ATA/QEMU
-
-        """
-        row_format = "  {0:<15} {1:>10} {2:>10} {3:>10} {4:>10} {5:<15}\n"
-        if only_header:
-            return row_format.format("Device Path", "Type", "Size", "Rotates",
-                                     "Available", "Model")
-        else:
-            return row_format.format(str(self.id), self.type if self.type is not None else "",
-                                     format_bytes(self.size if self.size is not None else 0, 5,
-                                                  colored=False),
-                                     str(self.rotates), str(self.available),
-                                     self.dev_id if self.dev_id is not None else "")
 
 
 class InventoryNode(object):
@@ -910,22 +924,24 @@ class InventoryNode(object):
     When fetching inventory, all Devices are groups inside of an
     InventoryNode.
     """
-    def __init__(self, name, devices):
-        # type: (str, List[InventoryDevice]) -> None
-        assert isinstance(devices, list)
+    def __init__(self, name, devices=None):
+        # type: (str, inventory.Devices) -> None
+        if devices is None:
+            devices = inventory.Devices([])
+        assert isinstance(devices, inventory.Devices)
+
         self.name = name  # unique within cluster.  For example a hostname.
         self.devices = devices
 
     def to_json(self):
-        return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+        return {'name': self.name, 'devices': self.devices.to_json()}
 
     @classmethod
     def from_json(cls, data):
         try:
             _data = copy.deepcopy(data)
             name = _data.pop('name')
-            devices = [InventoryDevice.from_json(device)
-                       for device in _data.pop('devices')]
+            devices = inventory.Devices.from_json(_data.pop('devices'))
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
@@ -933,11 +949,30 @@ class InventoryNode(object):
         except KeyError as e:
             error_msg = '{} is required for {}'.format(e, cls.__name__)
             raise OrchestratorValidationError(error_msg)
+        except TypeError as e:
+            raise OrchestratorValidationError('Failed to read inventory: {}'.format(e))
+
 
     @classmethod
     def from_nested_items(cls, hosts):
-        devs = InventoryDevice.from_ceph_volume_inventory_list
+        devs = inventory.Devices.from_json
         return [cls(item[0], devs(item[1].data)) for item in hosts]
+
+    def __repr__(self):
+        return "<InventoryNode>({name})".format(name=self.name)
+
+
+class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev'])):
+    """
+    Describes a specific device on a specific host. Used for enabling or disabling LEDs
+    on devices.
+
+    hostname as in :func:`orchestrator.Orchestrator.get_hosts`
+
+    device_id: e.g. ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+       See ``ceph osd metadata | jq '.[].device_ids'``
+    """
+    __slots__ = ()
 
 
 def _mk_orch_methods(cls):
@@ -1037,7 +1072,7 @@ class OrchestratorClientMixin(Orchestrator):
             self._update_completion_progress(c)
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
-                time.sleep(5)
+                time.sleep(1)
             else:
                 break
         for c in completions:
@@ -1086,13 +1121,13 @@ class OutdatableData(object):
     def from_json(cls, data):
         return cls(data['data'], cls.time_from_string(data['last_refresh']))
 
-    def outdated(self, timeout_min=None):
-        if timeout_min is None:
-            timeout_min = 10
+    def outdated(self, timeout=None):
+        if timeout is None:
+            timeout = 600
         if self.last_refresh is None:
             return True
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
-            minutes=timeout_min)
+            seconds=timeout)
         return self.last_refresh < cutoff
 
     def __repr__(self):
@@ -1137,8 +1172,14 @@ class OutdatableDictMixin(object):
         for o in outdated:
             del self[o]
 
+    def invalidate(self, key):
+        self[key] = OutdatableData(self[key].data,
+                                   datetime.datetime.fromtimestamp(0))
+
+
 class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
     pass
+
 
 class OutdatableDict(OutdatableDictMixin, dict):
     pass

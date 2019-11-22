@@ -61,20 +61,18 @@
 #define dout_prefix *_dout << "mds." << name << ' '
 
 // cons/des
-MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
+MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
+		     boost::asio::io_context& ioctx) :
   Dispatcher(m->cct),
-  mds_lock(ceph::make_mutex("MDSDaemon::mds_lock")),
-  stopping(false),
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   beacon(m->cct, mc, n),
   name(n),
   messenger(m),
   monc(mc),
+  ioctx(ioctx),
   mgrc(m->cct, m, &mc->monmap),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
-  mds_rank(NULL),
-  asok_hook(NULL),
   starttime(mono_clock::now())
 {
   orig_argc = 0;
@@ -390,9 +388,6 @@ int MDSDaemon::init()
     return -ETIMEDOUT;
   }
 
-  mgrc.init();
-  messenger->add_dispatcher_head(&mgrc);
-
   mds_lock.lock();
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
@@ -401,7 +396,6 @@ int MDSDaemon::init()
   }
 
   monc->sub_want("mdsmap", 0, 0);
-  monc->sub_want("mgrmap", 0, 0);
   monc->renew_subs();
 
   mds_lock.unlock();
@@ -759,8 +753,6 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 
   dout(1) << "Updating MDS map to version " << epoch << " from " << m->get_source() << dendl;
 
-  entity_addrvec_t addrs;
-
   // keep old map, for a moment
   std::unique_ptr<MDSMap> oldmap;
   oldmap.swap(mdsmap);
@@ -768,13 +760,8 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
   // decode and process
   mdsmap.reset(new MDSMap);
   mdsmap->decode(m->get_encoded());
-  const MDSMap::DaemonState new_state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
-  const int incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());
-
-  // Calculate my effective rank (either my owned rank or the rank I'm following if STATE_STANDBY_REPLAY
-  mds_rank_t whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
 
   // verify compatset
   CompatSet mdsmap_compat(MDSMap::get_compat_set_all());
@@ -785,56 +772,71 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 	    << " not writeable with daemon features " << mdsmap_compat
 	    << ", killing myself" << dendl;
     suicide();
-    goto out;
+    return;
+  }
+
+  // Calculate my effective rank (either my owned rank or the rank I'm following if STATE_STANDBY_REPLAY
+  const auto addrs = messenger->get_myaddrs();
+  const auto myid = monc->get_global_id();
+  const auto mygid = mds_gid_t(myid);
+  const auto whoami = mdsmap->get_rank_gid(mygid);
+  const auto old_state = oldmap->get_state_gid(mygid);
+  const auto new_state = mdsmap->get_state_gid(mygid);
+  const auto incarnation = mdsmap->get_inc_gid(mygid);
+  dout(10) << "my gid is " << myid << dendl;
+  dout(10) << "map says I am mds." << whoami << "." << incarnation
+	   << " state " << ceph_mds_state_name(new_state) << dendl;
+  dout(10) << "msgr says I am " << addrs << dendl;
+
+  // If we're removed from the MDSMap, stop all processing.
+  using DS = MDSMap::DaemonState;
+  if (old_state != DS::STATE_NULL && new_state == DS::STATE_NULL) {
+    const auto& oldinfo = oldmap->get_info_gid(mygid);
+    dout(1) << "Map removed me " << oldinfo
+            << " from cluster; respawning! See cluster/monitor logs for details." << dendl;
+    respawn();
+  }
+
+  if (old_state == DS::STATE_NULL && new_state != DS::STATE_NULL) {
+    /* The MDS has been added to the FSMap, now we can init the MgrClient */
+    mgrc.init();
+    messenger->add_dispatcher_tail(&mgrc);
+    monc->sub_want("mgrmap", 0, 0);
+    monc->renew_subs(); /* MgrMap receipt drives connection to ceph-mgr */
   }
 
   // mark down any failed peers
-  for (const auto &p : oldmap->get_mds_info()) {
-    if (mdsmap->get_mds_info().count(p.first) == 0) {
-      dout(10) << " peer mds gid " << p.first << " removed from map" << dendl;
-      messenger->mark_down_addrs(p.second.addrs);
+  for (const auto& [gid, info] : oldmap->get_mds_info()) {
+    if (mdsmap->get_mds_info().count(gid) == 0) {
+      dout(10) << " peer mds gid " << gid << " removed from map" << dendl;
+      messenger->mark_down_addrs(info.addrs);
     }
   }
 
-  // see who i am
-  dout(10) << "my gid is " << monc->get_global_id() << dendl;
-  dout(10) << "map says I am mds." << whoami << "." << incarnation
-	   << " state " << ceph_mds_state_name(new_state) << dendl;
-
-  addrs = messenger->get_myaddrs();
-  dout(10) << "msgr says i am " << addrs << dendl;
-
   if (whoami == MDS_RANK_NONE) {
-    if (mds_rank != NULL) {
-      const auto myid = monc->get_global_id();
-      // We have entered a rank-holding state, we shouldn't be back
-      // here!
-      if (g_conf()->mds_enforce_unique_name) {
-        if (mds_gid_t existing = mdsmap->find_mds_gid_by_name(name)) {
-          const MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
-          if (i.global_id > myid) {
-            dout(1) << "Map replaced me with another mds." << whoami
-                    << " with gid (" << i.global_id << ") larger than myself ("
-                    << myid << "); quitting!" << dendl;
-            // Call suicide() rather than respawn() because if someone else
-            // has taken our ID, we don't want to keep restarting and
-            // fighting them for the ID.
-            suicide();
-            return;
-          }
-        }
-      }
-
-      dout(1) << "Map removed me (mds." << whoami << " gid:"
-              << myid << ") from cluster due to lost contact; respawning" << dendl;
-      respawn();
-    }
-    // MDSRank not active: process the map here to see if we have
-    // been assigned a rank.
+    // We do not hold a rank:
     dout(10) <<  __func__ << ": handling map in rankless mode" << dendl;
-    _handle_mds_map(*mdsmap);
-  } else {
 
+    if (new_state == DS::STATE_STANDBY) {
+      /* Note: STATE_BOOT is never an actual state in the FSMap. The Monitors
+       * generally mark a new MDS as STANDBY (although it's possible to
+       * immediately be assigned a rank).
+       */
+      if (old_state == DS::STATE_NULL) {
+        dout(1) << "Monitors have assigned me to become a standby." << dendl;
+        beacon.set_want_state(*mdsmap, new_state);
+      } else if (old_state == DS::STATE_STANDBY) {
+        dout(5) << "I am still standby" << dendl;
+      }
+    } else if (new_state == DS::STATE_NULL) {
+      /* We are not in the MDSMap yet! Keep waiting: */
+      ceph_assert(beacon.get_want_state() == DS::STATE_BOOT);
+      dout(10) << "not in map yet" << dendl;
+    } else {
+      /* We moved to standby somehow from another state */
+      ceph_abort("invalid transition to standby");
+    }
+  } else {
     // Did we already hold a different rank?  MDSMonitor shouldn't try
     // to change that out from under me!
     if (mds_rank && whoami != mds_rank->get_nodeid()) {
@@ -845,10 +847,12 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
-          timer, beacon, mdsmap, messenger, monc, &mgrc,
-          new LambdaContext([this](int r){respawn();}),
-          new LambdaContext([this](int r){suicide();}));
+      mds_rank = new MDSRankDispatcher(
+	whoami, mds_lock, clog,
+	timer, beacon, mdsmap, messenger, monc, &mgrc,
+	new LambdaContext([this](int r){respawn();}),
+	new LambdaContext([this](int r){suicide();}),
+	ioctx);
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();
@@ -860,34 +864,7 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
     mds_rank->handle_mds_map(m, *oldmap);
   }
 
-out:
   beacon.notify_mdsmap(*mdsmap);
-}
-
-void MDSDaemon::_handle_mds_map(const MDSMap &mdsmap)
-{
-  MDSMap::DaemonState new_state = mdsmap.get_state_gid(mds_gid_t(monc->get_global_id()));
-
-  // Normal rankless case, we're marked as standby
-  if (new_state == MDSMap::STATE_STANDBY) {
-    beacon.set_want_state(mdsmap, new_state);
-    dout(1) << "Map has assigned me to become a standby" << dendl;
-
-    return;
-  }
-
-  // Case where we thought we were standby, but MDSMap disagrees
-  if (beacon.get_want_state() == MDSMap::STATE_STANDBY) {
-    dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
-    new_state = MDSMap::STATE_BOOT;
-    beacon.set_want_state(mdsmap, new_state);
-    return;
-  }
-
-  // Case where we have sent a boot beacon that isn't reflected yet
-  if (beacon.get_want_state() == MDSMap::STATE_BOOT) {
-    dout(10) << "not in map yet" << dendl;
-  }
 }
 
 void MDSDaemon::handle_signal(int signum)
@@ -921,17 +898,17 @@ void MDSDaemon::suicide()
 
   clean_up_admin_socket();
 
-  // Inform MDS we are going away, then shut down beacon
+  // Notify the Monitors (MDSMonitor) that we're dying, so that it doesn't have
+  // to wait for us to go laggy. Only do this if we're actually in the MDSMap,
+  // because otherwise the MDSMonitor will drop our message.
   beacon.set_want_state(*mdsmap, MDSMap::STATE_DNE);
   if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
-    // Notify the MDSMonitor that we're dying, so that it doesn't have to
-    // wait for us to go laggy.  Only do this if we're actually in the
-    // MDSMap, because otherwise the MDSMonitor will drop our message.
     beacon.send_and_wait(1);
   }
   beacon.shutdown();
 
-  mgrc.shutdown();
+  if (mgrc.is_initialized())
+    mgrc.shutdown();
 
   if (mds_rank) {
     mds_rank->shutdown();

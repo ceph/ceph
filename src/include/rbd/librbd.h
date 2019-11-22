@@ -627,6 +627,9 @@ CEPH_RBD_API int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
 CEPH_RBD_API int rbd_aio_open_by_id_read_only(rados_ioctx_t io, const char *id,
                                               rbd_image_t *image, const char *snap_name,
                                               rbd_completion_t c);
+CEPH_RBD_API int rbd_features_to_string(uint64_t features, char *str_features,
+                                        size_t *size);
+CEPH_RBD_API int rbd_features_from_string(const char *str_features, uint64_t *features);
 CEPH_RBD_API int rbd_close(rbd_image_t image);
 CEPH_RBD_API int rbd_aio_close(rbd_image_t image, rbd_completion_t c);
 CEPH_RBD_API int rbd_resize(rbd_image_t image, uint64_t size);
@@ -806,6 +809,8 @@ CEPH_RBD_API int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, str
 
 CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id);
+CEPH_RBD_API int rbd_snap_get_name(rbd_image_t image, uint64_t snap_id, char *snapname, size_t *name_len);
+CEPH_RBD_API int rbd_snap_get_id(rbd_image_t image, const char *snapname, uint64_t *snap_id);
 
 CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
                                              uint64_t snap_id,

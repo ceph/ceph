@@ -44,7 +44,16 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   ENCODE_START(v, 1, bl);
   encode(name, bl);
   if (v < 3) {
-    encode(public_addrs.legacy_addr(), bl, features);
+    auto a = public_addrs.legacy_addr();
+    if (a != entity_addr_t()) {
+      encode(a, bl, features);
+    } else {
+      // note: we don't have a legacy addr here, so lie so that it looks
+      // like one, just so that old clients get a valid-looking map.
+      // they won't be able to talk to the v2 mons, but that's better
+      // than nothing.
+      encode(public_addrs.as_legacy_addr(), bl, features);
+    }
   } else {
     encode(public_addrs, bl, features);
   }
@@ -649,7 +658,7 @@ int MonMap::init_with_config_file(const ConfigProxy& conf,
 
 using namespace seastar;
 
-future<> MonMap::read_monmap(const std::string& monmap)
+seastar::future<> MonMap::read_monmap(const std::string& monmap)
 {
   return open_file_dma(monmap, open_flags::ro).then([this] (file f) {
     return f.size().then([this, f = std::move(f)](size_t s) {
@@ -664,7 +673,7 @@ future<> MonMap::read_monmap(const std::string& monmap)
   });
 }
 
-future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& name)
+seastar::future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& name)
 {
   string domain;
   string service = name;
@@ -741,7 +750,7 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
   });
 }
 
-future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
+seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
   // file?
   if (const auto monmap = conf.get_val<std::string>("monmap");

@@ -125,10 +125,6 @@ ENDOFKEY
 }
 
 function ensure_decent_cmake_on_ubuntu {
-    # TODO: remove me after a while
-    # remove Kitware Apt Archive Automatic Signing Key
-    $SUDO apt-key del 40CD72DA
-    $SUDO rm -f /etc/apt/sources.list.d/kitware.list
     local new=$1
     if command -v cmake > /dev/null; then
         local old=$(cmake --version | grep -Po 'version \K[0-9].*')
@@ -142,6 +138,20 @@ function ensure_decent_cmake_on_ubuntu {
 	xenial \
 	force \
 	cmake
+}
+
+function ensure_decent_binutils_on_ubuntu {
+    local new=$1
+    local old=$(ld --version | head -n1 | grep -Po ' \K[0-9].*')
+    if dpkg --compare-versions $old ge $new; then
+        return
+    fi
+    install_pkg_on_ubuntu \
+	binutils \
+	7fa393306ed8b93019d225548474c0540b8928f7 \
+	xenial \
+	force \
+	binutils
 }
 
 function install_pkg_on_ubuntu {
@@ -308,6 +318,7 @@ else
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 8 xenial
                 ensure_decent_cmake_on_ubuntu 3.10.1
+                ensure_decent_binutils_on_ubuntu 2.28
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
@@ -391,6 +402,9 @@ else
                     dts_ver=8
                 elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     $SUDO dnf config-manager --set-enabled PowerTools
+		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
+		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
+		    $SUDO dnf config-manager --setopt gpgcheck=0 apt-mirror.front.sepia.ceph.com_lab-extras_8_ --save
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     $SUDO subscription-manager repos --enable "codeready-builder-for-rhel-8-*-rpms"
                 fi

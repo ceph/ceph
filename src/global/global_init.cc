@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
 #include "common/config.h"
@@ -312,6 +313,11 @@ global_init(const std::map<std::string,std::string> *defaults,
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
     cerr << "warning: unable to set dumpable flag: " << cpp_strerror(errno) << std::endl;
   }
+#  if defined(PR_SET_THP_DISABLE)
+  if (!g_conf().get_val<bool>("thp") && prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0) == -1) {
+    cerr << "warning: unable to disable THP: " << cpp_strerror(errno) << std::endl;
+  }
+#  endif
 #endif
 
   //
@@ -327,13 +333,16 @@ global_init(const std::map<std::string,std::string> *defaults,
     // make sure our mini-session gets legacy values
     g_conf().apply_changes(nullptr);
 
-    MonClient mc_bootstrap(g_ceph_context);
+    ceph::async::io_context_pool cp(1);
+    MonClient mc_bootstrap(g_ceph_context, cp);
     if (mc_bootstrap.get_monmap_and_config() < 0) {
+      cp.stop();
       g_ceph_context->_log->flush();
       cerr << "failed to fetch mon config (--no-mon-config to skip)"
 	   << std::endl;
       _exit(1);
     }
+    cp.stop();
   }
 
   // Expand metavariables. Invoke configuration observers. Open log file.
@@ -391,16 +400,6 @@ global_init(const std::map<std::string,std::string> *defaults,
   }
 
   return boost::intrusive_ptr<CephContext>{g_ceph_context, false};
-}
-
-void intrusive_ptr_add_ref(CephContext* cct)
-{
-  cct->get();
-}
-
-void intrusive_ptr_release(CephContext* cct)
-{
-  cct->put();
 }
 
 void global_print_banner(void)

@@ -21,7 +21,7 @@
 
 #include "mds/Capability.h"
 
-class MMDSResolve : public Message {
+class MMDSResolve : public SafeMessage {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
@@ -96,7 +96,7 @@ public:
   list<table_client> table_clients;
 
 protected:
-  MMDSResolve() : Message{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
+  MMDSResolve() : SafeMessage{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
  {}
   ~MMDSResolve() override {}
 

@@ -4,13 +4,16 @@
 #ifndef CEPH_LIBRBD_EXCLUSIVE_LOCK_H
 #define CEPH_LIBRBD_EXCLUSIVE_LOCK_H
 
-#include "librbd/ManagedLock.h"
 #include "common/AsyncOpTracker.h"
+#include "librbd/ManagedLock.h"
+#include "librbd/exclusive_lock/Policy.h"
+#include "common/RefCountedObj.h"
 
 namespace librbd {
 
 template <typename ImageCtxT = ImageCtx>
-class ExclusiveLock : public ManagedLock<ImageCtxT> {
+class ExclusiveLock : public RefCountedObject,
+                      public ManagedLock<ImageCtxT> {
 public:
   static ExclusiveLock *create(ImageCtxT &image_ctx) {
     return new ExclusiveLock<ImageCtxT>(image_ctx);
@@ -18,7 +21,8 @@ public:
 
   ExclusiveLock(ImageCtxT &image_ctx);
 
-  bool accept_requests(int *ret_val = nullptr) const;
+  bool accept_request(exclusive_lock::OperationRequestType request_type,
+                      int *ret_val) const;
   bool accept_ops() const;
 
   void block_requests(int r);

@@ -2,7 +2,6 @@
   <ng-container i18n>Only available for RBD images with <strong>fast-diff</strong> enabled</ng-container>
 </ng-template>
 
-
 <tabset *ngIf="selection?.hasSingleSelection">
   <tab i18n-heading
        heading="Details">
@@ -96,9 +95,7 @@
           <td i18n
               class="bold">Parent</td>
           <td>
-            <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}
-              /{{ selectedItem.parent.image_name }}
-              @{{ selectedItem.parent.snap_name }}</span>
+            <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}<span *ngIf="selectedItem.parent.pool_namespace">/{{ selectedItem.parent.pool_namespace }}</span>/{{ selectedItem.parent.image_name }}@{{ selectedItem.parent.snap_name }}</span>
             <span *ngIf="!selectedItem.parent">-</span>
           </td>
         </tr>
@@ -120,6 +117,7 @@
     <cd-rbd-snapshot-list [snapshots]="selectedItem.snapshots"
                           [featuresName]="selectedItem.features_name"
                           [poolName]="selectedItem.pool_name"
+                          [namespace]="selectedItem.namespace"
                           [rbdName]="selectedItem.name"></cd-rbd-snapshot-list>
   </tab>
   <tab i18n-heading
@@ -133,8 +131,14 @@
   let-row="row"
   let-value="value">
   <ng-container *ngIf="+value; else global">
-    <strong i18n i18n-tooltip tooltip="This setting overrides the global value">Image</strong>
+    <strong i18n
+            i18n-tooltip
+            tooltip="This setting overrides the global value">Image</strong>
   </ng-container>
-  <ng-template #global><span i18n i18n-tooltip tooltip="This is the global value. No value for this option has been set for this image.">Global</span></ng-template>
+  <ng-template #global>
+    <span i18n
+          i18n-tooltip
+          tooltip="This is the global value. No value for this option has been set for this image.">Global</span>
+  </ng-template>
 </ng-template>
 

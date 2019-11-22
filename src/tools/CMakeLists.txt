@@ -16,6 +16,14 @@ else()
 endif()
 install(TARGETS rados DESTINATION bin)
 
+set(neorados_srcs
+  neorados.cc)
+add_executable(neorados ${neorados_srcs})
+
+target_link_libraries(neorados libRADOS global Boost::coroutine ${CMAKE_DL_LIBS})
+#install(TARGETS neorados DESTINATION bin)
+
+
 if(WITH_TESTS)
 add_executable(ceph_scratchtool scratchtool.c)
 target_link_libraries(ceph_scratchtool librados global)
@@ -121,6 +129,10 @@ if(WITH_RBD)
     add_subdirectory(rbd_ggate)
   endif()
 endif(WITH_RBD)
+
+if(WITH_SEASTAR)
+  add_subdirectory(crimson)
+endif()
 
 add_subdirectory(immutable_object_cache)
 add_subdirectory(ceph-dencoder)

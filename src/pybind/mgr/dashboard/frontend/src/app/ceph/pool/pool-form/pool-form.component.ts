@@ -7,9 +7,11 @@ import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin, Subscription } from 'rxjs';
 
+import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -67,6 +69,7 @@ export class PoolFormComponent implements OnInit {
   action: string;
   resource: string;
   icons = Icons;
+  pgAutoscaleModes: string[];
 
   constructor(
     private dimlessBinaryPipe: DimlessBinaryPipe,
@@ -74,6 +77,7 @@ export class PoolFormComponent implements OnInit {
     private router: Router,
     private modalService: BsModalService,
     private poolService: PoolService,
+    private configurationService: ConfigurationService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
     private bsModalService: BsModalService,
@@ -148,6 +152,7 @@ export class PoolFormComponent implements OnInit {
         pgNum: new FormControl('', {
           validators: [Validators.required, Validators.min(1)]
         }),
+        pgAutoscaleMode: new FormControl(null),
         ecOverwrites: new FormControl(false),
         compression: compressionForm,
         max_bytes: new FormControl(''),
@@ -160,22 +165,29 @@ export class PoolFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    forkJoin(this.poolService.getInfo(), this.ecpService.list()).subscribe(
-      (data: [PoolFormInfo, ErasureCodeProfile[]]) => {
-        this.initInfo(data[0]);
-        this.initEcp(data[1]);
-        if (this.editing) {
-          this.initEditMode();
-        }
-        this.listenToChanges();
-        this.setComplexValidators();
+    forkJoin(
+      this.configurationService.get('osd_pool_default_pg_autoscale_mode'),
+      this.poolService.getInfo(),
+      this.ecpService.list()
+    ).subscribe((data: [any, PoolFormInfo, ErasureCodeProfile[]]) => {
+      const pgAutoscaleConfig = data[0];
+      this.pgAutoscaleModes = pgAutoscaleConfig.enum_values;
+      const defaultPgAutoscaleMode = this.configurationService.getValue(pgAutoscaleConfig, 'mon');
+      this.form.silentSet('pgAutoscaleMode', defaultPgAutoscaleMode);
+      this.initInfo(data[1]);
+      this.initEcp(data[2]);
+      if (this.editing) {
+        this.initEditMode();
+      } else {
+        this.setAvailableApps();
       }
-    );
+      this.listenToChanges();
+      this.setComplexValidators();
+    });
   }
 
   private initInfo(info: PoolFormInfo) {
     this.form.silentSet('algorithm', info.bluestore_compression_algorithm);
-    info.compression_modes.push('unset');
     this.info = info;
   }
 
@@ -222,6 +234,7 @@ export class PoolFormComponent implements OnInit {
       ),
       size: pool.size,
       erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile),
+      pgAutoscaleMode: pool.pg_autoscale_mode,
       pgNum: pool.pg_num,
       ecOverwrites: pool.flags_names.includes('ec_overwrites'),
       mode: pool.options.compression_mode,
@@ -240,7 +253,14 @@ export class PoolFormComponent implements OnInit {
       }
     });
     this.data.pgs = this.form.getValue('pgNum');
+    this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
+  }
+
+  private setAvailableApps(apps: string[] = this.data.applications.default) {
+    this.data.applications.available = _.uniq(apps.sort()).map(
+      (x: string) => new SelectOption(false, x, '')
+    );
   }
 
   private listenToChanges() {
@@ -531,7 +551,17 @@ export class PoolFormComponent implements OnInit {
 
     this.assignFormFields(pool, [
       { externalFieldName: 'pool_type', formControlName: 'poolType' },
-      { externalFieldName: 'pg_num', formControlName: 'pgNum', editable: true },
+      {
+        externalFieldName: 'pg_autoscale_mode',
+        formControlName: 'pgAutoscaleMode',
+        editable: true
+      },
+      {
+        externalFieldName: 'pg_num',
+        formControlName: 'pgNum',
+        replaceFn: (value) => (this.form.getValue('pgAutoscaleMode') === 'on' ? 1 : value),
+        editable: true
+      },
       this.form.getValue('poolType') === 'replicated'
         ? { externalFieldName: 'size', formControlName: 'size' }
         : {
@@ -602,7 +632,7 @@ export class PoolFormComponent implements OnInit {
             externalFieldName: 'compression_mode',
             formControlName: 'mode',
             editable: true,
-            replaceFn: () => 'unset'
+            replaceFn: () => 'unset' // Is used if no compression is set
           },
           {
             externalFieldName: 'srcpool',

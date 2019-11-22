@@ -23,7 +23,7 @@ void rados_callback(rados_completion_t c, void *arg) {
 template <typename T, void(T::*MF)(int)=&T::complete>
 librados::AioCompletion *create_rados_callback(T *obj) {
   return librados::Rados::aio_create_completion(
-    obj, &detail::rados_callback<T, MF>, nullptr);
+    obj, &detail::rados_callback<T, MF>);
 }
 
 }  // namespace immutable_obj_cache

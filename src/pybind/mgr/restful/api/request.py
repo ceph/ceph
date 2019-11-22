@@ -77,6 +77,14 @@ class Request(RestController):
         """
         Pass through method to create any request
         """
+        if isinstance(request.json, list):
+            if all(isinstance(element, list) for element in request.json):
+                return context.instance.submit_request(request.json, **kwargs)
+
+            # The request.json has wrong format
+            response.status = 500
+            return {'message': 'The request format should be [[{c1},{c2}]]'}
+
         return context.instance.submit_request([[request.json]], **kwargs)
 
 

@@ -33,11 +33,13 @@
 
 class health_check_map_t;
 class DaemonServer;
+class MgrSession;
+class ModuleCommand;
 class PyModuleRegistry;
 
 class ActivePyModules
 {
-  std::map<std::string, std::unique_ptr<ActivePyModule>> modules;
+  std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
   std::map<std::string, std::string> store_cache;
   DaemonStateIndex &daemon_state;
@@ -137,7 +139,8 @@ public:
   void set_uri(const std::string& module_name, const std::string &uri);
 
   int handle_command(
-    const std::string &module_name,
+    const ModuleCommand& module_command,
+    const MgrSession& session,
     const cmdmap_t &cmdmap,
     const bufferlist &inbuf,
     std::stringstream *ds,

@@ -38,6 +38,9 @@
                   class="invalid-feedback"
                   i18n>It's not possible to create an RBD pool with '/' in the name.
               Please change the name or remove 'rbd' from the applications list.</span>
+            <span *ngIf="form.showError('name', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Pool name can only contain letters, numbers, '.', '-', '_' or '/'.</span>
           </div>
         </div>
 
@@ -67,8 +70,27 @@
         </div>
 
         <div *ngIf="form.getValue('poolType')">
-          <!-- Pg number -->
+          <!-- PG Autoscale Mode -->
           <div class="form-group row">
+            <label i18n
+                   class="col-form-label col-sm-3"
+                   for="pgAutoscaleMode">PG Autoscale</label>
+            <div class="col-sm-9">
+              <select class="form-control custom-select"
+                      id="pgAutoscaleMode"
+                      name="pgAutoscaleMode"
+                      formControlName="pgAutoscaleMode">
+                <option *ngFor="let mode of pgAutoscaleModes"
+                        [value]="mode">
+                  {{ mode }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Pg number -->
+          <div class="form-group row"
+               *ngIf="form.getValue('pgAutoscaleMode') !== 'on'">
             <label class="col-form-label col-sm-3"
                    for="pgNum">
               <ng-container i18n>Placement groups</ng-container>

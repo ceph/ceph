@@ -953,7 +953,7 @@ Barbican Settings
 HashiCorp Vault Settings
 ========================
 
-``rgw crypt vault auth```
+``rgw crypt vault auth``
 
 :Description: Type of authentication method to be used. The only method
               currently supported is ``token``.
@@ -969,7 +969,14 @@ HashiCorp Vault Settings
 
 ``rgw crypt vault addr``
 
-:Description: Base URL to the Vault server.
+:Description: Vault server base address, e.g. ``http://vaultserver:8200``.
+:Type: String
+:Default: None
+
+``rgw crypt vault prefix``
+
+:Description: The Vault secret URL prefix, which can be used to restrict access
+              to a particular subset of the secret space, e.g. ``/v1/secret/data``.
 :Type: String
 :Default: None
 

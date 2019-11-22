@@ -1,9 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_S3_H
+#pragma once
 
-#define CEPH_RGW_REST_S3_H
 #define TIME_BUF_SIZE 128
 
 #include <mutex>
@@ -604,10 +603,10 @@ public:
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
-    const bool isSTSEnabled;
-    const bool isIAMEnabled;
-    const bool isPSEnabled;
-    bool is_usage_op() {
+  const bool isSTSEnabled;
+  const bool isIAMEnabled;
+  const bool isPSEnabled;
+  bool is_usage_op() const {
     return s->info.args.exists("usage");
   }
   RGWOp *op_get() override;
@@ -623,33 +622,28 @@ public:
 class RGWHandler_REST_Bucket_S3 : public RGWHandler_REST_S3 {
   const bool enable_pubsub;
 protected:
-  bool is_acl_op() {
+  bool is_acl_op() const {
     return s->info.args.exists("acl");
   }
-  bool is_cors_op() {
+  bool is_cors_op() const {
       return s->info.args.exists("cors");
   }
-  bool is_lc_op() {
+  bool is_lc_op() const {
       return s->info.args.exists("lifecycle");
   }
-  bool is_obj_update_op() override {
+  bool is_obj_update_op() const override {
     return is_acl_op() || is_cors_op();
   }
-
-  bool is_tagging_op() {
+  bool is_tagging_op() const {
     return s->info.args.exists("tagging");
   }
- 
-  bool is_request_payment_op() {
+  bool is_request_payment_op() const {
     return s->info.args.exists("requestPayment");
   }
-  bool is_policy_op() {
+  bool is_policy_op() const {
     return s->info.args.exists("policy");
   }
-  bool is_tagging_op() const {
-      return s->info.args.exists("tagging");
-  }
-  bool is_object_lock_op() {
+  bool is_object_lock_op() const {
     return s->info.args.exists("object-lock");
   }
   bool is_notification_op() const {
@@ -658,7 +652,8 @@ protected:
     }
     return false;
   }
-  RGWOp *get_obj_op(bool get_data);
+
+  RGWOp *get_obj_op(bool get_data) const;
 
   RGWOp *op_get() override;
   RGWOp *op_head() override;
@@ -674,20 +669,20 @@ public:
 
 class RGWHandler_REST_Obj_S3 : public RGWHandler_REST_S3 {
 protected:
-  bool is_acl_op() {
+  bool is_acl_op() const {
     return s->info.args.exists("acl");
   }
-  bool is_tagging_op() {
+  bool is_tagging_op() const {
     return s->info.args.exists("tagging");
   }
-  bool is_obj_retention_op() {
+  bool is_obj_retention_op() const {
     return s->info.args.exists("retention");
   }
-  bool is_obj_legal_hold_op() {
+  bool is_obj_legal_hold_op() const {
     return s->info.args.exists("legal-hold");
   }
 
-  bool is_obj_update_op() override {
+  bool is_obj_update_op() const override {
     return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op();
   }
   RGWOp *get_obj_op(bool get_data);
@@ -831,9 +826,7 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
 }
 
 
-namespace rgw {
-namespace auth {
-namespace s3 {
+namespace rgw::auth::s3 {
 
 class AWSEngine : public rgw::auth::Engine {
 public:
@@ -1092,9 +1085,4 @@ public:
 };
 
 
-} /* namespace s3 */
-} /* namespace auth */
-} /* namespace rgw */
-
-
-#endif /* CEPH_RGW_REST_S3_H */
+} // namespace rgw::auth::s3

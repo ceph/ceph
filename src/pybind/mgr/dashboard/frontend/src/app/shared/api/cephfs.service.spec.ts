@@ -55,4 +55,27 @@ describe('CephfsService', () => {
     const req = httpTesting.expectOne('api/cephfs/1/mds_counters');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call lsDir', () => {
+    service.lsDir(1).subscribe();
+    const req = httpTesting.expectOne('api/cephfs/1/ls_dir?depth=2');
+    expect(req.request.method).toBe('GET');
+    service.lsDir(2, '/some/path').subscribe();
+    httpTesting.expectOne('api/cephfs/2/ls_dir?depth=2&path=%252Fsome%252Fpath');
+  });
+
+  it('should call mkSnapshot', () => {
+    service.mkSnapshot(3, '/some/path').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/3/mk_snapshot?path=%252Fsome%252Fpath');
+    expect(req.request.method).toBe('POST');
+
+    service.mkSnapshot(4, '/some/other/path', 'snap').subscribe();
+    httpTesting.expectOne('api/cephfs/4/mk_snapshot?path=%252Fsome%252Fother%252Fpath&name=snap');
+  });
+
+  it('should call rmSnapshot', () => {
+    service.rmSnapshot(1, '/some/path', 'snap').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/1/rm_snapshot?path=%252Fsome%252Fpath&name=snap');
+    expect(req.request.method).toBe('POST');
+  });
 });

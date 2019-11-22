@@ -1,12 +1,15 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subject } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
 
@@ -17,12 +20,15 @@ import { TaskManagerService } from '../../../shared/services/task-manager.servic
 })
 export class RbdSnapshotFormComponent implements OnInit {
   poolName: string;
+  namespace: string;
   imageName: string;
   snapName: string;
 
   snapshotForm: CdFormGroup;
 
   editing = false;
+  action: string;
+  resource: string;
 
   public onSubmit: Subject<string>;
 
@@ -30,8 +36,12 @@ export class RbdSnapshotFormComponent implements OnInit {
     public modalRef: BsModalRef,
     private rbdService: RbdService,
     private taskManagerService: TaskManagerService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n,
+    private actionLabels: ActionLabelsI18n
   ) {
+    this.action = this.actionLabels.CREATE;
+    this.resource = this.i18n('RBD Snapshot');
     this.createForm();
   }
 
@@ -59,19 +69,20 @@ export class RbdSnapshotFormComponent implements OnInit {
    */
   setEditing(editing: boolean = true) {
     this.editing = editing;
+    this.action = this.editing ? this.actionLabels.RENAME : this.actionLabels.CREATE;
   }
 
   editAction() {
     const snapshotName = this.snapshotForm.getValue('snapshotName');
+    const imageSpec = new ImageSpec(this.poolName, this.namespace, this.imageName);
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/edit';
     finishedTask.metadata = {
-      pool_name: this.poolName,
-      image_name: this.imageName,
+      image_spec: imageSpec.toString(),
       snapshot_name: snapshotName
     };
     this.rbdService
-      .renameSnapshot(this.poolName, this.imageName, this.snapName, snapshotName)
+      .renameSnapshot(imageSpec, this.snapName, snapshotName)
       .toPromise()
       .then(() => {
         this.taskManagerService.subscribe(
@@ -91,15 +102,15 @@ export class RbdSnapshotFormComponent implements OnInit {
 
   createAction() {
     const snapshotName = this.snapshotForm.getValue('snapshotName');
+    const imageSpec = new ImageSpec(this.poolName, this.namespace, this.imageName);
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/create';
     finishedTask.metadata = {
-      pool_name: this.poolName,
-      image_name: this.imageName,
+      image_spec: imageSpec.toString(),
       snapshot_name: snapshotName
     };
     this.rbdService
-      .createSnapshot(this.poolName, this.imageName, snapshotName)
+      .createSnapshot(imageSpec, snapshotName)
       .toPromise()
       .then(() => {
         this.taskManagerService.subscribe(

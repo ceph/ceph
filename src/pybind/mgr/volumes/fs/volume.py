@@ -2,7 +2,7 @@ import json
 import time
 import errno
 import logging
-from threading import Lock
+from threading import Lock, Condition, Event
 try:
     # py2
     from threading import _Timer as Timer
@@ -43,11 +43,16 @@ class ConnectionPool(object):
             self.ops_in_progress += 1
             return self.fs
 
-        def put_fs_handle(self):
+        def put_fs_handle(self, notify):
             assert self.ops_in_progress > 0
             self.ops_in_progress -= 1
+            if self.ops_in_progress == 0:
+                notify()
 
-        def del_fs_handle(self):
+        def del_fs_handle(self, waiter):
+            if waiter:
+                while self.ops_in_progress != 0:
+                    waiter()
             if self.is_connection_valid():
                 self.disconnect()
             else:
@@ -108,6 +113,7 @@ class ConnectionPool(object):
         self.mgr = mgr
         self.connections = {}
         self.lock = Lock()
+        self.cond = Condition(self.lock)
         self.timer_task = ConnectionPool.RTimer(ConnectionPool.TIMER_TASK_RUN_INTERVAL,
                                                 self.cleanup_connections)
         self.timer_task.start()
@@ -150,19 +156,31 @@ class ConnectionPool(object):
         with self.lock:
             conn = self.connections.get(fs_name, None)
             if conn:
-                conn.put_fs_handle()
+                conn.put_fs_handle(notify=lambda: self.cond.notifyAll())
 
-    def _del_fs_handle(self, fs_name):
+    def _del_fs_handle(self, fs_name, wait=False):
         conn = self.connections.pop(fs_name, None)
         if conn:
-            conn.del_fs_handle()
-    def del_fs_handle(self, fs_name):
+            conn.del_fs_handle(waiter=None if not wait else lambda: self.cond.wait())
+
+    def del_fs_handle(self, fs_name, wait=False):
         with self.lock:
-            self._del_fs_handle(fs_name)
+            self._del_fs_handle(fs_name, wait)
+
+    def del_all_handles(self):
+        with self.lock:
+            for fs_name in list(self.connections.keys()):
+                log.info("waiting for pending ops for '{}'".format(fs_name))
+                self._del_fs_handle(fs_name, wait=True)
+                log.info("pending ops completed for '{}'".format(fs_name))
+            # no new connections should have been initialized since its
+            # guarded on shutdown.
+            assert len(self.connections) == 0
 
 class VolumeClient(object):
     def __init__(self, mgr):
         self.mgr = mgr
+        self.stopping = Event()
         self.connection_pool = ConnectionPool(self.mgr)
         # TODO: make thread pool size configurable
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
@@ -174,6 +192,15 @@ class VolumeClient(object):
         fs_map = self.mgr.get('fs_map')
         for fs in fs_map['filesystems']:
             self.purge_queue.queue_purge_job(fs['mdsmap']['fs_name'])
+
+    def shutdown(self):
+        log.info("shutting down")
+        # first, note that we're shutting down
+        self.stopping.set()
+        # second, ask purge threads to quit
+        self.purge_queue.cancel_all_jobs()
+        # third, delete all libcephfs handles from connection pool
+        self.connection_pool.del_all_handles()
 
     def cluster_log(self, msg, lvl=None):
         """
@@ -266,6 +293,9 @@ class VolumeClient(object):
         """
         create volume  (pool, filesystem and mds)
         """
+        if self.stopping.isSet():
+            return -errno.ESHUTDOWN, "", "shutdown in progress"
+
         metadata_pool, data_pool = self.gen_pool_names(volname)
         # create pools
         r, outs, outb = self.create_pool(metadata_pool)
@@ -286,8 +316,11 @@ class VolumeClient(object):
         """
         delete the given module (tear down mds, remove filesystem)
         """
+        if self.stopping.isSet():
+            return -errno.ESHUTDOWN, "", "shutdown in progress"
+
         self.purge_queue.cancel_purge_job(volname)
-        self.connection_pool.del_fs_handle(volname)
+        self.connection_pool.del_fs_handle(volname, wait=True)
         # Tear down MDS daemons
         try:
             completion = self.mgr.remove_mds(volname)
@@ -318,6 +351,9 @@ class VolumeClient(object):
         return self.remove_pool(data_pool)
 
     def list_volumes(self):
+        if self.stopping.isSet():
+            return -errno.ESHUTDOWN, "", "shutdown in progress"
+
         result = []
         fs_map = self.mgr.get("fs_map")
         for f in fs_map['filesystems']:
@@ -348,6 +384,9 @@ class VolumeClient(object):
             fs_name = kwargs['vol_name']
             # note that force arg is available for remove type commands
             force = kwargs.get('force', False)
+
+            if self.stopping.isSet():
+                return -errno.ESHUTDOWN, "", "shutdown in progress"
 
             # fetch the connection from the pool
             if not fs_handle:
@@ -387,6 +426,8 @@ class VolumeClient(object):
         groupname  = kwargs['group_name']
         size       = kwargs['size']
         pool       = kwargs['pool_layout']
+        uid        = kwargs['uid']
+        gid        = kwargs['gid']
         mode       = kwargs['mode']
 
         try:
@@ -396,7 +437,7 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, create it with " \
                         "`ceph fs subvolumegroup create` before creating subvolumes".format(groupname))
-                sv.create_subvolume(spec, size, pool=pool, mode=self.octal_str_to_decimal_int(mode))
+                sv.create_subvolume(spec, size, pool=pool, uid=uid, gid=gid, mode=self.octal_str_to_decimal_int(mode))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -418,6 +459,41 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, cannot remove " \
                         "subvolume '{1}'".format(groupname, subvolname))
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    @connection_pool_wrap
+    def resize_subvolume(self, fs_handle, **kwargs):
+        ret        = 0, "", ""
+        subvolname = kwargs['sub_name']
+        newsize    = kwargs['new_size']
+        groupname  = kwargs['group_name']
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec(subvolname, groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found, create it with " \
+                        "'ceph fs subvolumegroup create' before creating or resizing subvolumes".format(groupname))
+                subvolpath = sv.get_subvolume_path(spec)
+                if not subvolpath:
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume '{0}' not found, create it with " \
+                        "'ceph fs subvolume create' before resizing subvolumes".format(subvolname))
+
+                try:
+                    newsize = int(newsize)
+                except ValueError:
+                    newsize = newsize.lower()
+                    nsize, usedbytes = sv.resize_infinite(subvolpath, newsize)
+                    ret = 0, json.dumps([{'bytes_used': usedbytes}, {'bytes_quota': nsize}, {'bytes_pcent': "undefined"}], indent=2), ""
+                else:
+                    noshrink = kwargs['no_shrink']
+                    nsize, usedbytes = sv.resize_subvolume(subvolpath, newsize, noshrink)
+                    ret = 0, json.dumps([{'bytes_used': usedbytes}, {'bytes_quota': nsize},
+                                         {'bytes_pcent': '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}], indent=2), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -550,13 +626,15 @@ class VolumeClient(object):
         volname   = kwargs['vol_name']
         groupname = kwargs['group_name']
         pool      = kwargs['pool_layout']
+        uid       = kwargs['uid']
+        gid       = kwargs['gid']
         mode      = kwargs['mode']
 
         try:
             # TODO: validate that subvol size fits in volume size
             with SubVolume(self.mgr, fs_handle) as sv:
                 spec = SubvolumeSpec("", groupname)
-                sv.create_group(spec, pool=pool, mode=self.octal_str_to_decimal_int(mode))
+                sv.create_group(spec, pool=pool, uid=uid, gid=gid, mode=self.octal_str_to_decimal_int(mode))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

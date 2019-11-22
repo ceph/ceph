@@ -63,7 +63,7 @@ class ClusterConfiguration(RESTController):
 
         for section in avail_sections:
             for entry in value:
-                if not entry['value']:
+                if entry['value'] is None:
                     break
 
                 if entry['section'] == section:

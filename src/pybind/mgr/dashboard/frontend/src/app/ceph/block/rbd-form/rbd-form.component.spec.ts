@@ -14,6 +14,7 @@ import { delay } from 'rxjs/operators';
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
+import { ImageSpec } from '../../../shared/models/image-spec';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationFormComponent } from '../rbd-configuration-form/rbd-configuration-form.component';
 import { RbdFormMode } from './rbd-form-mode.enum';
@@ -178,17 +179,23 @@ describe('RbdFormComponent', () => {
       spyOn(rbdService, 'get').and.callThrough();
     });
 
-    it('without snapName', () => {
-      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: undefined });
+    it('with namespace', () => {
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar%2Fbaz' });
 
-      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(rbdService.get).toHaveBeenCalledWith(new ImageSpec('foo', 'bar', 'baz'));
+    });
+
+    it('without snapName', () => {
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar', snap: undefined });
+
+      expect(rbdService.get).toHaveBeenCalledWith(new ImageSpec('foo', null, 'bar'));
       expect(component.snapName).toBeUndefined();
     });
 
     it('with snapName', () => {
-      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: 'baz%2Fbaz' });
+      activatedRoute.setParams({ image_spec: 'foo%2Fbar', snap: 'baz%2Fbaz' });
 
-      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(rbdService.get).toHaveBeenCalledWith(new ImageSpec('foo', null, 'bar'));
       expect(component.snapName).toBe('baz/baz');
     });
   });

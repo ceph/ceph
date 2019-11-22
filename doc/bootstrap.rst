@@ -35,6 +35,7 @@ your Linux distribution::
    [monitor 1] # sudo dnf install -y ceph-daemon   # or,
    [monitor 1] # sudo yum install -y ceph-daemon
 
+
 Bootstrap a new cluster
 =======================
 

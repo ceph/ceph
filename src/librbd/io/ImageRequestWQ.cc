@@ -23,6 +23,9 @@
                            << " " << __func__ << ": "
 
 namespace librbd {
+
+using util::create_context_callback;
+
 namespace io {
 
 namespace {
@@ -889,7 +892,11 @@ void *ImageRequestWQ<I>::_void_dequeue() {
       } else {
         // stall IO until the acquire completes
         ++m_io_blockers;
-        m_image_ctx.exclusive_lock->acquire_lock(new C_AcquireLock(this, item));
+        Context *ctx = new C_AcquireLock(this, item);
+        ctx = create_context_callback<
+          Context, &Context::complete>(
+            ctx, m_image_ctx.exclusive_lock);
+        m_image_ctx.exclusive_lock->acquire_lock(ctx);
       }
     } else {
       // raced with the exclusive lock being disabled
@@ -931,8 +938,8 @@ void ImageRequestWQ<I>::process_io(ImageDispatchSpec<I> *req,
   const auto& extents = req->get_image_extents();
   bool write_op = req->is_write_op();
   uint64_t tid = req->get_tid();
-  uint64_t offset;
-  uint64_t length;
+  uint64_t offset = 0;
+  uint64_t length = 0;
 
   if (write_op) {
     std::lock_guard locker{m_lock};
