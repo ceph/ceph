@@ -3,3 +3,4 @@ tasks:
     clients:
       client.0:
       - qa/rbd/krbd_blkroset.t
+      - qa/rbd/krbd_get_features.t
