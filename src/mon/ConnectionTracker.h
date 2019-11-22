@@ -186,6 +186,8 @@ class ConnectionTracker {
     rank = new_rank;
   }
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
+  friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
+  friend map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);
 };
 
 WRITE_CLASS_ENCODER(ConnectionTracker);
