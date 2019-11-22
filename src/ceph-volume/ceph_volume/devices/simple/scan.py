@@ -294,7 +294,7 @@ class Scan(object):
         For an OSD ID of 0 with fsid of ``a9d50838-e823-43d6-b01f-2f8d0a77afc2``
         that could mean a scan command that looks like::
 
-            ceph-volume lvm scan /var/lib/ceph/osd/ceph-0
+            ceph-volume simple scan /var/lib/ceph/osd/ceph-0
 
         Which would store the metadata in a JSON file at::
 
