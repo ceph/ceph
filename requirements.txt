@@ -5,7 +5,7 @@
 #    pip-compile
 #
 ansible==2.8.2
-apache-libcloud==1.5.0
+apache-libcloud==2.6.0
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0
 asn1crypto==0.22.0        # via cryptography

@@ -135,6 +135,10 @@ class TestOpenStackBase(object):
             'libcloud.common.openstack'
             '.OpenStackBaseConnection.get_endpoint',
         )
+        self.patchers['m_connect'] = patch(
+            'libcloud.common.base'
+            '.Connection.connect',
+        )
         self.patchers['m_sleep'] = patch(
             'time.sleep'
         )
