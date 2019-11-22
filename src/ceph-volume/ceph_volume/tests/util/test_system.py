@@ -4,6 +4,7 @@ import getpass
 import pytest
 from textwrap import dedent
 from ceph_volume.util import system
+from mock.mock import patch
 
 
 class TestMkdirP(object):
@@ -260,8 +261,9 @@ class TestSetContext(object):
         system.set_context('/tmp/foo')
         assert len(fake_run.calls)
 
-    def test_selinuxenabled_doesnt_exist(self, stub_call, fake_run):
-        stub_call(('', 'command not found: selinuxenabled', 127))
+    @patch('ceph_volume.process.call')
+    def test_selinuxenabled_doesnt_exist(self, mocked_call, fake_run):
+        mocked_call.side_effect = FileNotFoundError()
         system.set_context('/tmp/foo')
         assert fake_run.calls == []
 
