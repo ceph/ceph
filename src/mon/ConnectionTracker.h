@@ -56,8 +56,8 @@ class RankProvider {
    * Get the rank of the running daemon.
    * It can be -1, meaning unknown/invalid, or it
    * can be >1.
-   * You should not invoke the functions generate_report_of_peers()
-   * or get_total_connection_score() with an unknown rank.
+   * You should not invoke the function get_total_connection_score()
+   * with an unknown rank.
    */
   virtual int get_my_rank() const = 0;
   /**
@@ -75,6 +75,7 @@ class ConnectionTracker {
    * if the peer has newer data.
    */
   void receive_peer_report(const ConnectionReport& report);
+  void receive_peer_report(const ConnectionTracker& o);
   /**
    * Bump up the epoch to the specified number.
    * Validates that it is > current epoch and resets
@@ -87,20 +88,10 @@ class ConnectionTracker {
    */
   void increase_version();
   /**
-   * Fill in the report with our liveness and reliability
-   * scores for all peers.
-   *
-   * NOTE: This only shares what the *local* node has seen directly;
-   * it does not include the shared data from other peers. Use
-   * get_peer_view to grab those and bundle them up when sharing it.
-   * This interface isn't great and would be better if you got a single
-   * struct for sharing, encode/decode, and import back into another
-   * ConnectionTracker, so look at existing implementations carefully
-   * if you're messing around here.
-   */
-  void generate_report_of_peers(ConnectionReport *report) const;
-  /**
-   * Get our current report from a peer of what it sees.
+   * Get the latest report we have of what a given peer (ourselves included!)
+   * has seen.
+   * If you don't want to share an encoded ConnectionReport directly,
+   * you can get the view of every rank and share them instead.
    */
   const ConnectionReport *get_peer_view(int peer) const;
   
@@ -141,7 +132,11 @@ class ConnectionTracker {
    */
   void get_total_connection_score(int peer_rank, double *rating,
 				  int *live_count) const;
-
+  /**
+   * Encode this ConnectionTracker. Useful both for storing on disk
+   * and for sending off to peers for decoding and import
+   * with receive_peer_report() above.
+   */
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);
 
@@ -168,6 +163,13 @@ class ConnectionTracker {
     half_life(hl), owner(o), rank(rank) {
     my_reports = &peer_reports[rank];
     my_reports->rank = rank;
+  }
+  ConnectionTracker(const bufferlist& bl) :
+    epoch(0), version(0),
+    half_life(0), owner(NULL), rank(-1)
+  {
+    auto bi = bl.cbegin();
+    decode(bi);
   }
   ConnectionTracker(const ConnectionTracker& o) :
     epoch(o.epoch), version(o.version),

@@ -199,9 +199,9 @@ class Elector : public ElectionOwner, RankProvider {
   void handle_ping(MonOpRequestRef op);
   /**
    * Update our view of everybody else's connectivity based on the provided
-   * reports
+   * tracker bufferlist
    */
-  void assimilate_connection_reports(const map<string,ConnectionReport>& reports);
+  void assimilate_connection_reports(const bufferlist& bl);
   
  public:
   /**

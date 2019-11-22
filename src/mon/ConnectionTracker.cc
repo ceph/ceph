@@ -57,6 +57,13 @@ void ConnectionTracker::receive_peer_report(const ConnectionReport& report)
   }
 }
 
+void ConnectionTracker::receive_peer_report(const ConnectionTracker& o)
+{
+  for (auto& i : o.peer_reports) {
+    receive_peer_report(i.second);
+  }
+}
+
 bool ConnectionTracker::increase_epoch(epoch_t e)
 {
   if (e > epoch) {
@@ -76,15 +83,8 @@ void ConnectionTracker::increase_version()
   }
 }
 
-void ConnectionTracker::generate_report_of_peers(ConnectionReport *report) const
-{
-  ceph_assert(report != NULL);
-  *report = *my_reports;
-}
-
 const ConnectionReport *ConnectionTracker::get_peer_view(int peer) const
 {
-  ceph_assert(peer != rank);
   return reports(peer);
 }
 
