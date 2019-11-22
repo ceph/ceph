@@ -1,5 +1,8 @@
 function(do_build_dpdk dpdk_dir)
-  find_program (MAKE_EXECUTABLE NAMES make gmake)
+  find_program(MAKE_EXECUTABLE NAMES gmake make)
+  if(NOT MAKE_EXECUTABLE)
+    message(FATAL_ERROR "Can't find make")
+  endif()
   # mk/machine/native/rte.vars.mk
   # rte_cflags are extracted from mk/machine/${machine}/rte.vars.mk
   # only 3 of them have -march=<arch> defined, so copying them here.
