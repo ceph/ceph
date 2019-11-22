@@ -439,7 +439,7 @@ std::vector<Option> get_global_options() {
     Option("container_image", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("container image (used by ssh orchestrator)")
     .set_flag(Option::FLAG_STARTUP)
-    .set_default("ceph/daemon-base"),
+    .set_default("ceph/daemon-base:latest-master-devel"),
 
     // lockdep
     Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
