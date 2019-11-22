@@ -7106,10 +7106,10 @@ int BlueStore::_fsck_check_extents(
             if (!already) {
               derr << "fsck error: " << oid << " extent " << e
 		   << " or a subset is already allocated (misreferenced)" << dendl;
-	      ++errors;
-	      already = true;
-	    }
-	  }
+              ++errors;
+              already = true;
+            }
+          }
 	  else
 	    bs.set(pos);
         });
@@ -8689,7 +8689,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       fm->enumerate_reset();
       uint64_t offset, length;
       while (fm->enumerate_next(db, &offset, &length)) {
-        bool intersects = false;
+        uint64_t intersects = 0;
         apply_for_bitset_range(
           offset, length, fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
@@ -8705,7 +8705,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 		         << " and min_alloc_size, 0x" << std::hex << offset << "~"
 		         << length << std::dec << dendl;
 	      } else {
-                intersects = true;
+                ++intersects;
 	        if (repair) {
 		  repairer.fix_false_free(db, fm,
 					  pos * min_alloc_size,
@@ -8721,7 +8721,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  derr << "fsck error: free extent 0x" << std::hex << offset
 	        << "~" << length << std::dec
 	        << " intersects allocated blocks" << dendl;
-	  ++errors;
+	  errors += intersects;
         }
       }
       fm->enumerate_reset();
