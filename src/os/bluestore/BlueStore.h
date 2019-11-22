@@ -512,6 +512,7 @@ public:
   };
 
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
+  struct Onode;
 
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
@@ -592,9 +593,9 @@ public:
     void discard_unallocated(Collection *coll);
 
     /// get logical references
-    void get_ref(Collection *coll, uint32_t offset, uint32_t length);
+    void get_ref(BlueStore::Onode* o, uint32_t offset, uint32_t length);
     /// put logical references, and get back any released extents
-    bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
+    bool put_ref(BlueStore::Onode* o, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
 
     /// split the blob
@@ -636,7 +637,7 @@ public:
       }
     }
     void decode(
-      Collection */*coll*/,
+      BlueStore::Onode */*onode*/,
       bufferptr::const_iterator& p,
       bool include_ref_map) {
       const char *start = p.get_pos();
@@ -676,7 +677,7 @@ public:
       }
     }
     void decode(
-      Collection *coll,
+      BlueStore::Onode *onode,
       bufferptr::const_iterator& p,
       uint64_t struct_v,
       uint64_t* sbid,
@@ -764,9 +765,9 @@ public:
     OldExtent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
       : e(lo, o, l, b), blob_empty(false) {
     }
-    static OldExtent* create(CollectionRef c,
+    static OldExtent* create(BlueStore::Onode* o,
                              uint32_t lo,
-			     uint32_t o,
+			     uint32_t offs,
 			     uint32_t l,
 			     BlobRef& b);
   };
@@ -776,8 +777,6 @@ public:
         OldExtent,
     boost::intrusive::list_member_hook<>,
     &OldExtent::old_extent_item> > old_extent_map_t;
-
-  struct Onode;
 
   /// a sharded extent map, mapping offsets to lextents to blobs
   struct ExtentMap {
@@ -928,14 +927,12 @@ public:
     int compress_extent_map(uint64_t offset, uint64_t length);
 
     /// punch a logical hole.  add lextents to deref to target list.
-    void punch_hole(CollectionRef &c,
-		    uint64_t offset, uint64_t length,
+    void punch_hole(uint64_t offset, uint64_t length,
 		    old_extent_map_t *old_extents);
 
     /// put new lextent into lextent_map overwriting existing ones if
     /// any and update references accordingly
-    Extent *set_lextent(CollectionRef &c,
-			uint64_t logical_offset,
+    Extent *set_lextent(uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
                         BlobRef b,
 			old_extent_map_t *old_extents);
