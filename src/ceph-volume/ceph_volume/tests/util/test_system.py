@@ -226,6 +226,13 @@ def stub_which(monkeypatch):
     return apply
 
 
+# python2 has no FileNotFoundError
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = OSError
+
+
 class TestSetContext(object):
 
     def setup(self):
