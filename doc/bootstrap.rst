@@ -13,7 +13,7 @@ monitor, and "[monitor 3]" identifies the third monitor. This
 information is provided in order to make clear which commands
 should be issued on which systems.
 
-"[any monitor]" identifies any Ceph node, and in the context
+"[any node]" identifies any Ceph node, and in the context
 of this installation guide means that the associated command
 can be run on any node.
 
@@ -26,14 +26,14 @@ Use curl to fetch the standalone script::
 
   [monitor 1] # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/master/src/ceph-daemon/ceph-daemon
   [monitor 1] # chmod +x ceph-daemon
-  [monitor 1] # sudo install -m 0755 ceph-daemon /usr/sbin    # optional!
   
 You can also get the utility by installing a package provided by
 your Linux distribution::
 
-   [monitor 1] # sudo apt install -y ceph-daemon   # or,
-   [monitor 1] # sudo dnf install -y ceph-daemon   # or,
-   [monitor 1] # sudo yum install -y ceph-daemon
+   [monitor 1] # apt install -y ceph-daemon   # or
+   [monitor 1] # dnf install -y ceph-daemon   # or
+   [monitor 1] # yum install -y ceph-daemon   # or
+   [monitor 1] # zypper install -y ceph-daemon
 
 
 Bootstrap a new cluster
@@ -48,7 +48,7 @@ To create a new cluster, you need to know:
 
 To bootstrap the cluster run the following command::
 
-  [monitor 1] $ sudo ceph-daemon bootstrap --mon-ip *<mon-ip>*
+  [node 1] $ sudo ceph-daemon bootstrap --mon-ip *<mon-ip>*
 
 This command does a few things:
 
@@ -67,7 +67,7 @@ Interacting with the cluster
 To interact with your cluster, start up a container that has all of 
 the Ceph packages installed::
 
-  [any monitor] $ sudo ceph-daemon shell --config ceph.conf --keyring ceph.keyring
+  [any node] $ sudo ceph-daemon shell --config ceph.conf --keyring ceph.keyring
 
 The ``--config`` and ``--keyring`` arguments will bind those local
 files to the default locations in ``/etc/ceph`` inside the container
@@ -81,12 +81,12 @@ In order to interact with the Ceph cluster outside of a container
 client packages and install the configuration and privileged 
 administrator key in a global location::
 
-   [any monitor] $ sudo apt install -y ceph-common   # or,
-   [any monitor] $ sudo dnf install -y ceph-common   # or,
-   [any monitor] $ sudo yum install -y ceph-common
+   [any node] $ sudo apt install -y ceph-common   # or,
+   [any node] $ sudo dnf install -y ceph-common   # or,
+   [any node] $ sudo yum install -y ceph-common
 
-   [any monitor] $ sudo install -m 0644 ceph.conf /etc/ceph/ceph.conf
-   [any monitor] $ sudo install -m 0600 ceph.keyring /etc/ceph/ceph.keyring
+   [any node] $ sudo install -m 0644 ceph.conf /etc/ceph/ceph.conf
+   [any node] $ sudo install -m 0600 ceph.keyring /etc/ceph/ceph.keyring
 
 Adding hosts to the cluster
 ===========================
