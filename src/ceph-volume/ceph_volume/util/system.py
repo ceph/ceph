@@ -8,6 +8,12 @@ import uuid
 from ceph_volume import process, terminal
 from . import as_string
 
+# python2 has no FileNotFoundError
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = OSError
+
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
 
