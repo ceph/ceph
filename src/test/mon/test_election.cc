@@ -196,16 +196,15 @@ struct Owner : public ElectionOwner, RankProvider {
       parent->report_quorum(quorum);
     }
   }
+  void receive_scores(bufferlist bl) {
+    ConnectionTracker oct(bl);
+    peer_tracker.receive_peer_report(oct);
+    ldout(g_ceph_context, 10) << "received scores " << oct << dendl;
+  }
   void receive_ping(int from_rank, bufferlist bl) {
-    map<int,ConnectionReport> crs;
-    bufferlist::const_iterator bi = bl.begin();
-    decode(crs, bi);
     ldout(g_ceph_context, 6) << "receive ping from " << from_rank << dendl;
     peer_tracker.report_live_connection(from_rank, parent->ping_interval);
-    for (auto& i : crs) {
-      peer_tracker.receive_peer_report(i.second);
-    }
-    
+    receive_scores(bl);
   }
   void receive_ping_timeout(int from_rank) {
     ldout(g_ceph_context, 6) << "timeout ping from " << from_rank << dendl;
@@ -225,6 +224,9 @@ struct Owner : public ElectionOwner, RankProvider {
 	 << ", acked_me:" << logic.acked_me << dendl;
     reset_election();
   }
+  void encode_scores(bufferlist& bl) {
+    encode(peer_tracker, bl);
+  }
   void send_pings() {
     if (!parent->ping_interval ||
 	parent->timesteps_run % parent->ping_interval != 0) {
@@ -232,19 +234,7 @@ struct Owner : public ElectionOwner, RankProvider {
     }
 
     bufferlist bl;
-    map<int,ConnectionReport> crs;
-    peer_tracker.generate_report_of_peers(&crs[rank]);
-    for (int i = 0; i < parent->get_paxos_size(); ++i) {
-      if (i == rank) {
-	continue;
-      }
-      const ConnectionReport *view = peer_tracker.get_peer_view(i);
-      if (view != NULL) {
-	crs[i] = *view;
-      }
-    }
-    encode(crs, bl);
-
+    encode_scores(bl);
     for (int i = 0; i < parent->get_paxos_size(); ++i) {
       if (i == rank)
 	continue;
