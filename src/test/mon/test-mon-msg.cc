@@ -20,7 +20,6 @@
 
 #include "global/global_init.h"
 #include "global/global_context.h"
-#include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/version.h"
 #include "common/dout.h"
@@ -52,7 +51,6 @@ class MonClientHelper : public Dispatcher
 {
 protected:
   CephContext *cct;
-  ceph::async::io_context_pool poolctx;
   Messenger *msg;
   MonClient monc;
 
@@ -65,9 +63,8 @@ public:
   explicit MonClientHelper(CephContext *cct_)
     : Dispatcher(cct_),
       cct(cct_),
-      poolctx(1),
       msg(NULL),
-      monc(cct_, poolctx)
+      monc(cct_)
   { }
 
 

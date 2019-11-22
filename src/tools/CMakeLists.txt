@@ -16,14 +16,6 @@ else()
 endif()
 install(TARGETS rados DESTINATION bin)
 
-set(neorados_srcs
-  neorados.cc)
-add_executable(neorados ${neorados_srcs})
-
-target_link_libraries(neorados libRADOS global Boost::coroutine ${CMAKE_DL_LIBS})
-#install(TARGETS neorados DESTINATION bin)
-
-
 if(WITH_TESTS)
 add_executable(ceph_scratchtool scratchtool.c)
 target_link_libraries(ceph_scratchtool librados global)

@@ -16,7 +16,6 @@
 #define PURGE_QUEUE_H_
 
 #include "include/compact_set.h"
-#include "common/Finisher.h"
 #include "mds/MDSMap.h"
 #include "osdc/Journaler.h"
 

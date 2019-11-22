@@ -30,10 +30,8 @@
  *
  */
 
-class MOSDOpReply;
+class OSD;
 
-namespace _mosdop {
-template<typename V>
 class MOSDOp : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 8;
@@ -56,7 +54,7 @@ private:
   std::atomic<bool> final_decode_needed;
   //
 public:
-  V ops;
+  std::vector<OSDOp> ops;
 private:
   snapid_t snap_seq;
   std::vector<snapid_t> snaps;
@@ -66,7 +64,7 @@ private:
   osd_reqid_t reqid; // reqid explicitly set by sender
 
 public:
-  friend MOSDOpReply;
+  friend class MOSDOpReply;
 
   ceph_tid_t get_client_tid() { return header.tid; }
   void set_snapid(const snapid_t& s) {
@@ -600,9 +598,6 @@ private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-}
-
-using MOSDOp = _mosdop::MOSDOp<std::vector<OSDOp>>;
 
 
 #endif
