@@ -17,11 +17,10 @@
 
 #include <cstdint>
 #include <cstdio>
-#include <iomanip>
 #include <iosfwd>
+#include <iomanip>
 #include <string>
-#include <string>
-#include <string_view>
+
 
 #include "include/rados.h"
 #include "include/unordered_map.h"
@@ -41,8 +40,6 @@ struct object_t {
   object_t(const char *s) : name(s) {}
   // cppcheck-suppress noExplicitConstructor
   object_t(const std::string& s) : name(s) {}
-  object_t(std::string&& s) : name(std::move(s)) {}
-  object_t(std::string_view s) : name(s) {}
 
   void swap(object_t& o) {
     name.swap(o.name);

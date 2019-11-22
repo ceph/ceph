@@ -256,10 +256,10 @@ namespace std {
 // does it go in.
 struct object_locator_t {
   // You specify either the hash or the key -- not both
-  std::int64_t pool;     ///< pool id
-  std::string key;       ///< key string (if non-empty)
+  int64_t pool;     ///< pool id
+  std::string key;       ///< key std::string (if non-empty)
   std::string nspace;    ///< namespace
-  std::int64_t hash;     ///< hash position (if >= 0)
+  int64_t hash;     ///< hash position (if >= 0)
 
   explicit object_locator_t()
     : pool(-1), hash(-1) {}
@@ -267,11 +267,11 @@ struct object_locator_t {
     : pool(po), hash(-1)  {}
   explicit object_locator_t(int64_t po, int64_t ps)
     : pool(po), hash(ps)  {}
-  explicit object_locator_t(int64_t po, std::string_view ns)
+  explicit object_locator_t(int64_t po, std::string ns)
     : pool(po), nspace(ns), hash(-1) {}
-  explicit object_locator_t(int64_t po, std::string_view ns, int64_t ps)
+  explicit object_locator_t(int64_t po, std::string ns, int64_t ps)
     : pool(po), nspace(ns), hash(ps) {}
-  explicit object_locator_t(int64_t po, std::string_view ns, std::string_view s)
+  explicit object_locator_t(int64_t po, std::string ns, std::string s)
     : pool(po), key(s), nspace(ns), hash(-1) {}
   explicit object_locator_t(const hobject_t& soid)
     : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace), hash(-1) {}
@@ -1692,7 +1692,7 @@ public:
   bool is_unmanaged_snaps_mode() const;
   bool is_removed_snap(snapid_t s) const;
 
-  snapid_t snap_exists(std::string_view s) const;
+  snapid_t snap_exists(const char *s) const;
   void add_snap(const char *n, utime_t stamp);
   uint64_t add_unmanaged_snap(bool preoctopus_compat);
   void remove_snap(snapid_t s);
@@ -3949,16 +3949,7 @@ struct OSDOp {
    * @param ops [out] vector of OSDOps
    * @param in  [in] combined data buffer
    */
-  template<typename V>
-  static void split_osd_op_vector_in_data(V& ops,
-					  ceph::buffer::list& in) {
-    ceph::buffer::list::iterator datap = in.begin();
-    for (unsigned i = 0; i < ops.size(); i++) {
-      if (ops[i].op.payload_len) {
-	datap.copy(ops[i].op.payload_len, ops[i].indata);
-      }
-    }
-  }
+  static void split_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& in);
 
   /**
    * merge indata members of a vector of OSDOp into a single ceph::buffer::list
@@ -3969,15 +3960,7 @@ struct OSDOp {
    * @param ops [in] vector of OSDOps
    * @param out [out] combined data buffer
    */
-  template<typename V>
-  static void merge_osd_op_vector_in_data(V& ops, ceph::buffer::list& out) {
-    for (unsigned i = 0; i < ops.size(); i++) {
-      if (ops[i].indata.length()) {
-	ops[i].op.payload_len = ops[i].indata.length();
-	out.append(ops[i].indata);
-      }
-    }
-  }
+  static void merge_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& out);
 
   /**
    * split a ceph::buffer::list into constituent outdata members of a vector of OSDOps
@@ -4000,36 +3983,10 @@ struct OSDOp {
    *
    * @param ops [in] vector of OSDOps
    */
-  template<typename V>
-  static void clear_data(V& ops) {
-    for (unsigned i = 0; i < ops.size(); i++) {
-      OSDOp& op = ops[i];
-      op.outdata.clear();
-      if (ceph_osd_op_type_attr(op.op.op) &&
-	  op.op.xattr.name_len &&
-	  op.indata.length() >= op.op.xattr.name_len) {
-	ceph::buffer::ptr bp(op.op.xattr.name_len);
-	ceph::buffer::list bl;
-	bl.append(bp);
-	bl.copy_in(0, op.op.xattr.name_len, op.indata);
-	op.indata.claim(bl);
-      } else if (ceph_osd_op_type_exec(op.op.op) &&
-		 op.op.cls.class_len &&
-		 op.indata.length() >
-	         (op.op.cls.class_len + op.op.cls.method_len)) {
-	__u8 len = op.op.cls.class_len + op.op.cls.method_len;
-	ceph::buffer::ptr bp(len);
-	ceph::buffer::list bl;
-	bl.append(bp);
-	bl.copy_in(0, len, op.indata);
-	op.indata.claim(bl);
-      } else {
-	op.indata.clear();
-      }
-    }
-  }
+  static void clear_data(std::vector<OSDOp>& ops);
 };
 std::ostream& operator<<(std::ostream& out, const OSDOp& op);
+
 
 struct pg_log_op_return_item_t {
   int32_t rval;
@@ -5002,14 +4959,14 @@ using pg_missing_tracker_t = pg_missing_set<true>;
  */
 struct pg_nls_response_t {
   collection_list_handle_t handle;
-  std::vector<librados::ListObjectImpl> entries;
+  std::list<librados::ListObjectImpl> entries;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(handle, bl);
     __u32 n = (__u32)entries.size();
     encode(n, bl);
-    for (auto i = entries.begin(); i != entries.end(); ++i) {
+    for (std::list<librados::ListObjectImpl>::const_iterator i = entries.begin(); i != entries.end(); ++i) {
       encode(i->nspace, bl);
       encode(i->oid, bl);
       encode(i->locator, bl);
@@ -5034,7 +4991,7 @@ struct pg_nls_response_t {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("handle") << handle;
     f->open_array_section("entries");
-    for (auto p = entries.begin(); p != entries.end(); ++p) {
+    for (std::list<librados::ListObjectImpl>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
       f->open_object_section("object");
       f->dump_string("namespace", p->nspace);
       f->dump_string("object", p->oid);
