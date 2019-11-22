@@ -77,7 +77,7 @@ arguments.  Inside the container, you can check the cluster status with::
   [ceph: root@monitor_1_hostname /]# ceph status
 
 In order to interact with the Ceph cluster outside of a container
-(that is, from the command line), you need to install the Ceph 
+(that is, from the command line), install the Ceph
 client packages and install the configuration and privileged 
 administrator key in a global location::
 
