@@ -135,7 +135,7 @@ timeout -v 3h npm ci
 
 # run E2E, telling it to not start a dev server but instead use the one
 # specified in protractor.conf.js
-timeout -v 3h npx ng e2e --devServerTarget=''
+timeout -v 3h npm run e2e:dev
 
 # cleanup
 rm -rf $TMPDIR
