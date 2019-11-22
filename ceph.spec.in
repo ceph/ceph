@@ -604,6 +604,12 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{_python_buildid}-remoto
 Requires:       ceph-daemon = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?suse_version}
+Requires:       openssh
+%endif
+%if 0%{?rhel} || 0%{?fedora}
+Requires:       openssh-clients
+%endif
 %description mgr-ssh
 ceph-mgr-ssh is a ceph-mgr module for orchestration functions using
 direct SSH connections for management operations.
