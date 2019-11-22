@@ -15,10 +15,11 @@ import datetime
 import copy
 import re
 import six
+import errno
 
 from ceph.deployment import inventory
 
-from mgr_module import MgrModule, PersistentStoreDict
+from mgr_module import MgrModule, PersistentStoreDict, CLICommand, HandleCommandResult
 from mgr_util import format_bytes
 
 try:
@@ -119,6 +120,29 @@ class OrchestratorValidationError(OrchestratorError):
     """
     Raised when an orchestrator doesn't support a specific feature.
     """
+
+
+def handle_exception(prefix, cmd_args, desc, perm, func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (OrchestratorError, ImportError) as e:
+            # Do not print Traceback for expected errors.
+            return HandleCommandResult(-errno.ENOENT, stderr=str(e))
+        except NotImplementedError:
+            msg = 'This Orchestrator does not support `{}`'.format(prefix)
+            return HandleCommandResult(-errno.ENOENT, stderr=msg)
+
+    return CLICommand(prefix, cmd_args, desc, perm)(wrapper)
+
+def _cli_command(perm):
+    def inner_cli_command(prefix, cmd_args="", desc=""):
+        return lambda func: handle_exception(prefix, cmd_args, desc, perm, func)
+    return inner_cli_command
+
+_cli_read_command = _cli_command('r')
+_cli_write_command = _cli_command('rw')
 
 
 class _Completion(G):
