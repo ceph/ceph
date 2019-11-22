@@ -25,7 +25,7 @@ public:
   friend factory;
 
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 5;
 
 public:
@@ -52,6 +52,7 @@ public:
   mon_feature_t mon_features;
   uint8_t mon_release = 0;
   bufferlist sharing_bl;
+  bufferlist scoring_bl;
   map<string,string> metadata;
   
   MMonElection() : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
@@ -60,11 +61,11 @@ public:
     mon_features(0)
   { }
 
-  MMonElection(int o, epoch_t e, MonMap *m)
+  MMonElection(int o, epoch_t e, const bufferlist& bl, MonMap *m)
     : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
       fsid(m->fsid), op(o), epoch(e),
       quorum_features(0),
-      mon_features(0)
+      mon_features(0), scoring_bl(bl)
   {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
@@ -102,6 +103,7 @@ public:
     encode(mon_features, payload);
     encode(metadata, payload);
     encode(mon_release, payload);
+    encode(scoring_bl, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -125,6 +127,8 @@ public:
       decode(mon_release, p);
     else
       mon_release = infer_ceph_release_from_mon_features(mon_features);
+    if (header.version >= 9)
+      decode(scoring_bl, p);
   }
   
 };

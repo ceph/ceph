@@ -49,6 +49,7 @@ const ConnectionReport *ConnectionTracker::reports(int p) const
 void ConnectionTracker::receive_peer_report(const ConnectionReport& report)
 {
   if (report.rank == rank) return;
+  encoding.clear();
   ConnectionReport& existing = *reports(report.rank);
   if (report.epoch > existing.epoch ||
       (report.epoch == existing.epoch &&
@@ -69,6 +70,7 @@ bool ConnectionTracker::increase_epoch(epoch_t e)
   if (e > epoch) {
     my_reports->epoch_version = version = 0;
     my_reports->epoch = epoch = e;
+    encoding.clear();
     return true;
   }
   return false;
@@ -76,6 +78,7 @@ bool ConnectionTracker::increase_epoch(epoch_t e)
 
 void ConnectionTracker::increase_version()
 {
+  encoding.clear();
   ++version;
   my_reports->epoch_version = version;
   if ((version % 10) == 0 ) { // TODO: make this configurable?
@@ -174,6 +177,7 @@ void ConnectionTracker::encode(bufferlist &bl) const
 
 void ConnectionTracker::decode(bufferlist::const_iterator& bl) {
   clear_peer_reports();
+  encoding.clear();
 
   DECODE_START(1, bl);
   decode(rank, bl);
@@ -184,4 +188,12 @@ void ConnectionTracker::decode(bufferlist::const_iterator& bl) {
   DECODE_FINISH(bl);
 
   my_reports = &peer_reports[rank];
+}
+
+const bufferlist& ConnectionTracker::get_encoded_bl()
+{
+  if (!encoding.length()) {
+    encode(encoding);
+  }
+  return encoding;
 }
