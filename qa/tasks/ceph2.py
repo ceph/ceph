@@ -27,6 +27,7 @@ from teuthology.orchestra import run
 import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
+from teuthology.config import config as teuth_config
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -90,16 +91,21 @@ def normalize_hostnames(ctx):
         pass
 
 @contextlib.contextmanager
-def download_ceph_daemon(ctx, config):
+def download_ceph_daemon(ctx, config, ref):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
-    branch = config.get('ceph_daemon_branch', 'master')
 
-    log.info('Downloading ceph-daemon (branch %s)...' % branch)
+    ref = config.get('ceph_daemon_branch', ref)
+    git_url = teuth_config.get_ceph_git_url()
+    log.info('Downloading ceph-daemon (repo %s ref %s)...' % (git_url, ref))
     ctx.cluster.run(
         args=[
-            'curl', '--silent',
-            'https://raw.githubusercontent.com/ceph/ceph/%s/src/ceph-daemon/ceph-daemon' % branch,
+            'git', 'archive',
+            '--remote=' + git_url,
+            ref,
+            'src/ceph-daemon/ceph-daemon',
+            run.Raw('|'),
+            'tar', '-xO', 'src/ceph-daemon/ceph-daemon',
             run.Raw('>'),
             '{tdir}/ceph-daemon'.format(tdir=testdir),
             run.Raw('&&'),
@@ -759,13 +765,16 @@ def task(ctx, config):
 
     # image
     ctx.image = config.get('image')
+    ref = None
     if not ctx.image:
         sha1 = config.get('sha1')
         if sha1:
             ctx.image = 'quay.io/ceph-ci/ceph:%s' % sha1
+            ref = sha1
         else:
             # hmm, fall back to branch?
             branch = config.get('branch', 'master')
+            ref = branch
             # FIXME when ceph-ci builds all branches
             if branch in ['master', 'nautilus']:
                 ctx.image = 'ceph/daemon-base:latest-%s-devel' % branch
@@ -794,7 +803,8 @@ def task(ctx, config):
     with contextutil.nested(
             lambda: ceph_initial(),
             lambda: normalize_hostnames(ctx=ctx),
-            lambda: download_ceph_daemon(ctx=ctx, config=config),
+            lambda: download_ceph_daemon(ctx=ctx, config=config,
+                                         ref=ref),
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
             lambda: ceph_bootstrap(ctx=ctx, config=config),
