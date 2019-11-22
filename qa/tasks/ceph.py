@@ -1469,14 +1469,7 @@ def healthy(ctx, config):
     except (run.CommandFailedError, AssertionError) as e:
         log.info('ignoring mgr wait error, probably testing upgrade: %s', e)
 
-    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
-    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-    teuthology.wait_until_osds_up(
-        ctx,
-        cluster=ctx.cluster,
-        remote=mon0_remote,
-        ceph_cluster=cluster_name,
-    )
+    manager.wait_for_all_osds_up(timeout=300)
 
     try:
         manager.flush_all_pg_stats()
@@ -1486,34 +1479,12 @@ def healthy(ctx, config):
 
     if config.get('wait-for-healthy', True):
         log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
-        teuthology.wait_until_healthy(
-            ctx,
-            remote=mon0_remote,
-            ceph_cluster=cluster_name,
-        )
+        manager.wait_until_healthy(timeout=300)
 
     if ctx.cluster.only(teuthology.is_type('mds', cluster_name)).remotes:
         # Some MDSs exist, wait for them to be healthy
         ceph_fs = Filesystem(ctx) # TODO: make Filesystem cluster-aware
         ceph_fs.wait_for_daemons(timeout=300)
-
-
-def wait_for_osds_up(ctx, config):
-    """
-    Wait for all osd's to come up.
-
-    :param ctx: Context
-    :param config: Configuration
-    """
-    log.info('Waiting until ceph osds are all up...')
-    cluster_name = config.get('cluster', 'ceph')
-    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
-    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-    teuthology.wait_until_osds_up(
-        ctx,
-        cluster=ctx.cluster,
-        remote=mon0_remote
-    )
 
 
 def wait_for_mon_quorum(ctx, config):
@@ -1641,7 +1612,7 @@ def restart(ctx, config):
             healthy(ctx=ctx, config=dict(cluster=cluster))
     if config.get('wait-for-osds-up', False):
         for cluster in clusters:
-            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
+            ctx.managers[cluster].wait_for_all_osds_up()
     yield
 
 
