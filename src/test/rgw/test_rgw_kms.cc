@@ -30,3 +30,27 @@ TEST(TestSSEKMS, non_existent_vault_token_file)
       -ENOENT
   );
 }
+
+TEST(TestSSEKMS, concat_url)
+{
+  // Each test has 3 strings:
+  // * the base URL
+  // * the path we want to concatenate
+  // * the exepected final URL
+  std::string tests[9][3] ={
+    {"", "", ""},
+    {"", "bar", "/bar"},
+    {"", "/bar", "/bar"},
+    {"foo", "", "foo"},
+    {"foo", "bar", "foo/bar"},
+    {"foo", "/bar", "foo/bar"},
+    {"foo/", "", "foo/"},
+    {"foo/", "bar", "foo/bar"},
+    {"foo/", "/bar", "foo/bar"},
+  };
+  for (const auto &test: tests) {
+    std::string url(test[0]), path(test[1]), expected(test[2]);
+    concat_url(url, path);
+    ASSERT_EQ(url, expected);
+  }
+}

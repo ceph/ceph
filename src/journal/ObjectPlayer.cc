@@ -78,9 +78,8 @@ void ObjectPlayer::fetch(Context *on_finish) {
   op.read(m_read_off, m_max_fetch_bytes, &context->read_bl, NULL);
   op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
-  librados::AioCompletion *rados_completion =
-    librados::Rados::aio_create_completion(context, utils::rados_ctx_callback,
-                                           NULL);
+  auto rados_completion =
+    librados::Rados::aio_create_completion(context, utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, 0, NULL);
   ceph_assert(r == 0);
   rados_completion->release();

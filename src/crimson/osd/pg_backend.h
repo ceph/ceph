@@ -12,11 +12,13 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
 #include "crimson/common/shared_lru.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
+#include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
 struct hobject_t;
-class MOSDRepOpReply;
 
 namespace ceph::os {
   class Transaction;
@@ -31,6 +33,8 @@ class PGBackend
 protected:
   using CollectionRef = crimson::os::CollectionRef;
   using ec_profile_t = std::map<std::string, std::string>;
+  // low-level read errorator
+  using ll_read_errorator = crimson::os::FuturizedStore::read_errorator;
 
 public:
   PGBackend(shard_id_t shard, CollectionRef coll, crimson::os::FuturizedStore* store);
@@ -42,15 +46,22 @@ public:
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
-  seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
+  using get_os_errorator = crimson::errorator<crimson::ct_error::enoent>;
+  get_os_errorator::future<cached_os_t> get_object_state(const hobject_t& oid);
   seastar::future<> evict_object_state(const hobject_t& oid);
-  seastar::future<bufferlist> read(const object_info_t& oi,
-				   uint64_t off,
-				   uint64_t len,
-				   size_t truncate_size,
-				   uint32_t truncate_seq,
-				   uint32_t flags);
-  seastar::future<> stat(
+
+  using read_errorator = ll_read_errorator::extend<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::object_corrupted>;
+  read_errorator::future<ceph::bufferlist> read(
+    const object_info_t& oi,
+    uint64_t off,
+    uint64_t len,
+    size_t truncate_size,
+    uint32_t truncate_seq,
+    uint32_t flags);
+  using stat_errorator = crimson::errorator<crimson::ct_error::enoent>;
+  stat_errorator::future<> stat(
     const ObjectState& os,
     OSDOp& osd_op);
 
@@ -84,10 +95,11 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
-  seastar::future<> getxattr(
+  using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
+  get_attr_errorator::future<> getxattr(
     const ObjectState& os,
     OSDOp& osd_op) const;
-  seastar::future<ceph::bufferptr> getxattr(
+  get_attr_errorator::future<ceph::bufferptr> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
 
@@ -116,13 +128,14 @@ protected:
 private:
   using cached_ss_t = boost::local_shared_ptr<SnapSet>;
   SharedLRU<hobject_t, SnapSet> ss_cache;
-  seastar::future<cached_ss_t> _load_ss(const hobject_t& oid);
+  get_os_errorator::future<cached_ss_t> _load_ss(const hobject_t& oid);
   SharedLRU<hobject_t, ObjectState> os_cache;
-  seastar::future<cached_os_t> _load_os(const hobject_t& oid);
-  virtual seastar::future<bufferlist> _read(const hobject_t& hoid,
-					    size_t offset,
-					    size_t length,
-					    uint32_t flags) = 0;
+  get_os_errorator::future<cached_os_t> _load_os(const hobject_t& oid);
+  virtual ll_read_errorator::future<ceph::bufferlist> _read(
+    const hobject_t& hoid,
+    size_t offset,
+    size_t length,
+    uint32_t flags) = 0;
   bool maybe_create_new_object(ObjectState& os, ceph::os::Transaction& txn);
   virtual seastar::future<crimson::osd::acked_peers_t>
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,

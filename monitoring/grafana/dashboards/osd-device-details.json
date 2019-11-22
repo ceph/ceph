@@ -109,7 +109,7 @@
       "title": "$osd Latency",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -205,7 +205,7 @@
       "title": "$osd R/W IOPS",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -301,7 +301,7 @@
       "title": "$osd R/W Bytes",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -390,14 +390,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\"))",
+          "expr": "(irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\"))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}/{{device}} Reads",
           "refId": "A"
         },
         {
-          "expr": "(irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\"))",
+          "expr": "(irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\"))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}/{{device}} Writes",
@@ -410,7 +410,7 @@
       "title": "Physical Device Latency for $osd",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -486,14 +486,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(node_disk_writes_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "irate(node_disk_writes_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}} on {{instance}} Writes",
           "refId": "A"
         },
         {
-          "expr": "irate(node_disk_reads_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "irate(node_disk_reads_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}} on {{instance}} Reads",
@@ -506,7 +506,7 @@
       "title": "Physical Device R/W IOPS for $osd",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -582,14 +582,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(node_disk_read_bytes_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "irate(node_disk_read_bytes_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} {{device}} Reads",
           "refId": "A"
         },
         {
-          "expr": "irate(node_disk_written_bytes_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "irate(node_disk_written_bytes_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} {{device}} Writes",
@@ -602,7 +602,7 @@
       "title": "Physical Device R/W Bytes for $osd",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -673,7 +673,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(node_disk_io_time_seconds_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
+          "expr": "irate(node_disk_io_time_seconds_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}} on {{instance}}",
@@ -686,7 +686,7 @@
       "title": "Physical Device Util% for $osd",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",

@@ -620,6 +620,7 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
+            osd_dev_node = None
             if obj_store == "filestore":
                 # collect filestore backend device
                 osd_dev_node = osd_metadata.get(
@@ -1087,7 +1088,7 @@ class Module(MgrModule):
         # Publish the URI that others may use to access the service we're
         # about to start serving
         self.set_uri('http://{0}:{1}/'.format(
-            socket.getfqdn() if server_addr == '::' else server_addr,
+            socket.getfqdn() if server_addr in ['::', '0.0.0.0'] else server_addr,
             server_port
         ))
 

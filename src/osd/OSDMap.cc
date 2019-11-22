@@ -4623,7 +4623,7 @@ int OSDMap::calc_pg_upmaps(
                      << dendl;
     }
     if (overfull.empty()) {
-      lderr(cct) << __func__ << " failed to build overfull" << dendl;
+      ldout(cct, 20) << __func__ << " failed to build overfull" << dendl;
       break;
     }
 
@@ -4647,7 +4647,7 @@ int OSDMap::calc_pg_upmaps(
                      << dendl;
     }
     if (underfull.empty()) {
-      lderr(cct) << __func__ << " failed to build underfull" << dendl;
+      ldout(cct, 20) << __func__ << " failed to build underfull" << dendl;
       break;
     }
 
@@ -5912,6 +5912,27 @@ void OSDMap::check_health(CephContext *cct,
       ss << detail.size() << " pool(s) have non-power-of-two pg_num";
       auto& d = checks->add("POOL_PG_NUM_NOT_POWER_OF_TWO", HEALTH_WARN,
 			    ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
+
+  // POOL_NO_REDUNDANCY
+  if (cct->_conf.get_val<bool>("mon_warn_on_pool_no_redundancy"))
+  {
+    list<string> detail;
+    for (auto it : get_pools()) {
+      if (it.second.get_size() == 1) {
+        ostringstream ss;
+        ss << "pool '" << get_pool_name(it.first)
+           << "' has no replicas configured";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have no replicas configured";
+      auto& d = checks->add("POOL_NO_REDUNDANCY", HEALTH_WARN,
+        ss.str(), detail.size());
       d.detail.swap(detail);
     }
   }

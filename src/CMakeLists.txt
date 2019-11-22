@@ -151,8 +151,8 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
 endif()
 
 set(EXTRALIBS ${CMAKE_DL_LIBS})
-if(NOT APPLE)
-  list(APPEND EXTRALIBS rt)
+if(HAVE_POSIX_TIMERS)
+  list(APPEND EXTRALIBS ${RT_LIBRARY})
 endif()
 if(LINUX OR APPLE)
   set(LIB_RESOLV resolv)
@@ -176,7 +176,9 @@ set(GCOV_PREFIX_STRIP 4)
 option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
 if(${ENABLE_GIT_VERSION})
   get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
-  git_describe(CEPH_GIT_NICE_VER --always)
+  git_describe(CEPH_GIT_NICE_VER_WITH_V --always)
+  # remove leading 'v'
+  string(SUBSTRING ${CEPH_GIT_NICE_VER_WITH_V} 1 -1 CEPH_GIT_NICE_VER)
   #if building from a source tarball via make-dist
   if(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
     message(STATUS "Ceph/.git directory not found, parsing ${CMAKE_CURRENT_SOURCE_DIR}/.git_version for CEPH_GIT_VER and CEPH_GIT_NICE_VER")
@@ -290,6 +292,7 @@ if(NOT fmt_FOUND)
   message(STATUS "Could not find fmt, will build it")
   add_subdirectory(fmt)
 endif()
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 
 if(WITH_SEASTAR)
   find_package(c-ares 1.13.0 QUIET)
@@ -324,11 +327,13 @@ set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   xxHash/xxhash.c
+  common/error_code.cc
   log/Log.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
   mon/MonSub.cc
+  mon/error_code.cc
   mgr/MgrClient.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
@@ -337,10 +342,12 @@ set(libcommon_files
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
   osd/osd_types.cc
+  osd/error_code.cc
   osd/PGPeeringEvent.cc
   osd/OpRequest.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
 set_source_files_properties(ceph_ver.c
@@ -422,7 +429,7 @@ add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
-  SOVERSION 0
+  SOVERSION 2
   SKIP_RPATH TRUE)
 if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
@@ -468,14 +475,13 @@ option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
 add_subdirectory(include)
 add_subdirectory(librados)
+add_subdirectory(RADOS)
 
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
-if(WITH_MGR)
-  add_subdirectory(mgr)
-endif()
+add_subdirectory(mgr)
 
 set(librados_config_srcs
   librados-config.cc)
@@ -493,6 +499,7 @@ endif()
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
 add_subdirectory(python-common)
+add_subdirectory(ceph-daemon)
 
 # Monitor
 add_subdirectory(mon)
@@ -690,7 +697,7 @@ if(WITH_FUSE)
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
   target_link_libraries(ceph-fuse ${FUSE_LIBRARIES}
-    ${GSSAPI_LIBRARIES} client ceph-common global-static)
+    ${GSSAPI_LIBRARIES} client ceph-common global-static ${EXTRALIBS})
   set_target_properties(ceph-fuse PROPERTIES
     COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})

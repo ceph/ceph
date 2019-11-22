@@ -4,6 +4,8 @@ tasks:
 - install:
 - ceph:
     fs: xfs
+    log-whitelist:
+      - \(PG_AVAILABILITY\)
 - cram:
     clients:
       client.0:

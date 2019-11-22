@@ -240,6 +240,8 @@ public:
 			 const char *snapname, RBD::AioCompletion *c);
   int aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
                                const char *snapname, RBD::AioCompletion *c);
+  int features_to_string(uint64_t features, std::string *str_features);
+  int features_from_string(const std::string str_features, uint64_t *features);
 
   int list(IoCtx& io_ctx, std::vector<std::string>& names)
     CEPH_RBD_DEPRECATED;
@@ -588,6 +590,8 @@ public:
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
   int snap_set_by_id(uint64_t snap_id);
+  int snap_get_name(uint64_t snap_id, std::string *snap_name);
+  int snap_get_id(const std::string snap_name, uint64_t *snap_id);
   int snap_rename(const char *srcname, const char *dstname);
   int snap_get_limit(uint64_t *limit);
   int snap_set_limit(uint64_t limit);

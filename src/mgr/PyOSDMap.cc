@@ -147,11 +147,13 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
 	   << " max_iterations " << max_iterations
 	   << " pools " << pools
 	   << dendl;
+  PyThreadState *tstate = PyEval_SaveThread();
   int r = self->osdmap->calc_pg_upmaps(g_ceph_context,
 				 max_deviation,
 				 max_iterations,
 				 pools,
 				 incobj->inc);
+  PyEval_RestoreThread(tstate);
   dout(10) << __func__ << " r = " << r << dendl;
   return PyInt_FromLong(r);
 }

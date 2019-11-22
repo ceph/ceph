@@ -124,7 +124,7 @@ export class CephfsChartComponent implements OnChanges, OnInit {
       this.chartCanvas,
       this.chartTooltip,
       (tooltip) => tooltip.caretX + 'px',
-      (tooltip) => tooltip.caretY - tooltip.height - 15 + 'px'
+      (tooltip) => tooltip.caretY - tooltip.height - 23 + 'px'
     );
     chartTooltip.getTitle = (ts) => moment(ts, 'x').format('LTS');
     chartTooltip.checkOffset = true;
@@ -168,6 +168,14 @@ export class CephfsChartComponent implements OnChanges, OnInit {
         y: dp[1]
       });
     });
+
+    /**
+     * MDS performance counters chart is expecting the same number of items
+     * from each data series. Since in deltaTimeSeries we are ignoring the first
+     * element, we will do the same here.
+     */
+    data.shift();
+
     return data;
   }
 

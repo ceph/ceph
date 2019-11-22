@@ -3,7 +3,7 @@
 
 #include "msg/Message.h"
 
-class MClientQuota : public Message {
+class MClientQuota : public SafeMessage {
 public:
   inodeno_t ino;
   nest_info_t rstat;
@@ -11,7 +11,7 @@ public:
 
 protected:
   MClientQuota() :
-    Message{CEPH_MSG_CLIENT_QUOTA},
+    SafeMessage{CEPH_MSG_CLIENT_QUOTA},
     ino(0)
   {}
   ~MClientQuota() override {}

@@ -38,7 +38,7 @@
 
 MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
-  monc{g_ceph_context},
+  monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(
 		     g_ceph_context,
 		     cct->_conf.get_val<std::string>("ms_type"),
@@ -46,7 +46,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 		     "mgr",
 		     getpid(),
 		     0)),
-  objecter{g_ceph_context, client_messenger.get(), &monc, NULL, 0, 0},
+  objecter{g_ceph_context, client_messenger.get(), &monc, poolctx, 0, 0},
   client{client_messenger.get(), &monc, &objecter},
   mgrc(g_ceph_context, client_messenger.get(), &monc.monmap),
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
@@ -115,6 +115,8 @@ int MgrStandby::init()
   client_messenger->add_dispatcher_tail(&client);
   client_messenger->start();
 
+  poolctx.start(2);
+
   // Initialize MonClient
   if (monc.build_initial_monmap() < 0) {
     client_messenger->shutdown();
@@ -169,6 +171,7 @@ int MgrStandby::init()
   // this method.
   monc.set_passthrough_monmap();
 
+  poolctx.start(1);
   client_t whoami = monc.get_global_id();
   client_messenger->set_myname(entity_name_t::MGR(whoami.v));
   monc.set_log_client(&log_client);
@@ -259,14 +262,6 @@ void MgrStandby::tick()
   )); 
 }
 
-void MgrStandby::handle_signal(int signum)
-{
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
-  //shutdown();
-}
-
 void MgrStandby::shutdown()
 {
   finisher.queue(new LambdaContext([&](int) {
@@ -287,17 +282,31 @@ void MgrStandby::shutdown()
     }
 
     py_module_registry.shutdown();
-
+    // stop sending beacon first, i use monc to talk with monitors
+    timer.shutdown();
+    // client uses monc and objecter
+    client.shutdown();
+    mgrc.shutdown();
+    // Stop asio threads, so leftover events won't call into shut down
+    // monclient/objecter.
+    poolctx.finish();
+    // stop monc, so mon won't be able to instruct me to shutdown/activate after
+    // the active_mgr is stopped
+    monc.shutdown();
+    if (active_mgr) {
+      active_mgr->shutdown();
+    }
     // objecter is used by monc and active_mgr
     objecter.shutdown();
     // client_messenger is used by all of them, so stop it in the end
     client_messenger->shutdown();
   }));
 
-  // Then stop the finisher to ensure its enqueued contexts aren't going
-  // to touch references to the things we're about to tear down
-  finisher.wait_for_empty();
-  finisher.stop();
+  // objecter is used by monc and active_mgr
+  objecter.shutdown();
+  // client_messenger is used by all of them, so stop it in the end
+  client_messenger->shutdown();
+  poolctx.finish();
 }
 
 void MgrStandby::respawn()
@@ -458,31 +467,13 @@ bool MgrStandby::ms_handle_refused(Connection *con)
   return false;
 }
 
-// A reference for use by the signal handler
-static MgrStandby *signal_mgr = nullptr;
-
-static void handle_mgr_signal(int signum)
-{
-  if (signal_mgr) {
-    signal_mgr->handle_signal(signum);
-  }
-}
-
 int MgrStandby::main(vector<const char *> args)
 {
-  // Enable signal handlers
-  signal_mgr = this;
-  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
-
   client_messenger->wait();
 
   // Disable signal handlers
   unregister_async_signal_handler(SIGHUP, sighup_handler);
-  unregister_async_signal_handler(SIGINT, handle_mgr_signal);
-  unregister_async_signal_handler(SIGTERM, handle_mgr_signal);
   shutdown_async_signal_handler();
-  signal_mgr = nullptr;
 
   return 0;
 }

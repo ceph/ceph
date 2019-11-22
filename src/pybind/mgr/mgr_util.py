@@ -71,20 +71,24 @@ def format_units(n, width, colored, decimal):
         return formatted
 
 
-def format_dimless(n, width, colored=True):
+def format_dimless(n, width, colored=False):
     return format_units(n, width, colored, decimal=True)
 
 
-def format_bytes(n, width, colored=True):
+def format_bytes(n, width, colored=False):
     return format_units(n, width, colored, decimal=False)
 
 
 def merge_dicts(*args):
     # type: (dict) -> dict
     """
-    >>> assert merge_dicts({1:2}, {3:4}) == {1:2, 3:4}
-        You can also overwrite keys:
-    >>> assert merge_dicts({1:2}, {1:4}) == {1:4}
+    >>> merge_dicts({1:2}, {3:4})
+    {1: 2, 3: 4}
+
+    You can also overwrite keys:
+    >>> merge_dicts({1:2}, {1:4})
+    {1: 4}
+
     :rtype: dict[str, Any]
     """
     ret = {}

@@ -97,6 +97,10 @@ cdef extern from "rbd/librbd.h" nogil:
         RBD_MAX_BLOCK_NAME_SIZE
         RBD_MAX_IMAGE_NAME_SIZE
 
+        _RBD_SNAP_REMOVE_UNPROTECT "RBD_SNAP_REMOVE_UNPROTECT"
+        _RBD_SNAP_REMOVE_FLATTEN "RBD_SNAP_REMOVE_FLATTEN"
+        _RBD_SNAP_REMOVE_FORCE "RBD_SNAP_REMOVE_FORCE"
+
     ctypedef void* rados_t
     ctypedef void* rados_ioctx_t
     ctypedef void* rbd_image_t
@@ -427,6 +431,8 @@ cdef extern from "rbd/librbd.h" nogil:
                            rbd_image_t *image, const char *snap_name)
     int rbd_open_by_id_read_only(rados_ioctx_t io, const char *image_id,
                                  rbd_image_t *image, const char *snap_name)
+    int rbd_features_to_string(uint64_t features, char *str_features, size_t *size)
+    int rbd_features_from_string(const char *str_features, uint64_t *features)
     int rbd_close(rbd_image_t image)
     int rbd_resize2(rbd_image_t image, uint64_t size, bint allow_shrink,
                     librbd_progress_fn_t cb, void *cbdata)
@@ -484,6 +490,10 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, timespec *timestamp)
     int rbd_snap_set(rbd_image_t image, const char *snapname)
     int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id)
+    int rbd_snap_get_name(rbd_image_t image, uint64_t snap_id,
+                          char *snapname, size_t *name_len)
+    int rbd_snap_get_id(rbd_image_t image, const char *snapname,
+                                uint64_t *snap_id)
     int rbd_snap_get_namespace_type(rbd_image_t image,
                                     uint64_t snap_id,
                                     rbd_snap_namespace_type_t *namespace_type)
@@ -732,6 +742,9 @@ RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_PROVI
 RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES
 RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS = _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS
 
+RBD_SNAP_REMOVE_UNPROTECT = _RBD_SNAP_REMOVE_UNPROTECT
+RBD_SNAP_REMOVE_FLATTEN = _RBD_SNAP_REMOVE_FLATTEN
+RBD_SNAP_REMOVE_FORCE = _RBD_SNAP_REMOVE_FORCE
 
 class Error(Exception):
     pass
@@ -2517,6 +2530,52 @@ class RBD(object):
         finally:
             rbd_pool_stats_destroy(_stats)
 
+    def features_to_string(self, features):
+        """
+        Convert features bitmask to str.
+
+        :param features: feature bitmask
+        :type features: int
+        :returns: str - the features str of the image
+        :raises: :class:`InvalidArgument`
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            uint64_t _features = features
+            size_t size = 1024
+            char *str_features = NULL
+        try:
+            while ret == -errno.ERANGE:
+                str_features =  <char *>realloc_chk(str_features, size)
+                with nogil:
+                    ret = rbd_features_to_string(_features, str_features, &size)
+
+            if ret != 0:
+                raise make_ex(ret, 'error converting features bitmask to str')
+            return decode_cstr(str_features)
+        finally:
+            free(str_features)
+
+    def features_from_string(self, str_features):
+        """
+        Get features bitmask from str, if str_features is empty, it will return
+        RBD_FEATURES_DEFAULT.
+
+        :param str_features: feature str
+        :type str_features: str
+        :returns: int - the features bitmask of the image
+        :raises: :class:`InvalidArgument`
+        """
+        str_features = cstr(str_features, 'str_features')
+        cdef:
+            const char *_str_features = str_features
+            uint64_t features
+        with nogil:
+            ret = rbd_features_from_string(_str_features, &features)
+        if ret != 0:
+            raise make_ex(ret, 'error getting features bitmask from str')
+        return features
+
 
 cdef class MirrorPeerIterator(object):
     """
@@ -3696,7 +3755,7 @@ cdef class Image(object):
 
         :param name: the name of the snapshot
         :type name: str
-        :raises: :class:`IOError`, :class:`ImageBusy`
+        :raises: :class:`IOError`, :class:`ImageBusy`, :class:`ImageNotFound`
         """
         name = cstr(name, 'name')
         cdef char *_name = name
@@ -3895,6 +3954,52 @@ cdef class Image(object):
             ret = rbd_snap_set_by_id(self.image, _snap_id)
         if ret != 0:
             raise make_ex(ret, 'error setting image %s to snapshot %d' % (self.name, snap_id))
+
+    def snap_get_name(self, snap_id):
+        """
+        Get snapshot name by id.
+
+        :param snap_id: the snapshot id
+        :type snap_id: int
+        :returns: str - snapshot name
+        :raises: :class:`ImageNotFound`
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            int64_t _snap_id = snap_id
+            size_t size = 512
+            char *image_name = NULL
+        try:
+            while ret == -errno.ERANGE:
+                image_name =  <char *>realloc_chk(image_name, size)
+                with nogil:
+                    ret = rbd_snap_get_name(self.image, _snap_id, image_name, &size)
+
+            if ret != 0:
+                raise make_ex(ret, 'error snap_get_name.')
+            return decode_cstr(image_name)
+        finally:
+            free(image_name)
+
+    def snap_get_id(self, snap_name):
+        """
+        Get snapshot id by name.
+
+        :param snap_name: the snapshot name
+        :type snap_name: str
+        :returns: int - snapshot id
+        :raises: :class:`ImageNotFound`
+        """
+
+        snap_name = cstr(snap_name, 'snap_name')
+        cdef:
+            const char *_snap_name = snap_name
+            uint64_t snap_id
+        with nogil:
+            ret = rbd_snap_get_id(self.image, _snap_name, &snap_id)
+        if ret != 0:
+            raise make_ex(ret, 'error snap_get_id.')
+        return snap_id
 
     def read(self, offset, length, fadvise_flags=0):
         """

@@ -33,6 +33,10 @@ Subscribe by sending a message to ``majordomo@vger.kernel.org`` with the line::
 
 in the body of the message.
 
+.. raw:: html
+
+   <!---
+
 .. rubric:: Contents
 
 .. toctree::
@@ -43,3 +47,7 @@ in the body of the message.
    mds_internals/index*
    radosgw/index*
    ceph-volume/index*
+
+.. raw:: html
+
+   --->

@@ -269,7 +269,7 @@ TEST_F(LibRadosMiscPP, BigObjectPP) {
 TEST_F(LibRadosMiscPP, AioOperatePP) {
   bool my_aio_complete = false;
   AioCompletion *my_completion = cluster.aio_create_completion(
-	  (void*)&my_aio_complete, set_completion_complete, NULL);
+	  (void*)&my_aio_complete, set_completion_complete);
   AioCompletion *my_completion_null = NULL;
   ASSERT_NE(my_completion, my_completion_null);
 

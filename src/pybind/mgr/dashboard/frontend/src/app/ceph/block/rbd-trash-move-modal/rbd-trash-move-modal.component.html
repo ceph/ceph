@@ -1,4 +1,4 @@
-<cd-modal>
+<cd-modal [modalRef]="modalRef">
   <ng-container i18n
                 class="modal-title">Move an image to trash</ng-container>
 
@@ -9,7 +9,7 @@
           [formGroup]="moveForm"
           novalidate>
       <div class="modal-body">
-        <p i18n>To move <kbd>{{ poolName }}/{{ imageName }}</kbd> to trash,
+        <p i18n>To move <kbd>{{ imageSpecStr }}</kbd> to trash,
           click <kbd>Move Image</kbd>. Optionally, you can pick an expiration date.</p>
 
         <div class="form-group">

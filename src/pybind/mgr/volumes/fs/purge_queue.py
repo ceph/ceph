@@ -75,10 +75,9 @@ class PurgeQueueBase(object):
                 self.jobs[volname] = []
             self.cv.notifyAll()
 
-    def cancel_purge_job(self, volname):
+    def _cancel_purge_job(self, volname):
         log.info("cancelling purge jobs for volume '{0}'".format(volname))
-        self.lock.acquire()
-        unlock = True
+        locked = True
         try:
             if not self.q.count(volname):
                 return
@@ -90,7 +89,7 @@ class PurgeQueueBase(object):
                 j[1].cancel_job()
             # wait for cancellation to complete
             with self.c_lock:
-                unlock = False
+                locked = False
                 self.waiting = True
                 self.lock.release()
                 while self.waiting:
@@ -98,8 +97,19 @@ class PurgeQueueBase(object):
                              "cancel".format(len(self.jobs[volname]), volname))
                     self.c_cv.wait()
         finally:
-            if unlock:
-                self.lock.release()
+            if not locked:
+                self.lock.acquire()
+
+    def cancel_purge_job(self, volname):
+        self.lock.acquire()
+        self._cancel_purge_job(volname)
+        self.lock.release()
+
+    def cancel_all_jobs(self):
+        self.lock.acquire()
+        for volname in list(self.q):
+            self._cancel_purge_job(volname)
+        self.lock.release()
 
     def register_job(self, volname, purge_dir):
         log.debug("registering purge job: {0}.{1}".format(volname, purge_dir))

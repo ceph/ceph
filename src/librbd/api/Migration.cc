@@ -20,6 +20,7 @@
 #include "librbd/api/Trash.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/CloneRequest.h"
@@ -1257,7 +1258,8 @@ int Migration<I>::create_dst_image() {
 
   {
     std::shared_lock owner_locker{dst_image_ctx->owner_lock};
-    r = dst_image_ctx->operations->prepare_image_update(true);
+    r = dst_image_ctx->operations->prepare_image_update(
+      exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true);
     if (r < 0) {
       lderr(m_cct) << "cannot obtain exclusive lock" << dendl;
       return r;

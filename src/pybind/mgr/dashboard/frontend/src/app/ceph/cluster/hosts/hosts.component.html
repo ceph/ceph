@@ -15,7 +15,8 @@
                           [tableActions]="tableActions">
         </cd-table-actions>
       </div>
-      <ng-template #servicesTpl let-value="value">
+      <ng-template #servicesTpl
+                   let-value="value">
         <span *ngFor="let service of value; last as isLast">
           <a class="service-link"
              [routerLink]="[service.cdLink]"

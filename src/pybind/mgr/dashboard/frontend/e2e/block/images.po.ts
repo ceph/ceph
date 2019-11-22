@@ -35,9 +35,9 @@ export class ImagesPageHelper extends PageHelper {
   async editImage(name, pool, newName, newSize) {
     const base_url = '/#/block/rbd/edit/';
     const editURL = base_url
-      .concat(pool)
-      .concat('/')
-      .concat(name);
+      .concat(encodeURIComponent(pool))
+      .concat('%2F')
+      .concat(encodeURIComponent(name));
     await browser.get(editURL);
 
     await element(by.id('name')).click(); // click name box and send new name

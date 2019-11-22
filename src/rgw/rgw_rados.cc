@@ -971,7 +971,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
 
   *result = entry;
 
-  entry->rados_completion = librados::Rados::aio_create_completion(entry, NULL, obj_complete_cb);
+  entry->rados_completion = librados::Rados::aio_create_completion(entry, obj_complete_cb);
 
   std::lock_guard l{locks[shard_id]};
   completions[shard_id].insert(entry);
@@ -1778,8 +1778,12 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
     }
   }
 
+  constexpr int allowed_read_attempts = 2;
   string skip_after_delim;
-  while (truncated && count <= max) {
+  for (int attempt = 0; attempt < allowed_read_attempts; ++attempt) {
+    // this loop is generally expected only to have a single
+    // iteration; see bottom of loop for early exit
+
     ent_map_t ent_map;
     ent_map.reserve(read_ahead);
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
@@ -1877,7 +1881,7 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
 
       result->emplace_back(std::move(entry));
       count++;
-    }
+    } // eiter for loop
 
     if (!params.delim.empty()) {
       int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
@@ -1896,7 +1900,18 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
         }
       }
     }
-  }
+
+    // if we finished listing, or if we're returning at least half the
+    // requested entries, that's enough; S3 and swift protocols allow
+    // returning fewer than max entries
+    if (!truncated || count >= max / 2) {
+      break;
+    }
+
+    ldout(cct, 1) << "RGWRados::Bucket::List::" << __func__ <<
+      " INFO ordered bucket listing requires read #" << (2 + attempt) <<
+      dendl;
+  } // read attempt loop
 
 done:
   if (is_truncated)
@@ -5252,7 +5267,7 @@ int RGWRados::Object::Stat::stat_async()
   librados::ObjectReadOperation op;
   op.stat2(&result.size, &result.mtime, NULL);
   op.getxattrs(&result.attrs, NULL);
-  state.completion = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  state.completion = librados::Rados::aio_create_completion(nullptr, nullptr);
   state.io_ctx.locator_set_key(loc);
   r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
   if (r < 0) {
@@ -5272,7 +5287,7 @@ int RGWRados::Object::Stat::wait()
     return state.ret;
   }
 
-  state.completion->wait_for_safe();
+  state.completion->wait_for_complete();
   state.ret = state.completion->get_return_value();
   state.completion->release();
 
@@ -7497,7 +7512,7 @@ int RGWRados::append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl)
     return r;
   }
   librados::Rados *rad = get_rados_handle();
-  librados::AioCompletion *completion = rad->aio_create_completion(NULL, NULL, NULL);
+  librados::AioCompletion *completion = rad->aio_create_completion(nullptr, nullptr);
 
   r = ref.pool.ioctx().aio_append(ref.obj.oid, completion, bl, size);
   completion->release();
@@ -7941,6 +7956,36 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_
 }
 
 
+uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
+						      uint32_t num_shards)
+{
+  // We want to minimize the chances that when num_shards >>
+  // num_entries that we return much fewer than num_entries to the
+  // client. Given all the overhead of making a cls call to the osd,
+  // returning a few entries is not much more work than returning one
+  // entry. This minimum might be better tuned based on future
+  // experiments where num_shards >> num_entries. (Note: ">>" should
+  // be interpreted as "much greater than".)
+  constexpr uint32_t min_read = 8;
+
+  // The following is based on _"Balls into Bins" -- A Simple and
+  // Tight Analysis_ by Raab and Steger. We add 1 as a way to handle
+  // cases when num_shards >> num_entries (it almost serves as a
+  // ceiling calculation). We also assume alpha is 1.0 and extract it
+  // from the calculation. Future work could involve memoizing some of
+  // the transcendental functions to minimize repeatedly re-calling
+  // them with the same parameters, which we expect to be the case the
+  // majority of the time.
+  uint32_t calc_read =
+    1 +
+    static_cast<uint32_t>((num_entries / num_shards) +
+			  sqrt((2 * num_entries) *
+			       log(num_shards) / num_shards));
+
+  return std::max(min_read, calc_read);
+}
+
+
 int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      int shard_id,
 				      const rgw_obj_index_key& start,
@@ -7962,39 +8007,46 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   // value - list result for the corresponding oid (shard), it is filled by
   //         the AIO callback
   map<int, string> oids;
-  map<int, struct rgw_cls_list_ret> list_results;
-  int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id, &index_pool, &oids, nullptr);
-  if (r < 0)
+  int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id,
+					  &index_pool, &oids, nullptr);
+  if (r < 0) {
     return r;
+  }
+
+  const uint32_t shard_count = oids.size();
+  const uint32_t num_entries_per_shard =
+    calc_ordered_bucket_list_per_shard(num_entries, shard_count);
+
+  ldout(cct, 10) << __func__ << " request from each of " << shard_count <<
+    " shard(s) for " << num_entries_per_shard << " entries to get " <<
+    num_entries << " total entries" << dendl;
 
   auto& ioctx = index_pool.ioctx();
-
+  map<int, struct rgw_cls_list_ret> list_results;
   cls_rgw_obj_key start_key(start.name, start.instance);
-  r = CLSRGWIssueBucketList(ioctx, start_key, prefix, num_entries,
+  r = CLSRGWIssueBucketList(ioctx, start_key, prefix, num_entries_per_shard,
 			    list_versions, oids, list_results,
 			    cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
-  // Create a list of iterators that are used to iterate each shard
+  // create a list of iterators that are used to iterate each shard
   vector<RGWRados::ent_map_t::iterator> vcurrents;
   vector<RGWRados::ent_map_t::iterator> vends;
   vector<string> vnames;
   vcurrents.reserve(list_results.size());
   vends.reserve(list_results.size());
   vnames.reserve(list_results.size());
-  map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
-  *is_truncated = false;
-  for (; iter != list_results.end(); ++iter) {
-    vcurrents.push_back(iter->second.dir.m.begin());
-    vends.push_back(iter->second.dir.m.end());
-    vnames.push_back(oids[iter->first]);
-    *is_truncated = (*is_truncated || iter->second.is_truncated);
+  for (auto& iter : list_results) {
+    vcurrents.push_back(iter.second.dir.m.begin());
+    vends.push_back(iter.second.dir.m.end());
+    vnames.push_back(oids[iter.first]);
   }
 
-  // Create a map to track the next candidate entry from each shard, if the entry
-  // from a specified shard is selected/erased, the next entry from that shard will
-  // be inserted for next round selection
+  // create a map to track the next candidate entry from each shard,
+  // if the entry from a specified shard is selected/erased, the next
+  // entry from that shard will be inserted for next round selection
   map<string, size_t> candidates;
   for (size_t i = 0; i < vcurrents.size(); ++i) {
     if (vcurrents[i] != vends[i]) {
@@ -8006,7 +8058,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   uint32_t count = 0;
   while (count < num_entries && !candidates.empty()) {
     r = 0;
-    // Select the next one
+    // select the next one
     int pos = candidates.begin()->second;
     const string& name = vcurrents[pos]->first;
     struct rgw_bucket_dir_entry& dirent = vcurrents[pos]->second;
@@ -8016,17 +8068,18 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     if ((!dirent.exists && !dirent.is_delete_marker()) ||
         !dirent.pending_map.empty() ||
         force_check) {
-      /* there are uncommitted ops. We need to check the current state,
-       * and if the tags are old we need to do cleanup as well. */
+      /* there are uncommitted ops. We need to check the current
+       * state, and if the tags are old we need to do clean-up as
+       * well. */
       librados::IoCtx sub_ctx;
       sub_ctx.dup(ioctx);
       r = check_disk_state(sub_ctx, bucket_info, dirent, dirent,
 			   updates[vnames[pos]], y);
       if (r < 0 && r != -ENOENT) {
-          return r;
+	return r;
       }
     } else {
-        r = 0;
+      r = 0;
     }
     if (r >= 0) {
       ldout(cct, 10) << "RGWRados::cls_bucket_list_ordered: got " <<
@@ -8035,36 +8088,50 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
       ++count;
     }
 
-    // Refresh the candidates map
+    // refresh the candidates map
     candidates.erase(candidates.begin());
-    ++vcurrents[pos];
-    if (vcurrents[pos] != vends[pos]) {
+    if (++vcurrents[pos] != vends[pos]) { // note: pre-increment
       candidates[vcurrents[pos]->first] = pos;
+    } else if (list_results[pos].is_truncated) {
+      // once we exhaust one shard that is truncated, we need to stop,
+      // as we cannot be certain that one of the next entries needs to
+      // come from that shard; S3 and swift protocols allow returning
+      // fewer than what was requested
+      break;
     }
-  }
+  } // while we haven't provided requested # of result entries
 
-  // Suggest updates if there is any
-  map<string, bufferlist>::iterator miter = updates.begin();
-  for (; miter != updates.end(); ++miter) {
-    if (miter->second.length()) {
+  // suggest updates if there is any
+  for (auto& miter : updates) {
+    if (miter.second.length()) {
       ObjectWriteOperation o;
-      cls_rgw_suggest_changes(o, miter->second);
+      cls_rgw_suggest_changes(o, miter.second);
       // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-      ioctx.aio_operate(miter->first, c, &o);
+      AioCompletion *c =
+	librados::Rados::aio_create_completion(nullptr, nullptr);
+      ioctx.aio_operate(miter.first, c, &o);
       c->release();
     }
-  }
+  } // updates loop
 
-  // Check if all the returned entries are consumed or not
+  *is_truncated = false;
+  // check if all the returned entries are consumed or not
   for (size_t i = 0; i < vcurrents.size(); ++i) {
-    if (vcurrents[i] != vends[i]) {
+    if (vcurrents[i] != vends[i] || list_results[i].is_truncated) {
       *is_truncated = true;
       break;
     }
   }
-  if (!m.empty())
+
+  if (*is_truncated && count < num_entries) {
+    ldout(cct, 10) << "RGWRados::" << __func__ <<
+      ": INFO requested " << num_entries << " entries but returning " <<
+      count << ", which is truncated" << dendl;
+  }
+
+  if (!m.empty()) {
     *last_entry = m.rbegin()->first;
+  }
 
   return 0;
 }
@@ -8211,7 +8278,7 @@ check_updates:
       ObjectWriteOperation o;
       cls_rgw_suggest_changes(o, miter->second);
       // we don't care if we lose suggested updates, send them off blindly
-      AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+      AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
       ioctx.aio_operate(miter->first, c, &o);
       c->release();
     }
@@ -8628,7 +8695,7 @@ int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompl
   list<string> prefixes;
   cls_rgw_remove_obj(op, prefixes);
 
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.pool.ioctx().aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;
@@ -8668,7 +8735,7 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   list<string> prefixes;
   cls_rgw_remove_obj(op, prefixes);
 
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.pool.ioctx().aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;

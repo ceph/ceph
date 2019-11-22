@@ -58,10 +58,15 @@ RGWBucketList::~RGWBucketList()
   buckets.clear();
 }
 
-RGWSalBucket* RGWRadosUser::add_bucket(rgw_bucket& bucket,
+RGWBucket* RGWRadosUser::add_bucket(rgw_bucket& bucket,
 				       ceph::real_time creation_time)
 {
   return NULL;
+}
+
+std::string& RGWRadosUser::get_display_name()
+{
+  return info.display_name;
 }
 
 RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
@@ -79,10 +84,9 @@ int RGWRadosBucket::remove_bucket(bool delete_children, optional_yield y)
   map<RGWObjCategory, RGWStorageStats> stats;
   std::vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
-  RGWBucketInfo info;
   string bucket_ver, master_ver;
 
-  ret = get_bucket_info(info, y);
+  ret = get_bucket_info(y);
   if (ret < 0)
     return ret;
 
@@ -151,10 +155,10 @@ int RGWRadosBucket::remove_bucket(bool delete_children, optional_yield y)
   return ret;
 }
 
-int RGWRadosBucket::get_bucket_info(RGWBucketInfo &info, optional_yield y)
+int RGWRadosBucket::get_bucket_info(optional_yield y)
 {
   return store->getRados()->get_bucket_info(store->svc(), ent.bucket.tenant, ent.bucket.name, info,
-					    NULL, y);
+					    NULL, y, &attrs);
 }
 
 int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
@@ -165,9 +169,14 @@ int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
   return store->getRados()->get_bucket_stats(bucket_info, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
-int RGWRadosBucket::sync_user_stats(RGWBucketInfo& bucket_info)
+int RGWRadosBucket::read_bucket_stats(optional_yield y)
 {
-      return store->ctl()->bucket->sync_user_stats(user.user, bucket_info, &ent);
+      return store->ctl()->bucket->read_bucket_stats(ent.bucket, &ent, y);
+}
+
+int RGWRadosBucket::sync_user_stats()
+{
+      return store->ctl()->bucket->sync_user_stats(user.user, info, &ent);
 }
 
 int RGWRadosBucket::update_container_stats(void)
@@ -194,14 +203,53 @@ int RGWRadosBucket::update_container_stats(void)
   return 0;
 }
 
-int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, RGWBucketInfo& bucket_info, optional_yield y)
+int RGWRadosBucket::check_bucket_shards(void)
+{
+      return store->getRados()->check_bucket_shards(info, ent.bucket, get_count());
+}
+
+int RGWRadosBucket::link(RGWUser* new_user, optional_yield y)
+{
+  RGWBucketEntryPoint ep;
+  ep.bucket = ent.bucket;
+  ep.owner = new_user->get_user();
+  ep.creation_time = get_creation_time();
+  ep.linked = true;
+  map<string, bufferlist> ep_attrs;
+  rgw_ep_info ep_data{ep, ep_attrs};
+
+  return store->ctl()->bucket->link_bucket(new_user->get_user(), info.bucket,
+					   ceph::real_time(), y, true, &ep_data);
+}
+
+int RGWRadosBucket::unlink(RGWUser* new_user, optional_yield y)
+{
+  return -1;
+}
+
+int RGWRadosBucket::chown(RGWUser* new_user, RGWUser* old_user, optional_yield y)
+{
+  string obj_marker;
+
+  return store->ctl()->bucket->chown(store, info, new_user->get_user(),
+			   old_user->get_display_name(), obj_marker, y);
+}
+
+bool RGWRadosBucket::is_owner(RGWUser* user)
+{
+  get_bucket_info(null_yield);
+
+  return (info.owner.compare(user->get_user()) == 0);
+}
+
+int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
 {
   bufferlist aclbl;
 
   acls = acl;
   acl.encode(aclbl);
 
-  return store->ctl()->bucket->set_acl(acl.get_owner(), ent.bucket, bucket_info, aclbl, null_yield);
+  return store->ctl()->bucket->set_acl(acl.get_owner(), ent.bucket, info, aclbl, null_yield);
 }
 
 RGWUser *RGWRadosStore::get_user(const rgw_user &u)
@@ -209,7 +257,7 @@ RGWUser *RGWRadosStore::get_user(const rgw_user &u)
   return new RGWRadosUser(this, u);
 }
 
-//RGWSalBucket *RGWRadosStore::create_bucket(RGWUser &u, const rgw_bucket &b)
+//RGWBucket *RGWRadosStore::create_bucket(RGWUser &u, const rgw_bucket &b)
 //{
   //if (!bucket) {
     //bucket = new RGWRadosBucket(this, u, b);
@@ -221,6 +269,27 @@ RGWUser *RGWRadosStore::get_user(const rgw_user &u)
 void RGWRadosStore::finalize(void) {
   if (rados)
     rados->finalize();
+}
+
+int RGWRadosStore::get_bucket(RGWUser& u, const rgw_bucket& b, RGWBucket** bucket)
+{
+  int ret;
+  RGWBucket* bp;
+
+  *bucket = nullptr;
+
+  bp = new RGWRadosBucket(this, u, b);
+  if (!bp) {
+    return -ENOMEM;
+  }
+  ret = bp->get_bucket_info(null_yield);
+  if (ret < 0) {
+    delete bp;
+    return ret;
+  }
+
+  *bucket = bp;
+  return 0;
 }
 
 } // namespace rgw::sal

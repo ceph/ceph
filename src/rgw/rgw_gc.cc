@@ -118,7 +118,7 @@ void RGWGC::on_defer_canceled(const cls_rgw_gc_obj_info& info)
   cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
   cls_rgw_gc_remove(op, {tag});
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
+  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
   store->gc_aio_operate(obj_names[i], c, &op);
   c->release();
 }
@@ -139,7 +139,7 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
     // enqueue succeeds
     cls_rgw_gc_remove(op, {tag});
 
-    auto c = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
+    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
     int ret = store->gc_aio_operate(obj_names[i], c, &op);
     c->release();
     return ret;
@@ -158,7 +158,7 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
   state->info.chain = chain;
   state->info.tag = tag;
   state->completion = librados::Rados::aio_create_completion(
-      state.get(), async_defer_callback, nullptr);
+      state.get(), async_defer_callback);
 
   int ret = store->gc_aio_operate(obj_names[i], state->completion, &op);
   if (ret == 0) {
@@ -172,7 +172,7 @@ int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc
   ObjectWriteOperation op;
   cls_rgw_gc_remove(op, tags);
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
+  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
   int ret = store->gc_aio_operate(obj_names[index], c, &op);
   if (ret < 0) {
     c->release();
@@ -323,7 +323,7 @@ public:
       }
     }
 
-    AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
     int ret = ioctx->aio_operate(oid, c, op);
     if (ret < 0) {
       return ret;
@@ -336,7 +336,7 @@ public:
   int handle_next_completion() {
     ceph_assert(!ios.empty());
     IO& io = ios.front();
-    io.c->wait_for_safe();
+    io.c->wait_for_complete();
     int ret = io.c->get_return_value();
     io.c->release();
 

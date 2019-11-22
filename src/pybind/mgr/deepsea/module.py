@@ -14,6 +14,7 @@ import requests
 
 from threading import Event, Thread, Lock
 
+from ceph.deployment import inventory
 from mgr_module import MgrModule
 import orchestrator
 
@@ -154,7 +155,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         # nodes, the cache will never be populated, and you'll always have
                         # the full round trip to DeepSea.
                         self.inventory_cache[node_name] = orchestrator.OutdatableData(node_devs)
-                    devs = orchestrator.InventoryDevice.from_ceph_volume_inventory_list(node_devs)
+                    devs = inventory.Devices.from_json(node_devs)
                     result.append(orchestrator.InventoryNode(node_name, devs))
             else:
                 self.log.error(event_data['return'])

@@ -12,6 +12,7 @@ from __future__ import absolute_import
 from datetime import datetime
 
 from .. import mgr, logger
+from . import rbd
 
 
 def _progress_event_to_dashboard_task_common(event, task):
@@ -25,9 +26,18 @@ def _progress_event_to_dashboard_task_common(event, task):
                 'trash remove': "trash/remove"
             }
             action = action_map.get(refs['action'], refs['action'])
+            metadata = {}
+            if 'image_name' in refs:
+                metadata['image_spec'] = rbd.get_image_spec(refs['pool_name'],
+                                                            refs['pool_namespace'],
+                                                            refs['image_name'])
+            else:
+                metadata['image_id_spec'] = rbd.get_image_spec(refs['pool_name'],
+                                                               refs['pool_namespace'],
+                                                               refs['image_id'])
             task.update({
                 'name': "rbd/{}".format(action),
-                'metadata': refs,
+                'metadata': metadata,
                 'begin_time': "{}Z".format(datetime.fromtimestamp(event["started_at"])
                                            .isoformat()),
             })

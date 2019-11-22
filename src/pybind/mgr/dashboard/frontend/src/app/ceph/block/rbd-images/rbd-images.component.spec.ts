@@ -12,6 +12,7 @@ import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdListComponent } from '../rbd-list/rbd-list.component';
+import { RbdNamespaceListComponent } from '../rbd-namespace-list/rbd-namespace-list.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
 import { RbdTrashListComponent } from '../rbd-trash-list/rbd-trash-list.component';
 import { RbdImagesComponent } from './rbd-images.component';
@@ -25,6 +26,7 @@ describe('RbdImagesComponent', () => {
       RbdDetailsComponent,
       RbdImagesComponent,
       RbdListComponent,
+      RbdNamespaceListComponent,
       RbdSnapshotListComponent,
       RbdTrashListComponent,
       RbdConfigurationListComponent

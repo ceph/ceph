@@ -216,3 +216,56 @@ class TestWhich(object):
         cap = capsys.readouterr()
         assert 'Absolute path not found for executable: exedir' in cap.err
         assert 'Ensure $PATH environment variable contains common executable locations' in cap.err
+
+
+@pytest.fixture
+def stub_which(monkeypatch):
+    def apply(value='/bin/restorecon'):
+        monkeypatch.setattr(system, 'which', lambda x: value)
+    return apply
+
+
+class TestSetContext(object):
+
+    def setup(self):
+        try:
+            os.environ.pop('CEPH_VOLUME_SKIP_RESTORECON')
+        except KeyError:
+            pass
+
+    @pytest.mark.parametrize('value', ['1', 'True', 'true', 'TRUE', 'yes'])
+    def test_set_context_skips(self, stub_call, fake_run, value):
+        stub_call(('', '', 0))
+        os.environ['CEPH_VOLUME_SKIP_RESTORECON'] = value
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    @pytest.mark.parametrize('value', ['0', 'False', 'false', 'FALSE', 'no'])
+    def test_set_context_doesnt_skip_with_env(self, stub_call, stub_which, fake_run, value):
+        stub_call(('', '', 0))
+        stub_which()
+        os.environ['CEPH_VOLUME_SKIP_RESTORECON'] = value
+        system.set_context('/tmp/foo')
+        assert len(fake_run.calls)
+
+    def test_set_context_skips_on_executable(self, stub_call, stub_which, fake_run):
+        stub_call(('', '', 0))
+        stub_which('restorecon')
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    def test_set_context_no_skip_on_executable(self, stub_call, stub_which, fake_run):
+        stub_call(('', '', 0))
+        stub_which('/bin/restorecon')
+        system.set_context('/tmp/foo')
+        assert len(fake_run.calls)
+
+    def test_selinuxenabled_doesnt_exist(self, stub_call, fake_run):
+        stub_call(('', 'command not found: selinuxenabled', 127))
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []
+
+    def test_selinuxenabled_is_not_enabled(self, stub_call, fake_run):
+        stub_call(('', '', 1))
+        system.set_context('/tmp/foo')
+        assert fake_run.calls == []

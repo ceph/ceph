@@ -218,7 +218,7 @@ struct WaitForFlush {
 void TestRadosClient::flush_aio_operations() {
   AioCompletionImpl *comp = new AioCompletionImpl();
   flush_aio_operations(comp);
-  comp->wait_for_safe();
+  comp->wait_for_complete();
   comp->put();
 }
 

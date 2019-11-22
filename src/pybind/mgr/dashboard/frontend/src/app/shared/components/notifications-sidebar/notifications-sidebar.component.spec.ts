@@ -9,6 +9,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../api/prometheus.service';
+import { RbdService } from '../../api/rbd.service';
 import { SettingsService } from '../../api/settings.service';
 import { NotificationType } from '../../enum/notification-type.enum';
 import { ExecutingTask } from '../../models/executing-task';
@@ -40,7 +41,8 @@ describe('NotificationsSidebarComponent', () => {
       PrometheusService,
       SettingsService,
       SummaryService,
-      NotificationService
+      NotificationService,
+      RbdService
     ]
   });
 
@@ -116,8 +118,7 @@ describe('NotificationsSidebarComponent', () => {
 
     it('should handle executing tasks', () => {
       const running_tasks = new ExecutingTask('rbd/delete', {
-        pool_name: 'somePool',
-        image_name: 'someImage'
+        image_spec: 'somePool/someImage'
       });
 
       summaryService['summaryDataSource'].next({ executing_tasks: [running_tasks] });

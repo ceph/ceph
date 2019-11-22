@@ -50,5 +50,7 @@ https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
 - `jenkins test dashboard backend`
 - `jenkins test docs`
 - `jenkins render docs`
+- `jenkins test ceph-volume all`
+- `jenkins test ceph-volume tox`
 
 </details>

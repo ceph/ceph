@@ -199,9 +199,9 @@ class OutputWizardProcessInventory(unittest.TestCase):
         self.assertEqual(nodes_list[0].name, "192.168.121.144")
 
         # Devices
-        self.assertTrue(len(nodes_list[0].devices), 4)
+        self.assertTrue(len(nodes_list[0].devices.devices), 4)
 
         expected_device_ids = ["/dev/sdc", "/dev/sda", "/dev/sdb", "/dev/vda"]
-        device_ids = [dev.id for dev in nodes_list[0].devices]
+        device_ids = [dev.path for dev in nodes_list[0].devices.devices]
 
         self.assertEqual(expected_device_ids, device_ids)

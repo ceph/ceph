@@ -1,4 +1,36 @@
 # -*- coding: utf-8 -*-
+"""
+Copyright © 2004-2019, CherryPy Team (team@cherrypy.org)
+
+All rights reserved.
+
+* * *
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of CherryPy nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""
 
 from distutils.version import StrictVersion
 
@@ -43,7 +75,7 @@ def patch_builtin_ssl_wrap(v, new_wrap):
     if v < StrictVersion("9.0.0"):
         from cherrypy.wsgiserver.ssl_builtin import BuiltinSSLAdapter as builtin_ssl
     else:
-        from cherrypy.cheroot.ssl.builtin import BuiltinSSLAdapter as builtin_ssl
+        from cheroot.ssl.builtin import BuiltinSSLAdapter as builtin_ssl
     builtin_ssl.wrap = new_wrap(builtin_ssl.wrap)
 
 
@@ -118,8 +150,49 @@ def accept_socket_error_0(v):
         patch_builtin_ssl_wrap(v, accept_socket_error_0)
 
 
+def patch_request_unique_id(v):
+    """
+    Older versions of cherrypy don't include request.unique_id field (a lazily
+    calculated UUID4).
+
+    Monkey-patching is preferred over alternatives as inheritance, as it'd break
+    type checks (cherrypy/lib/cgtools.py: `isinstance(obj, _cprequest.Request)`)
+    """
+    if v < StrictVersion('11.1.0'):
+        import uuid
+        from functools import update_wrapper
+        from cherrypy._cprequest import Request
+
+        class LazyUUID4(object):
+            def __str__(self):
+                """Return UUID4 and keep it for future calls."""
+                return str(self.uuid4)
+
+            @property
+            def uuid4(self):
+                """Provide unique id on per-request basis using UUID4.
+                It's evaluated lazily on render.
+                """
+                try:
+                    self._uuid4
+                except AttributeError:
+                    # evaluate on first access
+                    self._uuid4 = uuid.uuid4()
+
+                return self._uuid4
+
+        old_init = Request.__init__
+
+        def init_with_unique_id(self, *args, **kwargs):
+            old_init(self, *args, **kwargs)
+            self.unique_id = LazyUUID4()
+
+        Request.__init__ = update_wrapper(init_with_unique_id, old_init)
+
+
 def patch_cherrypy(v):
     patch_http_connection_init(v)
     skip_wait_for_occupied_port(v)
     accept_exceptions_from_builtin_ssl(v)
     accept_socket_error_0(v)
+    patch_request_unique_id(v)

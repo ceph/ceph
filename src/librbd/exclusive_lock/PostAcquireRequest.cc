@@ -156,7 +156,7 @@ void PostAcquireRequest<I>::send_allocate_journal_tag() {
   std::shared_lock image_locker{m_image_ctx.image_lock};
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_allocate_journal_tag>(this);
+    klass, &klass::handle_allocate_journal_tag>(this, m_journal);
   m_image_ctx.get_journal_policy()->allocate_tag_on_lock(ctx);
 }
 
@@ -225,7 +225,7 @@ void PostAcquireRequest<I>::handle_open_object_map(int r) {
 
   if (r < 0) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(r) << dendl;
-    delete m_object_map;
+    m_object_map->put();
     m_object_map = nullptr;
 
     if (r != -EFBIG) {
@@ -290,8 +290,12 @@ void PostAcquireRequest<I>::revert() {
   m_image_ctx.object_map = nullptr;
   m_image_ctx.journal = nullptr;
 
-  delete m_object_map;
-  delete m_journal;
+  if (m_object_map) {
+    m_object_map->put();
+  }
+  if (m_journal) {
+    m_journal->put();
+  }
 
   ceph_assert(m_error_result < 0);
 }

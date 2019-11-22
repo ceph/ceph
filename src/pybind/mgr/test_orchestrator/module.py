@@ -9,6 +9,7 @@ from subprocess import check_output, CalledProcessError
 
 import six
 
+from ceph.deployment import inventory
 from mgr_module import CLICommand, HandleCommandResult
 from mgr_module import MgrModule, PersistentStoreDict
 
@@ -201,10 +202,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         for out in c_v_out.splitlines():
             self.log.error(out)
-            devs = []
-            for device in json.loads(out):
-                dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
-                devs.append(dev)
+            devs = inventory.Devices.from_json(json.loads(out))
             return [orchestrator.InventoryNode('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')
@@ -246,6 +244,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def remove_osds(self, osd_ids, destroy=False):
         assert isinstance(osd_ids, list)
 
+    @deferred_write("blink_device_light")
+    def blink_device_light(self, ident_fault, on, locations):
+        assert ident_fault in ("ident", "fault")
+        assert len(locations)
+        return ''
+
     @deferred_write("service_action")
     def service_action(self, action, service_type, service_name=None, service_id=None):
         pass
@@ -283,7 +287,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def get_hosts(self):
         if self._inventory:
             return self._inventory
-        return [orchestrator.InventoryNode('localhost', [])]
+        return [orchestrator.InventoryNode('localhost', inventory.Devices([]))]
 
     @deferred_write("add_host")
     def add_host(self, host):

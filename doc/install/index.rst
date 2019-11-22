@@ -22,6 +22,7 @@ repository and build Ceph yourself.
 	Clone Source <clone-source>
 	Build Ceph <build-ceph>
     	Ceph Mirrors <mirrors>
+	Ceph Containers <containers>
 
 
 Install Software

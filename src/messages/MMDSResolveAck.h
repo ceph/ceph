@@ -20,7 +20,7 @@
 #include "include/types.h"
 
 
-class MMDSResolveAck : public Message {
+class MMDSResolveAck : public SafeMessage {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:
@@ -28,7 +28,7 @@ public:
   vector<metareqid_t> abort;
 
 protected:
-  MMDSResolveAck() : Message{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSResolveAck() : SafeMessage{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
   ~MMDSResolveAck() override {}
 
 public:

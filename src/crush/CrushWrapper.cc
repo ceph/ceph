@@ -932,7 +932,7 @@ int CrushWrapper::verify_upmap(CephContext *cct,
     return -ENOENT;
   }
   int root_bucket = 0;
-  int cursor = 0;
+  size_t cursor = 0;
   for (unsigned step = 0; step < rule->len; ++step) {
     auto curstep = &rule->steps[step];
     ldout(cct, 10) << __func__ << " step " << step << dendl;

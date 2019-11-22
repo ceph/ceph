@@ -607,20 +607,24 @@ class IscsiClientMock(object):
             target_config['ip_list'].remove(ip)
         target_config['portals'].pop(gateway_name)
 
-    def create_disk(self, pool, image, backstore):
+    def create_disk(self, pool, image, backstore, wwn):
+        if wwn is None:
+            wwn = '64af6678-9694-4367-bacc-f8eb0baa' + str(len(self.config['disks']))
         image_id = '{}/{}'.format(pool, image)
         self.config['disks'][image_id] = {
             "pool": pool,
             "image": image,
             "backstore": backstore,
             "controls": {},
-            "wwn": '64af6678-9694-4367-bacc-f8eb0baa' + str(len(self.config['disks']))
+            "wwn": wwn
         }
 
-    def create_target_lun(self, target_iqn, image_id):
+    def create_target_lun(self, target_iqn, image_id, lun):
         target_config = self.config['targets'][target_iqn]
+        if lun is None:
+            lun = len(target_config['disks'])
         target_config['disks'][image_id] = {
-            "lun_id": len(target_config['disks'])
+            "lun_id": lun
         }
         self.config['disks'][image_id]['owner'] = list(target_config['portals'].keys())[0]
 
@@ -653,6 +657,10 @@ class IscsiClientMock(object):
     def create_client_lun(self, target_iqn, client_iqn, image_id):
         target_config = self.config['targets'][target_iqn]
         target_config['clients'][client_iqn]['luns'][image_id] = {}
+
+    def delete_client_lun(self, target_iqn, client_iqn, image_id):
+        target_config = self.config['targets'][target_iqn]
+        del target_config['clients'][client_iqn]['luns'][image_id]
 
     def create_client_auth(self, target_iqn, client_iqn, user, password, m_user, m_password):
         target_config = self.config['targets'][target_iqn]

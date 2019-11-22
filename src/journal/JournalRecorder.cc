@@ -258,8 +258,9 @@ void JournalRecorder::open_object_set() {
   ldout(m_cct, 10) << "opening object set " << m_current_set << dendl;
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
+  bool overflowed = false;
 
-  lock_object_recorders();
+  auto lockers{lock_object_recorders()};
   for (const auto& p : m_object_ptrs) {
     const auto& object_recorder = p.second;
     uint64_t object_number = object_recorder->get_object_number();
@@ -267,10 +268,18 @@ void JournalRecorder::open_object_set() {
       ceph_assert(object_recorder->is_closed());
 
       // ready to close object and open object in active set
-      create_next_object_recorder(object_recorder);
+      if (create_next_object_recorder(object_recorder)) {
+        overflowed = true;
+      }
     }
   }
-  unlock_object_recorders();
+  lockers.clear();
+
+  if (overflowed) {
+    ldout(m_cct, 10) << "object set " << m_current_set << " now full" << dendl;
+    ldout(m_cct, 10) << "" << dendl;
+    close_and_advance_object_set(m_current_set);
+  }
 }
 
 bool JournalRecorder::close_object_set(uint64_t active_set) {
@@ -280,7 +289,7 @@ bool JournalRecorder::close_object_set(uint64_t active_set) {
   // object recorders will invoke overflow handler as they complete
   // closing the object to ensure correct order of future appends
   uint8_t splay_width = m_journal_metadata->get_splay_width();
-  lock_object_recorders();
+  auto lockers{lock_object_recorders()};
   for (const auto& p : m_object_ptrs) {
     const auto& object_recorder = p.second;
     if (object_recorder->get_object_number() / splay_width != active_set) {
@@ -289,13 +298,14 @@ bool JournalRecorder::close_object_set(uint64_t active_set) {
       // flush out all queued appends and hold future appends
       if (!object_recorder->close()) {
         ++m_in_flight_object_closes;
+        ldout(m_cct, 10) << "object " << object_recorder->get_oid() << " "
+                         << "close in-progress" << dendl;
       } else {
         ldout(m_cct, 10) << "object " << object_recorder->get_oid() << " closed"
                          << dendl;
       }
     }
   }
-  unlock_object_recorders();
   return (m_in_flight_object_closes == 0);
 }
 
@@ -312,7 +322,7 @@ ceph::ref_t<ObjectRecorder> JournalRecorder::create_object_recorder(
   return object_recorder;
 }
 
-void JournalRecorder::create_next_object_recorder(
+bool JournalRecorder::create_next_object_recorder(
     ceph::ref_t<ObjectRecorder> object_recorder) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
@@ -338,8 +348,14 @@ void JournalRecorder::create_next_object_recorder(
       new_object_recorder->get_object_number());
   }
 
-  new_object_recorder->append(std::move(append_buffers));
+  bool object_full = new_object_recorder->append(std::move(append_buffers));
+  if (object_full) {
+    ldout(m_cct, 10) << "object " << new_object_recorder->get_oid() << " "
+                     << "now full" << dendl;
+  }
+
   m_object_ptrs[splay_offset] = std::move(new_object_recorder);
+  return object_full;
 }
 
 void JournalRecorder::handle_update() {
@@ -404,6 +420,15 @@ void JournalRecorder::handle_overflow(ObjectRecorder *object_recorder) {
   ldout(m_cct, 10) << "object " << active_object_recorder->get_oid()
                    << " overflowed" << dendl;
   close_and_advance_object_set(object_number / splay_width);
+}
+
+JournalRecorder::Lockers JournalRecorder::lock_object_recorders() {
+  Lockers lockers;
+  lockers.reserve(m_object_ptrs.size());
+  for (auto& lock : m_object_locks) {
+    lockers.emplace_back(lock);
+  }
+  return lockers;
 }
 
 } // namespace journal

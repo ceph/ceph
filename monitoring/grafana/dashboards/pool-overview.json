@@ -82,7 +82,7 @@
       "title": "Top $topk Client IOPS by Pool",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -180,7 +180,7 @@
       "title": "Top $topk Client Throughput by Pool",
       "tooltip": {
         "shared": true,
-        "sort": 0,
+        "sort": 2,
         "value_type": "individual"
       },
       "type": "graph",
@@ -236,7 +236,7 @@
       "scroll": true,
       "showHeader": true,
       "sort": {
-        "col": 6,
+        "col": 5,
         "desc": true
       },
       "styles": [
@@ -382,7 +382,7 @@
       "scroll": true,
       "showHeader": true,
       "sort": {
-        "col": 6,
+        "col": 5,
         "desc": true
       },
       "styles": [
@@ -651,19 +651,19 @@
       },
       {
         "current": {
-          "text": "3",
-          "value": "3"
+          "text": "15",
+          "value": "15"
         },
         "hide": 0,
         "label": "Top K",
         "name": "topk",
         "options": [
           {
-            "text": "3",
-            "value": "3"
+            "text": "15",
+            "value": "15"
           }
         ],
-        "query": "3",
+        "query": "15",
         "skipUrlSync": false,
         "type": "textbox"
       }

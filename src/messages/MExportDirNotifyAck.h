@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MExportDirNotifyAck : public Message {
+class MExportDirNotifyAck : public SafeMessage {
 private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -31,9 +31,9 @@ private:
   
 protected:
   MExportDirNotifyAck() :
-    Message{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION} {}
+    SafeMessage{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirNotifyAck(dirfrag_t df, uint64_t tid, pair<__s32,__s32> na) :
-    Message{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), new_auth(na) {
+    SafeMessage{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), new_auth(na) {
     set_tid(tid);
   }
   ~MExportDirNotifyAck() override {}

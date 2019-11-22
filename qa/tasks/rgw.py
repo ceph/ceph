@@ -136,6 +136,8 @@ def start_rgw(ctx, config, clients):
                 raise ConfigError('vault: no "root_token" specified')
             # create token on file
             ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
+            log.info("Restrict access to token file")
+            ctx.cluster.only(client).run(args=['chmod', '600', token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
 

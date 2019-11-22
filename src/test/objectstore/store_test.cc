@@ -4583,6 +4583,7 @@ TEST_P(StoreTest, Synthetic) {
   doSyntheticTest(10000, 400*1024, 40*1024, 0);
 }
 
+#if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, BlueFSExtenderTest) {
   if(string(GetParam()) != "bluestore")
     return;
@@ -4618,7 +4619,6 @@ TEST_P(StoreTestSpecificAUSize, BlueFSExtenderTest) {
   bstore->mount();
 }
 
-#if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, SyntheticMatrixSharding) {
   if (string(GetParam()) != "bluestore")
     return;

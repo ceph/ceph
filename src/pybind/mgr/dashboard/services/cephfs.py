@@ -167,7 +167,7 @@ class CephFS(object):
             dent = self.cfs.readdir(d)
             while dent:
                 if dent.is_dir():
-                    if dent.d_name not in [b'.', b'..']:
+                    if dent.d_name not in [b'.', b'..'] and not dent.d_name.startswith(b'_'):
                         snapshot_path = os.path.join(path, dent.d_name)
                         stat = self.cfs.stat(snapshot_path)
                         result.append({

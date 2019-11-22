@@ -1,0 +1,25 @@
+@import 'defaults';
+
+/* ng2-tree */
+::ng-deep tree-internal .tree {
+  li {
+    cursor: pointer;
+  }
+  .node-value {
+    &:hover {
+      color: #212121;
+    }
+    &:after {
+      height: 0;
+    }
+    color: #2b99a8;
+    border-radius: 5px;
+  }
+  .node-selected {
+    background-color: #d9edf7;
+    color: #212121;
+  }
+  .loading-children {
+    display: none;
+  }
+}

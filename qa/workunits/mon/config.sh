@@ -50,6 +50,16 @@ ceph config rm mon.a debug_asok
 ceph config get mon.a debug_asok | grep 11
 ceph config rm mon debug_asok
 ceph config get mon.a debug_asok | grep 33
+#  nested .-prefix scoping
+ceph config set client.foo debug_asok 44
+ceph config get client.foo.bar debug_asok | grep 44
+ceph config get client.foo.bar.baz debug_asok | grep 44
+ceph config set client.foo.bar debug_asok 55
+ceph config get client.foo.bar.baz debug_asok | grep 55
+ceph config rm client.foo debug_asok
+ceph config get client.foo.bar.baz debug_asok | grep 55
+ceph config rm client.foo.bar debug_asok
+ceph config get client.foo.bar.baz debug_asok | grep 33
 ceph config rm global debug_asok
 
 # help

@@ -1382,10 +1382,10 @@ public:
   void send_response_data(rgw::sal::RGWBucketList& buckets) override {
     if (!sent_data)
       return;
-    map<string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+    map<string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
     for (const auto& iter : m) {
       boost::string_ref marker{iter.first};
-      rgw::sal::RGWSalBucket* ent = iter.second;
+      rgw::sal::RGWBucket* ent = iter.second;
       if (! this->operator()(ent->get_name(), marker)) {
 	/* caller cannot accept more */
 	lsubdout(cct, rgw, 5) << "ListBuckets rcb failed"

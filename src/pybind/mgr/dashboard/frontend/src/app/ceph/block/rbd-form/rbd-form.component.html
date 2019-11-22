@@ -90,6 +90,47 @@
           </div>
         </div>
 
+        <!-- Namespace -->
+        <div class="form-group row"
+             *ngIf="mode !== 'editing' && rbdForm.getValue('pool') && namespaces === null">
+          <div class="col-sm-9 offset-sm-3">
+            <i [ngClass]="[icons.spinner, icons.spin]"></i>
+          </div>
+        </div>
+        <div class="form-group row"
+             *ngIf="(mode === 'editing' && rbdForm.getValue('namespace')) || mode !== 'editing' && (namespaces && namespaces.length > 0 || !poolPermission.read)">
+          <label class="col-form-label col-sm-3"
+                 for="pool">
+            Namespace
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Namespace..."
+                   id="namespace"
+                   name="namespace"
+                   formControlName="namespace"
+                   *ngIf="mode === 'editing' || !poolPermission.read">
+            <select id="namespace"
+                    name="namespace"
+                    class="form-control custom-select"
+                    formControlName="namespace"
+                    *ngIf="mode !== 'editing' && poolPermission.read">
+              <option *ngIf="pools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="pools !== null && pools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No namespaces available --</option>
+              <option *ngIf="pools !== null && pools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a namespace --</option>
+              <option *ngFor="let namespace of namespaces"
+                      [value]="namespace">{{ namespace }}</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Use a dedicated pool -->
         <div class="form-group row">
           <div class="offset-sm-3 col-sm-9">

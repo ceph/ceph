@@ -127,7 +127,8 @@
         <!-- Versioning -->
         <div class="form-group row"
              *ngIf="editing">
-          <legend class="cd-header ml-5 mr-5" i18n>Versioning</legend>
+          <legend class="cd-header ml-5 mr-5"
+                  i18n>Versioning</legend>
           <div class="col-sm-9 offset-sm-3">
             <input type="radio"
                    id="enabled"
@@ -139,7 +140,8 @@
             <label class="align-text-top"
                    for="enabled">
               <span i18n>Enabled</span>
-              <div class="text-muted" i18n>Enables versioning for the objects in the bucket.</div>
+              <div class="text-muted"
+                   i18n>Enables versioning for the objects in the bucket.</div>
             </label>
           </div>
           <div class="col-sm-9 offset-sm-3">
@@ -153,7 +155,8 @@
             <label class="align-text-top"
                    for="suspended">
               <span i18n>Suspended</span>
-              <div class="text-muted" i18n>Disables versioning for the objects in the bucket.</div>
+              <div class="text-muted"
+                   i18n>Disables versioning for the objects in the bucket.</div>
             </label>
           <span class="invalid-feedback"
                 *ngIf="bucketForm.showError('versioning', frm, 'required')"

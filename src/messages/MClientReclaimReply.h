@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientReclaimReply: public Message {
+class MClientReclaimReply: public SafeMessage {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -55,7 +55,7 @@ protected:
     MClientReclaimReply{0, 0}
   {}
   MClientReclaimReply(int r, epoch_t e=0) :
-    Message{CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION},
+    SafeMessage{CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION},
     result(r), epoch(e) {}
 
 private:

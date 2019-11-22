@@ -10,6 +10,8 @@
   $ ceph config set osd.* target_max_misplaced_ratio .07
   $ ceph balancer eval
   current cluster score [0-9]*\.?[0-9]+.* (re)
+# Turn off active balancer to use manual commands
+  $ ceph balancer off
   $ ceph balancer optimize test_plan balancer_opt
   $ ceph balancer ls
   [

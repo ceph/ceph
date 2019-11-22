@@ -50,7 +50,7 @@ struct C_ClientList : public C_AioExec {
 
     outbl.clear();
     librados::AioCompletion *rados_completion =
-       librados::Rados::aio_create_completion(this, rados_callback, NULL);
+       librados::Rados::aio_create_completion(this, rados_callback);
     int r = ioctx.aio_operate(oid, rados_completion, &op, &outbl);
     ceph_assert(r == 0);
     rados_completion->release();
@@ -111,7 +111,7 @@ struct C_ImmutableMetadata : public C_AioExec {
     op.exec("journal", "get_pool_id", inbl);
 
     librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, rados_callback, NULL);
+      librados::Rados::aio_create_completion(this, rados_callback);
     int r = ioctx.aio_operate(oid, rados_completion, &op, &outbl);
     ceph_assert(r == 0);
     rados_completion->release();
@@ -151,7 +151,7 @@ struct C_MutableMetadata : public C_AioExec {
     op.exec("journal", "get_active_set", inbl);
 
     librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, rados_callback, NULL);
+      librados::Rados::aio_create_completion(this, rados_callback);
     int r = ioctx.aio_operate(oid, rados_completion, &op, &outbl);
     ceph_assert(r == 0);
     rados_completion->release();

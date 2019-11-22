@@ -114,7 +114,10 @@ ceph_release = None
 dry_run = False
 redmine = None
 bri_tag = None
+github_token_file = "~/.github_token"
 github_token = None
+redmine_key_file = "~/.redmine_key"
+redmine_key = None
 
 def browser_running():
     global browser_cmd
@@ -140,12 +143,15 @@ def commit_range(args):
     return '{}..HEAD'.format(commit)
 
 def connect_to_redmine(a):
-    if a.key:
-        logging.info("Redmine key was provided; using it")
-        return Redmine(redmine_endpoint, key=a.key)
-    elif a.user and a.password:
+    global redmine_key
+    global redmine_key_file
+    redmine_key = read_from_file(redmine_key_file)
+    if a.user and a.password:
         logging.info("Redmine username and password were provided; using them")
         return Redmine(redmine_endpoint, username=a.user, password=a.password)
+    elif redmine_key:
+        logging.info("Redmine key was read from '%s'; using it" % redmine_key_file)
+        return Redmine(redmine_endpoint, key=redmine_key)
     else:
         usage()
 
@@ -183,10 +189,8 @@ def has_tracker(r, p_id, tracker_name):
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--key", help="Redmine user key")
     parser.add_argument("--user", help="Redmine user")
     parser.add_argument("--password", help="Redmine password")
-    parser.add_argument("--token", help="GitHub token")
     parser.add_argument("--debug", help="Show debug-level messages",
                         action="store_true")
     parser.add_argument("--dry-run", help="Do not write anything to Redmine",
@@ -281,6 +285,16 @@ def process_merge(repo, merge, merges_remaining):
             tag_sha1(repo, sha1)
     return True
 
+def read_from_file(fs):
+    retval = None
+    full_path=os.path.expanduser(fs)
+    try:
+        with open(full_path, "r") as f:
+            retval = f.read().strip()
+    except FileNotFoundError:
+        pass
+    return retval
+
 def releases():
     return ('argonaut', 'bobtail', 'cuttlefish', 'dumpling', 'emperor',
             'firefly', 'giant', 'hammer', 'infernalis', 'jewel', 'kraken',
@@ -296,9 +310,8 @@ def report_params(a):
     if a.no_browser:
          no_browser = True
          logging.warning("Web browser will not be used even if it is running")
-    if a.token:
-         github_token = a.token
-         logging.info("GitHub token provided on command line; using it")
+    if github_token:
+         logging.info("GitHub token was read from '%s'; using it" % github_token_file)
 
 def set_logging_level(a):
     if a.debug:
@@ -317,12 +330,13 @@ def ver_to_release():
             'v12.2': 'luminous', 'v13.2': 'mimic', 'v14.2': 'nautilus'}
 
 def usage():
-    logging.error("Command-line arguments must include either a Redmine key (--key) "
+    logging.error("Redmine credentials are required to perform this operation. "
+                  "Please provide either a Redmine key (via %s) "
                   "or a Redmine username and password (via --user and --password). "
                   "Optionally, one or more issue numbers can be given via positional "
                   "argument(s). In the absence of positional arguments, the script "
                   "will loop through all merge commits after the tag \"BRI-{release}\". If there "
-                  "is no such tag in the local branch, one will be created for you.")
+                  "is no such tag in the local branch, one will be created for you." % redmine_key_file)
     exit(-1)
 
 
@@ -393,7 +407,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
         #
         for bt in self.backport_trackers:
             # does the Backport Tracker description link back to the GitHub PR?
-            p = re.compile('http.*://github.com/ceph/ceph/pull/\\d+')
+            p = re.compile('http.?://github.com/ceph/ceph/pull/\\d+')
             bt.tracker_description = bt.redmine_issue.description
             bt.github_url_from_tracker = None
             try:
@@ -487,7 +501,7 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
 
     def extract_backport_trackers_from_github_pr_desc(self):
         global redmine_endpoint
-        p = re.compile('http.*://tracker.ceph.com/issues/\\d+')
+        p = re.compile('http.?://tracker.ceph.com/issues/\\d+')
         matching_strings = p.findall(self.github_pr_desc)
         if not matching_strings: 
             print_outer_divider()
@@ -581,6 +595,7 @@ if __name__ == '__main__':
     args = parse_arguments()
     set_logging_level(args)
     logging.debug(args)
+    github_token = read_from_file(github_token_file)
     report_params(args)
     #
     # set up Redmine variables

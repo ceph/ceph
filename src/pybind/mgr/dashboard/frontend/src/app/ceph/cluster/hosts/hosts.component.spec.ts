@@ -8,13 +8,12 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { CoreModule } from '../../../core/core.module';
 import { HostService } from '../../../shared/api/host.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { InventoryComponent } from '../inventory/inventory.component';
-import { ServicesComponent } from '../services/services.component';
-import { HostDetailsComponent } from './host-details/host-details.component';
+import { CephModule } from '../../ceph.module';
 import { HostsComponent } from './hosts.component';
 
 describe('HostsComponent', () => {
@@ -35,10 +34,12 @@ describe('HostsComponent', () => {
       TabsModule.forRoot(),
       BsDropdownModule.forRoot(),
       RouterTestingModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      CephModule,
+      CoreModule
     ],
     providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }, i18nProviders],
-    declarations: [HostsComponent, HostDetailsComponent, InventoryComponent, ServicesComponent]
+    declarations: []
   });
 
   beforeEach(() => {

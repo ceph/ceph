@@ -50,9 +50,12 @@
 #include <exception>
 #include <type_traits>
 
+#include <boost/system/system_error.hpp>
+
 #include "page.h"
 #include "crc32c.h"
 #include "buffer_fwd.h"
+
 
 #ifdef __CEPH__
 # include "include/ceph_assert.h"
@@ -101,30 +104,69 @@ struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
 namespace buffer CEPH_BUFFER_API {
 inline namespace v14_2_0 {
 
+  const boost::system::error_category& buffer_category() noexcept;
+  enum class errc { bad_alloc = 1,
+		    end_of_buffer,
+		    malformed_input };
+}
+}
+}
+
+namespace boost {
+namespace system {
+template<>
+struct is_error_code_enum<::ceph::buffer::errc> {
+  static const bool value = true;
+};
+}
+}
+
+namespace ceph {
+
+namespace buffer CEPH_BUFFER_API {
+inline namespace v14_2_0 {
+
   /*
    * exceptions
    */
 
-  struct error : public std::exception{
-    const char *what() const throw () override;
-  };
+  //  explicit conversion:
+  inline boost::system::error_code make_error_code(errc e) noexcept {
+    return { static_cast<int>(e), buffer_category() };
+  }
+
+// implicit conversion:
+  inline boost::system::error_condition
+  make_error_condition(errc e) noexcept {
+    return { static_cast<int>(e), buffer_category() };
+  }
+
+  using error = boost::system::system_error;
+
   struct bad_alloc : public error {
-    const char *what() const throw () override;
+    bad_alloc() : error(errc::bad_alloc) {}
+    bad_alloc(const char* what_arg) : error(errc::bad_alloc, what_arg) {}
+    bad_alloc(const std::string& what_arg) : error(errc::bad_alloc, what_arg) {}
   };
   struct end_of_buffer : public error {
-    const char *what() const throw () override;
+    end_of_buffer() : error(errc::end_of_buffer) {}
+    end_of_buffer(const char* what_arg) : error(errc::end_of_buffer, what_arg) {}
+    end_of_buffer(const std::string& what_arg)
+      : error(errc::end_of_buffer, what_arg) {}
   };
   struct malformed_input : public error {
-    explicit malformed_input(const std::string& w) {
-      snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", w.c_str());
-    }
-    const char *what() const throw () override;
-  private:
-    char buf[256];
+    malformed_input() : error(errc::malformed_input) {}
+    malformed_input(const char* what_arg)
+      : error(errc::malformed_input, what_arg) {}
+    malformed_input(const std::string& what_arg)
+      : error(errc::malformed_input, what_arg) {}
   };
-  struct error_code : public malformed_input {
-    explicit error_code(int error);
-    int code;
+  struct error_code : public error {
+    error_code(int r) : error(-r, boost::system::system_category()) {}
+    error_code(int r, const char* what_arg)
+      : error(-r, boost::system::system_category(), what_arg) {}
+    error_code(int r, const std::string& what_arg)
+      : error(-r, boost::system::system_category(), what_arg) {}
   };
 
 
@@ -1311,5 +1353,6 @@ inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
 } // namespace buffer
 
 } // namespace ceph
+
 
 #endif

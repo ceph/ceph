@@ -23,7 +23,8 @@ set(lib_mon_srcs
   ConfigKeyService.cc
   ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc
-  ../osd/OSDCap.cc)
+  ../osd/OSDCap.cc
+  $<TARGET_OBJECTS:mgr_cap_obj>)
 
 if(HAVE_GSSAPI)
   list(APPEND lib_mon_srcs

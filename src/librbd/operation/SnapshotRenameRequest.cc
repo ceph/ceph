@@ -4,7 +4,6 @@
 #include "librbd/operation/SnapshotRenameRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 
 #define dout_subsys ceph_subsys_rbd

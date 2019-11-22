@@ -9,6 +9,7 @@ import {
   expectItemTasks,
   i18nProviders
 } from '../../../testing/unit-test-helper';
+import { RbdService } from '../api/rbd.service';
 import { ExecutingTask } from '../models/executing-task';
 import { SummaryService } from './summary.service';
 import { TaskListService } from './task-list.service';
@@ -28,7 +29,7 @@ describe('TaskListService', () => {
   };
 
   configureTestBed({
-    providers: [TaskListService, TaskMessageService, SummaryService, i18nProviders],
+    providers: [TaskListService, TaskMessageService, SummaryService, i18nProviders, RbdService],
     imports: [HttpClientTestingModule, RouterTestingModule]
   });
 

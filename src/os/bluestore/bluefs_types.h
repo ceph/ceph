@@ -91,6 +91,7 @@ struct bluefs_fnode_t {
   void append_extent(const bluefs_extent_t& ext) {
     if (!extents.empty() &&
 	extents.back().end() == ext.offset &&
+	extents.back().bdev == ext.bdev &&
 	(uint64_t)extents.back().length + (uint64_t)ext.length < 0xffffffff) {
       extents.back().length += ext.length;
     } else {

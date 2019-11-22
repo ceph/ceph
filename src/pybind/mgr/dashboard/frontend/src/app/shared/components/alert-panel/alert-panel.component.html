@@ -3,8 +3,10 @@
     <ng-container *ngIf="size === 'normal'; else slim">
       <tr>
         <td *ngIf="showIcon"
-            rowspan="2" class="alert-panel-icon">
-          <i [ngClass]="[icons.large3x]" class="alert-{{ bootstrapClass }} {{ typeIcon }}"
+            rowspan="2"
+            class="alert-panel-icon">
+          <i [ngClass]="[icons.large3x]"
+             class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>
         <td class="alert-panel-title">{{ title }}</td>
@@ -17,7 +19,8 @@
     </ng-container>
     <ng-template #slim>
       <tr>
-        <td *ngIf="showIcon" class="alert-panel-icon">
+        <td *ngIf="showIcon"
+            class="alert-panel-icon">
           <i class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>

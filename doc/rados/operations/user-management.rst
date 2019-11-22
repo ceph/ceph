@@ -144,6 +144,35 @@ Capability syntax follows the form::
   the use of this capability is restricted to clients connecting from
   this network.
 
+- **Manager Caps:** Manager (``ceph-mgr``) capabilities include
+  ``r``, ``w``, ``x`` access settings or ``profile {name}``. For example: ::
+
+	mgr 'allow {access-spec} [network {network/prefix}]'
+
+	mgr 'profile {name} [{key1} {match-type} {value1} ...] [network {network/prefix}]'
+
+  Manager capabilities can also be specified for specific commands,
+  all commands exported by a built-in manager service, or all commands
+  exported by a specific add-on module. For example: ::
+
+        mgr 'allow command "{command-prefix}" [with {key1} {match-type} {value1} ...] [network {network/prefix}]'
+
+        mgr 'allow service {service-name} {access-spec} [network {network/prefix}]'
+
+        mgr 'allow module {module-name} [with {key1} {match-type} {value1} ...] {access-spec} [network {network/prefix}]'
+
+  The ``{access-spec}`` syntax is as follows: ::
+
+        * | all | [r][w][x]
+
+  The ``{service-name}`` is one of the following: ::
+
+        mgr | osd | pg | py
+
+  The ``{match-type}`` is one of the following: ::
+
+        = | prefix | regex
+
 - **Metadata Server Caps:** For administrators, use ``allow *``.  For all
   other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
 
@@ -240,14 +269,15 @@ The following entries describe valid capability profiles:
               so they have permissions to add keys, etc. when bootstrapping
               an ``rbd-mirror`` daemon.
 
-``profile rbd`` (Monitor and OSD)
+``profile rbd`` (Manager, Monitor, and OSD)
 
 :Description: Gives a user permissions to manipulate RBD images. When used
               as a Monitor cap, it provides the minimal privileges required
               by an RBD client application; this includes the ability
 	      to blacklist other client users. When used as an OSD cap, it
               provides read-write access to the specified pool to an
-	      RBD client application.
+	      RBD client application. The Manager cap supports optional
+              ``pool`` and ``namespace`` keyword arguments.
 
 ``profile rbd-mirror`` (Monitor only)
 
@@ -255,9 +285,11 @@ The following entries describe valid capability profiles:
               RBD mirroring config-key secrets. It provides the minimal
               privileges required for the ``rbd-mirror`` daemon.
 
-``profile rbd-read-only`` (OSD only)
+``profile rbd-read-only`` (Manager and OSD)
 
-:Description: Gives a user read-only permissions to RBD images.
+:Description: Gives a user read-only permissions to RBD images. The Manager
+              cap supports optional ``pool`` and ``namespace`` keyword
+              arguments.
 
 
 Pool

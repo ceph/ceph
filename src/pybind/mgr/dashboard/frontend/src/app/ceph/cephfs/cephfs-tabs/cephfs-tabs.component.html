@@ -14,6 +14,11 @@
     </cd-cephfs-clients>
   </tab>
   <tab i18n-heading
+       heading="Directories">
+    <cd-cephfs-directories [id]="id">
+    </cd-cephfs-directories>
+  </tab>
+  <tab i18n-heading
        *ngIf="grafanaPermission.read && grafanaId"
        heading="Performance Details">
     <cd-grafana [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"

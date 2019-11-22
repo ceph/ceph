@@ -420,7 +420,8 @@ void generate_transaction(
 	      goid,
 	      extent.get_off(),
 	      extent.get_len(),
-	      op.buffer);
+	      op.buffer,
+	      op.fadvise_flags);
 	  },
 	  [&](const BufferUpdate::Zero &op) {
 	    t->zero(

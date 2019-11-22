@@ -43,6 +43,13 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
   }
 
   getTargetControlLimits(setting) {
-    return this.target_controls_limits[setting];
+    if (this.target_controls_limits) {
+      return this.target_controls_limits[setting];
+    }
+    // backward compatibility
+    if (['Yes', 'No'].includes(this.target_default_controls[setting])) {
+      return { type: 'bool' };
+    }
+    return { type: 'int' };
   }
 }

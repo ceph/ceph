@@ -40,6 +40,9 @@
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#include "rgw_kafka.h"
+#endif
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
@@ -376,6 +379,11 @@ int main(int argc, const char **argv)
         dout(1) << "ERROR: failed to initialize AMQP manager" << dendl;
     }
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+    if (!rgw::kafka::init(cct.get())) {
+        dout(1) << "ERROR: failed to initialize Kafka manager" << dendl;
+    }
+#endif
   }
 
   if (apis_map.count("swift") > 0) {
@@ -606,6 +614,9 @@ int main(int argc, const char **argv)
   g_conf().remove_observer(&implicit_tenant_context);
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  rgw::kafka::shutdown();
 #endif
 
   rgw_perf_stop(g_ceph_context);

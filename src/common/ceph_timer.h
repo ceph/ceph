@@ -19,14 +19,9 @@
 #include <thread>
 #include <boost/intrusive/set.hpp>
 
+#include "common/detail/construct_suspended.h"
+
 namespace ceph {
-
-  /// Newly constructed timer should be suspended at point of
-  /// construction.
-
-  struct construct_suspended_t { };
-  constexpr construct_suspended_t construct_suspended { };
-
   namespace timer_detail {
     using boost::intrusive::member_hook;
     using boost::intrusive::set_member_hook;

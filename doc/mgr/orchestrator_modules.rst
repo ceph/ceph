@@ -230,10 +230,18 @@ Inventory and status
 
 .. automethod:: Orchestrator.get_inventory
 .. autoclass:: InventoryFilter
-.. autoclass:: InventoryNode
 
-.. autoclass:: InventoryDevice
+.. py:currentmodule:: ceph.deployment.inventory
+
+.. autoclass:: Devices
    :members:
+
+.. autoclass:: Device
+   :members:
+
+.. py:currentmodule:: orchestrator
+
+
 
 .. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription
@@ -259,6 +267,9 @@ OSD management
    :exclude-members: from_json
 
 .. py:currentmodule:: orchestrator
+
+.. automethod:: Orchestrator.blink_device_light
+.. autoclass:: DeviceLightLoc
 
 .. _orchestrator-osd-replace:
 

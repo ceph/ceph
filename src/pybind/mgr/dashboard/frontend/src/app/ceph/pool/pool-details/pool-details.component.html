@@ -4,7 +4,7 @@
   <tab i18n-heading
        heading="Details">
     <cd-table-key-value [renderObjects]="true"
-                        [data]="selection.first()"
+                        [data]="filterNonPoolData(selection.first())"
                         [autoReload]="false">
     </cd-table-key-value>
   </tab>
@@ -23,7 +23,7 @@
     <cd-rbd-configuration-table [data]="selectedPoolConfiguration"></cd-rbd-configuration-table>
   </tab>
   <tab i18n-heading
-       *ngIf="selection.first()['tiers'].length > 0"
+       *ngIf="selection.first()['tiers']?.length > 0"
        heading="Cache Tiers Details">
     <cd-table [data]="cacheTiers"
               [columns]="cacheTierColumns"

@@ -213,7 +213,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& 
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  const std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+  const std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
   for (auto iter = m.lower_bound(prefix);
        iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
        ++iter) {
@@ -221,7 +221,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& 
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::RGWSalBucket& obj)
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::RGWBucket& obj)
 {
   s->formatter->open_object_section("container");
   s->formatter->dump_string("name", obj.get_name());
@@ -248,7 +248,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBuc
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  std::map<std::string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+  std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
 
   auto iter = m.rbegin();
   for (/* initialized above */;
@@ -340,7 +340,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
 }
 
 static void dump_container_metadata(struct req_state *,
-                                    const rgw::sal::RGWSalBucket*,
+                                    const rgw::sal::RGWBucket*,
                                     const RGWQuotaInfo&,
                                     const RGWBucketWebsiteConf&);
 
@@ -450,7 +450,7 @@ next:
 } // RGWListBucket_ObjStore_SWIFT::send_response
 
 static void dump_container_metadata(struct req_state *s,
-                                    const rgw::sal::RGWSalBucket* bucket,
+                                    const rgw::sal::RGWBucket* bucket,
                                     const RGWQuotaInfo& quota,
                                     const RGWBucketWebsiteConf& ws_conf)
 {
@@ -2580,7 +2580,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   return subdir_marker == content_type && state->size <= 1;
 }
 
-bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
+bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
   rgw_obj obj(s->bucket, index);
 

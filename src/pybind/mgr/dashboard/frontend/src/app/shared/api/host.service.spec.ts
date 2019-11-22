@@ -35,4 +35,11 @@ describe('HostService', () => {
     tick();
     expect(result).toEqual(['foo', 'bar']);
   }));
+
+  it('should make a GET request on the devices endpoint when requesting devices', () => {
+    const hostname = 'hostname';
+    service.getDevices(hostname).subscribe();
+    const req = httpTesting.expectOne(`api/host/${hostname}/devices`);
+    expect(req.request.method).toBe('GET');
+  });
 });

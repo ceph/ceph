@@ -275,8 +275,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
 
-     virtual void send_message_osd_cluster(
+      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
+      virtual void send_message_osd_cluster(
+       std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
      virtual void send_message_osd_cluster(
        Message *m, Connection *con) = 0;
      virtual void send_message_osd_cluster(

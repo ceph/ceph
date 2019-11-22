@@ -202,7 +202,7 @@ grouped.
 
 Each layer consists of::
 
-       bucket ( uniform | list | tree | straw ) size
+       bucket ( uniform | list | tree | straw | straw2 ) size
 
 The **bucket** is the type of the buckets in the layer
 (e.g. "rack"). Each bucket name will be built by appending a unique

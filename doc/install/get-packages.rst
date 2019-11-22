@@ -83,7 +83,7 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 	https://download.ceph.com/rpm-{release-name}
 
-The major releases of Ceph are summarized at: :ref:`ceph-releases`
+The major releases of Ceph are summarized at: :ref:`ceph-releases-general`
 
 Every second major release is considered Long Term Stable (LTS). Critical
 bugfixes are backported to LTS releases until their retirement. Since retired

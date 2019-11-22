@@ -198,4 +198,4 @@ DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
 ### upgrade runs for next release octopus (runs on master)
 ###### on smithi
 23 14 * * 1,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL -p 70
-23 24 * * 1,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/mimic-x -e $CEPH_QA_EMAIL -p 70
+22 14 * * 1,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/mimic-x -e $CEPH_QA_EMAIL -p 70

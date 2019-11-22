@@ -636,7 +636,7 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB 
   ObjectReadOperation op;
   GetDirHeaderCompletion *cb = new GetDirHeaderCompletion(ctx);
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, cb);
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   int r = io_ctx.aio_operate(oid, c, &op, NULL);
   c->release();
   if (r < 0)

@@ -10,6 +10,30 @@ import { ApiModule } from './api.module';
 export class ConfigurationService {
   constructor(private http: HttpClient) {}
 
+  private findValue(config, section: string) {
+    if (!config.value) {
+      return undefined;
+    }
+    return config.value.find((v) => v.section === section);
+  }
+
+  getValue(config, section: string) {
+    let val = this.findValue(config, section);
+    if (!val) {
+      const indexOfDot = section.indexOf('.');
+      if (indexOfDot !== -1) {
+        val = this.findValue(config, section.substring(0, indexOfDot));
+      }
+    }
+    if (!val) {
+      val = this.findValue(config, 'global');
+    }
+    if (val) {
+      return val.value;
+    }
+    return config.default;
+  }
+
   getConfigData() {
     return this.http.get('api/cluster_conf/');
   }

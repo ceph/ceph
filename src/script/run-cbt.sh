@@ -87,6 +87,14 @@ fi
 source_dir=$(readlink -f $source_dir)
 if ! $use_existing; then
     cd $build_dir
+    # seastar uses 128*8 aio in reactor for io and 10003 aio for events pooling
+    # for each core, if it fails to enough aio context, the seastar application
+    # bails out. and take other process into consideration, let's make it
+    # 32768 per core
+    max_io=$(expr 32768 \* $(nproc))
+    if test $(/sbin/sysctl --values fs.aio-max-nr) -lt $max_io; then
+        sudo /sbin/sysctl -q -w fs.aio-max-nr=$max_io
+    fi
     if $classical; then
         MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
            --without-dashboard --memstore \

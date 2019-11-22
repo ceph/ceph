@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MDentryLink : public Message {
+class MDentryLink : public SafeMessage {
 private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -40,9 +40,9 @@ private:
 
 protected:
   MDentryLink() :
-    Message(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION) { }
+    SafeMessage(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION) { }
   MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
-    Message(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION),
+    SafeMessage(MSG_MDS_DENTRYLINK, HEAD_VERSION, COMPAT_VERSION),
     subtree(r),
     dirfrag(df),
     dn(n),

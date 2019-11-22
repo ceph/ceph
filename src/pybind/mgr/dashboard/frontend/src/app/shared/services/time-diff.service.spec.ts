@@ -38,6 +38,11 @@ describe('TimeDiffService', () => {
     expect(service.calculateDuration(baseTime, new Date('2022-02-28T04:05:00'))).toBe('6d 4h 5m');
   });
 
+  it('should return an empty string if time diff is less then a minute', () => {
+    const ts = 1568361327000;
+    expect(service.calculateDuration(new Date(ts), new Date(ts + 120))).toBe('');
+  });
+
   describe('testing duration calculation in detail', () => {
     const minutes = 60 * 1000;
     const hours = 60 * minutes;

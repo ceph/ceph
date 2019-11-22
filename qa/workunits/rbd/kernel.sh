@@ -10,6 +10,10 @@ fi
 
 TMP_FILES="/tmp/img1 /tmp/img1.small /tmp/img1.snap1 /tmp/img1.export /tmp/img1.trunc"
 
+function expect_false() {
+	if "$@"; then return 1; else return 0; fi
+}
+
 function get_device_dir {
 	local POOL=$1
 	local IMAGE=$2
@@ -84,8 +88,9 @@ cmp /tmp/img1 /tmp/img1.snap1
 sudo dd if=/dev/rbd/rbd/testimg1 of=/tmp/img1.export
 cmp /tmp/img1 /tmp/img1.export
 
-# remove snapshot and detect error from mapped snapshot
+# zeros are returned if an image or a snapshot is removed
+expect_false cmp -n 76800000 /dev/rbd/rbd/testimg1@snap1 /dev/zero
 rbd snap rm --snap=snap1 testimg1
-sudo dd if=/dev/rbd/rbd/testimg1@snap1 of=/tmp/img1.snap1 2>&1 | grep 'Input/output error'
+cmp -n 76800000 /dev/rbd/rbd/testimg1@snap1 /dev/zero
 
 echo OK

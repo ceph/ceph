@@ -19,6 +19,7 @@
 
 #include "msg/Dispatcher.h"
 
+#include "common/async/context_pool.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncReserver.h"
@@ -90,7 +91,6 @@ struct C_FinishSplits;
 struct C_OpenPGs;
 class LogChannel;
 class CephContext;
-class MOSDOp;
 
 class MOSDPGCreate2;
 class MOSDPGQuery;
@@ -192,6 +192,7 @@ public:
 private:
   OSDMapRef next_osdmap;
   ceph::condition_variable pre_publish_cond;
+  int pre_publish_waiter = 0;
 
 public:
   void pre_publish_map(OSDMapRef map) {
@@ -224,17 +225,21 @@ public:
     if (--(i->second) == 0) {
       map_reservations.erase(i);
     }
-    pre_publish_cond.notify_all();
+    if (pre_publish_waiter) {
+      pre_publish_cond.notify_all();
+    }
   }
   /// blocks until there are no reserved maps prior to next_osdmap
   void await_reserved_maps() {
     std::unique_lock l{pre_publish_lock};
     ceph_assert(next_osdmap);
+    pre_publish_waiter++;
     pre_publish_cond.wait(l, [this] {
       auto i = map_reservations.cbegin();
       return (i == map_reservations.cend() ||
 	      i->first >= next_osdmap->get_epoch());
     });
+    pre_publish_waiter--;
   }
   OSDMapRef get_next_osdmap() {
     std::lock_guard l(pre_publish_lock);
@@ -256,6 +261,7 @@ public:
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
+  void send_message_osd_cluster(std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch);
   void send_message_osd_cluster(Message *m, Connection *con) {
     con->send_message(m);
   }
@@ -511,6 +517,7 @@ public:
   void promote_throttle_recalibrate();
 
   // -- Objecter, for tiering reads/writes from/to other OSDs --
+  ceph::async::io_context_pool& poolctx;
   Objecter *objecter;
   int m_objecter_finishers;
   vector<Finisher*> objecter_finishers;
@@ -898,7 +905,7 @@ public:
   void dump_live_pgids();
 #endif
 
-  explicit OSDService(OSD *osd);
+  OSDService(OSD *osd, ceph::async::io_context_pool& poolctx);
   ~OSDService();
 };
 
@@ -1827,7 +1834,7 @@ protected:
 
   void send_full_update();
   
-  friend struct C_OSD_GetVersion;
+  friend struct CB_OSD_GetVersion;
 
   // -- alive --
   epoch_t up_thru_wanted;
@@ -2001,7 +2008,8 @@ private:
       Messenger *hb_front_server,
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
-      MonClient *mc, const std::string &dev, const std::string &jdev);
+      MonClient *mc, const std::string &dev, const std::string &jdev,
+      ceph::async::io_context_pool& poolctx);
   ~OSD() override;
 
   // static bits

@@ -38,6 +38,8 @@ endif()
 
 set(components
   bus_pci
+  bus_vdev
+  cfgfile
   cmdline
   eal
   ethdev
@@ -47,15 +49,25 @@ set(components
   mempool
   mempool_ring
   mempool_stack
+  net
   pci
   pmd_af_packet
+  pmd_bnxt
   pmd_bond
+  pmd_cxgbe
+  pmd_e1000
+  pmd_ena
+  pmd_enic
   pmd_i40e
   pmd_ixgbe
   pmd_mlx5
+  pmd_nfp
+  pmd_qede
   pmd_ring
+  pmd_sfc_efx
   pmd_vmxnet3_uio
-  ring)
+  ring
+  timer)
 
 # for collecting dpdk library targets, it will be used when defining dpdk::dpdk
 set(_dpdk_libs)

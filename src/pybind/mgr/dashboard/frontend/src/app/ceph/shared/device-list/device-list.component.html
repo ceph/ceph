@@ -1,0 +1,48 @@
+<cd-table *ngIf="hostname || osdId !== null"
+          [data]="devices"
+          [columns]="columns"></cd-table>
+
+<cd-alert-panel type="warning"
+                *ngIf="hostname === '' && osdId === null"
+                i18n>Neither hostname nor OSD ID given</cd-alert-panel>
+
+<ng-template #deviceLocation
+             let-value="value">
+  <span *ngFor="let location of value">{{location.dev}}</span>
+</ng-template>
+
+<ng-template #lifeExpectancy
+             let-value="value">
+  <span *ngIf="value.min && !value.max">&gt; {{value.min | i18nPlural: translationMapping}}</span>
+  <span *ngIf="value.max && !value.min">&lt; {{value.max | i18nPlural: translationMapping}}</span>
+  <span *ngIf="value.max && value.min">{{value.min}} to {{value.max | i18nPlural: translationMapping}}</span>
+</ng-template>
+
+<ng-template #lifeExpectancyTimestamp
+             let-value="value">
+  {{value}}
+</ng-template>
+
+<ng-template #state
+             let-value="value">
+  <ng-container *ngIf="value === 'good'">
+    <span class="badge badge-success"
+          i18n>Good</span>
+  </ng-container>
+  <ng-container *ngIf="value === 'warning'">
+    <span class="badge badge-warning"
+          i18n>Warning</span>
+  </ng-container>
+  <ng-container *ngIf="value === 'bad'">
+    <span class="badge badge-danger"
+          i18n>Bad</span>
+  </ng-container>
+  <ng-container *ngIf="value === 'stale'">
+    <span class="badge badge-info"
+          i18n>Stale</span>
+  </ng-container>
+  <ng-container *ngIf="value === 'unknown'">
+    <span class="badge badge-dark"
+          i18n>Unknown</span>
+  </ng-container>
+</ng-template>

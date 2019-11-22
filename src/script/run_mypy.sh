@@ -3,11 +3,13 @@
 # needs to be executed from the src directory.
 # generates a report at src/mypy_report.txt
 
+set -e
+
 python3 -m venv .mypy_venv
 
 . .mypy_venv/bin/activate
 
-pip install $(find * -name requirements.txt | grep -v node_modules | awk '{print "-r  " $0}')
+! pip install $(find -name requirements.txt -not -path './frontend/*' -printf '-r%p ')
 pip install mypy
 
 MYPY_INI="$PWD"/mypy.ini
@@ -29,6 +31,7 @@ popd
 
 SORT_MYPY=$(cat <<-EOF
 #!/bin/python3
+import re
 from collections import namedtuple
 
 class Line(namedtuple('Line', 'prefix no rest')):
@@ -36,6 +39,8 @@ class Line(namedtuple('Line', 'prefix no rest')):
     def parse(cls, l):
         if not l:
             return cls('', 0, '')
+        if re.search('Found [0-9]+ errors in [0-9]+ files', l):
+            return cls('', 0, '')     
         p, *rest = l.split(':', 2)
         if len(rest) == 1:
             return cls(p, 0, rest[0])

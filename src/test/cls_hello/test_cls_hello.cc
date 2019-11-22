@@ -106,7 +106,7 @@ TEST(ClsHello, WriteReturnData) {
   librados::AioCompletion *completion = cluster.aio_create_completion();
   ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				 librados::OPERATION_RETURNVEC));
-  completion->wait_for_safe();
+  completion->wait_for_complete();
   ASSERT_EQ(42, completion->get_return_value());
   ASSERT_EQ(42, rval);
   out.hexdump(std::cout);
@@ -122,7 +122,7 @@ TEST(ClsHello, WriteReturnData) {
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				   librados::OPERATION_RETURNVEC));
-    completion->wait_for_safe();
+    completion->wait_for_complete();
     ASSERT_EQ(-EOVERFLOW, completion->get_return_value());
     ASSERT_EQ(-EOVERFLOW, rval);
     ASSERT_EQ("", std::string(out.c_str(), out.length()));

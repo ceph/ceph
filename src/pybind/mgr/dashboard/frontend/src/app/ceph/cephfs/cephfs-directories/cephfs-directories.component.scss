@@ -1,0 +1,9 @@
+@import 'ng2-tree.scss';
+
+.quota-origin {
+  &:hover {
+    color: #212121;
+  }
+  cursor: pointer;
+  color: #2b99a8;
+}

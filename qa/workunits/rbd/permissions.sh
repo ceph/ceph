@@ -40,7 +40,10 @@ delete_users() {
 }
 
 create_users() {
-    ceph auth get-or-create client.volumes mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd-read-only pool=images' >> $KEYRING
+    ceph auth get-or-create client.volumes \
+	mon 'profile rbd' \
+	osd 'profile rbd pool=volumes, profile rbd-read-only pool=images' \
+	mgr 'profile rbd pool=volumes, profile rbd-read-only pool=images' >> $KEYRING
     ceph auth get-or-create client.images mon 'profile rbd' osd 'profile rbd pool=images' >> $KEYRING
 
     ceph auth get-or-create client.snap_none mon 'allow r' >> $KEYRING
@@ -231,6 +234,17 @@ test_remove_self_managed_snapshots() {
     expect 1 remove_self_managed_snapshot snap_profile_pool volumes
 }
 
+test_rbd_support() {
+    # read-only commands should work on both pools
+    ceph -k $KEYRING --id volumes rbd perf image stats volumes
+    ceph -k $KEYRING --id volumes rbd perf image stats images
+
+    # read/write commands should only work on 'volumes'
+    rbd -k $KEYRING --id volumes create --image-format 2 --image-feature $IMAGE_FEATURES -s 1 volumes/foo
+    ceph -k $KEYRING --id volumes rbd task add remove volumes/foo
+    expect 13 ceph -k $KEYRING --id volumes rbd task add remove images/foo
+}
+
 cleanup() {
     rm -f $KEYRING
 }
@@ -248,6 +262,8 @@ recreate_pools
 test_volumes_access
 
 test_remove_self_managed_snapshots
+
+test_rbd_support
 
 delete_pools
 delete_users

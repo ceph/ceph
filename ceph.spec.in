@@ -36,6 +36,7 @@
 %bcond_without cephfs_java
 %endif
 %bcond_without amqp_endpoint
+%bcond_without kafka_endpoint
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
@@ -45,6 +46,7 @@
 %bcond_with selinux
 %bcond_with cephfs_java
 %bcond_with amqp_endpoint
+%bcond_with kafka_endpoint
 #Compat macro for new _fillupdir macro introduced in Nov 2017
 %if ! %{defined _fillupdir}
 %global _fillupdir /var/adm/fillup-templates
@@ -200,6 +202,9 @@ BuildRequires:	yasm
 %if 0%{with amqp_endpoint}
 BuildRequires:  librabbitmq-devel
 %endif
+%if 0%{with kafka_endpoint}
+BuildRequires:  librdkafka-devel
+%endif
 %if 0%{with make_check}
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
@@ -343,6 +348,9 @@ BuildRequires:  protobuf-compiler
 BuildRequires:  libcryptopp-devel
 BuildRequires:  libnuma-devel
 %endif
+%endif
+%if 0%{?rhel} >= 8
+BuildRequires:  /usr/bin/pathfix.py
 %endif
 
 %description
@@ -1294,6 +1302,11 @@ ${CMAKE} .. \
 %else
     -DWITH_RADOSGW_AMQP_ENDPOINT=OFF \
 %endif
+%if 0%{with kafka_endpoint}
+    -DWITH_RADOSGW_KAFKA_ENDPOINT=ON \
+%else
+    -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
+%endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
     -DWITH_GRAFANA=ON
 
@@ -1329,7 +1342,7 @@ chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
 install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 
-install -m 0755 src/ceph-daemon %{buildroot}%{_sbindir}/ceph-daemon
+install -m 0755 src/ceph-daemon/ceph-daemon %{buildroot}%{_sbindir}/ceph-daemon
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
@@ -1342,6 +1355,11 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 
 # sudoers.d
 install -m 0600 -D sudoers.d/ceph-osd-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-osd-smartctl
+
+%if 0%{?rhel} >= 8
+pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
+pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_sbindir}/*
+%endif
 
 #set up placeholder directories
 mkdir -p %{buildroot}%{_sysconfdir}/ceph

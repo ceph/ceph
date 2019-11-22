@@ -1,7 +1,7 @@
 <ng-template #tasksTpl>
   <!-- Executing -->
   <div *ngFor="let executingTask of executingTasks; trackBy:trackByFn">
-    <div class="card border-0 mb-3">
+    <div class="card tc_task border-0 mb-3">
       <div class="row no-gutters">
         <div class="col-md-3 text-center">
           <span [ngClass]="[icons.stack, icons.large2x]"
@@ -55,7 +55,7 @@
     <hr>
 
     <div *ngFor="let notification of notifications; let i = index">
-      <div class="card border-0 mb-3">
+      <div class="card tc_notification border-0 mb-3">
         <div class="row no-gutters">
           <div class="col-md-3 text-center">
             <span [ngClass]="[icons.stack, icons.large2x, notification.textClass]">

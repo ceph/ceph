@@ -21,6 +21,7 @@
 #include "common/common_init.h"
 #include "common/TracepointProvider.h"
 #include "common/hobject.h"
+#include "common/async/waiter.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
@@ -155,10 +156,11 @@ void librados::ObjectOperation::assert_exists()
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
-  o->stat(NULL, (ceph::real_time*) NULL, NULL);
+  o->stat(nullptr, nullptr, nullptr);
 }
 
-void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl)
+void librados::ObjectOperation::exec(const char *cls, const char *method,
+				     bufferlist& inbl)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -1014,7 +1016,7 @@ int librados::AioCompletion::AioCompletion::wait_for_complete()
 int librados::AioCompletion::AioCompletion::wait_for_safe()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
-  return c->wait_for_safe();
+  return c->wait_for_complete();
 }
 
 bool librados::AioCompletion::AioCompletion::is_complete()
@@ -1970,7 +1972,7 @@ struct AioGetxattrDataPP {
   AioGetxattrDataPP(librados::AioCompletionImpl *c, bufferlist *_bl) :
     bl(_bl), completion(c) {}
   bufferlist *bl;
-  struct librados::C_AioCompleteAndSafe completion;
+  struct librados::CB_AioCompleteAndSafe completion;
 };
 
 static void rados_aio_getxattr_completepp(rados_completion_t c, void *arg) {
@@ -1979,7 +1981,7 @@ static void rados_aio_getxattr_completepp(rados_completion_t c, void *arg) {
   if (rc >= 0) {
     rc = cdata->bl->length();
   }
-  cdata->completion.finish(rc);
+  cdata->completion(rc);
   delete cdata;
 }
 
@@ -2798,6 +2800,15 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
   return new AioCompletion(c);
 }
 
+librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
+								callback_t cb_complete)
+{
+  AioCompletionImpl *c;
+  int r = rados_aio_create_completion2(cb_arg, cb_complete, (void**)&c);
+  ceph_assert(r == 0);
+  return new AioCompletion(c);
+}
+
 librados::ObjectOperation::ObjectOperation() : impl(new ObjectOperationImpl) {}
 
 librados::ObjectOperation::ObjectOperation(ObjectOperation&& rhs)
@@ -2993,9 +3004,9 @@ int librados::IoCtx::object_list(const ObjectCursor &start,
   ceph_assert(next != nullptr);
   result->clear();
 
-  C_SaferCond cond;
-  hobject_t next_hash;
-  std::list<librados::ListObjectImpl> obj_result;
+  ceph::async::waiter<boost::system::error_code,
+		      std::vector<librados::ListObjectImpl>,
+		      hobject_t>  w;
   io_ctx_impl->objecter->enumerate_objects(
       io_ctx_impl->poolid,
       io_ctx_impl->oloc.nspace,
@@ -3003,19 +3014,17 @@ int librados::IoCtx::object_list(const ObjectCursor &start,
       *((hobject_t*)finish.c_cursor),
       result_item_count,
       filter,
-      &obj_result,
-      &next_hash,
-      &cond);
+      w);
 
-  int r = cond.wait();
-  if (r < 0) {
+  auto [ec, obj_result, next_hash] = w.wait();
+  if (ec) {
     next->set((rados_object_list_cursor)(new hobject_t(hobject_t::get_max())));
-    return r;
+    return ceph::from_error_code(ec);
   }
 
   next->set((rados_object_list_cursor)(new hobject_t(next_hash)));
 
-  for (std::list<librados::ListObjectImpl>::iterator i = obj_result.begin();
+  for (auto i = obj_result.begin();
        i != obj_result.end(); ++i) {
     ObjectItem oi;
     oi.oid = i->oid;

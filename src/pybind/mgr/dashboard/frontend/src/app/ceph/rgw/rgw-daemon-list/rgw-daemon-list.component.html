@@ -1,12 +1,14 @@
 <tabset>
-  <tab i18n-heading heading="Daemons List">
+  <tab i18n-heading
+       heading="Daemons List">
     <cd-table [data]="daemons"
               [columns]="columns"
               columnMode="flex"
               selectionType="single"
               (updateSelection)="updateSelection($event)"
               (fetchData)="getDaemonList($event)">
-      <cd-rgw-daemon-details cdTableDetail [selection]="selection">
+      <cd-rgw-daemon-details cdTableDetail
+                             [selection]="selection">
       </cd-rgw-daemon-details>
     </cd-table>
   </tab>

@@ -966,6 +966,47 @@ wait_for_snap_present()
     return 1
 }
 
+test_snap_moved_to_trash()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_name=$4
+
+    rbd --cluster ${cluster} snap ls ${pool}/${image} --all |
+        grep -F " trash (${snap_name})"
+}
+
+wait_for_snap_moved_to_trash()
+{
+    local s
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
+	sleep ${s}
+        test_snap_moved_to_trash $@ || continue
+        return 0
+    done
+    return 1
+}
+
+test_snap_removed_from_trash()
+{
+    test_snap_moved_to_trash $@ && return 1
+    return 0
+}
+
+wait_for_snap_removed_from_trash()
+{
+    local s
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
+	sleep ${s}
+        test_snap_removed_from_trash $@ || continue
+        return 0
+    done
+    return 1
+}
+
 write_image()
 {
     local cluster=$1

@@ -9,6 +9,7 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.orchestrator import OrchClient
 from ..services.exception import handle_orchestrator_error
+from ..services.ceph_service import CephService
 
 
 def host_task(name, metadata, wait_for=10.0):
@@ -102,3 +103,8 @@ class Host(RESTController):
                 msg='Remove a non-existent host {} from orchestrator'.format(
                     hostname),
                 component='orchestrator')
+
+    @RESTController.Resource('GET')
+    def devices(self, hostname):
+        # (str) -> dict
+        return CephService.send_command('mon', 'device ls-by-host', host=hostname)

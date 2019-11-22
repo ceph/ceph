@@ -123,7 +123,8 @@ struct C_InvokeAsyncRequest : public Context {
    */
 
   I &image_ctx;
-  std::string request_type;
+  std::string name;
+  exclusive_lock::OperationRequestType request_type;
   bool permit_snapshot;
   boost::function<void(Context*)> local;
   boost::function<void(Context*)> remote;
@@ -131,13 +132,14 @@ struct C_InvokeAsyncRequest : public Context {
   Context *on_finish;
   bool request_lock = false;
 
-  C_InvokeAsyncRequest(I &image_ctx, const std::string& request_type,
+  C_InvokeAsyncRequest(I &image_ctx, const std::string& name,
+                       exclusive_lock::OperationRequestType request_type,
                        bool permit_snapshot,
                        const boost::function<void(Context*)>& local,
                        const boost::function<void(Context*)>& remote,
                        const std::set<int> &filter_error_codes,
                        Context *on_finish)
-    : image_ctx(image_ctx), request_type(request_type),
+    : image_ctx(image_ctx), name(name), request_type(request_type),
       permit_snapshot(permit_snapshot), local(local), remote(remote),
       filter_error_codes(filter_error_codes), on_finish(on_finish) {
   }
@@ -199,7 +201,7 @@ struct C_InvokeAsyncRequest : public Context {
     }
 
     if (image_ctx.exclusive_lock->is_lock_owner() &&
-        image_ctx.exclusive_lock->accept_requests()) {
+        image_ctx.exclusive_lock->accept_request(request_type, nullptr)) {
       send_local_request();
       owner_lock.unlock_shared();
       return;
@@ -210,8 +212,9 @@ struct C_InvokeAsyncRequest : public Context {
 
     Context *ctx = util::create_async_context_callback(
       image_ctx, util::create_context_callback<
-        C_InvokeAsyncRequest<I>,
-        &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(this));
+      C_InvokeAsyncRequest<I>,
+      &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
+        this, image_ctx.exclusive_lock));
 
     if (request_lock) {
       // current lock owner doesn't support op -- try to perform
@@ -265,8 +268,7 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r == -EOPNOTSUPP) {
-      ldout(cct, 5) << request_type << " not supported by current lock owner"
-                    << dendl;
+      ldout(cct, 5) << name << " not supported by current lock owner" << dendl;
       request_lock = true;
       send_refresh_image();
       return;
@@ -277,8 +279,7 @@ struct C_InvokeAsyncRequest : public Context {
       return;
     }
 
-    ldout(cct, 5) << request_type << " timed out notifying lock owner"
-                  << dendl;
+    ldout(cct, 5) << name << " timed out notifying lock owner" << dendl;
     send_refresh_image();
   }
 
@@ -356,7 +357,9 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
   }
 
   uint64_t request_id = ++m_async_request_seq;
-  r = invoke_async_request("flatten", false,
+  r = invoke_async_request("flatten",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                           false,
                            boost::bind(&Operations<I>::execute_flatten, this,
                                        boost::ref(prog_ctx), _1),
                            boost::bind(&ImageWatcher<I>::notify_flatten,
@@ -430,7 +433,8 @@ int Operations<I>::rebuild_object_map(ProgressContext &prog_ctx) {
   }
 
   uint64_t request_id = ++m_async_request_seq;
-  r = invoke_async_request("rebuild object map", true,
+  r = invoke_async_request("rebuild object map",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true,
                            boost::bind(&Operations<I>::execute_rebuild_object_map,
                                        this, boost::ref(prog_ctx), _1),
                            boost::bind(&ImageWatcher<I>::notify_rebuild_object_map,
@@ -480,7 +484,8 @@ int Operations<I>::check_object_map(ProgressContext &prog_ctx) {
     return r;
   }
 
-  r = invoke_async_request("check object map", true,
+  r = invoke_async_request("check object map",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true,
                            boost::bind(&Operations<I>::check_object_map, this,
                                        boost::ref(prog_ctx), _1),
 			   [this](Context *c) {
@@ -533,7 +538,9 @@ int Operations<I>::rename(const char *dstname) {
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    r = invoke_async_request("rename", true,
+    r = invoke_async_request("rename",
+                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             true,
                              boost::bind(&Operations<I>::execute_rename, this,
                                          dstname, _1),
                              boost::bind(&ImageWatcher<I>::notify_rename,
@@ -630,7 +637,9 @@ int Operations<I>::resize(uint64_t size, bool allow_shrink, ProgressContext& pro
   }
 
   uint64_t request_id = ++m_async_request_seq;
-  r = invoke_async_request("resize", false,
+  r = invoke_async_request("resize",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                           false,
                            boost::bind(&Operations<I>::execute_resize, this,
                                        size, allow_shrink, boost::ref(prog_ctx), _1, 0),
                            boost::bind(&ImageWatcher<I>::notify_resize,
@@ -722,7 +731,8 @@ void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespac
   m_image_ctx.image_lock.unlock_shared();
 
   C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
-    m_image_ctx, "snap_create", true,
+    m_image_ctx, "snap_create", exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+    true,
     boost::bind(&Operations<I>::execute_snap_create, this, snap_namespace, snap_name,
 		_1, 0, false),
     boost::bind(&ImageWatcher<I>::notify_snap_create, m_image_ctx.image_watcher,
@@ -798,7 +808,8 @@ int Operations<I>::snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespa
       }
     }
 
-    r = prepare_image_update(false);
+    r = prepare_image_update(exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             false);
     if (r < 0) {
       return r;
     }
@@ -900,8 +911,13 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
   m_image_ctx.image_lock.unlock_shared();
 
   if (proxy_op) {
+    auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
+    if (cls::rbd::get_snap_namespace_type(snap_namespace) ==
+        cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+      request_type = exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE;
+    }
     C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
-      m_image_ctx, "snap_remove", true,
+      m_image_ctx, "snap_remove", request_type, true,
       boost::bind(&Operations<I>::execute_snap_remove, this, snap_namespace, snap_name, _1),
       boost::bind(&ImageWatcher<I>::notify_snap_remove, m_image_ctx.image_watcher,
                   snap_namespace, snap_name, _1),
@@ -992,7 +1008,9 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    r = invoke_async_request("snap_rename", true,
+    r = invoke_async_request("snap_rename",
+                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             true,
                              boost::bind(&Operations<I>::execute_snap_rename,
                                          this, snap_id, dstname, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_rename,
@@ -1091,7 +1109,9 @@ int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespac
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    r = invoke_async_request("snap_protect", true,
+    r = invoke_async_request("snap_protect",
+                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             true,
                              boost::bind(&Operations<I>::execute_snap_protect,
                                          this, snap_namespace, snap_name, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_protect,
@@ -1186,7 +1206,9 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    r = invoke_async_request("snap_unprotect", true,
+    r = invoke_async_request("snap_unprotect",
+                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             true,
                              boost::bind(&Operations<I>::execute_snap_unprotect,
                                          this, snap_namespace, snap_name, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_unprotect,
@@ -1267,7 +1289,8 @@ int Operations<I>::snap_set_limit(uint64_t limit) {
   C_SaferCond limit_ctx;
   {
     std::shared_lock owner_lock{m_image_ctx.owner_lock};
-    r = prepare_image_update(true);
+    r = prepare_image_update(exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             true);
     if (r < 0) {
       return r;
     }
@@ -1371,7 +1394,8 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
     C_SaferCond cond_ctx;
     {
       std::shared_lock owner_lock{m_image_ctx.owner_lock};
-      r = prepare_image_update(true);
+      r = prepare_image_update(exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                               true);
       if (r < 0) {
         return r;
       }
@@ -1381,7 +1405,9 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
 
     r = cond_ctx.wait();
   } else {
-    r = invoke_async_request("update_features", false,
+    r = invoke_async_request("update_features",
+                             exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             false,
                              boost::bind(&Operations<I>::execute_update_features,
                                          this, features, enabled, _1, 0),
                              boost::bind(&ImageWatcher<I>::notify_update_features,
@@ -1456,7 +1482,8 @@ int Operations<I>::metadata_set(const std::string &key,
   C_SaferCond metadata_ctx;
   {
     std::shared_lock owner_lock{m_image_ctx.owner_lock};
-    r = prepare_image_update(true);
+    r = prepare_image_update(exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             true);
     if (r < 0) {
       return r;
     }
@@ -1517,7 +1544,8 @@ int Operations<I>::metadata_remove(const std::string &key) {
   C_SaferCond metadata_ctx;
   {
     std::shared_lock owner_lock{m_image_ctx.owner_lock};
-    r = prepare_image_update(true);
+    r = prepare_image_update(exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                             true);
     if (r < 0) {
       return r;
     }
@@ -1579,7 +1607,9 @@ int Operations<I>::migrate(ProgressContext &prog_ctx) {
   }
 
   uint64_t request_id = ++m_async_request_seq;
-  r = invoke_async_request("migrate", false,
+  r = invoke_async_request("migrate",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                           false,
                            boost::bind(&Operations<I>::execute_migrate, this,
                                        boost::ref(prog_ctx), _1),
                            boost::bind(&ImageWatcher<I>::notify_migrate,
@@ -1634,7 +1664,7 @@ template <typename I>
 int Operations<I>::sparsify(size_t sparse_size, ProgressContext &prog_ctx) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "sparsify" << dendl;
-  
+
   if (sparse_size < 4096 || sparse_size > m_image_ctx.get_object_size() ||
       (sparse_size & (sparse_size - 1)) != 0) {
     lderr(cct) << "sparse size should be power of two not less than 4096"
@@ -1643,7 +1673,9 @@ int Operations<I>::sparsify(size_t sparse_size, ProgressContext &prog_ctx) {
   }
 
   uint64_t request_id = ++m_async_request_seq;
-  int r = invoke_async_request("sparsify", false,
+  int r = invoke_async_request("sparsify",
+                               exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                               false,
                                boost::bind(&Operations<I>::execute_sparsify,
                                            this, sparse_size,
                                            boost::ref(prog_ctx), _1),
@@ -1681,7 +1713,8 @@ void Operations<I>::execute_sparsify(size_t sparse_size,
 }
 
 template <typename I>
-int Operations<I>::prepare_image_update(bool request_lock) {
+int Operations<I>::prepare_image_update(
+    exclusive_lock::OperationRequestType request_type, bool request_lock) {
   ceph_assert(ceph_mutex_is_rlocked(m_image_ctx.owner_lock));
   if (m_image_ctx.image_watcher == nullptr) {
     return -EROFS;
@@ -1695,7 +1728,7 @@ int Operations<I>::prepare_image_update(bool request_lock) {
     std::unique_lock owner_locker{m_image_ctx.owner_lock};
     if (m_image_ctx.exclusive_lock != nullptr &&
         (!m_image_ctx.exclusive_lock->is_lock_owner() ||
-         !m_image_ctx.exclusive_lock->accept_requests())) {
+         !m_image_ctx.exclusive_lock->accept_request(request_type, nullptr))) {
 
       attempting_lock = true;
       m_image_ctx.exclusive_lock->block_requests(0);
@@ -1732,12 +1765,12 @@ int Operations<I>::prepare_image_update(bool request_lock) {
 }
 
 template <typename I>
-int Operations<I>::invoke_async_request(const std::string& request_type,
-                                        bool permit_snapshot,
-                                        const boost::function<void(Context*)>& local_request,
-                                        const boost::function<void(Context*)>& remote_request) {
+int Operations<I>::invoke_async_request(
+    const std::string& name, exclusive_lock::OperationRequestType request_type,
+    bool permit_snapshot, const boost::function<void(Context*)>& local_request,
+    const boost::function<void(Context*)>& remote_request) {
   C_SaferCond ctx;
-  C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(m_image_ctx,
+  C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(m_image_ctx, name,
                                                              request_type,
                                                              permit_snapshot,
                                                              local_request,

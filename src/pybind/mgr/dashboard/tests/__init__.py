@@ -17,6 +17,13 @@ from ..controllers import json_error_page, generate_controller_routes
 from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
 
+from ..plugins import PLUGIN_MANAGER
+from ..plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+
+
+PLUGIN_MANAGER.hook.init()
+PLUGIN_MANAGER.hook.register_commands()
+
 
 class CmdException(Exception):
     def __init__(self, retcode, message):
@@ -118,6 +125,7 @@ class ControllerTestCase(helper.CPWebCase):
             'tools.json_in.on': True,
             'tools.json_in.force': False
         })
+        PLUGIN_MANAGER.hook.configure_cherrypy(config=cherrypy.config)
         super(ControllerTestCase, self).__init__(*args, **kwargs)
 
     def _request(self, url, method, data=None, headers=None):

@@ -65,7 +65,8 @@ describe('RbdTrashListComponent', () => {
 
     const addImage = (id) => {
       images.push({
-        id: id
+        id: id,
+        pool_name: 'pl'
       });
     };
 
@@ -73,7 +74,7 @@ describe('RbdTrashListComponent', () => {
       const task = new ExecutingTask();
       task.name = name;
       task.metadata = {
-        image_id: image_id
+        image_id_spec: `pl/${image_id}`
       };
       summaryService.addRunningTask(task);
     };

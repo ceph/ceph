@@ -146,7 +146,7 @@ int main(int argc, const char **argv)
     }
     // allocate the completion from librados
     rados_completion_t read_completion;
-    ret = rados_aio_create_completion(NULL, NULL, NULL, &read_completion);
+    ret = rados_aio_create_completion2(NULL, NULL, &read_completion);
     if (ret < 0) {
       printf("couldn't create completion! error %d\n", ret);
       ret = EXIT_FAILURE;

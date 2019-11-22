@@ -10,6 +10,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
+#include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
@@ -37,7 +38,7 @@ class ImageCtx;
 namespace journal { template <typename> class Replay; }
 
 template <typename ImageCtxT = ImageCtx>
-class Journal {
+class Journal : public RefCountedObject {
 public:
   /**
    * @verbatim

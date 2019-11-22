@@ -6,7 +6,7 @@ Orchestrator CLI
 ================
 
 This module provides a command line interface (CLI) to orchestrator
-modules (ceph-mgr modules which interface with external orchestation services)
+modules (ceph-mgr modules which interface with external orchestration services).
 
 As the orchestrator CLI unifies different external orchestrators, a common nomenclature
 for the orchestrator module is needed.
@@ -68,7 +68,7 @@ Disable the Orchestrator
 
 To disable the orchestrator again, use the empty string ``""``::
 
-    ceph orchestrator set backend ""``
+    ceph orchestrator set backend ""
     ceph mgr module disable rook
 
 Usage
@@ -182,10 +182,19 @@ Example::
     ^^^^^^^^^^^^^^^^^^^
     ::
 
-        ceph orchestrator device ident-on <host> <devname>
-        ceph orchestrator device ident-off <host> <devname>
-        ceph orchestrator device fault-on <host> <devname>
-        ceph orchestrator device fault-off <host> <devname>
+        ceph orchestrator device ident-on <dev_id>
+        ceph orchestrator device ident-on <dev_name> <host>
+        ceph orchestrator device fault-on <dev_id>
+        ceph orchestrator device fault-on <dev_name> <host>
+
+        ceph orchestrator device ident-off <dev_id> [--force=true]
+        ceph orchestrator device ident-off <dev_id> <host> [--force=true]
+        ceph orchestrator device fault-off <dev_id> [--force=true]
+        ceph orchestrator device fault-off <dev_id> <host> [--force=true]
+
+    where ``dev_id`` is the device id as listed in ``osd metadata``,
+    ``dev_name`` is the name of the device on the system and ``host`` is the host as
+    returned by ``orchestrator host ls``
 
         ceph orchestrator osd ident-on {primary,journal,db,wal,all} <osd-id>
         ceph orchestrator osd ident-off {primary,journal,db,wal,all} <osd-id>
@@ -285,38 +294,33 @@ This is an overview of the current implementation status of the orchestrators.
 =================================== ========= ====== ========= =====
  Command                             Ansible   Rook   DeepSea   SSH
 =================================== ========= ====== ========= =====
- host add                            ✔️         ⚪       ⚪         ✔️
- host ls                             ✔️         ✔️       ⚪         ✔️
- host rm                             ✔️         ⚪       ⚪         ✔️
- mgr update                          ⚪         ⚪       ⚪         ✔️
- mon update                          ⚪         ✔️       ⚪         ✔️
- osd create                          ✔️         ✔️       ⚪         ✔️
- osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
- osd rm                              ✔️         ⚪       ⚪         ⚪
- device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ⚪
- device ls                           ✔️         ✔️       ✔️         ✔️
- service ls                          ⚪         ✔️       ✔️         ⚪
- service-instance status             ⚪         ⚪       ⚪         ⚪
- iscsi {stop,start,reload}           ⚪         ⚪       ⚪         ⚪
+ host add                            ✔         ⚪       ⚪         ✔
+ host ls                             ✔         ✔       ⚪         ✔
+ host rm                             ✔         ⚪       ⚪         ✔
+ mgr update                          ⚪         ⚪       ⚪         ✔
+ mon update                          ⚪         ✔       ⚪         ✔
+ osd create                          ✔         ✔       ⚪         ✔
+ osd rm                              ✔         ⚪       ⚪         ✔
+ device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ✔
+ device ls                           ✔         ✔       ✔         ✔
+ service ls                          ⚪         ✔       ✔         ✔
+ service-instance status             ⚪         ⚪       ⚪         ✔
+ service-instance {stop,start,...}   ⚪         ⚪       ⚪         ✔
  iscsi add                           ⚪         ⚪       ⚪         ⚪
  iscsi rm                            ⚪         ⚪       ⚪         ⚪
  iscsi update                        ⚪         ⚪       ⚪         ⚪
- mds {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
- mds add                             ⚪         ✔️       ⚪         ⚪
- mds rm                              ⚪         ✔️       ⚪         ⚪
- mds update                          ⚪         ⚪       ⚪         ⚪
- nfs {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
- nfs add                             ⚪         ✔️       ⚪         ⚪
- nfs rm                              ⚪         ✔️       ⚪         ⚪
- nfs update                          ⚪         ✔️       ⚪         ⚪
- rbd-mirror {stop,start,reload}      ⚪         ⚪       ⚪         ⚪
- rbd-mirror add                      ⚪         ⚪       ⚪         ⚪
- rbd-mirror rm                       ⚪         ⚪       ⚪         ⚪
- rbd-mirror update                   ⚪         ⚪       ⚪         ⚪
- rgw {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
- rgw add                             ✔️         ✔️       ⚪         ⚪
- rgw rm                              ✔️         ✔️       ⚪         ⚪
- rgw update                          ⚪         ⚪       ⚪         ⚪
+ mds add                             ⚪         ✔       ⚪         ✔
+ mds rm                              ⚪         ✔       ⚪         ✔
+ mds update                          ⚪         ✔       ⚪         ✔
+ nfs add                             ⚪         ✔       ⚪         ⚪
+ nfs rm                              ⚪         ✔       ⚪         ⚪
+ nfs update                          ⚪         ✔       ⚪         ⚪
+ rbd-mirror add                      ⚪         ⚪       ⚪         ✔
+ rbd-mirror rm                       ⚪         ⚪       ⚪         ✔
+ rbd-mirror update                   ⚪         ⚪       ⚪         ✔
+ rgw add                             ✔         ✔       ⚪         ✔
+ rgw rm                              ✔         ✔       ⚪         ✔
+ rgw update                          ⚪         ⚪       ⚪         ✔
 =================================== ========= ====== ========= =====
 
 where

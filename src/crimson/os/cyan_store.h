@@ -44,14 +44,16 @@ public:
   seastar::future<> mkfs(uuid_d new_osd_fsid) final;
   store_statfs_t stat() const final;
 
-  seastar::future<ceph::bufferlist> read(CollectionRef c,
-				   const ghobject_t& oid,
-				   uint64_t offset,
-				   size_t len,
-				   uint32_t op_flags = 0) final;
-  seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
-					    const ghobject_t& oid,
-					    std::string_view name) const final;
+  read_errorator::future<ceph::bufferlist> read(
+    CollectionRef c,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    uint32_t op_flags = 0) final;
+  get_attr_errorator::future<ceph::bufferptr> get_attr(
+    CollectionRef c,
+    const ghobject_t& oid,
+    std::string_view name) const final;
   seastar::future<attrs_t> get_attrs(CollectionRef c,
                                      const ghobject_t& oid) final;
 

@@ -135,11 +135,11 @@ public:
 
 MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   mds(m),
+  open_file_table(m),
   filer(m->objecter, m->finisher),
-  recovery_queue(m),
   stray_manager(m, purge_queue_),
-  trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate")),
-  open_file_table(m)
+  recovery_queue(m),
+  trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate"))
 {
   migrator.reset(new Migrator(mds, this));
 
@@ -163,8 +163,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
     while (!upkeep_trim_shutdown.load()) {
       auto now = clock::now();
       auto since = now-upkeep_last_trim;
-      auto interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_trim_interval"));
-      if (since >= interval*.90) {
+      auto trim_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_trim_interval"));
+      if (since >= trim_interval*.90) {
         lock.unlock(); /* mds_lock -> upkeep_mutex */
         std::scoped_lock mds_lock(mds->mds_lock);
         lock.lock();
@@ -177,13 +177,24 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
           check_memory_usage();
           auto flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
           mds->server->recall_client_state(nullptr, flags);
-          upkeep_last_trim = clock::now();
+          upkeep_last_trim = now = clock::now();
         } else {
           dout(10) << "cache not ready for trimming" << dendl;
         }
       } else {
-        interval -= since;
+        trim_interval -= since;
       }
+      since = now-upkeep_last_release;
+      auto release_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_release_free_interval"));
+      if (since >= release_interval) {
+        /* XXX not necessary once MDCache uses PriorityCache */
+        dout(10) << "releasing free memory" << dendl;
+        ceph_heap_release_free_memory();
+        upkeep_last_release = clock::now();
+      } else {
+        release_interval -= since;
+      }
+      auto interval = std::min(release_interval, trim_interval);
       dout(20) << "upkeep thread waiting interval " << interval << dendl;
       upkeep_cvar.wait_for(lock, interval);
     }
@@ -229,6 +240,11 @@ void MDCache::log_stat()
   mds->logger->set(l_mds_inodes_pin_tail, lru.lru_get_pintail());
   mds->logger->set(l_mds_inodes_with_caps, num_inodes_with_caps);
   mds->logger->set(l_mds_caps, Capability::count());
+  if (root) {
+    mds->logger->set(l_mds_root_rfiles, root->inode.rstat.rfiles);
+    mds->logger->set(l_mds_root_rbytes, root->inode.rstat.rbytes);
+    mds->logger->set(l_mds_root_rsnaps, root->inode.rstat.rsnaps);
+  }
 }
 
 
@@ -3954,15 +3970,13 @@ void MDCache::rejoin_send_rejoins()
 
   // if i am rejoining, send a rejoin to everyone.
   // otherwise, just send to others who are rejoining.
-  for (set<mds_rank_t>::iterator p = recovery_set.begin();
-       p != recovery_set.end();
-       ++p) {
-    if (*p == mds->get_nodeid())  continue;  // nothing to myself!
-    if (rejoin_sent.count(*p)) continue;     // already sent a rejoin to this node!
+  for (const auto& rank : recovery_set) {
+    if (rank == mds->get_nodeid())  continue;  // nothing to myself!
+    if (rejoin_sent.count(rank)) continue;     // already sent a rejoin to this node!
     if (mds->is_rejoin())
-      rejoins[*p] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_WEAK);
-    else if (mds->mdsmap->is_rejoin(*p))
-      rejoins[*p] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_STRONG);
+      rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_WEAK);
+    else if (mds->mdsmap->is_rejoin(rank))
+      rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_STRONG);
   }
 
   if (mds->is_rejoin()) {
@@ -4087,7 +4101,7 @@ void MDCache::rejoin_send_rejoins()
 	if (!q.first->is_auth()) {
 	  ceph_assert(q.second == q.first->authority().first);
 	  if (rejoins.count(q.second) == 0) continue;
-	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[q.second];
+	  const auto& rejoin = rejoins[q.second];
 	  
 	  dout(15) << " " << *mdr << " authpin on " << *q.first << dendl;
 	  MDSCacheObjectInfo i;
@@ -4110,7 +4124,7 @@ void MDCache::rejoin_send_rejoins()
 	if (q.is_xlock() && !obj->is_auth()) {
 	  mds_rank_t who = obj->authority().first;
 	  if (rejoins.count(who) == 0) continue;
-	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[who];
+	  const auto& rejoin = rejoins[who];
 	  
 	  dout(15) << " " << *mdr << " xlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -4124,7 +4138,7 @@ void MDCache::rejoin_send_rejoins()
 	} else if (q.is_remote_wrlock()) {
 	  mds_rank_t who = q.wrlock_target;
 	  if (rejoins.count(who) == 0) continue;
-	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[who];
+	  const auto& rejoin = rejoins[who];
 
 	  dout(15) << " " << *mdr << " wrlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -4695,7 +4709,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
     
     const auto it = strong->strong_dentries.find(dirfrag);
     if (it != strong->strong_dentries.end()) {
-      const map<string_snap_t,MMDSCacheRejoin::dn_strong>& dmap = it->second;
+      const auto& dmap = it->second;
       for (const auto &q : dmap) {
         const string_snap_t& ss = q.first;
         const MMDSCacheRejoin::dn_strong& d = q.second;
@@ -8593,7 +8607,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       decode(backtrace, bl);
     } catch (const buffer::error &decode_exc) {
       derr << "corrupt backtrace on ino x0" << std::hex << ino
-           << std::dec << ": " << decode_exc << dendl;
+           << std::dec << ": " << decode_exc.what() << dendl;
       open_ino_finish(ino, info, -EIO);
       return;
     }
@@ -9362,12 +9376,12 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 	  }
 	case CEPH_MDS_OP_LOOKUP:
 	  {
-	    CDentry* dn = mdr->dn[0].back();
-	    if (dn) {
+	    if (mdr->dn[0].size()) {
+	      CDentry* dn = mdr->dn[0].back();
 	      auto it = dn->batch_ops.find(mask);
 	      if (it != dn->batch_ops.end()) {
-                it->second->forward(who);
-                dn->batch_ops.erase(it);
+		it->second->forward(who);
+		dn->batch_ops.erase(it);
 	      }
 	    }
 	    break;

@@ -1494,6 +1494,12 @@ public:
                    bool *is_truncated, RGWAccessListFilter *filter);
 
   uint64_t next_bucket_id();
+
+  /**
+   * This is broken out to facilitate unit testing.
+   */
+  static uint32_t calc_ordered_bucket_list_per_shard(uint32_t num_entries,
+						     uint32_t num_shards);
 };
 
 #endif

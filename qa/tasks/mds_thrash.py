@@ -98,7 +98,8 @@ class MDSThrasher(Greenlet, Thrasher):
     """
 
     def __init__(self, ctx, manager, config, fs, max_mds):
-        super(MDSThrasher, self).__init__()
+        Greenlet.__init__(self)
+        Thrasher.__init__(self, "MDSThrasher")
 
         self.config = config
         self.ctx = ctx
@@ -416,6 +417,7 @@ def task(ctx, config):
 
     for fs in status.get_filesystems():
         thrasher = MDSThrasher(ctx, manager, config, Filesystem(ctx, fs['id']), fs['mdsmap']['max_mds'])
+        thrasher.name = thrasher.name + " on fs." + thrasher.fs.name
         thrasher.start()
         ctx.ceph[config['cluster']].thrashers.append(thrasher)
 

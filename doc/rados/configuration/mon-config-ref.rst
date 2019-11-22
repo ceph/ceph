@@ -420,6 +420,14 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Default: ``0``
 
 
+``mon warn on pool no redundancy``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if any pool is
+              configured with no replicas.
+:Type: Boolean
+:Default: ``True``
+
+
 ``mon cache target full warn ratio``
 
 :Description: Position between pool's ``cache_target_full`` and
