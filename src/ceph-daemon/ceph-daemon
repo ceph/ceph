@@ -693,7 +693,7 @@ def install_base_units(fsid):
     endscript
     missingok
     notifempty
-    su root ceph
+    su root root
 }
 """ % fsid)
 
