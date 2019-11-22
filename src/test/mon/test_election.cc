@@ -75,7 +75,6 @@ struct Election {
 
   // test runner interfaces
   int run_timesteps(int max);
-  void init_pings();
   void start_one(int who);
   void start_all();
   bool election_stable();
@@ -397,21 +396,13 @@ int Election::run_timesteps(int max)
   return steps;
 }
 
-void Election::init_pings()
-{
-  for (auto e : electors) {
-    e.second->send_pings();
-  }
-}
 void Election::start_one(int who)
 {
-  init_pings();
   assert(who < static_cast<int>(electors.size()));
   electors[who]->logic.start();
 }
 
 void Election::start_all() {
-  init_pings();
   for (auto e : electors) {
     e.second->logic.start();
   }
