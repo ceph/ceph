@@ -5,6 +5,7 @@ from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
+from .fs.nfs import check_fsal_valid, create_instance, create_export
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -252,6 +253,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Cancel an pending or ongoing clone operation.",
             'perm': 'r'
         },
+        {
+            'cmd': 'fs nfs create',
+            'desc': "Create dummy exports",
+            'perm': 'rw'
+        },
 
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -439,3 +445,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_nfs_create(self, inbuf, cmd):
+        if check_fsal_valid(self.vc.mgr.get('fs_map')):
+            instance = create_instance(self)
+            return create_export(instance)

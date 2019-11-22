@@ -1099,23 +1099,16 @@ NFSv4 {
         Minor_Versions = 1, 2;
 }
 
-EXPORT {
-	Export_Id = 100;
-	Transports = TCP;
-	Path = /;
-	Pseudo = /ceph/;
-	Protocols = 4;
-	Access_Type = RW;
-	Attr_Expiration_Time = 0;
-	Squash = None;
-	FSAL {
-	    Name = CEPH;
-	}
+CEPH {
+       Ceph_Conf = $conf_fn;
 }
 
-CEPH {
-	Ceph_Conf = $conf_fn;
+RADOS_URLS {
+	   ceph_conf = $conf_fn;
+	   userid = "admin";
 }
+
+%url rados://nfs-ganesha/ganesha/export-1
 
 RADOS_KV {
 	Ceph_Conf = $conf_fn;
@@ -1140,6 +1133,7 @@ EOF
             prun ceph_adm osd pool application enable nfs-ganesha nfs
         fi
 
+        prun ceph_adm fs nfs create
         prun ganesha-rados-grace -p nfs-ganesha -n ganesha add $name
         prun ganesha-rados-grace -p nfs-ganesha -n ganesha
 
