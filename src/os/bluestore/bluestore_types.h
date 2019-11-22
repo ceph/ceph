@@ -916,6 +916,7 @@ struct bluestore_onode_t {
     FLAG_OMAP = 1,       ///< object may have omap data
     FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix
     FLAG_PERPOOL_OMAP = 4, ///< omap data is in per-pool prefix; per-pool keys
+    FLAG_SMALL_ALLOC = 8,  ///< object uses small allocations (main device block size granularity)
   };
 
   string get_flags_string() const {
@@ -928,6 +929,9 @@ struct bluestore_onode_t {
     }
     if (flags & FLAG_PERPOOL_OMAP) {
       s += "+perpool_omap";
+    }
+    if (flags & FLAG_SMALL_ALLOC) {
+      s += "+small_alloc";
     }
     return s;
   }
@@ -952,6 +956,9 @@ struct bluestore_onode_t {
   }
   bool is_perpool_omap() const {
     return has_flag(FLAG_PERPOOL_OMAP);
+  }
+  bool use_small_alloc() const {
+    return has_flag(FLAG_SMALL_ALLOC);
   }
 
   void set_omap_flags() {
