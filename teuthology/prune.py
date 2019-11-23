@@ -50,10 +50,7 @@ def prune_archive(
     log.debug("Archive {archive} has {count} children".format(
         archive=archive_dir, count=len(os.listdir(archive_dir))))
     # Use full paths
-    children = map(
-        lambda p: os.path.join(archive_dir, p),
-        listdir(archive_dir)
-    )
+    children = [os.path.join(archive_dir, p) for p in listdir(archive_dir)]
     run_dirs = list()
     for child in children:
         # Ensure that the path is not a symlink, is a directory, and is old
