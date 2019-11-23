@@ -55,7 +55,6 @@ public:
   int partition(char* partition, size_t max) const;
   // from a device (e.g., "sdb")
   bool support_discard() const;
-  bool is_nvme() const;
   bool is_rotational() const;
   int get_numa_node(int *node) const;
   int dev(char *dev, size_t max) const;

@@ -157,8 +157,6 @@ int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
     blkdev.serial(buffer, sizeof(buffer));
     (*pm)[prefix + "serial"] = buffer;
 
-    if (blkdev.is_nvme())
-      (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";
     (*pm)[prefix + "path"] = path;
