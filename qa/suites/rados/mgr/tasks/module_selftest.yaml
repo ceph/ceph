@@ -5,6 +5,10 @@ tasks:
       # tests may leave mgrs broken, so don't try and call into them
       # to invoke e.g. pg dump during teardown.
       wait-for-scrub: false
+      conf:
+        mgr:
+          debug monc: 20
+          debug objecter: 20
       log-whitelist:
         - overall HEALTH_
         - \(MGR_DOWN\)
