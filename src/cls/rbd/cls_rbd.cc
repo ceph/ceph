@@ -4814,7 +4814,9 @@ struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
 
   void encode_meta(bufferlist &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    encode(origin, bl, features);
+    auto sanitized_origin = origin;
+    sanitize_entity_inst(&sanitized_origin);
+    encode(sanitized_origin, bl, features);
     ENCODE_FINISH(bl);
   }
 
@@ -4826,6 +4828,7 @@ struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
   void decode_meta(bufferlist::const_iterator &it) {
     DECODE_START(1, it);
     decode(origin, it);
+    sanitize_entity_inst(&origin);
     DECODE_FINISH(it);
   }
 
@@ -4843,7 +4846,6 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   ondisk_status.last_update = ceph_clock_now();
 
   int r = cls_get_request_origin(hctx, &ondisk_status.origin);
-  sanitize_entity_inst(&ondisk_status.origin);
   ceph_assert(r == 0);
 
   bufferlist bl;
