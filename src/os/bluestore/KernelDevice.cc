@@ -326,9 +326,6 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
     blkdev.serial(buffer, sizeof(buffer));
     (*pm)[prefix + "serial"] = buffer;
 
-    if (blkdev.is_nvme())
-      (*pm)[prefix + "type"] = "nvme";
-
     // numa
     int node;
     r = blkdev.get_numa_node(&node);

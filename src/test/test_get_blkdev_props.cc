@@ -43,8 +43,6 @@ int main(int argc, char **argv)
 
 	discard_support = blkdev.support_discard();
 
-	nvme = blkdev.is_nvme();
-
 	rotational = blkdev.is_rotational();
 
 	if ((ret = blkdev.dev(dev, BUFSIZE)) < 0) {
@@ -81,7 +79,6 @@ int main(int argc, char **argv)
 	fprintf(stdout, "Size:\t\t%" PRId64 "\n", size);
 	fprintf(stdout, "Discard:\t%s\n",
 		discard_support ? "supported" : "not supported");
-	fprintf(stdout, "NVME:\t\t%s\n", nvme ? "yes" : "no");
 	fprintf(stdout, "Rotational:\t%s\n", rotational ? "yes" : "no");
 	fprintf(stdout, "Dev:\t\t%s\n", dev);
 	fprintf(stdout, "Whole disk:\t%s\n", wholedisk);
