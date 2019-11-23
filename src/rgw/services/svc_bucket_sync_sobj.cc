@@ -180,12 +180,13 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   rgw_cache_entry_info cache_info;
 
   RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
 
   int r = svc.bucket_sobj->read_bucket_instance_info(ctx.bi,
                                                      bucket_key,
                                                      &bucket_info,
                                                      nullptr,
-                                                     nullptr,
+                                                     &attrs,
                                                      y,
                                                      &cache_info);
   if (r < 0) {
@@ -201,7 +202,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
     return -ENOENT;
   }
 
-  e.handler.reset(zone_policy_handler->alloc_child(bucket_info));
+  e.handler.reset(zone_policy_handler->alloc_child(bucket_info, std::move(attrs)));
 
   r = e.handler->init(y);
   if (r < 0) {

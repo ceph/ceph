@@ -533,9 +533,10 @@ int RGWAsyncGetBucketInstanceInfo::_send_request()
   int r;
   if (!bucket.bucket_id.empty()) {
     RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
-    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr, null_yield);
+    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, &attrs, null_yield);
   } else {
-    r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield);
+    r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield,
+                                               RGWBucketCtl::BucketInstance::GetParams().set_attrs(&attrs));
   }
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
