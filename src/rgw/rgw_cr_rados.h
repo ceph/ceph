@@ -863,6 +863,7 @@ public:
     : RGWAsyncRadosRequest(caller, cn), store(_store), bucket(bucket) {}
 
   RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
 };
 
 class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
@@ -870,15 +871,17 @@ class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
   rgw::sal::RGWRadosStore *store;
   rgw_bucket bucket;
   RGWBucketInfo *bucket_info;
+  map<string, bufferlist> *pattrs;
 
   RGWAsyncGetBucketInstanceInfo *req{nullptr};
   
 public:
   // rgw_bucket constructor
   RGWGetBucketInstanceInfoCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
-                             const rgw_bucket& _bucket, RGWBucketInfo *_bucket_info)
+                             const rgw_bucket& _bucket, RGWBucketInfo *_bucket_info,
+                             map<string, bufferlist> *_pattrs)
     : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-      bucket(_bucket), bucket_info(_bucket_info) {}
+      bucket(_bucket), bucket_info(_bucket_info), pattrs(_pattrs) {}
   ~RGWGetBucketInstanceInfoCR() override {
     request_cleanup();
   }
@@ -897,6 +900,9 @@ public:
   int request_complete() override {
     if (bucket_info) {
       *bucket_info = std::move(req->bucket_info);
+    }
+    if (pattrs) {
+      *pattrs = std::move(req->attrs);
     }
     return req->get_ret_status();
   }

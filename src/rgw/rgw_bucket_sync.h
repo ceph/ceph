@@ -280,6 +280,7 @@ class RGWBucketSyncPolicyHandler {
   RGWSI_Bucket_Sync *bucket_sync_svc;
   rgw_zone_id zone_id;
   std::optional<RGWBucketInfo> bucket_info;
+  std::optional<map<string, bufferlist> > bucket_attrs;
   std::optional<rgw_bucket> bucket;
   std::unique_ptr<RGWBucketSyncFlowManager> flow_mgr;
   rgw_sync_policy_info sync_policy;
@@ -308,7 +309,8 @@ class RGWBucketSyncPolicyHandler {
   }
 
   RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
-                             const RGWBucketInfo& _bucket_info);
+                             const RGWBucketInfo& _bucket_info,
+                             map<string, bufferlist>&& _bucket_attrs);
 
   RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
                              const rgw_bucket& _bucket,
@@ -319,7 +321,8 @@ public:
 			     RGWSI_Bucket_Sync *bucket_sync_svc,
                              std::optional<rgw_zone_id> effective_zone = std::nullopt);
 
-  RGWBucketSyncPolicyHandler *alloc_child(const RGWBucketInfo& bucket_info) const;
+  RGWBucketSyncPolicyHandler *alloc_child(const RGWBucketInfo& bucket_info,
+                                          map<string, bufferlist>&& bucket_attrs) const;
   RGWBucketSyncPolicyHandler *alloc_child(const rgw_bucket& bucket,
                                           std::optional<rgw_sync_policy_info> sync_policy) const;
 
@@ -365,6 +368,10 @@ public:
 
   const std::optional<RGWBucketInfo>& get_bucket_info() const {
     return bucket_info;
+  }
+
+  const std::optional<map<string, bufferlist> >& get_bucket_attrs() const {
+    return bucket_attrs;
   }
 
   void get_pipes(RGWBucketSyncFlowManager::pipe_set **_sources, RGWBucketSyncFlowManager::pipe_set **_targets) { /* return raw pipes (with zone name) */

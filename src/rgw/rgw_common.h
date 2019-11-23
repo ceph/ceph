@@ -2496,6 +2496,13 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       RGWAccessControlPolicy * const user_acl,
                                       const int perm);
 
+bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
+                                        struct perm_state_base * const s,
+					RGWAccessControlPolicy * const user_acl,
+					RGWAccessControlPolicy * const bucket_acl,
+					RGWAccessControlPolicy * const object_acl,
+					const int perm);
+
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
 rgw::IAM::Effect eval_user_policies(const vector<rgw::IAM::Policy>& user_policies,

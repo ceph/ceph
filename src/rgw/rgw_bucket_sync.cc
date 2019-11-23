@@ -669,8 +669,10 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
 }
 
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
-                                                       const RGWBucketInfo& _bucket_info) : parent(_parent),
-                                                                                            bucket_info(_bucket_info) {
+                                                       const RGWBucketInfo& _bucket_info,
+                                                       map<string, bufferlist>&& _bucket_attrs) : parent(_parent),
+                                                                                                       bucket_info(_bucket_info),
+                                                                                                       bucket_attrs(std::move(_bucket_attrs)) {
   if (_bucket_info.sync_policy) {
     sync_policy = *_bucket_info.sync_policy;
 
@@ -705,9 +707,10 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicy
                                               parent->flow_mgr.get()));
 }
 
-RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const RGWBucketInfo& bucket_info) const
+RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const RGWBucketInfo& bucket_info,
+                                                                    map<string, bufferlist>&& bucket_attrs) const
 {
-  return new RGWBucketSyncPolicyHandler(this, bucket_info);
+  return new RGWBucketSyncPolicyHandler(this, bucket_info, std::move(bucket_attrs));
 }
 
 RGWBucketSyncPolicyHandler *RGWBucketSyncPolicyHandler::alloc_child(const rgw_bucket& bucket,

@@ -2397,15 +2397,16 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
   if (eff_bucket) {
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
+    map<string, bufferlist> bucket_attrs;
 
-    int ret = init_bucket(*eff_bucket, bucket_info, bucket);
+    int ret = init_bucket(*eff_bucket, bucket_info, bucket, &bucket_attrs);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: init_bucket failed: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
 
     if (ret >= 0) {
-      bucket_handler.reset(handler->alloc_child(bucket_info));
+      bucket_handler.reset(handler->alloc_child(bucket_info, std::move(bucket_attrs)));
     } else {
       cerr << "WARNING: bucket not found, simulating result" << std::endl;
       bucket_handler.reset(handler->alloc_child(*eff_bucket, nullopt));
