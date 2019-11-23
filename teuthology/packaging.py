@@ -970,7 +970,7 @@ class ShamanProject(GitbuilderProject):
     def _get_repo(self):
         resp = requests.get(self.repo_url)
         resp.raise_for_status()
-        return resp.text
+        return str(resp.text)
 
     def _install_rpm_repo(self):
         dist_release = self.dist_release
