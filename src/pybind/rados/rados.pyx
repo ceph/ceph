@@ -295,7 +295,8 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_omap_clear(rados_write_op_t write_op)
     void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
     void rados_write_op_setxattr(rados_write_op_t write_op, const char *name, const char *value, size_t value_len)
-    
+    void rados_write_op_rmxattr(rados_write_op_t write_op, const char *name)
+
     void rados_write_op_create(rados_write_op_t write_op, int exclusive, const char *category)
     void rados_write_op_append(rados_write_op_t write_op, const char *buffer, size_t len)
     void rados_write_op_write_full(rados_write_op_t write_op, const char *buffer, size_t len)
@@ -2063,6 +2064,19 @@ cdef class WriteOp(object):
             size_t _xattr_value_len = len(xattr_value)
         with nogil:
             rados_write_op_setxattr(self.write_op, _xattr_name, _xattr_value, _xattr_value_len)
+
+    @requires(('xattr_name', str_type))
+    def rm_xattr(self, xattr_name):
+        """  
+        Removes an extended attribute on from an object.
+        :param xattr_name: name of the xattr to remove
+        :type xattr_name: str
+        """
+        xattr_name = cstr(xattr_name, 'xattr_name')
+        cdef:
+            char *_xattr_name = xattr_name
+        with nogil:
+            rados_write_op_rmxattr(self.write_op, _xattr_name)
 
     @requires(('to_write', bytes))
     def append(self, to_write):
