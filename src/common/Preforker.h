@@ -85,7 +85,6 @@ public:
       ::close(0);
       ::close(1);
       ::close(2);
-      r = 0;
     } else if (err) {
       oss << "[" << getpid() << "]: " << cpp_strerror(err);
     } else {
