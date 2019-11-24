@@ -43,7 +43,7 @@ class Matrix:
         A cyclicity of N means that the set represented by the Matrix
         can be chopped into N good subsets of sequential indices.
         """
-        return self.size() / self.minscanlen()
+        return self.size() // self.minscanlen()
 
     def tostr(self, depth):
         pass

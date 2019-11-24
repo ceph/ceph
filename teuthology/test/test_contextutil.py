@@ -25,8 +25,7 @@ class TestSafeWhile(object):
                 while proceed():
                     pass
 
-        msg = error.value[0]
-        assert 'waiting for 6 seconds' in msg
+        assert 'waiting for 6 seconds' in str(error)
 
     def test_1_0_10_deal(self):
         with raises(contextutil.MaxWhileTries) as error:
@@ -37,8 +36,7 @@ class TestSafeWhile(object):
                 while proceed():
                     pass
 
-        msg = error.value[0]
-        assert 'waiting for 10 seconds' in msg
+        assert 'waiting for 10 seconds' in str(error)
 
     def test_6_1_10_deal(self):
         with raises(contextutil.MaxWhileTries) as error:
@@ -49,8 +47,7 @@ class TestSafeWhile(object):
                 while proceed():
                     pass
 
-        msg = error.value[0]
-        assert 'waiting for 105 seconds' in msg
+        assert 'waiting for 105 seconds' in str(error)
 
     def test_action(self):
         with raises(contextutil.MaxWhileTries) as error:
@@ -61,8 +58,7 @@ class TestSafeWhile(object):
                 while proceed():
                     pass
 
-        msg = error.value[0]
-        assert "'doing the thing' reached maximum tries" in msg
+        assert "'doing the thing' reached maximum tries" in str(error)
 
     def test_no_raise(self):
         with self.s_while(_raise=False, _sleeper=self.fake_sleep) as proceed:

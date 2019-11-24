@@ -37,8 +37,7 @@ class TestTimer(object):
                 fake_time.return_value = now
                 self.timer.mark(str(i))
 
-        summed_intervals = map(lambda x: sum(intervals[:x + 1]),
-                               range(len(intervals)))
+        summed_intervals = [sum(intervals[:x + 1]) for x in range(len(intervals))]
         result_intervals = [m['interval'] for m in self.timer.data['marks']]
         assert result_intervals == summed_intervals
         assert self.timer.data['start'] == \
@@ -46,7 +45,7 @@ class TestTimer(object):
         assert self.timer.data['end'] == \
             self.timer.get_datetime_string(start_time + summed_intervals[-1])
         assert [m['message'] for m in self.timer.data['marks']] == \
-            map(str, intervals)
+            [str(i) for i in intervals]
         assert self.timer.data['elapsed'] == summed_intervals[-1]
 
     def test_write(self):

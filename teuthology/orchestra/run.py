@@ -59,10 +59,10 @@ class RemoteProcess(object):
         """
         self.client = client
         self.args = args
-        if isinstance(args, basestring):
-            self.command = args
-        else:
+        if isinstance(args, list):
             self.command = quote(args)
+        else:
+            self.command = args
 
         if cwd:
             self.command = '(cd {cwd} && exec {cmd})'.format(
@@ -241,9 +241,6 @@ def quote(args):
     """
     Internal quote wrapper.
     """
-    if isinstance(args, basestring):
-        return args
-
     def _quote(args):
         """
         Handle quoted string, testing for raw charaters.
@@ -253,7 +250,10 @@ def quote(args):
                 yield a.value
             else:
                 yield pipes.quote(a)
-    return ' '.join(_quote(args))
+    if isinstance(args, list):
+        return ' '.join(_quote(args))
+    else:
+        return args
 
 
 def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):

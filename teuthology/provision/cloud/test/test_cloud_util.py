@@ -18,7 +18,7 @@ from teuthology.provision.cloud import util
 def test_get_user_ssh_pubkey(path, exists):
     with patch('os.path.exists') as m_exists:
         m_exists.return_value = exists
-        with patch('__builtin__.open', mock_open(), create=True) as m_open:
+        with patch('teuthology.provision.cloud.util.open', mock_open(), create=True) as m_open:
             util.get_user_ssh_pubkey(path)
             if exists:
                 m_open.assert_called_once_with(path, 'rb')

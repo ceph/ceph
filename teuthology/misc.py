@@ -893,7 +893,7 @@ def wait_until_osds_up(ctx, cluster, remote, ceph_cluster='ceph'):
                 logger=log.getChild('health'),
             )
             j = json.loads('\n'.join(out.split('\n')[1:]))
-            up = len(filter(lambda o: 'up' in o['state'], j['osds']))
+            up = sum(1 for o in j['osds'] if 'up' in o['state'])
             log.debug('%d of %d OSDs are up' % (up, num_osds))
             if up == num_osds:
                 break
@@ -967,7 +967,7 @@ def get_clients(ctx, roles):
     return all remote roles that are clients.
     """
     for role in roles:
-        assert isinstance(role, basestring)
+        assert isinstance(role, str)
         assert 'client.' in role
         _, _, id_ = split_role(role)
         (remote,) = ctx.cluster.only(role).remotes.keys()
@@ -1094,7 +1094,7 @@ def ssh_keyscan(hostnames, _raise=True):
     :param _raise: Whether to raise an exception if not all keys are retrieved
     :returns: A dict keyed by hostname, with the host keys as values
     """
-    if isinstance(hostnames, basestring):
+    if not isinstance(hostnames, list) and not isinstance(hostnames, dict):
         raise TypeError("'hostnames' must be a list")
     hostnames = [canonicalize_hostname(name, user=None) for name in
                  hostnames]

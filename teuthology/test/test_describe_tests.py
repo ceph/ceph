@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pytest
 
-from fake_fs import make_fake_fstools
+from teuthology.test.fake_fs import make_fake_fstools
 from teuthology.describe_tests import (tree_with_info, extract_info,
                                        get_combinations)
 from teuthology.exceptions import ParseError
@@ -106,20 +106,18 @@ expected_rbd_features = [
 
 class TestDescribeTests(object):
 
-    patchpoints = [
-        'os.path.exists',
-        'os.listdir',
-        'os.path.isfile',
-        'os.path.isdir',
-        '__builtin__.open',
-    ]
-    fake_fns = make_fake_fstools(realistic_fs)
-
     def setup(self):
         self.mocks = dict()
         self.patchers = dict()
-        klass = self.__class__
-        for ppoint, fn in zip(klass.patchpoints, klass.fake_fns):
+        exists, listdir, isfile, isdir, open = make_fake_fstools(realistic_fs)
+        for ppoint, fn in {
+             'os.listdir': listdir,
+             'os.path.isdir': isdir,
+             'teuthology.describe_tests.open': open,
+             'os.path.exists': exists,
+             'os.listdir': listdir,
+             'os.path.isfile': isfile,
+         }.items():
             mockobj = MagicMock()
             patcher = patch(ppoint, mockobj)
             mockobj.side_effect = fn
@@ -145,51 +143,51 @@ class TestDescribeTests(object):
 
     def test_single_filter(self):
         rows = tree_with_info('basic', ['desc'], False, '', [])
-        assert rows == map(list, zip(expected_tree, expected_desc))
+        assert rows == [list(_) for _ in zip(expected_tree, expected_desc)]
 
         rows = tree_with_info('basic', ['rbd_features'], False, '', [])
-        assert rows == map(list, zip(expected_tree, expected_rbd_features))
+        assert rows == [list(_) for _ in zip(expected_tree, expected_rbd_features)]
 
     def test_single_filter_with_facets(self):
         rows = tree_with_info('basic', ['desc'], True, '', [])
-        assert rows == map(list, zip(expected_tree, expected_facets,
-                                     expected_desc))
+        assert rows == [list(_) for _ in zip(expected_tree, expected_facets,
+                                     expected_desc)]
 
         rows = tree_with_info('basic', ['rbd_features'], True, '', [])
-        assert rows == map(list, zip(expected_tree, expected_facets,
-                                     expected_rbd_features))
+        assert rows == [list(_) for _ in zip(expected_tree, expected_facets,
+                                     expected_rbd_features)]
 
     def test_no_matching(self):
         rows = tree_with_info('basic', ['extra'], False, '', [])
-        assert rows == map(list, zip(expected_tree, [''] * len(expected_tree)))
+        assert rows == [list(_) for _ in zip(expected_tree, [''] * len(expected_tree))]
 
         rows = tree_with_info('basic', ['extra'], True, '', [])
-        assert rows == map(list, zip(expected_tree, expected_facets,
-                                     [''] * len(expected_tree)))
+        assert rows == [list(_) for _ in zip(expected_tree, expected_facets,
+                                     [''] * len(expected_tree))]
 
     def test_multiple_filters(self):
         rows = tree_with_info('basic', ['desc', 'rbd_features'], False, '', [])
-        assert rows == map(list, zip(expected_tree,
+        assert rows == [list(_) for _ in zip(expected_tree,
                                      expected_desc,
-                                     expected_rbd_features))
+                                     expected_rbd_features)]
 
         rows = tree_with_info('basic', ['rbd_features', 'desc'], False, '', [])
-        assert rows == map(list, zip(expected_tree,
+        assert rows == [list(_) for _ in zip(expected_tree,
                                      expected_rbd_features,
-                                     expected_desc))
+                                     expected_desc)]
 
     def test_multiple_filters_with_facets(self):
         rows = tree_with_info('basic', ['desc', 'rbd_features'], True, '', [])
-        assert rows == map(list, zip(expected_tree,
+        assert rows == [list(_) for _ in zip(expected_tree,
                                      expected_facets,
                                      expected_desc,
-                                     expected_rbd_features))
+                                     expected_rbd_features)]
 
         rows = tree_with_info('basic', ['rbd_features', 'desc'], True, '', [])
-        assert rows == map(list, zip(expected_tree,
+        assert rows == [list(_) for _ in zip(expected_tree,
                                      expected_facets,
                                      expected_rbd_features,
-                                     expected_desc))
+                                     expected_desc)]
 
     def test_combinations_only_facets(self):
         headers, rows = get_combinations('basic', [], None, 1, None, None, True)
@@ -221,7 +219,7 @@ class TestDescribeTests(object):
         assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
 
 
-@patch('__builtin__.open')
+@patch('teuthology.describe_tests.open')
 @patch('os.path.isdir')
 def test_extract_info_dir(m_isdir, m_open):
     simple_fs = {'a': {'b.yaml': 'meta: [{foo: c}]'}}
@@ -237,7 +235,7 @@ def test_extract_info_dir(m_isdir, m_open):
     assert info == {'foo': 'c', 'bar': ''}
 
 
-@patch('__builtin__.open')
+@patch('teuthology.describe_tests.open')
 @patch('os.path.isdir')
 def check_parse_error(fs, m_isdir, m_open):
     _, _, _, m_isdir.side_effect, m_open.side_effect = make_fake_fstools(fs)
@@ -258,7 +256,7 @@ def test_extract_info_not_a_dict():
     check_parse_error({'a.yaml': 'meta: [[a, b]]'})
 
 
-@patch('__builtin__.open')
+@patch('teuthology.describe_tests.open')
 @patch('os.path.isdir')
 def test_extract_info_empty_file(m_isdir, m_open):
     simple_fs = {'a.yaml': ''}
