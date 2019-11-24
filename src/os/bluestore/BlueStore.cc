@@ -22,6 +22,7 @@
 
 #include "include/cpp-btree/btree_set.h"
 
+#include "bluestore_common.h"
 #include "BlueStore.h"
 #include "os/kv.h"
 #include "include/compat.h"
@@ -7018,20 +7019,6 @@ int BlueStore::cold_close()
   return 0;
 }
 
-static void apply(uint64_t off,
-                  uint64_t len,
-                  uint64_t granularity,
-                  BlueStore::mempool_dynamic_bitset &bitset,
-                  std::function<void(uint64_t,
-				     BlueStore::mempool_dynamic_bitset &)> f) {
-  auto end = round_up_to(off + len, granularity);
-  while (off < end) {
-    uint64_t pos = off / granularity;
-    f(pos, bitset);
-    off += granularity;
-  }
-}
-
 int _fsck_sum_extents(
   const PExtentVector& extents,
   bool compressed,
@@ -7070,10 +7057,9 @@ int BlueStore::_fsck_check_extents(
     }
     if (depth != FSCK_SHALLOW) {
       bool already = false;
-      apply(
+      apply_for_bitset_range(
         e.offset, e.length, granularity, used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	  ceph_assert(pos < bs.size());
 	  if (bs.test(pos)) {
 	    if (repairer) {
 	      repairer->note_misreference(
@@ -8130,10 +8116,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   _fsck_collections(&errors);
   used_blocks.resize(fm->get_alloc_units());
-  apply(
+  apply_for_bitset_range(
     0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	ceph_assert(pos < bs.size());
       bs.set(pos);
     }
   );
@@ -8171,10 +8156,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     }
 
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-      apply(
+      apply_for_bitset_range(
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	ceph_assert(pos < bs.size());
           bs.set(pos);
         }
 	);
@@ -8645,10 +8629,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	         << " ops " << wt.ops.size()
 	         << " released 0x" << std::hex << wt.released << std::dec << dendl;
         for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
-          apply(
+          apply_for_bitset_range(
             e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
             [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	  ceph_assert(pos < bs.size());
               bs.set(pos);
             }
           );
@@ -8661,10 +8644,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       // remove bluefs_extents from used set since the freelist doesn't
       // know they are allocated.
       for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-        apply(
+        apply_for_bitset_range(
           e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	    ceph_assert(pos < bs.size());
 	    bs.reset(pos);
           }
         );
@@ -8673,10 +8655,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       uint64_t offset, length;
       while (fm->enumerate_next(db, &offset, &length)) {
         bool intersects = false;
-        apply(
+        apply_for_bitset_range(
           offset, length, fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	    ceph_assert(pos < bs.size());
             if (bs.test(pos)) {
 	      if (offset == SUPER_RESERVED &&
 	          length == min_alloc_size - SUPER_RESERVED) {

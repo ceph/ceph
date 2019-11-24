@@ -79,6 +79,61 @@ TEST(BlueFS, mkfs_mount) {
   fs.umount();
 }
 
+TEST(BlueFS, mkfs_mount_duplicate_gift) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{ size };
+  {
+    BlueFS fs(g_ceph_context);
+    ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+    fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+    uuid_d fsid;
+    ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+    ASSERT_EQ(0, fs.mount());
+
+    {
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.mkdir("dir"));
+      ASSERT_EQ(0, fs.open_for_write("dir", "file1", &h, false));
+      h->append("foo", 3);
+      h->append("bar", 3);
+      h->append("baz", 3);
+      fs.fsync(h);
+      fs.close_writer(h);
+    }
+
+    fs.umount();
+  }
+
+  {
+    BlueFS fs(g_ceph_context);
+    ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+    ASSERT_EQ(0, fs.mount());
+    // free allocation presumably allocated for file1 
+    fs.debug_inject_duplicate_gift(BlueFS::BDEV_DB, 5 * 1048576, 1048576);
+    {
+      // overwrite file1 with file2 
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.open_for_write("dir", "file2", &h, false));
+      h->append("foo", 3);
+      h->append("bar", 3);
+      h->append("baz", 3);
+      fs.fsync(h);
+      fs.close_writer(h);
+    }
+    fs.umount();
+  }
+
+  g_ceph_context->_conf.set_val_or_die("bluefs_log_replay_check_allocations", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  {
+    // this should fail
+    BlueFS fs(g_ceph_context);
+    ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+    ASSERT_NE(0, fs.mount());
+  }
+}
+
 TEST(BlueFS, write_read) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
