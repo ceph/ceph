@@ -11,76 +11,49 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <iostream>
 
-#include "common/config.h"
+#include <boost/program_options/cmdline.hpp>
+#include <boost/program_options/option.hpp>
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
 
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
 #include "include/rados/librados.h"
+#include "ceph_ver.h"
 
-void usage()
-{
-  cout << "usage: librados-config [option]\n"
-       << "where options are:\n"
-       << "  --version                    library version\n"
-       << "  --vernum                     library version code\n";
-}
-
-void usage_exit()
-{
-  usage();
-  exit(1);
-}
+namespace po = boost::program_options;
 
 int main(int argc, const char **argv) 
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  if (args.empty()) {
-    cerr << argv[0] << ": -h or --help for usage" << std::endl;
-    exit(1);
-  }
-  if (ceph_argparse_need_usage(args)) {
-    usage();
-    exit(0);
-  }
+  po::options_description desc{"usage: librados-config [option]"};
+  desc.add_options()
+    ("help,h", "print this help message")
+    ("version", "library version")
+    ("vernum", "library version code")
+    ("release", "print release name");
 
-  bool opt_version = false;
-  bool opt_vernum = false;
+  po::parsed_options parsed =
+    po::command_line_parser(argc, argv).options(desc).run();
+  po::variables_map vm;
+  po::store(parsed, vm);
+  po::notify(vm);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(g_ceph_context);
-  for (std::vector<const char*>::iterator i = args.begin();
-       i != args.end(); ) {
-    if (strcmp(*i, "--") == 0) {
-      break;
-    }
-    else if (strcmp(*i, "--version") == 0) {
-      opt_version = true;
-      i = args.erase(i);
-    }
-    else if (strcmp(*i, "--vernum") == 0) {
-      opt_vernum = true;
-      i = args.erase(i);
-    }
-    else
-      ++i;
-  }
-
-  if (!opt_version && !opt_vernum)
-    usage_exit();
-
-  if (opt_version) {
+  if (vm.count("help")) {
+    std::cout << desc << std::endl;
+  } else if (vm.count("version")) {
     int maj, min, ext;
     rados_version(&maj, &min, &ext);
-    cout << maj << "." << min << "." << ext << std::endl;
-  } else if (opt_vernum) {
-    cout << hex << LIBRADOS_VERSION_CODE << dec << std::endl;
+    std::cout << maj << "." << min << "." << ext << std::endl;
+  } else if (vm.count("vernum")) {
+    std::cout << std::hex << LIBRADOS_VERSION_CODE << std::dec << std::endl;
+  } else if (vm.count("release")) {
+    std::cout << CEPH_RELEASE_NAME << ' '
+	      << '(' << CEPH_RELEASE_TYPE << ')'
+	      << std::endl;
+  } else {
+    std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    return 1;
   }
-
-  return 0;
 }
 
