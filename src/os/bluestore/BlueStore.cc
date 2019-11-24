@@ -841,58 +841,88 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
       BlueStore::Onode,
       boost::intrusive::list_member_hook<>,
       &BlueStore::Onode::lru_item> > list_t;
+  typedef boost::intrusive::list<
+    BlueStore::Onode,
+    boost::intrusive::member_hook<
+      BlueStore::Onode,
+      boost::intrusive::list_member_hook<>,
+      &BlueStore::Onode::pin_item> > pin_list_t;
+
   list_t lru;
+  pin_list_t pin_list;
 
   explicit LruOnodeCacheShard(CephContext *cct) : BlueStore::OnodeCacheShard(cct) {}
 
   void _add(BlueStore::OnodeRef& o, int level) override
   {
-    (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
+    ceph_assert(o->s == nullptr);
+    o->s = this;
+    if (o->nref > 1) {
+      pin_list.push_front(*o);
+      o->pinned = true;
+      num_pinned = pin_list.size();
+    } else {
+      (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
+    }
     num = lru.size();
   }
   void _rm(BlueStore::OnodeRef& o) override
   {
-    lru.erase(lru.iterator_to(*o));
+    o->s = nullptr;
+    if (o->pinned) {
+      o->pinned = false;
+      pin_list.erase(pin_list.iterator_to(*o));
+    } else {
+      lru.erase(lru.iterator_to(*o));
+    }
     num = lru.size();
+    num_pinned = pin_list.size();
   }
   void _touch(BlueStore::OnodeRef& o) override
   {
+    if (o->pinned) {
+      return;
+    }
     lru.erase(lru.iterator_to(*o));
     lru.push_front(*o);
     num = lru.size();
   }
-  void _trim_to(uint64_t max) override
+  void _pin(BlueStore::Onode& o) override
   {
-    if (max >= lru.size()) {
+    if (o.pinned == true) {
+      return;
+    }
+    lru.erase(lru.iterator_to(o));
+    pin_list.push_front(o);
+    o.pinned = true;
+    num = lru.size();
+    num_pinned = pin_list.size();
+    dout(30) << __func__ << " " << o.oid << " pinned" << dendl;
+
+  } 
+  void _unpin(BlueStore::Onode& o) override
+  {
+    if (o.pinned == false) {
+      return;
+    }
+    pin_list.erase(pin_list.iterator_to(o));
+    lru.push_front(o);
+    o.pinned = false;
+    num = lru.size();
+    num_pinned = pin_list.size();
+    dout(30) << __func__ << " " << o.oid << " unpinned" << dendl;
+  }
+  void _trim_to(uint64_t new_size) override
+  {
+    if (new_size >= lru.size()) {
       return; // don't even try
     } 
-    uint64_t n = lru.size() - max;
-
+    uint64_t n = lru.size() - new_size;
     auto p = lru.end();
     ceph_assert(p != lru.begin());
     --p;
-    int skipped = 0;
-    int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
     while (n > 0) {
       BlueStore::Onode *o = &*p;
-      int refs = o->nref.load();
-      if (refs > 1) {
-        dout(20) << __func__ << "  " << o->oid << " has " << refs
-                 << " refs, skipping" << dendl;
-        if (++skipped >= max_skipped) {
-          dout(20) << __func__ << " maximum skip pinned reached; stopping with "
-                   << n << " left to trim" << dendl;
-          break;
-        }
-
-        if (p == lru.begin()) {
-          break;
-        } else {
-          p--;
-          n--;
-          continue;
-        }
-      }
       dout(30) << __func__ << "  rm " << o->oid << dendl;
       if (p != lru.begin()) {
         lru.erase(p--);
@@ -900,6 +930,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
         lru.erase(p);
         ceph_assert(n == 1);
       }
+      o->s = nullptr;
       o->get();  // paranoia
       o->c->onode_map.remove(o->oid);
       o->put();
@@ -907,9 +938,10 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     }
     num = lru.size();
   }
-  void add_stats(uint64_t *onodes) override
+  void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) override
   {
-    *onodes += num;
+    *onodes += num + num_pinned;
+    *pinned_onodes += num_pinned;
   }
 };
 
@@ -4553,6 +4585,8 @@ void BlueStore::_init_logger()
 
   b.add_u64(l_bluestore_onodes, "bluestore_onodes",
 	    "Number of onodes in cache");
+  b.add_u64(l_bluestore_pinned_onodes, "bluestore_pinned_onodes",
+            "Number of pinned onodes in cache");
   b.add_u64_counter(l_bluestore_onode_hits, "bluestore_onode_hits",
 		    "Sum for onode-lookups hit in the cache");
   b.add_u64_counter(l_bluestore_onode_misses, "bluestore_onode_misses",
@@ -9173,18 +9207,20 @@ void BlueStore::_reap_collections()
 void BlueStore::_update_cache_logger()
 {
   uint64_t num_onodes = 0;
+  uint64_t num_pinned_onodes = 0;
   uint64_t num_extents = 0;
   uint64_t num_blobs = 0;
   uint64_t num_buffers = 0;
   uint64_t num_buffer_bytes = 0;
   for (auto c : onode_cache_shards) {
-    c->add_stats(&num_onodes);
+    c->add_stats(&num_onodes, &num_pinned_onodes);
   }
   for (auto c : buffer_cache_shards) {
     c->add_stats(&num_extents, &num_blobs,
                  &num_buffers, &num_buffer_bytes);
   }
   logger->set(l_bluestore_onodes, num_onodes);
+  logger->set(l_bluestore_pinned_onodes, num_pinned_onodes);
   logger->set(l_bluestore_extents, num_extents);
   logger->set(l_bluestore_blobs, num_blobs);
   logger->set(l_bluestore_buffers, num_buffers);

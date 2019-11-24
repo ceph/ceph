@@ -3204,6 +3204,11 @@ int OSD::enable_disable_fuse(bool stop)
   return 0;
 }
 
+size_t OSD::get_num_cache_shards()
+{
+  return cct->_conf.get_val<Option::size_t>("osd_num_cache_shards");
+}
+
 int OSD::get_num_op_shards()
 {
   if (cct->_conf->osd_op_num_shards)
@@ -3297,7 +3302,7 @@ int OSD::init()
   dout(2) << "journal " << journal_path << dendl;
   ceph_assert(store);  // call pre_init() first!
 
-  store->set_cache_shards(get_num_op_shards());
+  store->set_cache_shards(get_num_cache_shards());
 
   int r = store->mount();
   if (r < 0) {
