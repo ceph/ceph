@@ -158,7 +158,9 @@ void Processor::start()
       for (auto& listen_socket : listen_sockets) {
 	if (listen_socket) {
           if (listen_socket.fd() == -1) {
-            ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
+            ldout(msgr->cct, 1) << __func__ 
+                << " Error: processor restart after listen_socket.fd closed. " 
+                << this << dendl;
             return;
           }
 	  worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE,
