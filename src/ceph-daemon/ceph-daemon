@@ -238,8 +238,11 @@ def infer_fsid(func):
     return _infer_fsid
 
 def write_tmp(s, uid, gid, mode=0o600):
+    delete = not args.devel
+
     tmp_f = tempfile.NamedTemporaryFile(mode='w',
-                                        prefix='ceph-tmp')
+                                        prefix='ceph-tmp',
+                                        delete=delete)
     os.fchmod(tmp_f.fileno(), mode)
     os.fchown(tmp_f.fileno(), uid, gid)
     tmp_f.write(s)
@@ -1622,6 +1625,12 @@ def _get_parser():
         '--verbose', '-v',
         action='store_true',
         help='Show debug-level log messages')
+
+    parser.add_argument(
+        '--devel', '-d',
+        action='store_true',
+        help='Enable developer mode')
+
     subparsers = parser.add_subparsers(help='sub-command')
 
     parser_version = subparsers.add_parser(
@@ -1901,6 +1910,10 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger('ceph-daemon')
+
+    if args.devel:
+        # TODO: clean-up string to match other ceph devel mode messages
+        logging.info("Developer mode enabled")
 
     # podman or docker?
     if args.docker:
