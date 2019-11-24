@@ -237,6 +237,16 @@ def infer_fsid(func):
         return func()
     return _infer_fsid
 
+def write_tmp(s, uid, gid, mode=0o600):
+    tmp_f = tempfile.NamedTemporaryFile(mode='w',
+                                        prefix='ceph-tmp')
+    os.fchmod(tmp_f.fileno(), mode)
+    os.fchown(tmp_f.fileno(), uid, gid)
+    tmp_f.write(s)
+    tmp_f.flush()
+
+    return tmp_f
+
 def makedirs(dir, uid, gid, mode):
     # type: (str, int, int, int) -> None
     if not os.path.exists(dir):
@@ -518,18 +528,10 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
     if daemon_type == 'mon' and not os.path.exists(get_data_dir(fsid, 'mon',
                                                                 daemon_id)):
         # tmp keyring file
-        tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_keyring.fileno(), 0o600)
-        os.fchown(tmp_keyring.fileno(), uid, gid)
-        tmp_keyring.write(keyring)
-        tmp_keyring.flush()
+        tmp_keyring = write_tmp(keyring, uid, gid)
 
         # tmp config file
-        tmp_config = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_config.fileno(), 0o600)
-        os.fchown(tmp_config.fileno(), uid, gid)
-        tmp_config.write(config)
-        tmp_config.flush()
+        tmp_config = write_tmp(config, uid, gid)
 
         # --mkfs
         create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid)
@@ -961,16 +963,11 @@ def command_bootstrap():
                % (mon_key, admin_key, mgr_id, mgr_key, hostname, crash_key))
 
     # tmp keyring file
-    tmp_bootstrap_keyring = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_bootstrap_keyring.fileno(), 0o600)
-    os.fchown(tmp_bootstrap_keyring.fileno(), uid, gid)
-    tmp_bootstrap_keyring.write(keyring)
-    tmp_bootstrap_keyring.flush()
+    tmp_bootstrap_keyring = write_tmp(keyring, uid, gid)
 
     # create initial monmap, tmp monmap file
     logger.info('Creating initial monmap...')
-    tmp_monmap = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_monmap.fileno(), 0o644)
+    tmp_monmap = write_tmp('', uid, gid, mode=0o644)
     out = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/monmaptool',
@@ -1017,18 +1014,10 @@ def command_bootstrap():
     deploy_daemon_units(fsid, uid, gid, 'mon', mon_id, mon_c)
 
     # client.admin key + config to issue various CLI commands
-    tmp_admin_keyring = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_admin_keyring.fileno(), 0o600)
-    os.fchown(tmp_admin_keyring.fileno(), uid, gid)
-    tmp_admin_keyring.write('[client.admin]\n'
-                      '\tkey = ' + admin_key + '\n')
-    tmp_admin_keyring.flush()
-
-    tmp_config = tempfile.NamedTemporaryFile(mode='w')
-    os.fchmod(tmp_config.fileno(), 0o600)
-    os.fchown(tmp_config.fileno(), uid, gid)
-    tmp_config.write(config)
-    tmp_config.flush()
+    tmp_admin_keyring = write_tmp('[client.admin]\n'
+                                  '\tkey = ' + admin_key + '\n',
+                                       uid, gid)
+    tmp_config = write_tmp(config, uid, gid)
 
     # a CLI helper to reduce our typing
     def cli(cmd, extra_mounts={}):
@@ -1314,18 +1303,10 @@ def command_ceph_volume():
         (config, keyring) = get_config_and_keyring()
 
         # tmp keyring file
-        tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_keyring.fileno(), 0o600)
-        os.fchown(tmp_keyring.fileno(), uid, gid)
-        tmp_keyring.write(keyring)
-        tmp_keyring.flush()
+        tmp_keyring = write_tmp(keyring, uid, gid)
 
         # tmp config file
-        tmp_config = tempfile.NamedTemporaryFile(mode='w')
-        os.fchmod(tmp_config.fileno(), 0o600)
-        os.fchown(tmp_keyring.fileno(), uid, gid)
-        tmp_config.write(config)
-        tmp_config.flush()
+        tmp_config = write_tmp(config, uid, gid)
 
         mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
         mounts[tmp_keyring.name] = '/var/lib/ceph/bootstrap-osd/ceph.keyring:z'
