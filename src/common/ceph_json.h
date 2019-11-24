@@ -3,7 +3,7 @@
 
 #include <stdexcept>
 #include <include/types.h>
-
+#include <boost/container/flat_map.hpp>
 
 #include "json_spirit/json_spirit.h"
 
@@ -259,6 +259,22 @@ void decode_json_obj(std::multimap<K, V>& m, JSONObj *obj)
   }
 }
 
+template<class K, class V>
+void decode_json_obj(boost::container::flat_map<K, V>& m, JSONObj *obj)
+{
+  m.clear();
+
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    K key;
+    V val;
+    JSONObj *o = *iter;
+    JSONDecoder::decode_json("key", key, o);
+    JSONDecoder::decode_json("val", val, o);
+    m[key] = val;
+  }
+}
 template<class C>
 void decode_json_obj(C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj)
 {
@@ -397,6 +413,7 @@ static void encode_json(const char *name, const std::list<T>& l, ceph::Formatter
   }
   f->close_section();
 }
+
 template<class T>
 static void encode_json(const char *name, const std::deque<T>& l, ceph::Formatter *f)
 {
@@ -406,6 +423,7 @@ static void encode_json(const char *name, const std::deque<T>& l, ceph::Formatte
   }
   f->close_section();
 }
+
 template<class T, class Compare = std::less<T> >
 static void encode_json(const char *name, const std::set<T, Compare>& l, ceph::Formatter *f)
 {
@@ -426,7 +444,7 @@ static void encode_json(const char *name, const std::vector<T>& l, ceph::Formatt
   f->close_section();
 }
 
-template<class K, class V, class C = std::less<K> >
+template<class K, class V, class C = std::less<K>>
 static void encode_json(const char *name, const std::map<K, V, C>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
@@ -451,6 +469,20 @@ static void encode_json(const char *name, const std::multimap<K, V>& m, ceph::Fo
   }
   f->close_section();
 }
+
+template<class K, class V>
+static void encode_json(const char *name, const boost::container::flat_map<K, V>& m, ceph::Formatter *f)
+{
+  f->open_array_section(name);
+  for (auto i = m.begin(); i != m.end(); ++i) {
+    f->open_object_section("entry");
+    encode_json("key", i->first, f);
+    encode_json("val", i->second, f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
 template<class K, class V>
 void encode_json_map(const char *name, const std::map<K, V>& m, ceph::Formatter *f)
 {

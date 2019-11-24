@@ -49,6 +49,8 @@ Ceph's bucket notification API has the following extensions:
 
   - Filtering based on metadata attributes attached to the object
 
+  - Filtering based on object tags
+
 - Filtering overlapping is allowed, so that same event could be sent as different notification
 
 
