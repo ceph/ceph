@@ -40,6 +40,8 @@ void populate_record_from_request(const req_state *s,
   record.bucket_id = s->bucket.bucket_id;
   // pass meta data
   record.x_meta_map = s->info.x_meta_map;
+  // pass tags
+  record.tags = s->tagset.get_tags();
 }
 
 bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, EventType event) {
@@ -50,6 +52,9 @@ bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, EventType 
     return false;
   }
   if (!::match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
+    return false;
+  }
+  if (!::match(filter.s3_filter.tag_filter, s->tagset.get_tags())) {
     return false;
   }
   return true;

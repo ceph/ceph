@@ -13,6 +13,26 @@ from botocore.client import Config
 
 log = logging.getLogger('rgw_multi.tests')
 
+def put_object_tagging(conn, bucket_name, key, tags):
+    client = boto3.client('s3',
+            endpoint_url='http://'+conn.host+':'+str(conn.port),
+            aws_access_key_id=conn.aws_access_key_id,
+            aws_secret_access_key=conn.aws_secret_access_key,
+            config=Config(signature_version='s3'))
+    return client.put_object(Body='aaaaaaaaaaa', Bucket=bucket_name, Key=key, Tagging=tags)
+
+
+def get_object_tagging(conn, bucket, object_key):
+    client = boto3.client('s3',
+            endpoint_url='http://'+conn.host+':'+str(conn.port),
+            aws_access_key_id=conn.aws_access_key_id,
+            aws_secret_access_key=conn.aws_secret_access_key,
+            config=Config(signature_version='s3'))
+    return client.get_object_tagging(
+                Bucket=bucket, 
+                Key=object_key
+            )
+
 
 class PSZone(Zone):  # pylint: disable=too-many-ancestors
     """ PubSub zone class """

@@ -1,5 +1,6 @@
 # Introduction
 This directory contains examples on how to use AWS CLI/boto3 to exercise the RadosGW extensions to the S3 API.
+This is an extension to the [AWS SDK](https://github.com/boto/botocore/blob/develop/botocore/data/s3/2006-03-01/service-2.json).
 
 # Users
 For the standard client to support these extensions, the: ``service-2.sdk-extras.json`` file should be placed under: ``~/.aws/models/s3/2006-03-01/`` directory.
