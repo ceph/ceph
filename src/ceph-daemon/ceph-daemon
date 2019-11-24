@@ -61,7 +61,7 @@ import uuid
 
 from distutils.spawn import find_executable
 from functools import wraps
-from glob import glob
+from glob import iglob
 
 
 container_path = None
@@ -1515,7 +1515,7 @@ def command_adopt():
                         (daemon_type, args.cluster, daemon_id))
         data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
         data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id)
-        for data_file in glob(os.path.join(data_dir_src, '*')):
+        for data_file in iglob(os.path.join(data_dir_src, '*')):
             move_file(data_file, data_dir_dst)
         logger.debug('Remove dir \'%s\'' % (data_dir_src))
         if os.path.ismount(data_dir_src):
@@ -1535,7 +1535,7 @@ def command_adopt():
                         (args.cluster, daemon_type, daemon_id))
         log_dir_src = os.path.abspath(args.legacy_dir + log_dir_src)
         log_dir_dst = make_log_dir(fsid, uid=uid, gid=gid)
-        for log_file in glob(log_dir_src):
+        for log_file in iglob(log_dir_src):
             move_file(log_file, log_dir_dst)
 
         logger.info('Creating new units...')
