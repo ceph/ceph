@@ -3968,6 +3968,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Preextent rocksdb wal files on mkfs to avoid performance penalty"),
 
+    Option("bluefs_log_replay_check_allocations", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+      .set_default(true)
+      .set_description("Enables checks for allocations consistency during log replay"),
+
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_flag(Option::FLAG_CREATE)

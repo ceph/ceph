@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "boost/algorithm/string.hpp" 
+#include "bluestore_common.h"
 #include "BlueFS.h"
 
 #include "common/debug.h"
@@ -756,6 +757,51 @@ int BlueFS::_open_super()
   return 0;
 }
 
+int BlueFS::_check_new_allocations(const bluefs_fnode_t& fnode,
+  size_t dev_count,
+  boost::dynamic_bitset<uint64_t>* owned_blocks,
+  boost::dynamic_bitset<uint64_t>* used_blocks)
+{
+  auto& fnode_extents = fnode.extents;
+  for (auto e : fnode_extents) {
+    auto id = e.bdev;
+    bool fail = false;
+    ceph_assert(id < dev_count);
+    apply_for_bitset_range(e.offset, e.length, alloc_size[id], owned_blocks[id],
+      [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+        if (!bs.test(pos)) {
+          fail = true;
+        }
+      }
+    );
+    if (fail) {
+      derr << __func__ << " invalid extent " << int(id)
+        << ": 0x" << std::hex << e.offset << "~" << e.length
+        << std::dec
+        << ": wasn't given but allocated for ino " << fnode.ino
+        << dendl;
+      return -EFAULT;
+    }
+
+    apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
+      [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+        if (bs.test(pos)) {
+          fail = true;
+        }
+        bs.set(pos);
+      }
+    );
+    if (fail) {
+      derr << __func__ << " invalid extent " << int(e.bdev)
+        << ": 0x" << std::hex << e.offset << "~" << e.length
+        << std::dec << ": duplicate reference, ino " << fnode.ino
+        << dendl;
+      return -EFAULT;
+    }
+  }
+  return 0;
+}
+
 int BlueFS::_replay(bool noop, bool to_stdout)
 {
   dout(10) << __func__ << (noop ? " NO-OP" : "") << dendl;
@@ -764,6 +810,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
   FileRef log_file;
   log_file = _get_file(1);
+
   if (!noop) {
     log_file->fnode = super.log_fnode;
   } else {
@@ -783,6 +830,21 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     true);  // ignore eof
 
   bool seen_recs = false;
+
+  boost::dynamic_bitset<uint64_t> used_blocks[MAX_BDEV];
+  boost::dynamic_bitset<uint64_t> owned_blocks[MAX_BDEV];
+
+  if (cct->_conf->bluefs_log_replay_check_allocations) {
+    for (size_t i = 0; i < MAX_BDEV; ++i) {
+      if (alloc_size[i] != 0 && bdev[i] != nullptr) {
+        used_blocks[i].resize(bdev[i]->get_size() / alloc_size[i]);
+        owned_blocks[i].resize(bdev[i]->get_size() / alloc_size[i]);
+      }
+    }
+  }
+  
+  bool first_log_check = true;
+  
   while (true) {
     ceph_assert((log_reader->buf.pos & ~super.block_mask()) == 0);
     uint64_t pos = log_reader->buf.pos;
@@ -961,6 +1023,38 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	  if (!noop) {
 	    block_all[id].insert(offset, length);
 	    alloc[id]->init_add_free(offset, length);
+
+            if (cct->_conf->bluefs_log_replay_check_allocations) {
+              bool fail = false;
+              apply_for_bitset_range(offset, length, alloc_size[id], owned_blocks[id],
+                [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                  if (bs.test(pos)) {
+                    fail = true;
+                  } else {
+                    bs.set(pos);
+                  }
+                }
+              );
+              if (fail) {
+                derr << __func__ << " invalid extent " << (int)id
+                  << ": 0x" << std::hex << offset << "~" << length
+                  << std::dec << ": already given" << dendl;
+                return -EFAULT;
+              }
+              apply_for_bitset_range(offset, length, alloc_size[id], used_blocks[id],
+                [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                  if (bs.test(pos)) {
+                    fail = true;
+                  }
+                }
+              );
+              if (fail) {
+                derr << __func__ << " invalid extent " << int(id)
+                  << ": 0x" << std::hex << offset << "~" << length
+                  << std::dec << ": already in use" << dendl;
+                return -EFAULT;
+              }
+            }
 	  }
 	}
 	break;
@@ -986,7 +1080,39 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	  if (!noop) {
 	    block_all[id].erase(offset, length);
 	    alloc[id]->init_rm_free(offset, length);
-	  }
+            if (cct->_conf->bluefs_log_replay_check_allocations) {
+              bool fail = false;
+              apply_for_bitset_range(offset, length, alloc_size[id], owned_blocks[id],
+                [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                  if (!bs.test(pos)) {
+                    fail = true;
+                  } else {
+                    bs.reset(pos);
+                  }
+                }
+              );
+              if (fail) {
+                derr << __func__ << " invalid extent " << int(id)
+                  << ": 0x" << std::hex << offset << "~" << length
+                  << std::dec << ": wasn't given" << dendl;
+                return -EFAULT;
+              }
+
+              apply_for_bitset_range(offset, length, alloc_size[id], used_blocks[id],
+                [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                  if (bs.test(pos)) {
+                    fail = true;
+                  }
+                }
+              );
+              if (fail) {
+                derr << __func__ << " invalid extent " << (int)id
+                   << ": 0x" << std::hex << offset << "~" << length
+                  << std::dec << ": still in use" << dendl;
+                return -EFAULT;
+              }
+            }
+          }
 	}
 	break;
 
@@ -1097,14 +1223,44 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << ":  op_file_update " << " " << fnode << std::endl;
           }
 
-	  if (!noop) {
+          if (!noop) {
 	    FileRef f = _get_file(fnode.ino);
+            if (cct->_conf->bluefs_log_replay_check_allocations) {
+              // check initial log layout
+              if (first_log_check) {
+                first_log_check = false;
+                int r = _check_new_allocations(log_file->fnode,
+                  MAX_BDEV, owned_blocks, used_blocks);
+                if (r < 0) {
+                  return r;
+                }
+              }
+            
+              auto& fnode_extents = f->fnode.extents;
+              for (auto e : fnode_extents) {
+                auto id = e.bdev;
+                apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
+                  [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                    ceph_assert(bs.test(pos));
+                    bs.reset(pos);
+                  }
+                );
+              }
+            }
+
 	    f->fnode = fnode;
 	    if (fnode.ino > ino_last) {
 	      ino_last = fnode.ino;
 	    }
+            if (cct->_conf->bluefs_log_replay_check_allocations) {
+              int r = _check_new_allocations(f->fnode,
+                MAX_BDEV, owned_blocks, used_blocks);
+              if (r < 0) {
+                return r;
+              }
+            }
 	  }
-	}
+        }
 	break;
 
       case bluefs_transaction_t::OP_FILE_REMOVE:
@@ -1118,12 +1274,51 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << ":  op_file_remove " << ino << std::endl;
           }
 
-	  if (!noop) {
-	    auto p = file_map.find(ino);
-	    ceph_assert(p != file_map.end());
-	    file_map.erase(p);
-	  }
-	}
+          if (!noop) {
+            auto p = file_map.find(ino);
+            ceph_assert(p != file_map.end());
+            if (cct->_conf->bluefs_log_replay_check_allocations) {
+              auto& fnode_extents = p->second->fnode.extents;
+              for (auto e : fnode_extents) {
+                auto id = e.bdev;
+                bool fail = false;
+                apply_for_bitset_range(e.offset, e.length, alloc_size[id], owned_blocks[id],
+                  [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                    if (!bs.test(pos)) {
+                      fail = true;
+                    }
+                  }
+                );
+                if (fail) {
+                  derr << __func__ << " invalid extent " << int(id)
+                    << ": 0x" << std::hex << e.offset << "~" << e.length
+                    << std::dec
+                    << ": wasn't given but is allocated for removed ino " << ino
+                    << dendl;
+                  return -EFAULT;
+                }
+
+                apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
+                  [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
+                    if (!bs.test(pos)) {
+                      fail = true;
+                    }
+                    bs.reset(pos);
+                  }
+                );
+                if (fail) {
+                  derr << __func__ << " invalid extent " << int(id)
+                    << ": 0x" << std::hex << e.offset << "~" << e.length
+                    << std::dec
+                    << ": not in use but is allocated for removed ino " << ino
+                    << dendl;
+                  return -EFAULT;
+                }
+              }
+            }
+            file_map.erase(p);
+          }
+        }
 	break;
 
       default:
@@ -1138,6 +1333,15 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     // we successfully replayed the transaction; bump the seq and log size
     ++log_seq;
     log_file->fnode.size = log_reader->buf.pos;
+  }
+
+  if (!noop && first_log_check &&
+        cct->_conf->bluefs_log_replay_check_allocations) {
+    int r = _check_new_allocations(log_file->fnode,
+      MAX_BDEV, owned_blocks, used_blocks);
+    if (r < 0) {
+      return r;
+    }
   }
 
   dout(10) << __func__ << " log file size was 0x"
@@ -3190,3 +3394,14 @@ bool BlueFS::wal_is_rotational()
   }
   return bdev[BDEV_SLOW]->is_rotational();
 }
+
+void BlueFS::debug_inject_duplicate_gift(unsigned id,
+  uint64_t offset,
+  uint64_t len)
+{
+  dout(0) << __func__ << dendl;
+  if (id < alloc.size() && alloc[id]) {
+    alloc[id]->init_add_free(offset, len);
+  }
+}
+
