@@ -50,6 +50,7 @@ groups:
           description: One or more OSDs down for more than 15 minutes.
       - alert: OSDs near full
         expr: ((ceph_osd_stat_bytes_used / ceph_osd_stat_bytes) and on(ceph_daemon) ceph_osd_up == 1) > 0.8
+        for: 5m
         labels:
           severity: critical
           type: ceph_default
@@ -65,8 +66,8 @@ groups:
           oid: 1.3.6.1.4.1.50495.15.1.2.4.4
         annotations:
           description: >
-              OSD {{ $labels.ceph_daemon }} was marked down and back up at least once a
-              minute for 5 minutes.
+            OSD {{ $labels.ceph_daemon }} was marked down and back up at least once a
+            minute for 5 minutes.
       # alert on high deviation from average PG count
       - alert: high pg count deviation
         expr: abs(((ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0) by (job)) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)) > 0.35
@@ -77,8 +78,8 @@ groups:
           oid: 1.3.6.1.4.1.50495.15.1.2.4.5
         annotations:
           description: >
-              OSD {{ $labels.ceph_daemon }} deviates by more than 30% from
-              average PG count.
+            OSD {{ $labels.ceph_daemon }} deviates by more than 30% from
+            average PG count.
       # alert on high commit latency...but how high is too high
   - name: mds
     rules:
