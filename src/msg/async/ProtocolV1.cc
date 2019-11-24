@@ -90,6 +90,7 @@ void ProtocolV1::connect() {
 
   // reset connect state variables
   authorizer_buf.clear();
+  // FIPS zeroization audit 20191115: these memsets are not security related.
   memset(&connect_msg, 0, sizeof(connect_msg));
   memset(&connect_reply, 0, sizeof(connect_reply));
 
@@ -1539,6 +1540,7 @@ CtPtr ProtocolV1::handle_connect_message_write(int r) {
 CtPtr ProtocolV1::wait_connect_reply() {
   ldout(cct, 20) << __func__ << dendl;
 
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&connect_reply, 0, sizeof(connect_reply));
   return READ(sizeof(connect_reply), handle_connect_reply_1);
 }
@@ -1889,6 +1891,7 @@ CtPtr ProtocolV1::handle_client_banner(char *buffer, int r) {
 CtPtr ProtocolV1::wait_connect_message() {
   ldout(cct, 20) << __func__ << dendl;
 
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&connect_msg, 0, sizeof(connect_msg));
   return READ(sizeof(connect_msg), handle_connect_message_1);
 }
@@ -1953,6 +1956,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   ceph_msg_connect_reply reply;
   bufferlist authorizer_reply;
 
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&reply, 0, sizeof(reply));
   reply.protocol_version =
       messenger->get_proto_version(connection->peer_type, false);
@@ -2556,6 +2560,7 @@ CtPtr ProtocolV1::server_ready() {
 		 << dendl;
 
   ldout(cct, 20) << __func__ << " accept done" << dendl;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&connect_msg, 0, sizeof(connect_msg));
 
   if (connection->delay_state) {

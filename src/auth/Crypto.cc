@@ -285,6 +285,8 @@ public:
     // let's pad the data
     std::uint8_t pad_len = out_tmp.length() - in.length();
     ceph::bufferptr pad_buf{pad_len};
+    // FIPS zeroization audit 20191115: this memset is not intended to
+    // wipe out a secret after use.
     memset(pad_buf.c_str(), pad_len, pad_len);
 
     // form contiguous buffer for block cipher. The ctor copies shallowly.
@@ -360,6 +362,8 @@ public:
 
     std::array<unsigned char, AES_BLOCK_LEN> last_block;
     memcpy(last_block.data(), in.buf + in.length - tail_len, tail_len);
+    // FIPS zeroization audit 20191115: this memset is not intended to
+    // wipe out a secret after use.
     memset(last_block.data() + tail_len, pad_len, pad_len);
 
     // need a local copy because AES_cbc_encrypt takes `iv` as non-const.

@@ -22,6 +22,7 @@ int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 		string host(m[2].first, m[2].second);
 		string port(m[3].first, m[3].second);
 		addrinfo hints;
+		// FIPS zeroization audit 20191115: this memset is fine.
 		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = PF_UNSPEC;
 		addrinfo *res;

@@ -99,6 +99,7 @@ char *resolve_addrs(const char *orig_str)
 
     //printf("name '%s' port '%s'\n", tok, port_str);
 
+    // FIPS zeroization audit 20191115: this memset is fine.
     memset(&hint, 0, sizeof(hint));
     hint.ai_family = AF_UNSPEC;
     hint.ai_socktype = SOCK_STREAM;

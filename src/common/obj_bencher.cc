@@ -70,6 +70,7 @@ static std::string generate_object_name_fast(int objnum, int pid = 0)
 }
 
 static void sanitize_object_contents (bench_data *data, size_t length) {
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(data->object_contents, 'z', length);
 }
 

@@ -479,12 +479,15 @@ static int build_token(const string& swift_user,
   dout(20) << "build_token token=" << buf << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+  // FIPS zeroization audit 20191116: this memset is not intended to
+  // wipe out a secret after use.
   memset(k, 0, sizeof(k));
   const char *s = key.c_str();
   for (int i = 0; i < (int)key.length(); i++, s++) {
     k[i % CEPH_CRYPTO_HMACSHA1_DIGESTSIZE] |= *s;
   }
   calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(), p.c_str());
+  ::ceph::crypto::zeroize_for_security(k, sizeof(k));
 
   bl.append(p);
 

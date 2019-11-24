@@ -147,7 +147,7 @@ public:
   explicit AES_256_CBC(CephContext* cct): cct(cct) {
   }
   ~AES_256_CBC() {
-    memset(key, 0, AES_256_KEYSIZE);
+    ::ceph::crypto::zeroize_for_security(key, AES_256_KEYSIZE);
   }
   bool set_key(const uint8_t* _key, size_t key_size) {
     if (key_size != AES_256_KEYSIZE) {
@@ -865,7 +865,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
                               reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()), AES_256_KEYSIZE,
                               reinterpret_cast<const uint8_t*>(key_selector.c_str()),
                               actual_key, AES_256_KEYSIZE) != true) {
-        memset(actual_key, 0, sizeof(actual_key));
+        ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
         return -EIO;
       }
       if (block_crypt) {
@@ -873,7 +873,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         aes->set_key(reinterpret_cast<const uint8_t*>(actual_key), AES_256_KEYSIZE);
         *block_crypt = std::move(aes);
       }
-      memset(actual_key, 0, sizeof(actual_key));
+      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return 0;
     }
   }
@@ -1038,12 +1038,12 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
                             AES_256_KEYSIZE,
                             reinterpret_cast<const uint8_t*>(attr_key_selector.c_str()),
                             actual_key, AES_256_KEYSIZE) != true) {
-      memset(actual_key, 0, sizeof(actual_key));
+      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return -EIO;
     }
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
     aes->set_key(actual_key, AES_256_KEYSIZE);
-    memset(actual_key, 0, sizeof(actual_key));
+    ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
     if (block_crypt) *block_crypt = std::move(aes);
     return 0;
   }

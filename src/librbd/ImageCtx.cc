@@ -131,6 +131,7 @@ public:
     if (snap)
       snap_name = snap;
 
+    // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&header, 0, sizeof(header));
 
     ThreadPool *thread_pool;
