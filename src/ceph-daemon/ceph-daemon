@@ -507,7 +507,7 @@ def extract_uid_gid():
     out = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/grep',
-        args=['ceph', '/etc/passwd'],
+        args=['^ceph:', '/etc/passwd'],
     ).run()
     (uid, gid) = out.split(':')[2:4]
     return (int(uid), int(gid))
