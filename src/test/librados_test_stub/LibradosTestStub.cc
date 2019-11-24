@@ -345,9 +345,13 @@ extern "C" int rados_wait_for_latest_osdmap(rados_t cluster) {
 
 namespace librados {
 
-void AioCompletion::release() {
-  AioCompletionImpl *c = reinterpret_cast<AioCompletionImpl *>(pc);
+AioCompletion::~AioCompletion()
+{
+  auto c = reinterpret_cast<AioCompletionImpl *>(pc);
   c->release();
+}
+
+void AioCompletion::release() {
   delete this;
 }
 

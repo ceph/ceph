@@ -960,6 +960,12 @@ uint32_t librados::NObjectIterator::get_pg_hash_position() const
 const librados::NObjectIterator librados::NObjectIterator::__EndObjectIterator(NULL);
 
 ///////////////////////////// PoolAsyncCompletion //////////////////////////////
+librados::PoolAsyncCompletion::PoolAsyncCompletion::~PoolAsyncCompletion()
+{
+  auto c = reinterpret_cast<PoolAsyncCompletionImpl *>(pc);
+  c->release();
+}
+
 int librados::PoolAsyncCompletion::PoolAsyncCompletion::set_callback(void *cb_arg,
 								     rados_callback_t cb)
 {
@@ -987,12 +993,16 @@ int librados::PoolAsyncCompletion::PoolAsyncCompletion::get_return_value()
 
 void librados::PoolAsyncCompletion::PoolAsyncCompletion::release()
 {
-  PoolAsyncCompletionImpl *c = (PoolAsyncCompletionImpl *)pc;
-  c->release();
   delete this;
 }
 
 ///////////////////////////// AioCompletion //////////////////////////////
+librados::AioCompletion::AioCompletion::~AioCompletion()
+{
+  auto c = reinterpret_cast<AioCompletionImpl *>(pc);
+  c->release();
+}
+
 int librados::AioCompletion::AioCompletion::set_complete_callback(void *cb_arg, rados_callback_t cb)
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
@@ -1073,8 +1083,6 @@ uint64_t librados::AioCompletion::AioCompletion::get_version64()
 
 void librados::AioCompletion::AioCompletion::release()
 {
-  AioCompletionImpl *c = (AioCompletionImpl *)pc;
-  c->release();
   delete this;
 }
 
