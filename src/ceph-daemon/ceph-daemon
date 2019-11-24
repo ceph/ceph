@@ -219,10 +219,10 @@ def infer_fsid(func):
             return func()
 
         fsid_list = []
-        for i in os.listdir(args.data_dir):
-            if is_fsid(i):
-                fsid_list.append(i)
-
+        if os.path.exists(args.data_dir):
+            for i in os.listdir(args.data_dir):
+                if is_fsid(i):
+                    fsid_list.append(i)
         logger.debug('Found fsids %s' % str(fsid_list))
 
         if not fsid_list:
