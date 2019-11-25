@@ -42,6 +42,7 @@
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_types.h"
 
+#include <boost/algorithm/string/predicate.hpp>
 
 /*
  * Object keys:
@@ -5069,7 +5070,7 @@ int get_remote_image_status_fsids(cls_method_context_t hctx,
                                   std::set<std::string>* fsids) {
   std::string filter = remote_status_global_key(global_image_id, "");
   std::string last_read = filter;
-  int max_read = RBD_MAX_KEYS_READ;
+  int max_read = 4; // we don't expect lots of peers
   bool more = true;
 
   do {
@@ -5080,7 +5081,8 @@ int get_remote_image_status_fsids(cls_method_context_t hctx,
     }
 
     for (auto& key : keys) {
-      if (key.find(filter) != 0 && key.length() <= filter.length()) {
+      if (!boost::starts_with(key, filter)) {
+        more = false;
         break;
       }
 
@@ -5120,34 +5122,87 @@ int image_status_remove(cls_method_context_t hctx,
 }
 
 int image_status_get(cls_method_context_t hctx, const string &global_image_id,
-                     const std::string& fsid,
+                     const std::string& fsid, const bufferlist& bl,
                      const std::set<entity_inst_t> &watchers,
-                     cls::rbd::MirrorImageSiteStatus *status) {
-  bufferlist bl;
-  int r = cls_cxx_map_get_val(hctx, status_global_key(global_image_id,
-                                                      fsid), &bl);
-  if (r < 0) {
-    if (r != -ENOENT) {
-      CLS_ERR("error reading status for mirrored image, global id '%s', "
-              "site '%s': '%s'",
-	      global_image_id.c_str(), fsid.c_str(),
-              cpp_strerror(r).c_str());
-    }
-    return r;
-  }
-
+                     cls::rbd::MirrorImageStatus* status) {
   cls::rbd::MirrorImageSiteStatusOnDisk ondisk_status;
   try {
     auto it = bl.cbegin();
     decode(ondisk_status, it);
   } catch (const buffer::error &err) {
-    CLS_ERR("could not decode status for mirrored image, global id '%s'",
-	    global_image_id.c_str());
+    CLS_ERR("could not decode status for mirrored image, global id '%s', "
+            "site '%s'",
+            global_image_id.c_str(), fsid.c_str());
     return -EIO;
   }
 
-  *status = static_cast<cls::rbd::MirrorImageSiteStatus>(ondisk_status);
-  status->up = (watchers.find(ondisk_status.origin) != watchers.end());
+  auto site_status = static_cast<cls::rbd::MirrorImageSiteStatus>(
+    ondisk_status);
+  site_status.up = (watchers.find(ondisk_status.origin) != watchers.end());
+  site_status.fsid = fsid;
+  status->mirror_image_site_statuses.push_back(site_status);
+  return 0;
+}
+
+int image_status_get_local(cls_method_context_t hctx,
+                           const string &global_image_id,
+                           const std::set<entity_inst_t> &watchers,
+                           cls::rbd::MirrorImageStatus *status) {
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(
+    hctx, status_global_key(global_image_id,
+                            cls::rbd::MirrorImageSiteStatus::LOCAL_FSID), &bl);
+  if (r == -ENOENT) {
+    return 0;
+  } else if (r < 0) {
+    CLS_ERR("error reading status for mirrored image, global id '%s', "
+            "site '%s': '%s'",
+            global_image_id.c_str(),
+            cls::rbd::MirrorImageSiteStatus::LOCAL_FSID.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return image_status_get(hctx, global_image_id,
+                          cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
+                          bl, watchers, status);
+}
+
+int image_status_get_remote(cls_method_context_t hctx,
+                            const string &global_image_id,
+                            const std::set<entity_inst_t> &watchers,
+                            cls::rbd::MirrorImageStatus *status) {
+  std::string filter = remote_status_global_key(global_image_id, "");
+  std::string last_read = filter;
+  int max_read = RBD_MAX_KEYS_READ;
+  bool more = true;
+
+  do {
+    std::map<std::string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    int r = cls_cxx_map_get_vals(hctx, last_read, filter, max_read, &vals,
+                                 &more);
+    if (r == -ENOENT) {
+      return 0;
+    } else if (r < 0) {
+      return r;
+    }
+
+    for (auto& it : vals) {
+      auto fsid = it.first.substr(filter.length());
+      CLS_LOG(20, "fsid = '%s'", fsid.c_str());
+      r = image_status_get(hctx, global_image_id, fsid, it.second, watchers,
+                           status);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  } while (more);
+
   return 0;
 }
 
@@ -5156,39 +5211,16 @@ int image_status_get(cls_method_context_t hctx, const string &global_image_id,
                      cls::rbd::MirrorImageStatus *status) {
   status->mirror_image_site_statuses.clear();
 
-  std::set<std::string> fsids;
-  int r = get_remote_image_status_fsids(hctx, global_image_id, &fsids);
-  if (r < 0 && r != -ENOENT) {
-    return r;
-  }
-
   // collect local site status
-  cls::rbd::MirrorImageSiteStatus local_status;
-  r = image_status_get(
-    hctx, global_image_id, cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
-    watchers, &local_status);
-  if (r < 0 && r != -ENOENT) {
+  int r = image_status_get_local(hctx, global_image_id, watchers, status);
+  if (r < 0) {
     return r;
-  }
-
-  if (r >= 0) {
-    local_status.fsid = cls::rbd::MirrorImageSiteStatus::LOCAL_FSID;
-    status->mirror_image_site_statuses.push_back(local_status);
   }
 
   // collect remote site status (TX to peer)
-  for (auto& fsid : fsids) {
-    cls::rbd::MirrorImageSiteStatus remote_status;
-    r = image_status_get(
-      hctx, global_image_id, fsid, watchers, &remote_status);
-    if (r < 0 && r != -ENOENT) {
-      return r;
-    }
-
-    if (r >= 0) {
-      remote_status.fsid = fsid;
-      status->mirror_image_site_statuses.push_back(remote_status);
-    }
+  r = image_status_get_remote(hctx, global_image_id, watchers, status);
+  if (r < 0) {
+    return r;
   }
 
   if (status->mirror_image_site_statuses.empty()) {
