@@ -28,5 +28,6 @@ versions of Ceph.
     Cephadm operations <operations>
     Cephadm monitoring <monitoring>
     Cephadm CLI <../mgr/orchestrator>
+    Client Setup <client-setup>
     DriveGroups <drivegroups>
     troubleshooting
