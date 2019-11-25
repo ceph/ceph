@@ -2302,7 +2302,7 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
     MDRequestRef null_ref;
-    int r = cache->path_traverse(null_ref, cf, fpath, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+    int r = cache->path_traverse(null_ref, cf, fpath, MDS_TRAVERSE_DISCOVER, &trace);
     if (r > 0) return;
     if (r < 0) {
       dout(7) << "handle_export_discover failed to discover or not dir " << m->get_path() << ", NAK" << dendl;

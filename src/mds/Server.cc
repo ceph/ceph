@@ -1234,11 +1234,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   mdlog->flush();
 
   // clean up requests, too
-  elist<MDRequestImpl*>::iterator p =
-    session->requests.begin(member_offset(MDRequestImpl,
-					  item_session_request));
-  while (!p.end()) {
-    MDRequestRef mdr = mdcache->request_get((*p)->reqid);
+  for (auto p = session->requests.begin(); !p.end(); ) {
+    MDRequestRef mdr(*p);
     ++p;
     mdcache->request_kill(mdr);
   }
@@ -2968,11 +2965,13 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
   
   // return list of my auth_pins (if any)
-  for (const auto &p : mdr->auth_pins) {
+  for (const auto &p : mdr->object_states) {
+    if (!p.second.auth_pinned)
+      continue;
     MDSCacheObjectInfo info;
-    p->set_object_info(info);
+    p.first->set_object_info(info);
     reply->get_authpins().push_back(info);
-    if (p == (MDSCacheObject*)auth_pin_freeze)
+    if (p.first == (MDSCacheObject*)auth_pin_freeze)
       auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
   }
 
@@ -2999,8 +2998,7 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlave
     MDSCacheObject *object = mdcache->get_object(oi);
     ceph_assert(object);  // we pinned it
     dout(10) << " remote has pinned " << *object << dendl;
-    if (!mdr->is_auth_pinned(object))
-      mdr->remote_auth_pins[object] = from;
+    mdr->set_remote_auth_pinned(object, from);
     if (oi == ack->get_authpin_freeze())
       mdr->set_remote_frozen_auth_pin(static_cast<CInode *>(object));
     pinned.insert(object);
@@ -3009,22 +3007,21 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlave
   // removed frozen auth pin ?
   if (mdr->more()->is_remote_frozen_authpin &&
       ack->get_authpin_freeze() == MDSCacheObjectInfo()) {
-    auto p = mdr->remote_auth_pins.find(mdr->more()->rename_inode);
-    ceph_assert(p != mdr->remote_auth_pins.end());
-    if (p->second == from) {
+    auto stat_p = mdr->find_object_state(mdr->more()->rename_inode);
+    ceph_assert(stat_p);
+    if (stat_p->remote_auth_pinned == from) {
       mdr->more()->is_remote_frozen_authpin = false;
     }
   }
 
   // removed auth pins?
-  auto p = mdr->remote_auth_pins.begin();
-  while (p != mdr->remote_auth_pins.end()) {
-    MDSCacheObject* object = p->first;
-    if (p->second == from && pinned.count(object) == 0) {
+  for (auto& p : mdr->object_states) {
+    if (p.second.remote_auth_pinned == MDS_RANK_NONE)
+      continue;
+    MDSCacheObject* object = p.first;
+    if (p.second.remote_auth_pinned == from && pinned.count(object) == 0) {
       dout(10) << " remote has unpinned " << *object << dendl;
-      mdr->remote_auth_pins.erase(p++);
-    } else {
-      ++p;
+      mdr->_clear_remote_auth_pinned(p.second);
     }
   }
 
@@ -3094,87 +3091,6 @@ bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
   }
 
   return true;
-}
-
-
-/** validate_dentry_dir
- *
- * verify that the dir exists and would own the dname.
- * do not check if the dentry exists.
- */
-CDir *Server::validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_view dname)
-{
-  // make sure parent is a dir?
-  if (!diri->is_dir()) {
-    dout(7) << "validate_dentry_dir: not a dir" << dendl;
-    respond_to_request(mdr, -ENOTDIR);
-    return NULL;
-  }
-
-  // which dirfrag?
-  frag_t fg = diri->pick_dirfrag(dname);
-  CDir *dir = try_open_auth_dirfrag(diri, fg, mdr);
-  if (!dir)
-    return 0;
-
-  // frozen?
-  if (dir->is_frozen()) {
-    dout(7) << "dir is frozen " << *dir << dendl;
-    dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-    return NULL;
-  }
-
-  return dir;
-}
-
-
-/** prepare_null_dentry
- * prepare a null (or existing) dentry in given dir. 
- * wait for any dn lock.
- */
-CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_view dname, bool okexist)
-{
-  dout(10) << "prepare_null_dentry " << dname << " in " << *dir << dendl;
-  ceph_assert(dir->is_auth());
-
-  client_t client = mdr->get_client();
-
-  // does it already exist?
-  CDentry *dn = dir->lookup(dname);
-  if (dn) {
-    /*
-    if (dn->lock.is_xlocked_by_other(mdr)) {
-      dout(10) << "waiting on xlocked dentry " << *dn << dendl;
-      dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
-      return 0;
-    }
-    */
-    if (!dn->get_linkage(client, mdr)->is_null()) {
-      // name already exists
-      dout(10) << "dentry " << dname << " exists in " << *dir << dendl;
-      if (!okexist) {
-        respond_to_request(mdr, -EEXIST);
-        return 0;
-      }
-    } else {
-      snapid_t next_snap = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
-      dn->first = std::max(dn->first, next_snap);
-    }
-    return dn;
-  }
-
-  // make sure dir is complete
-  if (!dir->is_complete() && (!dir->has_bloom() || dir->is_in_bloom(dname))) {
-    dout(7) << " incomplete dir contents for " << *dir << ", fetching" << dendl;
-    dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
-    return 0;
-  }
-  
-  // create
-  dn = dir->add_null_dentry(dname, mdcache->get_global_snaprealm()->get_newest_seq() + 1);
-  dn->mark_new();
-  dout(10) << "prepare_null_dentry added " << *dn << dendl;
-  return dn;
 }
 
 CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
@@ -3375,43 +3291,6 @@ private:
   MDRequestRef mdr;
 };
 
-CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath)
-{
-  // figure parent dir vs dname
-  if (refpath.depth() == 0) {
-    dout(7) << "can't do that to root" << dendl;
-    respond_to_request(mdr, -EINVAL);
-    return 0;
-  }
-  string dname = refpath.last_dentry();
-  refpath.pop_dentry();
-  
-  dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << dendl;
-
-  // traverse to parent dir
-  CInode *diri;
-  CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, refpath, &trace, &diri, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return 0; // delayed
-  if (r < 0) {
-    if (r == -ESTALE) {
-      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
-      return 0;
-    }
-    respond_to_request(mdr, r);
-    return 0;
-  }
-
-  // is it an auth dir?
-  CDir *dir = validate_dentry_dir(mdr, diri, dname);
-  if (!dir)
-    return 0; // forwarded or waiting for freeze
-
-  dout(10) << "traverse_to_auth_dir " << *dir << dendl;
-  return dir;
-}
-
 /* If this returns null, the request has been handled
  * as appropriate: forwarded on, or the client's been replied to */
 CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
@@ -3428,11 +3307,17 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
   if (mdr->done_locking)
     return mdr->in[n];
 
+  if (!no_want_auth && refpath.is_last_snap())
+    want_auth = true;
+
   // traverse
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
+  int flags = 0;
+  if (want_auth)
+    flags |= MDS_TRAVERSE_WANT_AUTH;
+  int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[n], &mdr->in[n]);
   if (r > 0)
-    return NULL; // delayed
+    return nullptr; // delayed
   if (r < 0) {  // error
     if (r == -ENOENT && n == 0 && !mdr->dn[n].empty()) {
       if (!no_lookup) {
@@ -3452,22 +3337,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
   CInode *ref = mdr->in[n];
   dout(10) << "ref is " << *ref << dendl;
 
-  // fw to inode auth?
-  if (mdr->snapid != CEPH_NOSNAP && !no_want_auth)
-    want_auth = true;
-
   if (want_auth) {
-    if (ref->is_ambiguous_auth()) {
-      dout(10) << "waiting for single auth on " << *ref << dendl;
-      ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-      return 0;
-    }
-    if (!ref->is_auth()) {
-      dout(10) << "fw to auth for " << *ref << dendl;
-      mdcache->request_forward(mdr, ref->authority().first);
-      return 0;
-    }
-
     // auth_pin?
     //   do NOT proceed if freezing, as cap release may defer in that case, and
     //   we could deadlock when we try to lock @ref.
@@ -3488,7 +3358,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
        */
       mds->locker->drop_locks(mdr.get(), NULL);
       mdr->drop_local_auth_pins();
-      if (!mdr->remote_auth_pins.empty())
+      if (mdr->is_any_remote_auth_pin())
 	mds->locker->notify_freeze_waiter(ref);
       return 0;
     }
@@ -3517,68 +3387,65 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
  */
 CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 					  MutationImpl::LockOpVec& lov,
-					  bool okexist, bool mustexist, bool alwaysxlock,
+					  bool okexist, bool alwaysxlock,
 					  file_layout_t **layout)
 {
   const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
 
   dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
-
-  client_t client = mdr->get_client();
-
   if (mdr->done_locking)
     return mdr->dn[n].back();
 
-  CDir *dir = traverse_to_auth_dir(mdr, mdr->dn[n], refpath);
-  if (!dir) return 0;
+  CF_MDS_MDRContextFactory cf(mdcache, mdr);
+  int flags = MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_WANT_AUTH;
+  int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[n]);
+  if (r > 0)
+    return nullptr; // delayed
+  if (r < 0) {
+    if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      return nullptr;
+    }
+    respond_to_request(mdr, r);
+    return nullptr;
+  }
 
+  CDentry *dn = mdr->dn[0].back();
+  CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
+
   if (!mdr->reqid.name.is_mds()) {
     if (diri->is_system() && !diri->is_root()) {
       respond_to_request(mdr, -EROFS);
       return 0;
     }
   }
+
   if (!diri->is_base() && diri->get_projected_parent_dir()->inode->is_stray()) {
     respond_to_request(mdr, -ENOENT);
     return 0;
   }
 
-  // make a null dentry?
-  std::string_view dname = refpath.last_dentry();
-  CDentry *dn;
-  if (mustexist) {
-    dn = dir->lookup(dname);
-
-    // make sure dir is complete
-    if (!dn && !dir->is_complete() &&
-        (!dir->has_bloom() || dir->is_in_bloom(dname))) {
-      dout(7) << " incomplete dir contents for " << *dir << ", fetching" << dendl;
-      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
-      return 0;
-    }
-
-    // readable?
-    if (dn && !dn->lock.can_read(client) && dn->lock.get_xlock_by() != mdr) {
-      dout(10) << "waiting on xlocked dentry " << *dn << dendl;
-      dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
-      return 0;
-    }
-      
-    // exists?
-    if (!dn || dn->get_linkage(client, mdr)->is_null()) {
-      dout(7) << "dentry " << dname << " dne in " << *dir << dendl;
-      respond_to_request(mdr, -ENOENT);
-      return 0;
-    }    
-  } else {
-    dn = prepare_null_dentry(mdr, dir, dname, okexist);
-    if (!dn) 
-      return 0;
+  client_t client = mdr->get_client();
+  if (dn && !dn->lock.can_read(client) && dn->lock.get_xlock_by() != mdr) {
+    dout(10) << "waiting on xlocked dentry " << *dn << dendl;
+    dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
+    return 0;
   }
 
-  mdr->dn[n].push_back(dn);
   CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
+  if (!dnl->is_null()) {
+    // name already exists
+    dout(10) << "dentry " << dn->get_name() << " exists in " << *dir << dendl;
+    if (!okexist) {
+      respond_to_request(mdr, -EEXIST);
+      return 0;
+    }
+  } else {
+    snapid_t next_snap = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+    dn->first = std::max(dn->first, next_snap);
+  }
   mdr->in[n] = dnl->get_inode();
 
   // -- lock --
@@ -3615,33 +3482,34 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
 {
   CDir *dir = diri->get_dirfrag(fg);
 
-  // not open and inode not mine?
-  if (!dir && !diri->is_auth()) {
-    mds_rank_t inauth = diri->authority().first;
-    dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds." << inauth << dendl;
-    mdcache->request_forward(mdr, inauth);
-    return 0;
-  }
+  if (dir) {
+    // am i auth for the dirfrag?
+    if (!dir->is_auth()) {
+      mds_rank_t auth = dir->authority().first;
+      dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
+	<< ", fw to mds." << auth << dendl;
+      mdcache->request_forward(mdr, auth);
+      return nullptr;
+    }
+  } else {
+    // not open and inode not mine?
+    if (!diri->is_auth()) {
+      mds_rank_t inauth = diri->authority().first;
+      dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds." << inauth << dendl;
+      mdcache->request_forward(mdr, inauth);
+      return nullptr;
+    }
 
-  // not open and inode frozen?
-  if (!dir && diri->is_frozen()) {
-    dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
-    ceph_assert(diri->get_parent_dir());
-    diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-    return 0;
-  }
+    // not open and inode frozen?
+    if (diri->is_frozen()) {
+      dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
+      ceph_assert(diri->get_parent_dir());
+      diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+      return nullptr;
+    }
 
-  // invent?
-  if (!dir) 
+    // invent?
     dir = diri->get_or_open_dirfrag(mdcache, fg);
- 
-  // am i auth for the dirfrag?
-  if (!dir->is_auth()) {
-    mds_rank_t auth = dir->authority().first;
-    dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
-	    << ", fw to mds." << auth << dendl;
-    mdcache->request_forward(mdr, auth);
-    return 0;
   }
 
   return dir;
@@ -4200,8 +4068,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   if (!excl) {
     CF_MDS_MDRContextFactory cf(mdcache, mdr);
-    int r = mdcache->path_traverse(mdr, cf, req->get_filepath(),
-				   &mdr->dn[0], NULL, MDS_TRAVERSE_FORWARD);
+    int r = mdcache->path_traverse(mdr, cf, req->get_filepath(), 0, &mdr->dn[0]);
     if (r > 0) return;
     if (r == 0) {
       // it existed.
@@ -4224,7 +4091,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   MutationImpl::LockOpVec lov;
   file_layout_t *dir_layout = nullptr;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov,
-                                         !excl, false, false, &dir_layout);
+                                         !excl, false, &dir_layout);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
@@ -5844,7 +5711,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   client_t client = mdr->get_client();
   MutationImpl::LockOpVec lov;
   file_layout_t *dir_layout = nullptr;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false, false,
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false,
 					 &dir_layout);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
@@ -5944,7 +5811,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   }
 
   MutationImpl::LockOpVec lov;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false, false);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
@@ -6031,7 +5898,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false, false);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
@@ -6094,7 +5961,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
 
   MutationImpl::LockOpVec lov;
 
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false, false);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false);
   if (!dn) return;
   CInode *targeti = rdlock_path_pin_ref(mdr, 1, lov, false);
   if (!targeti) return;
@@ -6750,7 +6617,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   vector<CDentry*> trace;
   CInode *in;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, refpath, &trace, &in, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, cf, refpath, 0, &trace, &in);
   if (r > 0) return;
   if (r < 0) {
     if (r == -ESTALE) {
@@ -7138,7 +7005,9 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   dout(10) << " src " << srcpath << dendl;
   CInode *in;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, srcpath, &trace, &in, MDS_TRAVERSE_DISCOVERXLOCK);
+  int r = mdcache->path_traverse(mdr, cf, srcpath,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+				 &trace, &in);
   if (r > 0) return;
   if (r == -ESTALE) {
     mdcache->find_ino_peers(srcpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
@@ -7522,7 +7391,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   MutationImpl::LockOpVec lov;
 
-  CDentry *destdn = rdlock_path_xlock_dentry(mdr, 0, lov, true, false, true);
+  CDentry *destdn = rdlock_path_xlock_dentry(mdr, 0, lov, true, true);
   if (!destdn) return;
   dout(10) << " destdn " << *destdn << dendl;
   if (mdr->snapid != CEPH_NOSNAP) {
@@ -7534,7 +7403,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   ceph_assert(destdir->is_auth());
 
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, srcpath, &srctrace, NULL, MDS_TRAVERSE_DISCOVER);
+  int r = mdcache->path_traverse(mdr, cf, srcpath, MDS_TRAVERSE_DISCOVER, &srctrace);
   if (r > 0)
     return; // delayed
   if (r < 0) {
@@ -8692,7 +8561,9 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, destpath, &trace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
+  int r = mdcache->path_traverse(mdr, cf, destpath,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED | MDS_TRAVERSE_WANT_DENTRY,
+				 &trace);
   if (r > 0) return;
   if (r == -ESTALE) {
     mdcache->find_ino_peers(destpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
@@ -8710,13 +8581,12 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   CInode *srci = nullptr;
-  r = mdcache->path_traverse(mdr, cf, srcpath, &trace, &srci, MDS_TRAVERSE_DISCOVERXLOCK);
+  r = mdcache->path_traverse(mdr, cf, srcpath,
+			     MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+			     &trace, &srci);
   if (r > 0) return;
   ceph_assert(r == 0);
 
-  // srcpath must not point to a null dentry
-  ceph_assert(srci != nullptr);
-      
   CDentry *srcdn = trace.back();
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   dout(10) << " srcdn " << *srcdn << dendl;

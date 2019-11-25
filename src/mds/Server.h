@@ -208,9 +208,6 @@ public:
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
-  CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_view dname);
-  CDir *traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath);
-  CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_view dname, bool okexist=false);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    file_layout_t *layout=NULL);
@@ -223,7 +220,7 @@ public:
 			      bool no_lookup=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 				    MutationImpl::LockOpVec& lov,
-				    bool okexist, bool mustexist, bool alwaysxlock,
+				    bool okexist, bool alwaysxlock,
 				    file_layout_t **layout=nullptr);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
