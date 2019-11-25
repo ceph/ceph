@@ -43,6 +43,7 @@ export class PrometheusRule {
   alerts: PrometheusAlert[]; // Shows only active alerts
   health: string;
   type: string;
+  group?: string; // Added field for flattened list
 }
 
 export class AlertmanagerAlert extends CommonAlertmanagerAlert {

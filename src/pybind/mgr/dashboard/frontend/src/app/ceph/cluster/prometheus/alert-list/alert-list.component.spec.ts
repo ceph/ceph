@@ -10,9 +10,12 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../../testing/unit-test-helper';
+import { CoreModule } from '../../../../core/core.module';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../../shared/shared.module';
-import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
+import { CephModule } from '../../../ceph.module';
+import { DashboardModule } from '../../../dashboard/dashboard.module';
+import { ClusterModule } from '../../cluster.module';
 import { AlertListComponent } from './alert-list.component';
 
 describe('AlertListComponent', () => {
@@ -25,9 +28,13 @@ describe('AlertListComponent', () => {
       TabsModule.forRoot(),
       RouterTestingModule,
       ToastrModule.forRoot(),
-      SharedModule
+      SharedModule,
+      ClusterModule,
+      DashboardModule,
+      CephModule,
+      CoreModule
     ],
-    declarations: [AlertListComponent, PrometheusTabsComponent],
+    declarations: [],
     providers: [i18nProviders]
   });
 

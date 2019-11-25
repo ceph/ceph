@@ -47,7 +47,7 @@ describe('PrometheusAlertService', () => {
         getAlerts: () => ({ subscribe: (_fn, err) => err(resp) }),
         disableAlertmanagerConfig: () => (disabledSetting = true)
       } as object) as PrometheusService);
-      service.refresh();
+      service.getAlerts();
       expect(disabledSetting).toBe(expectation);
     };
 
@@ -62,6 +62,40 @@ describe('PrometheusAlertService', () => {
     it('does not disable on 400 error which is thrown if the external api receives unexpected data', () => {
       expectDisabling(400, false);
     });
+  });
+
+  it('should flatten the response of getRules()', () => {
+    service = TestBed.get(PrometheusAlertService);
+    prometheusService = TestBed.get(PrometheusService);
+
+    spyOn(service['prometheusService'], 'ifPrometheusConfigured').and.callFake((fn) => fn());
+    spyOn(prometheusService, 'getRules').and.returnValue(
+      of({
+        groups: [
+          {
+            name: 'group1',
+            rules: [{ name: 'nearly_full', type: 'alerting' }]
+          },
+          {
+            name: 'test',
+            rules: [
+              { name: 'load_0', type: 'alerting' },
+              { name: 'load_1', type: 'alerting' },
+              { name: 'load_2', type: 'alerting' }
+            ]
+          }
+        ]
+      })
+    );
+
+    service.getRules();
+
+    expect(service.rules as any).toEqual([
+      { name: 'nearly_full', type: 'alerting', group: 'group1' },
+      { name: 'load_0', type: 'alerting', group: 'test' },
+      { name: 'load_1', type: 'alerting', group: 'test' },
+      { name: 'load_2', type: 'alerting', group: 'test' }
+    ]);
   });
 
   describe('refresh', () => {

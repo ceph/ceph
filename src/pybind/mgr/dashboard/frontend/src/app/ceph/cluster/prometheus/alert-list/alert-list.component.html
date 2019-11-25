@@ -1,5 +1,11 @@
 <cd-prometheus-tabs></cd-prometheus-tabs>
 
+<h3 class="cd-header"
+    i18n>All Alerts</h3>
+<cd-rules-list [data]="prometheusAlertService.rules"></cd-rules-list>
+
+<h3 class="cd-header"
+    i18n>Active Alerts</h3>
 <cd-table [data]="prometheusAlertService.alerts"
           [columns]="columns"
           identifier="fingerprint"
