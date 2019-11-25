@@ -18,29 +18,32 @@ from teuthology.orchestra.connection import split_user
 
 log = logging.getLogger(__name__)
 
-
 @contextlib.contextmanager
 def download(ctx, config):
     """
     Download the s3 tests from the git builder.
     Remove downloaded s3 file upon exit.
-    
+
     The context passed in should be identical to the context
     passed in to the main task.
     """
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
-    for (client, cconf) in config.items():
-        branch = cconf.get('force-branch', None)
-        if not branch:
-            branch = cconf.get('branch', 'master')
-        sha1 = cconf.get('sha1')
+    for (client, client_config) in config.items():
+        s3tests_branch = client_config.get('force-branch', None)
+        if not s3tests_branch:
+            raise ValueError(
+                "Could not determine what branch to use for s3-tests. Please add 'force-branch: {s3-tests branch name}' to the .yaml config for this s3readwrite task.")
+
+        log.info("Using branch '%s' for s3tests", s3tests_branch)
+        sha1 = client_config.get('sha1')
+        git_remote = client_config.get('git_remote', teuth_config.ceph_git_base_url)
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                '-b', branch,
-                teuth_config.ceph_git_base_url + 's3-tests.git',
+                '-b', s3tests_branch,
+                git_remote + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
@@ -242,6 +245,7 @@ def task(ctx, config):
         - ceph:
         - rgw:
         - s3readwrite:
+            force-branch: ceph-nautilus
 
     To restrict testing to particular clients::
 
@@ -257,6 +261,7 @@ def task(ctx, config):
         - rgw: [client.1]
         - s3readwrite:
             client.0:
+              force-branch: ceph-nautilus
               rgw_server: client.1
 
     To pass extra test arguments
@@ -266,6 +271,7 @@ def task(ctx, config):
         - rgw: [client.0]
         - s3readwrite:
             client.0:
+              force-branch: ceph-nautilus
               readwrite:
                 bucket: mybucket
                 readers: 10
@@ -285,6 +291,7 @@ def task(ctx, config):
         - rgw: [client.0]
         - s3readwrite:
             client.0:
+              force-branch: ceph-nautilus
               s3:
                 user_id: myuserid
                 display_name: myname
