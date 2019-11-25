@@ -572,11 +572,12 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         Notes:
           - skip async: manager reads from cache.
-
-        TODO:
-          - InventoryNode probably needs to be able to report labels
         """
-        nodes = [orchestrator.InventoryNode(host_name, inventory.Devices([])) for host_name in self.inventory_cache]
+        nodes = [
+            orchestrator.InventoryNode(h,
+                                       inventory.Devices([]),
+                                       i.get('labels', []))
+            for h, i in self.inventory.items()]
         return orchestrator.TrivialReadCompletion(nodes)
 
     def add_host_label(self, host, label):
