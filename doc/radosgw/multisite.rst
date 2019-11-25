@@ -569,7 +569,7 @@ disaster recovery.
    ::
 
        # radosgw-admin zone modify --rgw-zone={zone-name} --master --default \
-                                   --read-only=False
+                                   --read-only=false
 
 2. Update the period to make the changes take effect.
 
