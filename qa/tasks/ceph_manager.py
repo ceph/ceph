@@ -40,7 +40,7 @@ def shell(ctx, cluster_name, remote, args, **kwargs):
         args=[
             'sudo',
             '{}/ceph-daemon'.format(testdir),
-            '--image', ctx.image,
+            '--image', ctx.ceph[cluster_name].image,
             'shell',
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
             '-k', '{}/{}.keyring'.format(testdir, cluster_name),
