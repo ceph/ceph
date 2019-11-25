@@ -520,6 +520,28 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _get_user(self):
         return 0, self.ssh_user, ''
 
+    @orchestrator._cli_read_command(
+        'ssh check-host',
+        'name=host,type=CephString',
+        'Check whether we can access and manage a remote host')
+    def _check_host(self, host):
+        out, err, code = self._run_ceph_daemon(host, '', 'check-host', [],
+                                               error_ok=True, no_fsid=True)
+        if code:
+            return 1, '', err
+        return 0, 'host ok', err
+
+    @orchestrator._cli_write_command(
+        'ssh prepare-host',
+        'name=host,type=CephString',
+        'Try to prepare a host for remote management')
+    def _prepare_host(self, host):
+        out, err, code = self._run_ceph_daemon(host, '', 'prepare-host', [],
+                                               error_ok=True, no_fsid=True)
+        if code:
+            return 1, '', err
+        return 0, 'host ok', err
+
     def _get_connection(self, host):
         """
         Setup a connection for running commands on remote host.
