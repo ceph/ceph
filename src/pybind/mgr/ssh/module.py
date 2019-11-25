@@ -192,8 +192,14 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
 
         self._reconfig_ssh()
 
-        # the keys in inventory_cache are authoritative.
-        #   You must not call remove_outdated()
+        # load inventory
+        i = self.get_store('inventory')
+        if i:
+            self.inventory = json.loads(i)
+        else:
+            self.inventory = dict()
+        self.log.debug('Loaded inventory %s' % self.inventory)
+
         # The values are cached by instance.
         # cache is invalidated by
         # 1. timeout
@@ -205,13 +211,19 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
             self, self._STORE_HOST_PREFIX + '.services')
 
         # ensure the host lists are in sync
-        for h in set(self.inventory_cache.keys()) | set(self.service_cache.keys()):
+        for h in self.inventory.keys():
             if h not in self.inventory_cache:
                 self.log.debug('adding inventory item for %s' % h)
                 self.inventory_cache[h] = orchestrator.OutdatableData()
             if h not in self.service_cache:
                 self.log.debug('adding service item for %s' % h)
                 self.service_cache[h] = orchestrator.OutdatableData()
+        for h in self.inventory_cache:
+            if h not in self.inventory:
+                del self.inventory_cache[h]
+        for h in self.service_cache:
+            if h not in self.inventory:
+                del self.service_cache[h]
 
     def config_notify(self):
         """
@@ -249,6 +261,9 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
                 self.log('name %s exists, trying again', name)
                 continue
             return name
+
+    def _save_inventory(self):
+        self.set_store('inventory', json.dumps(self.inventory))
 
     def _reconfig_ssh(self):
         temp_files = []
@@ -525,6 +540,8 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         @log_exceptions
         def run(host):
+            self.inventory[host] = {}
+            self._save_inventory()
             self.inventory_cache[host] = orchestrator.OutdatableData()
             self.service_cache[host] = orchestrator.OutdatableData()
             return "Added host '{}'".format(host)
@@ -540,6 +557,8 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         @log_exceptions
         def run(host):
+            del self.inventory[host]
+            self._save_inventory()
             del self.inventory_cache[host]
             del self.service_cache[host]
             return "Removed host '{}'".format(host)
