@@ -90,10 +90,30 @@ void ElectionLogic::clear_live_election_state()
 {
   leader_acked = -1;
   electing_me = false;
-  delete stable_peer_tracker;
-  stable_peer_tracker = new ConnectionTracker(*peer_tracker);
+  reset_stable_tracker();
   delete leader_peer_tracker;
   leader_peer_tracker = NULL;
+}
+
+void ElectionLogic::reset_stable_tracker()
+{
+  delete stable_peer_tracker;
+  stable_peer_tracker = new ConnectionTracker(*peer_tracker);
+}
+
+void ElectionLogic::connectivity_bump_epoch_in_election(epoch_t mepoch)
+{
+  ceph_assert(mepoch > epoch);
+  bump_epoch(mepoch);
+  reset_stable_tracker();
+  double lscore, my_score;
+  my_score = connectivity_election_score(elector->get_my_rank());
+  lscore = connectivity_election_score(leader_acked);
+  if (my_score > lscore) {
+    leader_acked = -1;
+    delete leader_peer_tracker;
+    leader_peer_tracker = NULL;
+  }
 }
 
 void ElectionLogic::start()
@@ -115,6 +135,7 @@ void ElectionLogic::start()
   }
   acked_me.insert(elector->get_my_rank());
   clear_live_election_state();
+  reset_stable_tracker();
   electing_me = true;
 
   bufferlist bl;
@@ -325,7 +346,7 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
     }
   }
   if (mepoch > epoch) {
-    bump_epoch(mepoch);
+    connectivity_bump_epoch_in_election(mepoch);
   } else if (mepoch < epoch) {
     // got an "old" propose,
     if (epoch % 2 == 0 &&    // in a non-election cycle
@@ -380,8 +401,8 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
     }
   } else {
     // they would win over me
-    if (their_win) {
-      if (leader_acked >= 0) {
+    if (their_win || from == leader_acked) {
+      if (leader_acked >= 0 && from != leader_acked) {
 	// we have to make sure our acked leader will ALSO defer to them, or else
 	// we can't, to maintain guarantees!
 	double leader_from_score;
@@ -399,12 +420,23 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
 	  defer(from);
 	  delete leader_peer_tracker;
 	  leader_peer_tracker = ct;
-	} else { // we have to ignore them this round even though they should win
-	  /*	  double cur_leader_score, cur_from_score;
+	} else { // we can't defer to them *this* round even though they should win...
+	  double cur_leader_score, cur_from_score;
 	  int cur_leader_live, cur_from_live;
-	  peer_tracker->get_total_connection_score(leader_acked */
-	  ldout(cct, 5) << "not deferring despite better score due to leader "
-			<< leader_acked << " score disagreement!" << dendl;
+	  peer_tracker->get_total_connection_score(leader_acked, &cur_leader_score, &cur_leader_live);
+	  peer_tracker->get_total_connection_score(from, &cur_from_score, &cur_from_live);
+	  if ((from < leader_acked && cur_from_score >= cur_leader_score) ||
+	      (cur_from_score > cur_leader_score)) {
+	    ldout(cct, 5) << "Bumping epoch and starting new election; acked "
+			  << leader_acked << " should defer to " << from
+			  << " but there is score disagreement!" << dendl;
+	    bump_epoch(epoch+1);
+	    start();
+	  } else {
+	    ldout(cct, 5) << "no, we already acked " << leader_acked
+			  << " and it won't defer to " << from
+			  << " despite better round scores" << dendl;
+	  }
 	}
       } else {
 	defer(from);
