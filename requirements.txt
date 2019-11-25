@@ -38,8 +38,8 @@ first==2.0.1              # via pip-tools
 funcsigs==1.0.2           # via debtcollector, oslo.utils, pytest
 functools32==3.2.3.post2  # via jsonschema
 futures==3.2.0            # via s3transfer
-gevent==1.2.1
-greenlet==0.4.12          # via gevent
+gevent==1.4.0
+greenlet==0.4.15          # via gevent
 httplib2==0.10.3
 idna==2.5                 # via requests
 ipaddress==1.0.18         # via cryptography
