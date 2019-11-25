@@ -92,7 +92,7 @@ python-neutronclient==6.2.0
 python-novaclient==8.0.0
 python-openstackclient==3.9.0
 pytz==2017.2              # via babel, oslo.serialization, oslo.utils
-pyyaml==5.1
+PyYAML==5.1.2
 raven==6.0.0
 requests==2.22.0
 requestsexceptions==1.2.0  # via os-client-config
