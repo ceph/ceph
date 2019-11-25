@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
 import {
@@ -48,8 +49,28 @@ export class PrometheusService {
     return this.http.get<AlertmanagerSilence[]>(`${this.baseURL}/silences`, { params });
   }
 
-  getRules(params = {}): Observable<{ groups: PrometheusRuleGroup[] }> {
-    return this.http.get<{ groups: PrometheusRuleGroup[] }>(`${this.baseURL}/rules`, { params });
+  getRules(
+    type: 'all' | 'alerting' | 'rewrites' = 'all'
+  ): Observable<{ groups: PrometheusRuleGroup[] }> {
+    let rules = this.http.get<{ groups: PrometheusRuleGroup[] }>(`${this.baseURL}/rules`);
+    const filterByType = (_type: 'alerting' | 'rewrites') => {
+      return rules.pipe(
+        map((_rules) => {
+          _rules.groups = _rules.groups.map((group) => {
+            group.rules = group.rules.filter((rule) => rule.type === _type);
+            return group;
+          });
+          return _rules;
+        })
+      );
+    };
+    switch (type) {
+      case 'alerting':
+      case 'rewrites':
+        rules = filterByType(type);
+        break;
+    }
+    return rules;
   }
 
   setSilence(silence: AlertmanagerSilence) {

@@ -44,6 +44,7 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
 import { OsdSmartListComponent } from './osd/osd-smart-list/osd-smart-list.component';
 import { AlertListComponent } from './prometheus/alert-list/alert-list.component';
 import { PrometheusTabsComponent } from './prometheus/prometheus-tabs/prometheus-tabs.component';
+import { RulesListComponent } from './prometheus/rules-list/rules-list.component';
 import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
 import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
@@ -114,7 +115,9 @@ import { ServicesComponent } from './services/services.component';
     OsdDevicesSelectionModalComponent,
     InventoryDevicesComponent,
     OsdDevicesSelectionGroupsComponent,
-    OsdCreationPreviewModalComponent
+    OsdCreationPreviewModalComponent,
+    RulesListComponent,
+    AlertListComponent
   ]
 })
 export class ClusterModule {}
