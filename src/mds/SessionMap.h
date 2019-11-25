@@ -173,18 +173,13 @@ public:
   }
 
   inodeno_t take_ino(inodeno_t ino = 0) {
-    ceph_assert(!info.prealloc_inos.empty());
-
     if (ino) {
-      if (info.prealloc_inos.contains(ino)) {
-	info.prealloc_inos.erase(ino);
-	if (delegated_inos.contains(ino))
-	  delegated_inos.erase(ino);
-      } else {
-	ino = 0;
-      }
-    }
-    if (!ino) {
+      if (!info.prealloc_inos.contains(ino))
+	return 0;
+      info.prealloc_inos.erase(ino);
+      if (delegated_inos.contains(ino))
+	delegated_inos.erase(ino);
+    } else {
       /* Grab first prealloc_ino that isn't delegated */
       for (const auto& [start, len] : info.prealloc_inos) {
 	for (auto i = start ; i < start + len ; i += 1) {
@@ -201,8 +196,8 @@ public:
 	  break;
       }
     }
-    ceph_assert(ino);
-    info.used_inos.insert(ino, 1);
+    if (ino)
+      info.used_inos.insert(ino, 1);
     return ino;
   }
   void delegate_inos(int want, interval_set<inodeno_t>& newinos) {

@@ -3165,11 +3165,8 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   bool allow_prealloc_inos = mdr->session->is_open();
 
   // assign ino
-  if (allow_prealloc_inos && mdr->session->get_num_prealloc_inos()) {
-    mdr->used_prealloc_ino = 
-      in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
+  if (allow_prealloc_inos && (mdr->used_prealloc_ino = in->inode.ino = mdr->session->take_ino(useino))) {
     mds->sessionmap.mark_projected(mdr->session);
-
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
 	     << " (" << mdr->session->info.prealloc_inos
 	     << ", " << mdr->session->info.prealloc_inos.size() << " left)"
