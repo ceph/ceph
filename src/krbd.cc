@@ -43,9 +43,11 @@
 #include "mon/MonMap.h"
 
 #include <blkid/blkid.h>
+#include <boost/algorithm/string/predicate.hpp>
 #include <libudev.h>
 
 static const int UDEV_BUF_SIZE = 1 << 20;  /* doubled to 2M (SO_RCVBUFFORCE) */
+static const char DEVNODE_PREFIX[] = "/dev/rbd";
 
 #define DEFINE_UDEV_UPTR(what)                           \
 struct udev_##what##_deleter {                           \
@@ -119,7 +121,9 @@ static udev_device_uptr dev_from_list_entry(udev *udev, udev_list_entry *l)
 
 static string get_kernel_rbd_name(const char *id)
 {
-  return string("/dev/rbd") + id;
+  std::string devnode = DEVNODE_PREFIX;
+  devnode += id;
+  return devnode;
 }
 
 static int sysfs_write_rbd(const char *which, const string& buf)
@@ -325,6 +329,10 @@ public:
    * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
    * block device to show up.  This is necessary because rbd devices
    * and block devices aren't linked together in our sysfs layout.
+   *
+   * Note that our "block" event can come before the "rbd" event, so
+   * all potential "block" events are gathered in m_block_devs before
+   * m_bus_dev is caught.
    */
   bool operator()(udev_device_uptr dev) {
     if (strcmp(udev_device_get_action(dev.get()), "add")) {
@@ -335,35 +343,30 @@ public:
         auto spec = spec_from_dev(dev.get());
         if (spec && *spec == *m_spec) {
           m_bus_dev = std::move(dev);
-          goto check;
+          m_devnode = get_kernel_rbd_name(udev_device_get_sysname(m_bus_dev.get()));
         }
       }
     } else if (!strcmp(udev_device_get_subsystem(dev.get()), "block")) {
-      m_block_devs.push_back(std::move(dev));
-      goto check;
+      if (boost::starts_with(udev_device_get_devnode(dev.get()),
+                             DEVNODE_PREFIX)) {
+        m_block_devs.push_back(std::move(dev));
+      }
     }
 
-    return false;
-
-check:
     if (m_bus_dev && !m_block_devs.empty()) {
-      const char *major = udev_device_get_sysattr_value(m_bus_dev.get(), "major");
-      const char *minor = udev_device_get_sysattr_value(m_bus_dev.get(), "minor");
-      ceph_assert(!minor ^ have_minor_attr());
-
       for (const auto& p : m_block_devs) {
-        const char *this_major = udev_device_get_property_value(p.get(), "MAJOR");
-        const char *this_minor = udev_device_get_property_value(p.get(), "MINOR");
-
-        if (strcmp(this_major, major) == 0 &&
-            (!minor || strcmp(this_minor, minor) == 0)) {
-          string name = get_kernel_rbd_name(udev_device_get_sysname(m_bus_dev.get()));
-
-          ceph_assert(strcmp(udev_device_get_devnode(p.get()), name.c_str()) == 0);
-          *m_pdevnode = name;
+        if (udev_device_get_devnode(p.get()) == m_devnode) {
+          ceph_assert(!strcmp(
+              udev_device_get_sysattr_value(m_bus_dev.get(), "major"),
+              udev_device_get_property_value(p.get(), "MAJOR")));
+          ceph_assert(!have_minor_attr() || !strcmp(
+              udev_device_get_sysattr_value(m_bus_dev.get(), "minor"),
+              udev_device_get_property_value(p.get(), "MINOR")));
+          *m_pdevnode = std::move(m_devnode);
           return true;
         }
       }
+      m_block_devs.clear();
     }
     return false;
   }
@@ -371,6 +374,7 @@ check:
 private:
   udev_device_uptr m_bus_dev;
   std::vector<udev_device_uptr> m_block_devs;
+  std::string m_devnode;
   const krbd_spec *m_spec;
   std::string *m_pdevnode;
 };
