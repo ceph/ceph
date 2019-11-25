@@ -17,9 +17,17 @@
         <source>Hosts</source>
         <target>Stroje</target>
       </trans-unit>
+      <trans-unit id="2cc3ecb16e348fcf2f2fbfd2f997d4d22f37475b" datatype="html">
+        <source>Inventory</source>
+        <target>Inventory</target>
+      </trans-unit>
       <trans-unit id="624f596cc3320f5e0a0d7c7346c364e5af9bdd8c" datatype="html">
         <source>Monitors</source>
         <target>Monitory</target>
+      </trans-unit>
+      <trans-unit id="419d940613972cc3fae9c8ea0a4306dbf80616e5" datatype="html">
+        <source>Services</source>
+        <target>Služby</target>
       </trans-unit>
       <trans-unit id="1a9183778f2c6473d7ccb080f651caa01faaf70c" datatype="html">
         <source>OSDs</source>
@@ -47,7 +55,7 @@
       </trans-unit>
       <trans-unit id="aa0c44aa1e5727061baa91e954f77e2f5f9a37c9" datatype="html">
         <source>Silences</source>
-        <target>Silences</target>
+        <target>Ticha</target>
       </trans-unit>
       <trans-unit id="92899fa68e8ca108912163ff58edc8540e453787" datatype="html">
         <source>Pools</source>
@@ -139,9 +147,25 @@
   Zkontrolujte zdraví klastru.
         </target>
       </trans-unit>
-      <trans-unit id="cda31dbd724cf5f4fa7a4274d9120651490c8a8c" datatype="html">
-        <source>Back</source>
-        <target>Zpět</target>
+      <trans-unit id="7e52e9143145e1db5146258de81eae018a407b31" datatype="html">
+        <source>Clear notifications</source>
+        <target>Vyčistit oznámení</target>
+      </trans-unit>
+      <trans-unit id="b0b07bb6b7ff21ede439dd04eaf8872d1ecb84d8" datatype="html">
+        <source>Remove notification</source>
+        <target>Odebrat oznámení</target>
+      </trans-unit>
+      <trans-unit id="e17a1d75189da843f541f7764f188f2b19a97df2" datatype="html">
+        <source>Duration:</source>
+        <target>Trvání:</target>
+      </trans-unit>
+      <trans-unit id="0d4b37c6675c5b436a54c43d6716eec835e1aa7f" datatype="html">
+        <source>There are no notifications.</source>
+        <target>Nejsou zde žádná oznámení.</target>
+      </trans-unit>
+      <trans-unit id="0a23e992f6c6e169a38b2b7338b4e5e803b52e0d" datatype="html">
+        <source>Tasks and Notifications</source>
+        <target>Úlohy a oznámení</target>
       </trans-unit>
       <trans-unit id="3fb5709e10166cbc85970cbff103db227dbeb813" datatype="html">
         <source>Select a Language</source>
@@ -189,13 +213,13 @@
       </trans-unit>
       <trans-unit id="6c947210e2d162b6225083d18820ab602f58cd2d" datatype="html">
         <source>Remove the custom configuration value. The default configuration will be inherited and used instead.</source>
-        <target>Remove the custom configuration value. The default configuration will be inherited and used instead.</target>
+        <target>Odebrat uživatelsky určenou hodnotu nastavení. Namísto toho bude převzato a použito výchozí nastavení.</target>
       </trans-unit>
       <trans-unit id="454ee9cb60b00446a8fb147fd2cc5eb836320586" datatype="html">
         <source>The entered value is too high! It must not be greater than 
           <x id="INTERPOLATION" equiv-text="{{ option.maxValue }}"/>.
         </source>
-        <target>The entered value is too high! It must not be greater than 
+        <target>Zadaná hodnota je příliš vysoká! Nemůže být vyšší než 
           <x id="INTERPOLATION" equiv-text="{{ option.maxValue }}"/>.
         </target>
       </trans-unit>
@@ -203,9 +227,11 @@
         <source>The entered value is too low! It must not be lower than 
           <x id="INTERPOLATION" equiv-text="{{ option.minValue }}"/>.
         </source>
-        <target>The entered value is too low! It must not be lower than 
-          <x id="INTERPOLATION" equiv-text="{{ option.minValue }}"/>.
-        </target>
+        <target>Zadaná hodnota je příliš nízká! Nemůže být nižší než 1.</target>
+      </trans-unit>
+      <trans-unit id="cda31dbd724cf5f4fa7a4274d9120651490c8a8c" datatype="html">
+        <source>Back</source>
+        <target>Zpět</target>
       </trans-unit>
       <trans-unit id="012741ee52b3c050e4a977c37cc2334f7974f141" datatype="html">
         <source>Failed to load data.</source>
@@ -246,10 +272,6 @@
         <source>Daemon default</source>
         <target>Výchozí pro proces služby</target>
       </trans-unit>
-      <trans-unit id="419d940613972cc3fae9c8ea0a4306dbf80616e5" datatype="html">
-        <source>Services</source>
-        <target>Služby</target>
-      </trans-unit>
       <trans-unit id="809b0c848932a41318f77a2aace904ef429c13f4" datatype="html">
         <source>Values</source>
         <target>Hodnoty</target>
@@ -278,6 +300,84 @@
         <source>CRUSH map viewer</source>
         <target>prohlížeč CRUSH mapy</target>
       </trans-unit>
+      <trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
+        <source>Loading...</source>
+        <target>Načítání…</target>
+      </trans-unit>
+      <trans-unit id="formTitle" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </target>
+        <note>form title</note>
+      </trans-unit>
+      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
+        <source>Hostname</source>
+        <target>Název stroje</target>
+      </trans-unit>
+      <trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
+        <source>This field is required.</source>
+        <target>Tuto kolonku je třeba vyplnit.</target>
+      </trans-unit>
+      <trans-unit id="1b3f5e5291541678f7afa49d28fad5ca848a8061" datatype="html">
+        <source>The chosen hostname is already in use.</source>
+        <target>Zvolený název stroje už je používán.</target>
+      </trans-unit>
+      <trans-unit id="formActionButton" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </target>
+        <note>form action button</note>
+      </trans-unit>
+      <trans-unit id="6110699a3562eeb15371063c0cf7f6bfd88a0209" datatype="html">
+        <source>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ itemNames[0] }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>?
+        </source>
+        <target>Opravdu chcete 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ itemNames[0] }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>?
+        </target>
+      </trans-unit>
+      <trans-unit id="549859e511ba5af0ea03fcaa620c472f08038969" datatype="html">
+        <source>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected items?
+        </source>
+        <target>Opravdu chcete označené položky 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> ?
+        </target>
+      </trans-unit>
+      <trans-unit id="54839ebc827b73c9dc4e1df731c6d36a85036af7" datatype="html">
+        <source>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
+          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
+        </source>
+        <target>Opravdu chcete 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> označené 
+          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
+        </target>
+      </trans-unit>
+      <trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
+        <source>Yes, I am sure.</source>
+        <target>Ano, opravdu to chci.</target>
+      </trans-unit>
+      <trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
+        <source>Cancel</source>
+        <target>Storno</target>
+      </trans-unit>
       <trans-unit id="40661476cb24c89d8b06614998e31d5fbe84eeb6" datatype="html">
         <source>Hosts List</source>
         <target>Seznam strojů</target>
@@ -285,6 +385,22 @@
       <trans-unit id="5e7f4b1ca49e8d217bd0e12c6f7d6b6a2ade2c18" datatype="html">
         <source>Overall Performance</source>
         <target>Celková výkonnost</target>
+      </trans-unit>
+      <trans-unit id="6bc15dc1a621b6ff7378db7fd3ac10b2a2627c77" datatype="html">
+        <source>Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to
+  configure and enable the orchestrator functionality.
+        </source>
+        <target>Nahlédněte do dokumentace
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> ohledně toho, jak
+   nastavit a zapnout funkci orchestrace.
+        </target>
+      </trans-unit>
+      <trans-unit id="3e24569eca61d598c8b01defbbbb1fa8bd5222bc" datatype="html">
+        <source>Devices</source>
+        <target>Zařízení</target>
       </trans-unit>
       <trans-unit id="e6d57f36aa2bad303c8a8ee944b9bd7fae3c8c26" datatype="html">
         <source>No entries found</source>
@@ -337,10 +453,6 @@
       <trans-unit id="7aacd038b39cfd347107d01d1dc27f5cb3e0951c" datatype="html">
         <source>The entered value needs to be a valid IP address.</source>
         <target>Je třeba, aby zadaná hodnota byla platnou IP adresou.</target>
-      </trans-unit>
-      <trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
-        <source>This field is required.</source>
-        <target>Tuto kolonku je třeba vyplnit.</target>
       </trans-unit>
       <trans-unit id="f19106149f4b07a0d721f9d317afed393cb7bd93" datatype="html">
         <source>The entered value is too high! It must be lower or equal to 
@@ -410,24 +522,6 @@
         <source>Not In Quorum</source>
         <target>Není v kvóru</target>
       </trans-unit>
-      <trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
-        <source>Cancel</source>
-        <target>Storno</target>
-      </trans-unit>
-      <trans-unit id="0c5121c531718a269a1e5bb54959fdb43a890483" datatype="html">
-        <source>Are you sure that you want to
-          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
-          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
-        </source>
-        <target>Are you sure that you want to
-          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
-          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
-        </target>
-      </trans-unit>
-      <trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
-        <source>Yes, I am sure.</source>
-        <target>Ano, opravdu to chci.</target>
-      </trans-unit>
       <trans-unit id="5ef50ba2514414f799d4c8fc36067a251904ba81" datatype="html">
         <source>Cluster-wide OSD Flags</source>
         <target>Příznaky OSD pro celý klastr</target>
@@ -436,35 +530,13 @@
         <source>Submit</source>
         <target>Odeslat</target>
       </trans-unit>
-      <trans-unit id="formTitle" datatype="html">
-        <source>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </target>
-        <note>form title</note>
-      </trans-unit>
       <trans-unit id="1cfe07dac5b4ee1c464eb24225ddeb4f1d24076a" datatype="html">
         <source>Advanced...</source>
         <target>Pokročilé…</target>
       </trans-unit>
       <trans-unit id="b1ef1c12ddcee305353623919ef02778569f5454" datatype="html">
         <source>Advanced configuration options</source>
-        <target>Advanced configuration options</target>
-      </trans-unit>
-      <trans-unit id="formActionButton" datatype="html">
-        <source>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </target>
-        <note>form action button</note>
+        <target>Pokročilé volby nastavení</target>
       </trans-unit>
       <trans-unit id="c35f9c5f268a514b970cc55e9a5dc4bed0988e7f" datatype="html">
         <source>OSD Recovery Priority</source>
@@ -502,9 +574,13 @@
           <x id="INTERPOLATION" equiv-text="{{ attr.value.minValue }}"/>.
         </target>
       </trans-unit>
-      <trans-unit id="272696ff8acdbed0af6dc13f09729e70be435b82" datatype="html">
-        <source>Reweight OSD</source>
-        <target>Znovu vyvážit OSD</target>
+      <trans-unit id="5251a4355cece3075db43f15d69a24a0f8485707" datatype="html">
+        <source>Reweight OSD: 
+          <x id="INTERPOLATION" equiv-text="{{ osdId }}"/>
+        </source>
+        <target>Reweight OSD: 
+          <x id="INTERPOLATION" equiv-text="{{ osdId }}"/>
+        </target>
       </trans-unit>
       <trans-unit id="67650b2998db48201b2c6176cbfef51e7211ccaa" datatype="html">
         <source>The value needs to be between 0 and 1.</source>
@@ -526,19 +602,19 @@
         <source>{VAR_SELECT, select, 1 {Deep } }</source>
         <target>{VAR_SELECT, vybrat, 1 {Deep } }</target>
       </trans-unit>
-      <trans-unit id="6a92b12d76f3cb0ea9d4f6c3cdc57cb1e1235977" datatype="html">
+      <trans-unit id="2613498e8e5853c26a1cc62ae8dc673d1fdf0e2a" datatype="html">
         <source>You are about to apply a 
           <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>scrub to
-            the OSD 
+          the OSD(s): 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ selected[0].id }}"/>
+          <x id="INTERPOLATION" equiv-text="{{ selected | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>.
         </source>
-        <target>Chystáte se použít kontrolu na
-          <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>scrub to
-            OSD 
+        <target>Chystáte se použít 
+          <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>scrub na
+          OSD(s): 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ selected[0].id }}"/>
+          <x id="INTERPOLATION" equiv-text="{{ selected | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>.
         </target>
       </trans-unit>
@@ -550,10 +626,10 @@
         <source>OSDs List</source>
         <target>Seznam OSD</target>
       </trans-unit>
-      <trans-unit id="5fefe1505caccc8be70c808c1ea9451af0a84a45" datatype="html">
+      <trans-unit id="c402e6ec1c6792ede81f56c28eee8955860391c8" datatype="html">
         <source>
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD(s) 
+          <x id="INTERPOLATION" equiv-text="{{  getSelectedOsdIds() | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be marked
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/>
@@ -561,21 +637,29 @@
         </source>
         <target>
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be marked
+          <x id="INTERPOLATION" equiv-text="{{  getSelectedOsdIds() | list }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> budou označena
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> pokud budete pokračovat.
         </target>
       </trans-unit>
-      <trans-unit id="2d3a73f6440a7d896d74356fe0a725d731e71cbb" datatype="html">
-        <source>The OSD is not safe to destroy!</source>
-        <target>OSD není možné bezpečně zlikvidovat!</target>
+      <trans-unit id="d2797d01ba86f5df03d875803e49e648a4027869" datatype="html">
+        <source>The 
+          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, 0 {...} 1 {...}}"/> not safe to destroy!
+        </source>
+        <target>
+          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, 0 {...} 1 {...}}"/> není bezpečné zlikvidovat!
+        </target>
       </trans-unit>
-      <trans-unit id="e38d09f45e55ff926cc9d1c262b033201477278d" datatype="html">
+      <trans-unit id="e776996dac651ef3819bfa767ccf2a0613759f47" datatype="html">
+        <source>{VAR_SELECT, select, 0 {OSDs are} 1 {OSD is} }</source>
+        <target>{VAR_SELECT, select, 0 {OSDs are} 1 {OSD is} }</target>
+      </trans-unit>
+      <trans-unit id="1e2c50ed3c3934ef068976dc7f38513cec29d515" datatype="html">
         <source>
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
+          <x id="INTERPOLATION" equiv-text="{{ getSelectedOsdIds() | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/>
@@ -583,11 +667,11 @@
         </source>
         <target>
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be
+          <x id="INTERPOLATION" equiv-text="{{ getSelectedOsdIds() | list }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> bude
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> pokud budete pokračovat.
         </target>
       </trans-unit>
       <trans-unit id="4f8b2bb476981727ab34ed40fde1218361f92c45" datatype="html">
@@ -600,7 +684,7 @@
       </trans-unit>
       <trans-unit id="9c25e04f554875dc2625a78ba0fc56c6010cd0d3" datatype="html">
         <source>-- Select an attribute to match against --</source>
-        <target>-- Select an attribute to match against --</target>
+        <target>-- Vyberte atribut vůči kterému hledat shodu --</target>
       </trans-unit>
       <trans-unit id="5049e204c14c648691ac775a64fb504467aeb549" datatype="html">
         <source>Value</source>
@@ -608,7 +692,7 @@
       </trans-unit>
       <trans-unit id="77fc5c63497fc031ddc97645484e3d94ad27766c" datatype="html">
         <source>Use regular expression</source>
-        <target>Use regular expression</target>
+        <target>Použít regulární výraz</target>
       </trans-unit>
       <trans-unit id="7bbec1a797283712c0adf9e71d77fb5a8cd720db" datatype="html">
         <source>{VAR_SELECT, select, 1 {Update} other {Add} }</source>
@@ -628,31 +712,31 @@
       </trans-unit>
       <trans-unit id="a3ba06aba047605af8ea1718ec1ba153b7db12a2" datatype="html">
         <source>Editing a silence will expire the old silence and recreate it as a new silence</source>
-        <target>Editing a silence will expire the old silence and recreate it as a new silence</target>
+        <target>Úprava ticha skončí platnost původního ticha a znovu ho vytvoří jako nové ticho</target>
       </trans-unit>
       <trans-unit id="a20424156b8816671f61879f0574a4f27d7b16b9" datatype="html">
         <source>Creator</source>
-        <target>Creator</target>
+        <target>Tvůrce</target>
       </trans-unit>
       <trans-unit id="5a5d7ee2acbfa9c91ab7f41d26bda9ff0cafe42f" datatype="html">
         <source>Comment</source>
-        <target>Comment</target>
+        <target>Komentář</target>
       </trans-unit>
       <trans-unit id="4c11aad490b2d53fdae30b3807beabf79306752c" datatype="html">
         <source>Start time</source>
-        <target>Start time</target>
+        <target>Čas začátku</target>
       </trans-unit>
       <trans-unit id="32856b1e8e339b747b21e313e2fe65a51fd450bb" datatype="html">
         <source>If the start time lies in the past the creation time will be used</source>
-        <target>If the start time lies in the past the creation time will be used</target>
+        <target>Pokud čas začátku leží v minulosti, bude namísto něj použit okamžik vytvoření</target>
       </trans-unit>
       <trans-unit id="a02ea1d4e7424ca989929da5e598f379940fdbf2" datatype="html">
         <source>Duration</source>
-        <target>Duration</target>
+        <target>Trvání</target>
       </trans-unit>
       <trans-unit id="2f4e35e36f4d3c62e2c17df41730b6dee4afc4b9" datatype="html">
         <source>End time</source>
-        <target>End time</target>
+        <target>Čas konce</target>
       </trans-unit>
       <trans-unit id="dbe739ec8c99a0132e326067ffec9c0ee06b2655" datatype="html">
         <source>Matchers
@@ -726,10 +810,6 @@
       <trans-unit id="0660ae339068979854ade34a96546980723dede3" datatype="html">
         <source>Add clients</source>
         <target>Přidat klienty</target>
-      </trans-unit>
-      <trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
-        <source>Loading...</source>
-        <target>Načítání…</target>
       </trans-unit>
       <trans-unit id="135b91a2d908d5814b782695470a6a786c99d9d2" datatype="html">
         <source>-- No cluster available --</source>
@@ -883,7 +963,7 @@
       </trans-unit>
       <trans-unit id="ddf98fcdeeb17643db020d54f42b5e56b5f9a52a" datatype="html">
         <source>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &amp;, ( or ).</source>
-        <target>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &amp;, ( or ).</target>
+        <target>Je třeba, aby Pseudo začínalo na „/“ a a nemůže obsahovat nic z následujícího: &gt;, &lt;, |, &amp;, ( nebo ).</target>
       </trans-unit>
       <trans-unit id="27eb35c4b4ac08781a7253a2ab40f8f7d957ba51" datatype="html">
         <source>-- No access type available --</source>
@@ -892,6 +972,20 @@
       <trans-unit id="509ce016c9110a54028dafd741f15ceacbe74b5a" datatype="html">
         <source>-- Select the access type --</source>
         <target>-- Vyberte typ přístupu --</target>
+      </trans-unit>
+      <trans-unit id="49850390a653cd05dc5843d74ef073a9122b54c9" datatype="html">
+        <source>The Object Gateway NFS backend has a number of
+              limitations which will seriously affect applications writing to
+              the share. Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/> documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for details before enabling write access.
+        </source>
+        <target>The Object Gateway NFS backend has a number of
+              limitations which will seriously affect applications writing to
+              the share. Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/> documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for details before enabling write access.
+        </target>
       </trans-unit>
       <trans-unit id="4deda03573eaaff77e63f6a238a1f0ca7816950a" datatype="html">
         <source>-- No squash available --</source>
@@ -950,23 +1044,27 @@
       </trans-unit>
       <trans-unit id="0eb15f32b2b92d7f3103ef3ff032621888a8dc32" datatype="html">
         <source>Old password</source>
-        <target>Old password</target>
-      </trans-unit>
-      <trans-unit id="e70e209561583f360b1e9cefd2cbb1fe434b6229" datatype="html">
-        <source>New password</source>
-        <target>New password</target>
+        <target>Původní heslo</target>
       </trans-unit>
       <trans-unit id="1cf42e491adc166a337a960eb84d03c0c3f677c8" datatype="html">
         <source>The old and new passwords must be different.</source>
-        <target>The old and new passwords must be different.</target>
+        <target>Je třeba, aby původní a nové heslo nebyly stejné</target>
+      </trans-unit>
+      <trans-unit id="e70e209561583f360b1e9cefd2cbb1fe434b6229" datatype="html">
+        <source>New password</source>
+        <target>Nové heslo</target>
+      </trans-unit>
+      <trans-unit id="595ebc9279497f6dc733777e2816bee936901388" datatype="html">
+        <source>Too weak</source>
+        <target>Příliš neodolné</target>
       </trans-unit>
       <trans-unit id="ede41f01c781b168a783cfcefc6fb67d48780d9b" datatype="html">
         <source>Confirm new password</source>
-        <target>Confirm new password</target>
+        <target>Zopakování zadání nového hesla</target>
       </trans-unit>
       <trans-unit id="90163a3d3746819aef42e829f4446331232f3b66" datatype="html">
         <source>Password confirmation doesn't match the new password.</source>
-        <target>Password confirmation doesn't match the new password.</target>
+        <target>Kontrolní zadání nového hesla se neshoduje.</target>
       </trans-unit>
       <trans-unit id="471e78026c258073ba687478dc54c35d9041ea42" datatype="html">
         <source>Forbidden</source>
@@ -980,323 +1078,309 @@
         <source>Sorry, we could not find what you were looking for</source>
         <target>Omlouváme se, nepodařilo se najít to, po čem se poohlížíte</target>
       </trans-unit>
-      <trans-unit id="16568619015cfb2352e3b2596ba04fc1c82e44ef" datatype="html">
-        <source>Remove all</source>
-        <target>Odebrat vše</target>
+      <trans-unit id="a949d7e577902d0e5dc5d0971bb0170a21be7728" datatype="html">
+        <source>[object Object]</source>
+        <target>[object Object]</target>
       </trans-unit>
-      <trans-unit id="0d4b37c6675c5b436a54c43d6716eec835e1aa7f" datatype="html">
-        <source>There are no notifications.</source>
-        <target>There are no notifications.</target>
+      <trans-unit id="ff92fbdec9fdd5054493eeda0d7ee8b450f83e72" datatype="html">
+        <source>RBD Configuration</source>
+        <target>Nastavení RBD</target>
       </trans-unit>
-      <trans-unit id="1d65cc22d5842c06d33b244fc67de9db4003537e" datatype="html">
-        <source>Recent Notifications</source>
-        <target>Nedávná oznámení</target>
+      <trans-unit id="b62d9efc8eb3b589904f6cb96a0406bbda55673a" datatype="html">
+        <source>Remove the local configuration value. The parent configuration value will be inherited and used instead.</source>
+        <target>Odebrat hodnotu místnímu nastavení. Namísto ní bude použita hodnota nadřazeného nastavení.</target>
       </trans-unit>
-      <trans-unit id="495ab70870b5b4a30f2bc5f55052fdc518d954a9" datatype="html">
-        <source>There are no background tasks.</source>
-        <target>Nejsou zde žádné úlohy na pozadí.</target>
+      <trans-unit id="963488a1010d46067b238c4ae917fab3907c0a3a" datatype="html">
+        <source>The mininum value is 0</source>
+        <target>Minimální hodnota je 0</target>
       </trans-unit>
-      <trans-unit id="ea94e7754983d80af8acb958a5d49d93bacd721c" datatype="html">
-        <source>Background Tasks</source>
-        <target>Úlohy na pozadí</target>
+      <trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
+        <source>Pools List</source>
+        <target>Seznam fondů</target>
       </trans-unit>
-      <trans-unit id="85b79c9064aed1ead31ace985f31aa1363f6bdaf" datatype="html">
-        <source>Help</source>
-        <target>Nápověda</target>
+      <trans-unit id="490e15ecc922965b6d8194754c87c5583aa071f3" datatype="html">
+        <source>The name can only consist of alphanumeric characters, dashes and underscores.</source>
+        <target>Název může být tvořen pouze písmeny a číslicemi, dále ještě spojovníky a podtržítky.</target>
       </trans-unit>
-      <trans-unit id="fcfd4675b4c90f08d18d3abede9a9a4dff4cfdc7" datatype="html">
-        <source>Documentation</source>
-        <target>Dokumentace</target>
+      <trans-unit id="9edc2b494e660618af3e5225f68d40b7ca67629c" datatype="html">
+        <source>The chosen erasure code profile name is already in use.</source>
+        <target>Zvolený název pro profil mazacího kódu je už používán.</target>
       </trans-unit>
-      <trans-unit id="e351b40b3869a5c7d19c3d4918cb1ac7aaab95c4" datatype="html">
-        <source>API</source>
-        <target>Aplikační program. rozhraní</target>
+      <trans-unit id="ef9ff0e6227947b48dfab4ac39ade04af758913b" datatype="html">
+        <source>Plugin</source>
+        <target>Zásuvný modul</target>
       </trans-unit>
-      <trans-unit id="004b222ff9ef9dd4771b777950ca1d0e4cd4348a" datatype="html">
-        <source>About</source>
-        <target>O aplikaci</target>
+      <trans-unit id="dd69b31bce8f630eac1d4762b0bbcf72ce19d193" datatype="html">
+        <source>Data chunks (k)</source>
+        <target>Shluky dat (k)</target>
       </trans-unit>
-      <trans-unit id="1481ecd21e760ac919a24e26cf790acd82e40199" datatype="html">
-        <source>Dashboard Settings</source>
-        <target>Nastavení přehledu</target>
+      <trans-unit id="b0d26a6172d32cb81218fe2103c54a818cbc1189" datatype="html">
+        <source>Must be equal to or greater than 2.</source>
+        <target>Je třeba, aby bylo 2 a více.</target>
       </trans-unit>
-      <trans-unit id="a79aab4ef674bf3f6532292107c0054302236e0f" datatype="html">
-        <source>User management</source>
-        <target>Správa uživatelů</target>
+      <trans-unit id="dab3a299ead121169b8e08ed618c3b6a2f66691b" datatype="html">
+        <source>Coding chunks (m)</source>
+        <target>Shluky kódování (m)</target>
       </trans-unit>
-      <trans-unit id="049dfd9fe6c78914ad58cf89ac6a631fca28ec74" datatype="html">
-        <source>Logged in user</source>
-        <target>Přihlášený uživatel</target>
+      <trans-unit id="1e2773e5bd4948193f18f2361d663ecc3988c656" datatype="html">
+        <source>Must be equal to or greater than 1.</source>
+        <target>Je třeba, aby bylo 1 a více.</target>
       </trans-unit>
-      <trans-unit id="cd38a58e73f306d838e621959d47d5e7a2f06d1f" datatype="html">
-        <source>Signed in as
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
-        </source>
-        <target>Přihlášeni jako
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
-        </target>
+      <trans-unit id="6cde4c945a49a260c0a47bcc7cd956846930a5f7" datatype="html">
+        <source>Durability estimator (c)</source>
+        <target>Odhadování odolnosti (c)</target>
       </trans-unit>
-      <trans-unit id="739516c2ca75843d5aec9cf0e6b3e4335c4227b9" datatype="html">
-        <source>Change password</source>
-        <target>Change password</target>
+      <trans-unit id="af668c2a095a979ea2b4e43cd82c2120ab56c21c" datatype="html">
+        <source>Locality (l)</source>
+        <target>Umístění (l)</target>
       </trans-unit>
-      <trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
-        <source>Sign out</source>
-        <target>Odhlásit</target>
+      <trans-unit id="d455a110bf6d2235e314e295ce1dfeee93d3dff2" datatype="html">
+        <source>Crush failure domain</source>
+        <target>Doména selhání crush</target>
+      </trans-unit>
+      <trans-unit id="b74a495f041f7dd102eee5c0bbc9e03083b538ae" datatype="html">
+        <source>Crush Locality</source>
+        <target>Lokalita crush</target>
+      </trans-unit>
+      <trans-unit id="a2f14a73f7a6e94479f67423cc51102da8d6f524" datatype="html">
+        <source>None</source>
+        <target>Žádné</target>
+      </trans-unit>
+      <trans-unit id="2981733b912b693a9dd9d915d6d34f4692cc874a" datatype="html">
+        <source>Technique</source>
+        <target>Technika</target>
+      </trans-unit>
+      <trans-unit id="e0098b6e47b04ec817361f384ce81d454ba5c0bb" datatype="html">
+        <source>Packetsize</source>
+        <target>Velikostpaketu</target>
+      </trans-unit>
+      <trans-unit id="c0252cd81ca54d0a2f69ec9ccf4248e73df5aa4a" datatype="html">
+        <source>Crush root</source>
+        <target>Kořen crush</target>
+      </trans-unit>
+      <trans-unit id="1548d5c76f0406ddd1ba3c557e1e6db22e95b340" datatype="html">
+        <source>Crush device class</source>
+        <target>Třída crush zařízení</target>
+      </trans-unit>
+      <trans-unit id="5e85feb6f9f0334366e46ee09ca6b8df52397432" datatype="html">
+        <source>any</source>
+        <target>libovolné</target>
+      </trans-unit>
+      <trans-unit id="03d84645f6e019c5a43909bbf2ea1696ee88332c" datatype="html">
+        <source>Directory</source>
+        <target>Složka</target>
       </trans-unit>
       <trans-unit id="2fecea01ce1d44114ee45144eff6d47a5016a74f" datatype="html">
         <source>Name...</source>
         <target>Název…</target>
       </trans-unit>
-      <trans-unit id="eabb4db920d9f9b2480cf438468b86e1bea02a9b" datatype="html">
-        <source>The chosen name is already in use.</source>
-        <target>Zvolený název už je používán.</target>
+      <trans-unit id="16e113230b6b0d3165e076300880542bac7c8138" datatype="html">
+        <source>The chosen Ceph pool name is already in use.</source>
+        <target>Zvolený název pro Ceph fond je už používán.</target>
       </trans-unit>
-      <trans-unit id="1ea5c4d8942c00752dcc72e72949c5d9832f6399" datatype="html">
-        <source>Description...</source>
-        <target>Popis…</target>
+      <trans-unit id="c75b132bef7b29fa5171768303c4b96e34ccaf68" datatype="html">
+        <source>It's not possible to create an RBD pool with '/' in the name.
+              Please change the name or remove 'rbd' from the applications list.</source>
+        <target>Není možné vytvořit RBD fond s názvem „/“ v názvu.
+              Změňte název nebo 'rbd' odeberte ze seznamu aplikací.</target>
       </trans-unit>
-      <trans-unit id="70f45880fce6ac5d8e468e25e82aefbba8098cfe" datatype="html">
-        <source>Permissions</source>
-        <target>Oprávnění</target>
+      <trans-unit id="b85c657469e5ec8231c3de99b22f437bc01ffde5" datatype="html">
+        <source>Pool type</source>
+        <target>Typ fondul</target>
       </trans-unit>
-      <trans-unit id="9610487cbeb5796d34d8601b5ac0c0a65f9e1d19" datatype="html">
-        <source>Roles</source>
-        <target>Role</target>
+      <trans-unit id="526c5443254c3b126eedb264840ffe827727bfd3" datatype="html">
+        <source>-- Select a pool type --</source>
+        <target>-- Vybrat typ fondu --</target>
       </trans-unit>
-      <trans-unit id="08c74dc9762957593b91f6eb5d65efdfc975bf48" datatype="html">
-        <source>Username</source>
-        <target>Uživatelské jméno</target>
+      <trans-unit id="0aa21053410a94aa61d16985a4e95fd65523430d" datatype="html">
+        <source>Placement groups</source>
+        <target>Skupiny umístění</target>
       </trans-unit>
-      <trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
-        <source>Password</source>
-        <target>Heslo</target>
+      <trans-unit id="6301f1391d726f8f450bb358058534db19541ca9" datatype="html">
+        <source>At least one placement group is needed!</source>
+        <target>Je třeba alespoň jedné skupiny umístění!</target>
       </trans-unit>
-      <trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
-        <source>Confirm password</source>
-        <target>Potvrzení zadání hesla</target>
+      <trans-unit id="ba9469a1ce6ed36e039c1f67247c8c81a5c71449" datatype="html">
+        <source>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</source>
+        <target>Váš klastr nemůže obsloužit tolik skupin umístění. Přepočítejte potřebné množství skupin umístění.</target>
       </trans-unit>
-      <trans-unit id="cbb979e63ba50e0ca3adfa09cbdcaefd0853fca1" datatype="html">
-        <source>Password confirmation doesn't match the password.</source>
-        <target>Zadání hesla se neshodují.</target>
+      <trans-unit id="80ac68cd883369dac20688bc32b4cb33291b5e50" datatype="html">
+        <source>Calculation help</source>
+        <target>Nápověda k výpočtu</target>
       </trans-unit>
-      <trans-unit id="b760f123248930122fc7e7b6b6bf94e376e959c8" datatype="html">
-        <source>Full name</source>
-        <target>Celé jméno</target>
+      <trans-unit id="fccbd60493df26705d957ed6c02a3c447894678f" datatype="html">
+        <source>The current PGs settings were calculated for you, you
+                should make sure the values suit your needs before submit.</source>
+        <target>The current PGs settings were calculated for you, you
+                should make sure the values suit your needs before submit.</target>
       </trans-unit>
-      <trans-unit id="244aae9346da82b0922506c2d2581373a15641cc" datatype="html">
-        <source>Email</source>
-        <target>E-mail</target>
+      <trans-unit id="33150f22ce5348aa6c499bd092c3f4f3695d62cc" datatype="html">
+        <source>Crush ruleset</source>
+        <target>Sada pravidel crush</target>
       </trans-unit>
-      <trans-unit id="d0ec081dd61eb4f43aea269077bbe38eae87b7f9" datatype="html">
-        <source>Invalid email.</source>
-        <target>Neplatný e-mail.</target>
+      <trans-unit id="73a6b31116b3cc322af951daa0bafdc169e6c42e" datatype="html">
+        <source>-- Select a crush rule --</source>
+        <target>-- Vybrat crush pravidlo --</target>
       </trans-unit>
-      <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
-        <source>You are about to remove "user read / update" permissions from your own user.</source>
-        <target>Chystáte se odebrat oprávnění „uživatel číst/aktualizovat“ svému vlastnímu účtu.</target>
+      <trans-unit id="92da80699921e89fb19372e25b8d0f3b9fa427fc" datatype="html">
+        <source>Crush rule</source>
+        <target>Crush pravidlo</target>
       </trans-unit>
-      <trans-unit id="af4bf9fcb256853f14cf947eb1deb8d7f176d3f9" datatype="html">
-        <source>If you continue, you will no longer be able to add or remove roles from any user.</source>
-        <target>Pokud budete pokračovat, nebudete nadále schopní přidávat nebo nebo odebírat role žádnému z uživatelů.</target>
+      <trans-unit id="5489e9f96835f469f6f728a00d8efa88ea5bc940" datatype="html">
+        <source>Crush steps</source>
+        <target>Crush kroky</target>
       </trans-unit>
-      <trans-unit id="7d1dcf2a9146caac0581329acf94806ec69a89a5" datatype="html">
-        <source>Are you sure you want to continue?</source>
-        <target>Opravdu chcete pokračovat?</target>
+      <trans-unit id="54a53b1b402aafff5b992ee9b64e409fbfe9074f" datatype="html">
+        <source>The rule can't be used in the current cluster as it has
+                to few OSDs to meet the minimum required OSD by this rule.</source>
+        <target>Pravidlo nemůže být uplatněno na stávající klastr protože má
+                příliš málo OSD aby splnil minimum OSD vyžadovaných tímto pravidlem.</target>
       </trans-unit>
-      <trans-unit id="ca53d681a9892d6fdbb57ee9676582186515e961" datatype="html">
-        <source>Performance counters not available</source>
-        <target>Výkonnostní čítače nejsou k dispozici</target>
+      <trans-unit id="a43b2695131b48b76cebba676aba98a2bee17515" datatype="html">
+        <source>Replicated size</source>
+        <target>Replikovaná velikost</target>
       </trans-unit>
-      <trans-unit id="91853167141c37b58868f3b0421383dd72fa8a01" datatype="html">
-        <source>Attributes (OSD map)</source>
-        <target>Atributy (OSD mapa)</target>
-      </trans-unit>
-      <trans-unit id="97842f379e1d4157ac3ab0661b90c352e7cb72d5" datatype="html">
-        <source>Metadata not available</source>
-        <target>Metadata nejsou k dispozici</target>
-      </trans-unit>
-      <trans-unit id="f721a500a68c357e8f2a01e60510f6a01e4ba529" datatype="html">
-        <source>Metadata</source>
-        <target>Metadata</target>
-      </trans-unit>
-      <trans-unit id="d24e28e19c5703d7c6be44f4eb595a6a43b618ed" datatype="html">
-        <source>Performance counter</source>
-        <target>Výkonnostní čítač</target>
-      </trans-unit>
-      <trans-unit id="d1f7c81ed9c5034af4abcdf119b1c1e86cd019dd" datatype="html">
-        <source>Histogram not available: 
-          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
+      <trans-unit id="7bff144a4c4dc63b0e18fff2617d61a7ebdf2b6c" datatype="html">
+        <source>Minimum: 
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
         </source>
-        <target>Histogram není k dispozici: 
-          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
+        <target>Nejméně: 
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
         </target>
       </trans-unit>
-      <trans-unit id="868abfff914873d1c65df798d8432ed04b8ae2a9" datatype="html">
-        <source>Writes</source>
-        <target>Zápisy</target>
+      <trans-unit id="1a9c54b41f6d58a74e5d0aa3429ed0c87a482551" datatype="html">
+        <source>Maximum: 
+          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
+        </source>
+        <target>Nejvíce: 
+          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
+        </target>
       </trans-unit>
-      <trans-unit id="996ebb9a653b5067f97bf3891ea9d2108e969492" datatype="html">
-        <source>Reads</source>
-        <target>Čtení</target>
+      <trans-unit id="6ab647b95bd2347ae6f4605576de5e0269fb893a" datatype="html">
+        <source>The size specified is out of range. A value from
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> to 
+          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> is valid.
+        </source>
+        <target>Zadaná velikost je mimo rozsah. Platná hodnota je
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> až 
+          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> .
+        </target>
       </trans-unit>
-      <trans-unit id="65ac79790aa477a97b1cc579e18a115a8df8918f" datatype="html">
-        <source>Histogram</source>
-        <target>Histogram</target>
+      <trans-unit id="9de7dde00e2139cc4bd03b1837afbe72ad15a1ff" datatype="html">
+        <source>Erasure code profile</source>
+        <target>Profil mazacího kódu</target>
       </trans-unit>
-      <trans-unit id="fbbaf5cb02ed419e79a27072478f716a4666a99d" datatype="html">
-        <source>Performance Details</source>
-        <target>Podrobnosti o výkonnosti</target>
+      <trans-unit id="39b4620e6bd444e0a57a0a5c03fa8c96d7fe5235" datatype="html">
+        <source>-- No erasure code profile available --</source>
+        <target>-- Žádný profil mazacího kódu --</target>
       </trans-unit>
-      <trans-unit id="26fb5f81b3581f06b9210defb0e71dc69a67e819" datatype="html">
-        <source>Current values</source>
-        <target>Stávající hodnoty</target>
-      </trans-unit>
-      <trans-unit id="f61c6867295f3b53d23557021f2f4e0aa1d0b8fc" datatype="html">
-        <source>Type</source>
-        <target>Typ</target>
-      </trans-unit>
-      <trans-unit id="9abcd7c82643d60c22733470463f74e4a54bc069" datatype="html">
-        <source>Min</source>
-        <target>Min</target>
-      </trans-unit>
-      <trans-unit id="c3ced4d162a0a55ee233a187ce7208ba5e922418" datatype="html">
-        <source>Max</source>
-        <target>Max</target>
+      <trans-unit id="498561757390d5528b263ce450d5f38efb00266d" datatype="html">
+        <source>-- Select an erasure code profile --</source>
+        <target>-- Vyberte profil mazacího kódu --</target>
       </trans-unit>
       <trans-unit id="920617c6a1a4805e53bcb5af6a9c76f8387e89c6" datatype="html">
         <source>Flags</source>
         <target>Příznaky</target>
       </trans-unit>
-      <trans-unit id="6834fa6b43d1ecbdf147c48dd9c4d72f1484571d" datatype="html">
-        <source>Source</source>
-        <target>Zdroj</target>
+      <trans-unit id="1c870fb00256b8a5b9cb9cd1a124e6390b9bc639" datatype="html">
+        <source>EC Overwrites</source>
+        <target>EC přebití</target>
       </trans-unit>
-      <trans-unit id="a446fb0eb11fbffcac805ece5a2d306d24e733d8" datatype="html">
-        <source>Level</source>
-        <target>Úroveň</target>
+      <trans-unit id="f1abafaeb40ce52355ddcc24686e3cd17b64e08a" datatype="html">
+        <source>Applications</source>
+        <target>Aplikace</target>
       </trans-unit>
-      <trans-unit id="39f2fb094e9b2eda13163fa3f3a31594cf9c1307" datatype="html">
-        <source>Can be updated at runtime (editable)</source>
-        <target>Je možné aktualizovat za provozu (upravitelné)</target>
+      <trans-unit id="2208d63d5940ce656006a220102b1eb2b5e553da" datatype="html">
+        <source>Compression</source>
+        <target>Komprese</target>
       </trans-unit>
-      <trans-unit id="cafc87479686947e2590b9f588a88040aeaf660b" datatype="html">
-        <source>Tags</source>
-        <target>Štítky</target>
+      <trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
+        <source>Mode</source>
+        <target>Režim</target>
       </trans-unit>
-      <trans-unit id="ab0089ef47af61ca1d137bc908b96c290dfd9287" datatype="html">
-        <source>Enum values</source>
-        <target>Vyčíslit hodnoty</target>
+      <trans-unit id="6c6f25c47da62ec597c6057a36ddfc3209811ec5" datatype="html">
+        <source>Algorithm</source>
+        <target>Algoritmus</target>
       </trans-unit>
-      <trans-unit id="819476f1264f1659f38e86f6abb542141b184832" datatype="html">
-        <source>See also</source>
-        <target>Viz také</target>
+      <trans-unit id="4903231d42089325a28892c0fde1aed46b733ae6" datatype="html">
+        <source>-- No erasure compression algorithm available --</source>
+        <target>-- Žádný algoritmus komprese mazání --</target>
       </trans-unit>
-      <trans-unit id="73caac4265ea7314ff061e5a1d78a6361a6dd3b8" datatype="html">
-        <source>Cluster Status</source>
-        <target>Stav klastru</target>
+      <trans-unit id="5d68ddb254275f8f44221e9ad6d8ceeb59ca46a6" datatype="html">
+        <source>Minimum blob size</source>
+        <target>Minimální velikost blobu</target>
       </trans-unit>
-      <trans-unit id="1d4bc612bbf19aa9553853266b9e92c9d75f4464" datatype="html">
-        <source>Manager Daemons</source>
-        <target>Procesy služby správy</target>
+      <trans-unit id="fb2f176df80647137cbb02bbeb29e5dec707a400" datatype="html">
+        <source>e.g., 128KiB</source>
+        <target>např. 128 KiB</target>
       </trans-unit>
-      <trans-unit id="946ac5dea9921dc09d7b0a63b89535371f283b19" datatype="html">
-        <source>Object Gateways</source>
-        <target>Objektové brány</target>
+      <trans-unit id="1b7f6e53a4521c6eb3ced4c007fdd4cf80bb7707" datatype="html">
+        <source>Value should be greater than 0</source>
+        <target>Hodnota by měla být vyšší než nula</target>
       </trans-unit>
-      <trans-unit id="ff03fa5bcf37c4da46ad736c1f7d03f959e8ba9a" datatype="html">
-        <source>Metadata Servers</source>
-        <target>Metadata servery</target>
+      <trans-unit id="8db98ab14b4e207ec763dfdefbc2dae367aab1cc" datatype="html">
+        <source>Value should be less than the maximum blob size</source>
+        <target>Hodnota by měla být nižší než maximální velikost blobu</target>
       </trans-unit>
-      <trans-unit id="d817609ba4993eba859409ab71e566168f4d5f5a" datatype="html">
-        <source>iSCSI Gateways</source>
-        <target>iSCSI brány</target>
+      <trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
+        <source>Maximum blob size</source>
+        <target>Nejvyšší velikost blobu</target>
       </trans-unit>
-      <trans-unit id="42c13e50391250ea9379bdf55d5d6c0228c0c8bc" datatype="html">
-        <source>Client IOPS</source>
-        <target>vst/výst. klienta</target>
+      <trans-unit id="0c656f0e346bbadf46eb1a5d20d0307a3bd20ba8" datatype="html">
+        <source>e.g., 512KiB</source>
+        <target>např. 512 KiB</target>
       </trans-unit>
-      <trans-unit id="52213660b2454d139ada3079a42ec6caf3c3c01e" datatype="html">
-        <source>Client Throughput</source>
-        <target>Propustnost klienta</target>
+      <trans-unit id="0a65a24eee8a026f3b1113fe9e157e9a0dd69486" datatype="html">
+        <source>Value should be greater than the minimum blob size</source>
+        <target>Hodnota by měla být vyšší než nejnižší velikost blobu</target>
       </trans-unit>
-      <trans-unit id="32efd1c3f70e3c5244239de97a2cc95d98534a14" datatype="html">
-        <source>Client Read/Write</source>
-        <target>Čtení/zápis klienta</target>
+      <trans-unit id="261ba09c4a59de83f48f52a23fd328da37e61ff4" datatype="html">
+        <source>Ratio</source>
+        <target>Poměr</target>
       </trans-unit>
-      <trans-unit id="275485415092cbae3a9f3cbb786ebe283cacfdd5" datatype="html">
-        <source>Recovery Throughput</source>
-        <target>Propustnost zotavení</target>
+      <trans-unit id="c1430457a9c3c66366e51d76bf10396014c576be" datatype="html">
+        <source>Compression ratio</source>
+        <target>Kompresní poměr</target>
       </trans-unit>
-      <trans-unit id="6d9a9f55046891733ef71170e7652063765eb542" datatype="html">
-        <source>Scrub</source>
-        <target>Kontrola</target>
+      <trans-unit id="ae5ce6de352cde949998fb10754459c3a4eb183b" datatype="html">
+        <source>Value should be between 0.0 and 1.0</source>
+        <target>Hodnota by měla být z rozmezí 0.0 až 1.0</target>
       </trans-unit>
-      <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
-        <source>Performance</source>
-        <target>Výkonnost</target>
+      <trans-unit id="8bb8293aa8161433778762ae025ffd5e7c85795e" datatype="html">
+        <source>Quotas</source>
+        <target>Kvóty</target>
       </trans-unit>
-      <trans-unit id="88f383269db2d32cccee9e936fe549dccb9fdbf4" datatype="html">
-        <source>Raw Capacity</source>
-        <target>Holá kapacita</target>
+      <trans-unit id="d99b34162c9c34f10d0ccd8dbae83d8569c2db77" datatype="html">
+        <source>Max bytes</source>
+        <target>Nejvýše bajtů</target>
       </trans-unit>
-      <trans-unit id="afdb601c16162f2c798b16a2920955f1cc6a20aa" datatype="html">
-        <source>Objects</source>
-        <target>Objekty</target>
+      <trans-unit id="a1d14a18879c62f3f4ed705318b7164a1160e249" datatype="html">
+        <source>Leave it blank or specify 0 to disable this quota.</source>
+        <target>Pro vypnutí této kvóty nevyplňujte nebo zadejte 0 (nulu).</target>
       </trans-unit>
-      <trans-unit id="c5f8a813f91a11af99132e4beafc136cfc13d73b" datatype="html">
-        <source>PGs per OSD</source>
-        <target>Skupin umístění na OSD</target>
+      <trans-unit id="7565b131562ff6c5f769fdbd239a772154abdd97" datatype="html">
+        <source>A valid quota should be greater than 0.</source>
+        <target>Platná kvóta by měla být vyšší než 0 (nula).</target>
       </trans-unit>
-      <trans-unit id="498a109c6e9e94f1966de01aa0326f7f0ac6fb52" datatype="html">
-        <source>PG Status</source>
-        <target>Stav skupiny umístění</target>
+      <trans-unit id="f0016bd458baa88284a658ce9eeda42d8ad88d2c" datatype="html">
+        <source>e.g., 10GiB</source>
+        <target>např. 10 GiB</target>
       </trans-unit>
-      <trans-unit id="ce9dfdc6dccb28dc75a78c704e09dc18fb02dcfa" datatype="html">
-        <source>Capacity</source>
-        <target>Kapacita</target>
+      <trans-unit id="b8bf35b66f09a301eef92ffc3cb2fd259df67ce9" datatype="html">
+        <source>Max objects</source>
+        <target>Nejvýše objektů</target>
       </trans-unit>
-      <trans-unit id="44ecac93d67c6a671198091c2270354f80322327" datatype="html">
-        <source>
-          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
-          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
-        </source>
-        <target>Další podrobnosti 
-          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
-          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> naleznete v 
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>záznamech událostí
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>.
-        </target>
+      <trans-unit id="95f348167622d832c5ae532b6944635c8e2ae5cb" datatype="html">
+        <source>The value should be greater or equal to 0</source>
+        <target>Hodnota by měla být vyšší nebo rovna 0</target>
       </trans-unit>
-      <trans-unit id="0c1e17956453ad772dbe82d6946f62748c692f3e" datatype="html">
-        <source>Ranks</source>
-        <target>Hodnocení</target>
+      <trans-unit id="fbbaf5cb02ed419e79a27072478f716a4666a99d" datatype="html">
+        <source>Performance Details</source>
+        <target>Podrobnosti o výkonnosti</target>
       </trans-unit>
-      <trans-unit id="50df62325726db950523a5be1c78b8905fcc25d4" datatype="html">
-        <source>MDS performance counters</source>
-        <target>MDS performance counters</target>
-      </trans-unit>
-      <trans-unit id="95c96d55690c0c685deebe52a1da94dc36f5e99d" datatype="html">
-        <source>Clients: 
-          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
-        </source>
-        <target>Klienti: 
-          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="47116253e36f4e38a97ba41b2d3122c6c15ab904" datatype="html">
-        <source>Clients (
-          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
-        </source>
-        <target>Clients (
-          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
-        </target>
+      <trans-unit id="3938a411d76796f8ae73b72ea4c77661207453bd" datatype="html">
+        <source>Cache Tiers Details</source>
+        <target>Podrobnosti o stupních mezipaměti</target>
       </trans-unit>
       <trans-unit id="f0b5d789d42c0e69348e5fe0037fcbf5b5fbbdcc" datatype="html">
         <source>Move an image to trash</source>
@@ -1346,6 +1430,22 @@
         <source>Gateways</source>
         <target>Brány</target>
       </trans-unit>
+      <trans-unit id="8835b9e49a3348b0a2f2162c21118af1f4bee45a" datatype="html">
+        <source>Must be greater than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ limits['min'] }}"/>.
+        </source>
+        <target>Je třeba, aby bylo vyšší nebo rovno 
+          <x id="INTERPOLATION" equiv-text="{{ limits['min'] }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="bbddac59563c8c126e3fe28691e4e247614fcbd1" datatype="html">
+        <source>Must be less than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ limits['max'] }}"/>.
+        </source>
+        <target>Je třeba, aby bylo nižší nebo rovno 
+          <x id="INTERPOLATION" equiv-text="{{ limits['max'] }}"/>.
+        </target>
+      </trans-unit>
       <trans-unit id="e95ae009d0bdb45fcc656e8b65248cf7396080d5" datatype="html">
         <source>Overview</source>
         <target>Přehled</target>
@@ -1368,11 +1468,15 @@
         <target>Je třeba, aby uživatelská jména byla 8 až 64 znaků dlouhá a
               mohu obsahovat pouze písmena a znaky „.“, „@“, „-“, „_“ a „:“.</target>
       </trans-unit>
+      <trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
+        <source>Password</source>
+        <target>Heslo</target>
+      </trans-unit>
       <trans-unit id="6682d1c00263bee204583a5d589b308b6be88b0f" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters
               and can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters
-              and can only contain letters, '@', '-', '_' or '/'.</target>
+        <target>Je třeba, aby hesla byla 12 až 16 znaků dlouhá
+              a mohou obsahovat pouze písmena, „@“, „-“, „_“ nebo „/“.</target>
       </trans-unit>
       <trans-unit id="ff40391de7a1944ea95091e4045cc34c4979b736" datatype="html">
         <source>Mutual User</source>
@@ -1385,8 +1489,8 @@
       <trans-unit id="8800276925157c666b103c36ff7fe8ffe11980b4" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and
               can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters and
-              can only contain letters, '@', '-', '_' or '/'.</target>
+        <target>Je třeba, aby heslo byla 12 až 16 znaků dlouhá a
+              mohou obsahovat pouze písmena, „@“, „-“, „_“ nebo „/“.</target>
       </trans-unit>
       <trans-unit id="53a583cd5f15059cc958b7d547f72cc78f68e123" datatype="html">
         <source>Please consult the 
@@ -1437,6 +1541,10 @@
       <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
         <source>Size</source>
         <target>Velikost</target>
+      </trans-unit>
+      <trans-unit id="afdb601c16162f2c798b16a2920955f1cc6a20aa" datatype="html">
+        <source>Objects</source>
+        <target>Objekty</target>
       </trans-unit>
       <trans-unit id="ceac8e132384322ec778ba760875a6c6897d3e42" datatype="html">
         <source>Object size</source>
@@ -1530,10 +1638,6 @@
         <source>Dedicated pool that stores the object-data of the RBD.</source>
         <target>Vyhrazený fond který uchovává objektová data RBD.</target>
       </trans-unit>
-      <trans-unit id="f0016bd458baa88284a658ce9eeda42d8ad88d2c" datatype="html">
-        <source>e.g., 10GiB</source>
-        <target>např. 10 GiB</target>
-      </trans-unit>
       <trans-unit id="0a88bbee20570aaf9615332fb27020627044874d" datatype="html">
         <source>You have to increase the size.</source>
         <target>Je třeba zvětšit.</target>
@@ -1593,6 +1697,10 @@
         <target>
           <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> zachycený stav
         </target>
+      </trans-unit>
+      <trans-unit id="cb60c1cd3655234756b5b92d4d597d92d520ee30" datatype="html">
+        <source>PROTECTED</source>
+        <target>CHRÁNĚNO</target>
       </trans-unit>
       <trans-unit id="deffb86b8fb0541254ad5a43862d82bff6b6a6c4" datatype="html">
         <source>UNPROTECTED</source>
@@ -1674,22 +1782,6 @@
         <source>Backstore</source>
         <target>Backstore</target>
       </trans-unit>
-      <trans-unit id="6e57f37f033d2756d72e76f0214ec2cf7471a24f" datatype="html">
-        <source>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['min'] }}"/>.
-        </source>
-        <target>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['min'] }}"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="ba70656490cbe3688eaafb9a00ed0910a4fce76d" datatype="html">
-        <source>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['max'] }}"/>.
-        </source>
-        <target>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['max'] }}"/>.
-        </target>
-      </trans-unit>
       <trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
         <source>Confirm</source>
         <target>Potvrdit</target>
@@ -1697,22 +1789,6 @@
       <trans-unit id="339878da255ab55447c43afef8d9b2f9753bf5f6" datatype="html">
         <source>Advanced Settings</source>
         <target>Pokročilá nastavení</target>
-      </trans-unit>
-      <trans-unit id="b2de1dac73071775f2a6e53da76e861e91eff690" datatype="html">
-        <source>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['min'] }}"/>.
-        </source>
-        <target>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['min'] }}"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="bd0ea96890eb025a4e649c615ca02606619f4077" datatype="html">
-        <source>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['max'] }}"/>.
-        </source>
-        <target>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['max'] }}"/>.
-        </target>
       </trans-unit>
       <trans-unit id="1406c2fb12a20c1528b19bcc5e24a6a2386167f3" datatype="html">
         <source>Target IQN</source>
@@ -1725,8 +1801,8 @@
       <trans-unit id="050a7ff057d1e895357540406b6be5652b4d1c71" datatype="html">
         <source>An IQN has the following notation
                 'iqn.$year-$month.$reversedAddress:$definedName'</source>
-        <target>An IQN has the following notation
-                'iqn.$year-$month.$reversedAddress:$definedName'</target>
+        <target>IQN má následující formu zápisu
+                'iqn.$rok-$mesic.$adresaObracene:$definovanyNazev'</target>
       </trans-unit>
       <trans-unit id="c8ada4b53396d8366db00a435acc61d53d857047" datatype="html">
         <source>For example: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</source>
@@ -1780,6 +1856,18 @@
         <source>ACL authentication</source>
         <target>ACL ověřování</target>
       </trans-unit>
+      <trans-unit id="419c8b402609dcf49ae4932a5a4647dc8d79bbaf" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+                can only contain letters, '.', '@', '-', '_' or ':'.</source>
+        <target>Je třeba, aby uživatelská jména měla délku 8 až 64 znaků a
+                obsahovala pouze písmena a případně ještě znaky „.“, „@“, „-“, „_“ nebo „:“.</target>
+      </trans-unit>
+      <trans-unit id="938050960d6653fddfcfd42425e18fb35a308262" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+                and can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Je třeba, aby hesla měla délku 12 až 16 znaků
+                a obsahovala písmena a znaky „@“, „-“, „_“ nebo „/“.</target>
+      </trans-unit>
       <trans-unit id="f494bd31f095f6dcc656ce87ec2dcf07a2e9b30c" datatype="html">
         <source>Initiators</source>
         <target>Iniciátory</target>
@@ -1805,14 +1893,14 @@
       <trans-unit id="fdfee5d7a27e1bdd97a176097277bee078de6aaf" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters
                         and can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters
-                        and can only contain letters, '@', '-', '_' or '/'.</target>
+        <target>Je třeba, aby hesla měla délku 12 až 16 znaků
+                        a mohou obsahovat pouze písmena, „@“, „-“, „_“ nebo „/“.</target>
       </trans-unit>
       <trans-unit id="8406eb7415ee40e54d9ecb209abb056f06e3d666" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and
                         can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters and
-                        can only contain letters, '@', '-', '_' or '/'.</target>
+        <target>Je třeba, aby hesla měla délku 12 znaků 16 a
+                        mohou obsahovat pouze písmena, „@“, „-“, „_“ nebo „/“.</target>
       </trans-unit>
       <trans-unit id="5d1878d5fc761cbe9614bfd87047a740c82a6951" datatype="html">
         <source>Initiator belongs to a group. Images will be configure in the group.</source>
@@ -1837,22 +1925,6 @@
       <trans-unit id="3084948274cff4f56d0f431af47240e9cf02fcc7" datatype="html">
         <source>Add group</source>
         <target>Přidat skupinu</target>
-      </trans-unit>
-      <trans-unit id="a949d7e577902d0e5dc5d0971bb0170a21be7728" datatype="html">
-        <source>[object Object]</source>
-        <target>[object Object]</target>
-      </trans-unit>
-      <trans-unit id="ff92fbdec9fdd5054493eeda0d7ee8b450f83e72" datatype="html">
-        <source>RBD Configuration</source>
-        <target>Nastavení RBD</target>
-      </trans-unit>
-      <trans-unit id="b62d9efc8eb3b589904f6cb96a0406bbda55673a" datatype="html">
-        <source>Remove the local configuration value. The parent configuration value will be inherited and used instead.</source>
-        <target>Odebrat hodnotu místnímu nastavení. Namísto ní bude použita hodnota nadřazeného nastavení.</target>
-      </trans-unit>
-      <trans-unit id="963488a1010d46067b238c4ae917fab3907c0a3a" datatype="html">
-        <source>The mininum value is 0</source>
-        <target>Minimální hodnota je 0</target>
       </trans-unit>
       <trans-unit id="66db799d67958d4b0765181d072df62e2d1c16f5" datatype="html">
         <source>Issues</source>
@@ -1885,10 +1957,6 @@
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Aktualizovat
           <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
-      </trans-unit>
-      <trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
-        <source>Mode</source>
-        <target>Režim</target>
       </trans-unit>
       <trans-unit id="32ca348ef926b0a6a7a780b8b64c3a8239895cec" datatype="html">
         <source>Peer clusters must be removed prior to disabling mirror.</source>
@@ -1972,275 +2040,9 @@
         <source>CephX key must be base64 encoded.</source>
         <target>Je třeba, aby CephX klíč byl v kódování base64.</target>
       </trans-unit>
-      <trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
-        <source>Pools List</source>
-        <target>Seznam fondů</target>
-      </trans-unit>
-      <trans-unit id="490e15ecc922965b6d8194754c87c5583aa071f3" datatype="html">
-        <source>The name can only consist of alphanumeric characters, dashes and underscores.</source>
-        <target>Název může být tvořen pouze písmeny a číslicemi, dále ještě spojovníky a podtržítky.</target>
-      </trans-unit>
-      <trans-unit id="9edc2b494e660618af3e5225f68d40b7ca67629c" datatype="html">
-        <source>The chosen erasure code profile name is already in use.</source>
-        <target>Zvolený název pro profil mazacího kódu je už používán.</target>
-      </trans-unit>
-      <trans-unit id="ef9ff0e6227947b48dfab4ac39ade04af758913b" datatype="html">
-        <source>Plugin</source>
-        <target>Zásuvný modul</target>
-      </trans-unit>
-      <trans-unit id="dd69b31bce8f630eac1d4762b0bbcf72ce19d193" datatype="html">
-        <source>Data chunks (k)</source>
-        <target>Shluky dat (k)</target>
-      </trans-unit>
-      <trans-unit id="b0d26a6172d32cb81218fe2103c54a818cbc1189" datatype="html">
-        <source>Must be equal to or greater than 2.</source>
-        <target>Je třeba, aby bylo 2 a více.</target>
-      </trans-unit>
-      <trans-unit id="dab3a299ead121169b8e08ed618c3b6a2f66691b" datatype="html">
-        <source>Coding chunks (m)</source>
-        <target>Shluky kódování (m)</target>
-      </trans-unit>
-      <trans-unit id="1e2773e5bd4948193f18f2361d663ecc3988c656" datatype="html">
-        <source>Must be equal to or greater than 1.</source>
-        <target>Je třeba, aby bylo 1 a více.</target>
-      </trans-unit>
-      <trans-unit id="6cde4c945a49a260c0a47bcc7cd956846930a5f7" datatype="html">
-        <source>Durability estimator (c)</source>
-        <target>Odhadování odolnosti (c)</target>
-      </trans-unit>
-      <trans-unit id="af668c2a095a979ea2b4e43cd82c2120ab56c21c" datatype="html">
-        <source>Locality (l)</source>
-        <target>Umístění (l)</target>
-      </trans-unit>
-      <trans-unit id="d455a110bf6d2235e314e295ce1dfeee93d3dff2" datatype="html">
-        <source>Crush failure domain</source>
-        <target>Doména selhání crush</target>
-      </trans-unit>
-      <trans-unit id="b74a495f041f7dd102eee5c0bbc9e03083b538ae" datatype="html">
-        <source>Crush Locality</source>
-        <target>Lokalita crush</target>
-      </trans-unit>
-      <trans-unit id="a2f14a73f7a6e94479f67423cc51102da8d6f524" datatype="html">
-        <source>None</source>
-        <target>Žádné</target>
-      </trans-unit>
-      <trans-unit id="2981733b912b693a9dd9d915d6d34f4692cc874a" datatype="html">
-        <source>Technique</source>
-        <target>Technika</target>
-      </trans-unit>
-      <trans-unit id="e0098b6e47b04ec817361f384ce81d454ba5c0bb" datatype="html">
-        <source>Packetsize</source>
-        <target>Velikostpaketu</target>
-      </trans-unit>
-      <trans-unit id="c0252cd81ca54d0a2f69ec9ccf4248e73df5aa4a" datatype="html">
-        <source>Crush root</source>
-        <target>Kořen crush</target>
-      </trans-unit>
-      <trans-unit id="1548d5c76f0406ddd1ba3c557e1e6db22e95b340" datatype="html">
-        <source>Crush device class</source>
-        <target>Třída crush zařízení</target>
-      </trans-unit>
-      <trans-unit id="5e85feb6f9f0334366e46ee09ca6b8df52397432" datatype="html">
-        <source>any</source>
-        <target>libovolné</target>
-      </trans-unit>
-      <trans-unit id="03d84645f6e019c5a43909bbf2ea1696ee88332c" datatype="html">
-        <source>Directory</source>
-        <target>Složka</target>
-      </trans-unit>
-      <trans-unit id="16e113230b6b0d3165e076300880542bac7c8138" datatype="html">
-        <source>The chosen Ceph pool name is already in use.</source>
-        <target>Zvolený název pro Ceph fond je už používán.</target>
-      </trans-unit>
-      <trans-unit id="b85c657469e5ec8231c3de99b22f437bc01ffde5" datatype="html">
-        <source>Pool type</source>
-        <target>Typ fondul</target>
-      </trans-unit>
-      <trans-unit id="526c5443254c3b126eedb264840ffe827727bfd3" datatype="html">
-        <source>-- Select a pool type --</source>
-        <target>-- Vybrat typ fondu --</target>
-      </trans-unit>
-      <trans-unit id="0aa21053410a94aa61d16985a4e95fd65523430d" datatype="html">
-        <source>Placement groups</source>
-        <target>Skupiny umístění</target>
-      </trans-unit>
-      <trans-unit id="6301f1391d726f8f450bb358058534db19541ca9" datatype="html">
-        <source>At least one placement group is needed!</source>
-        <target>Je třeba alespoň jedné skupiny umístění!</target>
-      </trans-unit>
-      <trans-unit id="ba9469a1ce6ed36e039c1f67247c8c81a5c71449" datatype="html">
-        <source>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</source>
-        <target>Váš klastr nemůže obsloužit tolik skupin umístění. Přepočítejte potřebné množství skupin umístění.</target>
-      </trans-unit>
-      <trans-unit id="80ac68cd883369dac20688bc32b4cb33291b5e50" datatype="html">
-        <source>Calculation help</source>
-        <target>Nápověda k výpočtu</target>
-      </trans-unit>
-      <trans-unit id="fccbd60493df26705d957ed6c02a3c447894678f" datatype="html">
-        <source>The current PGs settings were calculated for you, you
-                should make sure the values suit your needs before submit.</source>
-        <target>The current PGs settings were calculated for you, you
-                should make sure the values suit your needs before submit.</target>
-      </trans-unit>
-      <trans-unit id="33150f22ce5348aa6c499bd092c3f4f3695d62cc" datatype="html">
-        <source>Crush ruleset</source>
-        <target>Sada pravidel crush</target>
-      </trans-unit>
-      <trans-unit id="73a6b31116b3cc322af951daa0bafdc169e6c42e" datatype="html">
-        <source>-- Select a crush rule --</source>
-        <target>-- Vybrat crush pravidlo --</target>
-      </trans-unit>
-      <trans-unit id="92da80699921e89fb19372e25b8d0f3b9fa427fc" datatype="html">
-        <source>Crush rule</source>
-        <target>Crush pravidlo</target>
-      </trans-unit>
-      <trans-unit id="5489e9f96835f469f6f728a00d8efa88ea5bc940" datatype="html">
-        <source>Crush steps</source>
-        <target>Crush kroky</target>
-      </trans-unit>
-      <trans-unit id="54a53b1b402aafff5b992ee9b64e409fbfe9074f" datatype="html">
-        <source>The rule can't be used in the current cluster as it has
-                to few OSDs to meet the minimum required OSD by this rule.</source>
-        <target>Pravidlo nemůže být uplatněno na stávající klastr protože má
-                příliš málo OSD aby splnil minimum OSD vyžadovaných tímto pravidlem.</target>
-      </trans-unit>
-      <trans-unit id="a43b2695131b48b76cebba676aba98a2bee17515" datatype="html">
-        <source>Replicated size</source>
-        <target>Replikovaná velikost</target>
-      </trans-unit>
-      <trans-unit id="7bff144a4c4dc63b0e18fff2617d61a7ebdf2b6c" datatype="html">
-        <source>Minimum: 
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
-        </source>
-        <target>Nejméně: 
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="1a9c54b41f6d58a74e5d0aa3429ed0c87a482551" datatype="html">
-        <source>Maximum: 
-          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
-        </source>
-        <target>Nejvíce: 
-          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="6ab647b95bd2347ae6f4605576de5e0269fb893a" datatype="html">
-        <source>The size specified is out of range. A value from
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> to 
-          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> is valid.
-        </source>
-        <target>The size specified is out of range. A value from
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> to 
-          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> is valid.
-        </target>
-      </trans-unit>
-      <trans-unit id="9de7dde00e2139cc4bd03b1837afbe72ad15a1ff" datatype="html">
-        <source>Erasure code profile</source>
-        <target>Profil mazacího kódu</target>
-      </trans-unit>
-      <trans-unit id="39b4620e6bd444e0a57a0a5c03fa8c96d7fe5235" datatype="html">
-        <source>-- No erasure code profile available --</source>
-        <target>-- Žádný profil mazacího kódu --</target>
-      </trans-unit>
-      <trans-unit id="498561757390d5528b263ce450d5f38efb00266d" datatype="html">
-        <source>-- Select an erasure code profile --</source>
-        <target>-- Vyberte profil mazacího kódu --</target>
-      </trans-unit>
-      <trans-unit id="1c870fb00256b8a5b9cb9cd1a124e6390b9bc639" datatype="html">
-        <source>EC Overwrites</source>
-        <target>EC přebití</target>
-      </trans-unit>
-      <trans-unit id="f1abafaeb40ce52355ddcc24686e3cd17b64e08a" datatype="html">
-        <source>Applications</source>
-        <target>Aplikace</target>
-      </trans-unit>
-      <trans-unit id="2208d63d5940ce656006a220102b1eb2b5e553da" datatype="html">
-        <source>Compression</source>
-        <target>Komprese</target>
-      </trans-unit>
-      <trans-unit id="6c6f25c47da62ec597c6057a36ddfc3209811ec5" datatype="html">
-        <source>Algorithm</source>
-        <target>Algoritmus</target>
-      </trans-unit>
-      <trans-unit id="4903231d42089325a28892c0fde1aed46b733ae6" datatype="html">
-        <source>-- No erasure compression algorithm available --</source>
-        <target>-- Žádný algoritmus komprese mazání --</target>
-      </trans-unit>
-      <trans-unit id="5d68ddb254275f8f44221e9ad6d8ceeb59ca46a6" datatype="html">
-        <source>Minimum blob size</source>
-        <target>Minimální velikost blobu</target>
-      </trans-unit>
-      <trans-unit id="fb2f176df80647137cbb02bbeb29e5dec707a400" datatype="html">
-        <source>e.g., 128KiB</source>
-        <target>např. 128 KiB</target>
-      </trans-unit>
-      <trans-unit id="1b7f6e53a4521c6eb3ced4c007fdd4cf80bb7707" datatype="html">
-        <source>Value should be greater than 0</source>
-        <target>Hodnota by měla být vyšší než nula</target>
-      </trans-unit>
-      <trans-unit id="8db98ab14b4e207ec763dfdefbc2dae367aab1cc" datatype="html">
-        <source>Value should be less than the maximum blob size</source>
-        <target>Hodnota by měla být nižší než maximální velikost blobu</target>
-      </trans-unit>
-      <trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
-        <source>Maximum blob size</source>
-        <target>Nejvyšší velikost blobu</target>
-      </trans-unit>
-      <trans-unit id="0c656f0e346bbadf46eb1a5d20d0307a3bd20ba8" datatype="html">
-        <source>e.g., 512KiB</source>
-        <target>např. 512 KiB</target>
-      </trans-unit>
-      <trans-unit id="0a65a24eee8a026f3b1113fe9e157e9a0dd69486" datatype="html">
-        <source>Value should be greater than the minimum blob size</source>
-        <target>Hodnota by měla být vyšší než nejnižší velikost blobu</target>
-      </trans-unit>
-      <trans-unit id="261ba09c4a59de83f48f52a23fd328da37e61ff4" datatype="html">
-        <source>Ratio</source>
-        <target>Poměr</target>
-      </trans-unit>
-      <trans-unit id="c1430457a9c3c66366e51d76bf10396014c576be" datatype="html">
-        <source>Compression ratio</source>
-        <target>Kompresní poměr</target>
-      </trans-unit>
-      <trans-unit id="ae5ce6de352cde949998fb10754459c3a4eb183b" datatype="html">
-        <source>Value should be between 0.0 and 1.0</source>
-        <target>Hodnota by měla být z rozmezí 0.0 až 1.0</target>
-      </trans-unit>
-      <trans-unit id="8bb8293aa8161433778762ae025ffd5e7c85795e" datatype="html">
-        <source>Quotas</source>
-        <target>Quotas</target>
-      </trans-unit>
-      <trans-unit id="d99b34162c9c34f10d0ccd8dbae83d8569c2db77" datatype="html">
-        <source>Max bytes</source>
-        <target>Max bytes</target>
-      </trans-unit>
-      <trans-unit id="a1d14a18879c62f3f4ed705318b7164a1160e249" datatype="html">
-        <source>Leave it blank or specify 0 to disable this quota.</source>
-        <target>Leave it blank or specify 0 to disable this quota.</target>
-      </trans-unit>
-      <trans-unit id="7565b131562ff6c5f769fdbd239a772154abdd97" datatype="html">
-        <source>A valid quota should be greater than 0.</source>
-        <target>A valid quota should be greater than 0.</target>
-      </trans-unit>
-      <trans-unit id="b8bf35b66f09a301eef92ffc3cb2fd259df67ce9" datatype="html">
-        <source>Max objects</source>
-        <target>Max objects</target>
-      </trans-unit>
-      <trans-unit id="95f348167622d832c5ae532b6944635c8e2ae5cb" datatype="html">
-        <source>The value should be greater or equal to 0</source>
-        <target>The value should be greater or equal to 0</target>
-      </trans-unit>
-      <trans-unit id="4b673e771a3f6b056837b22ef19a825386046095" datatype="html">
-        <source>It's not possible to create an RBD pool with '/' in the name.</source>
-        <target>Není možné vytvořit RBD fond, který má v názvu „/“.</target>
-      </trans-unit>
-      <trans-unit id="a9c02674c6e4936562d1146e1ecf0c4240dfcf96" datatype="html">
-        <source>Please change the name or remove 'rbd' from the applications list.</source>
-        <target>Změňte název nebo ze seznamu použití odeberte „rbd“</target>
-      </trans-unit>
-      <trans-unit id="3938a411d76796f8ae73b72ea4c77661207453bd" datatype="html">
-        <source>Cache Tiers Details</source>
-        <target>Podrobnosti o stupních mezipaměti</target>
+      <trans-unit id="ca53d681a9892d6fdbb57ee9676582186515e961" datatype="html">
+        <source>Performance counters not available</source>
+        <target>Výkonnostní čítače nejsou k dispozici</target>
       </trans-unit>
       <trans-unit id="9424badb7e0c6ac792d020d7830645b529a80aad" datatype="html">
         <source>Please consult the 
@@ -2266,10 +2068,6 @@
         <source>Loading bucket data...</source>
         <target>Načítání dat nádoby…</target>
       </trans-unit>
-      <trans-unit id="8508c0ab851ad91fd0410da1266c02b0ef9d3ff9" datatype="html">
-        <source>The bucket data could not be loaded.</source>
-        <target>Data nádoby se nepodařilo načíst.</target>
-      </trans-unit>
       <trans-unit id="2798cc1e152b1ec07fd8daf94a2a073d1ba1ebcc" datatype="html">
         <source>Id</source>
         <target>Identif.</target>
@@ -2277,6 +2075,10 @@
       <trans-unit id="db4e1a734518691b128ef40b939cc673f01d03a6" datatype="html">
         <source>The value is not valid.</source>
         <target>Hodnota není platná.</target>
+      </trans-unit>
+      <trans-unit id="eabb4db920d9f9b2480cf438468b86e1bea02a9b" datatype="html">
+        <source>The chosen name is already in use.</source>
+        <target>Zvolený název už je používán.</target>
       </trans-unit>
       <trans-unit id="0ee5132a8da30e0b7f9f5c70dbc91928d17dd909" datatype="html">
         <source>Owner</source>
@@ -2288,11 +2090,31 @@
       </trans-unit>
       <trans-unit id="a4aab1f837bc8ec222e4f25922465d1c5929a1fc" datatype="html">
         <source>Placement target</source>
-        <target>Placement target</target>
+        <target>Cíl umístění</target>
       </trans-unit>
       <trans-unit id="6bae0a7fc2c9c1fde7d937a8a1a3c7e6825cf7d1" datatype="html">
         <source>-- Select a placement target --</source>
-        <target>-- Select a placement target --</target>
+        <target>-- Vybrat cíl umístění --</target>
+      </trans-unit>
+      <trans-unit id="efeade5060b3add63863c24871f0830fb16b7e6d" datatype="html">
+        <source>Versioning</source>
+        <target>Verzování</target>
+      </trans-unit>
+      <trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
+        <source>Enabled</source>
+        <target>Zapnuto</target>
+      </trans-unit>
+      <trans-unit id="016d24e069e7d505a090fb8243e5cd43b35dc39b" datatype="html">
+        <source>Enables versioning for the objects in the bucket.</source>
+        <target>Enables versioning for the objects in the bucket.</target>
+      </trans-unit>
+      <trans-unit id="92f3f203270a29b3001871153f02c063484a1574" datatype="html">
+        <source>Suspended</source>
+        <target>Pozastaveno</target>
+      </trans-unit>
+      <trans-unit id="cd6a798fd0f85cd7e31a57c58074f25035d7850d" datatype="html">
+        <source>Disables versioning for the objects in the bucket.</source>
+        <target>Disables versioning for the objects in the bucket.</target>
       </trans-unit>
       <trans-unit id="45cc8ca94b5a50842a9a8ef804a5ab089a38ae5c" datatype="html">
         <source>ID</source>
@@ -2334,10 +2156,6 @@
         <source>Bucket quota</source>
         <target>Kvóta nádoby</target>
       </trans-unit>
-      <trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
-        <source>Enabled</source>
-        <target>Zapnuto</target>
-      </trans-unit>
       <trans-unit id="cef1595d040e77cbb4466e60382028d4c2040cac" datatype="html">
         <source>Maximum size</source>
         <target>Nejvyšší velikost</target>
@@ -2349,6 +2167,10 @@
       <trans-unit id="ee862a800364b4d11f9b8cb9955a28a60f840a45" datatype="html">
         <source>Maximum objects</source>
         <target>Nejvýše objektů</target>
+      </trans-unit>
+      <trans-unit id="08c74dc9762957593b91f6eb5d65efdfc975bf48" datatype="html">
+        <source>Username</source>
+        <target>Uživatelské jméno</target>
       </trans-unit>
       <trans-unit id="49c614babd1950adb2be75df4e2c9747286d6adc" datatype="html">
         <source>-- Select a username --</source>
@@ -2366,13 +2188,13 @@
         <source>Secret key</source>
         <target>Tajný klíč</target>
       </trans-unit>
+      <trans-unit id="b760f123248930122fc7e7b6b6bf94e376e959c8" datatype="html">
+        <source>Full name</source>
+        <target>Celé jméno</target>
+      </trans-unit>
       <trans-unit id="69b6ac577a19acc39fc0c22342092f327fff2529" datatype="html">
         <source>Email address</source>
         <target>E-mailová adresa</target>
-      </trans-unit>
-      <trans-unit id="92f3f203270a29b3001871153f02c063484a1574" datatype="html">
-        <source>Suspended</source>
-        <target>Pozastaveno</target>
       </trans-unit>
       <trans-unit id="8011e20c5bbe51602d459a860fbf29b599b55edd" datatype="html">
         <source>System</source>
@@ -2401,6 +2223,10 @@
       <trans-unit id="0bcd5ef19af0f1b814141ca8c57df623d8270088" datatype="html">
         <source>Keys</source>
         <target>Klíče</target>
+      </trans-unit>
+      <trans-unit id="f61c6867295f3b53d23557021f2f4e0aa1d0b8fc" datatype="html">
+        <source>Type</source>
+        <target>Typ</target>
       </trans-unit>
       <trans-unit id="1221ca97d19eaa9a7bc0c5243d5fc5befe1d2314" datatype="html">
         <source>-- Select a type --</source>
@@ -2536,6 +2362,296 @@
         <source>Max. objects</source>
         <target>Nejvýše objektů</target>
       </trans-unit>
+      <trans-unit id="1ea5c4d8942c00752dcc72e72949c5d9832f6399" datatype="html">
+        <source>Description...</source>
+        <target>Popis…</target>
+      </trans-unit>
+      <trans-unit id="70f45880fce6ac5d8e468e25e82aefbba8098cfe" datatype="html">
+        <source>Permissions</source>
+        <target>Oprávnění</target>
+      </trans-unit>
+      <trans-unit id="9610487cbeb5796d34d8601b5ac0c0a65f9e1d19" datatype="html">
+        <source>Roles</source>
+        <target>Role</target>
+      </trans-unit>
+      <trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
+        <source>Confirm password</source>
+        <target>Potvrzení zadání hesla</target>
+      </trans-unit>
+      <trans-unit id="cbb979e63ba50e0ca3adfa09cbdcaefd0853fca1" datatype="html">
+        <source>Password confirmation doesn't match the password.</source>
+        <target>Zadání hesla se neshodují.</target>
+      </trans-unit>
+      <trans-unit id="244aae9346da82b0922506c2d2581373a15641cc" datatype="html">
+        <source>Email</source>
+        <target>E-mail</target>
+      </trans-unit>
+      <trans-unit id="d0ec081dd61eb4f43aea269077bbe38eae87b7f9" datatype="html">
+        <source>Invalid email.</source>
+        <target>Neplatný e-mail.</target>
+      </trans-unit>
+      <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
+        <source>You are about to remove "user read / update" permissions from your own user.</source>
+        <target>Chystáte se odebrat oprávnění „uživatel číst/aktualizovat“ svému vlastnímu účtu.</target>
+      </trans-unit>
+      <trans-unit id="af4bf9fcb256853f14cf947eb1deb8d7f176d3f9" datatype="html">
+        <source>If you continue, you will no longer be able to add or remove roles from any user.</source>
+        <target>Pokud budete pokračovat, nebudete nadále schopní přidávat nebo nebo odebírat role žádnému z uživatelů.</target>
+      </trans-unit>
+      <trans-unit id="7d1dcf2a9146caac0581329acf94806ec69a89a5" datatype="html">
+        <source>Are you sure you want to continue?</source>
+        <target>Opravdu chcete pokračovat?</target>
+      </trans-unit>
+      <trans-unit id="85b79c9064aed1ead31ace985f31aa1363f6bdaf" datatype="html">
+        <source>Help</source>
+        <target>Nápověda</target>
+      </trans-unit>
+      <trans-unit id="fcfd4675b4c90f08d18d3abede9a9a4dff4cfdc7" datatype="html">
+        <source>Documentation</source>
+        <target>Dokumentace</target>
+      </trans-unit>
+      <trans-unit id="e351b40b3869a5c7d19c3d4918cb1ac7aaab95c4" datatype="html">
+        <source>API</source>
+        <target>Aplikační program. rozhraní</target>
+      </trans-unit>
+      <trans-unit id="004b222ff9ef9dd4771b777950ca1d0e4cd4348a" datatype="html">
+        <source>About</source>
+        <target>O aplikaci</target>
+      </trans-unit>
+      <trans-unit id="1481ecd21e760ac919a24e26cf790acd82e40199" datatype="html">
+        <source>Dashboard Settings</source>
+        <target>Nastavení přehledu</target>
+      </trans-unit>
+      <trans-unit id="a79aab4ef674bf3f6532292107c0054302236e0f" datatype="html">
+        <source>User management</source>
+        <target>Správa uživatelů</target>
+      </trans-unit>
+      <trans-unit id="049dfd9fe6c78914ad58cf89ac6a631fca28ec74" datatype="html">
+        <source>Logged in user</source>
+        <target>Přihlášený uživatel</target>
+      </trans-unit>
+      <trans-unit id="cd38a58e73f306d838e621959d47d5e7a2f06d1f" datatype="html">
+        <source>Signed in as
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
+        </source>
+        <target>Přihlášeni jako
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="739516c2ca75843d5aec9cf0e6b3e4335c4227b9" datatype="html">
+        <source>Change password</source>
+        <target>Změnit heslo</target>
+      </trans-unit>
+      <trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
+        <source>Sign out</source>
+        <target>Odhlásit</target>
+      </trans-unit>
+      <trans-unit id="91853167141c37b58868f3b0421383dd72fa8a01" datatype="html">
+        <source>Attributes (OSD map)</source>
+        <target>Atributy (OSD mapa)</target>
+      </trans-unit>
+      <trans-unit id="97842f379e1d4157ac3ab0661b90c352e7cb72d5" datatype="html">
+        <source>Metadata not available</source>
+        <target>Metadata nejsou k dispozici</target>
+      </trans-unit>
+      <trans-unit id="f721a500a68c357e8f2a01e60510f6a01e4ba529" datatype="html">
+        <source>Metadata</source>
+        <target>Metadata</target>
+      </trans-unit>
+      <trans-unit id="deba10b7279a589d01e919ea11f43c79ca1773e3" datatype="html">
+        <source>Device health</source>
+        <target>Stav zařízení</target>
+      </trans-unit>
+      <trans-unit id="d24e28e19c5703d7c6be44f4eb595a6a43b618ed" datatype="html">
+        <source>Performance counter</source>
+        <target>Výkonnostní čítač</target>
+      </trans-unit>
+      <trans-unit id="d1f7c81ed9c5034af4abcdf119b1c1e86cd019dd" datatype="html">
+        <source>Histogram not available: 
+          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
+        </source>
+        <target>Histogram není k dispozici: 
+          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="868abfff914873d1c65df798d8432ed04b8ae2a9" datatype="html">
+        <source>Writes</source>
+        <target>Zápisy</target>
+      </trans-unit>
+      <trans-unit id="996ebb9a653b5067f97bf3891ea9d2108e969492" datatype="html">
+        <source>Reads</source>
+        <target>Čtení</target>
+      </trans-unit>
+      <trans-unit id="65ac79790aa477a97b1cc579e18a115a8df8918f" datatype="html">
+        <source>Histogram</source>
+        <target>Histogram</target>
+      </trans-unit>
+      <trans-unit id="26fb5f81b3581f06b9210defb0e71dc69a67e819" datatype="html">
+        <source>Current values</source>
+        <target>Stávající hodnoty</target>
+      </trans-unit>
+      <trans-unit id="9abcd7c82643d60c22733470463f74e4a54bc069" datatype="html">
+        <source>Min</source>
+        <target>Min</target>
+      </trans-unit>
+      <trans-unit id="c3ced4d162a0a55ee233a187ce7208ba5e922418" datatype="html">
+        <source>Max</source>
+        <target>Max</target>
+      </trans-unit>
+      <trans-unit id="6834fa6b43d1ecbdf147c48dd9c4d72f1484571d" datatype="html">
+        <source>Source</source>
+        <target>Zdroj</target>
+      </trans-unit>
+      <trans-unit id="a446fb0eb11fbffcac805ece5a2d306d24e733d8" datatype="html">
+        <source>Level</source>
+        <target>Úroveň</target>
+      </trans-unit>
+      <trans-unit id="39f2fb094e9b2eda13163fa3f3a31594cf9c1307" datatype="html">
+        <source>Can be updated at runtime (editable)</source>
+        <target>Je možné aktualizovat za provozu (upravitelné)</target>
+      </trans-unit>
+      <trans-unit id="cafc87479686947e2590b9f588a88040aeaf660b" datatype="html">
+        <source>Tags</source>
+        <target>Štítky</target>
+      </trans-unit>
+      <trans-unit id="ab0089ef47af61ca1d137bc908b96c290dfd9287" datatype="html">
+        <source>Enum values</source>
+        <target>Vyčíslit hodnoty</target>
+      </trans-unit>
+      <trans-unit id="819476f1264f1659f38e86f6abb542141b184832" datatype="html">
+        <source>See also</source>
+        <target>Viz také</target>
+      </trans-unit>
+      <trans-unit id="d82a9af5b05e7cd17640f196f163771685ff8df6" datatype="html">
+        <source>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</source>
+        <target>Data obdržena v JSON formátu verze 2.x, což je v tuto chvíli nekompatibilní s přehledem.</target>
+      </trans-unit>
+      <trans-unit id="a185c9b97513b3882604ea9bab60edbfac945c15" datatype="html">
+        <source>SMART overall-health self-assessment test result</source>
+        <target>výsledek SMART testu samoposouzení celkového stavu</target>
+      </trans-unit>
+      <trans-unit id="ddd5dd6d930030096ea617f62c82b648a0dd9484" datatype="html">
+        <source>Device Information</source>
+        <target>Informace o zařízení</target>
+      </trans-unit>
+      <trans-unit id="79c6bf990ea5b4d83bbf8f9e399f4bd933a1ebfc" datatype="html">
+        <source>S.M.A.R.T</source>
+        <target>S.M.A.R.T</target>
+      </trans-unit>
+      <trans-unit id="05c17e08939cbef1a5df5386263b1701e8d5742e" datatype="html">
+        <source>S.M.A.R.T data is loading.</source>
+        <target>Načítání dat ze S.M.A.R.T diagnostiky.</target>
+      </trans-unit>
+      <trans-unit id="73caac4265ea7314ff061e5a1d78a6361a6dd3b8" datatype="html">
+        <source>Cluster Status</source>
+        <target>Stav klastru</target>
+      </trans-unit>
+      <trans-unit id="1d4bc612bbf19aa9553853266b9e92c9d75f4464" datatype="html">
+        <source>Manager Daemons</source>
+        <target>Procesy služby správy</target>
+      </trans-unit>
+      <trans-unit id="946ac5dea9921dc09d7b0a63b89535371f283b19" datatype="html">
+        <source>Object Gateways</source>
+        <target>Objektové brány</target>
+      </trans-unit>
+      <trans-unit id="ff03fa5bcf37c4da46ad736c1f7d03f959e8ba9a" datatype="html">
+        <source>Metadata Servers</source>
+        <target>Metadata servery</target>
+      </trans-unit>
+      <trans-unit id="d817609ba4993eba859409ab71e566168f4d5f5a" datatype="html">
+        <source>iSCSI Gateways</source>
+        <target>iSCSI brány</target>
+      </trans-unit>
+      <trans-unit id="42c13e50391250ea9379bdf55d5d6c0228c0c8bc" datatype="html">
+        <source>Client IOPS</source>
+        <target>vst/výst. klienta</target>
+      </trans-unit>
+      <trans-unit id="52213660b2454d139ada3079a42ec6caf3c3c01e" datatype="html">
+        <source>Client Throughput</source>
+        <target>Propustnost klienta</target>
+      </trans-unit>
+      <trans-unit id="32efd1c3f70e3c5244239de97a2cc95d98534a14" datatype="html">
+        <source>Client Read/Write</source>
+        <target>Čtení/zápis klienta</target>
+      </trans-unit>
+      <trans-unit id="275485415092cbae3a9f3cbb786ebe283cacfdd5" datatype="html">
+        <source>Recovery Throughput</source>
+        <target>Propustnost zotavení</target>
+      </trans-unit>
+      <trans-unit id="6d9a9f55046891733ef71170e7652063765eb542" datatype="html">
+        <source>Scrub</source>
+        <target>Kontrola</target>
+      </trans-unit>
+      <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
+        <source>Performance</source>
+        <target>Výkonnost</target>
+      </trans-unit>
+      <trans-unit id="88f383269db2d32cccee9e936fe549dccb9fdbf4" datatype="html">
+        <source>Raw Capacity</source>
+        <target>Holá kapacita</target>
+      </trans-unit>
+      <trans-unit id="c5f8a813f91a11af99132e4beafc136cfc13d73b" datatype="html">
+        <source>PGs per OSD</source>
+        <target>Skupin umístění na OSD</target>
+      </trans-unit>
+      <trans-unit id="498a109c6e9e94f1966de01aa0326f7f0ac6fb52" datatype="html">
+        <source>PG Status</source>
+        <target>Stav skupiny umístění</target>
+      </trans-unit>
+      <trans-unit id="ce9dfdc6dccb28dc75a78c704e09dc18fb02dcfa" datatype="html">
+        <source>Capacity</source>
+        <target>Kapacita</target>
+      </trans-unit>
+      <trans-unit id="44ecac93d67c6a671198091c2270354f80322327" datatype="html">
+        <source>
+          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
+          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
+        </source>
+        <target>Další podrobnosti 
+          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
+          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> naleznete v 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>záznamech událostí
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="0c1e17956453ad772dbe82d6946f62748c692f3e" datatype="html">
+        <source>Ranks</source>
+        <target>Hodnocení</target>
+      </trans-unit>
+      <trans-unit id="2b24e0b0b1629d2e8a51b9da7c75d6e6379f4bc4" datatype="html">
+        <source>Standbys</source>
+        <target>Pohotovosti</target>
+      </trans-unit>
+      <trans-unit id="50df62325726db950523a5be1c78b8905fcc25d4" datatype="html">
+        <source>MDS performance counters</source>
+        <target>čítače výkonnosti MDS</target>
+      </trans-unit>
+      <trans-unit id="a7b6508fb834bee9e48e11e4503fbbc2d19204de" datatype="html">
+        <source>Clients: 
+          <x id="INTERPOLATION" equiv-text="{{ clients.data.length }}"/>
+        </source>
+        <target>Klienti: 
+          <x id="INTERPOLATION" equiv-text="{{ clients.data.length }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="6e213942c6354b9cbe7a650f0f1499bfc1000fb6" datatype="html">
+        <source>Directories</source>
+        <target>Složky</target>
+      </trans-unit>
+      <trans-unit id="47116253e36f4e38a97ba41b2d3122c6c15ab904" datatype="html">
+        <source>Clients (
+          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
+        </source>
+        <target>Klienti (
+          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
+        </target>
+      </trans-unit>
       <trans-unit id="bd5a3b1c5a3c185c7bbb0e09a061d4cdc88ce5ad" datatype="html">
         <source>Current</source>
         <target>Stávající</target>
@@ -2572,6 +2688,14 @@
         <source># Sessions</source>
         <target>Počet relací</target>
       </trans-unit>
+      <trans-unit id="c49e0dd71d551bd4928d967d78f0721dbf9f95e3" datatype="html">
+        <source>Target has active sessions</source>
+        <target>Cíl má aktivní relace</target>
+      </trans-unit>
+      <trans-unit id="a87acd72dfb68b45175270695209550a85adf50c" datatype="html">
+        <source>iSCSI target</source>
+        <target>iSCSI cíl</target>
+      </trans-unit>
       <trans-unit id="873b72903b1858a9cd6c8967521030b4d7d1435b" datatype="html">
         <source>State</source>
         <target>Stav</target>
@@ -2603,10 +2727,6 @@
       <trans-unit id="ff78f059449d44322f627d0f66df07abe476962b" datatype="html">
         <source>Instance</source>
         <target>Instance</target>
-      </trans-unit>
-      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
-        <source>Hostname</source>
-        <target>Název stroje</target>
       </trans-unit>
       <trans-unit id="36fad7995cadfb3a6f0d43ef2db280146b3ca022" datatype="html">
         <source>Issue</source>
@@ -2684,6 +2804,10 @@
         <source>Fast diff (interlocked with object-map)</source>
         <target>Fast diff (interlocked with object-map)</target>
       </trans-unit>
+      <trans-unit id="631fc50ec7c9bd81dc797a3c7e09eda1178ad999" datatype="html">
+        <source>Parent image must support Layering</source>
+        <target>Je třeba, aby nadřazený obraz podporoval vrstvy</target>
+      </trans-unit>
       <trans-unit id="7eb984588f4835f6d0187b33769b4b0f62821640" datatype="html">
         <source>RBD snapshot rollback</source>
         <target>Vrácení zachyceného stavu RBD zpět</target>
@@ -2732,6 +2856,10 @@
           <x id="INTERPOLATION" equiv-text="{{clientId}}"/>"
         </target>
       </trans-unit>
+      <trans-unit id="7db875ff4cc626d394f37fba95c075b2e4bfeb00" datatype="html">
+        <source>Standby daemons</source>
+        <target>Procesy služeb v pohotovosti</target>
+      </trans-unit>
       <trans-unit id="3c3a423d91e36ac6624e909fcd2669a25685f847" datatype="html">
         <source>Rank</source>
         <target>Hodnocení</target>
@@ -2756,9 +2884,9 @@
         <source>Usage</source>
         <target>Využití</target>
       </trans-unit>
-      <trans-unit id="7db875ff4cc626d394f37fba95c075b2e4bfeb00" datatype="html">
-        <source>Standby daemons</source>
-        <target>Procesy služeb v pohotovosti</target>
+      <trans-unit id="950b5f04a2efd3f11c0f76418d5a4212381e792e" datatype="html">
+        <source>Origin</source>
+        <target>Původ</target>
       </trans-unit>
       <trans-unit id="22e4e574b7f8abf58254f328792445b42e2a924a" datatype="html">
         <source>The value can be updated at runtime.</source>
@@ -2806,6 +2934,30 @@
         <source>Editable</source>
         <target>Upravitelné</target>
       </trans-unit>
+      <trans-unit id="261c0af854e8684abc15f89dce6efb3e72344b18" datatype="html">
+        <source>host</source>
+        <target>stroj</target>
+      </trans-unit>
+      <trans-unit id="9e35065e7c579e1fb960499117fd4b3c68d1c263" datatype="html">
+        <source>Host operation is disabled because orchestrator is unavailable</source>
+        <target>Host operation is disabled because orchestrator is unavailable</target>
+      </trans-unit>
+      <trans-unit id="a5d5e407f8c4e1b152509c966c90f37edf68472e" datatype="html">
+        <source>Device path</source>
+        <target>Popis umístění zařízení</target>
+      </trans-unit>
+      <trans-unit id="94e76c060aa68c05d8c4a3f5a20c92fab3e83ccf" datatype="html">
+        <source>Rotates</source>
+        <target>Rotates</target>
+      </trans-unit>
+      <trans-unit id="b7da3e3505cc80f9bf3cffc8444c53e8a9ec70a5" datatype="html">
+        <source>Available</source>
+        <target>K dispozici</target>
+      </trans-unit>
+      <trans-unit id="6ec98fa3d6504ba1fd03465194b53706c8263c99" datatype="html">
+        <source>Model</source>
+        <target>Model</target>
+      </trans-unit>
       <trans-unit id="1a6e6ad05508130b7a99ce5b15daf3227c2a930c" datatype="html">
         <source>Updated options for module "
           <x id="INTERPOLATION" equiv-text="{{name}}"/>".
@@ -2821,6 +2973,10 @@
       <trans-unit id="6766a926d80bb7763785621098dae459d6226429" datatype="html">
         <source>Disable</source>
         <target>Vypnout</target>
+      </trans-unit>
+      <trans-unit id="340f2f312c2eb353e5cd69aee6bee7f5a73c34ac" datatype="html">
+        <source>This Manager module is always on.</source>
+        <target>Modul Zpráva je vždy zapnutý.</target>
       </trans-unit>
       <trans-unit id="6a0b3657745dd7a2f2162f1cc790bf9004d0845d" datatype="html">
         <source>Reconnecting, please wait ...</source>
@@ -2988,7 +3144,7 @@
       </trans-unit>
       <trans-unit id="107614b994f2b01abdc1ca179bf780b0cd933ec4" datatype="html">
         <source>Recovery Priority</source>
-        <target>Recovery Priority</target>
+        <target>Priorita zotavování</target>
       </trans-unit>
       <trans-unit id="359dad5a3a912ef9dece3194035020856805aa96" datatype="html">
         <source>PG scrub</source>
@@ -3066,19 +3222,55 @@
           <x id="INTERPOLATION" equiv-text="{{value}}"/>“
         </target>
       </trans-unit>
-      <trans-unit id="442db228d78b94d704b22bb0ffeb712af183f19a" datatype="html">
+      <trans-unit id="ccf5f30798c03d2d8efd0e6eb508320c018b722d" datatype="html">
         <source>
-          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD: 
+          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD(s): 
           <x id="INTERPOLATION_1" equiv-text="{{id}}"/>
         </source>
         <target>
-          <x id="INTERPOLATION" equiv-text="{{operation}}"/> bylo inicializováno v následujícím OSD: 
+          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD(s): 
           <x id="INTERPOLATION_1" equiv-text="{{id}}"/>
         </target>
       </trans-unit>
+      <trans-unit id="9836e830d0219585b36d53be00a31c3d4798a4aa" datatype="html">
+        <source>Smartctl has received an unknown argument (error code
+          <x id="INTERPOLATION" equiv-text="{{smartData.smartctl_error_code}}"/>). You may be using an
+                incompatible version of smartmontools. Version &gt;= 7.0 of
+                smartmontools is required to succesfully retrieve data.
+        </source>
+        <target>Smartctl obdrželo neznámý argument (kód chyby
+          <x id="INTERPOLATION" equiv-text="{{smartData.smartctl_error_code}}"/>). Možná používáte nekompatibilní
+                verzi smartmontools. Pro úspěšné získání dat je třeba verze
+                smartmontools &amp;gt;= 7.0.
+        </target>
+      </trans-unit>
+      <trans-unit id="d5fd840374ca1a6f394bcd81f390a6dca27f8224" datatype="html">
+        <source>An error with error code 
+          <x id="INTERPOLATION" equiv-text="{{code}}"/> occurred.
+        </source>
+        <target>Vyskytla se chyba s kódem 
+          <x id="INTERPOLATION" equiv-text="{{code}}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="a0b59d7139692bb8d8ed786b6eb6e9e70ce743f3" datatype="html">
+        <source>Raw</source>
+        <target>Raw</target>
+      </trans-unit>
+      <trans-unit id="2f3beddc8234b30fb26a7f63ba2f1ea74f2ed6f7" datatype="html">
+        <source>Threshold</source>
+        <target>Práh</target>
+      </trans-unit>
+      <trans-unit id="4654b5a68af3c8bad29aa14ca85ccea1f3143c6b" datatype="html">
+        <source>When Failed</source>
+        <target>Když se nezdařilo</target>
+      </trans-unit>
+      <trans-unit id="5b7f56d5be49fb8e8d8f40209d6746f8f72e9177" datatype="html">
+        <source>Worst</source>
+        <target>Nejhorší</target>
+      </trans-unit>
       <trans-unit id="1edb8e46b0fac57c5feb3d7d3585afc0122d5481" datatype="html">
         <source>Create silence</source>
-        <target>Create silence</target>
+        <target>Vytvořit ticho</target>
       </trans-unit>
       <trans-unit id="78917e8031aaf913ac3fa63295325ce8879703ce" datatype="html">
         <source>Job</source>
@@ -3098,23 +3290,23 @@
       </trans-unit>
       <trans-unit id="a5cd682a8a33bdc72e093d059429e3cc3a50ec1d" datatype="html">
         <source>silence</source>
-        <target>silence</target>
+        <target>ticho</target>
       </trans-unit>
       <trans-unit id="f557e117e059e7036c6eecacd325a6ae35d866e0" datatype="html">
         <source>Attribute name</source>
-        <target>Attribute name</target>
+        <target>Název atributu</target>
       </trans-unit>
       <trans-unit id="50f7f517ad8158667f7d4e2bd6f3256e05156e75" datatype="html">
         <source>Regular expression</source>
-        <target>Regular expression</target>
+        <target>Regulární výraz</target>
       </trans-unit>
       <trans-unit id="81b1eab399c47110d50f45e3ccb4c009de7cb581" datatype="html">
         <source>Please add your Prometheus host to the dashboard configuration and refresh the page</source>
-        <target>Please add your Prometheus host to the dashboard configuration and refresh the page</target>
+        <target>Přidejte hostitele s Prometheus do nastavení přehledu a znovu načtete stránku</target>
       </trans-unit>
       <trans-unit id="29b4ae3296e239446fa0dea88a5112de15cffa54" datatype="html">
         <source>Created by</source>
-        <target>Created by</target>
+        <target>Vytvořil(a)</target>
       </trans-unit>
       <trans-unit id="9da0107a35751e722c8b4bca7636fc7645dbdbdc" datatype="html">
         <source>Updated</source>
@@ -3122,11 +3314,35 @@
       </trans-unit>
       <trans-unit id="8d833cceee0ba4c5161b130365e02bc1e129b57e" datatype="html">
         <source>Ends</source>
-        <target>Ends</target>
+        <target>Končí</target>
       </trans-unit>
       <trans-unit id="46a11ff4289e8c88b1b7a935f8d8ee704055f11a" datatype="html">
         <source>Silence</source>
-        <target>Silence</target>
+        <target>Ticho</target>
+      </trans-unit>
+      <trans-unit id="f392abfbb997402ce2aebb13e660a8f01dec54db" datatype="html">
+        <source>Service type</source>
+        <target>Typ služby</target>
+      </trans-unit>
+      <trans-unit id="9ffa91b056fb979786627885651e19c8275675cd" datatype="html">
+        <source>Service instance</source>
+        <target>Instance služby</target>
+      </trans-unit>
+      <trans-unit id="b5910192a9ac4816638ff6383b03f986ff965796" datatype="html">
+        <source>Container id</source>
+        <target>Identifikátor kontejneru</target>
+      </trans-unit>
+      <trans-unit id="60ab9cce12a56cdc5ec6a1b699f8c7afecd629d5" datatype="html">
+        <source>Rados config location</source>
+        <target>Umístění nastavení pro rados</target>
+      </trans-unit>
+      <trans-unit id="dfa409f831c9168a377bdee02c5ea6aaf9b2bf61" datatype="html">
+        <source>Service URL</source>
+        <target>URL služby</target>
+      </trans-unit>
+      <trans-unit id="bf2468fd965b8a59c135ad549b3a612aa9873abc" datatype="html">
+        <source>Status Description</source>
+        <target>Popis stavu</target>
       </trans-unit>
       <trans-unit id="fb2e1bed329dc5b84197808c778abb9edcbdb335" datatype="html">
         <source>Used</source>
@@ -3154,23 +3370,23 @@
       </trans-unit>
       <trans-unit id="88155be1b9b9c6140d6e8f93bac4a775cfdc6671" datatype="html">
         <source>Healthy</source>
-        <target>Healthy</target>
+        <target>Zdravé</target>
       </trans-unit>
       <trans-unit id="8a3aec4dc1a6e2d4c612ae85e0537acbb20a0f85" datatype="html">
         <source>Misplaced</source>
-        <target>Misplaced</target>
+        <target>Chybně umístěno</target>
       </trans-unit>
       <trans-unit id="ee81f9bf7ceac69712e0b83e8adc268739f9673e" datatype="html">
         <source>Degraded</source>
-        <target>Degraded</target>
+        <target>Degradováno</target>
       </trans-unit>
       <trans-unit id="14625bc4025daef1969777a67a3cca27e0cd9167" datatype="html">
         <source>Unfound</source>
-        <target>Unfound</target>
+        <target>Odnalezeno</target>
       </trans-unit>
       <trans-unit id="8f23ea509d081c2f747d083d44608dbf125b2ea2" datatype="html">
         <source>replicas</source>
-        <target>replicas</target>
+        <target>repliky</target>
       </trans-unit>
       <trans-unit id="129a2224e1f9d19eb5e11e2a07fe10a785556484" datatype="html">
         <source>up</source>
@@ -3235,10 +3451,6 @@
       <trans-unit id="18ae8dc1264f06df7ea251175ada2ac1b8401018" datatype="html">
         <source>NFS export</source>
         <target>NFS export</target>
-      </trans-unit>
-      <trans-unit id="5f19586aba912ec6eb123ec5ab609a3bcc073066" datatype="html">
-        <source>Export</source>
-        <target>Exportovat</target>
       </trans-unit>
       <trans-unit id="ae128527ec18892f812a62a1fd15dc50a38060c0" datatype="html">
         <source>EC Profile</source>
@@ -3322,18 +3534,18 @@
       </trans-unit>
       <trans-unit id="bcc365a084b6145b941b371bd4c2b6c3d2c79234" datatype="html">
         <source>Pool deletion is disabled by the mon_allow_pool_delete configuration setting.</source>
-        <target>Pool deletion is disabled by the mon_allow_pool_delete configuration setting.</target>
+        <target>Smazání fondu je vypnuto nastavením mon_allow_pool_delete configuration.</target>
       </trans-unit>
       <trans-unit id="44939fd05cedfd077db886528b755e77d5fa3885" datatype="html">
         <source>bucket</source>
         <target>nádoba</target>
       </trans-unit>
-      <trans-unit id="364cc3f92837b6000e686aab6d03bd2ad8007b50" datatype="html">
+      <trans-unit id="84fee774286ec4191311f1277075455c3ea5e2e2" datatype="html">
         <source>Updated Object Gateway bucket "
-          <x id="INTERPOLATION" equiv-text="{{bid}}"/>"
+          <x id="INTERPOLATION" equiv-text="{{bid}}"/>".
         </source>
-        <target>Aktualizována nádoba objektové brány „
-          <x id="INTERPOLATION" equiv-text="{{bid}}"/>“
+        <target>Updated Object Gateway bucket "
+          <x id="INTERPOLATION" equiv-text="{{bid}}"/>".
         </target>
       </trans-unit>
       <trans-unit id="2d7a43674f0bbc131c9e555ec16ac37fa0445d76" datatype="html">
@@ -3432,6 +3644,10 @@
           <x id="INTERPOLATION" equiv-text="{{role_name}}"/>“
         </target>
       </trans-unit>
+      <trans-unit id="2e35d60a14ce0b470e8b54602864a867f7fcef40" datatype="html">
+        <source>There are no roles.</source>
+        <target>Nejsou zde žádné role.</target>
+      </trans-unit>
       <trans-unit id="d2362a49d2434ce137bf19dab004251b7fd9c7b3" datatype="html">
         <source>Created user "
           <x id="INTERPOLATION" equiv-text="{{username}}"/>"
@@ -3486,11 +3702,11 @@
       </trans-unit>
       <trans-unit id="d8b81951d25439864e92f750f7c99d7426d6517c" datatype="html">
         <source>password</source>
-        <target>password</target>
+        <target>heslo</target>
       </trans-unit>
       <trans-unit id="d361a9b5e1f7985a12c0433388f31626525a02b8" datatype="html">
         <source>Updated user password"</source>
-        <target>Updated user password"</target>
+        <target>Aktualizované heslo uživatele"</target>
       </trans-unit>
       <trans-unit id="1d7fbcc3d5efc946ffbcf86fed04c4e20dda20fb" datatype="html">
         <source>Each object is split in data-chunks parts, each stored on a different OSD.</source>
@@ -3513,10 +3729,10 @@
           and m. The cauchy_good technique can be faster but you need to chose the packetsize
           carefully. All of reed_sol_r6_op, liberation, blaum_roth, liber8tion are RAID6 equivalents
           in the sense that they can only be configured with m=2.</source>
-        <target>The more flexible technique is reed_sol_van : it is enough to set k
-          and m. The cauchy_good technique can be faster but you need to chose the packetsize
-          carefully. All of reed_sol_r6_op, liberation, blaum_roth, liber8tion are RAID6 equivalents
-          in the sense that they can only be configured with m=2.</target>
+        <target>Přizpůsobivější technikou je reed_sol_van: postačí nastvit k
+          a m. Technika cauchy_good technique může být rychlejší, ale je třeba pečlivě nastavit velikost
+          paketu. Všechny z reed_sol_r6_op, liberation, blaum_roth, liber8tion jsou ekvivalenty RAID6
+          v tom smyslu, že je možné je nastavit pouze s m=2.</target>
       </trans-unit>
       <trans-unit id="b1b11f49281b4e79219b4eecfbcb033cb15bd880" datatype="html">
         <source>The encoding will be done on packets of bytes size at a time.
@@ -3644,6 +3860,18 @@
         <source>High</source>
         <target>Vysoká</target>
       </trans-unit>
+      <trans-unit id="6080b77234e92ad41bb52653b239c4c4f851317d" datatype="html">
+        <source>Error</source>
+        <target>Chyba</target>
+      </trans-unit>
+      <trans-unit id="c43dc1967a603fefb886149ac35863a06d5b4ce5" datatype="html">
+        <source>Information</source>
+        <target>Informace</target>
+      </trans-unit>
+      <trans-unit id="1e035e6ccfab771cad4226b2ad230cb0d4a88cba" datatype="html">
+        <source>Success</source>
+        <target>Úspěch</target>
+      </trans-unit>
       <trans-unit id="e6ca3c0efaf51e6d45a7f92f58bac37140c3fda4" datatype="html">
         <source>Last 5 minutes</source>
         <target>Uplynulých 5 minut</target>
@@ -3764,10 +3992,6 @@
         <source>Last 5 years</source>
         <target>Uplynulých 5 let</target>
       </trans-unit>
-      <trans-unit id="c43dc1967a603fefb886149ac35863a06d5b4ce5" datatype="html">
-        <source>Information</source>
-        <target>Informace</target>
-      </trans-unit>
       <trans-unit id="37391297bb077a6f84484930261b01a3ce38327b" datatype="html">
         <source>No items selected.</source>
         <target>Nevybrány žádné položky.</target>
@@ -3862,11 +4086,11 @@
       </trans-unit>
       <trans-unit id="024cdb2814b0cb3f4ced148f1a0b9854447cb214" datatype="html">
         <source>Change</source>
-        <target>Change</target>
+        <target>Změnit</target>
       </trans-unit>
       <trans-unit id="011f3e2bfc1fd8407eb5f599352665bfeb145664" datatype="html">
         <source>Recreate</source>
-        <target>Recreate</target>
+        <target>Znovuvytvořit</target>
       </trans-unit>
       <trans-unit id="6df2dfa48bef5510c82fb43f4e71a7f9557f3d71" datatype="html">
         <source>Expire</source>
@@ -3878,19 +4102,19 @@
       </trans-unit>
       <trans-unit id="80e3b490720757978c99a7b5af3885faf202b955" datatype="html">
         <source>Added</source>
-        <target>Added</target>
+        <target>Přidáno</target>
       </trans-unit>
       <trans-unit id="1aa4883bc4f1352f7a0bdd94810a9bf6dc22bd02" datatype="html">
         <source>Removed</source>
-        <target>Removed</target>
+        <target>Odebráno</target>
       </trans-unit>
       <trans-unit id="402f3ee47f98fbbc68530239b1ddcbb9e96a460c" datatype="html">
         <source>Edited</source>
-        <target>Edited</target>
+        <target>Upraveno</target>
       </trans-unit>
       <trans-unit id="96d56ec71c6e78cb4d6204c4a9359a3d38fcdb59" datatype="html">
         <source>Canceled</source>
-        <target>Canceled</target>
+        <target>Zrušeno</target>
       </trans-unit>
       <trans-unit id="a3318a2ee2bd0064b6b9ff72a4018b679ec63125" datatype="html">
         <source>Cloned</source>
@@ -3906,7 +4130,7 @@
       </trans-unit>
       <trans-unit id="7c9efb91434a5c15e9579c0b31c8e184b8c8240d" datatype="html">
         <source>Destroyed</source>
-        <target>Destroyed</target>
+        <target>Zlikvidováno</target>
       </trans-unit>
       <trans-unit id="647059bf3ea098fffedf92ddfad792bb3daa3c95" datatype="html">
         <source>Flattened</source>
@@ -3922,7 +4146,7 @@
       </trans-unit>
       <trans-unit id="ebcf306036a6c5579df9448f77eca98d491db245" datatype="html">
         <source>Marked Lost</source>
-        <target>Marked Lost</target>
+        <target>Označeno jako ztracené</target>
       </trans-unit>
       <trans-unit id="3a8803369ac18be3ad762384b9fda095fe2a6dcc" datatype="html">
         <source>Marked Out</source>
@@ -3930,7 +4154,7 @@
       </trans-unit>
       <trans-unit id="0fe2a62ea7c609fa8326ee6d38060bc5ba8bf34f" datatype="html">
         <source>Protected</source>
-        <target>Protected</target>
+        <target>Chráněno</target>
       </trans-unit>
       <trans-unit id="69b0446c6c2411c4fe01e411b8ceec72d4044fb4" datatype="html">
         <source>Purged</source>
@@ -3938,7 +4162,7 @@
       </trans-unit>
       <trans-unit id="d53de1a61bd51c815dc374c7f97e4ee69230e412" datatype="html">
         <source>Renamed</source>
-        <target>Renamed</target>
+        <target>Přejmenováno</target>
       </trans-unit>
       <trans-unit id="86fc6cae82c095f14105eb8a61d7b3fa948304b7" datatype="html">
         <source>Restored</source>
@@ -3958,23 +4182,23 @@
       </trans-unit>
       <trans-unit id="8dc560ded67482f109a98e0638851ad1d37188b3" datatype="html">
         <source>Showed</source>
-        <target>Showed</target>
+        <target>Zobrazeno</target>
       </trans-unit>
       <trans-unit id="197259b7ea76f15c6d0a64b075a673fd4112ada7" datatype="html">
         <source>Moved to Trash</source>
-        <target>Moved to Trash</target>
+        <target>Přesunout do koše</target>
       </trans-unit>
       <trans-unit id="8fb15cb102cd75b562680290b7e04c44d80018f2" datatype="html">
         <source>Unprotected</source>
-        <target>Unprotected</target>
+        <target>Ochrana zrušena</target>
       </trans-unit>
       <trans-unit id="8588eafa498262a1cbb5043ad68cf0ff669c4f10" datatype="html">
         <source>Recreated</source>
-        <target>Recreated</target>
+        <target>Znovu vytvořeno</target>
       </trans-unit>
       <trans-unit id="ffde7468d7b5cad6990095ed68ddee3d67cd02f8" datatype="html">
         <source>Expired</source>
-        <target>Expired</target>
+        <target>Platnost skončila</target>
       </trans-unit>
       <trans-unit id="4f20f2d5a6882190892e58b85f6ccbedfa737952" datatype="html">
         <source>Yes</source>
@@ -3990,30 +4214,30 @@
       </trans-unit>
       <trans-unit id="7e284852732c303eb1f47de9aca2569e41aeffed" datatype="html">
         <source>no active alerts</source>
-        <target>no active alerts</target>
+        <target>žádné aktivní výstrahy</target>
       </trans-unit>
       <trans-unit id="b8042829e4fbe7b09fd9bac9fa0ecf5cc1802fee" datatype="html">
         <source>1 active alert</source>
-        <target>1 active alert</target>
+        <target>Jedna aktivní výstraha</target>
       </trans-unit>
       <trans-unit id="e24adce97669cb0fc74cc13fdc14179b6f78ea5e" datatype="html">
         <source>
           <x id="INTERPOLATION" equiv-text="{{n}}"/> active alerts
         </source>
         <target>
-          <x id="INTERPOLATION" equiv-text="{{n}}"/> active alerts
+          <x id="INTERPOLATION" equiv-text="{{n}}"/> aktivních výstrah
         </target>
       </trans-unit>
       <trans-unit id="d8fb058ff5883731d38a132da4ca45cfe8d719a3" datatype="html">
         <source>Matches 1 rule</source>
-        <target>Matches 1 rule</target>
+        <target>Odpovídá jednomu pravidlu</target>
       </trans-unit>
       <trans-unit id="90aaef24d192e67c3fbc2ec6f8bfaff211cea128" datatype="html">
         <source>Matches 
           <x id="INTERPOLATION" equiv-text="{{n}}"/> rules
         </source>
-        <target>Matches 
-          <x id="INTERPOLATION" equiv-text="{{n}}"/> rules
+        <target>Odpovídá 
+          <x id="INTERPOLATION" equiv-text="{{n}}"/> pravidlům
         </target>
       </trans-unit>
       <trans-unit id="f4685dc581e18244cd410f1057a8c56a9dbfe8df" datatype="html">
@@ -4022,7 +4246,7 @@
           <x id="INTERPOLATION_1" equiv-text="{{alerts}}"/>.
         </source>
         <target>
-          <x id="INTERPOLATION" equiv-text="{{rules}}"/> with 
+          <x id="INTERPOLATION" equiv-text="{{rules}}"/> s 
           <x id="INTERPOLATION_1" equiv-text="{{alerts}}"/>.
         </target>
       </trans-unit>
@@ -4176,6 +4400,22 @@
         <source>delete</source>
         <target>smazat</target>
       </trans-unit>
+      <trans-unit id="d07a282afc7fbdb39cea6e1c9b544882a7260a86" datatype="html">
+        <source>Adding</source>
+        <target>Přidávání</target>
+      </trans-unit>
+      <trans-unit id="a11ec4e640f241329943237d2a3cceaa4823658e" datatype="html">
+        <source>add</source>
+        <target>přidat</target>
+      </trans-unit>
+      <trans-unit id="ea1c70b874904216cc5af24bd7cb3dab2d074d42" datatype="html">
+        <source>Removing</source>
+        <target>Odebírání</target>
+      </trans-unit>
+      <trans-unit id="4da487aec5a29ce4372e7b512227cd665b01fe6f" datatype="html">
+        <source>remove</source>
+        <target>odebrat</target>
+      </trans-unit>
       <trans-unit id="3f757cfc3749ebb5d4462017cb60138ca082f15f" datatype="html">
         <source>RBD '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>'
@@ -4210,7 +4450,7 @@
       </trans-unit>
       <trans-unit id="db15adc778317d551232fe712eb03a2c1eac4a43" datatype="html">
         <source>all dashboards</source>
-        <target>all dashboards</target>
+        <target>všechny přehledy</target>
       </trans-unit>
       <trans-unit id="1b559dbd9cc9664fd788c2da9a10d3abafe066cb" datatype="html">
         <source>Name is already used by 
@@ -4390,6 +4630,14 @@
         <source>Cannot disable mirroring because it contains a peer.</source>
         <target>Zrcadlení nelze vypnout protože obsahuje protějšek.</target>
       </trans-unit>
+      <trans-unit id="f123ae1fc3b000e5d08e766dd78bff162afe709d" datatype="html">
+        <source>host '
+          <x id="INTERPOLATION" equiv-text="{{hostname}}"/>'
+        </source>
+        <target>stroj „
+          <x id="INTERPOLATION" equiv-text="{{hostname}}"/>“
+        </target>
+      </trans-unit>
       <trans-unit id="dfe70001dc590a9e12512cbb206aa29fb36fd00b" datatype="html">
         <source>pool '
           <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>'
@@ -4421,6 +4669,50 @@
         <target>NFS 
           <x id="INTERPOLATION" equiv-text="{{nfs_id}}"/>
         </target>
+      </trans-unit>
+      <trans-unit id="54bf6542e39412f83ec883266f443e31b304c937" datatype="html">
+        <source>Required rules for password complexity:
+    - must contain at least 8 characters
+    - cannot contain username
+    - cannot contain any keyword used in Ceph
+    - cannot contain any repetitive characters e.g. "aaa"
+    - cannot contain any sequencial characters e.g. "abc"
+    - must consist of characters from the following groups:
+      * alphabetic a-z, A-Z
+      * numbers 0-9
+      * special chars: !"#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`
+          <x id="INTERPOLATION" equiv-text="{{|}}"/>~
+      * any other characters (signs)
+        </source>
+        <target>Required rules for password complexity:
+    - must contain at least 8 characters
+    - cannot contain username
+    - cannot contain any keyword used in Ceph
+    - cannot contain any repetitive characters e.g. "aaa"
+    - cannot contain any sequencial characters e.g. "abc"
+    - must consist of characters from the following groups:
+      * alphabetic a-z, A-Z
+      * numbers 0-9
+      * special chars: !"#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`
+          <x id="INTERPOLATION" equiv-text="{{|}}"/>~
+      * any other characters (signs)
+        </target>
+      </trans-unit>
+      <trans-unit id="ba575e9364b43dc870e332265c5182bb357b7a49" datatype="html">
+        <source>Weak</source>
+        <target>Snadno prolomitelné</target>
+      </trans-unit>
+      <trans-unit id="7e6c975ebea8b5f8b120905ca7acf9f8edf59d8e" datatype="html">
+        <source>OK</source>
+        <target>OK</target>
+      </trans-unit>
+      <trans-unit id="3f7349017a01eed18c3daf2b7295ca96ef442eb6" datatype="html">
+        <source>Strong</source>
+        <target>Odolné</target>
+      </trans-unit>
+      <trans-unit id="a1e3aecc2022cb0ebed8575a24d0e29d2de815c6" datatype="html">
+        <source>Very strong</source>
+        <target>Velmi odolné</target>
       </trans-unit>
     </body>
   </file>
