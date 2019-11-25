@@ -466,6 +466,20 @@ class Orchestrator(object):
         """
         return self.get_inventory()
 
+    def add_host_label(self, host, label):
+        # type: (str) -> WriteCompletion
+        """
+        Add a host label
+        """
+        return NotImplementedError()
+
+    def remove_host_label(self, host, label):
+        # type: (str) -> WriteCompletion
+        """
+        Remove a host label
+        """
+        return NotImplementedError()
+
     def get_inventory(self, node_filter=None, refresh=False):
         # type: (InventoryFilter, bool) -> ReadCompletion[List[InventoryNode]]
         """
