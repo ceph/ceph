@@ -11,8 +11,7 @@ import teuthology.lock.util
 from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import ConsoleError
-
-import remote
+from teuthology.misc import host_shortname
 
 try:
     import libvirt
@@ -22,14 +21,23 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-class PhysicalConsole():
+class RemoteConsole():
+    def getShortName(self, name=None):
+        """
+        Extract the name portion from remote name strings.
+        """
+        hostname = (name or self.name).split('@')[-1]
+        return host_shortname(hostname)
+
+
+class PhysicalConsole(RemoteConsole):
     """
     Physical Console (set from getRemoteConsole)
     """
     def __init__(self, name, ipmiuser=None, ipmipass=None, ipmidomain=None,
                  logfile=None, timeout=20):
         self.name = name
-        self.shortname = remote.getShortName(name)
+        self.shortname = self.getShortName(name)
         self.timeout = timeout
         self.logfile = None
         self.ipmiuser = ipmiuser or config.ipmi_user
@@ -306,7 +314,7 @@ class PhysicalConsole():
         return proc
 
 
-class VirtualConsole():
+class VirtualConsole(RemoteConsole):
     """
     Virtual Console (set from getRemoteConsole)
     """
@@ -314,7 +322,7 @@ class VirtualConsole():
         if libvirt is None:
             raise RuntimeError("libvirt not found")
 
-        self.shortname = remote.getShortName(name)
+        self.shortname = self.getShortName(name)
         status_info = teuthology.lock.query.get_status(self.shortname)
         try:
             if teuthology.lock.query.is_vm(status=status_info):

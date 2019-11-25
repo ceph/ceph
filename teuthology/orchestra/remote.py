@@ -5,6 +5,7 @@ import teuthology.lock.query
 import teuthology.lock.util
 from teuthology.orchestra import run
 from teuthology.orchestra import connection
+from teuthology.orchestra import console
 from teuthology.orchestra.opsys import OS
 from teuthology import misc
 from teuthology.exceptions import CommandFailedError
@@ -17,8 +18,6 @@ import os
 import pwd
 import tempfile
 import netaddr
-
-import console
 
 log = logging.getLogger(__name__)
 
@@ -512,13 +511,6 @@ class Remote(object):
         if self.ssh is not None:
             self.ssh.close()
 
-
-def getShortName(name):
-    """
-    Extract the name portion from remote name strings.
-    """
-    hostname = name.split('@')[-1]
-    return host_shortname(hostname)
 
 def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
                      logfile=None, timeout=20):

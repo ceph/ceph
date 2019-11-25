@@ -13,7 +13,6 @@ from teuthology import misc
 from teuthology.config import set_config_attr
 
 from teuthology.lock import (
-    keys,
     ops,
     util,
     query,
@@ -88,7 +87,7 @@ def main(ctx):
                 vmachines.append(machine['name'])
         if vmachines:
             log.info("updating host keys for %s", ' '.join(sorted(vmachines)))
-            keys.do_update_keys(vmachines, _raise=False)
+            ops.do_update_keys(vmachines, _raise=False)
             # get statuses again to refresh any updated keys
             statuses = query.get_statuses(machines)
         if statuses:
@@ -179,7 +178,7 @@ def main(ctx):
             for machine in reimage_machines:
                 p.spawn(teuthology.provision.reimage, ctx, machine)
         for machine in updatekeys_machines:
-            keys.do_update_keys([machine])
+            ops.do_update_keys([machine])
         ops.update_nodes(reimage_machines + machines_to_update)
 
     elif ctx.unlock:
@@ -286,4 +285,4 @@ def updatekeys(args):
             for doc in docs:
                 machines = [n for n in doc.get('targets', dict()).keys()]
 
-    return keys.do_update_keys(machines, all_)[0]
+    return ops.do_update_keys(machines, all_)[0]

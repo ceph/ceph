@@ -13,8 +13,7 @@ from teuthology.contextutil import safe_while
 from teuthology.task import console_log
 from teuthology.misc import canonicalize_hostname
 
-import util
-import keys
+from teuthology.lock import util, query
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +125,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                         log.error('Unable to create virtual machine: %s',
                                   machine)
                         unlock_one(ctx, machine, user)
-                    ok_machs = keys.do_update_keys(ok_machs.keys())[1]
+                    ok_machs = do_update_keys(ok_machs.keys())[1]
                 update_nodes(ok_machs)
                 return ok_machs
             elif machine_type in reimage_types:
@@ -143,7 +142,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                         for machine in machines:
                             p.spawn(teuthology.provision.reimage, ctx, machine)
                             reimaged[machine] = machines[machine]
-                reimaged = keys.do_update_keys(reimaged.keys())[1]
+                reimaged = do_update_keys(reimaged.keys())[1]
                 update_nodes(reimaged)
                 return reimaged
             return machines
@@ -277,3 +276,23 @@ def update_inventory(node_dict):
         log.error("Node update/creation failed for %s: %s",
                   name, response.text)
     return response.ok
+
+
+def do_update_keys(machines, all_=False, _raise=True):
+    reference = query.list_locks(keyed_by_name=True)
+    if all_:
+        machines = reference.keys()
+    keys_dict = misc.ssh_keyscan(machines, _raise=_raise)
+    return push_new_keys(keys_dict, reference), keys_dict
+
+
+def push_new_keys(keys_dict, reference):
+    ret = 0
+    for hostname, pubkey in keys_dict.items():
+        log.info('Checking %s', hostname)
+        if reference[hostname]['ssh_pub_key'] != pubkey:
+            log.info('New key found. Updating...')
+            if not update_lock(hostname, ssh_pub_key=pubkey):
+                log.error('failed to update %s!', hostname)
+                ret = 1
+    return ret
