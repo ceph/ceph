@@ -731,6 +731,34 @@ def test_versioned_object_incremental_sync():
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+def test_concurrent_versioned_object_incremental_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a versioned bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    bucket.configure_versioning(True)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload a dummy object and wait for sync. this forces each zone to finish
+    # a full sync and switch to incremental
+    new_key(zone, bucket, 'dummy').set_contents_from_string('')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # create several concurrent versions on each zone and let them race to sync
+    obj = 'obj'
+    for i in range(10):
+        for zone_conn in zonegroup_conns.rw_zones:
+            k = new_key(zone_conn, bucket, obj)
+            k.set_contents_from_string('version1')
+            log.debug('zone=%s version=%s', zone_conn.zone.name, k.version_id)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
 def test_version_suspended_incremental_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
