@@ -7,6 +7,7 @@ overrides:
         mon lease: 15
         mon lease ack timeout: 25
   s3tests:
+    force-branch: ceph-master
     idle_timeout: 1200
   ceph-fuse:
     client.0:
