@@ -15,7 +15,7 @@ import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
-import { ListPipe } from './list.pipe';
+import { JoinPipe } from './join.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
@@ -36,7 +36,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     CephReleaseNamePipe,
     RelativeDatePipe,
     IscsiBackstorePipe,
-    ListPipe,
+    JoinPipe,
     LogPriorityPipe,
     FilterPipe,
     CdDatePipe,
@@ -60,7 +60,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     CephReleaseNamePipe,
     RelativeDatePipe,
     IscsiBackstorePipe,
-    ListPipe,
+    JoinPipe,
     LogPriorityPipe,
     FilterPipe,
     CdDatePipe,
@@ -84,7 +84,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DimlessPipe,
     RelativeDatePipe,
     IscsiBackstorePipe,
-    ListPipe,
+    JoinPipe,
     LogPriorityPipe,
     CdDatePipe,
     EmptyPipe,
