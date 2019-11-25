@@ -48,6 +48,7 @@
 
 static const int UDEV_BUF_SIZE = 1 << 20;  /* doubled to 2M (SO_RCVBUFFORCE) */
 static const char DEVNODE_PREFIX[] = "/dev/rbd";
+static const char SNAP_HEAD_NAME[] = "-";
 
 #define DEFINE_UDEV_UPTR(what)                           \
 struct udev_##what##_deleter {                           \
@@ -66,8 +67,6 @@ struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
 };
-
-static const std::string SNAP_HEAD_NAME("-");
 
 struct krbd_spec {
   std::string pool_name;
@@ -90,7 +89,8 @@ struct krbd_spec {
   }
 };
 
-std::ostream& operator<<(std::ostream& os, const krbd_spec& spec) {
+static std::ostream& operator<<(std::ostream& os, const krbd_spec& spec)
+{
   os << spec.pool_name << "/";
   if (!spec.nspace_name.empty())
     os << spec.nspace_name << "/";
@@ -100,7 +100,8 @@ std::ostream& operator<<(std::ostream& os, const krbd_spec& spec) {
   return os;
 }
 
-std::optional<krbd_spec> spec_from_dev(udev_device *dev) {
+static std::optional<krbd_spec> spec_from_dev(udev_device *dev)
+{
   const char *pool_name = udev_device_get_sysattr_value(dev, "pool");
   const char *nspace_name = udev_device_get_sysattr_value(dev, "pool_ns");
   const char *image_name = udev_device_get_sysattr_value(dev, "name");
@@ -119,10 +120,10 @@ static udev_device_uptr dev_from_list_entry(udev *udev, udev_list_entry *l)
       udev_device_new_from_syspath(udev, udev_list_entry_get_name(l)));
 }
 
-static string get_kernel_rbd_name(const char *id)
+static std::string get_devnode(udev_device *dev)
 {
   std::string devnode = DEVNODE_PREFIX;
-  devnode += id;
+  devnode += udev_device_get_sysname(dev);
   return devnode;
 }
 
@@ -343,7 +344,7 @@ public:
         auto spec = spec_from_dev(dev.get());
         if (spec && *spec == *m_spec) {
           m_bus_dev = std::move(dev);
-          m_devnode = get_kernel_rbd_name(udev_device_get_sysname(m_bus_dev.get()));
+          m_devnode = get_devnode(m_bus_dev.get());
         }
       }
     } else if (!strcmp(udev_device_get_subsystem(dev.get()), "block")) {
@@ -650,22 +651,19 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const krbd_spec& spec,
    */
   if (udev_list_entry_get_next(l))
     cerr << "rbd: " << spec << ": mapped more than once, unmapping "
-         << get_kernel_rbd_name(udev_device_get_sysname(dev.get()))
-         << " only" << std::endl;
+         << get_devnode(dev.get()) << " only" << std::endl;
 
   *pdevno = makedev(maj, min);
   *pid = udev_device_get_sysname(dev.get());
   return 0;
 }
 
-static string build_unmap_buf(const string& id, const char *options)
+static void append_unmap_options(std::string *buf, const char *options)
 {
-  string buf(id);
   if (strcmp(options, "") != 0) {
-    buf += " ";
-    buf += options;
+    *buf += " ";
+    *buf += options;
   }
-  return buf;
 }
 
 class UdevUnmapHandler {
@@ -766,7 +764,7 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
 {
   struct stat sb;
   dev_t wholedevno = 0;
-  string id;
+  std::string buf;
   int r;
 
   if (stat(devnode, &sb) < 0 || !S_ISBLK(sb.st_mode)) {
@@ -786,7 +784,7 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
   }
 
   for (int tries = 0; ; tries++) {
-    r = devno_to_krbd_id(ctx->udev, wholedevno, &id);
+    r = devno_to_krbd_id(ctx->udev, wholedevno, &buf);
     if (r == -ENOENT && tries < 2) {
       usleep(250 * 1000);
     } else {
@@ -806,18 +804,19 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
     }
   }
 
-  return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
+  append_unmap_options(&buf, options);
+  return do_unmap(ctx->udev, wholedevno, buf);
 }
 
 static int unmap_image(struct krbd_ctx *ctx, const krbd_spec& spec,
                        const char *options)
 {
   dev_t devno = 0;
-  string id;
+  std::string buf;
   int r;
 
   for (int tries = 0; ; tries++) {
-    r = spec_to_devno_and_krbd_id(ctx->udev, spec, &devno, &id);
+    r = spec_to_devno_and_krbd_id(ctx->udev, spec, &devno, &buf);
     if (r == -ENOENT && tries < 2) {
       usleep(250 * 1000);
     } else {
@@ -837,15 +836,16 @@ static int unmap_image(struct krbd_ctx *ctx, const krbd_spec& spec,
     }
   }
 
-  return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
+  append_unmap_options(&buf, options);
+  return do_unmap(ctx->udev, devno, buf);
 }
 
 static bool dump_one_image(Formatter *f, TextTable *tbl,
                            struct udev_device *dev)
 {
-  const char *id = udev_device_get_sysname(dev);
   auto spec = spec_from_dev(dev);
-  string kname = get_kernel_rbd_name(id);
+  std::string devnode = get_devnode(dev);
+  const char *id = devnode.c_str() + sizeof(DEVNODE_PREFIX) - 1;
 
   if (!spec)
     return false;
@@ -857,11 +857,11 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
     f->dump_string("namespace", spec->nspace_name);
     f->dump_string("name", spec->image_name);
     f->dump_string("snap", spec->snap_name);
-    f->dump_string("device", kname);
+    f->dump_string("device", devnode);
     f->close_section();
   } else {
     *tbl << id << spec->pool_name << spec->nspace_name << spec->image_name
-         << spec->snap_name << kname << TextTable::endrow;
+         << spec->snap_name << devnode << TextTable::endrow;
   }
 
   return true;
@@ -902,7 +902,7 @@ retry:
   return have_output;
 }
 
-int dump_images(struct krbd_ctx *ctx, Formatter *f)
+static int dump_images(struct krbd_ctx *ctx, Formatter *f)
 {
   TextTable tbl;
   int r;
@@ -948,7 +948,7 @@ static int is_mapped_image(struct udev *udev, const krbd_spec& spec,
     if (!dev)
       return -ENOMEM;
 
-    *pname = get_kernel_rbd_name(udev_device_get_sysname(dev.get()));
+    *pname = get_devnode(dev.get());
     return 1;
   }
 
