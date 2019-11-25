@@ -43,7 +43,7 @@ def _shell(ctx, cluster_name, remote, args, **kwargs):
         args=[
             'sudo',
             '{}/ceph-daemon'.format(testdir),
-            '--image', ctx.image,
+            '--image', ctx.ceph[cluster_name].image,
             'shell',
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
             '-k', '{}/{}.keyring'.format(testdir, cluster_name),
@@ -262,7 +262,7 @@ def ceph_bootstrap(ctx, config):
         cmd = [
             'sudo',
             '{}/ceph-daemon'.format(testdir),
-            '--image', ctx.image,
+            '--image', ctx.ceph[cluster_name].image,
             'bootstrap',
             '--fsid', fsid,
             '--mon-id', first_mon,
@@ -782,12 +782,12 @@ def task(ctx, config):
     #validate_config(ctx, config)
 
     # image
-    ctx.image = config.get('image')
+    ctx.ceph[cluster_name].image = config.get('image')
     ref = None
-    if not ctx.image:
+    if not ctx.ceph[cluster_name].image:
         sha1 = config.get('sha1')
         if sha1:
-            ctx.image = 'quay.io/ceph-ci/ceph:%s' % sha1
+            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % sha1
             ref = sha1
         else:
             # hmm, fall back to branch?
@@ -795,10 +795,10 @@ def task(ctx, config):
             ref = branch
             # FIXME when ceph-ci builds all branches
             if branch in ['master', 'nautilus']:
-                ctx.image = 'ceph/daemon-base:latest-%s-devel' % branch
+                ctx.ceph[cluster_name].image = 'ceph/daemon-base:latest-%s-devel' % branch
             else:
-                ctx.image = 'quay.io/ceph-ci/ceph:%s' % branch
-    log.info('Cluster image is %s' % ctx.image)
+                ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % branch
+    log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
     # uuid
     fsid = str(uuid.uuid1())
