@@ -54,3 +54,9 @@ However if you prefer, you may install ``teuthology`` from `PyPI <http://pypi.py
 
 **Note**: The version in PyPI can be (*far*) behind the development version.
 
+Or from GitHub::
+
+    pip install git+https://github.com/ceph/teuthology#egg=teuthology[orchestra]
+
+where the dependencies for orchestrating are installed. They are used for
+interacting with the services to schedule tests and to report the test results.

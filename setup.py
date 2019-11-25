@@ -53,41 +53,20 @@ setup(
                       'gevent',
                       'PyYAML',
                       'argparse >= 1.2.1',
-                      'beanstalkc3 >= 0.4.0',
                       'boto >= 2.0b4',
                       'bunch >= 1.0.0',
                       'configobj',
                       'six >= 1.9', # python-openstackclient won't work properly with less
-                      'httplib2',
-                      'paramiko',
                       'pexpect',
                       'pytest', # for tox.ini
                       'nose', # for qa/tasks/rgw_multisite_tests.py',
-                      'requests != 2.13.0',
-                      'raven',
                       'web.py',
                       'docopt',
                       'psutil >= 2.1.0',
                       'configparser',
                       'ansible>=2.0',
-                      'pyopenssl>=0.13',
-                      'ndg-httpsclient',
-                      'pyasn1',
-                      # python-novaclient is specified here, even though it is
-                      # redundant, because python-openstackclient requires
-                      # Babel, and installs 2.3.3, which is forbidden by
-                      # python-novaclient 4.0.0
-                      'python-novaclient',
-                      'python-openstackclient',
-                      # with openstacklient >= 2.1.0, neutronclient no longer is
-                      # a dependency but we need it anyway.
-                      'python-neutronclient',
                       'prettytable',
-                      'python-dateutil',
                       'manhole',
-                      'apache-libcloud',
-                      # For apache-libcloud when using python < 2.7.9
-                      'backports.ssl_match_hostname',
                       # For bucket notification testing in multisite
                       'xmltodict',
                       'boto3',
@@ -95,6 +74,29 @@ setup(
                       ],
     extras_require = {
         'coverage': [ 'mysqlclient == 1.4.2'],
+        'orchestra': [
+            'apache-libcloud',
+            # For apache-libcloud when using python < 2.7.9
+            'backports.ssl_match_hostname',
+            'beanstalkc3 >= 0.4.0',
+            'httplib2',
+            'ndg-httpsclient',  # for requests, urllib3
+            'paramiko',
+            'pyasn1',           # for requests, urllib3
+            'pyopenssl>=0.13',  # for requests, urllib3
+            'python-dateutil',
+            # python-novaclient is specified here, even though it is
+            # redundant, because python-openstackclient requires
+            # Babel, and installs 2.3.3, which is forbidden by
+            # python-novaclient 4.0.0
+            'python-novaclient',
+            'python-openstackclient',
+            # with openstacklient >= 2.1.0, neutronclient no longer is
+            # a dependency but we need it anyway.
+            'python-neutronclient',
+            'raven',
+            'requests != 2.13.0',
+        ]
     },
 
 
