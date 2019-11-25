@@ -631,6 +631,7 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         pc.run()
 
     deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c)
+    update_firewalld(daemon_type)
 
 def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                         enable=True, start=True):
@@ -660,6 +661,52 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
         call_throws(['systemctl', 'enable', unit_name])
     if start:
         call_throws(['systemctl', 'start', unit_name])
+
+def update_firewalld(daemon_type):
+    if args.skip_firewalld:
+        return
+    cmd = find_executable('firewall-cmd')
+    if not cmd:
+        logger.debug('firewalld does not appear to be present')
+        return
+    (enabled, state) = check_unit('firewalld.service')
+    if not enabled:
+        logger.debug('firewalld.service is not enabled')
+        return
+
+    fw_services = []
+    fw_ports = []
+    if daemon_type == 'mon':
+        fw_services.append('ceph-mon')
+    elif daemon_type in ['mgr', 'mds', 'osd']:
+        fw_services.append('ceph')
+    if daemon_type == 'mgr':
+        fw_ports.append(8080)  # dashboard
+        fw_ports.append(8443)  # dashboard
+        fw_ports.append(9283)  # prometheus
+
+    for svc in fw_services:
+        out, err, ret = call([cmd, '--permanent', '--query-service', svc])
+        if ret:
+            logger.info('Enabling firewalld service %s in current zone...' % svc)
+            out, err, ret = call([cmd, '--permanent', '--add-service', svc])
+            if ret:
+                raise RuntimeError('unable to add service %s to current zone:' %
+                                   (svc, err))
+        else:
+            logger.debug('firewalld service %s is enabled in current zone' % svc)
+    for port in fw_ports:
+        port = str(port) + '/tcp'
+        out, err, ret = call([cmd, '--permanent', '--query-port', port])
+        if ret:
+            logger.info('Enabling firewalld port %s in current zone...' % port)
+            out, err, ret = call([cmd, '--permanent', '--add-port', port])
+            if ret:
+                raise RuntimeError('unable to add port %s to current zone: %s' %
+                                   (port, err))
+        else:
+            logger.debug('firewalld port %s is enabled in current zone' % port)
+    call_throws([cmd, '--reload'])
 
 def install_base_units(fsid):
     # type: (str) -> None
@@ -1066,6 +1113,7 @@ def command_bootstrap():
 
     mon_c = get_container(fsid, 'mon', mon_id)
     deploy_daemon_units(fsid, uid, gid, 'mon', mon_id, mon_c)
+    update_firewalld(daemon_type)
 
     # client.admin key + config to issue various CLI commands
     tmp_admin_keyring = tempfile.NamedTemporaryFile(mode='w')
@@ -1585,6 +1633,8 @@ def command_adopt():
         deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                             enable=True,  # unconditionally enable the new unit
                             start=(state == 'running'))
+        update_firewalld(daemon_type)
+
     else:
         raise Error('adoption of style %s not implemented' % args.style)
 
@@ -1734,6 +1784,10 @@ def _get_parser():
         '--legacy-dir',
         default='/',
         help='base directory for legacy daemon data')
+    parser_adopt.add_argument(
+        '--skip-firewalld',
+        action='store_true',
+        help='Do not configure firewalld')
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -1916,6 +1970,10 @@ def _get_parser():
         action='store_true',
         help='do not pull the latest image before bootstrapping')
     parser_bootstrap.add_argument(
+        '--skip-firewalld',
+        action='store_true',
+        help='Do not configure firewalld')
+    parser_bootstrap.add_argument(
         '--allow-overwrite',
         action='store_true',
         help='allow overwrite of existing --output-* config/keyring/ssh files')
@@ -1958,6 +2016,10 @@ def _get_parser():
     parser_deploy.add_argument(
         '--osd-fsid',
         help='OSD uuid, if creating an OSD container')
+    parser_deploy.add_argument(
+        '--skip-firewalld',
+        action='store_true',
+        help='Do not configure firewalld')
 
     return parser
 
