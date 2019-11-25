@@ -350,11 +350,11 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<Capability*>& ls);
   
-  snapid_t client_follows;
-  version_t client_xattr_version;
-  version_t client_inline_version;
-  int64_t last_rbytes;
-  int64_t last_rsize;
+  snapid_t client_follows = 0;
+  version_t client_xattr_version = 0;
+  version_t client_inline_version = 0;
+  int64_t last_rbytes = 0;
+  int64_t last_rsize = 0;
 
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
@@ -380,24 +380,24 @@ private:
   uint64_t cap_id;
   uint32_t cap_gen;
 
-  __u32 _wanted;     // what the client wants (ideally)
+  __u32 _wanted = 0;     // what the client wants (ideally)
 
   utime_t last_issue_stamp;
   utime_t last_revoke_stamp;
-  unsigned num_revoke_warnings;
+  unsigned num_revoke_warnings = 0;
 
   // track in-flight caps --------------
   //  - add new caps to _pending
   //  - track revocations in _revokes list
-  __u32 _pending, _issued;
+  __u32 _pending = 0, _issued = 0;
   mempool::mds_co::list<revoke_info> _revokes;
 
-  ceph_seq_t last_sent;
-  ceph_seq_t last_issue;
-  ceph_seq_t mseq;
+  ceph_seq_t last_sent = 0;
+  ceph_seq_t last_issue = 0;
+  ceph_seq_t mseq = 0;
 
-  int suppress;
-  unsigned state;
+  int suppress = 0;
+  unsigned state = 0;
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)

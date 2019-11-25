@@ -20,17 +20,21 @@
 
 void MutationImpl::pin(MDSCacheObject *o)
 {
-  if (pins.count(o) == 0) {
+  auto& stat = object_states[o];
+  if (!stat.pinned) {
     o->get(MDSCacheObject::PIN_REQUEST);
-    pins.insert(o);
+    stat.pinned = true;
+    ++num_pins;
   }      
 }
 
 void MutationImpl::unpin(MDSCacheObject *o)
 {
-  ceph_assert(pins.count(o));
+  auto& stat = object_states[o];
+  ceph_assert(stat.pinned);
   o->put(MDSCacheObject::PIN_REQUEST);
-  pins.erase(o);
+  stat.pinned = false;
+  --num_pins;
 }
 
 void MutationImpl::set_stickydirs(CInode *in)
@@ -54,9 +58,13 @@ void MutationImpl::put_stickydirs()
 
 void MutationImpl::drop_pins()
 {
-  for (auto& o : pins)
-    o->put(MDSCacheObject::PIN_REQUEST);
-  pins.clear();
+  for (auto& p : object_states) {
+    if (p.second.pinned) {
+      p.first->put(MDSCacheObject::PIN_REQUEST);
+      p.second.pinned = false;
+      --num_pins;
+    }
+  }
 }
 
 void MutationImpl::start_locking(SimpleLock *lock, int target)
@@ -84,10 +92,9 @@ void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
     }
   }
 }
-
 void MutationImpl::LockOpVec::sort_and_merge()
 {
-  std::sort(begin(), end(), SimpleLock::ptr_lt());
+  std::sort(begin(), end());
   // merge ops on the same lock
   for (auto i = end() - 1; i > begin(); ) {
     auto j = i;
@@ -99,7 +106,6 @@ void MutationImpl::LockOpVec::sort_and_merge()
       i = j;
       continue;
     }
-
     // merge
     ++j;
     for (auto k = i; k > j; --k) {
@@ -122,31 +128,59 @@ void MutationImpl::LockOpVec::sort_and_merge()
 // auth pins
 bool MutationImpl::is_auth_pinned(MDSCacheObject *object) const
 { 
-  return auth_pins.count(object) || remote_auth_pins.count(object); 
+  auto stat_p = find_object_state(object);
+  if (!stat_p)
+    return false;
+  return stat_p->auth_pinned || stat_p->remote_auth_pinned != MDS_RANK_NONE;
 }
 
 void MutationImpl::auth_pin(MDSCacheObject *object)
 {
-  if (!is_auth_pinned(object)) {
+  auto &stat = object_states[object];
+  if (!stat.auth_pinned) {
     object->auth_pin(this);
-    auth_pins.insert(object);
+    stat.auth_pinned = true;
+    ++num_auth_pins;
   }
 }
 
 void MutationImpl::auth_unpin(MDSCacheObject *object)
 {
-  ceph_assert(auth_pins.count(object));
+  auto &stat = object_states[object];
+  ceph_assert(stat.auth_pinned);
   object->auth_unpin(this);
-  auth_pins.erase(object);
+  stat.auth_pinned = false;
+  --num_auth_pins;
 }
 
 void MutationImpl::drop_local_auth_pins()
 {
-  for (const auto& p : auth_pins) {
-    ceph_assert(p->is_auth());
-    p->auth_unpin(this);
+  for (auto& p : object_states) {
+    if (p.second.auth_pinned) {
+      ceph_assert(p.first->is_auth());
+      p.first->auth_unpin(this);
+      p.second.auth_pinned = false;
+      --num_auth_pins;
+    }
   }
-  auth_pins.clear();
+}
+
+void MutationImpl::set_remote_auth_pinned(MDSCacheObject *object, mds_rank_t from)
+{
+  auto &stat = object_states[object];
+  if (stat.remote_auth_pinned == MDS_RANK_NONE) {
+    stat.remote_auth_pinned = from;
+    ++num_remote_auth_pins;
+  } else {
+    ceph_assert(stat.remote_auth_pinned == from);
+  }
+}
+
+void MutationImpl::_clear_remote_auth_pinned(ObjectState &stat)
+{
+  ceph_assert(stat.remote_auth_pinned != MDS_RANK_NONE);
+  stat.remote_auth_pinned = MDS_RANK_NONE;
+  --num_remote_auth_pins;
 }
 
 void MutationImpl::add_projected_inode(CInode *in)
