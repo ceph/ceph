@@ -5655,7 +5655,7 @@ int RGWRados::Object::Read::prepare(optional_yield y)
     obj_time_weight dest_weight;
     dest_weight.high_precision = conds.high_precision_time;
 
-    if (conds.mod_ptr) {
+    if (conds.mod_ptr && !conds.if_nomatch) {
       dest_weight.init(*conds.mod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
       ldout(cct, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
       if (!(dest_weight < src_weight)) {
@@ -5663,7 +5663,7 @@ int RGWRados::Object::Read::prepare(optional_yield y)
       }
     }
 
-    if (conds.unmod_ptr) {
+    if (conds.unmod_ptr && !conds.if_match) {
       dest_weight.init(*conds.unmod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
       ldout(cct, 10) << "If-UnModified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
       if (dest_weight < src_weight) {
@@ -5675,8 +5675,6 @@ int RGWRados::Object::Read::prepare(optional_yield y)
     r = get_attr(RGW_ATTR_ETAG, etag, y);
     if (r < 0)
       return r;
-
-    
 
     if (conds.if_match) {
       string if_match_str = rgw_string_unquote(conds.if_match);
