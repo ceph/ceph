@@ -54,13 +54,11 @@ setup(
                       'PyYAML',
                       'argparse >= 1.2.1',
                       'boto >= 2.0b4',
-                      'bunch >= 1.0.0',
                       'configobj',
                       'six >= 1.9', # python-openstackclient won't work properly with less
                       'pexpect',
                       'pytest', # for tox.ini
                       'nose', # for qa/tasks/rgw_multisite_tests.py',
-                      'web.py',
                       'docopt',
                       'psutil >= 2.1.0',
                       'configparser',

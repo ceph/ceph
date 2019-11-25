@@ -18,7 +18,6 @@ beanstalkc3==0.4.0
 boto3==1.9.161
 boto==2.46.1
 botocore==1.12.161        # via boto3, s3transfer
-bunch==1.0.1
 certifi==2019.3.9         # via requests
 cffi==1.10.0              # via bcrypt, cryptography, pynacl
 chardet==3.0.4            # via requests
@@ -107,6 +106,5 @@ unicodecsv==0.14.1        # via cliff
 urllib3==1.25.3           # via botocore, requests
 virtualenv==15.1.0        # via tox
 warlock==1.2.0            # via python-glanceclient
-web.py==0.38
 wrapt==1.10.10            # via debtcollector, positional, python-glanceclient
 xmltodict==0.12.0
