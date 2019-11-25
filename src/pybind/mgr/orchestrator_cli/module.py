@@ -659,8 +659,9 @@ Usage:
 
         return HandleCommandResult(-errno.EINVAL, stderr="Module '{0}' not found".format(module_name))
 
-    @_write_cli('orchestrator cancel',
-                desc='cancels ongoing operations')
+    @orchestrator._cli_write_command(
+        'orchestrator cancel',
+        desc='cancels ongoing operations')
     def _cancel(self):
         """
         ProgressReferences might get stuck. Let's unstuck them.
@@ -705,3 +706,6 @@ Usage:
             assert False
         except orchestrator.OrchestratorError as e:
             assert e.args == ('hello', 'world')
+
+        c = orchestrator.TrivialReadCompletion(result=True)
+        assert c.has_result

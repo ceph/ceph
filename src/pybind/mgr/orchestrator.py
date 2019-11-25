@@ -637,7 +637,8 @@ class TrivialReadCompletion(Completion):
     """
     def __init__(self, result):
         super(TrivialReadCompletion, self).__init__()
-        self._result = result
+        if result:
+            self.finalize(result)
 
 
 def _hide_in_features(f):
