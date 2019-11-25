@@ -28,6 +28,7 @@ tasks:
     - default.rgw.log
 - s3readwrite:
     client.0:
+      force-branch: ceph-mimic
       rgw_server: client.0
       readwrite:
         bucket: rwtest
