@@ -37,7 +37,7 @@ CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
 log = logging.getLogger(__name__)
 
 
-def shell(ctx, cluster_name, remote, args, **kwargs):
+def _shell(ctx, cluster_name, remote, args, **kwargs):
     testdir = teuthology.get_testdir(ctx)
     return remote.run(
         args=[
@@ -351,7 +351,7 @@ def ceph_bootstrap(ctx, config):
                 data=ctx.ceph[cluster_name].admin_keyring)
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'host', 'add',
                 remote.shortname
             ])
@@ -397,7 +397,7 @@ def ceph_mons(ctx, config):
                     continue
                 log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
-                shell(ctx, cluster_name, remote, [
+                _shell(ctx, cluster_name, remote, [
                     'ceph', 'orchestrator', 'mon', 'update',
                     str(num_mons),
                     remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
@@ -414,7 +414,7 @@ def ceph_mons(ctx, config):
                 with contextutil.safe_while(sleep=1, tries=180) as proceed:
                     while proceed():
                         log.info('Waiting for %d mons in monmap...' % (num_mons))
-                        r = shell(
+                        r = _shell(
                             ctx=ctx,
                             cluster_name=cluster_name,
                             remote=remote,
@@ -433,11 +433,11 @@ def ceph_mons(ctx, config):
             for mon in [r for r in roles
                         if teuthology.is_type('mon', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mon)
-                shell(ctx, cluster_name, remote, [
+                _shell(ctx, cluster_name, remote, [
                     'ceph', 'orchestrator', 'service', 'redeploy',
                     'mon', id_,
                 ])
-        shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
+        _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
             'ceph', 'orchestrator', 'service', 'redeploy',
             'mgr', ctx.ceph[cluster_name].first_mgr,
         ])
@@ -470,7 +470,7 @@ def ceph_mgrs(ctx, config):
                 nodes.append(remote.shortname + '=' + id_)
                 daemons[mgr] = (remote, id_)
         if nodes:
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'mgr', 'update',
                 str(len(nodes) + 1)] + nodes
             )
@@ -520,9 +520,9 @@ def ceph_osds(ctx, config):
             dev = devs.pop()
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'osd', 'create',
                 remote.shortname + ':' + dev
             ])
@@ -559,7 +559,7 @@ def ceph_mdss(ctx, config):
             nodes.append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
     if nodes:
-        shell(ctx, cluster_name, remote, [
+        _shell(ctx, cluster_name, remote, [
             'ceph', 'orchestrator', 'mds', 'update',
             'all',
             str(len(nodes))] + nodes
@@ -621,6 +621,24 @@ def stop(ctx, config):
 #        ctx.ceph[cluster].watchdog.join()
 
     yield
+
+def shell(ctx, config):
+    """
+    Execute (shell) commands
+    """
+    testdir = teuthology.get_testdir(ctx)
+    cluster_name = config.get('cluster', 'ceph')
+
+    if 'all' in config and len(config) == 1:
+        a = config['all']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles)
+
+    for role, ls in config.items():
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        log.info('Running commands on role %s host %s', role, remote.name)
+        for c in ls:
+            _shell(ctx, cluster_name, remote, c.split(' '))
 
 @contextlib.contextmanager
 def tweaked_option(ctx, config):
