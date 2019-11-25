@@ -287,7 +287,9 @@ std::ostream& operator<<(std::ostream& os,
 void MirrorImageSiteStatusOnDisk::encode_meta(bufferlist &bl,
                                               uint64_t features) const {
   ENCODE_START(1, 1, bl);
-  encode(origin, bl, features);
+  auto sanitized_origin = origin;
+  sanitize_entity_inst(&sanitized_origin);
+  encode(sanitized_origin, bl, features);
   ENCODE_FINISH(bl);
 }
 
@@ -300,6 +302,7 @@ void MirrorImageSiteStatusOnDisk::encode(bufferlist &bl,
 void MirrorImageSiteStatusOnDisk::decode_meta(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(origin, it);
+  sanitize_entity_inst(&origin);
   DECODE_FINISH(it);
 }
 
@@ -1144,6 +1147,13 @@ std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state) {
     break;
   }
   return os;
+}
+
+void sanitize_entity_inst(entity_inst_t* entity_inst) {
+  // make all addrs of type ANY because the type isn't what uniquely
+  // identifies them and clients and on-disk formats can be encoded
+  // with different backwards compatibility settings.
+  entity_inst->addr.set_type(entity_addr_t::TYPE_ANY);
 }
 
 } // namespace rbd

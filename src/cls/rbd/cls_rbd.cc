@@ -4662,13 +4662,6 @@ int uuid_get(cls_method_context_t hctx, std::string *mirror_uuid) {
   return 0;
 }
 
-void sanitize_entity_inst(entity_inst_t* entity_inst) {
-  // make all addrs of type ANY because the type isn't what uniquely
-  // identifies them and clients and on-disk formats can be encoded
-  // with different backwards compatibility settings.
-  entity_inst->addr.set_type(entity_addr_t::TYPE_ANY);
-}
-
 int list_watchers(cls_method_context_t hctx,
                   std::set<entity_inst_t> *entities) {
   obj_list_watch_response_t watchers;
@@ -4681,7 +4674,7 @@ int list_watchers(cls_method_context_t hctx,
   entities->clear();
   for (auto &w : watchers.entries) {
     entity_inst_t entity_inst{w.name, w.addr};
-    sanitize_entity_inst(&entity_inst);
+    cls::rbd::sanitize_entity_inst(&entity_inst);
 
     entities->insert(entity_inst);
   }
@@ -5055,7 +5048,6 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   ondisk_status.last_update = ceph_clock_now();
 
   int r = cls_get_request_origin(hctx, &ondisk_status.origin);
-  sanitize_entity_inst(&ondisk_status.origin);
   ceph_assert(r == 0);
 
   bufferlist bl;
