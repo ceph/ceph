@@ -965,17 +965,22 @@ class InventoryNode(object):
     When fetching inventory, all Devices are groups inside of an
     InventoryNode.
     """
-    def __init__(self, name, devices=None):
-        # type: (str, inventory.Devices) -> None
+    def __init__(self, name, devices=None, labels=None):
+        # type: (str, inventory.Devices, List[str]) -> None
         if devices is None:
             devices = inventory.Devices([])
         assert isinstance(devices, inventory.Devices)
 
         self.name = name  # unique within cluster.  For example a hostname.
         self.devices = devices
+        self.labels = labels
 
     def to_json(self):
-        return {'name': self.name, 'devices': self.devices.to_json()}
+        return {
+            'name': self.name,
+            'devices': self.devices.to_json(),
+            'labels': self.labels,
+        }
 
     @classmethod
     def from_json(cls, data):
@@ -986,7 +991,8 @@ class InventoryNode(object):
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
-            return cls(name, devices)
+            labels = _data.get('labels', list())
+            return cls(name, devices, labels)
         except KeyError as e:
             error_msg = '{} is required for {}'.format(e, cls.__name__)
             raise OrchestratorValidationError(error_msg)
