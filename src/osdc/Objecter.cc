@@ -619,13 +619,12 @@ void Objecter::_linger_commit(LingerOp *info, bs::error_code ec,
 
 class CB_DoWatchError {
   Objecter *objecter;
-  Objecter::LingerOp *info;
+  boost::intrusive_ptr<Objecter::LingerOp> info;
   bs::error_code ec;
 public:
   CB_DoWatchError(Objecter *o, Objecter::LingerOp *i,
 		  bs::error_code ec)
     : objecter(o), info(i), ec(ec) {
-    info->get();
     info->_queued_async();
   }
   void operator()() {
@@ -638,7 +637,6 @@ public:
     }
 
     info->finished_async();
-    info->put();
   }
 };
 
@@ -693,21 +691,17 @@ void Objecter::_send_linger_ping(LingerOp *info)
   opv[0].op.watch.cookie = info->get_cookie();
   opv[0].op.watch.op = CEPH_OSD_WATCH_OP_PING;
   opv[0].op.watch.gen = info->register_gen;
-  auto onack = new CB_Linger_Ping(this, info);
+
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 std::move(opv), info->target.flags | CEPH_OSD_FLAG_READ,
 		 Op::OpComp::create(service.get_executor(),
-				    [c = std::unique_ptr<CB_Linger_Ping>(onack)]
-				    (bs::error_code ec) mutable {
-				      std::move(*c)(ec);
-				    }),
+				    CB_Linger_Ping(this, info, now)),
 		 nullptr, nullptr);
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
   o->tid = ++last_tid;
   _session_op_assign(info->session, o);
-  onack->sent = now;
   _send_op(o);
   info->ping_tid = o->tid;
 
@@ -887,16 +881,14 @@ void Objecter::_linger_submit(LingerOp *info,
 
 struct CB_DoWatchNotify {
   Objecter *objecter;
-  Objecter::LingerOp *info;
-  MWatchNotify *msg;
+  boost::intrusive_ptr<Objecter::LingerOp> info;
+  boost::intrusive_ptr<MWatchNotify> msg;
   CB_DoWatchNotify(Objecter *o, Objecter::LingerOp *i, MWatchNotify *m)
     : objecter(o), info(i), msg(m) {
-    info->get();
     info->_queued_async();
-    msg->get();
   }
   void operator()() {
-    objecter->_do_watch_notify(info, msg);
+    objecter->_do_watch_notify(std::move(info), std::move(msg));
   }
 };
 
@@ -943,7 +935,8 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
   }
 }
 
-void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
+void Objecter::_do_watch_notify(boost::intrusive_ptr<LingerOp> info,
+                                boost::intrusive_ptr<MWatchNotify> m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
 
@@ -970,8 +963,6 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 
  out:
   info->finished_async();
-  info->put();
-  m->put();
 }
 
 bool Objecter::ms_dispatch(Message *m)

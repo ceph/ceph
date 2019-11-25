@@ -2173,48 +2173,38 @@ public:
 
   struct CB_Linger_Commit {
     Objecter *objecter;
-    LingerOp *info;
+    boost::intrusive_ptr<LingerOp> info;
     ceph::buffer::list outbl;  // used for notify only
-    CB_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {
-      info->get();
-    }
-    ~CB_Linger_Commit() {
-      info->put();
-    }
+
+    CB_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {}
+
     void operator()(boost::system::error_code ec) {
-      objecter->_linger_commit(info, ec, outbl);
+      objecter->_linger_commit(info.get(), ec, outbl);
     }
   };
 
   struct CB_Linger_Reconnect {
     Objecter *objecter;
-    LingerOp *info;
-    CB_Linger_Reconnect(Objecter *o, LingerOp *l)
-      : objecter(o), info(l) {
-      info->get();
-    }
-    ~CB_Linger_Reconnect() {
-      info->put();
-    }
+    boost::intrusive_ptr<LingerOp> info;
+
+    CB_Linger_Reconnect(Objecter *o, LingerOp *l) : objecter(o), info(l) {}
+
     void operator()(boost::system::error_code ec) {
-      objecter->_linger_reconnect(info, ec);
+      objecter->_linger_reconnect(info.get(), ec);
     }
   };
 
   struct CB_Linger_Ping {
     Objecter *objecter;
-    LingerOp *info;
+    boost::intrusive_ptr<LingerOp> info;
     ceph::coarse_mono_time sent;
     uint32_t register_gen;
-    CB_Linger_Ping(Objecter *o, LingerOp *l)
-      : objecter(o), info(l), register_gen(info->register_gen) {
-      info->get();
-    }
-    CB_Linger_Ping() {
-      info->put();
-    }
+
+    CB_Linger_Ping(Objecter *o, LingerOp *l, ceph::coarse_mono_time s)
+      : objecter(o), info(l), sent(s), register_gen(info->register_gen) {}
+
     void operator()(boost::system::error_code ec) {
-      objecter->_linger_ping(info, ec, sent, register_gen);
+      objecter->_linger_ping(info.get(), ec, sent, register_gen);
     }
   };
 
@@ -2982,7 +2972,8 @@ public:
   void linger_cancel(LingerOp *info);  // releases a reference
   void _linger_cancel(LingerOp *info);
 
-  void _do_watch_notify(LingerOp *info, MWatchNotify *m);
+  void _do_watch_notify(boost::intrusive_ptr<LingerOp> info,
+                        boost::intrusive_ptr<MWatchNotify> m);
 
   /**
    * set up initial ops in the op std::vector, and allocate a final op slot.
