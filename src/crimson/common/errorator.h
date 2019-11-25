@@ -544,6 +544,37 @@ private:
     template <class Func>
     void then(Func&&) = delete;
 
+    template <class ErrorVisitorT>
+    auto handle_error(ErrorVisitorT&& errfunc) {
+      static_assert((... && std::is_invocable_v<ErrorVisitorT,
+                                                AllowedErrors>),
+                    "provided Error Visitor is not exhaustive");
+      using return_errorator_t = make_errorator_t<
+        errorator<>,
+        std::decay_t<std::invoke_result_t<ErrorVisitorT, AllowedErrors>>...>;
+      using futurator_t = \
+        typename return_errorator_t::template futurize<::seastar::future<ValuesT...>>;
+      return this->then_wrapped(
+        [ errfunc = std::forward<ErrorVisitorT>(errfunc)
+        ] (auto&& future) mutable [[gnu::always_inline]] noexcept {
+          if (__builtin_expect(future.failed(), false)) {
+            return _safe_then_handle_errors<futurator_t>(
+              std::move(future), std::forward<ErrorVisitorT>(errfunc));
+          } else {
+            return typename futurator_t::type{ std::move(future) };
+          }
+        });
+    }
+    template <class ErrorFuncHead,
+              class... ErrorFuncTail>
+    auto handle_error(ErrorFuncHead&& error_func_head,
+                      ErrorFuncTail&&... error_func_tail) {
+      static_assert(sizeof...(ErrorFuncTail) > 0);
+      return this->handle_error(
+        composer(std::forward<ErrorFuncHead>(error_func_head),
+                 std::forward<ErrorFuncTail>(error_func_tail)...));
+    }
+
   private:
     // for ::crimson::do_for_each
     template <class Func>
