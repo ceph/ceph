@@ -17,9 +17,17 @@
         <source>Hosts</source>
         <target>主机</target>
       </trans-unit>
+      <trans-unit id="2cc3ecb16e348fcf2f2fbfd2f997d4d22f37475b" datatype="html">
+        <source>Inventory</source>
+        <target>Inventory</target>
+      </trans-unit>
       <trans-unit id="624f596cc3320f5e0a0d7c7346c364e5af9bdd8c" datatype="html">
         <source>Monitors</source>
         <target>Monitor</target>
+      </trans-unit>
+      <trans-unit id="419d940613972cc3fae9c8ea0a4306dbf80616e5" datatype="html">
+        <source>Services</source>
+        <target>对应的服务</target>
       </trans-unit>
       <trans-unit id="1a9183778f2c6473d7ccb080f651caa01faaf70c" datatype="html">
         <source>OSDs</source>
@@ -139,9 +147,25 @@
   Please check the cluster health.
         </target>
       </trans-unit>
-      <trans-unit id="cda31dbd724cf5f4fa7a4274d9120651490c8a8c" datatype="html">
-        <source>Back</source>
-        <target>返回</target>
+      <trans-unit id="7e52e9143145e1db5146258de81eae018a407b31" datatype="html">
+        <source>Clear notifications</source>
+        <target>Clear notifications</target>
+      </trans-unit>
+      <trans-unit id="b0b07bb6b7ff21ede439dd04eaf8872d1ecb84d8" datatype="html">
+        <source>Remove notification</source>
+        <target>Remove notification</target>
+      </trans-unit>
+      <trans-unit id="e17a1d75189da843f541f7764f188f2b19a97df2" datatype="html">
+        <source>Duration:</source>
+        <target>Duration:</target>
+      </trans-unit>
+      <trans-unit id="0d4b37c6675c5b436a54c43d6716eec835e1aa7f" datatype="html">
+        <source>There are no notifications.</source>
+        <target>There are no notifications.</target>
+      </trans-unit>
+      <trans-unit id="0a23e992f6c6e169a38b2b7338b4e5e803b52e0d" datatype="html">
+        <source>Tasks and Notifications</source>
+        <target>Tasks and Notifications</target>
       </trans-unit>
       <trans-unit id="3fb5709e10166cbc85970cbff103db227dbeb813" datatype="html">
         <source>Select a Language</source>
@@ -207,6 +231,10 @@
           <x id="INTERPOLATION" equiv-text="{{ option.minValue }}"/>.
         </target>
       </trans-unit>
+      <trans-unit id="cda31dbd724cf5f4fa7a4274d9120651490c8a8c" datatype="html">
+        <source>Back</source>
+        <target>返回</target>
+      </trans-unit>
       <trans-unit id="012741ee52b3c050e4a977c37cc2334f7974f141" datatype="html">
         <source>Failed to load data.</source>
         <target>无法加载数据。</target>
@@ -246,10 +274,6 @@
         <source>Daemon default</source>
         <target>守护进程的缺省值</target>
       </trans-unit>
-      <trans-unit id="419d940613972cc3fae9c8ea0a4306dbf80616e5" datatype="html">
-        <source>Services</source>
-        <target>对应的服务</target>
-      </trans-unit>
       <trans-unit id="809b0c848932a41318f77a2aace904ef429c13f4" datatype="html">
         <source>Values</source>
         <target>可选值</target>
@@ -278,6 +302,84 @@
         <source>CRUSH map viewer</source>
         <target>检查 CRUSH 索引图</target>
       </trans-unit>
+      <trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
+        <source>Loading...</source>
+        <target>正在加载…</target>
+      </trans-unit>
+      <trans-unit id="formTitle" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </target>
+        <note>form title</note>
+      </trans-unit>
+      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
+        <source>Hostname</source>
+        <target>主机名</target>
+      </trans-unit>
+      <trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
+        <source>This field is required.</source>
+        <target>请填写此栏目！</target>
+      </trans-unit>
+      <trans-unit id="1b3f5e5291541678f7afa49d28fad5ca848a8061" datatype="html">
+        <source>The chosen hostname is already in use.</source>
+        <target>The chosen hostname is already in use.</target>
+      </trans-unit>
+      <trans-unit id="formActionButton" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </target>
+        <note>form action button</note>
+      </trans-unit>
+      <trans-unit id="6110699a3562eeb15371063c0cf7f6bfd88a0209" datatype="html">
+        <source>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ itemNames[0] }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>?
+        </source>
+        <target>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ itemNames[0] }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>?
+        </target>
+      </trans-unit>
+      <trans-unit id="549859e511ba5af0ea03fcaa620c472f08038969" datatype="html">
+        <source>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected items?
+        </source>
+        <target>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected items?
+        </target>
+      </trans-unit>
+      <trans-unit id="54839ebc827b73c9dc4e1df731c6d36a85036af7" datatype="html">
+        <source>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
+          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
+        </source>
+        <target>Are you sure that you want to 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
+          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
+        </target>
+      </trans-unit>
+      <trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
+        <source>Yes, I am sure.</source>
+        <target>是的，我确定。</target>
+      </trans-unit>
+      <trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
+        <source>Cancel</source>
+        <target>取消</target>
+      </trans-unit>
       <trans-unit id="40661476cb24c89d8b06614998e31d5fbe84eeb6" datatype="html">
         <source>Hosts List</source>
         <target>主机列表</target>
@@ -285,6 +387,22 @@
       <trans-unit id="5e7f4b1ca49e8d217bd0e12c6f7d6b6a2ade2c18" datatype="html">
         <source>Overall Performance</source>
         <target>总体性能</target>
+      </trans-unit>
+      <trans-unit id="6bc15dc1a621b6ff7378db7fd3ac10b2a2627c77" datatype="html">
+        <source>Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to
+  configure and enable the orchestrator functionality.
+        </source>
+        <target>Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to
+  configure and enable the orchestrator functionality.
+        </target>
+      </trans-unit>
+      <trans-unit id="3e24569eca61d598c8b01defbbbb1fa8bd5222bc" datatype="html">
+        <source>Devices</source>
+        <target>Devices</target>
       </trans-unit>
       <trans-unit id="e6d57f36aa2bad303c8a8ee944b9bd7fae3c8c26" datatype="html">
         <source>No entries found</source>
@@ -337,10 +455,6 @@
       <trans-unit id="7aacd038b39cfd347107d01d1dc27f5cb3e0951c" datatype="html">
         <source>The entered value needs to be a valid IP address.</source>
         <target>输入的应该是个有效的 IP 地址。</target>
-      </trans-unit>
-      <trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
-        <source>This field is required.</source>
-        <target>请填写此栏目！</target>
       </trans-unit>
       <trans-unit id="f19106149f4b07a0d721f9d317afed393cb7bd93" datatype="html">
         <source>The entered value is too high! It must be lower or equal to 
@@ -410,24 +524,6 @@
         <source>Not In Quorum</source>
         <target>非仲裁成员</target>
       </trans-unit>
-      <trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
-        <source>Cancel</source>
-        <target>取消</target>
-      </trans-unit>
-      <trans-unit id="0c5121c531718a269a1e5bb54959fdb43a890483" datatype="html">
-        <source>Are you sure that you want to
-          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
-          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
-        </source>
-        <target>Are you sure that you want to
-          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
-          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
-        </target>
-      </trans-unit>
-      <trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
-        <source>Yes, I am sure.</source>
-        <target>是的，我确定。</target>
-      </trans-unit>
       <trans-unit id="5ef50ba2514414f799d4c8fc36067a251904ba81" datatype="html">
         <source>Cluster-wide OSD Flags</source>
         <target>集群范围的 OSD 标志</target>
@@ -436,17 +532,6 @@
         <source>Submit</source>
         <target>提交</target>
       </trans-unit>
-      <trans-unit id="formTitle" datatype="html">
-        <source>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </target>
-        <note>form title</note>
-      </trans-unit>
       <trans-unit id="1cfe07dac5b4ee1c464eb24225ddeb4f1d24076a" datatype="html">
         <source>Advanced...</source>
         <target>高级设置…</target>
@@ -454,17 +539,6 @@
       <trans-unit id="b1ef1c12ddcee305353623919ef02778569f5454" datatype="html">
         <source>Advanced configuration options</source>
         <target>Advanced configuration options</target>
-      </trans-unit>
-      <trans-unit id="formActionButton" datatype="html">
-        <source>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
-        </target>
-        <note>form action button</note>
       </trans-unit>
       <trans-unit id="c35f9c5f268a514b970cc55e9a5dc4bed0988e7f" datatype="html">
         <source>OSD Recovery Priority</source>
@@ -502,9 +576,13 @@
           <x id="INTERPOLATION" equiv-text="{{ attr.value.minValue }}"/>.
         </target>
       </trans-unit>
-      <trans-unit id="272696ff8acdbed0af6dc13f09729e70be435b82" datatype="html">
-        <source>Reweight OSD</source>
-        <target>重新设置 OSD 的权重</target>
+      <trans-unit id="5251a4355cece3075db43f15d69a24a0f8485707" datatype="html">
+        <source>Reweight OSD: 
+          <x id="INTERPOLATION" equiv-text="{{ osdId }}"/>
+        </source>
+        <target>Reweight OSD: 
+          <x id="INTERPOLATION" equiv-text="{{ osdId }}"/>
+        </target>
       </trans-unit>
       <trans-unit id="67650b2998db48201b2c6176cbfef51e7211ccaa" datatype="html">
         <source>The value needs to be between 0 and 1.</source>
@@ -526,19 +604,19 @@
         <source>{VAR_SELECT, select, 1 {Deep } }</source>
         <target>{VAR_SELECT, select, 1 {深度}}</target>
       </trans-unit>
-      <trans-unit id="6a92b12d76f3cb0ea9d4f6c3cdc57cb1e1235977" datatype="html">
+      <trans-unit id="2613498e8e5853c26a1cc62ae8dc673d1fdf0e2a" datatype="html">
         <source>You are about to apply a 
           <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>scrub to
-            the OSD 
+          the OSD(s): 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ selected[0].id }}"/>
+          <x id="INTERPOLATION" equiv-text="{{ selected | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>.
         </source>
         <target>You are about to apply a 
           <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>scrub to
-            the OSD 
+          the OSD(s): 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ selected[0].id }}"/>
+          <x id="INTERPOLATION" equiv-text="{{ selected | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>.
         </target>
       </trans-unit>
@@ -550,32 +628,40 @@
         <source>OSDs List</source>
         <target>OSD 列表</target>
       </trans-unit>
-      <trans-unit id="5fefe1505caccc8be70c808c1ea9451af0a84a45" datatype="html">
+      <trans-unit id="c402e6ec1c6792ede81f56c28eee8955860391c8" datatype="html">
         <source>
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD(s) 
+          <x id="INTERPOLATION" equiv-text="{{  getSelectedOsdIds() | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be marked
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </source>
         <target>
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD(s) 
+          <x id="INTERPOLATION" equiv-text="{{  getSelectedOsdIds() | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be marked
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </target>
       </trans-unit>
-      <trans-unit id="2d3a73f6440a7d896d74356fe0a725d731e71cbb" datatype="html">
-        <source>The OSD is not safe to destroy!</source>
-        <target>OSD 不安全，无法销毁！</target>
+      <trans-unit id="d2797d01ba86f5df03d875803e49e648a4027869" datatype="html">
+        <source>The 
+          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, 0 {...} 1 {...}}"/> not safe to destroy!
+        </source>
+        <target>The 
+          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, 0 {...} 1 {...}}"/> not safe to destroy!
+        </target>
       </trans-unit>
-      <trans-unit id="e38d09f45e55ff926cc9d1c262b033201477278d" datatype="html">
+      <trans-unit id="e776996dac651ef3819bfa767ccf2a0613759f47" datatype="html">
+        <source>{VAR_SELECT, select, 0 {OSDs are} 1 {OSD is} }</source>
+        <target>{VAR_SELECT, select, 0 {OSDs are} 1 {OSD is} }</target>
+      </trans-unit>
+      <trans-unit id="1e2c50ed3c3934ef068976dc7f38513cec29d515" datatype="html">
         <source>
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
+          <x id="INTERPOLATION" equiv-text="{{ getSelectedOsdIds() | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/>
@@ -583,7 +669,7 @@
         </source>
         <target>
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
+          <x id="INTERPOLATION" equiv-text="{{ getSelectedOsdIds() | list }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/>
@@ -727,10 +813,6 @@
       <trans-unit id="0660ae339068979854ade34a96546980723dede3" datatype="html">
         <source>Add clients</source>
         <target>添加客户端</target>
-      </trans-unit>
-      <trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
-        <source>Loading...</source>
-        <target>正在加载…</target>
       </trans-unit>
       <trans-unit id="135b91a2d908d5814b782695470a6a786c99d9d2" datatype="html">
         <source>-- No cluster available --</source>
@@ -894,6 +976,20 @@
         <source>-- Select the access type --</source>
         <target>-- 选择访问类型 --</target>
       </trans-unit>
+      <trans-unit id="49850390a653cd05dc5843d74ef073a9122b54c9" datatype="html">
+        <source>The Object Gateway NFS backend has a number of
+              limitations which will seriously affect applications writing to
+              the share. Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/> documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for details before enabling write access.
+        </source>
+        <target>The Object Gateway NFS backend has a number of
+              limitations which will seriously affect applications writing to
+              the share. Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/> documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for details before enabling write access.
+        </target>
+      </trans-unit>
       <trans-unit id="4deda03573eaaff77e63f6a238a1f0ca7816950a" datatype="html">
         <source>-- No squash available --</source>
         <target>-- 没有可用的 squash --</target>
@@ -953,13 +1049,17 @@
         <source>Old password</source>
         <target>Old password</target>
       </trans-unit>
+      <trans-unit id="1cf42e491adc166a337a960eb84d03c0c3f677c8" datatype="html">
+        <source>The old and new passwords must be different.</source>
+        <target>The old and new passwords must be different.</target>
+      </trans-unit>
       <trans-unit id="e70e209561583f360b1e9cefd2cbb1fe434b6229" datatype="html">
         <source>New password</source>
         <target>New password</target>
       </trans-unit>
-      <trans-unit id="1cf42e491adc166a337a960eb84d03c0c3f677c8" datatype="html">
-        <source>The old and new passwords must be different.</source>
-        <target>The old and new passwords must be different.</target>
+      <trans-unit id="595ebc9279497f6dc733777e2816bee936901388" datatype="html">
+        <source>Too weak</source>
+        <target>Too weak</target>
       </trans-unit>
       <trans-unit id="ede41f01c781b168a783cfcefc6fb67d48780d9b" datatype="html">
         <source>Confirm new password</source>
@@ -981,864 +1081,6 @@
         <source>Sorry, we could not find what you were looking for</source>
         <target>抱歉，我们找不到您要看的东西。</target>
       </trans-unit>
-      <trans-unit id="16568619015cfb2352e3b2596ba04fc1c82e44ef" datatype="html">
-        <source>Remove all</source>
-        <target>全部已读</target>
-      </trans-unit>
-      <trans-unit id="0d4b37c6675c5b436a54c43d6716eec835e1aa7f" datatype="html">
-        <source>There are no notifications.</source>
-        <target>There are no notifications.</target>
-      </trans-unit>
-      <trans-unit id="1d65cc22d5842c06d33b244fc67de9db4003537e" datatype="html">
-        <source>Recent Notifications</source>
-        <target>最新的通知</target>
-      </trans-unit>
-      <trans-unit id="495ab70870b5b4a30f2bc5f55052fdc518d954a9" datatype="html">
-        <source>There are no background tasks.</source>
-        <target>没有后台任务正在执行。</target>
-      </trans-unit>
-      <trans-unit id="ea94e7754983d80af8acb958a5d49d93bacd721c" datatype="html">
-        <source>Background Tasks</source>
-        <target>后台任务</target>
-      </trans-unit>
-      <trans-unit id="85b79c9064aed1ead31ace985f31aa1363f6bdaf" datatype="html">
-        <source>Help</source>
-        <target>帮助</target>
-      </trans-unit>
-      <trans-unit id="fcfd4675b4c90f08d18d3abede9a9a4dff4cfdc7" datatype="html">
-        <source>Documentation</source>
-        <target>文档</target>
-      </trans-unit>
-      <trans-unit id="e351b40b3869a5c7d19c3d4918cb1ac7aaab95c4" datatype="html">
-        <source>API</source>
-        <target>API</target>
-      </trans-unit>
-      <trans-unit id="004b222ff9ef9dd4771b777950ca1d0e4cd4348a" datatype="html">
-        <source>About</source>
-        <target>关于</target>
-      </trans-unit>
-      <trans-unit id="1481ecd21e760ac919a24e26cf790acd82e40199" datatype="html">
-        <source>Dashboard Settings</source>
-        <target>仪表盘设置</target>
-      </trans-unit>
-      <trans-unit id="a79aab4ef674bf3f6532292107c0054302236e0f" datatype="html">
-        <source>User management</source>
-        <target>用户管理</target>
-      </trans-unit>
-      <trans-unit id="049dfd9fe6c78914ad58cf89ac6a631fca28ec74" datatype="html">
-        <source>Logged in user</source>
-        <target>登录的用户</target>
-      </trans-unit>
-      <trans-unit id="cd38a58e73f306d838e621959d47d5e7a2f06d1f" datatype="html">
-        <source>Signed in as
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
-        </source>
-        <target>Signed in as
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
-          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="739516c2ca75843d5aec9cf0e6b3e4335c4227b9" datatype="html">
-        <source>Change password</source>
-        <target>Change password</target>
-      </trans-unit>
-      <trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
-        <source>Sign out</source>
-        <target>登出</target>
-      </trans-unit>
-      <trans-unit id="2fecea01ce1d44114ee45144eff6d47a5016a74f" datatype="html">
-        <source>Name...</source>
-        <target>名称…</target>
-      </trans-unit>
-      <trans-unit id="eabb4db920d9f9b2480cf438468b86e1bea02a9b" datatype="html">
-        <source>The chosen name is already in use.</source>
-        <target>所选名称已经被使用。</target>
-      </trans-unit>
-      <trans-unit id="1ea5c4d8942c00752dcc72e72949c5d9832f6399" datatype="html">
-        <source>Description...</source>
-        <target>描述…</target>
-      </trans-unit>
-      <trans-unit id="70f45880fce6ac5d8e468e25e82aefbba8098cfe" datatype="html">
-        <source>Permissions</source>
-        <target>权限</target>
-      </trans-unit>
-      <trans-unit id="9610487cbeb5796d34d8601b5ac0c0a65f9e1d19" datatype="html">
-        <source>Roles</source>
-        <target>角色</target>
-      </trans-unit>
-      <trans-unit id="08c74dc9762957593b91f6eb5d65efdfc975bf48" datatype="html">
-        <source>Username</source>
-        <target>用户名</target>
-      </trans-unit>
-      <trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
-        <source>Password</source>
-        <target>密码</target>
-      </trans-unit>
-      <trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
-        <source>Confirm password</source>
-        <target>确认密码</target>
-      </trans-unit>
-      <trans-unit id="cbb979e63ba50e0ca3adfa09cbdcaefd0853fca1" datatype="html">
-        <source>Password confirmation doesn't match the password.</source>
-        <target>密码和之前的输入不匹配。</target>
-      </trans-unit>
-      <trans-unit id="b760f123248930122fc7e7b6b6bf94e376e959c8" datatype="html">
-        <source>Full name</source>
-        <target>全名</target>
-      </trans-unit>
-      <trans-unit id="244aae9346da82b0922506c2d2581373a15641cc" datatype="html">
-        <source>Email</source>
-        <target>邮箱</target>
-      </trans-unit>
-      <trans-unit id="d0ec081dd61eb4f43aea269077bbe38eae87b7f9" datatype="html">
-        <source>Invalid email.</source>
-        <target>邮箱地址无效。</target>
-      </trans-unit>
-      <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
-        <source>You are about to remove "user read / update" permissions from your own user.</source>
-        <target>您即将取消您自己用户的 "user read / update" 权限。</target>
-      </trans-unit>
-      <trans-unit id="af4bf9fcb256853f14cf947eb1deb8d7f176d3f9" datatype="html">
-        <source>If you continue, you will no longer be able to add or remove roles from any user.</source>
-        <target>如果您继续的话，您以后就没办法为其他用户添加或者删除角色了。</target>
-      </trans-unit>
-      <trans-unit id="7d1dcf2a9146caac0581329acf94806ec69a89a5" datatype="html">
-        <source>Are you sure you want to continue?</source>
-        <target>您确实要继续吗？</target>
-      </trans-unit>
-      <trans-unit id="ca53d681a9892d6fdbb57ee9676582186515e961" datatype="html">
-        <source>Performance counters not available</source>
-        <target>无法读取性能计数器</target>
-      </trans-unit>
-      <trans-unit id="91853167141c37b58868f3b0421383dd72fa8a01" datatype="html">
-        <source>Attributes (OSD map)</source>
-        <target>OSD map</target>
-      </trans-unit>
-      <trans-unit id="97842f379e1d4157ac3ab0661b90c352e7cb72d5" datatype="html">
-        <source>Metadata not available</source>
-        <target>元数据不可用</target>
-      </trans-unit>
-      <trans-unit id="f721a500a68c357e8f2a01e60510f6a01e4ba529" datatype="html">
-        <source>Metadata</source>
-        <target>相关元数据</target>
-      </trans-unit>
-      <trans-unit id="d24e28e19c5703d7c6be44f4eb595a6a43b618ed" datatype="html">
-        <source>Performance counter</source>
-        <target>性能计数器</target>
-      </trans-unit>
-      <trans-unit id="d1f7c81ed9c5034af4abcdf119b1c1e86cd019dd" datatype="html">
-        <source>Histogram not available: 
-          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
-        </source>
-        <target>Histogram not available: 
-          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="868abfff914873d1c65df798d8432ed04b8ae2a9" datatype="html">
-        <source>Writes</source>
-        <target>写入请求</target>
-      </trans-unit>
-      <trans-unit id="996ebb9a653b5067f97bf3891ea9d2108e969492" datatype="html">
-        <source>Reads</source>
-        <target>读取请求</target>
-      </trans-unit>
-      <trans-unit id="65ac79790aa477a97b1cc579e18a115a8df8918f" datatype="html">
-        <source>Histogram</source>
-        <target>直方图</target>
-      </trans-unit>
-      <trans-unit id="fbbaf5cb02ed419e79a27072478f716a4666a99d" datatype="html">
-        <source>Performance Details</source>
-        <target>性能详情</target>
-      </trans-unit>
-      <trans-unit id="26fb5f81b3581f06b9210defb0e71dc69a67e819" datatype="html">
-        <source>Current values</source>
-        <target>当前值</target>
-      </trans-unit>
-      <trans-unit id="f61c6867295f3b53d23557021f2f4e0aa1d0b8fc" datatype="html">
-        <source>Type</source>
-        <target>类型</target>
-      </trans-unit>
-      <trans-unit id="9abcd7c82643d60c22733470463f74e4a54bc069" datatype="html">
-        <source>Min</source>
-        <target>下限</target>
-      </trans-unit>
-      <trans-unit id="c3ced4d162a0a55ee233a187ce7208ba5e922418" datatype="html">
-        <source>Max</source>
-        <target>上限</target>
-      </trans-unit>
-      <trans-unit id="920617c6a1a4805e53bcb5af6a9c76f8387e89c6" datatype="html">
-        <source>Flags</source>
-        <target>标志</target>
-      </trans-unit>
-      <trans-unit id="6834fa6b43d1ecbdf147c48dd9c4d72f1484571d" datatype="html">
-        <source>Source</source>
-        <target>来源</target>
-      </trans-unit>
-      <trans-unit id="a446fb0eb11fbffcac805ece5a2d306d24e733d8" datatype="html">
-        <source>Level</source>
-        <target>级别</target>
-      </trans-unit>
-      <trans-unit id="39f2fb094e9b2eda13163fa3f3a31594cf9c1307" datatype="html">
-        <source>Can be updated at runtime (editable)</source>
-        <target>可在运行时更新（可编辑）</target>
-      </trans-unit>
-      <trans-unit id="cafc87479686947e2590b9f588a88040aeaf660b" datatype="html">
-        <source>Tags</source>
-        <target>标记</target>
-      </trans-unit>
-      <trans-unit id="ab0089ef47af61ca1d137bc908b96c290dfd9287" datatype="html">
-        <source>Enum values</source>
-        <target>可选项</target>
-      </trans-unit>
-      <trans-unit id="819476f1264f1659f38e86f6abb542141b184832" datatype="html">
-        <source>See also</source>
-        <target>参见</target>
-      </trans-unit>
-      <trans-unit id="73caac4265ea7314ff061e5a1d78a6361a6dd3b8" datatype="html">
-        <source>Cluster Status</source>
-        <target>集群状态</target>
-      </trans-unit>
-      <trans-unit id="1d4bc612bbf19aa9553853266b9e92c9d75f4464" datatype="html">
-        <source>Manager Daemons</source>
-        <target>manager 守护进程</target>
-      </trans-unit>
-      <trans-unit id="946ac5dea9921dc09d7b0a63b89535371f283b19" datatype="html">
-        <source>Object Gateways</source>
-        <target>对象网关</target>
-      </trans-unit>
-      <trans-unit id="ff03fa5bcf37c4da46ad736c1f7d03f959e8ba9a" datatype="html">
-        <source>Metadata Servers</source>
-        <target>metadata 服务器</target>
-      </trans-unit>
-      <trans-unit id="d817609ba4993eba859409ab71e566168f4d5f5a" datatype="html">
-        <source>iSCSI Gateways</source>
-        <target>iSCSI 网关</target>
-      </trans-unit>
-      <trans-unit id="42c13e50391250ea9379bdf55d5d6c0228c0c8bc" datatype="html">
-        <source>Client IOPS</source>
-        <target>客户端 IOPS</target>
-      </trans-unit>
-      <trans-unit id="52213660b2454d139ada3079a42ec6caf3c3c01e" datatype="html">
-        <source>Client Throughput</source>
-        <target>客户端吞吐量</target>
-      </trans-unit>
-      <trans-unit id="32efd1c3f70e3c5244239de97a2cc95d98534a14" datatype="html">
-        <source>Client Read/Write</source>
-        <target>客户端读/写</target>
-      </trans-unit>
-      <trans-unit id="275485415092cbae3a9f3cbb786ebe283cacfdd5" datatype="html">
-        <source>Recovery Throughput</source>
-        <target>恢复吞吐量</target>
-      </trans-unit>
-      <trans-unit id="6d9a9f55046891733ef71170e7652063765eb542" datatype="html">
-        <source>Scrub</source>
-        <target>洗刷</target>
-      </trans-unit>
-      <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
-        <source>Performance</source>
-        <target>性能</target>
-      </trans-unit>
-      <trans-unit id="88f383269db2d32cccee9e936fe549dccb9fdbf4" datatype="html">
-        <source>Raw Capacity</source>
-        <target>基本容量</target>
-      </trans-unit>
-      <trans-unit id="afdb601c16162f2c798b16a2920955f1cc6a20aa" datatype="html">
-        <source>Objects</source>
-        <target>对象数</target>
-      </trans-unit>
-      <trans-unit id="c5f8a813f91a11af99132e4beafc136cfc13d73b" datatype="html">
-        <source>PGs per OSD</source>
-        <target>每个 OSD 的 PG 数</target>
-      </trans-unit>
-      <trans-unit id="498a109c6e9e94f1966de01aa0326f7f0ac6fb52" datatype="html">
-        <source>PG Status</source>
-        <target>PG 状态</target>
-      </trans-unit>
-      <trans-unit id="ce9dfdc6dccb28dc75a78c704e09dc18fb02dcfa" datatype="html">
-        <source>Capacity</source>
-        <target>容量</target>
-      </trans-unit>
-      <trans-unit id="44ecac93d67c6a671198091c2270354f80322327" datatype="html">
-        <source>
-          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
-          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
-        </source>
-        <target>
-          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
-          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
-        </target>
-      </trans-unit>
-      <trans-unit id="0c1e17956453ad772dbe82d6946f62748c692f3e" datatype="html">
-        <source>Ranks</source>
-        <target>排位</target>
-      </trans-unit>
-      <trans-unit id="50df62325726db950523a5be1c78b8905fcc25d4" datatype="html">
-        <source>MDS performance counters</source>
-        <target>MDS performance counters</target>
-      </trans-unit>
-      <trans-unit id="95c96d55690c0c685deebe52a1da94dc36f5e99d" datatype="html">
-        <source>Clients: 
-          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
-        </source>
-        <target>Clients: 
-          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="47116253e36f4e38a97ba41b2d3122c6c15ab904" datatype="html">
-        <source>Clients (
-          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
-        </source>
-        <target>Clients (
-          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
-        </target>
-      </trans-unit>
-      <trans-unit id="f0b5d789d42c0e69348e5fe0037fcbf5b5fbbdcc" datatype="html">
-        <source>Move an image to trash</source>
-        <target>将映像移至回收站</target>
-      </trans-unit>
-      <trans-unit id="86301cf2044b1eda218483365f6b9de8dde5040b" datatype="html">
-        <source>To move 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>/
-          <x id="INTERPOLATION_1" equiv-text="{{ imageName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> to trash,
-          click 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Move Image
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
-        </source>
-        <target>To move 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>/
-          <x id="INTERPOLATION_1" equiv-text="{{ imageName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> to trash,
-          click 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Move Image
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
-        </target>
-      </trans-unit>
-      <trans-unit id="88f27d390844aad53b4240360e928156c5f0d326" datatype="html">
-        <source>Protection expires at</source>
-        <target>保护期一直到</target>
-      </trans-unit>
-      <trans-unit id="da166e9a0d27322f6ba8916d71ecc0f9905bb4b1" datatype="html">
-        <source>NOT PROTECTED</source>
-        <target>无保护</target>
-      </trans-unit>
-      <trans-unit id="a1506e5f2ca22cad14502ec7a20fb6113ace145d" datatype="html">
-        <source>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</source>
-        <target>日期格式有问题。请使用“YYYY-MM-DD HH:mm:ss”。</target>
-      </trans-unit>
-      <trans-unit id="aa7ea0bb7495281e0b3258467ac7d90a1e44a1a1" datatype="html">
-        <source>Protection has already expired. Please pick a future date or leave it empty.</source>
-        <target>保护期限已经过了。请设置一个将来的日期，或者清空不填。</target>
-      </trans-unit>
-      <trans-unit id="536b3205c0c0d4d21685ec06feccfcf2fe14deb1" datatype="html">
-        <source>Move Image</source>
-        <target>移动映像</target>
-      </trans-unit>
-      <trans-unit id="8a9910cd114c1deb9af74f6f99b4173403965bf2" datatype="html">
-        <source>Gateways</source>
-        <target>Gateways</target>
-      </trans-unit>
-      <trans-unit id="e95ae009d0bdb45fcc656e8b65248cf7396080d5" datatype="html">
-        <source>Overview</source>
-        <target>概览</target>
-      </trans-unit>
-      <trans-unit id="bbd2045d5c37e4bb39a3c0fb62ea1ddf70a12838" datatype="html">
-        <source>Targets</source>
-        <target>目标</target>
-      </trans-unit>
-      <trans-unit id="6803e31b7395d94934e091a49a9524026b59b018" datatype="html">
-        <source>Discovery Authentication</source>
-        <target>发现身份验证</target>
-      </trans-unit>
-      <trans-unit id="e08a77594f3d89311cdf6da5090044270909c194" datatype="html">
-        <source>User</source>
-        <target>用户</target>
-      </trans-unit>
-      <trans-unit id="0214f773f8e394f50f953f39962e352d7863e959" datatype="html">
-        <source>Usernames must have a length of 8 to 64 characters and
-              can only contain letters, '.', '@', '-', '_' or ':'.</source>
-        <target>用户名长度必须在 8 到 64 个字符之间，且只能包含
-以下字符：英文字母、“.”、“@”、“-”、“_”或“:”。</target>
-      </trans-unit>
-      <trans-unit id="6682d1c00263bee204583a5d589b308b6be88b0f" datatype="html">
-        <source>Passwords must have a length of 12 to 16 characters
-              and can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters
-              and can only contain letters, '@', '-', '_' or '/'.</target>
-      </trans-unit>
-      <trans-unit id="ff40391de7a1944ea95091e4045cc34c4979b736" datatype="html">
-        <source>Mutual User</source>
-        <target>互认证用户</target>
-      </trans-unit>
-      <trans-unit id="0cf73dbebe99b737c4d288788182fc356e3c93d3" datatype="html">
-        <source>Mutual Password</source>
-        <target>互认证密码</target>
-      </trans-unit>
-      <trans-unit id="8800276925157c666b103c36ff7fe8ffe11980b4" datatype="html">
-        <source>Passwords must have a length of 12 to 16 characters and
-              can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters and
-              can only contain letters, '@', '-', '_' or '/'.</target>
-      </trans-unit>
-      <trans-unit id="53a583cd5f15059cc958b7d547f72cc78f68e123" datatype="html">
-        <source>Please consult the 
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
-    on how to configure and enable the iSCSI Targets management functionality.
-        </source>
-        <target>Please consult the 
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
-    on how to configure and enable the iSCSI Targets management functionality.
-        </target>
-      </trans-unit>
-      <trans-unit id="3b301d0044f62c92af0da53d7aaca52a436a547d" datatype="html">
-        <source>Available information:</source>
-        <target>可用信息：</target>
-      </trans-unit>
-      <trans-unit id="332227f088a4877b3c11f5fb3ae8bc812c470fae" datatype="html">
-        <source>iSCSI Targets not available</source>
-        <target>无可用 iSCSI 目标</target>
-      </trans-unit>
-      <trans-unit id="8414a5cb9d71cc1b21b10e4a9d1f2dad558f3361" datatype="html">
-        <source>Discovery authentication</source>
-        <target>Discovery authentication</target>
-      </trans-unit>
-      <trans-unit id="0f6e8f6094b180eaf1f11bc0ffe383f1cdcd059e" datatype="html">
-        <source>Only available for RBD images with 
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>fast-diff
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> enabled
-        </source>
-        <target>Only available for RBD images with 
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>fast-diff
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> enabled
-        </target>
-      </trans-unit>
-      <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
-        <source>Pool</source>
-        <target>存储池</target>
-      </trans-unit>
-      <trans-unit id="03cc5b14b0a20d075e9009ff021f4f1660ba348a" datatype="html">
-        <source>Data Pool</source>
-        <target>数据存储池</target>
-      </trans-unit>
-      <trans-unit id="1b051734b0ee9021991c91b3ed4e81c244322462" datatype="html">
-        <source>Created</source>
-        <target>创建</target>
-      </trans-unit>
-      <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
-        <source>Size</source>
-        <target>容量</target>
-      </trans-unit>
-      <trans-unit id="ceac8e132384322ec778ba760875a6c6897d3e42" datatype="html">
-        <source>Object size</source>
-        <target>对象大小</target>
-      </trans-unit>
-      <trans-unit id="6cdb1fea93d77c07950c0c76c6e0ad79ebbef084" datatype="html">
-        <source>Features</source>
-        <target>特性</target>
-      </trans-unit>
-      <trans-unit id="0a65771c9a73b9aa609d592fc96a64801a8f40bd" datatype="html">
-        <source>Provisioned</source>
-        <target>供给容量</target>
-      </trans-unit>
-      <trans-unit id="84a36cb75660b736773fe36ffa3d54f0f0fe363e" datatype="html">
-        <source>N/A</source>
-        <target>N/A</target>
-      </trans-unit>
-      <trans-unit id="e5c009342a4e8381f64341d0bb61c2e4685f5a4b" datatype="html">
-        <source>Total provisioned</source>
-        <target>总供给容量</target>
-      </trans-unit>
-      <trans-unit id="7f6bf8a43ae415f527ac961ea62471b983aaa97b" datatype="html">
-        <source>Striping unit</source>
-        <target>条带单元</target>
-      </trans-unit>
-      <trans-unit id="db710e8a8f011923f2d15d713fbae49c38b02b26" datatype="html">
-        <source>Striping count</source>
-        <target>条带个数</target>
-      </trans-unit>
-      <trans-unit id="3a4c2a9e76634ff14a60d52a718296f722d47c67" datatype="html">
-        <source>Parent</source>
-        <target>父节点</target>
-      </trans-unit>
-      <trans-unit id="6a209e68d78ffc2cc9c53d2e76158624efab71ad" datatype="html">
-        <source>Block name prefix</source>
-        <target>块存储名字前缀</target>
-      </trans-unit>
-      <trans-unit id="5704ec2049d007c5f5fb495a5d8b607e68d58081" datatype="html">
-        <source>Order</source>
-        <target>order</target>
-      </trans-unit>
-      <trans-unit id="f21b1d17b6c5042bb5805516eee37fde33739dd8" datatype="html">
-        <source>Snapshots</source>
-        <target>快照</target>
-      </trans-unit>
-      <trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
-        <source>Image</source>
-        <target>映像</target>
-      </trans-unit>
-      <trans-unit id="58e58f1a8786da9031a05e6770c5dafce82badf5" datatype="html">
-        <source>This setting overrides the global value</source>
-        <target>此设置会覆盖全局值</target>
-      </trans-unit>
-      <trans-unit id="5decb3917d46a9ac6e5813699801becb7c3c1455" datatype="html">
-        <source>Global</source>
-        <target>全局</target>
-      </trans-unit>
-      <trans-unit id="36b46714164964c6258b08ed0a25f57d8a950f92" datatype="html">
-        <source>This is the global value. No value for this option has been set for this image.</source>
-        <target>该值为全局值。没有为此映像设置此选项的值。</target>
-      </trans-unit>
-      <trans-unit id="6547c9c4d5f62942ac4b1fe459cf9a03d4dbf5a0" datatype="html">
-        <source>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> from
-        </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> from
-        </target>
-      </trans-unit>
-      <trans-unit id="0e9ecf29a4fa5b057bd8052e0d801b3fde6a30bf" datatype="html">
-        <source>'/' and '@' are not allowed.</source>
-        <target>不允许使用“/”和“@”。</target>
-      </trans-unit>
-      <trans-unit id="b99417c4dd46286ffd37c8d2e987c8b512ec7052" datatype="html">
-        <source>-- No rbd pools available --</source>
-        <target>-- 没有可用的 RBD 存储池 --</target>
-      </trans-unit>
-      <trans-unit id="ef83ec9c304a89d45650e580dcdc2978c37b3a83" datatype="html">
-        <source>-- Select a pool --</source>
-        <target>-- 请选择存储池 --</target>
-      </trans-unit>
-      <trans-unit id="49449943d8cbf59d8c401c8bd2e76f92e207cc5f" datatype="html">
-        <source>Use a dedicated data pool</source>
-        <target>使用一个专用的数据池</target>
-      </trans-unit>
-      <trans-unit id="870aee0dd31a9643bf62007beb8f1ae1deb34d42" datatype="html">
-        <source>Data pool</source>
-        <target>数据池</target>
-      </trans-unit>
-      <trans-unit id="3792ca829d9b9f687e1f5d7733d30e9bb0bfec47" datatype="html">
-        <source>Dedicated pool that stores the object-data of the RBD.</source>
-        <target>为保存 RBD 的对象数据单独分配的存储池。</target>
-      </trans-unit>
-      <trans-unit id="f0016bd458baa88284a658ce9eeda42d8ad88d2c" datatype="html">
-        <source>e.g., 10GiB</source>
-        <target>如 10 GiB</target>
-      </trans-unit>
-      <trans-unit id="0a88bbee20570aaf9615332fb27020627044874d" datatype="html">
-        <source>You have to increase the size.</source>
-        <target>您需要设置大一些的容量。</target>
-      </trans-unit>
-      <trans-unit id="bc2e854e111ecf2bd7db170da5e3c2ed08181d88" datatype="html">
-        <source>Advanced</source>
-        <target>高级设置</target>
-      </trans-unit>
-      <trans-unit id="3562a3778695a5f9c0445660e35301f0a39aaf73" datatype="html">
-        <source>Striping</source>
-        <target>条带</target>
-      </trans-unit>
-      <trans-unit id="ef3c3f3b5f562a5cdbe0ee2874287db1534b5958" datatype="html">
-        <source>Stripe unit</source>
-        <target>条带单元大小</target>
-      </trans-unit>
-      <trans-unit id="84471be1049006edecbcaef1a32ae0893c229c50" datatype="html">
-        <source>-- Select stripe unit --</source>
-        <target>-- 选择条带单元大小 --</target>
-      </trans-unit>
-      <trans-unit id="8d32c5c54c8581c774a7f467fbd4e329b15a74fa" datatype="html">
-        <source>This field is required because stripe count is defined!</source>
-        <target>因为设置了条带个数，所以这个字段是必选的！</target>
-      </trans-unit>
-      <trans-unit id="6bbf9040be7c5491d4a03f2185708f43a6582a3b" datatype="html">
-        <source>Stripe unit is greater than object size.</source>
-        <target>条带单元大小超过了对象大小。</target>
-      </trans-unit>
-      <trans-unit id="a682f49f9b761591661276d7c6f550e641a130a4" datatype="html">
-        <source>Stripe count</source>
-        <target>条带个数</target>
-      </trans-unit>
-      <trans-unit id="baa74031990c5370008ba622d0a250f0929097f4" datatype="html">
-        <source>This field is required because stripe unit is defined!</source>
-        <target>因为设置了条带单元大小，所以这个字段是必选的！</target>
-      </trans-unit>
-      <trans-unit id="cd2ada6d5ecbd5cbf89eae0a1f5326efedac0dbc" datatype="html">
-        <source>Stripe count must be greater than 0.</source>
-        <target>条带的个数必须大于 0。</target>
-      </trans-unit>
-      <trans-unit id="3f67f30568e9ae47507d46e28e1e82a7dca772e2" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot
-        </target>
-      </trans-unit>
-      <trans-unit id="1628d19a4490817c18be2afab410ca4adfa62ea7" datatype="html">
-        <source>{VAR_SELECT, select, true {Rename} other {Create} }</source>
-        <target>{VAR_SELECT, select, true {改名} other {创建} }</target>
-      </trans-unit>
-      <trans-unit id="73a287b41afe6b28f90edbeb98957a341a0276b4" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> Snapshot
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> Snapshot
-        </target>
-      </trans-unit>
-      <trans-unit id="deffb86b8fb0541254ad5a43862d82bff6b6a6c4" datatype="html">
-        <source>UNPROTECTED</source>
-        <target>无保护的</target>
-      </trans-unit>
-      <trans-unit id="5c5331983af566d4ac6a1024d15a3511786a4aa6" datatype="html">
-        <source>You are about to rollback</source>
-        <target>您即将进行回滚操作</target>
-      </trans-unit>
-      <trans-unit id="49c0408946a6d67185947f455f15cc201d0d78e6" datatype="html">
-        <source>Purge Trash</source>
-        <target>清空回收站</target>
-      </trans-unit>
-      <trans-unit id="af728625d769b61acf291442644b89edb88faec3" datatype="html">
-        <source>To purge, select one or All images and click</source>
-        <target>要彻底清空的话，请选择单个或所有的映像，然后点击</target>
-      </trans-unit>
-      <trans-unit id="55a4f598a4894b7fd5cb88f0ffd3c37ad009dd70" datatype="html">
-        <source>Pool:</source>
-        <target>存储池：</target>
-      </trans-unit>
-      <trans-unit id="d43dd2b9f7797e4cf3a604695bb33e4479108516" datatype="html">
-        <source>Pool name...</source>
-        <target>存储池名称…</target>
-      </trans-unit>
-      <trans-unit id="dfc3c34e182ea73c5d784ff7c8135f087992dac1" datatype="html">
-        <source>All</source>
-        <target>全选</target>
-      </trans-unit>
-      <trans-unit id="b0e7c7ed1d51a0c205c815048bc9f79e24ee6db2" datatype="html">
-        <source>Restore Image</source>
-        <target>恢复映像</target>
-      </trans-unit>
-      <trans-unit id="7369384817e0ad61ce871c9afdfbb538df2f97c1" datatype="html">
-        <source>To restore</source>
-        <target>要恢复</target>
-      </trans-unit>
-      <trans-unit id="e7f0abefc608f7fb452c2dc9b1cdc3dec432160e" datatype="html">
-        <source>type the image's new name and click</source>
-        <target>输入映像的新名称，并点击</target>
-      </trans-unit>
-      <trans-unit id="41307dd56fea669eed72e12a6c23af275f6bfd82" datatype="html">
-        <source>New Name</source>
-        <target>新名称</target>
-      </trans-unit>
-      <trans-unit id="5c96a761dc55a21882c132c929583a424c9b8cf4" datatype="html">
-        <source>Expired at</source>
-        <target>过期时间</target>
-      </trans-unit>
-      <trans-unit id="661041e3fcff4d3e75c561e038ca2504cf2cc643" datatype="html">
-        <source>Protected until</source>
-        <target>保护期限</target>
-      </trans-unit>
-      <trans-unit id="0ee3b2322a1d3277f7e3fdb8a5141ac42bcf350b" datatype="html">
-        <source>This image is protected until 
-          <x id="INTERPOLATION" equiv-text="{{ expiresAt | cdDate }}"/>.
-        </source>
-        <target>This image is protected until 
-          <x id="INTERPOLATION" equiv-text="{{ expiresAt | cdDate }}"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="aba82bfd8e177d35b76cad7cd43941f8e5e5acac" datatype="html">
-        <source>Trash</source>
-        <target>回收站</target>
-      </trans-unit>
-      <trans-unit id="a674ab267d1934bf395f87ca1503fd474296893f" datatype="html">
-        <source>iSCSI Topology</source>
-        <target>iSCSI 结构图</target>
-      </trans-unit>
-      <trans-unit id="121cc5391cd2a5115bc2b3160379ee5b36cd7716" datatype="html">
-        <source>Settings</source>
-        <target>设置</target>
-      </trans-unit>
-      <trans-unit id="9e515f954730279c31d5301f02479666d6264e8b" datatype="html">
-        <source>Changing these parameters from their default values is usually not necessary.</source>
-        <target>通常无须改变这些默认参数值。</target>
-      </trans-unit>
-      <trans-unit id="69a47cbabcc51ca942606e1d8da0ec11f98a2690" datatype="html">
-        <source>Backstore</source>
-        <target>后备存储</target>
-      </trans-unit>
-      <trans-unit id="6e57f37f033d2756d72e76f0214ec2cf7471a24f" datatype="html">
-        <source>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['min'] }}"/>.
-        </source>
-        <target>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['min'] }}"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="ba70656490cbe3688eaafb9a00ed0910a4fce76d" datatype="html">
-        <source>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['max'] }}"/>.
-        </source>
-        <target>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['max'] }}"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
-        <source>Confirm</source>
-        <target>确认</target>
-      </trans-unit>
-      <trans-unit id="339878da255ab55447c43afef8d9b2f9753bf5f6" datatype="html">
-        <source>Advanced Settings</source>
-        <target>高级设置</target>
-      </trans-unit>
-      <trans-unit id="b2de1dac73071775f2a6e53da76e861e91eff690" datatype="html">
-        <source>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['min'] }}"/>.
-        </source>
-        <target>Must be greater than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['min'] }}"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="bd0ea96890eb025a4e649c615ca02606619f4077" datatype="html">
-        <source>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['max'] }}"/>.
-        </source>
-        <target>Must be less than or equal to 
-          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['max'] }}"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="1406c2fb12a20c1528b19bcc5e24a6a2386167f3" datatype="html">
-        <source>Target IQN</source>
-        <target>目标限定名</target>
-      </trans-unit>
-      <trans-unit id="5fe42339be910372fa689f559155631862d218e8" datatype="html">
-        <source>IQN has wrong pattern.</source>
-        <target>IQN 格式错误。</target>
-      </trans-unit>
-      <trans-unit id="050a7ff057d1e895357540406b6be5652b4d1c71" datatype="html">
-        <source>An IQN has the following notation
-                'iqn.$year-$month.$reversedAddress:$definedName'</source>
-        <target>An IQN has the following notation
-                'iqn.$year-$month.$reversedAddress:$definedName'</target>
-      </trans-unit>
-      <trans-unit id="c8ada4b53396d8366db00a435acc61d53d857047" datatype="html">
-        <source>For example: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</source>
-        <target>例如：iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</target>
-      </trans-unit>
-      <trans-unit id="e60c11e1b1dfbbeda577364b8de39ded2d796c5e" datatype="html">
-        <source>More information</source>
-        <target>更多信息</target>
-      </trans-unit>
-      <trans-unit id="9b1aa85dfc6849196e64060db02c5410de69b7a1" datatype="html">
-        <source>This target has modified advanced settings.</source>
-        <target>此目标的高级设置项存在修改。</target>
-      </trans-unit>
-      <trans-unit id="6990ad8d6182662e864495ac31c3758cda1c7a28" datatype="html">
-        <source>Portals</source>
-        <target>端口</target>
-      </trans-unit>
-      <trans-unit id="c3638c01b6c34066438909713ec96087c813fc7e" datatype="html">
-        <source>At least 
-          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.
-        </source>
-        <target>At least 
-          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.
-        </target>
-      </trans-unit>
-      <trans-unit id="6a3ac2b4137d723fd9878cd357c2012ff6c07973" datatype="html">
-        <source>Add portal</source>
-        <target>添加端口</target>
-      </trans-unit>
-      <trans-unit id="9aff25be088f0efe3eaaf62edf2bff41cc41a617" datatype="html">
-        <source>Backstore: 
-          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. 
-        </source>
-        <target>Backstore: 
-          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. 
-        </target>
-      </trans-unit>
-      <trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
-        <source>This image has modified settings.</source>
-        <target>此映像的设置项存在修改。</target>
-      </trans-unit>
-      <trans-unit id="107c84e820909b44fe258673938a68ced1bbff72" datatype="html">
-        <source>At least 1 image is required.</source>
-        <target>至少需要 1 个映像！</target>
-      </trans-unit>
-      <trans-unit id="808038f912fdc7f0e03f82d4afd3bf9178527fc8" datatype="html">
-        <source>Add image</source>
-        <target>添加映像</target>
-      </trans-unit>
-      <trans-unit id="66c5fb27f52e75b70ca4b670b9b15a2a51cf9543" datatype="html">
-        <source>ACL authentication</source>
-        <target>ACL 身份验证</target>
-      </trans-unit>
-      <trans-unit id="f494bd31f095f6dcc656ce87ec2dcf07a2e9b30c" datatype="html">
-        <source>Initiators</source>
-        <target>授权人</target>
-      </trans-unit>
-      <trans-unit id="e98239d8a6be1100119ff4b5630c822b82786740" datatype="html">
-        <source>Initiator</source>
-        <target>授权人</target>
-      </trans-unit>
-      <trans-unit id="f2c5059d8cda15d8d03e2cce30f2d139623d9a91" datatype="html">
-        <source>Client IQN</source>
-        <target>客户端 IQN</target>
-      </trans-unit>
-      <trans-unit id="107d5aabce23d900f0a80e6ddc1c10e29aa0bed8" datatype="html">
-        <source>Initiator IQN needs to be unique.</source>
-        <target>授权人 IQN 必须唯一。</target>
-      </trans-unit>
-      <trans-unit id="bbf0b34a3fcc80800fcb44b9e1e86931a530dfe3" datatype="html">
-        <source>Usernames must have a length of 8 to 64 characters and
-                        can only contain letters, '.', '@', '-', '_' or ':'.</source>
-        <target>用户名长度必须在 8 到 64 个字符之间，且只能包含
-以下字符：英文字母、“.”、“@”、“-”、“_”或“:”。</target>
-      </trans-unit>
-      <trans-unit id="fdfee5d7a27e1bdd97a176097277bee078de6aaf" datatype="html">
-        <source>Passwords must have a length of 12 to 16 characters
-                        and can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters
-                        and can only contain letters, '@', '-', '_' or '/'.</target>
-      </trans-unit>
-      <trans-unit id="8406eb7415ee40e54d9ecb209abb056f06e3d666" datatype="html">
-        <source>Passwords must have a length of 12 to 16 characters and
-                        can only contain letters, '@', '-', '_' or '/'.</source>
-        <target>Passwords must have a length of 12 to 16 characters and
-                        can only contain letters, '@', '-', '_' or '/'.</target>
-      </trans-unit>
-      <trans-unit id="5d1878d5fc761cbe9614bfd87047a740c82a6951" datatype="html">
-        <source>Initiator belongs to a group. Images will be configure in the group.</source>
-        <target>授权人属于群组。映像须在群组中进行设置。</target>
-      </trans-unit>
-      <trans-unit id="c0de67b9d97fafbf200f9451e8388ee8128a56ac" datatype="html">
-        <source>No items added.</source>
-        <target>无项目添加。</target>
-      </trans-unit>
-      <trans-unit id="d565e47726158e428ecdc952fc9233b9b7d7f049" datatype="html">
-        <source>Add initiator</source>
-        <target>添加授权人</target>
-      </trans-unit>
-      <trans-unit id="c22ba03540aa3217da059f45e7eab138b51a96e2" datatype="html">
-        <source>Groups</source>
-        <target>群组</target>
-      </trans-unit>
-      <trans-unit id="4c90059afafb7e160384d9f512797c95bb95c6dc" datatype="html">
-        <source>Group</source>
-        <target>群组</target>
-      </trans-unit>
-      <trans-unit id="3084948274cff4f56d0f431af47240e9cf02fcc7" datatype="html">
-        <source>Add group</source>
-        <target>添加群组</target>
-      </trans-unit>
       <trans-unit id="a949d7e577902d0e5dc5d0971bb0170a21be7728" datatype="html">
         <source>[object Object]</source>
         <target>[object Object]</target>
@@ -1854,124 +1096,6 @@
       <trans-unit id="963488a1010d46067b238c4ae917fab3907c0a3a" datatype="html">
         <source>The mininum value is 0</source>
         <target>最小值为 0</target>
-      </trans-unit>
-      <trans-unit id="66db799d67958d4b0765181d072df62e2d1c16f5" datatype="html">
-        <source>Issues</source>
-        <target>问题</target>
-      </trans-unit>
-      <trans-unit id="ef06d69259e587e28d52372455f44c7153cda7e7" datatype="html">
-        <source>Syncing</source>
-        <target>正在同步</target>
-      </trans-unit>
-      <trans-unit id="0b0901877d837d3fda16ba161eb74368d1c75b7a" datatype="html">
-        <source>Ready</source>
-        <target>已就绪</target>
-      </trans-unit>
-      <trans-unit id="4057c56d63a7e9b140b1d01871a9229a5f30eb27" datatype="html">
-        <source>Edit pool mirror mode</source>
-        <target>编辑存储池镜像模式</target>
-      </trans-unit>
-      <trans-unit id="e1f367f5feaab38f6637dd1f967c848b447dea2d" datatype="html">
-        <source>To edit the mirror mode for pool 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>, select a new mode from the list and click 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
-        </source>
-        <target>To edit the mirror mode for pool 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>, select a new mode from the list and click 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
-        <source>Mode</source>
-        <target>模式</target>
-      </trans-unit>
-      <trans-unit id="32ca348ef926b0a6a7a780b8b64c3a8239895cec" datatype="html">
-        <source>Peer clusters must be removed prior to disabling mirror.</source>
-        <target>在禁用镜像功能前必须先移除同伴集群。</target>
-      </trans-unit>
-      <trans-unit id="fa61522d482349707fd7dd03b90dc5781611b17f" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/>
-  pool mirror peer
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/>
-  pool mirror peer
-        </target>
-      </trans-unit>
-      <trans-unit id="4ddcb416c1c0aa1f54acf5beef1de81813e76fa6" datatype="html">
-        <source>{VAR_SELECT, select, edit {Edit} other {Add} }</source>
-        <target>{VAR_SELECT, select, edit {编辑} other {添加} }</target>
-      </trans-unit>
-      <trans-unit id="59ca65ece457429d90104ede4674965f62edbabe" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/> the pool
-          mirror peer attributes for pool 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> and click
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Submit
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/> the pool
-          mirror peer attributes for pool 
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> and click
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Submit
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
-        </target>
-      </trans-unit>
-      <trans-unit id="d3cc964811f852a168f4a2d5daa59068abc5cf53" datatype="html">
-        <source>Cluster Name</source>
-        <target>集群名称</target>
-      </trans-unit>
-      <trans-unit id="b631721fc56cb7fb1cbd07b802a487c5753f6a2d" datatype="html">
-        <source>The cluster name is not valid.</source>
-        <target>集群名称无效。</target>
-      </trans-unit>
-      <trans-unit id="ca6deafa31bf421f85094807982aee4bcb20a3ae" datatype="html">
-        <source>CephX ID</source>
-        <target>CephX ID</target>
-      </trans-unit>
-      <trans-unit id="7539188a568c3d553cbde1bacaf32310c4264e24" datatype="html">
-        <source>CephX ID...</source>
-        <target>CephX ID...</target>
-      </trans-unit>
-      <trans-unit id="a1c45b594b0fba22fc64e80c793a7ffe005fdb0e" datatype="html">
-        <source>The CephX ID is not valid.</source>
-        <target>CephX ID 无效。</target>
-      </trans-unit>
-      <trans-unit id="20861576fcfce773c918c782cd4f5adf32382921" datatype="html">
-        <source>Monitor Addresses</source>
-        <target>Monitor 地址</target>
-      </trans-unit>
-      <trans-unit id="fa28eeed2b4bd4ccbe6e9349a1c2b3cb1c5de70a" datatype="html">
-        <source>Comma-delimited addresses...</source>
-        <target>逗号分割的地址...</target>
-      </trans-unit>
-      <trans-unit id="dc016c82fd85848d5c1b2fd0e8469ee2027d9c16" datatype="html">
-        <source>The monitory address is not valid.</source>
-        <target>Monitor 地址无效。</target>
-      </trans-unit>
-      <trans-unit id="e0ac55b83dc6739e62bc655cfe375b67c93e7f4a" datatype="html">
-        <source>CephX Key</source>
-        <target>CephX 密钥</target>
-      </trans-unit>
-      <trans-unit id="f53434bcb95bd86f1df9c8e22966f757614fc4ad" datatype="html">
-        <source>Base64-encoded key...</source>
-        <target>Base64 编码的密钥...</target>
-      </trans-unit>
-      <trans-unit id="4cd83164cd4f66b4abc2863f9ce6f599d789e4ca" datatype="html">
-        <source>CephX key must be base64 encoded.</source>
-        <target>CephX 密钥必须是 base64 编码的。</target>
       </trans-unit>
       <trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
         <source>Pools List</source>
@@ -2049,9 +1173,19 @@
         <source>Directory</source>
         <target>目录</target>
       </trans-unit>
+      <trans-unit id="2fecea01ce1d44114ee45144eff6d47a5016a74f" datatype="html">
+        <source>Name...</source>
+        <target>名称…</target>
+      </trans-unit>
       <trans-unit id="16e113230b6b0d3165e076300880542bac7c8138" datatype="html">
         <source>The chosen Ceph pool name is already in use.</source>
         <target>此 Ceph 存储池名称已被使用。</target>
+      </trans-unit>
+      <trans-unit id="c75b132bef7b29fa5171768303c4b96e34ccaf68" datatype="html">
+        <source>It's not possible to create an RBD pool with '/' in the name.
+              Please change the name or remove 'rbd' from the applications list.</source>
+        <target>It's not possible to create an RBD pool with '/' in the name.
+              Please change the name or remove 'rbd' from the applications list.</target>
       </trans-unit>
       <trans-unit id="b85c657469e5ec8231c3de99b22f437bc01ffde5" datatype="html">
         <source>Pool type</source>
@@ -2147,6 +1281,10 @@
         <source>-- Select an erasure code profile --</source>
         <target>-- 请选择一个纠删码配置 --</target>
       </trans-unit>
+      <trans-unit id="920617c6a1a4805e53bcb5af6a9c76f8387e89c6" datatype="html">
+        <source>Flags</source>
+        <target>标志</target>
+      </trans-unit>
       <trans-unit id="1c870fb00256b8a5b9cb9cd1a124e6390b9bc639" datatype="html">
         <source>EC Overwrites</source>
         <target>EC 重写 (overwrite)</target>
@@ -2158,6 +1296,10 @@
       <trans-unit id="2208d63d5940ce656006a220102b1eb2b5e553da" datatype="html">
         <source>Compression</source>
         <target>压缩</target>
+      </trans-unit>
+      <trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
+        <source>Mode</source>
+        <target>模式</target>
       </trans-unit>
       <trans-unit id="6c6f25c47da62ec597c6057a36ddfc3209811ec5" datatype="html">
         <source>Algorithm</source>
@@ -2223,6 +1365,10 @@
         <source>A valid quota should be greater than 0.</source>
         <target>A valid quota should be greater than 0.</target>
       </trans-unit>
+      <trans-unit id="f0016bd458baa88284a658ce9eeda42d8ad88d2c" datatype="html">
+        <source>e.g., 10GiB</source>
+        <target>如 10 GiB</target>
+      </trans-unit>
       <trans-unit id="b8bf35b66f09a301eef92ffc3cb2fd259df67ce9" datatype="html">
         <source>Max objects</source>
         <target>Max objects</target>
@@ -2231,17 +1377,675 @@
         <source>The value should be greater or equal to 0</source>
         <target>The value should be greater or equal to 0</target>
       </trans-unit>
-      <trans-unit id="4b673e771a3f6b056837b22ef19a825386046095" datatype="html">
-        <source>It's not possible to create an RBD pool with '/' in the name.</source>
-        <target>无法新建名字中有“/”的 RBD 存储池。</target>
-      </trans-unit>
-      <trans-unit id="a9c02674c6e4936562d1146e1ecf0c4240dfcf96" datatype="html">
-        <source>Please change the name or remove 'rbd' from the applications list.</source>
-        <target>请重新命名，或者把存储池的“rbd”应用标记去掉。</target>
+      <trans-unit id="fbbaf5cb02ed419e79a27072478f716a4666a99d" datatype="html">
+        <source>Performance Details</source>
+        <target>性能详情</target>
       </trans-unit>
       <trans-unit id="3938a411d76796f8ae73b72ea4c77661207453bd" datatype="html">
         <source>Cache Tiers Details</source>
         <target>缓存层详细信息</target>
+      </trans-unit>
+      <trans-unit id="f0b5d789d42c0e69348e5fe0037fcbf5b5fbbdcc" datatype="html">
+        <source>Move an image to trash</source>
+        <target>将映像移至回收站</target>
+      </trans-unit>
+      <trans-unit id="86301cf2044b1eda218483365f6b9de8dde5040b" datatype="html">
+        <source>To move 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>/
+          <x id="INTERPOLATION_1" equiv-text="{{ imageName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> to trash,
+          click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Move Image
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
+        </source>
+        <target>To move 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>/
+          <x id="INTERPOLATION_1" equiv-text="{{ imageName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> to trash,
+          click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Move Image
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
+        </target>
+      </trans-unit>
+      <trans-unit id="88f27d390844aad53b4240360e928156c5f0d326" datatype="html">
+        <source>Protection expires at</source>
+        <target>保护期一直到</target>
+      </trans-unit>
+      <trans-unit id="da166e9a0d27322f6ba8916d71ecc0f9905bb4b1" datatype="html">
+        <source>NOT PROTECTED</source>
+        <target>无保护</target>
+      </trans-unit>
+      <trans-unit id="a1506e5f2ca22cad14502ec7a20fb6113ace145d" datatype="html">
+        <source>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</source>
+        <target>日期格式有问题。请使用“YYYY-MM-DD HH:mm:ss”。</target>
+      </trans-unit>
+      <trans-unit id="aa7ea0bb7495281e0b3258467ac7d90a1e44a1a1" datatype="html">
+        <source>Protection has already expired. Please pick a future date or leave it empty.</source>
+        <target>保护期限已经过了。请设置一个将来的日期，或者清空不填。</target>
+      </trans-unit>
+      <trans-unit id="536b3205c0c0d4d21685ec06feccfcf2fe14deb1" datatype="html">
+        <source>Move Image</source>
+        <target>移动映像</target>
+      </trans-unit>
+      <trans-unit id="8a9910cd114c1deb9af74f6f99b4173403965bf2" datatype="html">
+        <source>Gateways</source>
+        <target>Gateways</target>
+      </trans-unit>
+      <trans-unit id="8835b9e49a3348b0a2f2162c21118af1f4bee45a" datatype="html">
+        <source>Must be greater than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ limits['min'] }}"/>.
+        </source>
+        <target>Must be greater than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ limits['min'] }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="bbddac59563c8c126e3fe28691e4e247614fcbd1" datatype="html">
+        <source>Must be less than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ limits['max'] }}"/>.
+        </source>
+        <target>Must be less than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ limits['max'] }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="e95ae009d0bdb45fcc656e8b65248cf7396080d5" datatype="html">
+        <source>Overview</source>
+        <target>概览</target>
+      </trans-unit>
+      <trans-unit id="bbd2045d5c37e4bb39a3c0fb62ea1ddf70a12838" datatype="html">
+        <source>Targets</source>
+        <target>目标</target>
+      </trans-unit>
+      <trans-unit id="6803e31b7395d94934e091a49a9524026b59b018" datatype="html">
+        <source>Discovery Authentication</source>
+        <target>发现身份验证</target>
+      </trans-unit>
+      <trans-unit id="e08a77594f3d89311cdf6da5090044270909c194" datatype="html">
+        <source>User</source>
+        <target>用户</target>
+      </trans-unit>
+      <trans-unit id="0214f773f8e394f50f953f39962e352d7863e959" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+              can only contain letters, '.', '@', '-', '_' or ':'.</source>
+        <target>用户名长度必须在 8 到 64 个字符之间，且只能包含
+以下字符：英文字母、“.”、“@”、“-”、“_”或“:”。</target>
+      </trans-unit>
+      <trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
+        <source>Password</source>
+        <target>密码</target>
+      </trans-unit>
+      <trans-unit id="6682d1c00263bee204583a5d589b308b6be88b0f" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+              and can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters
+              and can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="ff40391de7a1944ea95091e4045cc34c4979b736" datatype="html">
+        <source>Mutual User</source>
+        <target>互认证用户</target>
+      </trans-unit>
+      <trans-unit id="0cf73dbebe99b737c4d288788182fc356e3c93d3" datatype="html">
+        <source>Mutual Password</source>
+        <target>互认证密码</target>
+      </trans-unit>
+      <trans-unit id="8800276925157c666b103c36ff7fe8ffe11980b4" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters and
+              can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters and
+              can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="53a583cd5f15059cc958b7d547f72cc78f68e123" datatype="html">
+        <source>Please consult the 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
+    on how to configure and enable the iSCSI Targets management functionality.
+        </source>
+        <target>Please consult the 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
+    on how to configure and enable the iSCSI Targets management functionality.
+        </target>
+      </trans-unit>
+      <trans-unit id="3b301d0044f62c92af0da53d7aaca52a436a547d" datatype="html">
+        <source>Available information:</source>
+        <target>可用信息：</target>
+      </trans-unit>
+      <trans-unit id="332227f088a4877b3c11f5fb3ae8bc812c470fae" datatype="html">
+        <source>iSCSI Targets not available</source>
+        <target>无可用 iSCSI 目标</target>
+      </trans-unit>
+      <trans-unit id="8414a5cb9d71cc1b21b10e4a9d1f2dad558f3361" datatype="html">
+        <source>Discovery authentication</source>
+        <target>Discovery authentication</target>
+      </trans-unit>
+      <trans-unit id="0f6e8f6094b180eaf1f11bc0ffe383f1cdcd059e" datatype="html">
+        <source>Only available for RBD images with 
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>fast-diff
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> enabled
+        </source>
+        <target>Only available for RBD images with 
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>fast-diff
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> enabled
+        </target>
+      </trans-unit>
+      <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
+        <source>Pool</source>
+        <target>存储池</target>
+      </trans-unit>
+      <trans-unit id="03cc5b14b0a20d075e9009ff021f4f1660ba348a" datatype="html">
+        <source>Data Pool</source>
+        <target>数据存储池</target>
+      </trans-unit>
+      <trans-unit id="1b051734b0ee9021991c91b3ed4e81c244322462" datatype="html">
+        <source>Created</source>
+        <target>创建</target>
+      </trans-unit>
+      <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
+        <source>Size</source>
+        <target>容量</target>
+      </trans-unit>
+      <trans-unit id="afdb601c16162f2c798b16a2920955f1cc6a20aa" datatype="html">
+        <source>Objects</source>
+        <target>对象数</target>
+      </trans-unit>
+      <trans-unit id="ceac8e132384322ec778ba760875a6c6897d3e42" datatype="html">
+        <source>Object size</source>
+        <target>对象大小</target>
+      </trans-unit>
+      <trans-unit id="6cdb1fea93d77c07950c0c76c6e0ad79ebbef084" datatype="html">
+        <source>Features</source>
+        <target>特性</target>
+      </trans-unit>
+      <trans-unit id="0a65771c9a73b9aa609d592fc96a64801a8f40bd" datatype="html">
+        <source>Provisioned</source>
+        <target>供给容量</target>
+      </trans-unit>
+      <trans-unit id="84a36cb75660b736773fe36ffa3d54f0f0fe363e" datatype="html">
+        <source>N/A</source>
+        <target>N/A</target>
+      </trans-unit>
+      <trans-unit id="e5c009342a4e8381f64341d0bb61c2e4685f5a4b" datatype="html">
+        <source>Total provisioned</source>
+        <target>总供给容量</target>
+      </trans-unit>
+      <trans-unit id="7f6bf8a43ae415f527ac961ea62471b983aaa97b" datatype="html">
+        <source>Striping unit</source>
+        <target>条带单元</target>
+      </trans-unit>
+      <trans-unit id="db710e8a8f011923f2d15d713fbae49c38b02b26" datatype="html">
+        <source>Striping count</source>
+        <target>条带个数</target>
+      </trans-unit>
+      <trans-unit id="3a4c2a9e76634ff14a60d52a718296f722d47c67" datatype="html">
+        <source>Parent</source>
+        <target>父节点</target>
+      </trans-unit>
+      <trans-unit id="6a209e68d78ffc2cc9c53d2e76158624efab71ad" datatype="html">
+        <source>Block name prefix</source>
+        <target>块存储名字前缀</target>
+      </trans-unit>
+      <trans-unit id="5704ec2049d007c5f5fb495a5d8b607e68d58081" datatype="html">
+        <source>Order</source>
+        <target>order</target>
+      </trans-unit>
+      <trans-unit id="f21b1d17b6c5042bb5805516eee37fde33739dd8" datatype="html">
+        <source>Snapshots</source>
+        <target>快照</target>
+      </trans-unit>
+      <trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
+        <source>Image</source>
+        <target>映像</target>
+      </trans-unit>
+      <trans-unit id="58e58f1a8786da9031a05e6770c5dafce82badf5" datatype="html">
+        <source>This setting overrides the global value</source>
+        <target>此设置会覆盖全局值</target>
+      </trans-unit>
+      <trans-unit id="5decb3917d46a9ac6e5813699801becb7c3c1455" datatype="html">
+        <source>Global</source>
+        <target>全局</target>
+      </trans-unit>
+      <trans-unit id="36b46714164964c6258b08ed0a25f57d8a950f92" datatype="html">
+        <source>This is the global value. No value for this option has been set for this image.</source>
+        <target>该值为全局值。没有为此映像设置此选项的值。</target>
+      </trans-unit>
+      <trans-unit id="6547c9c4d5f62942ac4b1fe459cf9a03d4dbf5a0" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> from
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> from
+        </target>
+      </trans-unit>
+      <trans-unit id="0e9ecf29a4fa5b057bd8052e0d801b3fde6a30bf" datatype="html">
+        <source>'/' and '@' are not allowed.</source>
+        <target>不允许使用“/”和“@”。</target>
+      </trans-unit>
+      <trans-unit id="b99417c4dd46286ffd37c8d2e987c8b512ec7052" datatype="html">
+        <source>-- No rbd pools available --</source>
+        <target>-- 没有可用的 RBD 存储池 --</target>
+      </trans-unit>
+      <trans-unit id="ef83ec9c304a89d45650e580dcdc2978c37b3a83" datatype="html">
+        <source>-- Select a pool --</source>
+        <target>-- 请选择存储池 --</target>
+      </trans-unit>
+      <trans-unit id="49449943d8cbf59d8c401c8bd2e76f92e207cc5f" datatype="html">
+        <source>Use a dedicated data pool</source>
+        <target>使用一个专用的数据池</target>
+      </trans-unit>
+      <trans-unit id="870aee0dd31a9643bf62007beb8f1ae1deb34d42" datatype="html">
+        <source>Data pool</source>
+        <target>数据池</target>
+      </trans-unit>
+      <trans-unit id="3792ca829d9b9f687e1f5d7733d30e9bb0bfec47" datatype="html">
+        <source>Dedicated pool that stores the object-data of the RBD.</source>
+        <target>为保存 RBD 的对象数据单独分配的存储池。</target>
+      </trans-unit>
+      <trans-unit id="0a88bbee20570aaf9615332fb27020627044874d" datatype="html">
+        <source>You have to increase the size.</source>
+        <target>您需要设置大一些的容量。</target>
+      </trans-unit>
+      <trans-unit id="bc2e854e111ecf2bd7db170da5e3c2ed08181d88" datatype="html">
+        <source>Advanced</source>
+        <target>高级设置</target>
+      </trans-unit>
+      <trans-unit id="3562a3778695a5f9c0445660e35301f0a39aaf73" datatype="html">
+        <source>Striping</source>
+        <target>条带</target>
+      </trans-unit>
+      <trans-unit id="ef3c3f3b5f562a5cdbe0ee2874287db1534b5958" datatype="html">
+        <source>Stripe unit</source>
+        <target>条带单元大小</target>
+      </trans-unit>
+      <trans-unit id="84471be1049006edecbcaef1a32ae0893c229c50" datatype="html">
+        <source>-- Select stripe unit --</source>
+        <target>-- 选择条带单元大小 --</target>
+      </trans-unit>
+      <trans-unit id="8d32c5c54c8581c774a7f467fbd4e329b15a74fa" datatype="html">
+        <source>This field is required because stripe count is defined!</source>
+        <target>因为设置了条带个数，所以这个字段是必选的！</target>
+      </trans-unit>
+      <trans-unit id="6bbf9040be7c5491d4a03f2185708f43a6582a3b" datatype="html">
+        <source>Stripe unit is greater than object size.</source>
+        <target>条带单元大小超过了对象大小。</target>
+      </trans-unit>
+      <trans-unit id="a682f49f9b761591661276d7c6f550e641a130a4" datatype="html">
+        <source>Stripe count</source>
+        <target>条带个数</target>
+      </trans-unit>
+      <trans-unit id="baa74031990c5370008ba622d0a250f0929097f4" datatype="html">
+        <source>This field is required because stripe unit is defined!</source>
+        <target>因为设置了条带单元大小，所以这个字段是必选的！</target>
+      </trans-unit>
+      <trans-unit id="cd2ada6d5ecbd5cbf89eae0a1f5326efedac0dbc" datatype="html">
+        <source>Stripe count must be greater than 0.</source>
+        <target>条带的个数必须大于 0。</target>
+      </trans-unit>
+      <trans-unit id="3f67f30568e9ae47507d46e28e1e82a7dca772e2" datatype="html">
+        <source>
+          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot
+        </source>
+        <target>
+          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot
+        </target>
+      </trans-unit>
+      <trans-unit id="1628d19a4490817c18be2afab410ca4adfa62ea7" datatype="html">
+        <source>{VAR_SELECT, select, true {Rename} other {Create} }</source>
+        <target>{VAR_SELECT, select, true {改名} other {创建} }</target>
+      </trans-unit>
+      <trans-unit id="73a287b41afe6b28f90edbeb98957a341a0276b4" datatype="html">
+        <source>
+          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> Snapshot
+        </source>
+        <target>
+          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> Snapshot
+        </target>
+      </trans-unit>
+      <trans-unit id="cb60c1cd3655234756b5b92d4d597d92d520ee30" datatype="html">
+        <source>PROTECTED</source>
+        <target>PROTECTED</target>
+      </trans-unit>
+      <trans-unit id="deffb86b8fb0541254ad5a43862d82bff6b6a6c4" datatype="html">
+        <source>UNPROTECTED</source>
+        <target>无保护的</target>
+      </trans-unit>
+      <trans-unit id="5c5331983af566d4ac6a1024d15a3511786a4aa6" datatype="html">
+        <source>You are about to rollback</source>
+        <target>您即将进行回滚操作</target>
+      </trans-unit>
+      <trans-unit id="49c0408946a6d67185947f455f15cc201d0d78e6" datatype="html">
+        <source>Purge Trash</source>
+        <target>清空回收站</target>
+      </trans-unit>
+      <trans-unit id="af728625d769b61acf291442644b89edb88faec3" datatype="html">
+        <source>To purge, select one or All images and click</source>
+        <target>要彻底清空的话，请选择单个或所有的映像，然后点击</target>
+      </trans-unit>
+      <trans-unit id="55a4f598a4894b7fd5cb88f0ffd3c37ad009dd70" datatype="html">
+        <source>Pool:</source>
+        <target>存储池：</target>
+      </trans-unit>
+      <trans-unit id="d43dd2b9f7797e4cf3a604695bb33e4479108516" datatype="html">
+        <source>Pool name...</source>
+        <target>存储池名称…</target>
+      </trans-unit>
+      <trans-unit id="dfc3c34e182ea73c5d784ff7c8135f087992dac1" datatype="html">
+        <source>All</source>
+        <target>全选</target>
+      </trans-unit>
+      <trans-unit id="b0e7c7ed1d51a0c205c815048bc9f79e24ee6db2" datatype="html">
+        <source>Restore Image</source>
+        <target>恢复映像</target>
+      </trans-unit>
+      <trans-unit id="7369384817e0ad61ce871c9afdfbb538df2f97c1" datatype="html">
+        <source>To restore</source>
+        <target>要恢复</target>
+      </trans-unit>
+      <trans-unit id="e7f0abefc608f7fb452c2dc9b1cdc3dec432160e" datatype="html">
+        <source>type the image's new name and click</source>
+        <target>输入映像的新名称，并点击</target>
+      </trans-unit>
+      <trans-unit id="41307dd56fea669eed72e12a6c23af275f6bfd82" datatype="html">
+        <source>New Name</source>
+        <target>新名称</target>
+      </trans-unit>
+      <trans-unit id="5c96a761dc55a21882c132c929583a424c9b8cf4" datatype="html">
+        <source>Expired at</source>
+        <target>过期时间</target>
+      </trans-unit>
+      <trans-unit id="661041e3fcff4d3e75c561e038ca2504cf2cc643" datatype="html">
+        <source>Protected until</source>
+        <target>保护期限</target>
+      </trans-unit>
+      <trans-unit id="0ee3b2322a1d3277f7e3fdb8a5141ac42bcf350b" datatype="html">
+        <source>This image is protected until 
+          <x id="INTERPOLATION" equiv-text="{{ expiresAt | cdDate }}"/>.
+        </source>
+        <target>This image is protected until 
+          <x id="INTERPOLATION" equiv-text="{{ expiresAt | cdDate }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="aba82bfd8e177d35b76cad7cd43941f8e5e5acac" datatype="html">
+        <source>Trash</source>
+        <target>回收站</target>
+      </trans-unit>
+      <trans-unit id="a674ab267d1934bf395f87ca1503fd474296893f" datatype="html">
+        <source>iSCSI Topology</source>
+        <target>iSCSI 结构图</target>
+      </trans-unit>
+      <trans-unit id="121cc5391cd2a5115bc2b3160379ee5b36cd7716" datatype="html">
+        <source>Settings</source>
+        <target>设置</target>
+      </trans-unit>
+      <trans-unit id="9e515f954730279c31d5301f02479666d6264e8b" datatype="html">
+        <source>Changing these parameters from their default values is usually not necessary.</source>
+        <target>通常无须改变这些默认参数值。</target>
+      </trans-unit>
+      <trans-unit id="69a47cbabcc51ca942606e1d8da0ec11f98a2690" datatype="html">
+        <source>Backstore</source>
+        <target>后备存储</target>
+      </trans-unit>
+      <trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
+        <source>Confirm</source>
+        <target>确认</target>
+      </trans-unit>
+      <trans-unit id="339878da255ab55447c43afef8d9b2f9753bf5f6" datatype="html">
+        <source>Advanced Settings</source>
+        <target>高级设置</target>
+      </trans-unit>
+      <trans-unit id="1406c2fb12a20c1528b19bcc5e24a6a2386167f3" datatype="html">
+        <source>Target IQN</source>
+        <target>目标限定名</target>
+      </trans-unit>
+      <trans-unit id="5fe42339be910372fa689f559155631862d218e8" datatype="html">
+        <source>IQN has wrong pattern.</source>
+        <target>IQN 格式错误。</target>
+      </trans-unit>
+      <trans-unit id="050a7ff057d1e895357540406b6be5652b4d1c71" datatype="html">
+        <source>An IQN has the following notation
+                'iqn.$year-$month.$reversedAddress:$definedName'</source>
+        <target>An IQN has the following notation
+                'iqn.$year-$month.$reversedAddress:$definedName'</target>
+      </trans-unit>
+      <trans-unit id="c8ada4b53396d8366db00a435acc61d53d857047" datatype="html">
+        <source>For example: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</source>
+        <target>例如：iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</target>
+      </trans-unit>
+      <trans-unit id="e60c11e1b1dfbbeda577364b8de39ded2d796c5e" datatype="html">
+        <source>More information</source>
+        <target>更多信息</target>
+      </trans-unit>
+      <trans-unit id="9b1aa85dfc6849196e64060db02c5410de69b7a1" datatype="html">
+        <source>This target has modified advanced settings.</source>
+        <target>此目标的高级设置项存在修改。</target>
+      </trans-unit>
+      <trans-unit id="6990ad8d6182662e864495ac31c3758cda1c7a28" datatype="html">
+        <source>Portals</source>
+        <target>端口</target>
+      </trans-unit>
+      <trans-unit id="c3638c01b6c34066438909713ec96087c813fc7e" datatype="html">
+        <source>At least 
+          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.
+        </source>
+        <target>At least 
+          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.
+        </target>
+      </trans-unit>
+      <trans-unit id="6a3ac2b4137d723fd9878cd357c2012ff6c07973" datatype="html">
+        <source>Add portal</source>
+        <target>添加端口</target>
+      </trans-unit>
+      <trans-unit id="9aff25be088f0efe3eaaf62edf2bff41cc41a617" datatype="html">
+        <source>Backstore: 
+          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. 
+        </source>
+        <target>Backstore: 
+          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. 
+        </target>
+      </trans-unit>
+      <trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
+        <source>This image has modified settings.</source>
+        <target>此映像的设置项存在修改。</target>
+      </trans-unit>
+      <trans-unit id="107c84e820909b44fe258673938a68ced1bbff72" datatype="html">
+        <source>At least 1 image is required.</source>
+        <target>至少需要 1 个映像！</target>
+      </trans-unit>
+      <trans-unit id="808038f912fdc7f0e03f82d4afd3bf9178527fc8" datatype="html">
+        <source>Add image</source>
+        <target>添加映像</target>
+      </trans-unit>
+      <trans-unit id="66c5fb27f52e75b70ca4b670b9b15a2a51cf9543" datatype="html">
+        <source>ACL authentication</source>
+        <target>ACL 身份验证</target>
+      </trans-unit>
+      <trans-unit id="419c8b402609dcf49ae4932a5a4647dc8d79bbaf" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+                can only contain letters, '.', '@', '-', '_' or ':'.</source>
+        <target>Usernames must have a length of 8 to 64 characters and
+                can only contain letters, '.', '@', '-', '_' or ':'.</target>
+      </trans-unit>
+      <trans-unit id="938050960d6653fddfcfd42425e18fb35a308262" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+                and can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters
+                and can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="f494bd31f095f6dcc656ce87ec2dcf07a2e9b30c" datatype="html">
+        <source>Initiators</source>
+        <target>授权人</target>
+      </trans-unit>
+      <trans-unit id="e98239d8a6be1100119ff4b5630c822b82786740" datatype="html">
+        <source>Initiator</source>
+        <target>授权人</target>
+      </trans-unit>
+      <trans-unit id="f2c5059d8cda15d8d03e2cce30f2d139623d9a91" datatype="html">
+        <source>Client IQN</source>
+        <target>客户端 IQN</target>
+      </trans-unit>
+      <trans-unit id="107d5aabce23d900f0a80e6ddc1c10e29aa0bed8" datatype="html">
+        <source>Initiator IQN needs to be unique.</source>
+        <target>授权人 IQN 必须唯一。</target>
+      </trans-unit>
+      <trans-unit id="bbf0b34a3fcc80800fcb44b9e1e86931a530dfe3" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+                        can only contain letters, '.', '@', '-', '_' or ':'.</source>
+        <target>用户名长度必须在 8 到 64 个字符之间，且只能包含
+以下字符：英文字母、“.”、“@”、“-”、“_”或“:”。</target>
+      </trans-unit>
+      <trans-unit id="fdfee5d7a27e1bdd97a176097277bee078de6aaf" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+                        and can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters
+                        and can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="8406eb7415ee40e54d9ecb209abb056f06e3d666" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters and
+                        can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters and
+                        can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="5d1878d5fc761cbe9614bfd87047a740c82a6951" datatype="html">
+        <source>Initiator belongs to a group. Images will be configure in the group.</source>
+        <target>授权人属于群组。映像须在群组中进行设置。</target>
+      </trans-unit>
+      <trans-unit id="c0de67b9d97fafbf200f9451e8388ee8128a56ac" datatype="html">
+        <source>No items added.</source>
+        <target>无项目添加。</target>
+      </trans-unit>
+      <trans-unit id="d565e47726158e428ecdc952fc9233b9b7d7f049" datatype="html">
+        <source>Add initiator</source>
+        <target>添加授权人</target>
+      </trans-unit>
+      <trans-unit id="c22ba03540aa3217da059f45e7eab138b51a96e2" datatype="html">
+        <source>Groups</source>
+        <target>群组</target>
+      </trans-unit>
+      <trans-unit id="4c90059afafb7e160384d9f512797c95bb95c6dc" datatype="html">
+        <source>Group</source>
+        <target>群组</target>
+      </trans-unit>
+      <trans-unit id="3084948274cff4f56d0f431af47240e9cf02fcc7" datatype="html">
+        <source>Add group</source>
+        <target>添加群组</target>
+      </trans-unit>
+      <trans-unit id="66db799d67958d4b0765181d072df62e2d1c16f5" datatype="html">
+        <source>Issues</source>
+        <target>问题</target>
+      </trans-unit>
+      <trans-unit id="ef06d69259e587e28d52372455f44c7153cda7e7" datatype="html">
+        <source>Syncing</source>
+        <target>正在同步</target>
+      </trans-unit>
+      <trans-unit id="0b0901877d837d3fda16ba161eb74368d1c75b7a" datatype="html">
+        <source>Ready</source>
+        <target>已就绪</target>
+      </trans-unit>
+      <trans-unit id="4057c56d63a7e9b140b1d01871a9229a5f30eb27" datatype="html">
+        <source>Edit pool mirror mode</source>
+        <target>编辑存储池镜像模式</target>
+      </trans-unit>
+      <trans-unit id="e1f367f5feaab38f6637dd1f967c848b447dea2d" datatype="html">
+        <source>To edit the mirror mode for pool 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>, select a new mode from the list and click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
+        </source>
+        <target>To edit the mirror mode for pool 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>, select a new mode from the list and click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="32ca348ef926b0a6a7a780b8b64c3a8239895cec" datatype="html">
+        <source>Peer clusters must be removed prior to disabling mirror.</source>
+        <target>在禁用镜像功能前必须先移除同伴集群。</target>
+      </trans-unit>
+      <trans-unit id="fa61522d482349707fd7dd03b90dc5781611b17f" datatype="html">
+        <source>
+          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/>
+  pool mirror peer
+        </source>
+        <target>
+          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/>
+  pool mirror peer
+        </target>
+      </trans-unit>
+      <trans-unit id="4ddcb416c1c0aa1f54acf5beef1de81813e76fa6" datatype="html">
+        <source>{VAR_SELECT, select, edit {Edit} other {Add} }</source>
+        <target>{VAR_SELECT, select, edit {编辑} other {添加} }</target>
+      </trans-unit>
+      <trans-unit id="59ca65ece457429d90104ede4674965f62edbabe" datatype="html">
+        <source>
+          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/> the pool
+          mirror peer attributes for pool 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> and click
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Submit
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
+        </source>
+        <target>
+          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/> the pool
+          mirror peer attributes for pool 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> and click
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Submit
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="d3cc964811f852a168f4a2d5daa59068abc5cf53" datatype="html">
+        <source>Cluster Name</source>
+        <target>集群名称</target>
+      </trans-unit>
+      <trans-unit id="b631721fc56cb7fb1cbd07b802a487c5753f6a2d" datatype="html">
+        <source>The cluster name is not valid.</source>
+        <target>集群名称无效。</target>
+      </trans-unit>
+      <trans-unit id="ca6deafa31bf421f85094807982aee4bcb20a3ae" datatype="html">
+        <source>CephX ID</source>
+        <target>CephX ID</target>
+      </trans-unit>
+      <trans-unit id="7539188a568c3d553cbde1bacaf32310c4264e24" datatype="html">
+        <source>CephX ID...</source>
+        <target>CephX ID...</target>
+      </trans-unit>
+      <trans-unit id="a1c45b594b0fba22fc64e80c793a7ffe005fdb0e" datatype="html">
+        <source>The CephX ID is not valid.</source>
+        <target>CephX ID 无效。</target>
+      </trans-unit>
+      <trans-unit id="20861576fcfce773c918c782cd4f5adf32382921" datatype="html">
+        <source>Monitor Addresses</source>
+        <target>Monitor 地址</target>
+      </trans-unit>
+      <trans-unit id="fa28eeed2b4bd4ccbe6e9349a1c2b3cb1c5de70a" datatype="html">
+        <source>Comma-delimited addresses...</source>
+        <target>逗号分割的地址...</target>
+      </trans-unit>
+      <trans-unit id="dc016c82fd85848d5c1b2fd0e8469ee2027d9c16" datatype="html">
+        <source>The monitory address is not valid.</source>
+        <target>Monitor 地址无效。</target>
+      </trans-unit>
+      <trans-unit id="e0ac55b83dc6739e62bc655cfe375b67c93e7f4a" datatype="html">
+        <source>CephX Key</source>
+        <target>CephX 密钥</target>
+      </trans-unit>
+      <trans-unit id="f53434bcb95bd86f1df9c8e22966f757614fc4ad" datatype="html">
+        <source>Base64-encoded key...</source>
+        <target>Base64 编码的密钥...</target>
+      </trans-unit>
+      <trans-unit id="4cd83164cd4f66b4abc2863f9ce6f599d789e4ca" datatype="html">
+        <source>CephX key must be base64 encoded.</source>
+        <target>CephX 密钥必须是 base64 编码的。</target>
+      </trans-unit>
+      <trans-unit id="ca53d681a9892d6fdbb57ee9676582186515e961" datatype="html">
+        <source>Performance counters not available</source>
+        <target>无法读取性能计数器</target>
       </trans-unit>
       <trans-unit id="9424badb7e0c6ac792d020d7830645b529a80aad" datatype="html">
         <source>Please consult the 
@@ -2267,10 +2071,6 @@
         <source>Loading bucket data...</source>
         <target>正在加载存储桶数据…</target>
       </trans-unit>
-      <trans-unit id="8508c0ab851ad91fd0410da1266c02b0ef9d3ff9" datatype="html">
-        <source>The bucket data could not be loaded.</source>
-        <target>存储桶数据无法加载。</target>
-      </trans-unit>
       <trans-unit id="2798cc1e152b1ec07fd8daf94a2a073d1ba1ebcc" datatype="html">
         <source>Id</source>
         <target>ID</target>
@@ -2278,6 +2078,10 @@
       <trans-unit id="db4e1a734518691b128ef40b939cc673f01d03a6" datatype="html">
         <source>The value is not valid.</source>
         <target>输入值无效。</target>
+      </trans-unit>
+      <trans-unit id="eabb4db920d9f9b2480cf438468b86e1bea02a9b" datatype="html">
+        <source>The chosen name is already in use.</source>
+        <target>所选名称已经被使用。</target>
       </trans-unit>
       <trans-unit id="0ee5132a8da30e0b7f9f5c70dbc91928d17dd909" datatype="html">
         <source>Owner</source>
@@ -2294,6 +2098,26 @@
       <trans-unit id="6bae0a7fc2c9c1fde7d937a8a1a3c7e6825cf7d1" datatype="html">
         <source>-- Select a placement target --</source>
         <target>-- Select a placement target --</target>
+      </trans-unit>
+      <trans-unit id="efeade5060b3add63863c24871f0830fb16b7e6d" datatype="html">
+        <source>Versioning</source>
+        <target>Versioning</target>
+      </trans-unit>
+      <trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
+        <source>Enabled</source>
+        <target>开启</target>
+      </trans-unit>
+      <trans-unit id="016d24e069e7d505a090fb8243e5cd43b35dc39b" datatype="html">
+        <source>Enables versioning for the objects in the bucket.</source>
+        <target>Enables versioning for the objects in the bucket.</target>
+      </trans-unit>
+      <trans-unit id="92f3f203270a29b3001871153f02c063484a1574" datatype="html">
+        <source>Suspended</source>
+        <target>冻结</target>
+      </trans-unit>
+      <trans-unit id="cd6a798fd0f85cd7e31a57c58074f25035d7850d" datatype="html">
+        <source>Disables versioning for the objects in the bucket.</source>
+        <target>Disables versioning for the objects in the bucket.</target>
       </trans-unit>
       <trans-unit id="45cc8ca94b5a50842a9a8ef804a5ab089a38ae5c" datatype="html">
         <source>ID</source>
@@ -2335,10 +2159,6 @@
         <source>Bucket quota</source>
         <target>存储桶配额</target>
       </trans-unit>
-      <trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
-        <source>Enabled</source>
-        <target>开启</target>
-      </trans-unit>
       <trans-unit id="cef1595d040e77cbb4466e60382028d4c2040cac" datatype="html">
         <source>Maximum size</source>
         <target>最大数目</target>
@@ -2350,6 +2170,10 @@
       <trans-unit id="ee862a800364b4d11f9b8cb9955a28a60f840a45" datatype="html">
         <source>Maximum objects</source>
         <target>最大对象数目</target>
+      </trans-unit>
+      <trans-unit id="08c74dc9762957593b91f6eb5d65efdfc975bf48" datatype="html">
+        <source>Username</source>
+        <target>用户名</target>
       </trans-unit>
       <trans-unit id="49c614babd1950adb2be75df4e2c9747286d6adc" datatype="html">
         <source>-- Select a username --</source>
@@ -2367,13 +2191,13 @@
         <source>Secret key</source>
         <target>秘密密钥</target>
       </trans-unit>
+      <trans-unit id="b760f123248930122fc7e7b6b6bf94e376e959c8" datatype="html">
+        <source>Full name</source>
+        <target>全名</target>
+      </trans-unit>
       <trans-unit id="69b6ac577a19acc39fc0c22342092f327fff2529" datatype="html">
         <source>Email address</source>
         <target>邮箱</target>
-      </trans-unit>
-      <trans-unit id="92f3f203270a29b3001871153f02c063484a1574" datatype="html">
-        <source>Suspended</source>
-        <target>冻结</target>
       </trans-unit>
       <trans-unit id="8011e20c5bbe51602d459a860fbf29b599b55edd" datatype="html">
         <source>System</source>
@@ -2402,6 +2226,10 @@
       <trans-unit id="0bcd5ef19af0f1b814141ca8c57df623d8270088" datatype="html">
         <source>Keys</source>
         <target>密钥</target>
+      </trans-unit>
+      <trans-unit id="f61c6867295f3b53d23557021f2f4e0aa1d0b8fc" datatype="html">
+        <source>Type</source>
+        <target>类型</target>
       </trans-unit>
       <trans-unit id="1221ca97d19eaa9a7bc0c5243d5fc5befe1d2314" datatype="html">
         <source>-- Select a type --</source>
@@ -2537,6 +2365,296 @@
         <source>Max. objects</source>
         <target>对象个数上限</target>
       </trans-unit>
+      <trans-unit id="1ea5c4d8942c00752dcc72e72949c5d9832f6399" datatype="html">
+        <source>Description...</source>
+        <target>描述…</target>
+      </trans-unit>
+      <trans-unit id="70f45880fce6ac5d8e468e25e82aefbba8098cfe" datatype="html">
+        <source>Permissions</source>
+        <target>权限</target>
+      </trans-unit>
+      <trans-unit id="9610487cbeb5796d34d8601b5ac0c0a65f9e1d19" datatype="html">
+        <source>Roles</source>
+        <target>角色</target>
+      </trans-unit>
+      <trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
+        <source>Confirm password</source>
+        <target>确认密码</target>
+      </trans-unit>
+      <trans-unit id="cbb979e63ba50e0ca3adfa09cbdcaefd0853fca1" datatype="html">
+        <source>Password confirmation doesn't match the password.</source>
+        <target>密码和之前的输入不匹配。</target>
+      </trans-unit>
+      <trans-unit id="244aae9346da82b0922506c2d2581373a15641cc" datatype="html">
+        <source>Email</source>
+        <target>邮箱</target>
+      </trans-unit>
+      <trans-unit id="d0ec081dd61eb4f43aea269077bbe38eae87b7f9" datatype="html">
+        <source>Invalid email.</source>
+        <target>邮箱地址无效。</target>
+      </trans-unit>
+      <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
+        <source>You are about to remove "user read / update" permissions from your own user.</source>
+        <target>您即将取消您自己用户的 "user read / update" 权限。</target>
+      </trans-unit>
+      <trans-unit id="af4bf9fcb256853f14cf947eb1deb8d7f176d3f9" datatype="html">
+        <source>If you continue, you will no longer be able to add or remove roles from any user.</source>
+        <target>如果您继续的话，您以后就没办法为其他用户添加或者删除角色了。</target>
+      </trans-unit>
+      <trans-unit id="7d1dcf2a9146caac0581329acf94806ec69a89a5" datatype="html">
+        <source>Are you sure you want to continue?</source>
+        <target>您确实要继续吗？</target>
+      </trans-unit>
+      <trans-unit id="85b79c9064aed1ead31ace985f31aa1363f6bdaf" datatype="html">
+        <source>Help</source>
+        <target>帮助</target>
+      </trans-unit>
+      <trans-unit id="fcfd4675b4c90f08d18d3abede9a9a4dff4cfdc7" datatype="html">
+        <source>Documentation</source>
+        <target>文档</target>
+      </trans-unit>
+      <trans-unit id="e351b40b3869a5c7d19c3d4918cb1ac7aaab95c4" datatype="html">
+        <source>API</source>
+        <target>API</target>
+      </trans-unit>
+      <trans-unit id="004b222ff9ef9dd4771b777950ca1d0e4cd4348a" datatype="html">
+        <source>About</source>
+        <target>关于</target>
+      </trans-unit>
+      <trans-unit id="1481ecd21e760ac919a24e26cf790acd82e40199" datatype="html">
+        <source>Dashboard Settings</source>
+        <target>仪表盘设置</target>
+      </trans-unit>
+      <trans-unit id="a79aab4ef674bf3f6532292107c0054302236e0f" datatype="html">
+        <source>User management</source>
+        <target>用户管理</target>
+      </trans-unit>
+      <trans-unit id="049dfd9fe6c78914ad58cf89ac6a631fca28ec74" datatype="html">
+        <source>Logged in user</source>
+        <target>登录的用户</target>
+      </trans-unit>
+      <trans-unit id="cd38a58e73f306d838e621959d47d5e7a2f06d1f" datatype="html">
+        <source>Signed in as
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
+        </source>
+        <target>Signed in as
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="739516c2ca75843d5aec9cf0e6b3e4335c4227b9" datatype="html">
+        <source>Change password</source>
+        <target>Change password</target>
+      </trans-unit>
+      <trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
+        <source>Sign out</source>
+        <target>登出</target>
+      </trans-unit>
+      <trans-unit id="91853167141c37b58868f3b0421383dd72fa8a01" datatype="html">
+        <source>Attributes (OSD map)</source>
+        <target>OSD map</target>
+      </trans-unit>
+      <trans-unit id="97842f379e1d4157ac3ab0661b90c352e7cb72d5" datatype="html">
+        <source>Metadata not available</source>
+        <target>元数据不可用</target>
+      </trans-unit>
+      <trans-unit id="f721a500a68c357e8f2a01e60510f6a01e4ba529" datatype="html">
+        <source>Metadata</source>
+        <target>相关元数据</target>
+      </trans-unit>
+      <trans-unit id="deba10b7279a589d01e919ea11f43c79ca1773e3" datatype="html">
+        <source>Device health</source>
+        <target>Device health</target>
+      </trans-unit>
+      <trans-unit id="d24e28e19c5703d7c6be44f4eb595a6a43b618ed" datatype="html">
+        <source>Performance counter</source>
+        <target>性能计数器</target>
+      </trans-unit>
+      <trans-unit id="d1f7c81ed9c5034af4abcdf119b1c1e86cd019dd" datatype="html">
+        <source>Histogram not available: 
+          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
+        </source>
+        <target>Histogram not available: 
+          <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="868abfff914873d1c65df798d8432ed04b8ae2a9" datatype="html">
+        <source>Writes</source>
+        <target>写入请求</target>
+      </trans-unit>
+      <trans-unit id="996ebb9a653b5067f97bf3891ea9d2108e969492" datatype="html">
+        <source>Reads</source>
+        <target>读取请求</target>
+      </trans-unit>
+      <trans-unit id="65ac79790aa477a97b1cc579e18a115a8df8918f" datatype="html">
+        <source>Histogram</source>
+        <target>直方图</target>
+      </trans-unit>
+      <trans-unit id="26fb5f81b3581f06b9210defb0e71dc69a67e819" datatype="html">
+        <source>Current values</source>
+        <target>当前值</target>
+      </trans-unit>
+      <trans-unit id="9abcd7c82643d60c22733470463f74e4a54bc069" datatype="html">
+        <source>Min</source>
+        <target>下限</target>
+      </trans-unit>
+      <trans-unit id="c3ced4d162a0a55ee233a187ce7208ba5e922418" datatype="html">
+        <source>Max</source>
+        <target>上限</target>
+      </trans-unit>
+      <trans-unit id="6834fa6b43d1ecbdf147c48dd9c4d72f1484571d" datatype="html">
+        <source>Source</source>
+        <target>来源</target>
+      </trans-unit>
+      <trans-unit id="a446fb0eb11fbffcac805ece5a2d306d24e733d8" datatype="html">
+        <source>Level</source>
+        <target>级别</target>
+      </trans-unit>
+      <trans-unit id="39f2fb094e9b2eda13163fa3f3a31594cf9c1307" datatype="html">
+        <source>Can be updated at runtime (editable)</source>
+        <target>可在运行时更新（可编辑）</target>
+      </trans-unit>
+      <trans-unit id="cafc87479686947e2590b9f588a88040aeaf660b" datatype="html">
+        <source>Tags</source>
+        <target>标记</target>
+      </trans-unit>
+      <trans-unit id="ab0089ef47af61ca1d137bc908b96c290dfd9287" datatype="html">
+        <source>Enum values</source>
+        <target>可选项</target>
+      </trans-unit>
+      <trans-unit id="819476f1264f1659f38e86f6abb542141b184832" datatype="html">
+        <source>See also</source>
+        <target>参见</target>
+      </trans-unit>
+      <trans-unit id="d82a9af5b05e7cd17640f196f163771685ff8df6" datatype="html">
+        <source>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</source>
+        <target>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</target>
+      </trans-unit>
+      <trans-unit id="a185c9b97513b3882604ea9bab60edbfac945c15" datatype="html">
+        <source>SMART overall-health self-assessment test result</source>
+        <target>SMART overall-health self-assessment test result</target>
+      </trans-unit>
+      <trans-unit id="ddd5dd6d930030096ea617f62c82b648a0dd9484" datatype="html">
+        <source>Device Information</source>
+        <target>Device Information</target>
+      </trans-unit>
+      <trans-unit id="79c6bf990ea5b4d83bbf8f9e399f4bd933a1ebfc" datatype="html">
+        <source>S.M.A.R.T</source>
+        <target>S.M.A.R.T</target>
+      </trans-unit>
+      <trans-unit id="05c17e08939cbef1a5df5386263b1701e8d5742e" datatype="html">
+        <source>S.M.A.R.T data is loading.</source>
+        <target>S.M.A.R.T data is loading.</target>
+      </trans-unit>
+      <trans-unit id="73caac4265ea7314ff061e5a1d78a6361a6dd3b8" datatype="html">
+        <source>Cluster Status</source>
+        <target>集群状态</target>
+      </trans-unit>
+      <trans-unit id="1d4bc612bbf19aa9553853266b9e92c9d75f4464" datatype="html">
+        <source>Manager Daemons</source>
+        <target>manager 守护进程</target>
+      </trans-unit>
+      <trans-unit id="946ac5dea9921dc09d7b0a63b89535371f283b19" datatype="html">
+        <source>Object Gateways</source>
+        <target>对象网关</target>
+      </trans-unit>
+      <trans-unit id="ff03fa5bcf37c4da46ad736c1f7d03f959e8ba9a" datatype="html">
+        <source>Metadata Servers</source>
+        <target>metadata 服务器</target>
+      </trans-unit>
+      <trans-unit id="d817609ba4993eba859409ab71e566168f4d5f5a" datatype="html">
+        <source>iSCSI Gateways</source>
+        <target>iSCSI 网关</target>
+      </trans-unit>
+      <trans-unit id="42c13e50391250ea9379bdf55d5d6c0228c0c8bc" datatype="html">
+        <source>Client IOPS</source>
+        <target>客户端 IOPS</target>
+      </trans-unit>
+      <trans-unit id="52213660b2454d139ada3079a42ec6caf3c3c01e" datatype="html">
+        <source>Client Throughput</source>
+        <target>客户端吞吐量</target>
+      </trans-unit>
+      <trans-unit id="32efd1c3f70e3c5244239de97a2cc95d98534a14" datatype="html">
+        <source>Client Read/Write</source>
+        <target>客户端读/写</target>
+      </trans-unit>
+      <trans-unit id="275485415092cbae3a9f3cbb786ebe283cacfdd5" datatype="html">
+        <source>Recovery Throughput</source>
+        <target>恢复吞吐量</target>
+      </trans-unit>
+      <trans-unit id="6d9a9f55046891733ef71170e7652063765eb542" datatype="html">
+        <source>Scrub</source>
+        <target>洗刷</target>
+      </trans-unit>
+      <trans-unit id="3cc9c2ae277393b3946b38c088dabff671b1ee1b" datatype="html">
+        <source>Performance</source>
+        <target>性能</target>
+      </trans-unit>
+      <trans-unit id="88f383269db2d32cccee9e936fe549dccb9fdbf4" datatype="html">
+        <source>Raw Capacity</source>
+        <target>基本容量</target>
+      </trans-unit>
+      <trans-unit id="c5f8a813f91a11af99132e4beafc136cfc13d73b" datatype="html">
+        <source>PGs per OSD</source>
+        <target>每个 OSD 的 PG 数</target>
+      </trans-unit>
+      <trans-unit id="498a109c6e9e94f1966de01aa0326f7f0ac6fb52" datatype="html">
+        <source>PG Status</source>
+        <target>PG 状态</target>
+      </trans-unit>
+      <trans-unit id="ce9dfdc6dccb28dc75a78c704e09dc18fb02dcfa" datatype="html">
+        <source>Capacity</source>
+        <target>容量</target>
+      </trans-unit>
+      <trans-unit id="44ecac93d67c6a671198091c2270354f80322327" datatype="html">
+        <source>
+          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
+          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
+        </source>
+        <target>
+          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
+          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
+        </target>
+      </trans-unit>
+      <trans-unit id="0c1e17956453ad772dbe82d6946f62748c692f3e" datatype="html">
+        <source>Ranks</source>
+        <target>排位</target>
+      </trans-unit>
+      <trans-unit id="2b24e0b0b1629d2e8a51b9da7c75d6e6379f4bc4" datatype="html">
+        <source>Standbys</source>
+        <target>Standbys</target>
+      </trans-unit>
+      <trans-unit id="50df62325726db950523a5be1c78b8905fcc25d4" datatype="html">
+        <source>MDS performance counters</source>
+        <target>MDS performance counters</target>
+      </trans-unit>
+      <trans-unit id="a7b6508fb834bee9e48e11e4503fbbc2d19204de" datatype="html">
+        <source>Clients: 
+          <x id="INTERPOLATION" equiv-text="{{ clients.data.length }}"/>
+        </source>
+        <target>Clients: 
+          <x id="INTERPOLATION" equiv-text="{{ clients.data.length }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="6e213942c6354b9cbe7a650f0f1499bfc1000fb6" datatype="html">
+        <source>Directories</source>
+        <target>Directories</target>
+      </trans-unit>
+      <trans-unit id="47116253e36f4e38a97ba41b2d3122c6c15ab904" datatype="html">
+        <source>Clients (
+          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
+        </source>
+        <target>Clients (
+          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
+        </target>
+      </trans-unit>
       <trans-unit id="bd5a3b1c5a3c185c7bbb0e09a061d4cdc88ce5ad" datatype="html">
         <source>Current</source>
         <target>当前</target>
@@ -2573,6 +2691,14 @@
         <source># Sessions</source>
         <target># Sessions</target>
       </trans-unit>
+      <trans-unit id="c49e0dd71d551bd4928d967d78f0721dbf9f95e3" datatype="html">
+        <source>Target has active sessions</source>
+        <target>Target has active sessions</target>
+      </trans-unit>
+      <trans-unit id="a87acd72dfb68b45175270695209550a85adf50c" datatype="html">
+        <source>iSCSI target</source>
+        <target>iSCSI target</target>
+      </trans-unit>
       <trans-unit id="873b72903b1858a9cd6c8967521030b4d7d1435b" datatype="html">
         <source>State</source>
         <target>状态</target>
@@ -2604,10 +2730,6 @@
       <trans-unit id="ff78f059449d44322f627d0f66df07abe476962b" datatype="html">
         <source>Instance</source>
         <target>实例</target>
-      </trans-unit>
-      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
-        <source>Hostname</source>
-        <target>主机名</target>
       </trans-unit>
       <trans-unit id="36fad7995cadfb3a6f0d43ef2db280146b3ca022" datatype="html">
         <source>Issue</source>
@@ -2685,6 +2807,10 @@
         <source>Fast diff (interlocked with object-map)</source>
         <target>Fast diff (interlocked with object-map)</target>
       </trans-unit>
+      <trans-unit id="631fc50ec7c9bd81dc797a3c7e09eda1178ad999" datatype="html">
+        <source>Parent image must support Layering</source>
+        <target>Parent image must support Layering</target>
+      </trans-unit>
       <trans-unit id="7eb984588f4835f6d0187b33769b4b0f62821640" datatype="html">
         <source>RBD snapshot rollback</source>
         <target>RBD 快照回滚</target>
@@ -2733,6 +2859,10 @@
           <x id="INTERPOLATION" equiv-text="{{clientId}}"/>"
         </target>
       </trans-unit>
+      <trans-unit id="7db875ff4cc626d394f37fba95c075b2e4bfeb00" datatype="html">
+        <source>Standby daemons</source>
+        <target>备用服务</target>
+      </trans-unit>
       <trans-unit id="3c3a423d91e36ac6624e909fcd2669a25685f847" datatype="html">
         <source>Rank</source>
         <target>排位</target>
@@ -2757,9 +2887,9 @@
         <source>Usage</source>
         <target>使用率</target>
       </trans-unit>
-      <trans-unit id="7db875ff4cc626d394f37fba95c075b2e4bfeb00" datatype="html">
-        <source>Standby daemons</source>
-        <target>备用服务</target>
+      <trans-unit id="950b5f04a2efd3f11c0f76418d5a4212381e792e" datatype="html">
+        <source>Origin</source>
+        <target>Origin</target>
       </trans-unit>
       <trans-unit id="22e4e574b7f8abf58254f328792445b42e2a924a" datatype="html">
         <source>The value can be updated at runtime.</source>
@@ -2806,6 +2936,30 @@
         <source>Editable</source>
         <target>可编辑</target>
       </trans-unit>
+      <trans-unit id="261c0af854e8684abc15f89dce6efb3e72344b18" datatype="html">
+        <source>host</source>
+        <target>host</target>
+      </trans-unit>
+      <trans-unit id="9e35065e7c579e1fb960499117fd4b3c68d1c263" datatype="html">
+        <source>Host operation is disabled because orchestrator is unavailable</source>
+        <target>Host operation is disabled because orchestrator is unavailable</target>
+      </trans-unit>
+      <trans-unit id="a5d5e407f8c4e1b152509c966c90f37edf68472e" datatype="html">
+        <source>Device path</source>
+        <target>Device path</target>
+      </trans-unit>
+      <trans-unit id="94e76c060aa68c05d8c4a3f5a20c92fab3e83ccf" datatype="html">
+        <source>Rotates</source>
+        <target>Rotates</target>
+      </trans-unit>
+      <trans-unit id="b7da3e3505cc80f9bf3cffc8444c53e8a9ec70a5" datatype="html">
+        <source>Available</source>
+        <target>Available</target>
+      </trans-unit>
+      <trans-unit id="6ec98fa3d6504ba1fd03465194b53706c8263c99" datatype="html">
+        <source>Model</source>
+        <target>Model</target>
+      </trans-unit>
       <trans-unit id="1a6e6ad05508130b7a99ce5b15daf3227c2a930c" datatype="html">
         <source>Updated options for module "
           <x id="INTERPOLATION" equiv-text="{{name}}"/>".
@@ -2821,6 +2975,10 @@
       <trans-unit id="6766a926d80bb7763785621098dae459d6226429" datatype="html">
         <source>Disable</source>
         <target>禁用</target>
+      </trans-unit>
+      <trans-unit id="340f2f312c2eb353e5cd69aee6bee7f5a73c34ac" datatype="html">
+        <source>This Manager module is always on.</source>
+        <target>This Manager module is always on.</target>
       </trans-unit>
       <trans-unit id="6a0b3657745dd7a2f2162f1cc790bf9004d0845d" datatype="html">
         <source>Reconnecting, please wait ...</source>
@@ -3066,15 +3224,51 @@
           <x id="INTERPOLATION" equiv-text="{{value}}"/>"
         </target>
       </trans-unit>
-      <trans-unit id="442db228d78b94d704b22bb0ffeb712af183f19a" datatype="html">
+      <trans-unit id="ccf5f30798c03d2d8efd0e6eb508320c018b722d" datatype="html">
         <source>
-          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD: 
+          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD(s): 
           <x id="INTERPOLATION_1" equiv-text="{{id}}"/>
         </source>
         <target>
-          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD: 
+          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD(s): 
           <x id="INTERPOLATION_1" equiv-text="{{id}}"/>
         </target>
+      </trans-unit>
+      <trans-unit id="9836e830d0219585b36d53be00a31c3d4798a4aa" datatype="html">
+        <source>Smartctl has received an unknown argument (error code
+          <x id="INTERPOLATION" equiv-text="{{smartData.smartctl_error_code}}"/>). You may be using an
+                incompatible version of smartmontools. Version &gt;= 7.0 of
+                smartmontools is required to succesfully retrieve data.
+        </source>
+        <target>Smartctl has received an unknown argument (error code
+          <x id="INTERPOLATION" equiv-text="{{smartData.smartctl_error_code}}"/>). You may be using an
+                incompatible version of smartmontools. Version &gt;= 7.0 of
+                smartmontools is required to succesfully retrieve data.
+        </target>
+      </trans-unit>
+      <trans-unit id="d5fd840374ca1a6f394bcd81f390a6dca27f8224" datatype="html">
+        <source>An error with error code 
+          <x id="INTERPOLATION" equiv-text="{{code}}"/> occurred.
+        </source>
+        <target>An error with error code 
+          <x id="INTERPOLATION" equiv-text="{{code}}"/> occurred.
+        </target>
+      </trans-unit>
+      <trans-unit id="a0b59d7139692bb8d8ed786b6eb6e9e70ce743f3" datatype="html">
+        <source>Raw</source>
+        <target>Raw</target>
+      </trans-unit>
+      <trans-unit id="2f3beddc8234b30fb26a7f63ba2f1ea74f2ed6f7" datatype="html">
+        <source>Threshold</source>
+        <target>Threshold</target>
+      </trans-unit>
+      <trans-unit id="4654b5a68af3c8bad29aa14ca85ccea1f3143c6b" datatype="html">
+        <source>When Failed</source>
+        <target>When Failed</target>
+      </trans-unit>
+      <trans-unit id="5b7f56d5be49fb8e8d8f40209d6746f8f72e9177" datatype="html">
+        <source>Worst</source>
+        <target>Worst</target>
       </trans-unit>
       <trans-unit id="1edb8e46b0fac57c5feb3d7d3585afc0122d5481" datatype="html">
         <source>Create silence</source>
@@ -3127,6 +3321,30 @@
       <trans-unit id="46a11ff4289e8c88b1b7a935f8d8ee704055f11a" datatype="html">
         <source>Silence</source>
         <target>Silence</target>
+      </trans-unit>
+      <trans-unit id="f392abfbb997402ce2aebb13e660a8f01dec54db" datatype="html">
+        <source>Service type</source>
+        <target>Service type</target>
+      </trans-unit>
+      <trans-unit id="9ffa91b056fb979786627885651e19c8275675cd" datatype="html">
+        <source>Service instance</source>
+        <target>Service instance</target>
+      </trans-unit>
+      <trans-unit id="b5910192a9ac4816638ff6383b03f986ff965796" datatype="html">
+        <source>Container id</source>
+        <target>Container id</target>
+      </trans-unit>
+      <trans-unit id="60ab9cce12a56cdc5ec6a1b699f8c7afecd629d5" datatype="html">
+        <source>Rados config location</source>
+        <target>Rados config location</target>
+      </trans-unit>
+      <trans-unit id="dfa409f831c9168a377bdee02c5ea6aaf9b2bf61" datatype="html">
+        <source>Service URL</source>
+        <target>Service URL</target>
+      </trans-unit>
+      <trans-unit id="bf2468fd965b8a59c135ad549b3a612aa9873abc" datatype="html">
+        <source>Status Description</source>
+        <target>Status Description</target>
       </trans-unit>
       <trans-unit id="fb2e1bed329dc5b84197808c778abb9edcbdb335" datatype="html">
         <source>Used</source>
@@ -3236,10 +3454,6 @@
         <source>NFS export</source>
         <target>NFS export</target>
       </trans-unit>
-      <trans-unit id="5f19586aba912ec6eb123ec5ab609a3bcc073066" datatype="html">
-        <source>Export</source>
-        <target>导出</target>
-      </trans-unit>
       <trans-unit id="ae128527ec18892f812a62a1fd15dc50a38060c0" datatype="html">
         <source>EC Profile</source>
         <target>EC Profile</target>
@@ -3328,12 +3542,12 @@
         <source>bucket</source>
         <target>存储桶</target>
       </trans-unit>
-      <trans-unit id="364cc3f92837b6000e686aab6d03bd2ad8007b50" datatype="html">
+      <trans-unit id="84fee774286ec4191311f1277075455c3ea5e2e2" datatype="html">
         <source>Updated Object Gateway bucket "
-          <x id="INTERPOLATION" equiv-text="{{bid}}"/>"
+          <x id="INTERPOLATION" equiv-text="{{bid}}"/>".
         </source>
         <target>Updated Object Gateway bucket "
-          <x id="INTERPOLATION" equiv-text="{{bid}}"/>"
+          <x id="INTERPOLATION" equiv-text="{{bid}}"/>".
         </target>
       </trans-unit>
       <trans-unit id="2d7a43674f0bbc131c9e555ec16ac37fa0445d76" datatype="html">
@@ -3431,6 +3645,10 @@
         <target>Deleted role '
           <x id="INTERPOLATION" equiv-text="{{role_name}}"/>'
         </target>
+      </trans-unit>
+      <trans-unit id="2e35d60a14ce0b470e8b54602864a867f7fcef40" datatype="html">
+        <source>There are no roles.</source>
+        <target>There are no roles.</target>
       </trans-unit>
       <trans-unit id="d2362a49d2434ce137bf19dab004251b7fd9c7b3" datatype="html">
         <source>Created user "
@@ -3642,6 +3860,18 @@ lrc 纠删码插件创建的是局部校验块，这样只需较少的 OSD 即�
         <source>High</source>
         <target>高</target>
       </trans-unit>
+      <trans-unit id="6080b77234e92ad41bb52653b239c4c4f851317d" datatype="html">
+        <source>Error</source>
+        <target>Error</target>
+      </trans-unit>
+      <trans-unit id="c43dc1967a603fefb886149ac35863a06d5b4ce5" datatype="html">
+        <source>Information</source>
+        <target>信息</target>
+      </trans-unit>
+      <trans-unit id="1e035e6ccfab771cad4226b2ad230cb0d4a88cba" datatype="html">
+        <source>Success</source>
+        <target>Success</target>
+      </trans-unit>
       <trans-unit id="e6ca3c0efaf51e6d45a7f92f58bac37140c3fda4" datatype="html">
         <source>Last 5 minutes</source>
         <target>过去 5 分钟</target>
@@ -3761,10 +3991,6 @@ lrc 纠删码插件创建的是局部校验块，这样只需较少的 OSD 即�
       <trans-unit id="138afa339ea6e75d25a474affe1edbcb90e00ec0" datatype="html">
         <source>Last 5 years</source>
         <target>过去 5 年</target>
-      </trans-unit>
-      <trans-unit id="c43dc1967a603fefb886149ac35863a06d5b4ce5" datatype="html">
-        <source>Information</source>
-        <target>信息</target>
       </trans-unit>
       <trans-unit id="37391297bb077a6f84484930261b01a3ce38327b" datatype="html">
         <source>No items selected.</source>
@@ -4174,6 +4400,22 @@ lrc 纠删码插件创建的是局部校验块，这样只需较少的 OSD 即�
         <source>delete</source>
         <target>删除</target>
       </trans-unit>
+      <trans-unit id="d07a282afc7fbdb39cea6e1c9b544882a7260a86" datatype="html">
+        <source>Adding</source>
+        <target>Adding</target>
+      </trans-unit>
+      <trans-unit id="a11ec4e640f241329943237d2a3cceaa4823658e" datatype="html">
+        <source>add</source>
+        <target>add</target>
+      </trans-unit>
+      <trans-unit id="ea1c70b874904216cc5af24bd7cb3dab2d074d42" datatype="html">
+        <source>Removing</source>
+        <target>Removing</target>
+      </trans-unit>
+      <trans-unit id="4da487aec5a29ce4372e7b512227cd665b01fe6f" datatype="html">
+        <source>remove</source>
+        <target>remove</target>
+      </trans-unit>
       <trans-unit id="3f757cfc3749ebb5d4462017cb60138ca082f15f" datatype="html">
         <source>RBD '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>'
@@ -4388,6 +4630,14 @@ lrc 纠删码插件创建的是局部校验块，这样只需较少的 OSD 即�
         <source>Cannot disable mirroring because it contains a peer.</source>
         <target>因为包含同伴集群，无法禁用镜像功能</target>
       </trans-unit>
+      <trans-unit id="f123ae1fc3b000e5d08e766dd78bff162afe709d" datatype="html">
+        <source>host '
+          <x id="INTERPOLATION" equiv-text="{{hostname}}"/>'
+        </source>
+        <target>host '
+          <x id="INTERPOLATION" equiv-text="{{hostname}}"/>'
+        </target>
+      </trans-unit>
       <trans-unit id="dfe70001dc590a9e12512cbb206aa29fb36fd00b" datatype="html">
         <source>pool '
           <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>'
@@ -4419,6 +4669,50 @@ lrc 纠删码插件创建的是局部校验块，这样只需较少的 OSD 即�
         <target>NFS 
           <x id="INTERPOLATION" equiv-text="{{nfs_id}}"/>
         </target>
+      </trans-unit>
+      <trans-unit id="54bf6542e39412f83ec883266f443e31b304c937" datatype="html">
+        <source>Required rules for password complexity:
+    - must contain at least 8 characters
+    - cannot contain username
+    - cannot contain any keyword used in Ceph
+    - cannot contain any repetitive characters e.g. "aaa"
+    - cannot contain any sequencial characters e.g. "abc"
+    - must consist of characters from the following groups:
+      * alphabetic a-z, A-Z
+      * numbers 0-9
+      * special chars: !"#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`
+          <x id="INTERPOLATION" equiv-text="{{|}}"/>~
+      * any other characters (signs)
+        </source>
+        <target>Required rules for password complexity:
+    - must contain at least 8 characters
+    - cannot contain username
+    - cannot contain any keyword used in Ceph
+    - cannot contain any repetitive characters e.g. "aaa"
+    - cannot contain any sequencial characters e.g. "abc"
+    - must consist of characters from the following groups:
+      * alphabetic a-z, A-Z
+      * numbers 0-9
+      * special chars: !"#$%&amp; '()*+,-./:;&lt;=&gt;?@[\]^_`
+          <x id="INTERPOLATION" equiv-text="{{|}}"/>~
+      * any other characters (signs)
+        </target>
+      </trans-unit>
+      <trans-unit id="ba575e9364b43dc870e332265c5182bb357b7a49" datatype="html">
+        <source>Weak</source>
+        <target>Weak</target>
+      </trans-unit>
+      <trans-unit id="7e6c975ebea8b5f8b120905ca7acf9f8edf59d8e" datatype="html">
+        <source>OK</source>
+        <target>OK</target>
+      </trans-unit>
+      <trans-unit id="3f7349017a01eed18c3daf2b7295ca96ef442eb6" datatype="html">
+        <source>Strong</source>
+        <target>Strong</target>
+      </trans-unit>
+      <trans-unit id="a1e3aecc2022cb0ebed8575a24d0e29d2de815c6" datatype="html">
+        <source>Very strong</source>
+        <target>Very strong</target>
       </trans-unit>
     </body>
   </file>
