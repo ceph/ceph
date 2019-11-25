@@ -1138,6 +1138,13 @@ public:
     void rewrite_omap_key(const string& old, string *out);
     void get_omap_tail(string *out);
     void decode_omap_key(const string& key, string *user_key);
+
+    uint32_t get_alloc_size() const {
+      if (onode.use_small_alloc()) {
+        return c->store->min_alloc_size;
+      }
+      return c->store->optimal_alloc_size;
+    }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -2024,6 +2031,12 @@ private:
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
 
+  uint64_t optimal_alloc_size = 0;
+  uint8_t optimal_alloc_size_order = 0;
+  static_assert(std::numeric_limits<uint8_t>::max() >
+    std::numeric_limits<decltype(optimal_alloc_size)>::digits,
+    "not enough bits for optimal_alloc_size");
+
   bool per_pool_omap = false;
 
   ///< maximum allocation unit (power of 2)
@@ -2423,9 +2436,9 @@ private:
 
   // -- ondisk version ---
 public:
-  const int32_t latest_ondisk_format = 3;        ///< our version
+  const int32_t latest_ondisk_format = 4;        ///< our version
   const int32_t min_readable_ondisk_format = 1;  ///< what we can read
-  const int32_t min_compat_ondisk_format = 3;    ///< who can read us
+  const int32_t min_compat_ondisk_format = 4;    ///< who can read us
 
 private:
   int32_t ondisk_format = 0;  ///< value detected on mount
@@ -2952,6 +2965,8 @@ private:
     old_extent_map_t old_extents;   ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
 
+    uint32_t alloc_size = 0;
+
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
       BlobRef b;
@@ -2997,6 +3012,7 @@ private:
       compress = other.compress;
       target_blob_size = other.target_blob_size;
       csum_order = other.csum_order;
+      alloc_size = other.alloc_size;
     }
     void write(
       uint64_t loffs,
@@ -3022,8 +3038,7 @@ private:
     bool has_conflict(
       BlobRef b,
       uint64_t loffs,
-      uint64_t loffs_end,
-      uint64_t min_alloc_size);
+      uint64_t loffs_end);
   };
 
   void _do_write_small(

@@ -116,6 +116,14 @@ bool sorted(const vector<ghobject_t> &in) {
   return true;
 }
 
+namespace {
+  ghobject_t make_object(const char* name, int64_t pool) {
+    sobject_t soid{ name, CEPH_NOSNAP };
+    uint32_t hash = std::hash<sobject_t>{}(soid);
+    return ghobject_t{ hobject_t{soid, "", hash, pool, ""} };
+  }
+}
+
 class StoreTest : public StoreTestFixture,
                   public ::testing::WithParamInterface<const char*> {
 public:
@@ -152,7 +160,7 @@ public:
     	   uint64_t align)> MatrixTest;
 
   void StartDeferred(size_t min_alloc_size) {
-    SetVal(g_conf(), "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
+    SetVal(g_conf(), "bluestore_optimal_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
   }
 
@@ -225,7 +233,7 @@ protected:
   void do_matrix(const char *matrix[][10],
                  MatrixTest fn) {
 
-    if (strcmp(matrix[0][0], "bluestore_min_alloc_size") == 0) {
+    if (strcmp(matrix[0][0], "bluestore_optimal_alloc_size") == 0) {
       int count;
       for (count = 0; matrix[0][count+1]; ++count) ;
       for (size_t j = 1; matrix[0][j]; ++j) {
@@ -1318,13 +1326,14 @@ TEST_P(StoreTest, SimpleObjectTest) {
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
-  StartDeferred(65536);
   SetVal(g_conf(), "bluestore_compression_mode", "force");
   SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   // just a big number to disble gc
   SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
   g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
   int r;
 
   int poolid = 4373;
@@ -1847,6 +1856,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
 TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   if(string(GetParam()) != "bluestore")
     return;
+
   StartDeferred(0x10000);
 
   int r;
@@ -2207,7 +2217,7 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
     r = store->queue_transaction(ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf()->bluestore_min_alloc_size;
+  unsigned min_alloc = g_conf()->bluestore_optimal_alloc_size;
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
   memset(bpa.c_str(), 1, bpa.length());
@@ -2284,7 +2294,7 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
     r = store->queue_transaction(ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf()->bluestore_min_alloc_size;
+  unsigned min_alloc = g_conf()->bluestore_optimal_alloc_size;
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
   memset(bpa.c_str(), 1, bpa.length());
@@ -4626,7 +4636,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixSharding) {
     return;
   
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", 0 }, // must be the first!
+    { "bluestore_optimal_alloc_size", "4096", 0 }, // must be the first!
     { "num_ops", "50000", 0 },
     { "max_write", "65536", 0 },
     { "max_size", "262144", 0 },
@@ -4690,7 +4700,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCsumAlgorithm) {
     return;
 
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "65536", 0 }, // must be the first!
+    { "bluestore_optimal_alloc_size", "65536", 0 }, // must be the first!
     { "max_write", "65536", 0 },
     { "max_size", "1048576", 0 },
     { "alignment", "16", 0 },
@@ -4707,7 +4717,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCsumVsCompression) {
     return;
 
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "16384", 0 }, //to be the first!
+    { "bluestore_optimal_alloc_size", "4096", "16384", 0 }, //to be the first!
     { "max_write", "131072", 0 },
     { "max_size", "262144", 0 },
     { "alignment", "512", 0 },
@@ -4727,7 +4737,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCompression) {
     return;
 
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
+    { "bluestore_optimal_alloc_size", "4096", "65536", 0 }, // to be the first!
     { "max_write", "1048576", 0 },
     { "max_size", "4194304", 0 },
     { "alignment", "65536", 0 },
@@ -4744,7 +4754,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCompressionAlgorithm) {
     return;
 
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
+    { "bluestore_optimal_alloc_size", "4096", "65536", 0 }, // to be the first!
     { "max_write", "1048576", 0 },
     { "max_size", "4194304", 0 },
     { "alignment", "65536", 0 },
@@ -4761,7 +4771,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixNoCsum) {
     return;
 
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
+    { "bluestore_optimal_alloc_size", "4096", "65536", 0 }, // to be the first!
     { "max_write", "65536", 0 },
     { "max_size", "1048576", 0 },
     { "alignment", "512", 0 },
@@ -4781,7 +4791,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferDeferred) {
     return;
 
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
+    { "bluestore_optimal_alloc_size", "4096", "65536", 0 }, // to be the first!
     { "max_write", "65536", 0 },
     { "max_size", "1048576", 0 },
     { "alignment", "512", 0 },
@@ -6195,6 +6205,152 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     ASSERT_EQ(r, 0);
   }
 }
+
+TEST_P(StoreTestSpecificAUSize, BluestoreSpaceSavingEnablementTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  StartDeferred(0x10000);
+
+  int r;
+
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_cloned = hoid;
+  hoid_cloned.hobj.snap = 1;
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    //write small object with no space saving enabled
+    size_t size = 6 * 1024;
+    bufferlist bl, orig;
+    bl.append(std::string(size, 'a'));
+    orig = bl;
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      t.set_alloc_hint(cid, hoid, 0, 0, 0);
+      t.write(cid, hoid, 0, bl.length(), bl);
+      cerr << "Write small object" << std::endl;
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+
+      {
+        struct store_statfs_t statfs;
+        int r = store->statfs(&statfs);
+        ASSERT_EQ(r, 0);
+        ASSERT_EQ(statfs.data_stored, size);
+        ASSERT_EQ(statfs.allocated, 0x10000);
+      }
+      {
+        ObjectStore::Transaction t;
+        t.remove(cid, hoid);
+        cerr << "Cleaning obj" << std::endl;
+        r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+      }
+    }
+    {
+      {
+        //write small object with space saving enabled
+        //(via expected object size provisioning)
+        ObjectStore::Transaction t;
+        t.touch(cid, hoid);
+        t.set_alloc_hint(cid, hoid, size, 0, 0);
+        t.write(cid, hoid, 0, bl.length(), bl);
+        cerr << "Write small object" << std::endl;
+        r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+
+        bufferlist in;
+        r = store->read(ch, hoid, 0, size, in);
+        ASSERT_EQ((int)size, r);
+        ASSERT_TRUE(bl_eq(orig, in));
+      }
+      {
+        struct store_statfs_t statfs;
+        int r = store->statfs(&statfs);
+        ASSERT_EQ(r, 0);
+        ASSERT_EQ(statfs.data_stored, size);
+        ASSERT_EQ(statfs.allocated, round_up_to(size, 0x1000));
+      }
+      {
+        // overwrite data in the clone to make sure space saving is still enabled
+        ObjectStore::Transaction t;
+        t.write(cid, hoid, 0, bl.length(), bl);
+        cerr << "Write small object" << std::endl;
+        r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+      }
+      {
+        struct store_statfs_t statfs;
+        int r = store->statfs(&statfs);
+        ASSERT_EQ(r, 0);
+        ASSERT_EQ(statfs.data_stored, size);
+        ASSERT_EQ(statfs.allocated, round_up_to(size, 0x1000));
+      }
+
+      {
+        //reset space saving for a small object with already enabled opt
+        //(via expected size reset on empty obj)
+        ObjectStore::Transaction t;
+        t.clone(cid, hoid, hoid_cloned); // do backup clone for future use
+        t.truncate(cid, hoid, 0);
+        t.set_alloc_hint(cid, hoid, 0, 0, 0);
+        t.write(cid, hoid, 0, bl.length(), bl);
+        cerr << "Write small object" << std::endl;
+        r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+      }
+      {
+        struct store_statfs_t statfs;
+        int r = store->statfs(&statfs);
+        ASSERT_EQ(r, 0);
+        ASSERT_EQ(statfs.data_stored, size * 2);
+        ASSERT_EQ(statfs.allocated, 0x10000 + round_up_to(size, 0x1000));
+      }
+      {
+        // overwrite data in the clone to make sure space saving is still enabled
+        ObjectStore::Transaction t;
+        t.write(cid, hoid_cloned, 0, bl.length(), bl);
+        cerr << "Write small object" << std::endl;
+        r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+      }
+      {
+        struct store_statfs_t statfs;
+        int r = store->statfs(&statfs);
+        ASSERT_EQ(r, 0);
+        ASSERT_EQ(statfs.data_stored, size * 2);
+        ASSERT_EQ(statfs.allocated, 0x10000 + round_up_to(size, 0x1000));
+      }
+
+      {
+        ObjectStore::Transaction t;
+        t.remove(cid, hoid);
+        t.remove(cid, hoid_cloned);
+        cerr << "Cleaning obj" << std::endl;
+        r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+      }
+    }
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    cerr << "Final cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
 #endif
 
 INSTANTIATE_TEST_SUITE_P(
@@ -7132,13 +7288,13 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
       ASSERT_EQ(r, 0);\
   }
 
-  StartDeferred(65536);
-
   SetVal(g_conf(), "bluestore_compression_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_compression_min_blob_size", "262144");
   SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_compression_mode", "force");
   g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
 
   auto ch = store->create_new_collection(cid);
 
@@ -7301,14 +7457,6 @@ TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice2) {
   store->mount();
 }
 
-namespace {
-  ghobject_t make_object(const char* name, int64_t pool) {
-    sobject_t soid{name, CEPH_NOSNAP};
-    uint32_t hash = std::hash<sobject_t>{}(soid);
-    return ghobject_t{hobject_t{soid, "", hash, pool, ""}};
-  }
-}
-
 TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -7377,7 +7525,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   bstore->mount();
   bstore->inject_false_free(cid, hoid);
   bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 2);
+  ASSERT_EQ(bstore->fsck(false), 32);
   ASSERT_EQ(bstore->repair(false), 0);
   ASSERT_EQ(bstore->fsck(false), 0);
 
