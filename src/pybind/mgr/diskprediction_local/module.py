@@ -140,19 +140,25 @@ class Module(MgrModule):
         except Exception as e:
             self.log.error('failed to get device %s health data due to %s', devid, str(e))
 
+        self.log.debug('got metrics %s' % health_data)
+
         # initialize appropriate disk failure predictor model
         from .predictor import get_diskfailurepredictor_path
         if self.predictor_model == 'prophetstor':
+            self.log.debug('using prophetstore')
             from .predictor import PSDiskFailurePredictor
             obj_predictor = PSDiskFailurePredictor()
             ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+            self.log.debug('ret %s' % ret)
             if ret is not None:
                 self.log.error('Error initializing predictor')
                 return predicted_result
         elif self.predictor_model == 'redhat':
+            self.log.debug('using redhat')
             from .predictor import RHDiskFailurePredictor
             obj_predictor = RHDiskFailurePredictor()
             ret = obj_predictor.initialize("{}/models/{}".format(get_diskfailurepredictor_path(), self.predictor_model))
+            self.log.debug('ret %s' % ret)
             if ret is not None:
                 self.log.error('Error initializing predictor')
                 return predicted_result
@@ -160,6 +166,7 @@ class Module(MgrModule):
             self.log.error('invalid value received for MODULE_OPTIONS.predictor_model')
             return predicted_result
 
+        self.log.debug('len(health_data) %s' % len(health_data))
         if len(health_data) >= 6:
             o_keys = sorted(health_data.keys(), reverse=True)
             for o_key in o_keys:
@@ -210,6 +217,7 @@ class Module(MgrModule):
         else:
             self.log.error('unable to predict device due to health data records less than 6 days')
 
+        self.log.debug('predict_datas %s' % predict_datas)
         if predict_datas:
             predicted_result = obj_predictor.predict(predict_datas)
         return predicted_result
@@ -269,6 +277,7 @@ class Module(MgrModule):
                 continue
             self.log.debug('%s' % devInfo)
             result = self._predict_life_expentancy(devInfo['devid'])
+            self.log.debug('%s' % result)
             if result == 'unknown':
                 self._reset_device_life_expectancy(devInfo['devid'])
                 continue
