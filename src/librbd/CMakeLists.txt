@@ -262,7 +262,7 @@ if(ENABLE_SHARED)
     SOVERSION 1
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)
-    if(NOT APPLE)
+    if(NOT APPLE AND NOT WIN32)
       set_property(TARGET librbd APPEND_STRING PROPERTY
         LINK_FLAGS " -Wl,--exclude-libs,ALL")
     endif()

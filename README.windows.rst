@@ -30,7 +30,6 @@ DEPS_DIR      The directory where the Ceph     $CEPH_DIR/build.deps
               dependencies will be built.
 NUM_WORKERS   The number of workers to use     The number of vcpus
               when building Ceph.              available
-NINJA_BUILD   Use Ninja instead of make.
 CLEAN_BUILD   Clean the build directory.
 SKIP_BUILD    Run cmake without actually
               performing the build.
