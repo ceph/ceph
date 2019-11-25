@@ -42,6 +42,13 @@ describe('TableKeyValueComponent', () => {
     ]);
   });
 
+  it('should not show data supposed to be have hidden by key', () => {
+    component.data = [['a', 1], ['b', 2]];
+    component.hideKeys = ['a'];
+    component.ngOnInit();
+    expect(component.tableData).toEqual([{ key: 'b', value: 2 }]);
+  });
+
   it('should remove items with objects as values', () => {
     component.data = [[3, 'something'], ['will be removed', { a: 3, b: 4, c: 5 }]];
     component.ngOnInit();
