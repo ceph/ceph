@@ -690,7 +690,7 @@ void netsplit_with_disallowed_tiebreaker_converges(ElectionLogic::election_strat
   };
   // turn everybody on, run happy for a while
   election.start_all();
-  election.run_timesteps(10);
+  election.run_timesteps(0);
   ASSERT_TRUE(election.election_stable());
   ASSERT_TRUE(election.quorum_stable(6));
   ASSERT_TRUE(election.check_leader_agreement());

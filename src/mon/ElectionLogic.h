@@ -439,6 +439,14 @@ private:
    * or need to be set consistently during stable states.
    */
   void clear_live_election_state();
+  void reset_stable_tracker();
+  /**
+   * Only for the connectivity handler, Bump the epoch
+   * when we get a message from a newer one and clear
+   * out leader and stable tracker
+   * data so that we can switch our allegiance.
+   */
+  void connectivity_bump_epoch_in_election(epoch_t mepoch);
 };
 
 #endif
