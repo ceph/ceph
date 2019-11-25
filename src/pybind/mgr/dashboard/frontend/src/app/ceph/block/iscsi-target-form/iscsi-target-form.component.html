@@ -11,11 +11,9 @@
       <div class="card-body">
         <!-- Target IQN -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="target_iqn">
-            <ng-container i18n>Target IQN</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="target_iqn"
+                 i18n>Target IQN</label>
           <div class="cd-col-form-input">
             <div class="input-group">
               <input class="form-control"
@@ -64,11 +62,9 @@
 
         <!-- Portals -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="portals">
-            <ng-container i18n>Portals</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="portals"
+                 i18n>Portals</label>
           <div class="cd-col-form-input">
 
             <ng-container *ngFor="let portal of portals.value; let i = index">
@@ -355,11 +351,9 @@
               <div class="card-body">
                 <!-- Initiator: Name -->
                 <div class="form-group row">
-                  <label class="cd-col-form-label"
-                         for="client_iqn">
-                    <ng-container i18n>Client IQN</ng-container>
-                    <span class="required"></span>
-                  </label>
+                  <label class="cd-col-form-label required"
+                         for="client_iqn"
+                         i18n>Client IQN</label>
                   <div class="cd-col-form-input">
                     <input class="form-control"
                            type="text"
@@ -579,11 +573,9 @@
               <div class="card-body">
                 <!-- Group: group_id -->
                 <div class="form-group row">
-                  <label class="cd-col-form-label"
-                         for="group_id">
-                    <ng-container i18n>Name</ng-container>
-                    <span class="required"></span>
-                  </label>
+                  <label class="cd-col-form-label required"
+                         for="group_id"
+                         i18n>Name</label>
                   <div class="cd-col-form-input">
                     <input class="form-control"
                            type="text"

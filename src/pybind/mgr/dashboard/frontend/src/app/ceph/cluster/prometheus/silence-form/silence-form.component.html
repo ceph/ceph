@@ -73,11 +73,9 @@
       <!-- Creator -->
       <div class="card-body">
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="created-by">
-            <ng-container i18n>Creator</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="created-by"
+                 i18n>Creator</label>
           <div class="cd-col-form-input">
             <input class="form-control"
                    formControlName="createdBy"
@@ -92,11 +90,9 @@
 
         <!-- Comment -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="comment">
-            <ng-container i18n>Comment</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="comment"
+                 i18n>Comment</label>
           <div class="cd-col-form-input">
             <textarea class="form-control"
                       formControlName="comment"
@@ -114,9 +110,9 @@
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="starts-at">
-            <ng-container i18n>Start time</ng-container>
+            <span class="required"
+                  i18n>Start time</span>
             <cd-helper i18n>If the start time lies in the past the creation time will be used</cd-helper>
-            <span class="required"></span>
           </label>
           <div class="cd-col-form-input">
             <input [bsConfig]="bsConfig"
@@ -133,11 +129,9 @@
 
         <!-- Duration -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="duration">
-            <ng-container i18n>Duration</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="duration"
+                 i18n>Duration</label>
           <div class="cd-col-form-input">
             <input class="form-control"
                    formControlName="duration"
@@ -152,11 +146,9 @@
 
         <!-- End time -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="ends-at">
-            <ng-container i18n>End time</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="ends-at"
+                 i18n>End time</label>
           <div class="cd-col-form-input">
             <input [bsConfig]="bsConfig"
                    bsDatepicker
@@ -172,7 +164,8 @@
 
         <!-- Matchers -->
         <fieldset>
-          <legend i18n>Matchers<span class="required">*</span></legend>
+          <legend class="required"
+                  i18n>Matchers</legend>
 
           <div class="cd-col-form-offset">
             <h5 *ngIf="matchers.length === 0"

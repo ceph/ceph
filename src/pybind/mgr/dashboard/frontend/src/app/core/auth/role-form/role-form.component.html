@@ -11,11 +11,9 @@
         <!-- Name -->
         <div class="form-group row">
           <label class="cd-col-form-label"
-                 for="name">
-            <ng-container i18n>Name</ng-container>
-            <span class="required"
-                  *ngIf="mode !== roleFormMode.editing"></span>
-          </label>
+                 [ngClass]="{'required': mode !== roleFormMode.editing}"
+                 for="name"
+                 i18n>Name</label>
           <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"

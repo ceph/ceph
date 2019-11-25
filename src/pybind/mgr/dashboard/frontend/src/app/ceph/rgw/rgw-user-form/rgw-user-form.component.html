@@ -18,12 +18,9 @@
         <!-- Username -->
         <div class="form-group row">
           <label class="cd-col-form-label"
-                 for="uid">
-            <ng-container i18n>Username</ng-container>
-            <span class="required"
-                  *ngIf="!editing">
-            </span>
-          </label>
+                 [ngClass]="{'required': !editing}"
+                 for="uid"
+                 i18n>Username</label>
           <div class="cd-col-form-input">
             <input id="uid"
                    class="form-control"
@@ -43,12 +40,9 @@
         <!-- Full name -->
         <div class="form-group row">
           <label class="cd-col-form-label"
-                 for="display_name">
-            <ng-container i18n>Full name</ng-container>
-            <span class="required"
-                  *ngIf="!editing">
-            </span>
-          </label>
+                 [ngClass]="{'required': !editing}"
+                 for="display_name"
+                 i18n>Full name</label>
           <div class="cd-col-form-input">
             <input id="display_name"
                    class="form-control"
@@ -81,11 +75,9 @@
 
         <!-- Max. buckets -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="max_buckets">
-            <ng-container i18n>Max. buckets</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="max_buckets"
+                 i18n>Max. buckets</label>
           <div class="cd-col-form-input">
             <input id="max_buckets"
                    class="form-control"
@@ -137,11 +129,9 @@
           <!-- Access key -->
           <div class="form-group row"
                *ngIf="!editing && !userForm.getValue('generate_key')">
-            <label class="cd-col-form-label"
-                   for="access_key">
-              <ng-container i18n>Access key</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="access_key"
+                   i18n>Access key</label>
             <div class="cd-col-form-input">
               <div class="input-group">
                 <input id="access_key"
@@ -168,11 +158,9 @@
           <!-- Secret key -->
           <div class="form-group row"
                *ngIf="!editing && !userForm.getValue('generate_key')">
-            <label class="cd-col-form-label"
-                   for="secret_key">
-              <ng-container i18n>Secret key</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="secret_key"
+                   i18n>Secret key</label>
             <div class="cd-col-form-input">
               <div class="input-group">
                 <input id="secret_key"
@@ -464,11 +452,9 @@
           <!-- Maximum size -->
           <div class="form-group row"
                *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_size_unlimited')">
-            <label class="cd-col-form-label"
-                   for="user_quota_max_size">
-              <ng-container i18n>Max. size</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="user_quota_max_size"
+                   i18n>Max. size</label>
             <div class="cd-col-form-input">
               <input id="user_quota_max_size"
                      class="form-control"
@@ -503,11 +489,9 @@
           <!-- Maximum objects -->
           <div class="form-group row"
                *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_objects_unlimited')">
-            <label class="cd-col-form-label"
-                   for="user_quota_max_objects">
-              <ng-container i18n>Max. objects</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="user_quota_max_objects"
+                   i18n>Max. objects</label>
             <div class="cd-col-form-input">
               <input id="user_quota_max_objects"
                      class="form-control"
@@ -561,11 +545,9 @@
           <!-- Maximum size -->
           <div class="form-group row"
                *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_size_unlimited')">
-            <label class="cd-col-form-label"
-                   for="bucket_quota_max_size">
-              <ng-container i18n>Max. size</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="bucket_quota_max_size"
+                   i18n>Max. size</label>
             <div class="cd-col-form-input">
               <input id="bucket_quota_max_size"
                      class="form-control"
@@ -600,11 +582,9 @@
           <!-- Maximum objects -->
           <div class="form-group row"
                *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_objects_unlimited')">
-            <label class="cd-col-form-label"
-                   for="bucket_quota_max_objects">
-              <ng-container i18n>Max. objects</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="bucket_quota_max_objects"
+                   i18n>Max. objects</label>
             <div class="cd-col-form-input">
               <input id="bucket_quota_max_objects"
                      class="form-control"

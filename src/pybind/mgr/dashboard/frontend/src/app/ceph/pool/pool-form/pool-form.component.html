@@ -14,11 +14,9 @@
       <div class="card-body">
         <!-- Name -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="name">
-            <ng-container i18n>Name</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="name"
+                 i18n>Name</label>
           <div class="cd-col-form-input">
             <input id="name"
                    name="name"
@@ -46,11 +44,9 @@
 
         <!-- Pool type selection -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="poolType">
-            <ng-container i18n>Pool type</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="poolType"
+                 i18n>Pool type</label>
           <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     id="poolType"
@@ -91,11 +87,9 @@
           <!-- Pg number -->
           <div class="form-group row"
                *ngIf="form.getValue('pgAutoscaleMode') !== 'on'">
-            <label class="cd-col-form-label"
-                   for="pgNum">
-              <ng-container i18n>Placement groups</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="pgNum"
+                   i18n>Placement groups</label>
             <div class="cd-col-form-input">
               <input class="form-control"
                      id="pgNum"
@@ -130,11 +124,9 @@
           <!-- Replica Size -->
           <div class="form-group row"
                *ngIf="form.getValue('poolType') === 'replicated'">
-            <label class="cd-col-form-label"
-                   for="size">
-              <ng-container i18n>Replicated size</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="size"
+                   i18n>Replicated size</label>
             <div class="cd-col-form-input">
               <input class="form-control"
                      id="size"

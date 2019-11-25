@@ -15,11 +15,9 @@
       novalidate>
   <div class="modal-body">
     <div class="form-group row">
-      <label for="name"
-             class="cd-col-form-label">
-        <ng-container i18n>Name</ng-container>
-        <span class="required"></span>
-      </label>
+      <label class="cd-col-form-label"
+             for="name"
+             i18n>Name</label>
       <div class="cd-col-form-input">
         <input type="text"
                id="name"
@@ -43,8 +41,8 @@
     <div class="form-group row">
       <label for="plugin"
              class="cd-col-form-label">
-        <ng-container i18n>Plugin</ng-container>
-        <span class="required"></span>
+        <span class="required"
+              i18n>Plugin</span>
         <cd-helper [html]="tooltips.plugins[plugin].description">
         </cd-helper>
       </label>
@@ -70,9 +68,8 @@
     <div class="form-group row">
       <label for="k"
              class="cd-col-form-label">
-        <ng-container i18n>Data chunks (k)</ng-container>
-        <span class="required"
-              *ngIf="requiredControls.includes('k')"></span>
+        <span [ngClass]="{'required': requiredControls.includes('k')}"
+              i18n>Data chunks (k)</span>
         <cd-helper [html]="tooltips.k">
         </cd-helper>
       </label>
@@ -96,9 +93,8 @@
     <div class="form-group row">
       <label for="m"
              class="cd-col-form-label">
-        <ng-container i18n>Coding chunks (m)</ng-container>
-        <span class="required"
-              *ngIf="requiredControls.includes('m')"></span>
+        <span [ngClass]="{'required': requiredControls.includes('m')}"
+              i18n>Coding chunks (m)</span>
         <cd-helper [html]="tooltips.m">
         </cd-helper>
       </label>
@@ -141,10 +137,10 @@
 
     <div class="form-group row"
          *ngIf="plugin === PLUGIN.LRC">
-      <label for="l"
-             class="cd-col-form-label">
-        <ng-container i18n>Locality (l)</ng-container>
-        <span class="required"></span>
+      <label class="cd-col-form-label"
+             for="l">
+        <span class="required"
+              i18n>Locality (l)</span>
         <cd-helper [html]="tooltips.plugins.lrc.l">
         </cd-helper>
       </label>
