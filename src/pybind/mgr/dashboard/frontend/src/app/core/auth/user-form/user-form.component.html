@@ -15,11 +15,9 @@
         <!-- Username -->
         <div class="form-group row">
           <label class="cd-col-form-label"
-                 for="username">
-            <ng-container i18n>Username</ng-container>
-            <span class="required"
-                  *ngIf="mode !== userFormMode.editing"></span>
-          </label>
+                 [ngClass]="{'required': mode !== userFormMode.editing}"
+                 for="username"
+                 i18n>Username</label>
           <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
@@ -107,6 +105,7 @@
         <div class="form-group row"
              *ngIf="!authStorageService.isSSO()">
           <label class="cd-col-form-label"
+                 [ngClass]="{'required': pwdExpirationSettings.pwdExpirationSpan > 0}"
                  for="pwdExpirationDate">
             <ng-container i18n>Password expiration date</ng-container>
             <cd-helper class="text-pre"
@@ -123,8 +122,6 @@
                 in order to let passwords expire periodically.
               </p>
             </cd-helper>
-            <span class="required"
-                  *ngIf="pwdExpirationSettings.pwdExpirationSpan > 0"></span>
           </label>
           <div class="cd-col-form-input">
             <div class="input-group">

@@ -279,19 +279,14 @@ a {
 .noscript p {
   color: $color-noscript-text;
 }
-.required {
-  color: $color-required-text;
-}
 /* Forms */
-.form-group > .col-form-label > span.required,
-.form-group > .col-sm-12 > .col-form-label > span.required {
-  @extend .fa;
-  @extend .fa-asterisk;
-  @extend .required;
-  font-size: 6px;
+.required::after {
+  color: $color-required-text;
+  content: '*';
+  font-size: 14px;
   padding-left: 4px;
-  vertical-align: text-top;
 }
+
 .form-control {
   display: table-cell;
 

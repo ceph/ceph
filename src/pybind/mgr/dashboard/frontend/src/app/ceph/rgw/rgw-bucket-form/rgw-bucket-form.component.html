@@ -31,11 +31,9 @@
         <!-- Name -->
         <div class="form-group row">
           <label class="cd-col-form-label"
-                 for="bid">
-            <ng-container i18n>Name</ng-container>
-            <span class="required"
-                  *ngIf="!editing"></span>
-          </label>
+                 [ngClass]="{required: !editing}"
+                 for="bid"
+                 i18n>Name</label>
           <div class="cd-col-form-input">
             <input id="bid"
                    name="bid"
@@ -60,11 +58,9 @@
 
         <!-- Owner -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="owner">
-            <ng-container i18n>Owner</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="owner"
+                 i18n>Owner</label>
           <div class="cd-col-form-input">
             <select id="owner"
                     name="owner"
@@ -89,11 +85,9 @@
         <!-- Placement target -->
         <div class="form-group row">
           <label class="cd-col-form-label"
-                 for="placement-target">
-            <ng-container i18n>Placement target</ng-container>
-            <span class="required"
-                  *ngIf="!editing"></span>
-          </label>
+                 [ngClass]="{required: !editing}"
+                 for="placement-target"
+                 i18n>Placement target</label>
           <div class="cd-col-form-input">
             <ng-template #placementTargetSelect>
               <select id="placement-target"

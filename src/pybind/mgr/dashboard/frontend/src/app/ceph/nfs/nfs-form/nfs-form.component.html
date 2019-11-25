@@ -11,11 +11,9 @@
         <!-- cluster_id -->
         <div class="form-group row"
              *ngIf="!isDefaultCluster">
-          <label class="cd-col-form-label"
-                 for="cluster_id">
-            <ng-container i18n>Cluster</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="cluster_id"
+                 i18n>Cluster</label>
           <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     formControlName="cluster_id"
@@ -83,11 +81,9 @@
         <div formGroupName="fsal">
           <!-- Name -->
           <div class="form-group row">
-            <label class="cd-col-form-label"
-                   for="name">
-              <ng-container i18n>Storage Backend</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="name"
+                   i18n>Storage Backend</label>
             <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       formControlName="name"
@@ -115,11 +111,9 @@
           <!-- RGW user -->
           <div class="form-group row"
                *ngIf="nfsForm.getValue('name') === 'RGW'">
-            <label class="cd-col-form-label"
-                   for="rgw_user_id">
-              <ng-container i18n>Object Gateway User</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="rgw_user_id"
+                   i18n>Object Gateway User</label>
             <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       formControlName="rgw_user_id"
@@ -147,11 +141,9 @@
           <!-- CephFS user_id -->
           <div class="form-group row"
                *ngIf="nfsForm.getValue('name') === 'CEPH'">
-            <label class="cd-col-form-label"
-                   for="user_id">
-              <ng-container i18n>CephFS User ID</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="user_id"
+                   i18n>CephFS User ID</label>
             <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       formControlName="user_id"
@@ -178,11 +170,9 @@
           <!-- CephFS fs_name -->
           <div class="form-group row"
                *ngIf="nfsForm.getValue('name') === 'CEPH'">
-            <label class="cd-col-form-label"
-                   for="fs_name">
-              <ng-container i18n>CephFS Name</ng-container>
-              <span class="required"></span>
-            </label>
+            <label class="cd-col-form-label required"
+                   for="fs_name"
+                   i18n>CephFS Name</label>
             <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       formControlName="fs_name"
@@ -212,11 +202,9 @@
         <div class="form-group row"
              *ngIf="nfsForm.getValue('name') === 'CEPH'">
           <label class="cd-col-form-label"
-                 for="security_label">
-            <ng-container i18n>Security Label</ng-container>
-            <span class="required"
-                  *ngIf="nfsForm.getValue('security_label')"></span>
-          </label>
+                 [ngClass]="{'required': nfsForm.getValue('security_label')}"
+                 for="security_label"
+                 i18n>Security Label</label>
 
           <div class="cd-col-form-input">
             <div class="custom-control custom-checkbox">
@@ -248,11 +236,9 @@
         <!-- Path -->
         <div class="form-group row"
              *ngIf="nfsForm.getValue('name') === 'CEPH'">
-          <label class="cd-col-form-label"
-                 for="path">
-            <ng-container i18n>CephFS Path</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="path"
+                 i18n>CephFS Path</label>
           <div class="cd-col-form-input">
             <input type="text"
                    class="form-control"
@@ -278,11 +264,9 @@
         <!-- Bucket -->
         <div class="form-group row"
              *ngIf="nfsForm.getValue('name') === 'RGW'">
-          <label class="cd-col-form-label"
-                 for="path">
-            <ng-container i18n>Path</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="path"
+                 i18n>Path</label>
           <div class="cd-col-form-input">
             <input type="text"
                    class="form-control"
@@ -309,11 +293,9 @@
 
         <!-- NFS Protocol -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="protocols">
-            <ng-container i18n>NFS Protocol</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="protocols"
+                 i18n>NFS Protocol</label>
           <div class="cd-col-form-input">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
@@ -368,8 +350,8 @@
              *ngIf="nfsForm.getValue('protocolNfsv4')">
           <label class="cd-col-form-label"
                  for="pseudo">
-            <ng-container i18n>Pseudo</ng-container>
-            <span class="required"></span>
+            <span class="required"
+                  i18n>Pseudo</span>
             <cd-helper>
               <p i18n>The position that this <strong>NFS v4</strong> export occupies
                 in the <strong>Pseudo FS</strong> (it must be unique).</p>
@@ -393,11 +375,9 @@
 
         <!-- Access Type -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="access_type">
-            <ng-container i18n>Access Type</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="access_type"
+                 i18n>Access Type</label>
           <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     formControlName="access_type"
@@ -435,11 +415,9 @@
 
         <!-- Squash -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="squash">
-            <ng-container i18n>Squash</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="squash"
+                 i18n>Squash</label>
           <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     name="squash"
@@ -466,11 +444,9 @@
 
         <!-- Transport Protocol -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="transports">
-            <ng-container i18n>Transport Protocol</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="transports"
+                 i18n>Transport Protocol</label>
           <div class="cd-col-form-input">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"

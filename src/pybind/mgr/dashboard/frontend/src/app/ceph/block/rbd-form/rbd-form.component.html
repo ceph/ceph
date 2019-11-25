@@ -26,11 +26,9 @@
 
         <!-- Name -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="name">
-            <ng-container i18n>Name</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="name"
+                 i18n>Name</label>
           <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
@@ -54,11 +52,9 @@
         <div class="form-group row"
              (change)="onPoolChange($event.target.value)">
           <label class="cd-col-form-label"
-                 for="pool">
-            Pool
-            <span class="required"
-                  *ngIf="mode !== 'editing'"></span>
-          </label>
+                 [ngClass]="{'required': mode !== 'editing'}"
+                 for="pool"
+                 i18n>Pool</label>
           <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
@@ -153,9 +149,8 @@
              *ngIf="rbdForm.getValue('useDataPool')">
           <label class="cd-col-form-label"
                  for="dataPool">
-            <ng-container i18n>Data pool</ng-container>
-            <span class="required"
-                  *ngIf="mode !== 'editing'"></span>
+            <span [ngClass]="{'required': mode !== 'editing'}"
+                  i18n>Data pool</span>
             <cd-helper i18n-html
                        html="Dedicated pool that stores the object-data of the RBD.">
             </cd-helper>
@@ -194,11 +189,9 @@
 
         <!-- Size -->
         <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="size">
-            <ng-container i18n>Size</ng-container>
-            <span class="required"></span>
-          </label>
+          <label class="cd-col-form-label required"
+                 for="size"
+                 i18n>Size</label>
           <div class="cd-col-form-input">
             <input id="size"
                    name="size"
@@ -280,12 +273,9 @@
             <!-- stripingUnit -->
             <div class="form-group row">
               <label class="cd-col-form-label"
-                     for="stripingUnit">
-                <span i18n>Stripe unit</span>
-                <span class="required"
-                      *ngIf="rbdForm.getValue('stripingCount')">
-                </span>
-              </label>
+                     [ngClass]="{'required': rbdForm.getValue('stripingCount')}"
+                     for="stripingUnit"
+                     i18n>Stripe unit</label>
               <div class="cd-col-form-input">
                 <select id="stripingUnit"
                         name="stripingUnit"
@@ -308,12 +298,9 @@
             <!-- Stripe Count -->
             <div class="form-group row">
               <label class="cd-col-form-label"
-                     for="stripingCount">
-                <span i18n>Stripe count</span>
-                <span class="required"
-                      *ngIf="rbdForm.getValue('stripingUnit')">
-                </span>
-              </label>
+                     [ngClass]="{'required': rbdForm.getValue('stripingUnit')}"
+                     for="stripingCount"
+                     i18n>Stripe count</label>
               <div class="cd-col-form-input">
                 <input id="stripingCount"
                        name="stripingCount"

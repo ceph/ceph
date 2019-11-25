@@ -17,12 +17,9 @@
     <!-- Username -->
     <div class="form-group row">
       <label class="cd-col-form-label"
-             for="user">
-        <ng-container i18n>Username</ng-container>
-        <span class="required"
-              *ngIf="!viewing">
-        </span>
-      </label>
+             [ngClass]="{'required': !viewing}"
+             for="user"
+             i18n>Username</label>
       <div class="cd-col-form-input">
         <input id="user"
                class="form-control"
@@ -67,12 +64,9 @@
     <div class="form-group row"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="cd-col-form-label"
-             for="access_key">
-        <ng-container i18n>Access key</ng-container>
-        <span class="required"
-              *ngIf="!viewing">
-        </span>
-      </label>
+             [ngClass]="{'required': !viewing}"
+             for="access_key"
+             i18n>Access key</label>
       <div class="cd-col-form-input">
         <div class="input-group">
           <input id="access_key"
@@ -101,12 +95,9 @@
     <div class="form-group row"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="cd-col-form-label"
-             for="secret_key">
-        <ng-container i18n>Secret key</ng-container>
-        <span class="required"
-              *ngIf="!viewing">
-        </span>
-      </label>
+             [ngClass]="{'required': !viewing}"
+             for="secret_key"
+             i18n>Secret key</label>
       <div class="cd-col-form-input">
         <div class="input-group">
           <input id="secret_key"

@@ -30,12 +30,9 @@
     <!-- Subuser -->
     <div class="form-group row">
       <label class="cd-col-form-label"
-             for="subuid">
-        <ng-container i18n>Subuser</ng-container>
-        <span class="required"
-              *ngIf="!editing">
-        </span>
-      </label>
+             [ngClass]="{'required': !editing}"
+             for="subuid"
+             i18n>Subuser</label>
       <div class="cd-col-form-input">
         <input id="subuid"
                class="form-control"
@@ -54,11 +51,9 @@
 
     <!-- Permission -->
     <div class="form-group row">
-      <label class="cd-col-form-label"
-             for="perm">
-        <ng-container i18n>Permission</ng-container>
-        <span class="required"></span>
-      </label>
+      <label class="cd-col-form-label required"
+             for="perm"
+             i18n>Permission</label>
       <div class="cd-col-form-input">
         <select id="perm"
                 class="form-control custom-select"
@@ -102,11 +97,9 @@
       <!-- Secret key -->
       <div class="form-group row"
            *ngIf="!editing && !formGroup.getValue('generate_secret')">
-        <label class="cd-col-form-label"
-               for="secret_key">
-          <ng-container i18n>Secret key</ng-container>
-          <span class="required"></span>
-        </label>
+        <label class="cd-col-form-label required"
+               for="secret_key"
+               i18n>Secret key</label>
         <div class="cd-col-form-input">
           <div class="input-group">
             <input id="secret_key"
