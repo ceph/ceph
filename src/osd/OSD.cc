@@ -4055,6 +4055,12 @@ void OSD::create_recoverystate_perf()
 
 int OSD::shutdown()
 {
+  if (cct->_conf->osd_fast_shutdown) {
+    derr << "*** Immediate shutdown (osd_fast_shutdown=true) ***" << dendl;
+    cct->_log->flush();
+    _exit(0);
+  }
+
   if (!service.prepare_to_stop())
     return 0; // already shutting down
   osd_lock.lock();
