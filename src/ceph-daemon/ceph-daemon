@@ -194,6 +194,11 @@ def get_fqdn():
     # type: () -> str
     return socket.getfqdn() or socket.gethostname()
 
+def generate_service_id():
+    # type: () -> str
+    return ''.join(random.choice(string.ascii_lowercase)
+                   for _ in range(6))
+
 def generate_password():
     # type: () -> str
     return ''.join(random.choice(string.ascii_lowercase + string.digits)
@@ -926,7 +931,7 @@ def command_bootstrap():
     fsid = args.fsid or make_fsid()
     hostname = get_hostname()
     mon_id = args.mon_id or hostname
-    mgr_id = args.mgr_id or hostname
+    mgr_id = args.mgr_id or generate_service_id()
     logging.info('Cluster fsid: %s' % fsid)
 
     # config
