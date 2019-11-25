@@ -5239,7 +5239,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_gc_obj_min_wait", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2_hr)
-    .set_description("Garabge collection object expiration time")
+    .set_description("Garbage collection object expiration time")
     .set_long_description(
        "The length of time (in seconds) that the RGW collector will wait before purging "
        "a deleted object's data. RGW will not remove object immediately, as object could "
@@ -5254,7 +5254,7 @@ std::vector<Option> get_rgw_options() {
         "Garbage collection thread in RGW process holds a lease on its data shards. These "
         "objects contain the information about the objects that need to be removed. RGW "
         "takes a lease in order to prevent multiple RGW processes from handling the same "
-        "objects concurrently. This time signifies that maximum amount of time that RGW "
+        "objects concurrently. This time signifies that maximum amount of time (in seconds) that RGW "
         "is allowed to hold that lease. In the case where RGW goes down uncleanly, this "
         "is the amount of time where processing of that data shard will be blocked.")
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
