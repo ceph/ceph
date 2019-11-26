@@ -380,3 +380,17 @@ Usage :
 
 Options :
   -h     Shows the help message
+
+snap
+----
+
+Create or Delete Snapshot
+
+Usage:
+
+     snap {create|delete} <snap_name> <dir_name>
+
+* snap_name - Snapshot name to be created or deleted
+
+* dir_name - directory under which snapshot should be created or deleted
+

@@ -48,6 +48,11 @@ class TestCephFSShell(CephFSTestCase):
         return mount_x.client_remote.run(args=args, stdout=StringIO(),
                                          stderr=StringIO(), stdin=stdin)
 
+    def get_cephfs_shell_cmd_error(self, cmd, mount_x=None, opts=None,
+                                    stdin=None):
+        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stderr.\
+            getvalue().strip()
+
     def get_cephfs_shell_cmd_output(self, cmd, mount_x=None, opts=None,
                                     stdin=None):
         return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stdout.\
@@ -292,6 +297,71 @@ class TestGetAndPut(TestCephFSShell):
         log.info("s_hash:{}".format(s_hash))
         log.info("o_hash:{}".format(o_hash))
         assert(s_hash == o_hash)
+
+class TestSnapshots(TestCephFSShell):
+    def test_snap(self):
+        """
+        Test that snapshot creation and deletion work
+        """
+        sd = self.fs.get_config('client_snapdir')
+        sdn = "data_dir/{}/snap1".format(sd)
+
+        # create a data dir and dump some files into it
+        self.get_cephfs_shell_cmd_output("mkdir data_dir")
+        s = 'A' * 10240
+        o = self.get_cephfs_shell_cmd_output("put - data_dir/data_a", stdin=s)
+        s = 'B' * 10240
+        o = self.get_cephfs_shell_cmd_output("put - data_dir/data_b", stdin=s)
+        s = 'C' * 10240
+        o = self.get_cephfs_shell_cmd_output("put - data_dir/data_c", stdin=s)
+        s = 'D' * 10240
+        o = self.get_cephfs_shell_cmd_output("put - data_dir/data_d", stdin=s)
+        s = 'E' * 10240
+        o = self.get_cephfs_shell_cmd_output("put - data_dir/data_e", stdin=s)
+
+        o = self.get_cephfs_shell_cmd_output("ls -l /data_dir")
+        log.info("cephfs-shell output:\n{}".format(o))
+
+        # create the snapshot - must pass
+        o = self.get_cephfs_shell_cmd_output("snap create snap1 /data_dir")
+        log.info("cephfs-shell output:\n{}".format(o))
+        assert(o == "")
+        o = self.mount_a.stat(sdn)
+        log.info("mount_a output:\n{}".format(o))
+        assert(('st_mode' in str(o)) == True)
+
+        # create the same snapshot again - must fail with an error message
+        o = self.get_cephfs_shell_cmd_error("snap create snap1 /data_dir")
+        log.info("cephfs-shell output:\n{}".format(o))
+        o = o.split('\n')
+        assert(o[0] == "ERROR: snapshot 'snap1' already exists")
+        o = self.mount_a.stat(sdn)
+        log.info("mount_a output:\n{}".format(o))
+        assert(('st_mode' in str(o)) == True)
+
+        # delete the snapshot - must pass
+        o = self.get_cephfs_shell_cmd_output("snap delete snap1 /data_dir")
+        log.info("cephfs-shell output:\n{}".format(o))
+        assert(o == "")
+        try:
+            o = self.mount_a.stat(sdn)
+        except:
+            # snap dir should not exist anymore
+            pass
+        log.info("mount_a output:\n{}".format(o))
+        assert(('st_mode' in str(o)) == False)
+
+        # delete the same snapshot again - must fail with an error message
+        o = self.get_cephfs_shell_cmd_error("snap delete snap1 /data_dir")
+        o = o.strip()
+        o = o.split('\n')
+        assert(o[0] == "ERROR: 'snap1': no such snapshot")
+        try:
+            o = self.mount_a.stat(sdn)
+        except:
+            pass
+        log.info("mount_a output:\n{}".format(o))
+        assert(('st_mode' in str(o)) == False)
 
 class TestCD(TestCephFSShell):
     CLIENTS_REQUIRED = 1
