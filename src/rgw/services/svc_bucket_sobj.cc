@@ -300,7 +300,6 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                   &ci, refresh_version, y);
   *info = e.info;
 
-#warning FIXME: use unique_ptr and implement RGWBucketInfo copy constructor, or other better solution
   if (info->sync_policy) { /* fork policy off cache */
     auto policy = make_shared<rgw_sync_policy_info>(*info->sync_policy);
     info->sync_policy = std::const_pointer_cast<const rgw_sync_policy_info>(policy);

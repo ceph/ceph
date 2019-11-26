@@ -3739,7 +3739,6 @@ int RGWBucketShardFullSyncCR::operate()
         if (!marker_tracker.start(entry->key, total_entries, real_time())) {
           tn->log(0, SSTR("ERROR: cannot start syncing " << entry->key << ". Duplicate entry?"));
         } else {
-#warning look in here
           using SyncCR = RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>;
           yield spawn(new SyncCR(sc, sync_pipe, entry->key,
                                  false, /* versioned, only matters for object removal */
@@ -4334,9 +4333,6 @@ int RGWRunBucketSourcesSyncCR::operate()
       }
     }
 
-#if 0
-    lease_cr->go_down();
-#endif
     drain_all();
     return set_cr_done();
   }
