@@ -25,7 +25,7 @@
 #ifdef WITH_SEASTAR
 #include <seastar/core/future.hh>
 #include "crimson/os/futurized_store.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/cyanstore/cyan_collection.h"
 #endif
 
 constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
