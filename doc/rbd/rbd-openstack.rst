@@ -55,7 +55,10 @@ Three parts of OpenStack integrate with Ceph's block devices:
   advantageous because it allows you to perform maintenance operations easily
   with the live-migration process. Additionally, if your hypervisor dies it is
   also convenient to trigger ``nova evacuate`` and  run the virtual machine
-  elsewhere almost seamlessly.
+  elsewhere almost seamlessly. In doing so,
+  :ref:`exclusive locks <rbd-exclusive-locks>` prevent multiple
+  compute nodes from concurrently accessing the guest disk.
+
 
 You can use OpenStack Glance to store images in a Ceph Block Device, and you
 can use Cinder to boot a VM using a copy-on-write clone of an image.
