@@ -187,8 +187,9 @@ def get_all_possible_paths(pattern):
     for pattern in patterns:
         for path in paths:
             paths.extend(glob(path, pattern))
-    return [path for path in paths if fnmatch.fnmatch(path,
-            os.path.join(cephfs.getcwd(), complete_pattern))]
+    if is_rel_path:
+        complete_pattern = os.path.join(cephfs.getcwd(), complete_pattern)
+    return [path for path in paths if fnmatch.fnmatch(path, complete_pattern)]
 
 
 suffixes = ['B', 'K', 'M', 'G', 'T', 'P']
@@ -850,6 +851,9 @@ sub-directories, files')
 
     @with_argparser(rmdir_parser)
     def do_rmdir(self, args):
+        self.do_rmdir_helper(args)
+
+    def do_rmdir_helper(self, args):
         """
         Remove a specific Directory
         """
@@ -1279,6 +1283,50 @@ sub-directories, files')
                 perror('max_files is not set')
                 self.exit_code = 1
                 pass
+
+    snap_parser = argparse.ArgumentParser(description='Snapshot Management')
+    snap_parser.add_argument('op', type=str,
+                             help='Snapshot operation: create or delete')
+    snap_parser.add_argument('name', type=str, action=path_to_bytes,
+                             help='Name of snapshot')
+    snap_parser.add_argument('dir', type=str, action=path_to_bytes,
+                             help='Directory for which snapshot '
+                                  'needs to be created or deleted')
+
+    @with_argparser(snap_parser)
+    def do_snap(self, args):
+        """
+        Snapshot management for the volume
+        """
+        # setting self.colors to None turns off colorizing and
+        # perror emits plain text
+        self.colors = None
+
+        snapdir = '.snap'
+        conf_snapdir = cephfs.conf_get('client_snapdir')
+        if conf_snapdir is not None:
+            snapdir = conf_snapdir
+        snapdir = to_bytes(snapdir)
+        if args.op == 'create':
+            try:
+                if is_dir_exists(args.dir):
+                    cephfs.mkdir(os.path.join(args.dir, snapdir, args.name), 0o755)
+                else:
+                    self.perror("'{}': no such directory".format(args.dir.decode('utf-8')))
+            except libcephfs.Error:
+                self.perror("snapshot '{}' already exists".format(args.name.decode('utf-8')))
+        elif args.op == 'delete':
+            snap_dir = os.path.join(args.dir, snapdir, args.name)
+            try:
+                if is_dir_exists(snap_dir):
+                    newargs = argparse.Namespace(paths=[snap_dir], parent=False)
+                    self.do_rmdir_helper(newargs)
+                else:
+                    self.perror("'{}': no such snapshot".format(args.name.decode('utf-8')))
+            except libcephfs.Error:
+                self.perror("error while deleting '{}'".format(snap_dir.decode('utf-8')))
+        else:
+            self.perror("snapshot can only be created or deleted; check - help snap")
 
     def do_help(self, line):
         """
