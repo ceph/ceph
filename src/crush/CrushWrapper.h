@@ -1529,6 +1529,7 @@ public:
     const vector<pair<int,int>>& stack,
     const set<int>& overfull,
     const vector<int>& underfull,
+    const vector<int>& more_underfull,
     const vector<int>& orig,
     vector<int>::const_iterator& i,
     set<int>& used,
@@ -1542,6 +1543,7 @@ public:
     int maxout,
     const set<int>& overfull,
     const vector<int>& underfull,
+    const vector<int>& more_underfull,
     const vector<int>& orig,
     vector<int> *out) const;
 
