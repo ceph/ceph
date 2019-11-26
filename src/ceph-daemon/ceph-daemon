@@ -300,10 +300,12 @@ def check_unit(unit_name):
     # NOTE: we ignore the exit code here because systemctl outputs
     # various exit codes based on the state of the service, but the
     # string result is more explicit (and sufficient).
+    enabled = False
     try:
         out, err, code = call(['systemctl', 'is-enabled', unit_name],
                               verbose_on_failure=False)
-        enabled = out.strip() == 'enabled'
+        if code == 0:
+            enabled = True
     except Exception as e:
         logger.warning('unable to run systemctl: %s' % e)
         enabled = False
