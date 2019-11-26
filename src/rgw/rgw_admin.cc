@@ -3108,7 +3108,7 @@ int main(int argc, const char **argv)
   string quota_scope;
   string object_version;
   string placement_id;
-  string storage_class;
+  std::optional<string> opt_storage_class;
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
@@ -3212,6 +3212,7 @@ int main(int argc, const char **argv)
 
   std::optional<int> opt_priority;
   std::optional<string> opt_mode;
+  std::optional<rgw_user> opt_dest_owner;
 
   rgw::notify::EventTypeList event_types;
 
@@ -3474,7 +3475,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
       placement_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
-      storage_class = val;
+      opt_storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
       get_str_list(val, ",", tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
@@ -3621,6 +3622,9 @@ int main(int argc, const char **argv)
       opt_priority = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--mode", (char*)NULL)) {
       opt_mode = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-owner", (char*)NULL)) {
+      opt_dest_owner.emplace(val);
+      opt_dest_owner = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -4759,12 +4763,12 @@ int main(int argc, const char **argv)
         rgw_placement_rule rule;
         rule.from_str(placement_id);
 
-        if (!rule.storage_class.empty() && !storage_class.empty() &&
-            rule.storage_class != storage_class) {
+        if (!rule.storage_class.empty() && opt_storage_class &&
+            rule.storage_class != *opt_storage_class) {
           cerr << "ERROR: provided contradicting storage class configuration" << std::endl;
           return EINVAL;
         } else if (rule.storage_class.empty()) {
-          rule.storage_class = storage_class;
+          rule.storage_class = opt_storage_class.value_or(string());
         }
 
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
@@ -4792,13 +4796,14 @@ int main(int argc, const char **argv)
           }
           target.storage_classes.insert(rule.get_storage_class());
         } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_RM) {
-          if (storage_class.empty()) {
+          if (!opt_storage_class ||
+              opt_storage_class->empty()) {
             zonegroup.placement_targets.erase(placement_id);
           } else {
             auto iter = zonegroup.placement_targets.find(placement_id);
             if (iter != zonegroup.placement_targets.end()) {
               RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[placement_id];
-              info.storage_classes.erase(storage_class);
+              info.storage_classes.erase(*opt_storage_class);
             }
           }
         } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {
@@ -5255,7 +5260,7 @@ int main(int argc, const char **argv)
 	    return EINVAL;
 	  }
 
-	  storage_class = rgw_placement_rule::get_canonical_storage_class(storage_class);
+	  string storage_class = rgw_placement_rule::get_canonical_storage_class(storage_class);
 	  if (ptiter->second.storage_classes.find(storage_class) == ptiter->second.storage_classes.end()) {
 	    cerr << "ERROR: storage class '" << storage_class << "' is not defined in zonegroup '" << placement_id << "' placement target" << std::endl;
 	    return EINVAL;
@@ -5305,13 +5310,14 @@ int main(int argc, const char **argv)
              return ret;
           }
         } else if (opt_cmd == OPT::ZONE_PLACEMENT_RM) {
-          if (storage_class.empty()) {
+          if (!opt_storage_class ||
+              opt_storage_class->empty()) {
             zone.placement_pools.erase(placement_id);
           } else {
             auto iter = zone.placement_pools.find(placement_id);
             if (iter != zone.placement_pools.end()) {
               RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
-              info.storage_classes.remove_storage_class(storage_class);
+              info.storage_classes.remove_storage_class(*opt_storage_class);
             }
           }
         }
@@ -8291,6 +8297,12 @@ next:
 
     pipe->params.source.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
     pipe->params.source.filter.set_tags(tags_add, tags_rm);
+    if (opt_dest_owner) {
+      pipe->params.dest.set_owner(*opt_dest_owner);
+    }
+    if (opt_storage_class) {
+      pipe->params.dest.set_storage_class(*opt_storage_class);
+    }
     if (opt_priority) {
       pipe->params.priority = *opt_priority;
     }

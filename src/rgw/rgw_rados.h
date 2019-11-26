@@ -211,6 +211,7 @@ public:
                      const RGWBucketInfo& dest_bucket_info,
                      std::optional<rgw_placement_rule> dest_placement_rule,
                      const map<string, bufferlist>& obj_attrs,
+                     std::optional<rgw_user> *poverride_owner,
                      const rgw_placement_rule **prule) = 0;
 };
 
@@ -225,6 +226,7 @@ public:
              const RGWBucketInfo& dest_bucket_info,
              std::optional<rgw_placement_rule> dest_placement_rule,
              const map<string, bufferlist>& obj_attrs,
+             std::optional<rgw_user> *poverride_owner,
              const rgw_placement_rule **prule) override;
 };
 
