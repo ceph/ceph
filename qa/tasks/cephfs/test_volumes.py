@@ -11,7 +11,7 @@ from teuthology.exceptions import CommandFailedError
 log = logging.getLogger(__name__)
 
 class TestVolumes(CephFSTestCase):
-    TEST_VOLUME_NAME = "fs_test_vol"
+    TEST_VOLUME_PREFIX = "volume"
     TEST_SUBVOLUME_PREFIX="subvolume"
     TEST_GROUP_PREFIX="group"
     TEST_SNAPSHOT_PREFIX="snapshot"
@@ -26,6 +26,11 @@ class TestVolumes(CephFSTestCase):
 
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
+
+    def _generate_random_volume_name(self, count=1):
+        r = random.sample(range(10000), count)
+        volumes = ["{0}_{1}".format(TestVolumes.TEST_VOLUME_PREFIX, c) for c in r]
+        return volumes[0] if count == 1 else volumes
 
     def _generate_random_subvolume_name(self, count=1):
         r = random.sample(range(10000), count)
@@ -49,7 +54,7 @@ class TestVolumes(CephFSTestCase):
         result = json.loads(self._fs_cmd("volume", "ls"))
         if len(result) == 0:
             self.vol_created = True
-            self.volname = TestVolumes.TEST_VOLUME_NAME
+            self.volname = self._generate_random_volume_name()
             self._fs_cmd("volume", "create", self.volname)
         else:
             self.volname = result[0]['name']
@@ -116,6 +121,48 @@ class TestVolumes(CephFSTestCase):
 
         # Now wait for the mgr to expire the connection:
         self.wait_until_evicted(sessions[0]['id'], timeout=90)
+
+    def test_volume_create(self):
+        """
+        That the volume can be created and then cleans up
+        """
+        volname = self._generate_random_volume_name()
+        self._fs_cmd("volume", "create", volname)
+        volumels = json.loads(self._fs_cmd("volume", "ls"))
+        try:
+            if (not (volname in ([volume['name'] for volume in volumels]))):
+                raise RuntimeError("Error creating volume '{0}'".format(volname))
+        finally:
+            # clean up
+            self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
+
+    def test_volume_ls(self):
+        """
+        That the existing and the newly created volumes can be listed and
+        finally cleans up.
+        """
+        vls = json.loads(self._fs_cmd("volume", "ls"))
+        volumes = [volume['name'] for volume in vls]
+
+        #create new volumes and add it to the existing list of volumes
+        volumenames = self._generate_random_volume_name(3)
+        for volumename in volumenames:
+            self._fs_cmd("volume", "create", volumename)
+        volumes.extend(volumenames)
+
+        # list volumes
+        try:
+            volumels = json.loads(self._fs_cmd('volume', 'ls'))
+            if len(volumels) == 0:
+                raise RuntimeError("Expected the 'fs volume ls' command to list the created volumes.")
+            else:
+                volnames = [volume['name'] for volume in volumels]
+                if collections.Counter(volnames) != collections.Counter(volumes):
+                    raise RuntimeError("Error creating or listing volumes")
+        finally:
+            # clean up
+            for volume in volumenames:
+                self._fs_cmd("volume", "rm", volume, "--yes-i-really-mean-it")
 
     def test_volume_rm(self):
         try:
