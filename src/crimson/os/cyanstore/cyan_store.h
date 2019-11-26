@@ -15,7 +15,7 @@
 #include "osd/osd_types.h"
 #include "include/uuid.h"
 
-#include "futurized_store.h"
+#include "crimson/os/futurized_store.h"
 
 namespace ceph::os {
 class Transaction;

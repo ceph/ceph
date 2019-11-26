@@ -12,8 +12,8 @@
 
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
-#include "crimson/os/cyan_collection.h"
-#include "crimson/os/cyan_object.h"
+#include "cyan_collection.h"
+#include "cyan_object.h"
 
 namespace {
   seastar::logger& logger() {

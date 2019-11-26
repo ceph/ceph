@@ -11,7 +11,7 @@
 #include "include/buffer.h"
 #include "osd/osd_types.h"
 
-#include "futurized_collection.h"
+#include "crimson/os/futurized_collection.h"
 
 namespace crimson::os {
 
