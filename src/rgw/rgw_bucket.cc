@@ -2182,15 +2182,21 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
+bool RGWDataChangesLog::filter_bucket(const rgw_bucket& bucket, optional_yield y) const
+{
+  if (!bucket_filter) {
+    return true;
+  }
+
+  return bucket_filter->filter(bucket, y);
+}
+
 int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
-#warning FIXME
-#if 0
-  if (!ctl.bucket->bucket_exports_data(bucket_info.bucket, null_yield)) {
+  auto& bucket = bucket_info.bucket;
+
+  if (!filter_bucket(bucket, null_yield)) {
     return 0;
   }
-#endif
-
-  auto& bucket = bucket_info.bucket;
 
   if (observer) {
     observer->on_bucket_changed(bucket.get_key());
@@ -3073,10 +3079,16 @@ public:
   }
 };
 
+bool RGWBucketCtl::DataLogFilter::filter(const rgw_bucket& bucket, optional_yield y) const
+{
+  return bucket_ctl->bucket_exports_data(bucket, null_yield);
+}
+
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
-                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
+                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx()),
+                                                        datalog_filter(this)
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
@@ -3086,7 +3098,8 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
 
 void RGWBucketCtl::init(RGWUserCtl *user_ctl,
                         RGWBucketMetadataHandler *_bm_handler,
-                        RGWBucketInstanceMetadataHandler *_bmi_handler)
+                        RGWBucketInstanceMetadataHandler *_bmi_handler,
+                        RGWDataChangesLog *datalog)
 {
   ctl.user = user_ctl;
 
@@ -3095,6 +3108,8 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
 
   bucket_be_handler = bm_handler->get_be_handler();
   bi_be_handler = bmi_handler->get_be_handler();
+
+  datalog->set_bucket_filter(&datalog_filter);
 }
 
 int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {

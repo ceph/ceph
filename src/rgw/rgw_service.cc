@@ -365,7 +365,8 @@ int RGWCtlDef::init(RGWServices& svc)
   user->init(bucket.get());
   bucket->init(user.get(),
                (RGWBucketMetadataHandler *)bucket_meta_handler,
-               (RGWBucketInstanceMetadataHandler *)bi_meta_handler);
+               (RGWBucketInstanceMetadataHandler *)bi_meta_handler,
+	       svc.datalog_rados->get_log());
 
   otp->init((RGWOTPMetadataHandler *)meta.otp.get());
 
