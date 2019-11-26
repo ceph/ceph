@@ -323,6 +323,11 @@ struct rgw_sync_pipe_dest_params {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  bool operator==(const rgw_sync_pipe_dest_params& rhs) const {
+    return (acl_translation == rhs.acl_translation &&
+	    storage_class == rhs.storage_class);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_dest_params)
 
