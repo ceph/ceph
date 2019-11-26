@@ -892,6 +892,10 @@ add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset)
 target_link_libraries(unittest_pageset global)
 
+add_executable(unittest_random_string test_random_string.cc $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_random_string)
+target_link_libraries(unittest_random_string global)
+
 # unittest_any_
 add_executable(unittest_any test_any.cc)
 add_ceph_unittest(unittest_any)
