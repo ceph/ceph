@@ -1362,8 +1362,7 @@ public:
                        rgw::notify::ObjectCreated, &record);
       }
 
-#warning should it be source owner?
-      yield call(new RGWPSHandleObjEventCR(sc, env, sync_pipe.dest_bucket_info.owner, event, record, topics));
+      yield call(new RGWPSHandleObjEventCR(sc, env, sync_pipe.source_bucket_info.owner, event, record, topics));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
