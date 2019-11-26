@@ -7,6 +7,7 @@ import { DimlessBinaryDirective } from './dimless-binary.directive';
 import { IopsDirective } from './iops.directive';
 import { MillisecondsDirective } from './milliseconds.directive';
 import { PasswordButtonDirective } from './password-button.directive';
+import { TrimDirective } from './trim.directive';
 
 @NgModule({
   imports: [],
@@ -16,6 +17,7 @@ import { PasswordButtonDirective } from './password-button.directive';
     DimlessBinaryDirective,
     DimlessBinaryPerSecondDirective,
     PasswordButtonDirective,
+    TrimDirective,
     MillisecondsDirective,
     IopsDirective
   ],
@@ -25,6 +27,7 @@ import { PasswordButtonDirective } from './password-button.directive';
     DimlessBinaryDirective,
     DimlessBinaryPerSecondDirective,
     PasswordButtonDirective,
+    TrimDirective,
     MillisecondsDirective,
     IopsDirective
   ],
