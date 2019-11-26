@@ -648,3 +648,6 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
+
+find_package(CppCheck)
+find_package(IWYU)
