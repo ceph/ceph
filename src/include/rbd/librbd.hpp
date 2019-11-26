@@ -224,13 +224,15 @@ public:
   void version(int *major, int *minor, int *extra);
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
-  int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+  int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname,
+           bool read_only =  false);
   int open_by_id(IoCtx& io_ctx, Image& image, const char *id);
-  int open_by_id(IoCtx& io_ctx, Image& image, const char *id, const char *snapname);
+  int open_by_id(IoCtx& io_ctx, Image& image, const char *id, const char *snapname,
+                 bool read_only =  false);
   int aio_open(IoCtx& io_ctx, Image& image, const char *name,
-	       const char *snapname, RBD::AioCompletion *c);
+	       const char *snapname, RBD::AioCompletion *c, bool read_only =  false);
   int aio_open_by_id(IoCtx& io_ctx, Image& image, const char *id,
-	             const char *snapname, RBD::AioCompletion *c);
+	             const char *snapname, RBD::AioCompletion *c, bool read_only =  false);
   // see librbd.h
   int open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 		     const char *snapname);

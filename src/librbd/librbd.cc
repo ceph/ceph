@@ -455,9 +455,9 @@ namespace librbd {
   }
 
   int RBD::open(IoCtx& io_ctx, Image& image, const char *name,
-		const char *snap_name)
+		const char *snap_name, bool read_only)
   {
-    ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, false);
+    ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, read_only);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
@@ -478,9 +478,9 @@ namespace librbd {
   }
 
   int RBD::open_by_id(IoCtx& io_ctx, Image& image, const char *id,
-		      const char *snap_name)
+		      const char *snap_name, bool read_only)
   {
-    ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, false);
+    ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, read_only);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, open_image_by_id_enter, ictx, ictx->id.c_str(),
                ictx->snap_name.c_str(), ictx->read_only);
@@ -502,9 +502,9 @@ namespace librbd {
   }
 
   int RBD::aio_open(IoCtx& io_ctx, Image& image, const char *name,
-		    const char *snap_name, RBD::AioCompletion *c)
+		    const char *snap_name, RBD::AioCompletion *c, bool read_only)
   {
-    ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, false);
+    ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, read_only);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, aio_open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only, c->pc);
 
@@ -520,9 +520,9 @@ namespace librbd {
   }
 
   int RBD::aio_open_by_id(IoCtx& io_ctx, Image& image, const char *id,
-		          const char *snap_name, RBD::AioCompletion *c)
+		          const char *snap_name, RBD::AioCompletion *c, bool read_only)
   {
-    ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, false);
+    ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, read_only);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, aio_open_image_by_id_enter, ictx, ictx->id.c_str(),
                ictx->snap_name.c_str(), ictx->read_only, c->pc);
