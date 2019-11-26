@@ -419,9 +419,10 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 				   m->get_connection()->get_peer_type(),
 				   m->daemon_name);
 
-  dout(4) << "from " << m->get_connection() << "  " << key << dendl;
+  auto con = m->get_connection();
+  dout(4) << "from " << key << " " << con << dendl;
 
-  _send_configure(m->get_connection());
+  _send_configure(con);
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
@@ -475,13 +476,13 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 	     << " bytes" << dendl;
   }
 
-  if (m->get_connection()->get_peer_type() != entity_name_t::TYPE_CLIENT &&
+  if (con->get_peer_type() != entity_name_t::TYPE_CLIENT &&
       m->service_name.empty())
   {
     // Store in set of the daemon/service connections, i.e. those
     // connections that require an update in the event of stats
     // configuration changes.
-    daemon_connections.insert(m->get_connection());
+    daemon_connections.insert(con);
   }
 
   m->put();
