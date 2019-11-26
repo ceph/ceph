@@ -3224,7 +3224,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
-  std::function<int(const map<string, bufferlist>&)> attrs_handler;
+  std::function<int(map<string, bufferlist>&)> attrs_handler;
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -3232,7 +3232,7 @@ public:
                  rgw::putobj::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data,
-                 std::function<int(const map<string, bufferlist>&)> _attrs_handler) :
+                 std::function<int(map<string, bufferlist>&)> _attrs_handler) :
                        cct(cct),
                        filter(p),
                        compressor(compressor),
@@ -3621,6 +3621,7 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
                                       const RGWBucketInfo& dest_bucket_info,
                                       std::optional<rgw_placement_rule> dest_placement_rule,
                                       const map<string, bufferlist>& obj_attrs,
+				      std::optional<rgw_user> *poverride_owner,
                                       const rgw_placement_rule **prule)
 {
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
@@ -3714,15 +3715,19 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (!filter) {
     filter = &source_filter;
   }
-  
+
+  std::optional<rgw_user> override_owner;
+
   RGWRadosPutObj cb(cct, plugin, compressor, &processor, progress_cb, progress_data,
-                    [&](const map<string, bufferlist>& obj_attrs) {
+                    [&](map<string, bufferlist>& obj_attrs) {
                       const rgw_placement_rule *ptail_rule;
+
                       int ret = filter->filter(cct,
                                                src_obj.key,
                                                dest_bucket_info,
                                                dest_placement_rule,
                                                obj_attrs,
+					       &override_owner,
                                                &ptail_rule);
                       if (ret < 0) {
                         ldout(cct, 5) << "Aborting fetch: source object filter returned ret=" << ret << dendl;
@@ -3807,6 +3812,43 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     cs_info.blocks = move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;
+  }
+
+  if (override_owner) {
+    processor.set_owner(*override_owner);
+
+    auto& obj_attrs = cb.get_attrs();
+
+    RGWUserInfo owner_info;
+    if (ctl.user->get_info_by_uid(*override_owner, &owner_info, null_yield) < 0) {
+      ldout(cct, 10) << "owner info does not exist" << dendl;
+      return -EINVAL;
+    }
+
+    RGWAccessControlPolicy acl;
+
+    auto aiter = obj_attrs.find(RGW_ATTR_ACL);
+    if (aiter == obj_attrs.end()) {
+      ldout(cct, 0) << "WARNING: " << __func__ << "(): object doesn't have ACL attribute" << dendl;
+    } else {
+      auto iter = aiter->second.cbegin();
+      try {
+	acl.decode(iter);
+      } catch (buffer::error& err) {
+	ldout(cct, 0) << "ERROR: " << __func__ << "(): could not decode policy, caught buffer::error" << dendl;
+	return -EIO;
+      }
+    }
+
+    ACLOwner new_owner;
+    new_owner.set_id(*override_owner);
+    new_owner.set_name(owner_info.display_name);
+
+    acl.set_owner(new_owner);
+
+    bufferlist bl;
+    acl.encode(bl);
+    obj_attrs[RGW_ATTR_ACL] = std::move(bl);
   }
 
   if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */

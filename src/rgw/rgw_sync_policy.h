@@ -308,6 +308,19 @@ struct rgw_sync_pipe_dest_params {
     DECODE_FINISH(bl);
   }
 
+  void set_storage_class(const string& sc) {
+    storage_class = sc;
+  }
+
+  void set_owner(const rgw_user& owner) {
+    if (owner.empty()){
+      acl_translation.reset();
+    } else {
+      acl_translation.emplace();
+      acl_translation->owner = owner;
+    }
+  }
+
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
