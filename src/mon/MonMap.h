@@ -95,6 +95,10 @@ class MonMap {
   map<entity_addr_t, string> addr_mons;
 
   vector<string> ranks;
+  /* ranks which were removed when this map took effect.
+     There should only be one at a time, but leave support
+     for arbitrary numbers just to be safe. */
+  list<int> removed_ranks;
 
   /**
    * Persistent Features are all those features that once set on a
@@ -222,6 +226,7 @@ public:
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    */
   void remove(const string &name) {
+    // this must match what we do in ConnectionTracker::notify_rank_removed
     ceph_assert(mon_info.count(name));
     mon_info.erase(name);
     ceph_assert(mon_info.count(name) == 0);

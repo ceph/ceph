@@ -177,7 +177,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(7, 6, blist);
+  ENCODE_START(8, 6, blist);
   encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -187,13 +187,14 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   encode(mon_info, blist, con_features);
   encode(ranks, blist);
   encode(min_mon_release, blist);
+  encode(removed_ranks, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(bufferlist::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(7, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(8, 3, 3, p);
   decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -234,6 +235,9 @@ void MonMap::decode(bufferlist::const_iterator& p)
     decode(min_mon_release, p);
   } else {
     min_mon_release = infer_ceph_release_from_mon_features(persistent_features);
+  }
+  if (struct_v >= 8) {
+    decode(removed_ranks, p);
   }
   calc_addr_mons();
   DECODE_FINISH(p);
