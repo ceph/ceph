@@ -171,8 +171,37 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.get_hosts()
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        result = "\n".join(map(lambda node: node.name, completion.result))
-        return HandleCommandResult(stdout=result)
+        table = PrettyTable(
+            ['HOST', 'LABELS'],
+            border=False)
+        table.align = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 1
+        for node in completion.result:
+            table.add_row((node.name, ' '.join(node.labels)))
+        return HandleCommandResult(stdout=table.get_string())
+
+    @orchestrator._cli_write_command(
+        'orchestrator host label add',
+        'name=host,type=CephString '
+        'name=label,type=CephString',
+        'Add a host label')
+    def _host_label_add(self, host, label):
+        completion = self.add_host_label(host, label)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
+        'orchestrator host label rm',
+        'name=host,type=CephString '
+        'name=label,type=CephString',
+        'Add a host label')
+    def _host_label_add(self, host, label):
+        completion = self.remove_host_label(host, label)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @orchestrator._cli_read_command(
         'orchestrator device ls',
