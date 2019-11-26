@@ -1145,9 +1145,9 @@ def command_bootstrap():
         add_newline = False
         if os.path.exists(auth_keys_file):
             with open(auth_keys_file, 'r') as f:
-                f.seek(0, 2)
+                f.seek(0, os.SEEK_END)
                 if f.tell() > 0:
-                    f.seek(-1, 2)  # go to last character
+                    f.seek(f.tell()-1, os.SEEK_SET) # go to last char
                     if f.read() != '\n':
                         add_newline = True
         with open(auth_keys_file, 'a') as f:
