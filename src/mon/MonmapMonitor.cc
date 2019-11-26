@@ -691,6 +691,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
     entity_addrvec_t addrs = pending_map.get_addrs(name);
     pending_map.remove(name);
+    int removed_rank = pending_map.get_rank(name);
+    if (removed_rank >= 0) {
+      pending_map.removed_ranks.push_back(removed_rank);
+    }
     pending_map.last_changed = ceph_clock_now();
     ss << "removing mon." << name << " at " << addrs
        << ", there will be " << pending_map.size() << " monitors" ;

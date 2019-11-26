@@ -355,11 +355,9 @@ class Elector : public ElectionOwner, RankProvider {
    */
   void notify_rank_changed(int new_rank);
   /**
-   * There's a new monmap and we need to deal with it.
-   * FIXME: Right now, we just toss out all peer history
-   * data when this happens, but we should stop doing that...
+   * A peer has been removed so we should clean up state related to it.
    */
-  void notify_new_monmap();
+  void notify_rank_removed(int rank_removed);
   /**
    * @}
    */
