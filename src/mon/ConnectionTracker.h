@@ -195,6 +195,15 @@ class ConnectionTracker {
     rank = new_rank;
     encoding.clear();
   }
+  void notify_rank_removed(int rank_removed) {
+    // this must match what we do in MonMap::remove
+    auto i = peer_reports.find(rank_removed);
+    ++i;
+    for (; i != peer_reports.end(); ++i) {
+      peer_reports[i->first - 1] = i->second;
+    }
+    peer_reports.erase(--peer_reports.end());
+  }
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
   friend map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);
