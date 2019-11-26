@@ -460,6 +460,26 @@ inline namespace v14_2_0 {
 		   uint64_t src_version, uint32_t src_fadvise_flags);
 
     /**
+     * Copy an object
+     *
+     * Copies an object from another location.  The operation is atomic in that
+     * the copy either succeeds in its entirety or fails (e.g., because the
+     * source object was modified while the copy was in progress).  Instead of
+     * copying truncate_seq and truncate_size from the source object it receives
+     * these values as parameters.
+     *
+     * @param src source object name
+     * @param src_ioctx ioctx for the source object
+     * @param src_version current version of the source object
+     * @param truncate_seq truncate sequence for the destination object
+     * @param truncate_size truncate size for the destination object
+     * @param src_fadvise_flags the fadvise flags for source object
+     */
+    void copy_from2(const std::string& src, const IoCtx& src_ioctx,
+		    uint64_t src_version, uint32_t truncate_seq,
+		    uint64_t truncate_size, uint32_t src_fadvise_flags);
+
+    /**
      * undirty an object
      *
      * Clear an objects dirty flag
