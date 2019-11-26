@@ -1412,6 +1412,7 @@ class RGWAWSStreamObjToCloudMultipartCR : public RGWCoroutine {
 
 public:
   RGWAWSStreamObjToCloudMultipartCR(RGWDataSyncCtx *_sc,
+				    rgw_bucket_sync_pipe& _sync_pipe,
                                 AWSSyncConfig& _conf,
                                 RGWRESTConn *_source_conn,
                                 const rgw_obj& _src_obj,
@@ -1431,7 +1432,7 @@ public:
                                                    src_properties(_src_properties),
                                                    rest_obj(_rest_obj),
                                                    status_obj(sync_env->svc->zone->get_zone_params().log_pool,
-                                                              RGWBucketPipeSyncStatusManager::obj_status_oid(sc->source_zone, src_obj)) {
+                                                              RGWBucketPipeSyncStatusManager::obj_status_oid(_sync_pipe, sc->source_zone, src_obj)) {
   }
 
 
@@ -1685,7 +1686,7 @@ public:
             ldout(sc->cct, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
             return set_cr_error(-EINVAL);
           }
-          call(new RGWAWSStreamObjToCloudMultipartCR(sc, instance.conf, source_conn, src_obj,
+          call(new RGWAWSStreamObjToCloudMultipartCR(sc, sync_pipe, instance.conf, source_conn, src_obj,
                                                      target, dest_obj, size, src_properties, rest_obj));
         }
       }

@@ -2443,8 +2443,6 @@ public:
 
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
-  auto sync_env = sc->env;
-
   return new RGWObjFetchCR(sc, sync_pipe, key, std::nullopt, versioned_epoch, zones_trace);
 }
 
@@ -4825,12 +4823,16 @@ string RGWBucketPipeSyncStatusManager::status_oid(const rgw_zone_id& source_zone
   }
 }
 
-string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_zone_id& source_zone,
-                                                  const rgw_obj& obj)
+string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
+                                                      const rgw_zone_id& source_zone,
+                                                      const rgw_obj& obj)
 {
-#warning FIXME
-  return object_status_oid_prefix + "." + source_zone.id + ":" + obj.bucket.get_key() + ":" +
-         obj.key.name + ":" + obj.key.instance;
+  string prefix = object_status_oid_prefix + "." + source_zone.id + ":" + obj.bucket.get_key();
+  if (sync_pipe.source_bucket_info.bucket !=
+      sync_pipe.dest_bucket_info.bucket) {
+    prefix += string("/") + sync_pipe.dest_bucket_info.bucket.get_key();
+  }
+  return prefix + ":" + obj.key.name + ":" + obj.key.instance;
 }
 
 class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
