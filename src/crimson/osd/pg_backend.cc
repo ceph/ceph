@@ -14,8 +14,8 @@
 #include "messages/MOSDOp.h"
 #include "os/Transaction.h"
 
+#include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_collection.h"
-#include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "replicated_backend.h"
 #include "ec_backend.h"
