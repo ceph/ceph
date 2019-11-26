@@ -411,7 +411,6 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info)
 {
-#warning needs to be done differently
   bool new_sync_enabled = info.datasync_flag_enabled();
   bool old_sync_enabled = orig_info.datasync_flag_enabled();
 
