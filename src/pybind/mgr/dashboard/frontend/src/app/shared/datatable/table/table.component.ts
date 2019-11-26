@@ -69,6 +69,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Display the tool header, including reload button, pagination and search fields?
   @Input()
   toolHeader? = true;
+  // Display search field inside tool header?
+  @Input()
+  searchField? = true;
   // Display the table header?
   @Input()
   header? = true;
