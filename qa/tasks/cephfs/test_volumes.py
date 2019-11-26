@@ -165,6 +165,10 @@ class TestVolumes(CephFSTestCase):
                 self._fs_cmd("volume", "rm", volume, "--yes-i-really-mean-it")
 
     def test_volume_rm(self):
+        """
+        That the volume can only be removed when --yes-i-really-mean-it is used
+        and verify that the deleted volume is not listed anymore.
+        """
         try:
             self._fs_cmd("volume", "rm", self.volname)
         except CommandFailedError as ce:
@@ -175,9 +179,10 @@ class TestVolumes(CephFSTestCase):
                 self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
                 #check if it's gone
-                volumes = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd('fs', 'volume', 'ls', '--format=json-pretty'))
+                volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
                 if (self.volname in [volume['name'] for volume in volumes]):
-                    raise RuntimeError("Expected the 'fs volume rm' command to succeed. The volume {0} not removed.".format(self.volname))
+                    raise RuntimeError("Expected the 'fs volume rm' command to succeed. "
+                                       "The volume {0} not removed.".format(self.volname))
         else:
             raise RuntimeError("expected the 'fs volume rm' command to fail.")
 
