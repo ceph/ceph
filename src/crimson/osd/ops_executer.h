@@ -46,6 +46,9 @@ class OpsExecuter {
     crimson::ct_error::input_output_error>;
   using read_errorator = PGBackend::read_errorator;
   using get_attr_errorator = PGBackend::get_attr_errorator;
+  using watch_errorator = crimson::errorator<
+    crimson::ct_error::enoent,
+    crimson::ct_error::invarg>;
 
 public:
   // because OpsExecuter is pretty heavy-weight object we want to ensure
@@ -58,6 +61,7 @@ public:
     call_errorator,
     read_errorator,
     get_attr_errorator,
+    watch_errorator,
     PGBackend::stat_errorator>;
 
 private:
@@ -94,6 +98,18 @@ private:
     EffectFunc&& effect_func);
 
   call_errorator::future<> do_op_call(class OSDOp& osd_op);
+  watch_errorator::future<> do_op_watch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_watch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_unwatch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
 
   hobject_t &get_target() const {
     return obc->obs.oi.soid;
