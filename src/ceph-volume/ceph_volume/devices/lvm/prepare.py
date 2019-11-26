@@ -202,7 +202,7 @@ class Prepare(object):
         :param device_type: Usually, either ``data`` or ``block`` (filestore vs. bluestore)
         :param osd_uuid: The OSD uuid
         """
-        if disk.is_partition(device) or disk.is_device(device):
+        if disk.is_partition(device) or disk.is_device(device) or disk.is_raid(device):
             # we must create a vg, and then a single lv
             lv_name_prefix = "osd-{}".format(device_type)
             return api.create_lv(

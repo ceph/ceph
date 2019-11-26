@@ -318,6 +318,17 @@ def lsblk(device, columns=None, abspath=False):
     return _lsblk_parser(' '.join(out))
 
 
+def is_raid(dev):
+    """
+    Boolean to determine if a given device is a raid, like /dev/md0
+    """
+    if not os.path.exists(dev):
+        return False
+    TYPE = lsblk(dev).get('TYPE')
+    is_raid = TYPE and (TYPE.startswith('raid') or TYPE.startswith('md'))
+    return is_raid
+
+
 def is_device(dev):
     """
     Boolean to determine if a given device is a block device (**not**
