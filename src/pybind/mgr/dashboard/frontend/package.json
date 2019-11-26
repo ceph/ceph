@@ -33,7 +33,7 @@
     "test:ci": "npm run test:config && JEST_SILENT_REPORTER_DOTS=true jest --coverage --reporters jest-silent-reporter",
     "test:config": "if [ ! -e 'src/unit-test-configuration.ts' ]; then cp 'src/unit-test-configuration.ts.sample' 'src/unit-test-configuration.ts'; fi",
     "e2e": "npm run env_build && npm run e2e:update && ng e2e --webdriverUpdate=false",
-    "e2e:dev": "npm run env_build && npm run e2e:update && ng e2e --dev-server-target --webdriverUpdate=false",
+    "e2e:dev": "npm run e2e:update && ng e2e --dev-server-target --webdriverUpdate=false",
     "e2e:update": "npx webdriver-manager update --gecko=false --versions.chrome=$(google-chrome --version | awk '{ print $3 }')",
     "lint:tslint": "ng lint",
     "lint:prettier": "prettier --list-different \"{src,e2e}/**/*.{ts,scss}\"",
