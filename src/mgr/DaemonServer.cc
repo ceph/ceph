@@ -400,12 +400,22 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
   if (daemon_state.exists(key)) {
     daemon = daemon_state.get(key);
   }
-  if (m->service_daemon && !daemon) {
-    dout(4) << "constructing new DaemonState for " << key << dendl;
-    daemon = std::make_shared<DaemonState>(daemon_state.types);
-    daemon->key = key;
-    daemon->service_daemon = true;
-    daemon_state.insert(daemon);
+  if (!daemon) {
+    if (m->service_daemon) {
+      dout(4) << "constructing new DaemonState for " << key << dendl;
+      daemon = std::make_shared<DaemonState>(daemon_state.types);
+      daemon->key = key;
+      daemon->service_daemon = true;
+      daemon_state.insert(daemon);
+    } else {
+      /* A normal Ceph daemon has connected but we are or should be waiting on
+       * metadata for it. Close the session so that it tries to reconnect.
+       */
+      dout(2) << "ignoring open from " << key << " " << con->get_peer_addr()
+              << "; not ready for session (expect reconnect)" << dendl;
+      con->mark_down();
+      return true;
+    }
   }
   if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
