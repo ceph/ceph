@@ -1231,7 +1231,9 @@ def command_run():
     # type: () -> int
     (daemon_type, daemon_id) = args.name.split('.', 1)
     c = get_container(args.fsid, daemon_type, daemon_id)
-    return subprocess.call(c.run_cmd())
+    command = c.run_cmd()
+    logger.debug("Running command: %s" % ' '.join(command))
+    return subprocess.call(command)
 
 ##################################
 
@@ -1270,7 +1272,9 @@ def command_shell():
         args=[],
         container_args=container_args,
         volume_mounts=mounts)
-    return subprocess.call(c.shell_cmd(command))
+    command = c.shell_cmd(command)
+    logger.debug("Running command: %s" % ' '.join(command))
+    return subprocess.call(command)
 
 ##################################
 
@@ -1292,7 +1296,9 @@ def command_enter():
         ]
     c = get_container(args.fsid, daemon_type, daemon_id,
                       container_args=container_args)
-    return subprocess.call(c.exec_cmd(command))
+    command = c.exec_cmd(command)
+    logger.debug("Running command: %s" % ' '.join(command))
+    return subprocess.call(command)
 
 ##################################
 
@@ -1359,7 +1365,7 @@ def command_logs():
     # type: () -> None
     if not args.fsid:
         raise RuntimeError('must pass --fsid to specify cluster')
-    cmd = [container_path, 'logs']
+    cmd = [str(container_path), 'logs'] # type: List[str]
     if args.follow:
         cmd.append('-f')
     if args.tail:
@@ -1368,6 +1374,7 @@ def command_logs():
 
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
+    logger.debug("Running command: %s" % ' '.join(cmd))
     subprocess.call(cmd) # type: ignore
 
 ##################################
