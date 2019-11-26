@@ -404,7 +404,9 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_obj_params(const rgw_obj_key& ke
   std::optional<int> priority;
 
   for (; iter != end; ++iter) {
-#warning this is not the most efficient way to do it, need trie maybe
+    /* NOTE: this is not the most efficient way to do it,
+     * a trie data structure would be better
+     */
     auto& prefix = iter->first;
     if (!boost::starts_with(key.name, prefix)) {
       continue;
