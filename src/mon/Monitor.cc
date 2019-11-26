@@ -6427,5 +6427,7 @@ int Monitor::ms_handle_authentication(Connection *con)
 
 void Monitor::notify_new_monmap()
 {
-  elector.notify_new_monmap();
+  for (auto i : monmap->removed_ranks) {
+    elector.notify_rank_removed(i);
+  }
 }

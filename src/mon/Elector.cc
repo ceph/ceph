@@ -641,7 +641,7 @@ void Elector::notify_rank_changed(int new_rank)
   peer_tracker.notify_rank_changed(new_rank);
 }
 
-void Elector::notify_new_monmap()
+void Elector::notify_rank_removed(int rank_removed)
 {
-  notify_clear_peer_state();
+  peer_tracker.notify_rank_removed(rank_removed);
 }
