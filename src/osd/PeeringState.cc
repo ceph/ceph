@@ -4301,6 +4301,7 @@ void PeeringState::Started::exit()
   DECLARE_LOCALS;
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_started_latency, dur);
+  ps->state_clear(PG_STATE_WAIT | PG_STATE_LAGGY);
 }
 
 /*--------Reset---------*/
