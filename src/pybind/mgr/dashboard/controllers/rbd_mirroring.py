@@ -51,7 +51,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
                 try:
                     status = json.loads(status['json'])
-                except (ValueError, KeyError):
+                except (ValueError, KeyError, TypeError):
                     status = {}
 
                 instance_id = metadata['instance_id']
