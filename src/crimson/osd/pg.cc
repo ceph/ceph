@@ -30,7 +30,7 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
