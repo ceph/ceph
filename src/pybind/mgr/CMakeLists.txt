@@ -14,12 +14,16 @@ endif()
 install(DIRECTORY
   ${CMAKE_CURRENT_SOURCE_DIR}
   DESTINATION ${CEPH_INSTALL_DATADIR}
-  REGEX "CMakeLists.txt" EXCLUDE
-  REGEX "\\.gitignore" EXCLUDE
+  PATTERN "CMakeLists.txt" EXCLUDE
+  PATTERN ".gitignore" EXCLUDE
   REGEX ".*\\.pyi" EXCLUDE
   REGEX "hello/.*" EXCLUDE
   REGEX "tests/.*" EXCLUDE
   REGEX "rook/rook-client-python.*" EXCLUDE
   REGEX "osd_perf_query/.*" EXCLUDE
-  REGEX "tox.ini" EXCLUDE
-  REGEX "requirements.txt" EXCLUDE)
+  PATTERN "tox.ini" EXCLUDE
+  PATTERN "requirements*.txt" EXCLUDE
+  PATTERN "constraints*.txt" EXCLUDE
+  PATTERN "wheelhouse" EXCLUDE
+  REGEX "${CMAKE_CURRENT_SOURCE_DIR}/dashboard" EXCLUDE
+  )

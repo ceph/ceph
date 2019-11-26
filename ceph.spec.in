@@ -23,6 +23,7 @@
 %bcond_with make_check
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
+%bcond_without dashboard_frontend
 %ifarch s390 s390x
 %bcond_with tcmalloc
 %else
@@ -1181,7 +1182,11 @@ ${CMAKE} .. \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=%{python3_version} \
+%if 0%{with dashboard_frontend}
+    -DWITH_MGR_DASHBOARD_FRONTEND=ON \
+%else
     -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
+%endif
 %if 0%{without ceph_test_package}
     -DWITH_TESTS=OFF \
 %endif

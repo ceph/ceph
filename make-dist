@@ -145,7 +145,11 @@ download_boost $boost_version 59c9b274bc451cf91a9ba1dd2c7fdcaf5d60b1b3aa83f2c9fa
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
 
-build_dashboard_frontend
+if [ ${WITH_MGR_DASHBOARD_FRONTEND:-OFF} == "OFF" ]; then
+    build_dashboard_frontend
+    tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
+    rm -f dashboard_frontend.tar
+fi
 generate_rook_ceph_client
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar

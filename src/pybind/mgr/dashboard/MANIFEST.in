@@ -1,0 +1,3 @@
+include README.rst
+include frontend/package.json
+recursive-include frontend/dist *
