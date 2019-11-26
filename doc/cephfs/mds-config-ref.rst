@@ -8,7 +8,10 @@
               under ``[mon]`` or ``[global]``.
 
 :Type: Boolean
-:Default: ``true`` 
+:Default: ``true``
+:Obsoleted: Please see "Configuring standby-replay" in :doc:`/cephfs/standby`.
+
+.. deprecated:: 14.2.0
 
 ``mds cache memory limit``
 
@@ -547,6 +550,9 @@
 
 :Type:  String
 :Default: N/A
+:Obsoleted: Please see "Configuring standby-replay" in :doc:`/cephfs/standby`.
+
+.. deprecated:: 14.2.0
 
 
 ``mds standby for rank``
@@ -554,6 +560,9 @@
 :Description: An MDS daemon will standby for an MDS daemon of this rank. 
 :Type:  32-bit Integer
 :Default: ``-1``
+:Obsoleted: Please see "Configuring standby-replay" in :doc:`/cephfs/standby`.
+
+.. deprecated:: 14.2.0
 
 
 ``mds standby replay``
@@ -563,6 +572,9 @@
               
 :Type:  Boolean
 :Default:  ``false``
+:Obsoleted: Please see "Configuring standby-replay" in :doc:`/cephfs/standby`.
+
+.. deprecated:: 14.2.0
 
 
 ``mds min caps per client``
