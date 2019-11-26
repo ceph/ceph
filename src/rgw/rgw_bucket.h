@@ -34,6 +34,8 @@ class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
+class RGWBucketCtl;
+
 namespace rgw { namespace sal {
   class RGWRadosStore;
   class RGWBucketList;
@@ -492,6 +494,15 @@ struct RGWDataChangesLogMarker {
 };
 
 class RGWDataChangesLog {
+public:
+  class BucketFilter {
+  public:
+    virtual ~BucketFilter() {}
+
+    virtual bool filter(const rgw_bucket& bucket, optional_yield y) const = 0;
+  };
+private:
+
   CephContext *cct;
   rgw::BucketChangeObserver *observer = nullptr;
 
@@ -544,6 +555,8 @@ class RGWDataChangesLog {
 
   ChangesRenewThread *renew_thread;
 
+  BucketFilter *bucket_filter{nullptr};
+
 public:
 
   RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc);
@@ -576,6 +589,12 @@ public:
   }
 
   bool going_down();
+
+  void set_bucket_filter(BucketFilter *f) {
+    bucket_filter = f;
+  }
+
+  bool filter_bucket(const rgw_bucket& bucket, optional_yield y) const;
 };
 
 struct rgw_ep_info {
@@ -608,6 +627,14 @@ class RGWBucketCtl
   RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
 
   int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
+
+  class DataLogFilter : public RGWDataChangesLog::BucketFilter {
+    RGWBucketCtl *bucket_ctl;
+  public:
+    DataLogFilter(RGWBucketCtl *_bucket_ctl) : bucket_ctl(_bucket_ctl) {}
+
+    bool filter(const rgw_bucket& bucket, optional_yield y) const override;
+  } datalog_filter;
   
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
@@ -617,7 +644,8 @@ public:
 
   void init(RGWUserCtl *user_ctl,
             RGWBucketMetadataHandler *_bm_handler,
-            RGWBucketInstanceMetadataHandler *_bmi_handler);
+            RGWBucketInstanceMetadataHandler *_bmi_handler,
+            RGWDataChangesLog *datalog);
 
   struct Bucket {
     struct GetParams {
