@@ -1399,6 +1399,7 @@ public:
     pg_t pg,                       ///< pg to potentially remap
     const set<int>& overfull,      ///< osds we'd want to evacuate
     const vector<int>& underfull,  ///< osds to move to, in order of preference
+    const vector<int>& more_underfull,  ///< less full osds to move to, in order of preference
     vector<int> *orig,
     vector<int> *out);             ///< resulting alternative mapping
 

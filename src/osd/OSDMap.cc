@@ -4398,6 +4398,7 @@ bool OSDMap::try_pg_upmap(
   pg_t pg,                       ///< pg to potentially remap
   const set<int>& overfull,      ///< osds we'd want to evacuate
   const vector<int>& underfull,  ///< osds to move to, in order of preference
+  const vector<int>& more_underfull,  ///< more osds only slightly underfull
   vector<int> *orig,
   vector<int> *out)              ///< resulting alternative mapping
 {
@@ -4426,6 +4427,7 @@ bool OSDMap::try_pg_upmap(
     rule,
     pool->get_size(),
     overfull, underfull,
+    more_underfull,
     *orig,
     out);
   if (r < 0)
@@ -4544,6 +4546,7 @@ int OSDMap::calc_pg_upmaps(
     // build overfull and underfull
     set<int> overfull;
     vector<int> underfull;
+    vector<int> more_underfull;
     for (auto i = deviation_osd.rbegin(); i != deviation_osd.rend(); i++) {
         ldout(cct, 30) << " check " << i->first << " <= " << max_deviation << dendl;
         if (i->first <= max_deviation)
@@ -4558,13 +4561,17 @@ int OSDMap::calc_pg_upmaps(
 
     for (auto i = deviation_osd.begin(); i != deviation_osd.end(); i++) {
         ldout(cct, 30) << " check " << i->first << " >= " << -(int)max_deviation << dendl;
-        if (i->first >= -(int)max_deviation)
+        if (i->first >= 0)
           break;
-	ldout(cct, 30) << " add underfull osd." << i->second << dendl;
-        underfull.push_back(i->second);
+        if (i->first < -(int)max_deviation) {
+	  ldout(cct, 30) << " add underfull osd." << i->second << dendl;
+          underfull.push_back(i->second);
+	} else {
+          more_underfull.push_back(i->second);
+	}
     }
-    if (underfull.empty()) {
-      ldout(cct, 20) << __func__ << " failed to build underfull" << dendl;
+    if (underfull.empty() && more_underfull.empty()) {
+      ldout(cct, 20) << __func__ << " failed to build underfull and more_underfull" << dendl;
       break;
     }
 
@@ -4581,7 +4588,7 @@ int OSDMap::calc_pg_upmaps(
     auto temp_pgs_by_osd = pgs_by_osd;
     // always start with fullest, break if we find any changes to make
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
-      if (skip_overfull) {
+      if (skip_overfull && !underfull.empty()) {
         ldout(cct, 10) << " skipping overfull " << dendl;
         break; // fall through to check underfull
       }
@@ -4693,7 +4700,7 @@ int OSDMap::calc_pg_upmaps(
 	ldout(cct, 10) << " trying " << pg << dendl;
         vector<int> raw, orig, out;
         tmp.pg_to_raw_upmap(pg, &raw, &orig); // including existing upmaps too
-	if (!try_pg_upmap(cct, pg, overfull, underfull, &orig, &out)) {
+	if (!try_pg_upmap(cct, pg, overfull, underfull, more_underfull, &orig, &out)) {
 	  continue;
 	}
 	ldout(cct, 10) << " " << pg << " " << orig << " -> " << out << dendl;
