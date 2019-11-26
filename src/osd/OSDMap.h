@@ -1433,6 +1433,7 @@ public:
     pg_t pg,                       ///< pg to potentially remap
     const std::set<int>& overfull,      ///< osds we'd want to evacuate
     const std::vector<int>& underfull,  ///< osds to move to, in order of preference
+    const std::vector<int>& more_underfull,  ///< less full osds to move to, in order of preference
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
