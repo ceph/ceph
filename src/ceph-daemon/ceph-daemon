@@ -1928,6 +1928,11 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger('ceph-daemon')
 
+    # root?
+    if os.geteuid() != 0:
+        sys.stderr.write('ERROR: ceph-daemon should be run as root\n')
+        sys.exit(1)
+
     # podman or docker?
     if args.docker:
         container_path = find_program('docker')
