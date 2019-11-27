@@ -18,7 +18,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <thread>
 #ifndef _WIN32
 #include <sys/mount.h>
 #endif
@@ -358,6 +360,42 @@ ssize_t writev(int fd, const struct iovec *iov, int iov_cnt) {
   }
 
   return written;
+}
+
+int &alloc_tls() {
+  static __thread int tlsvar;
+  tlsvar++;
+  return tlsvar;
+}
+
+int apply_tls_workaround() {
+  // Workaround for the following Mingw bugs:
+  // https://sourceforge.net/p/mingw-w64/bugs/727/
+  // https://sourceforge.net/p/mingw-w64/bugs/527/
+  // https://sourceforge.net/p/mingw-w64/bugs/445/
+  // https://gcc.gnu.org/bugzilla/attachment.cgi?id=41382
+  pthread_key_t key;
+  pthread_key_create(&key, nullptr);
+  // Use a TLS slot for emutls
+  alloc_tls();
+  // Free up a slot that can now be used for c++ destructors
+  pthread_key_delete(key);
+}
+
+CEPH_CONSTRUCTOR(ceph_windows_init) {
+  // This will run at startup time before invoking main().
+  WSADATA wsaData;
+  int error;
+
+  #ifdef __MINGW32__
+  apply_tls_workaround();
+  #endif
+
+  error = WSAStartup(MAKEWORD(2, 2), &wsaData);
+  if (error != 0) {
+    fprintf(stderr, "WSAStartup failed: %d", WSAGetLastError());
+    exit(error);
+  }
 }
 
 #endif /* _WIN32 */
