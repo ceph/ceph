@@ -174,9 +174,6 @@ int main(int argc, char* argv[])
           reference_wrapper<crimson::net::Messenger>(hb_front_msgr.local()),
           reference_wrapper<crimson::net::Messenger>(hb_back_msgr.local())).get();
         seastar::engine().at_exit([&] {
-          return osd.stop();
-        });
-        seastar::engine().at_exit([&] {
           return seastar::when_all_succeed(cluster_msgr.stop(),
                                            client_msgr.stop(),
                                            hb_front_msgr.stop(),
@@ -194,6 +191,9 @@ int main(int argc, char* argv[])
 	    local_conf().get_val<uuid_d>("osd_uuid"),
 	    local_conf().get_val<uuid_d>("fsid")).get();
         }
+        seastar::engine().at_exit([&] {
+          return osd.stop();
+        });
         if (config.count("mkkey") || config.count("mkfs")) {
           seastar::engine().exit(0);
         } else {
