@@ -49,7 +49,8 @@ class OpsExecuter {
   using watch_errorator = crimson::errorator<
     crimson::ct_error::enoent,
     crimson::ct_error::invarg,
-    crimson::ct_error::not_connected>;
+    crimson::ct_error::not_connected,
+    crimson::ct_error::timed_out>;
 
 public:
   // because OpsExecuter is pretty heavy-weight object we want to ensure
@@ -112,6 +113,10 @@ private:
     class ObjectState& os,
     ceph::os::Transaction& txn);
   watch_errorator::future<> do_op_watch_subop_unwatch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_ping(
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);

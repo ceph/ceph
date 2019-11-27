@@ -214,6 +214,30 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
     });
 }
 
+OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_ping(
+  OSDOp& osd_op,
+  ObjectState& os,
+  ceph::os::Transaction& txn)
+{
+  const entity_name_t& entity = get_message().get_reqid().name;
+  const auto& cookie = osd_op.op.watch.cookie;
+  const auto key = std::make_pair(cookie, entity);
+
+  // Note: WATCH with PING doesn't cause may_write() to return true,
+  // so if there is nothing else in the transaction, this is going
+  // to run do_osd_op_effects, but not write out a log entry */
+  if (!os.oi.watchers.count(key)) {
+    return crimson::ct_error::not_connected::make();
+  }
+  auto it = obc->watchers.find(key);
+  if (it == std::end(obc->watchers) || !it->second->is_connected()) {
+    return crimson::ct_error::timed_out::make();
+  }
+  logger().info("found existing watch by {}", entity);
+  it->second->got_ping(ceph_clock_now());
+  return seastar::now();
+}
+
 OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch(
   OSDOp& osd_op,
   ObjectState& os,
@@ -228,8 +252,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch(
     case CEPH_OSD_WATCH_OP_RECONNECT:
       return do_op_watch_subop_reconnect(osd_op, os, txn);
     case CEPH_OSD_WATCH_OP_PING:
-      // TODO: implement ping
-      break;
+      return do_op_watch_subop_ping(osd_op, os, txn);
     case CEPH_OSD_WATCH_OP_UNWATCH:
       return do_op_watch_subop_unwatch(osd_op, os, txn);
     case CEPH_OSD_WATCH_OP_LEGACY_WATCH:

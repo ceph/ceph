@@ -852,6 +852,7 @@ namespace ct_error {
   using operation_not_supported =
     ct_error_code<std::errc::operation_not_supported>;
   using not_connected = ct_error_code<std::errc::not_connected>;
+  using timed_out = ct_error_code<std::errc::timed_out>;
 }
 
 using stateful_errc = stateful_error_t<std::errc>;
