@@ -42,8 +42,8 @@ import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
 import { OsdSmartListComponent } from './osd/osd-smart-list/osd-smart-list.component';
-import { AlertListComponent } from './prometheus/alert-list/alert-list.component';
-import { PrometheusTabsComponent } from './prometheus/prometheus-tabs/prometheus-tabs.component';
+import { ActiveAlertListComponent } from './prometheus/active-alert-list/active-alert-list.component';
+import { MonitoringListComponent } from './prometheus/monitoring-list/monitoring-list.component';
 import { RulesListComponent } from './prometheus/rules-list/rules-list.component';
 import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
@@ -101,11 +101,10 @@ import { ServicesComponent } from './services/services.component';
     LogsComponent,
     OsdRecvSpeedModalComponent,
     OsdPgScrubModalComponent,
-    AlertListComponent,
+    ActiveAlertListComponent,
     OsdRecvSpeedModalComponent,
     SilenceFormComponent,
     SilenceListComponent,
-    PrometheusTabsComponent,
     SilenceMatcherModalComponent,
     ServicesComponent,
     InventoryComponent,
@@ -117,7 +116,8 @@ import { ServicesComponent } from './services/services.component';
     OsdDevicesSelectionGroupsComponent,
     OsdCreationPreviewModalComponent,
     RulesListComponent,
-    AlertListComponent
+    ActiveAlertListComponent,
+    MonitoringListComponent
   ]
 })
 export class ClusterModule {}
