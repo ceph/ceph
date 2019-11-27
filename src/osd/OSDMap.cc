@@ -4545,19 +4545,21 @@ int OSDMap::calc_pg_upmaps(
     ldout(cct, 30) << "Top of loop #" << max+1 << dendl;
     // build overfull and underfull
     set<int> overfull;
+    set<int> more_overfull;
+    bool using_more_overfull = false;
     vector<int> underfull;
     vector<int> more_underfull;
     for (auto i = deviation_osd.rbegin(); i != deviation_osd.rend(); i++) {
         ldout(cct, 30) << " check " << i->first << " <= " << max_deviation << dendl;
-        if (i->first <= max_deviation)
+	if (i->first <= 0)
 	  break;
-	ldout(cct, 30) << " add overfull osd." << i->second << dendl;
-        overfull.insert(i->second);
+        if (i->first > max_deviation) {
+	  ldout(cct, 30) << " add overfull osd." << i->second << dendl;
+          overfull.insert(i->second);
+	} else {
+          more_overfull.insert(i->second);
+	}
       }
-    if (overfull.empty()) {
-      ldout(cct, 20) << __func__ << " failed to build overfull" << dendl;
-      break;
-    }
 
     for (auto i = deviation_osd.begin(); i != deviation_osd.end(); i++) {
         ldout(cct, 30) << " check " << i->first << " >= " << -(int)max_deviation << dendl;
@@ -4570,9 +4572,14 @@ int OSDMap::calc_pg_upmaps(
           more_underfull.push_back(i->second);
 	}
     }
-    if (underfull.empty() && more_underfull.empty()) {
-      ldout(cct, 20) << __func__ << " failed to build underfull and more_underfull" << dendl;
+    if (underfull.empty() && overfull.empty()) {
+      ldout(cct, 20) << __func__ << " failed to build overfull and underfull" << dendl;
       break;
+    }
+    if (overfull.empty() && !underfull.empty()) {
+      ldout(cct, 20) << __func__ << " Using more_overfull since we still have underfull" << dendl;
+      overfull = more_overfull;
+      using_more_overfull = true;
     }
 
     ldout(cct, 10) << " overfull " << overfull
@@ -4600,7 +4607,7 @@ int OSDMap::calc_pg_upmaps(
                        << " deviation " << deviation
 		       << dendl;
       ceph_assert(target > 0);
-      if (deviation <= max_deviation) {
+      if (!using_more_overfull && deviation <= max_deviation) {
 	ldout(cct, 10) << " osd." << osd
                        << " target " << target
                        << " deviation " << deviation
