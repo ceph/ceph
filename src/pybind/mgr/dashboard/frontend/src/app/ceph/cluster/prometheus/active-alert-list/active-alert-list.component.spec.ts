@@ -16,11 +16,11 @@ import { SharedModule } from '../../../../shared/shared.module';
 import { CephModule } from '../../../ceph.module';
 import { DashboardModule } from '../../../dashboard/dashboard.module';
 import { ClusterModule } from '../../cluster.module';
-import { AlertListComponent } from './alert-list.component';
+import { ActiveAlertListComponent } from './active-alert-list.component';
 
-describe('AlertListComponent', () => {
-  let component: AlertListComponent;
-  let fixture: ComponentFixture<AlertListComponent>;
+describe('ActiveAlertListComponent', () => {
+  let component: ActiveAlertListComponent;
+  let fixture: ComponentFixture<ActiveAlertListComponent>;
 
   configureTestBed({
     imports: [
@@ -39,7 +39,7 @@ describe('AlertListComponent', () => {
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(AlertListComponent);
+    fixture = TestBed.createComponent(ActiveAlertListComponent);
     component = fixture.componentInstance;
   });
 
@@ -57,39 +57,39 @@ describe('AlertListComponent', () => {
 
     expect(tableActions).toEqual({
       'create,update,delete': {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       'create,update': {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       'create,delete': {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       create: {
-        actions: ['Create silence'],
+        actions: ['Create Silence'],
         primary: {
-          multiple: 'Create silence',
-          executing: 'Create silence',
-          single: 'Create silence',
-          no: 'Create silence'
+          multiple: 'Create Silence',
+          executing: 'Create Silence',
+          single: 'Create Silence',
+          no: 'Create Silence'
         }
       },
       'update,delete': {

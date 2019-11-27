@@ -1,0 +1,20 @@
+<tabset #tabs>
+  <tab id="active-alerts"
+       heading="Active Alerts"
+       (selectTab)="setFragment($event)"
+       i18n-heading>
+    <cd-active-alert-list></cd-active-alert-list>
+  </tab>
+  <tab id="all-alerts"
+       heading="All Alerts"
+       (selectTab)="setFragment($event)"
+       i18n-heading>
+    <cd-rules-list [data]="prometheusAlertService.rules"></cd-rules-list>
+  </tab>
+  <tab id="silences"
+       heading="Silences"
+       (selectTab)="setFragment($event)"
+       i18n-heading>
+    <cd-silences-list></cd-silences-list>
+  </tab>
+</tabset>
