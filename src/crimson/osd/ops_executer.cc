@@ -263,6 +263,40 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch(
   return crimson::ct_error::invarg::make();
 }
 
+OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
+  OSDOp& osd_op,
+  const ObjectState& os)
+{
+  if (!os.exists) {
+    return crimson::ct_error::enoent::make();
+  }
+  return with_effect_on_obc(notify_info_t{},
+    [&] (auto& ctx) {
+      try {
+        auto bp = osd_op.indata.cbegin();
+        uint32_t ver; // obsolete
+        ceph::decode(ver, bp);
+        ceph::decode(ctx.timeout, bp);
+        ceph::decode(ctx.bl, bp);
+      } catch (const buffer::error&) {
+        ctx.timeout = 0;
+      }
+      if (!ctx.timeout) {
+        using crimson::common::local_conf;
+        ctx.timeout = local_conf()->osd_default_notify_timeout;
+      }
+      // FIXME
+      ctx.notify_id = 42; //osd->get_next_id(get_osdmap_epoch());
+      ctx.cookie = osd_op.op.notify.cookie;
+      // return our unique notify id to the client
+      ceph::encode(ctx.notify_id, osd_op.outdata);
+      return seastar::now();
+    },
+    [] (auto&& ctx, ObjectContextRef obc) {
+      return seastar::now();
+  });
+}
+
 static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   const std::string& type,
   bufferlist::const_iterator& iter)
@@ -597,6 +631,10 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
   case CEPH_OSD_OP_WATCH:
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return do_op_watch(osd_op, os, txn);
+    });
+  case CEPH_OSD_OP_NOTIFY:
+    return do_read_op([this, &osd_op] (auto&, const auto& os) {
+      return do_op_notify(osd_op, os);
     });
 
   default:

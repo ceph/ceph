@@ -120,6 +120,9 @@ private:
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_notify(
+    class OSDOp& osd_op,
+    const class ObjectState& os);
 
   hobject_t &get_target() const {
     return obc->obs.oi.soid;
