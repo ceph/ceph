@@ -1354,6 +1354,7 @@ def command_ceph_volume():
     if args.fsid:
         make_log_dir(args.fsid)
 
+    (uid, gid) = extract_uid_gid()
     mounts = get_container_mounts(args.fsid, 'osd', None)
 
     tmp_config = None
@@ -1367,12 +1368,14 @@ def command_ceph_volume():
         # tmp keyring file
         tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
         os.fchmod(tmp_keyring.fileno(), 0o600)
+        os.fchown(tmp_keyring.fileno(), uid, gid)
         tmp_keyring.write(keyring)
         tmp_keyring.flush()
 
         # tmp config file
         tmp_config = tempfile.NamedTemporaryFile(mode='w')
         os.fchmod(tmp_config.fileno(), 0o600)
+        os.fchown(tmp_keyring.fileno(), uid, gid)
         tmp_config.write(config)
         tmp_config.flush()
 
