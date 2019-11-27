@@ -118,6 +118,98 @@ function TEST_balancer() {
     teardown $dir || return 1
 }
 
+function TEST_balancer2() {
+    local dir=$1
+    TEST_PGS1=118
+    TEST_PGS2=132
+    TOTAL_PGS=$(expr $TEST_PGS1 + $TEST_PGS2)
+    OSDS=5
+    DEFAULT_REPLICAS=3
+    # Integer average of PGS per OSD (70.8), so each OSD >= this
+    FINAL_PER_OSD1=$(expr \( $TEST_PGS1 \* $DEFAULT_REPLICAS \) / $OSDS)
+    # Integer average of PGS per OSD (150)
+    FINAL_PER_OSD2=$(expr \( \( $TEST_PGS1 + $TEST_PGS2 \) \* $DEFAULT_REPLICAS \) / $OSDS)
+
+    CEPH_ARGS+="--osd_pool_default_pg_autoscale_mode=off "
+    CEPH_ARGS+="--debug_osd=20 "
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $i || return 1
+    done
+
+    ceph osd set-require-min-compat-client luminous
+    ceph balancer mode upmap || return 1
+    ceph balancer on || return 1
+    ceph config set mgr mgr/balancer/sleep_interval 5
+
+    create_pool $TEST_POOL1 $TEST_PGS1
+
+    wait_for_clean || return 1
+
+    # Wait up to 2 minutes
+    OK=no
+    for i in $(seq 1 25)
+    do
+      sleep 5
+      if grep -q "Optimization plan is almost perfect" $dir/mgr.x.log
+      then
+        OK=yes
+        break
+      fi
+    done
+    test $OK = "yes" || return 1
+    # Plan is found, but PGs still need to move
+    sleep 30
+    ceph osd df
+
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[0].pgs')
+    test $PGS -ge $FINAL_PER_OSD1 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[1].pgs')
+    test $PGS -ge $FINAL_PER_OSD1 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[2].pgs')
+    test $PGS -ge $FINAL_PER_OSD1 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[3].pgs')
+    test $PGS -ge $FINAL_PER_OSD1 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[4].pgs')
+    test $PGS -ge $FINAL_PER_OSD1 || return 1
+
+    create_pool $TEST_POOL2 $TEST_PGS2
+
+    # Wait up to 2 minutes
+    OK=no
+    for i in $(seq 1 25)
+    do
+      sleep 5
+      COUNT=$(grep "Optimization plan is almost perfect" $dir/mgr.x.log | wc -l)
+      if test $COUNT = "2"
+      then
+        OK=yes
+        break
+      fi
+    done
+    test $OK = "yes" || return 1
+    # Plan is found, but PGs still need to move
+    sleep 30
+    ceph osd df
+
+    # FINAL_PER_OSD2 should distribute evenly
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[0].pgs')
+    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[1].pgs')
+    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[2].pgs')
+    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[3].pgs')
+    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    PGS=$(ceph osd df --format=json-pretty | jq '.nodes[4].pgs')
+    test $PGS -eq $FINAL_PER_OSD2 || return 1
+
+    teardown $dir || return 1
+}
+
 main balancer "$@"
 
 # Local Variables:
