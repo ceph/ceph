@@ -39,9 +39,9 @@ export class NavigationComponent implements OnInit {
       }
       this.summaryData = data;
     });
-    if (this.permissions.configOpt.read) {
-      this.prometheusService.ifAlertmanagerConfigured(() => (this.prometheusConfigured = true));
-    }
+    this.prometheusService.ifAlertmanagerConfigured(() => {
+      this.prometheusConfigured = true;
+    });
   }
 
   blockHealthColor() {
