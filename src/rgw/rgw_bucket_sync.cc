@@ -141,7 +141,8 @@ pair<zb_pipe_map_t::const_iterator, zb_pipe_map_t::const_iterator> rgw_sync_grou
 
 
 template <typename CB>
-void rgw_sync_group_pipe_map::init(const rgw_zone_id& _zone,
+void rgw_sync_group_pipe_map::init(CephContext *cct,
+                                   const rgw_zone_id& _zone,
                                    std::optional<rgw_bucket> _bucket,
                                    const rgw_sync_policy_group& group,
                                    rgw_sync_data_flow_group *_default_flow,
@@ -158,9 +159,12 @@ void rgw_sync_group_pipe_map::init(const rgw_zone_id& _zone,
 
   std::vector<rgw_sync_bucket_pipes> zone_pipes;
 
+  string bucket_key = (bucket ? bucket->get_key() : "*");
+
   /* only look at pipes that touch the specific zone and bucket */
   for (auto& pipe : group.pipes) {
     if (pipe.contains_zone_bucket(zone, bucket)) {
+      ldout(cct, 20) << __func__ << "(): pipe_map (zone=" << zone << " bucket=" << bucket_key << "): adding potential pipe: " << pipe << dendl;
       zone_pipes.push_back(pipe);
     }
   }
@@ -526,7 +530,7 @@ void RGWBucketSyncFlowManager::init(const rgw_sync_policy_info& sync_policy) {
     auto& group = item.second;
     auto& flow_group_map = flow_groups[group.id];
 
-    flow_group_map.init(zone_id, bucket, group,
+    flow_group_map.init(cct, zone_id, bucket, group,
                         (default_flow ? &(*default_flow) : nullptr),
                         &all_zones,
                         [&](const rgw_zone_id& source_zone,
@@ -551,10 +555,10 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
                                        bool only_enabled) const
 
 {
-  rgw_sync_bucket_entity entity;
-  entity.zone = zone_id;
-  entity.bucket = effective_bucket.value_or(rgw_bucket());
-
+  string effective_bucket_key;
+  if (effective_bucket) {
+    effective_bucket_key = effective_bucket->get_key();
+  }
   if (parent) {
     parent->reflect(effective_bucket, source_pipes, dest_pipes, only_enabled);
   }
@@ -577,6 +581,7 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
 
+      ldout(cct, 20) << __func__ << "(): flow manager (bucket=" << effective_bucket_key << "): adding source pipe: " << pipe << dendl;
       source_pipes->insert(pipe);
     }
 
@@ -590,15 +595,18 @@ void RGWBucketSyncFlowManager::reflect(std::optional<rgw_bucket> effective_bucke
       pipe.source.apply_bucket(effective_bucket);
       pipe.dest.apply_bucket(effective_bucket);
 
+      ldout(cct, 20) << __func__ << "(): flow manager (bucket=" << effective_bucket_key << "): adding dest pipe: " << pipe << dendl;
       dest_pipes->insert(pipe);
     }
   }
 }
 
 
-RGWBucketSyncFlowManager::RGWBucketSyncFlowManager(const rgw_zone_id& _zone_id,
+RGWBucketSyncFlowManager::RGWBucketSyncFlowManager(CephContext *_cct,
+                                                   const rgw_zone_id& _zone_id,
                                                    std::optional<rgw_bucket> _bucket,
-                                                   const RGWBucketSyncFlowManager *_parent) : zone_id(_zone_id),
+                                                   const RGWBucketSyncFlowManager *_parent) : cct(_cct),
+                                                                                              zone_id(_zone_id),
                                                                                               bucket(_bucket),
                                                                                               parent(_parent) {}
 
@@ -660,7 +668,8 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                                                        std::optional<rgw_zone_id> effective_zone) : zone_svc(_zone_svc) ,
                                                                                                     bucket_sync_svc(_bucket_sync_svc) {
   zone_id = effective_zone.value_or(zone_svc->zone_id());
-  flow_mgr.reset(new RGWBucketSyncFlowManager(zone_id,
+  flow_mgr.reset(new RGWBucketSyncFlowManager(zone_svc->ctx(),
+                                              zone_id,
                                               nullopt,
                                               nullptr));
   sync_policy = zone_svc->get_zonegroup().sync_policy;
@@ -690,7 +699,8 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicy
   bucket = _bucket_info.bucket;
   zone_svc = parent->zone_svc;
   bucket_sync_svc = parent->bucket_sync_svc;
-  flow_mgr.reset(new RGWBucketSyncFlowManager(parent->zone_id,
+  flow_mgr.reset(new RGWBucketSyncFlowManager(zone_svc->ctx(),
+                                              parent->zone_id,
                                               _bucket_info.bucket,
                                               parent->flow_mgr.get()));
 }
@@ -704,7 +714,8 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicy
   bucket = _bucket;
   zone_svc = parent->zone_svc;
   bucket_sync_svc = parent->bucket_sync_svc;
-  flow_mgr.reset(new RGWBucketSyncFlowManager(parent->zone_id,
+  flow_mgr.reset(new RGWBucketSyncFlowManager(zone_svc->ctx(),
+                                              parent->zone_id,
                                               _bucket,
                                               parent->flow_mgr.get()));
 }

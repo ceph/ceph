@@ -470,9 +470,10 @@ struct rgw_sync_bucket_entities {
                      std::optional<string> bucket_id);
 
   bool match_zone(const rgw_zone_id& zone) const {
-    if (all_zones) {
-      return true;
-    } else if (!zones) {
+    if (!zones) {
+      if (all_zones) {
+	return true;
+      }
       return false;
     }
 

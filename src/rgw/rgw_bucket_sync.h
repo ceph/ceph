@@ -70,7 +70,8 @@ struct rgw_sync_group_pipe_map {
                                                                                 std::optional<rgw_bucket> b) const;
 
   template <typename CB>
-  void init(const rgw_zone_id& _zone,
+  void init(CephContext *cct,
+            const rgw_zone_id& _zone,
             std::optional<rgw_bucket> _bucket,
             const rgw_sync_policy_group& group,
             rgw_sync_data_flow_group *_default_flow,
@@ -234,6 +235,8 @@ public:
 
 private:
 
+  CephContext *cct;
+
   rgw_zone_id zone_id;
   std::optional<rgw_bucket> bucket;
 
@@ -258,7 +261,8 @@ private:
 
 public:
 
-  RGWBucketSyncFlowManager(const rgw_zone_id& _zone_id,
+  RGWBucketSyncFlowManager(CephContext *_cct,
+                           const rgw_zone_id& _zone_id,
                            std::optional<rgw_bucket> _bucket,
                            const RGWBucketSyncFlowManager *_parent);
 
