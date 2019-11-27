@@ -20,7 +20,7 @@
                              writing commands to <file> [default: - for stdout]
      --upmap-max <max-count> set max upmap entries to calculate [default: 10]
      --upmap-deviation <max-deviation>
-                             max deviation from target [default: .01]
+                             max deviation from target [default: 1]
      --upmap-pool <poolname> restrict upmap balancing to 1 or more pools
      --upmap-save            write modified OSDMap with upmap changes
   [1]
