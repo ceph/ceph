@@ -66,7 +66,7 @@ from glob import glob
 
 container_path = None
 
-class CDError(Exception):
+class Error(Exception):
     pass
 
 ##################################
@@ -233,7 +233,7 @@ def infer_fsid(func):
             return func()
 
         if len(fsid_list) > 1:
-            raise CDError('cannot infer fsid, must specify --fsid')
+            raise Error('cannot infer fsid, must specify --fsid')
 
         logger.info('Inferring fsid %s' % fsid_list[0])
         args.fsid = fsid_list[0]
@@ -409,7 +409,7 @@ def get_config_and_keyring():
             with open(args.keyring, 'r') as f:
                 keyring = f.read()
         else:
-            raise CDError('no keyring provided')
+            raise Error('no keyring provided')
         with open(args.config, 'r') as f:
             config = f.read()
     return (config, keyring)
@@ -434,7 +434,7 @@ def get_config_and_both_keyrings():
             with open(args.keyring, 'r') as f:
                 keyring = f.read()
         else:
-            raise CDError('no keyring provided')
+            raise Error('no keyring provided')
         crash_keyring = None
         if args.crash_keyring:
             with open(args.crash_keyring, 'r') as f:
@@ -876,7 +876,7 @@ def command_bootstrap():
     if not args.allow_overwrite:
         for f in [args.output_config, args.output_keyring, args.output_pub_ssh_key]:
             if os.path.exists(f):
-                raise CDError('%s already exists; delete or pass '
+                raise Error('%s already exists; delete or pass '
                               '--allow-overwrite to overwrite' % f)
 
     # initial vars
@@ -897,7 +897,7 @@ def command_bootstrap():
         addr_arg = args.mon_addrv
         mon_ip = args.mon_addrv.split(':')[1]
     else:
-        raise CDError('must specify --mon-ip or --mon-addrv')
+        raise Error('must specify --mon-ip or --mon-addrv')
     if not cp.has_section('global'):
         cp.add_section('global')
     cp.set('global', 'fsid', fsid);
@@ -911,7 +911,7 @@ def command_bootstrap():
         logger.info('Verifying we can ping mon IP %s...' % mon_ip)
         _, _, ret = call(['timeout', '5', 'ping', mon_ip, '-c', '1'], 'ping')
         if ret:
-            raise CDError('failed to ping %s' % mon_ip)
+            raise Error('failed to ping %s' % mon_ip)
 
     if not args.skip_pull:
         logger.info('Pulling latest %s container...' % args.image)
@@ -1208,7 +1208,7 @@ def command_deploy():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
     if daemon_type not in ['mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror']:
-        raise CDError('daemon type %s not recognized' % daemon_type)
+        raise Error('daemon type %s not recognized' % daemon_type)
     (config, keyring, crash_keyring) = get_config_and_both_keyrings()
     if daemon_type == 'mon':
         if args.mon_ip:
@@ -1220,7 +1220,7 @@ def command_deploy():
             config += '[mon.%s]\n\tpublic_network = %s\n' % (daemon_id,
                                                              args.mon_network)
         else:
-            raise CDError('must specify --mon-ip or --mon-network')
+            raise Error('must specify --mon-ip or --mon-network')
     (uid, gid) = extract_uid_gid()
     c = get_container(args.fsid, daemon_type, daemon_id)
     deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
@@ -1285,7 +1285,7 @@ def command_shell():
 def command_enter():
     # type: () -> int
     if not args.fsid:
-        raise CDError('must pass --fsid to specify cluster')
+        raise Error('must pass --fsid to specify cluster')
     (daemon_type, daemon_id) = args.name.split('.', 1)
     container_args = [] # type: List[str]
     if args.command:
@@ -1353,7 +1353,7 @@ def command_ceph_volume():
 def command_unit():
     # type: () -> None
     if not args.fsid:
-        raise CDError('must pass --fsid to specify cluster')
+        raise Error('must pass --fsid to specify cluster')
     (daemon_type, daemon_id) = args.name.split('.', 1)
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
     call_throws([
@@ -1367,7 +1367,7 @@ def command_unit():
 def command_logs():
     # type: () -> None
     if not args.fsid:
-        raise CDError('must pass --fsid to specify cluster')
+        raise Error('must pass --fsid to specify cluster')
     cmd = [str(container_path), 'logs'] # type: List[str]
     if args.follow:
         cmd.append('-f')
@@ -1485,7 +1485,7 @@ def command_adopt():
                                       daemon_id,
                                       legacy_dir=args.legacy_dir)
         if not fsid:
-            raise CDError('could not detect legacy fsid; set fsid in ceph.conf')
+            raise Error('could not detect legacy fsid; set fsid in ceph.conf')
 
         # NOTE: implicit assumption here that the units correspond to the
         # cluster we are adopting based on the /etc/{defaults,sysconfig}/ceph
@@ -1537,7 +1537,7 @@ def command_adopt():
                             enable=True,  # unconditionally enable the new unit
                             start=(state == 'running'))
     else:
-        raise RuntimeError('adoption of style %s not implemented' % args.style)
+        raise Error('adoption of style %s not implemented' % args.style)
 
 ##################################
 
@@ -1545,7 +1545,7 @@ def command_rm_daemon():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
     if daemon_type in ['mon', 'osd'] and not args.force:
-        raise CDError('must pass --force to proceed: '
+        raise Error('must pass --force to proceed: '
                       'this command may destroy precious data!')
     unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
     call(['systemctl', 'stop', unit_name],
@@ -1562,7 +1562,7 @@ def command_rm_daemon():
 def command_rm_cluster():
     # type: () -> None
     if not args.force:
-        raise CDError('must pass --force to proceed: '
+        raise Error('must pass --force to proceed: '
                       'this command may destroy precious data!')
 
     # stop + disable individual daemon units
@@ -1937,17 +1937,20 @@ if __name__ == "__main__":
                 container_path = find_program(i)
                 break
             except Exception as e:
-                logger.debug('could not locate %s: %s' % (i, e))
+                logger.debug('Could not locate %s: %s' % (i, e))
         if not container_path:
-            raise CDError('unable to locate any of %s' % CONTAINER_PREFERENCE)
+            sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
+            sys.exit(1)
 
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
     try:
         r = args.func()
-    except CDError as e:
-        sys.stderr.write('ERROR: %s' % e)
+    except Error as e:
+        if args.verbose:
+            raise
+        sys.stderr.write('ERROR: %s\n' % e)
         sys.exit(1)
     if not r:
         r = 0
