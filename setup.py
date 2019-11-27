@@ -48,16 +48,13 @@ setup(
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Filesystems',
     ],
-    install_requires=['pip-tools',
-                      'tox',
-                      'gevent',
+    install_requires=['gevent',
                       'PyYAML',
                       'argparse >= 1.2.1',
                       'boto >= 2.0b4',
                       'configobj',
                       'six >= 1.9', # python-openstackclient won't work properly with less
                       'pexpect',
-                      'pytest', # for tox.ini
                       'nose', # for qa/tasks/rgw_multisite_tests.py',
                       'docopt',
                       'psutil >= 2.1.0',
@@ -94,6 +91,11 @@ setup(
             'python-neutronclient',
             'raven',
             'requests != 2.13.0',
+        ],
+        'test': [
+            'tox',
+            'pip-tools',
+            'pytest',           # for tox.ini
         ]
     },
 
