@@ -259,8 +259,28 @@ void DaemonStateIndex::cull(const std::string& svc_name,
   }
 
   for (auto &i : victims) {
+    DaemonKey daemon_key{svc_name, i};
+    dout(4) << "Removing data for " << daemon_key << dendl;
+    _erase(daemon_key);
+  }
+}
+
+void DaemonStateIndex::cull_services(const std::set<std::string>& types_exist)
+{
+  std::set<DaemonKey> victims;
+
+  RWLock::WLocker l(lock);
+  for (auto it = all.begin(); it != all.end(); ++it) {
+    const auto& daemon_key = it->first;
+    if (it->second->service_daemon &&
+        types_exist.count(daemon_key.first) == 0) {
+      victims.insert(daemon_key);
+    }
+  }
+
+  for (auto &i : victims) {
     dout(4) << "Removing data for " << i << dendl;
-    _erase({svc_name, i});
+    _erase(i);
   }
 }
 
