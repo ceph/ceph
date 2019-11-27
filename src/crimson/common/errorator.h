@@ -851,6 +851,7 @@ namespace ct_error {
   using permission_denied = ct_error_code<std::errc::permission_denied>;
   using operation_not_supported =
     ct_error_code<std::errc::operation_not_supported>;
+  using not_connected = ct_error_code<std::errc::not_connected>;
 }
 
 using stateful_errc = stateful_error_t<std::errc>;

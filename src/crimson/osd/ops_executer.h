@@ -48,7 +48,8 @@ class OpsExecuter {
   using get_attr_errorator = PGBackend::get_attr_errorator;
   using watch_errorator = crimson::errorator<
     crimson::ct_error::enoent,
-    crimson::ct_error::invarg>;
+    crimson::ct_error::invarg,
+    crimson::ct_error::not_connected>;
 
 public:
   // because OpsExecuter is pretty heavy-weight object we want to ensure
@@ -103,6 +104,10 @@ private:
     class ObjectState& os,
     ceph::os::Transaction& txn);
   watch_errorator::future<> do_op_watch_subop_watch(
+    class OSDOp& osd_op,
+    class ObjectState& os,
+    ceph::os::Transaction& txn);
+  watch_errorator::future<> do_op_watch_subop_reconnect(
     class OSDOp& osd_op,
     class ObjectState& os,
     ceph::os::Transaction& txn);
