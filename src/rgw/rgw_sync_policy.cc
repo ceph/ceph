@@ -193,6 +193,8 @@ void rgw_sync_bucket_entities::add_zones(const std::vector<rgw_zone_id>& new_zon
     }
 
     zones->insert(z);
+
+    all_zones = false;
   }
 }
 
