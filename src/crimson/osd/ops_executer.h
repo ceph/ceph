@@ -123,6 +123,9 @@ private:
   watch_errorator::future<> do_op_notify(
     class OSDOp& osd_op,
     const class ObjectState& os);
+  watch_errorator::future<> do_op_notify_ack(
+    class OSDOp& osd_op,
+    const class ObjectState& os);
 
   hobject_t &get_target() const {
     return obc->obs.oi.soid;

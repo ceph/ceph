@@ -41,6 +41,13 @@ public:
     return seastar::now();
   }
 
+  /// Call when notify_ack received on notify_id
+  seastar::future<> notify_ack(
+    uint64_t notify_id, ///< [in] id of acked notify
+    const ceph::bufferlist& reply_bl) { ///< [in] notify reply buffer
+    return seastar::now();
+  }
+
   template <class... Args>
   static seastar::shared_ptr<Watch> create(Args&&... args) {
     return seastar::make_shared<Watch>(private_ctag_t{},
