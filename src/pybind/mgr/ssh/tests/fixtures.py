@@ -35,6 +35,7 @@ def ssh_module():
             'ssh_config': '',
             'ssh_identity_key': '',
             'ssh_identity_pub': '',
+            'inventory': {},
         }
         m.__init__('ssh', 0, 0)
         yield m

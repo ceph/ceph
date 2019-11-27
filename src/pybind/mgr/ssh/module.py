@@ -639,7 +639,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         return [orchestrator.InventoryNode(host_name) for host_name in self.inventory_cache]
 
-"""
+    """
     def add_host_label(self, host, label):
         if host not in self.inventory:
             raise OrchestratorError('host %s does not exist' % host)
@@ -671,7 +671,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return SSHWriteCompletion(
             self._worker_pool.apply_async(run, (host, label)))
-"""
+    """
 
     @async_map_completion
     def _refresh_host_services(self, host):
