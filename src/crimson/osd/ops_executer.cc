@@ -163,6 +163,21 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_watch(
     });
 }
 
+OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_reconnect(
+  OSDOp& osd_op,
+  ObjectState& os,
+  ceph::os::Transaction& txn)
+{
+  const entity_name_t& entity = get_message().get_reqid().name;
+  const auto& cookie = osd_op.op.watch.cookie;
+  if (!os.oi.watchers.count(std::make_pair(cookie, entity))) {
+    return crimson::ct_error::not_connected::make();
+  } else {
+    logger().info("found existing watch by {}", entity);
+    return do_op_watch_subop_watch(osd_op, os, txn);
+  }
+}
+
 OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
   OSDOp& osd_op,
   ObjectState& os,
@@ -211,8 +226,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch(
     case CEPH_OSD_WATCH_OP_WATCH:
       return do_op_watch_subop_watch(osd_op, os, txn);
     case CEPH_OSD_WATCH_OP_RECONNECT:
-      // TODO: implement reconnect
-      break;
+      return do_op_watch_subop_reconnect(osd_op, os, txn);
     case CEPH_OSD_WATCH_OP_PING:
       // TODO: implement ping
       break;
