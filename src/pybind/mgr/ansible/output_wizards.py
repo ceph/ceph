@@ -6,23 +6,24 @@ completion objects
 """
 
 import json
+import logging
 
 from ceph.deployment import inventory
 from orchestrator import InventoryNode
 
 from .ansible_runner_svc import EVENT_DATA_URL
 
+logger = logging.getLogger(__name__)
+
 class OutputWizard(object):
     """Base class for help to process output in completion objects
     """
-    def __init__(self, ar_client, logger):
+    def __init__(self, ar_client):
         """Make easy to work in output wizards using this attributes:
 
         :param ars_client: Ansible Runner Service client
-        :param logger: log object
         """
         self.ar_client = ar_client
-        self.log = logger
 
     def process(self, operation_id, raw_result):
         """Make the magic here
@@ -139,12 +140,12 @@ class ProcessHostsList(OutputWizard):
                 inventory_nodes.append(InventoryNode(host, inventory.Devices([])))
 
         except ValueError:
-            self.log.exception("Malformed json response")
+            logger.exception("Malformed json response")
         except KeyError:
-            self.log.exception("Unexpected content in Ansible Runner Service"
+            logger.exception("Unexpected content in Ansible Runner Service"
                                " response")
         except TypeError:
-            self.log.exception("Hosts data must be iterable in Ansible Runner "
+            logger.exception("Hosts data must be iterable in Ansible Runner "
                                "Service response")
 
         return inventory_nodes

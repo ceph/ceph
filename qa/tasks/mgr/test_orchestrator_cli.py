@@ -2,6 +2,7 @@ import errno
 import json
 import logging
 from tempfile import NamedTemporaryFile
+from time import sleep
 
 from teuthology.exceptions import CommandFailedError
 
@@ -180,6 +181,7 @@ class TestOrchestratorCli(MgrTestCase):
         evs = json.loads(self._progress_cmd('json'))['completed']
         self.assertEqual(len(evs), 0)
         self._orch_cmd("mgr", "update", "4")
+        sleep(6)  # There is a sleep(5) in the test_orchestrator.module.serve()
         evs = json.loads(self._progress_cmd('json'))['completed']
         self.assertEqual(len(evs), 1)
         self.assertIn('update_mgrs', evs[0]['message'])

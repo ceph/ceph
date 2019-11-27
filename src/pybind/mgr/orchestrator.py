@@ -4,6 +4,8 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+import functools
+import logging
 import sys
 import time
 from collections import namedtuple
@@ -24,12 +26,12 @@ from mgr_util import format_bytes
 
 try:
     from ceph.deployment.drive_group import DriveGroupSpec
-    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator
-
-    T = TypeVar('T')
-    G = Generic[T]
+    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, Type
 except ImportError:
-    T, G = object, object
+    pass
+
+logger = logging.getLogger(__name__)
+
 
 
 def parse_host_specs(host, require_network=True):
@@ -136,27 +138,401 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
 
     return CLICommand(prefix, cmd_args, desc, perm)(wrapper)
 
+
 def _cli_command(perm):
     def inner_cli_command(prefix, cmd_args="", desc=""):
         return lambda func: handle_exception(prefix, cmd_args, desc, perm, func)
     return inner_cli_command
 
+
 _cli_read_command = _cli_command('r')
 _cli_write_command = _cli_command('rw')
 
 
-class _Completion(G):
+def _no_result():
+    return object()
+
+
+class _Promise(object):
+    """
+    A completion may need multiple promises to be fulfilled. `_Promise` is one
+    step.
+
+    Typically ``Orchestrator`` implementations inherit from this class to
+    build their own way of finishing a step to fulfil a future.
+
+    They are not exposed in the orchestrator interface and can be seen as a
+    helper to build orchestrator modules.
+    """
+    INITIALIZED = 1  # We have a parent completion and a next completion
+    RUNNING = 2
+    FINISHED = 3  # we have a final result
+
+    NO_RESULT = _no_result()  # type: None
+    ASYNC_RESULT = object()
+
+    def __init__(self,
+                 _first_promise=None,  # type: Optional["_Promise"]
+                 value=NO_RESULT,  # type: Optional
+                 on_complete=None,    # type: Optional[Callable]
+                 name=None,  # type: Optional[str]
+                 ):
+        self._on_complete = on_complete
+        self._name = name
+        self._next_promise = None  # type: Optional[_Promise]
+
+        self._state = self.INITIALIZED
+        self._exception = None  # type: Optional[Exception]
+
+        # Value of this _Promise. may be an intermediate result.
+        self._value = value
+
+        # _Promise is not a continuation monad, as `_result` is of type
+        # T instead of (T -> r) -> r. Therefore we need to store the first promise here.
+        self._first_promise = _first_promise or self  # type: 'Completion'
+
+    def __repr__(self):
+        name = self._name or getattr(self._on_complete, '__name__', '??') if self._on_complete else 'None'
+        val = repr(self._value) if self._value is not self.NO_RESULT else 'NA'
+        return '{}(_s={}, val={}, _on_c={}, id={}, name={}, pr={}, _next={})'.format(
+            self.__class__, self._state, val, self._on_complete, id(self), name, getattr(next, '_progress_reference', 'NA'), repr(self._next_promise)
+        )
+
+    def pretty_print_1(self):
+        if self._name:
+            name = self._name
+        elif self._on_complete is None:
+            name = 'lambda x: x'
+        elif hasattr(self._on_complete, '__name__'):
+            name = getattr(self._on_complete, '__name__')
+        else:
+            name = self._on_complete.__class__.__name__
+        val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
+        if hasattr(val, 'debug_str'):
+            val = val.debug_str()
+        prefix = {
+            self.INITIALIZED: '      ',
+            self.RUNNING:     '   >>>',
+            self.FINISHED:    '(done)'
+        }[self._state]
+        return '{} {}({}),'.format(prefix, name, val)
+
+    def then(self, on_complete):
+        # type: (Any, Callable) -> Any
+        """
+        Call ``on_complete`` as soon as this promise is finalized.
+        """
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+        if self._on_complete is not None:
+            assert self._next_promise is None
+            self._set_next_promise(self.__class__(
+                _first_promise=self._first_promise,
+                on_complete=on_complete
+            ))
+            return self._next_promise
+
+        else:
+            self._on_complete = on_complete
+            self._set_next_promise(self.__class__(_first_promise=self._first_promise))
+            return self._next_promise
+
+    def _set_next_promise(self, next):
+        # type: (_Promise) -> None
+        assert self is not next
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+
+        self._next_promise = next
+        assert self._next_promise is not None
+        for p in iter(self._next_promise):
+            p._first_promise = self._first_promise
+
+    def _finalize(self, value=NO_RESULT):
+        """
+        Sets this promise to complete.
+
+        Orchestrators may choose to use this helper function.
+
+        :param value: new value.
+        """
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+
+        self._state = self.RUNNING
+
+        if value is not self.NO_RESULT:
+            self._value = value
+        assert self._value is not self.NO_RESULT, repr(self)
+
+        if self._on_complete:
+            try:
+                next_result = self._on_complete(self._value)
+            except Exception as e:
+                self.fail(e)
+                return
+        else:
+            next_result = self._value
+
+        if isinstance(next_result, _Promise):
+            # hack: _Promise is not a continuation monad.
+            next_result = next_result._first_promise  # type: ignore
+            assert next_result not in self, repr(self._first_promise) + repr(next_result)
+            assert self not in next_result
+            next_result._append_promise(self._next_promise)
+            self._set_next_promise(next_result)
+            if self._next_promise._value is self.NO_RESULT:
+                self._next_promise._value = self._value
+            self.propagate_to_next()
+        elif next_result is not self.ASYNC_RESULT:
+            # simple map. simply forward
+            if self._next_promise:
+                self._next_promise._value = next_result
+            else:
+                # Hack: next_result is of type U, _value is of type T
+                self._value = next_result  # type: ignore
+            self.propagate_to_next()
+        else:
+            # asynchronous promise
+            pass
+
+
+    def propagate_to_next(self):
+        self._state = self.FINISHED
+        logger.debug('finalized {}'.format(repr(self)))
+        if self._next_promise:
+            self._next_promise._finalize()
+
+    def fail(self, e):
+        # type: (Exception) -> None
+        """
+        Sets the whole completion to be faild with this exception and end the
+        evaluation.
+        """
+        assert self._state in (self.INITIALIZED, self.RUNNING)
+        logger.exception('_Promise failed')
+        self._exception = e
+        self._value = 'exception'
+        if self._next_promise:
+            self._next_promise.fail(e)
+        self._state = self.FINISHED
+
+    def __contains__(self, item):
+        return any(item is p for p in iter(self._first_promise))
+
+    def __iter__(self):
+        yield self
+        elem = self._next_promise
+        while elem is not None:
+            yield elem
+            elem = elem._next_promise
+
+    def _append_promise(self, other):
+        if other is not None:
+            assert self not in other
+            assert other not in self
+            self._last_promise()._set_next_promise(other)
+
+    def _last_promise(self):
+        # type: () -> _Promise
+        return list(iter(self))[-1]
+
+
+class ProgressReference(object):
+    def __init__(self,
+                 message,  # type: str
+                 mgr,
+                 completion=None  # type: Optional[Callable[[], Completion]]
+                ):
+        """
+        ProgressReference can be used within Completions::
+
+            +---------------+      +---------------------------------+
+            |               | then |                                 |
+            | My Completion | +--> | on_complete=ProgressReference() |
+            |               |      |                                 |
+            +---------------+      +---------------------------------+
+
+        See :func:`Completion.with_progress` for an easy way to create
+        a progress reference
+
+        """
+        super(ProgressReference, self).__init__()
+        self.progress_id = str(uuid.uuid4())
+        self.message = message
+        self.mgr = mgr
+
+        #: The completion can already have a result, before the write
+        #: operation is effective. progress == 1 means, the services are
+        #: created / removed.
+        self.completion = completion  # type: Optional[Callable[[], Completion]]
+
+        #: if a orchestrator module can provide a more detailed
+        #: progress information, it needs to also call ``progress.update()``.
+        self.progress = 0.0
+
+        self._completion_has_result = False
+        self.mgr.all_progress_references.append(self)
+
+    def __str__(self):
+        """
+        ``__str__()`` is used for determining the message for progress events.
+        """
+        return self.message or super(ProgressReference, self).__str__()
+
+    def __call__(self, arg):
+        self._completion_has_result = True
+        if self.progress == 0.0:
+            self.progress = 0.5
+        return arg
+
+    @property
+    def progress(self):
+        return self._progress
+
+    @progress.setter
+    def progress(self, progress):
+        self._progress = progress
+        try:
+            if self.effective:
+                self.mgr.remote("progress", "complete", self.progress_id)
+                self.mgr.all_progress_references = [p for p in self.mgr.all_progress_references if p is not self]
+            else:
+                self.mgr.remote("progress", "update", self.progress_id, self.message,
+                                progress,
+                                [("origin", "orchestrator")])
+        except ImportError:
+            # If the progress module is disabled that's fine,
+            # they just won't see the output.
+            pass
+
+    @property
+    def effective(self):
+        return self.progress == 1 and self._completion_has_result
+
+    def update(self):
+        def progress_run(progress):
+            self.progress = progress
+        if self.completion:
+            c = self.completion().then(progress_run)
+            self.mgr.process([c._first_promise])
+        else:
+            self.progress = 1
+
+    def fail(self):
+        self._completion_has_result = True
+        self.progress = 1
+
+
+class Completion(_Promise):
+    """
+    Combines multiple promises into one overall operation.
+
+    Completions are composable by being able to
+    call one completion from another completion. I.e. making them re-usable
+    using Promises E.g.::
+
+        >>> return Orchestrator().get_hosts().then(self._create_osd)
+
+    where ``get_hosts`` returns a Completion of list of hosts and
+    ``_create_osd`` takes a list of hosts.
+
+    The concept behind this is to store the computation steps
+    explicit and then explicitly evaluate the chain:
+
+        >>> p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
+        ... p.finalize(2)
+        ... assert p.result = "4"
+
+    or graphically::
+
+        +---------------+      +-----------------+
+        |               | then |                 |
+        | lambda x: x*x | +--> | lambda x: str(x)|
+        |               |      |                 |
+        +---------------+      +-----------------+
+
+    """
+    def __init__(self,
+                 _first_promise=None,  # type: Optional["Completion"]
+                 value=_Promise.NO_RESULT,  # type: Any
+                 on_complete=None,  # type: Optional[Callable],
+                 name=None,  # type: Optional[str]
+                 ):
+        super(Completion, self).__init__(_first_promise, value, on_complete, name)
+
+    @property
+    def _progress_reference(self):
+        # type: () -> Optional[ProgressReference]
+        if hasattr(self._on_complete, 'progress_id'):
+            return self._on_complete
+        return None
+
+    @property
+    def progress_reference(self):
+        # type: () -> Optional[ProgressReference]
+        """
+        ProgressReference. Marks this completion
+        as a write completeion.
+        """
+
+        references = [c._progress_reference for c in iter(self) if c._progress_reference is not None]
+        if references:
+            assert len(references) == 1
+            return references[0]
+        return None
+
+    @classmethod
+    def with_progress(cls,  # type: Any
+                      message,  # type: str
+                      mgr,
+                      _first_promise=None,  # type: Optional["Completions"]
+                      value=_Promise.NO_RESULT,  # type: Any
+                      on_complete=None,  # type: Optional[Callable]
+                      calc_percent=None  # type: Optional[Callable[[], Any]]
+                      ):
+        # type: (...) -> Any
+
+        c = cls(
+            _first_promise=_first_promise,
+            value=value,
+            on_complete=on_complete
+        ).add_progress(message, mgr, calc_percent)
+
+        return c._first_promise
+
+    def add_progress(self,
+                     message,  # type: str
+                     mgr,
+                     calc_percent=None  # type: Optional[Callable[[], Any]]
+                     ):
+        return self.then(
+            on_complete=ProgressReference(
+                message=message,
+                mgr=mgr,
+                completion=calc_percent
+            )
+        )
+
+    def fail(self, e):
+        super(Completion, self).fail(e)
+        if self._progress_reference:
+            self._progress_reference.fail()
+
+    def finalize(self, result=_Promise.NO_RESULT):
+        if self._first_promise._state == self.INITIALIZED:
+            self._first_promise._finalize(result)
+
     @property
     def result(self):
-        # type: () -> T
         """
-        Return the result of the operation that we were waited
-        for.  Only valid after calling Orchestrator.wait() on this
+        The result of the operation that we were waited
+        for.  Only valid after calling Orchestrator.process() on this
         completion.
         """
-        raise NotImplementedError()
+        last = self._last_promise()
+        assert last._state == _Promise.FINISHED
+        return last._value
 
     def result_str(self):
+        """Force a string."""
         if self.result is None:
             return ''
         return str(self.result)
@@ -164,27 +540,24 @@ class _Completion(G):
     @property
     def exception(self):
         # type: () -> Optional[Exception]
-        """
-        Holds an exception object.
-        """
-        try:
-            return self.__exception
-        except AttributeError:
-            return None
-
-    @exception.setter
-    def exception(self, value):
-        self.__exception = value
+        return self._last_promise()._exception
 
     @property
-    def is_read(self):
+    def has_result(self):
         # type: () -> bool
-        raise NotImplementedError()
+        """
+        Has the operation already a result?
 
-    @property
-    def is_complete(self):
-        # type: () -> bool
-        raise NotImplementedError()
+        For Write operations, it can already have a
+        result, if the orchestrator's configuration is
+        persistently written. Typically this would
+        indicate that an update had been written to
+        a manifest, but that the update had not
+        necessarily been pushed out to the cluster.
+
+        :return:
+        """
+        return self._last_promise()._state == _Promise.FINISHED
 
     @property
     def is_errored(self):
@@ -196,13 +569,38 @@ class _Completion(G):
         return self.exception is not None
 
     @property
-    def should_wait(self):
+    def needs_result(self):
         # type: () -> bool
-        raise NotImplementedError()
+        """
+        Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return not self.is_errored and not self.has_result
+
+    @property
+    def is_finished(self):
+        # type: () -> bool
+        """
+        Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return self.is_errored or (self.has_result)
+
+    def pretty_print(self):
+
+        reprs = '\n'.join(p.pretty_print_1() for p in iter(self._first_promise))
+        return """<{}>[\n{}\n]""".format(self.__class__.__name__, reprs)
+
+
+def pretty_print(completions):
+    # type: (List[Completion]) -> str
+    return ', '.join(c.pretty_print() for c in completions)
 
 
 def raise_if_exception(c):
-    # type: (_Completion) -> None
+    # type: (Completion) -> None
     """
     :raises OrchestratorError: Some user error or a config error.
     :raises Exception: Some internal error
@@ -233,102 +631,14 @@ def raise_if_exception(c):
         raise e
 
 
-class ReadCompletion(_Completion):
-    """
-    ``Orchestrator`` implementations should inherit from this
-    class to implement their own handles to operations in progress, and
-    return an instance of their subclass from calls into methods.
-    """
-
-    def __init__(self):
-        pass
-
-    @property
-    def is_read(self):
-        return True
-
-    @property
-    def should_wait(self):
-        """Could the external operation be deemed as complete,
-        or should we wait?
-        We must wait for a read operation only if it is not complete.
-        """
-        return not self.is_complete
-
-
-class TrivialReadCompletion(ReadCompletion):
+class TrivialReadCompletion(Completion):
     """
     This is the trivial completion simply wrapping a result.
     """
     def __init__(self, result):
         super(TrivialReadCompletion, self).__init__()
-        self._result = result
-
-    @property
-    def result(self):
-        return self._result
-
-    @property
-    def is_complete(self):
-        return True
-
-
-class WriteCompletion(_Completion):
-    """
-    ``Orchestrator`` implementations should inherit from this
-    class to implement their own handles to operations in progress, and
-    return an instance of their subclass from calls into methods.
-    """
-
-    def __init__(self):
-        self.progress_id = str(uuid.uuid4())
-
-        #: if a orchestrator module can provide a more detailed
-        #: progress information, it needs to also call ``progress.update()``.
-        self.progress = 0.5
-
-    def __str__(self):
-        """
-        ``__str__()`` is used for determining the message for progress events.
-        """
-        return super(WriteCompletion, self).__str__()
-
-    @property
-    def is_persistent(self):
-        # type: () -> bool
-        """
-        Has the operation updated the orchestrator's configuration
-        persistently?  Typically this would indicate that an update
-        had been written to a manifest, but that the update
-        had not necessarily been pushed out to the cluster.
-        """
-        raise NotImplementedError()
-
-    @property
-    def is_effective(self):
-        """
-        Has the operation taken effect on the cluster?  For example,
-        if we were adding a service, has it come up and appeared
-        in Ceph's cluster maps?
-        """
-        raise NotImplementedError()
-
-    @property
-    def is_complete(self):
-        return self.is_errored or (self.is_persistent and self.is_effective)
-
-    @property
-    def is_read(self):
-        return False
-
-    @property
-    def should_wait(self):
-        """Could the external operation be deemed as complete,
-        or should we wait?
-        We must wait for a write operation only if we know
-        it is not persistent yet.
-        """
-        return not self.is_persistent
+        if result:
+            self.finalize(result)
 
 
 def _hide_in_features(f):
@@ -342,6 +652,10 @@ class Orchestrator(object):
     periods ranging from network latencies to package install latencies and large
     internet downloads.  For that reason, all are asynchronous, and return
     ``Completion`` objects.
+
+    Methods should only return the completion and not directly execute
+    anything, like network calls. Otherwise the purpose of
+    those completions is defeated.
 
     Implementations are not required to start work on an operation until
     the caller waits on the relevant Completion objects.  Callers making
@@ -392,19 +706,18 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     @_hide_in_features
-    def wait(self, completions):
+    def process(self, completions):
+        # type: (List[Completion]) -> None
         """
-        Given a list of Completion instances, progress any which are
-        incomplete.  Return a true if everything is done.
+        Given a list of Completion instances, process any which are
+        incomplete.
 
         Callers should inspect the detail of each completion to identify
         partial completion/progress information, and present that information
         to the user.
 
-        For fast operations (e.g. reading from a database), implementations
-        may choose to do blocking IO in this call.
-
-        :rtype: bool
+        This method should not block, as this would make it slow to query
+        a status, while other long running operations are in progress.
         """
         raise NotImplementedError()
 
@@ -437,8 +750,16 @@ class Orchestrator(object):
                     }
         return features
 
+    @_hide_in_features
+    def cancel_completions(self):
+        # type: () -> None
+        """
+        Cancels ongoing completions. Unstuck the mgr.
+        """
+        raise NotImplementedError()
+
     def add_host(self, host):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """
         Add a host to the orchestrator inventory.
 
@@ -447,7 +768,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def remove_host(self, host):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """
         Remove a host from the orchestrator inventory.
 
@@ -456,7 +777,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def get_hosts(self):
-        # type: () -> ReadCompletion[List[InventoryNode]]
+        # type: () -> Completion
         """
         Report the hosts in the cluster.
 
@@ -481,7 +802,7 @@ class Orchestrator(object):
         return NotImplementedError()
 
     def get_inventory(self, node_filter=None, refresh=False):
-        # type: (InventoryFilter, bool) -> ReadCompletion[List[InventoryNode]]
+        # type: (InventoryFilter, bool) -> Completion
         """
         Returns something that was created by `ceph-volume inventory`.
 
@@ -490,7 +811,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
-        # type: (Optional[str], Optional[str], Optional[str], bool) -> ReadCompletion[List[ServiceDescription]]
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -505,7 +826,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def service_action(self, action, service_type, service_name=None, service_id=None):
-        # type: (str, str, str, str) -> WriteCompletion
+        # type: (str, str, str, str) -> Completion
         """
         Perform an action (start/stop/reload) on a service.
 
@@ -520,15 +841,15 @@ class Orchestrator(object):
         :param service_type: e.g. "mds", "rgw", ...
         :param service_name: name of logical service ("cephfs", "us-east", ...)
         :param service_id: service daemon instance (usually a short hostname)
-        :rtype: WriteCompletion
+        :rtype: Completion
         """
-        assert action in ["start", "stop", "reload", "restart", "redeploy"]
-        assert service_name or service_id
-        assert not (service_name and service_id)
+        #assert action in ["start", "stop", "reload, "restart", "redeploy"]
+        #assert service_name or service_id
+        #assert not (service_name and service_id)
         raise NotImplementedError()
 
-    def create_osds(self, drive_group, all_hosts):
-        # type: (DriveGroupSpec, List[str]) -> WriteCompletion
+    def create_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> Completion
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -545,8 +866,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_osds(self, osd_ids, destroy=False):
-        # type: (List[str], bool) -> WriteCompletion
+    def remove_osds(self, osd_ids):
+        # type: (List[str]) -> Completion
         """
         :param osd_ids: list of OSD IDs
         :param destroy: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
@@ -568,7 +889,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mgrs(self, num, hosts):
-        # type: (int, List[str]) -> WriteCompletion
+        # type: (int, List[str]) -> Completion
         """
         Update the number of cluster managers.
 
@@ -578,7 +899,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mons(self, num, hosts):
-        # type: (int, List[Tuple[str,str]]) -> WriteCompletion
+        # type: (int, List[Tuple[str,str,str]]) -> Completion
         """
         Update the number of cluster monitors.
 
@@ -588,17 +909,17 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_mds(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """Create a new MDS cluster"""
         raise NotImplementedError()
 
     def remove_mds(self, name):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """Remove an MDS cluster"""
         raise NotImplementedError()
 
     def update_mds(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """
         Update / redeploy existing MDS cluster
         Like for example changing the number of service instances.
@@ -606,17 +927,17 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_rbd_mirror(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """Create rbd-mirror cluster"""
         raise NotImplementedError()
 
-    def remove_rbd_mirror(self):
-        # type: (str) -> WriteCompletion
+    def remove_rbd_mirror(self, name):
+        # type: (str) -> Completion
         """Remove rbd-mirror cluster"""
         raise NotImplementedError()
 
     def update_rbd_mirror(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (StatelessServiceSpec) -> Completion
         """
         Update / redeploy rbd-mirror cluster
         Like for example changing the number of service instances.
@@ -624,17 +945,17 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_nfs(self, spec):
-        # type: (NFSServiceSpec) -> WriteCompletion
+        # type: (NFSServiceSpec) -> Completion
         """Create a new MDS cluster"""
         raise NotImplementedError()
 
     def remove_nfs(self, name):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """Remove a NFS cluster"""
         raise NotImplementedError()
 
     def update_nfs(self, spec):
-        # type: (NFSServiceSpec) -> WriteCompletion
+        # type: (NFSServiceSpec) -> Completion
         """
         Update / redeploy existing NFS cluster
         Like for example changing the number of service instances.
@@ -642,17 +963,17 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_rgw(self, spec):
-        # type: (RGWSpec) -> WriteCompletion
+        # type: (RGWSpec) -> Completion
         """Create a new MDS zone"""
         raise NotImplementedError()
 
     def remove_rgw(self, zone):
-        # type: (str) -> WriteCompletion
+        # type: (str) -> Completion
         """Remove a RGW zone"""
         raise NotImplementedError()
 
     def update_rgw(self, spec):
-        # type: (StatelessServiceSpec) -> WriteCompletion
+        # type: (RGWSpec) -> Completion
         """
         Update / redeploy existing RGW zone
         Like for example changing the number of service instances.
@@ -661,12 +982,12 @@ class Orchestrator(object):
 
     @_hide_in_features
     def upgrade_start(self, upgrade_spec):
-        # type: (UpgradeSpec) -> WriteCompletion
+        # type: (UpgradeSpec) -> Completion
         raise NotImplementedError()
 
     @_hide_in_features
     def upgrade_status(self):
-        # type: () -> ReadCompletion[UpgradeStatusSpec]
+        # type: () -> Completion
         """
         If an upgrade is currently underway, report on where
         we are in the process, or if some error has occurred.
@@ -677,7 +998,7 @@ class Orchestrator(object):
 
     @_hide_in_features
     def upgrade_available(self):
-        # type: () -> ReadCompletion[List[str]]
+        # type: () -> Completion
         """
         Report on what versions are available to upgrade to
 
@@ -1014,6 +1335,14 @@ class InventoryNode(object):
     def __repr__(self):
         return "<InventoryNode>({name})".format(name=self.name)
 
+    @staticmethod
+    def get_host_names(nodes):
+        # type: (List[InventoryNode]) -> List[str]
+        return [node.name for node in nodes]
+
+    def __eq__(self, other):
+        return self.name == other.name and self.devices == other.devices
+
 
 class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev'])):
     """
@@ -1034,7 +1363,6 @@ def _mk_orch_methods(cls):
     def shim(method_name):
         def inner(self, *args, **kwargs):
             completion = self._oremote(method_name, args, kwargs)
-            self._update_completion_progress(completion, 0)
             return completion
         return inner
 
@@ -1069,6 +1397,12 @@ class OrchestratorClientMixin(Orchestrator):
 
         self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties
 
+    def __get_mgr(self):
+        try:
+            return self.__mgr
+        except AttributeError:
+            return self
+
     def _oremote(self, meth, args, kwargs):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
@@ -1077,10 +1411,8 @@ class OrchestratorClientMixin(Orchestrator):
         :raises OrchestratorError: orchestrator failed to perform
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
-        try:
-            mgr = self.__mgr
-        except AttributeError:
-            mgr = self
+        mgr = self.__get_mgr()
+
         try:
             o = mgr._select_orchestrator()
         except AttributeError:
@@ -1092,25 +1424,9 @@ class OrchestratorClientMixin(Orchestrator):
         mgr.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(mgr.module_name, o, meth, args, kwargs))
         return mgr.remote(o, meth, *args, **kwargs)
 
-    def _update_completion_progress(self, completion, force_progress=None):
-        # type: (WriteCompletion, Optional[float]) -> None
-        try:
-            progress = force_progress if force_progress is not None else completion.progress
-            if completion.is_complete:
-                self.remote("progress", "complete", completion.progress_id)
-            else:
-                self.remote("progress", "update", completion.progress_id, str(completion), progress,
-                            [("origin", "orchestrator")])
-        except AttributeError:
-            # No WriteCompletion. Ignore.
-            pass
-        except ImportError:
-            # If the progress module is disabled that's fine,
-            # they just won't see the output.
-            pass
 
     def _orchestrator_wait(self, completions):
-        # type: (List[_Completion]) -> None
+        # type: (List[Completion]) -> None
         """
         Wait for completions to complete (reads) or
         become persistent (writes).
@@ -1119,17 +1435,17 @@ class OrchestratorClientMixin(Orchestrator):
 
         :param completions: List of Completions
         :raises NoOrchestrator:
+        :raises RuntimeError: something went wrong while calling the process method.
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
-        for c in completions:
-            self._update_completion_progress(c)
-        while not self.wait(completions):
-            if any(c.should_wait for c in completions):
+        while any(not c.has_result for c in completions):
+            self.process(completions)
+            self.__get_mgr().log.info("Operations pending: %s",
+                                      sum(1 for c in completions if not c.has_result))
+            if any(c.needs_result for c in completions):
                 time.sleep(1)
             else:
                 break
-        for c in completions:
-            self._update_completion_progress(c)
 
 
 class OutdatableData(object):
