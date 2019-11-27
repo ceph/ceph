@@ -1061,6 +1061,12 @@ OPTION(bluestore_debug_enforce_settings, OPT_STR)
 OPTION(bluestore_volume_selection_policy, OPT_STR)
 OPTION(bluestore_volume_selection_reserved_factor, OPT_DOUBLE)
 OPTION(bluestore_volume_selection_reserved, OPT_INT)
+/*
+ * Onodes with sizes below this threshold use
+ * bluestore_min_alloc_size for blob allocations
+ * Hence small objects benefit from space saving
+ */
+OPTION(bluestore_use_min_alloc_threshold, OPT_U32)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)

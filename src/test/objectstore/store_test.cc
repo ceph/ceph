@@ -6332,6 +6332,28 @@ TEST_P(StoreTestSpecificAUSize, BluestoreSpaceSavingEnablementTest) {
         ASSERT_EQ(statfs.data_stored, size * 2);
         ASSERT_EQ(statfs.allocated, 0x10000 + round_up_to(size, 0x1000));
       }
+      {
+        // overwrite data in the clone with a larger chunk which
+        // doesn't fall under small allocation
+        bufferlist bl2;
+        bl2.append(
+          std::string(g_conf()->bluestore_use_min_alloc_threshold, 'b'));
+
+        ObjectStore::Transaction t;
+
+        t.truncate(cid, hoid_cloned, 0);
+        t.set_alloc_hint(cid, hoid_cloned, bl2.length(), 0, 0);
+        t.write(cid, hoid_cloned, 0, bl2.length(), bl2);
+        cerr << "Write 'long' object" << std::endl;
+        r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+      }
+      {
+        struct store_statfs_t statfs;
+        int r = store->statfs(&statfs);
+        ASSERT_EQ(r, 0);
+        ASSERT_EQ(statfs.allocated, 0x10000*2);
+      }
 
       {
         ObjectStore::Transaction t;

@@ -4622,6 +4622,11 @@ std::vector<Option> get_global_options() {
     .set_description("Enforces specific hw profile settings")
     .set_long_description("'hdd' enforces settings intended for BlueStore above a rotational drive. 'ssd' enforces settings intended for BlueStore above a solid drive. 'default' - using settings for the actual hardware."),
 
+    Option("bluestore_use_min_alloc_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(48 * 1024)
+    .set_description("Determines threshold to apply small allocations")
+    .set_long_description("Onodes with sizes below this threshold use 'bluestore_min_alloc_size' for blob allocations. Hence small objects benefit from space saving"),
+
     Option("bluestore_avl_alloc_bf_threshold", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(131072)
     .set_description(""),

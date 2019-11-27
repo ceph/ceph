@@ -13751,8 +13751,9 @@ void BlueStore::_choose_write_options(
   if (!o->onode.use_small_alloc() &&
     min_alloc_size != optimal_alloc_size && o->onode.size == 0) {
     // enable small allocations for tiny object which size is known beforehand
-    if (o->onode.expected_object_size &&
-        o->onode.expected_object_size <= (optimal_alloc_size * 3 / 4)) { //FIXME minor: configure threshold?
+    auto exp_size = o->onode.expected_object_size;
+    if (exp_size &&
+      exp_size < g_conf()->bluestore_use_min_alloc_threshold) {
       o->onode.set_flag(bluestore_onode_t::FLAG_SMALL_ALLOC);
       wctx->alloc_size = min_alloc_size;
       alloc_size_order = min_alloc_size_order;
