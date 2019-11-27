@@ -2927,6 +2927,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (meta.data) {
     /* if we want to overwrite the data, we also want to overwrite the
        xattrs, so just remove the object */
+    uint64_t len = meta.data->length();
+    op.set_alloc_hint2(len, len, 0);
     op.write_full(*meta.data);
   }
 

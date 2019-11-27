@@ -88,6 +88,8 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   }
   librados::ObjectWriteOperation op;
   if (offset == 0) {
+    uint64_t len = data.length();
+    op.set_alloc_hint2(len, len, 0);
     op.write_full(data);
   } else {
     op.write(offset, data);
@@ -103,6 +105,8 @@ int RadosWriter::write_exclusive(const bufferlist& data)
 
   librados::ObjectWriteOperation op;
   op.create(true); // exclusive create
+  uint64_t len = data.length();
+  op.set_alloc_hint2(len, len, 0);
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
