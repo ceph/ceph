@@ -292,7 +292,8 @@ class Remote(object):
         :param file_path: The path to the file
         :param context:   The SELinux context to be used
         """
-        if self.os.package_type != 'rpm':
+        if self.os.package_type != 'rpm' or \
+                self.os.name in ['opensuse', 'sle']:
             return
         if teuthology.lock.query.is_vm(self.shortname):
             return

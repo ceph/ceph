@@ -53,6 +53,10 @@ class SELinux(Task):
             if remote.is_vm:
                 msg = "Excluding {host}: VMs are not yet supported"
                 log.info(msg.format(host=remote.shortname))
+            elif remote.os.name in ['opensuse', 'sle']:
+                msg = "Excluding {host}: \
+                        SELinux is not supported for '{os}' os_type yet"
+                log.info(msg.format(host=remote.shortname, os=remote.os.name))
             elif remote.os.package_type == 'rpm':
                 new_cluster.add(remote, roles)
             else:
