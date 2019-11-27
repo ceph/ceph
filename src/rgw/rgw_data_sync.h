@@ -650,6 +650,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
                            rgw::sal::RGWRadosStore *store,
                            const rgw_sync_bucket_pipe& pipe,
                            const RGWBucketInfo& dest_bucket_info,
+                           RGWBucketInfo *psource_bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status);
 
 class RGWDefaultSyncModule : public RGWSyncModule {

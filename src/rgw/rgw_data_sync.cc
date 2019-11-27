@@ -4307,6 +4307,10 @@ int RGWRunBucketSourcesSyncCR::operate()
       ldpp_dout(sync_env->dpp, 20) << __func__ << "(): num shards=" << num_shards << " cur_shard=" << cur_shard << dendl;
 
       for (; num_shards > 0; --num_shards, ++cur_shard) {
+        /*
+         * use a negatvie shard_id for backward compatibility,
+         * this affects the crafted status oid
+         */
         sync_pair.source_bs.shard_id = (source_num_shards > 0 ? cur_shard : -1);
         if (source_num_shards == target_num_shards) {
           sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id;
@@ -4891,6 +4895,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
                            rgw::sal::RGWRadosStore *store,
                            const rgw_sync_bucket_pipe& pipe,
                            const RGWBucketInfo& dest_bucket_info,
+                           RGWBucketInfo *psource_bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status)
 {
   if (!pipe.source.zone ||
@@ -4909,12 +4914,16 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
 
   RGWBucketInfo source_bucket_info;
 
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto& bucket_ctl = store->getRados()->ctl.bucket;
 
-  int ret = store->getRados()->get_bucket_instance_info(obj_ctx, source_bucket, source_bucket_info, nullptr, nullptr, null_yield);
+  int ret = bucket_ctl->read_bucket_info(source_bucket, &source_bucket_info, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info: bucket=" << source_bucket << ": " << cpp_strerror(-ret) << dendl;
     return ret;
+  }
+
+  if (psource_bucket_info) {
+    *psource_bucket_info = source_bucket_info;
   }
 
   RGWDataSyncEnv env;

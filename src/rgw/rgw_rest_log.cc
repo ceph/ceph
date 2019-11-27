@@ -862,7 +862,7 @@ void RGWOp_BILog_Status::execute()
   pipe.source.bucket = info.bucket;
   pipe.dest.zone = store->svc()->zone->zone_id();
   pipe.dest.bucket = info.bucket;
-  http_ret = rgw_bucket_sync_status(this, store, pipe, info, &status);
+  http_ret = rgw_bucket_sync_status(this, store, pipe, info, nullptr, &status);
 }
 
 void RGWOp_BILog_Status::send_response()

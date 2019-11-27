@@ -801,6 +801,32 @@ void RGWBucketSyncPolicyHandler::reflect(RGWBucketSyncFlowManager::pipe_set *pso
   }
 }
 
+multimap<rgw_zone_id, rgw_sync_bucket_pipe> RGWBucketSyncPolicyHandler::get_all_sources()
+{
+  multimap<rgw_zone_id, rgw_sync_bucket_pipe> m;
+
+  for (auto& source_entry : sources) {
+    auto& zone_id = source_entry.first;
+
+    auto& pipes = source_entry.second.pipe_map;
+
+    for (auto& entry : pipes) {
+      auto& pipe = entry.second;
+      m.insert(make_pair(zone_id, pipe));
+    }
+  }
+
+  for (auto& pipe : resolved_sources) {
+    if (!pipe.source.zone) {
+      continue;
+    }
+
+    m.insert(make_pair(*pipe.source.zone, pipe));
+  }
+
+  return std::move(m);
+}
+
 void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sources, std::set<rgw_sync_bucket_pipe> *_targets,
                                            std::optional<rgw_sync_bucket_entity> filter_peer) { /* return raw pipes */
   for (auto& entry : source_pipes.pipe_map) {
