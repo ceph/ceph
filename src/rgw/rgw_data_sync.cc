@@ -2818,7 +2818,7 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
     sync_pair.source_bs.bucket = source_bucket_info.bucket;
     sync_pair.dest_bs.bucket = dest_bucket;
 
-    sync_pair.source_bs.shard_id = cur_shard;
+    sync_pair.source_bs.shard_id = (source_bucket_info.num_shards > 0 ? cur_shard : -1);
 
     if (dest_bucket == source_bucket_info.bucket) {
       sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id;
@@ -4307,9 +4307,9 @@ int RGWRunBucketSourcesSyncCR::operate()
       ldpp_dout(sync_env->dpp, 20) << __func__ << "(): num shards=" << num_shards << " cur_shard=" << cur_shard << dendl;
 
       for (; num_shards > 0; --num_shards, ++cur_shard) {
-        sync_pair.source_bs.shard_id = cur_shard;
+        sync_pair.source_bs.shard_id = (source_num_shards > 0 ? cur_shard : -1);
         if (source_num_shards == target_num_shards) {
-          sync_pair.dest_bs.shard_id = cur_shard;
+          sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id;
         } else {
           sync_pair.dest_bs.shard_id = -1;
         }
