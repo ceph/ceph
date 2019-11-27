@@ -312,4 +312,23 @@ int lchown(const char *path, uid_t owner, gid_t group);
 
 #endif /* WIN32 */
 
+/* Supplies code to be run at startup time before invoking main().
+ * Use as:
+ *
+ *     CEPH_CONSTRUCTOR(my_constructor) {
+ *         ...some code...
+ *     }
+ */
+#ifdef _MSC_VER
+#pragma section(".CRT$XCU",read)
+#define CEPH_CONSTRUCTOR(f) \
+  static void __cdecl f(void); \
+  __declspec(allocate(".CRT$XCU")) static void (__cdecl*f##_)(void) = f; \
+  static void __cdecl f(void)
+#else
+#define CEPH_CONSTRUCTOR(f) \
+  static void f(void) __attribute__((constructor)); \
+  static void f(void)
+#endif
+
 #endif /* !CEPH_COMPAT_H */

@@ -71,7 +71,8 @@ int NetHandler::set_nonblock(int sd)
   ULONG mode = 1;
   r = ioctlsocket(sd, FIONBIO, &mode);
   if (r) {
-    lderr(cct) << __func__ << " ioctlsocket(FIONBIO) failed: " << r << dendl;
+    lderr(cct) << __func__ << " ioctlsocket(FIONBIO) failed: " << r
+                           << " " << WSAGetLastError() << dendl;
     return -r;
   }
   #else
