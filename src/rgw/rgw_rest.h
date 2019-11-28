@@ -194,6 +194,12 @@ public:
   virtual ~RGWPutBucketTags_ObjStore() = default; 
 };
 
+class RGWPutBucketReplication_ObjStore: public RGWPutBucketReplication {
+public:
+  RGWPutBucketReplication_ObjStore() = default;
+  virtual ~RGWPutBucketReplication_ObjStore() = default; 
+};
+
 class RGWListBuckets_ObjStore : public RGWListBuckets {
 public:
   RGWListBuckets_ObjStore() {}

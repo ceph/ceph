@@ -193,6 +193,13 @@ class utime_t;
 void decode_xml_obj(utime_t& val, XMLObj *obj);
 
 template<class T>
+void decode_xml_obj(std::optional<T>& val, XMLObj *obj)
+{
+  val.emplace();
+  decode_xml_obj(*val, obj);
+}
+
+template<class T>
 void do_decode_xml_obj(list<T>& l, const string& name, XMLObj *obj)
 {
   l.clear();

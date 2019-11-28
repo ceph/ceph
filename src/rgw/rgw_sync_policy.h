@@ -487,6 +487,13 @@ struct rgw_sync_bucket_entities {
   }
 
   static string bucket_key(std::optional<rgw_bucket> b);
+
+  void set_all_zones(bool state) {
+    all_zones = state;
+    if (all_zones) {
+      zones.reset();
+    }
+  }
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entities)
 
