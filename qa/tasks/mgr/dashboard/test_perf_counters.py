@@ -65,9 +65,7 @@ class PerfCountersControllerTest(DashboardTestCase):
         self.assertStatus(404)
         schema = JObj(sub_elems={
             'status': str,
-            'version': str,
             'detail': str,
-            'traceback': str,
-        })
+        }, allow_unknown=True)
         self.assertEqual(self._resp.json()['detail'], "'osd.{}' not found".format(unused_id))
         self.assertSchemaBody(schema)
