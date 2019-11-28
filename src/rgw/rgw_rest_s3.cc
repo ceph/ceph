@@ -623,6 +623,10 @@ struct ReplicationConfiguration {
         RGWXMLDecoder::decode_xml("Status", status, obj);
       }
 
+      void dump_xml(Formatter *f) const {
+        encode_xml("Status", status, f);
+      }
+
       bool is_valid(CephContext *cct) const {
         bool result = is_valid_status(status);
         if (!result) {
@@ -638,6 +642,10 @@ struct ReplicationConfiguration {
       void decode_xml(XMLObj *obj) {
         RGWXMLDecoder::decode_xml("Zone", zone_names, obj);
       }
+
+      void dump_xml(Formatter *f) const {
+        encode_xml("Zone", zone_names, f);
+      }
     };
 
     struct Destination {
@@ -646,6 +654,9 @@ struct ReplicationConfiguration {
 
         void decode_xml(XMLObj *obj) {
           RGWXMLDecoder::decode_xml("Owner", owner, obj);
+        }
+        void dump_xml(Formatter *f) const {
+          encode_xml("Owner", owner, f);
         }
       };
 
@@ -668,6 +679,14 @@ struct ReplicationConfiguration {
         }
         RGWXMLDecoder::decode_xml("Zone", zone_names, obj); /* rgw extension */
       }
+
+      void dump_xml(Formatter *f) const {
+        encode_xml("AccessControlTranslation", acl_translation, f);
+        encode_xml("Account", account, f);
+        encode_xml("Bucket", bucket, f);
+        encode_xml("StorageClass", storage_class, f);
+        encode_xml("Zone", zone_names, f);
+      }
     };
 
     struct Filter {
@@ -683,6 +702,11 @@ struct ReplicationConfiguration {
           RGWXMLDecoder::decode_xml("Key", key, obj);
           RGWXMLDecoder::decode_xml("Value", value, obj);
         };
+
+        void dump_xml(Formatter *f) const {
+          encode_xml("Key", key, f);
+          encode_xml("Value", value, f);
+        }
       };
 
       struct AndElements {
@@ -707,11 +731,20 @@ struct ReplicationConfiguration {
             }
           }
         };
+
+        void dump_xml(Formatter *f) const {
+          encode_xml("Prefix", prefix, f);
+          encode_xml("Tag", tags, f);
+        }
       };
 
       std::optional<string> prefix;
       std::optional<Tag> tag;
       std::optional<AndElements> and_elements;
+
+      bool empty() const {
+        return (!prefix && !tag && !and_elements);
+      }
 
       void decode_xml(XMLObj *obj) {
         RGWXMLDecoder::decode_xml("Prefix", prefix, obj);
@@ -727,6 +760,12 @@ struct ReplicationConfiguration {
           and_elements.reset();
         }
       };
+
+      void dump_xml(Formatter *f) const {
+        encode_xml("Prefix", prefix, f);
+        encode_xml("Tag", tag, f);
+        encode_xml("And", and_elements, f);
+      }
 
       bool is_valid(CephContext *cct) const {
         if (tag && prefix) {
@@ -765,6 +804,42 @@ struct ReplicationConfiguration {
         }
         return 0;
       }
+
+      void from_sync_pipe_filter(const rgw_sync_pipe_filter& f) {
+        if (f.prefix && f.tags.empty()) {
+          prefix = f.prefix;
+          return;
+        }
+        if (f.prefix) {
+          and_elements.emplace();
+          and_elements->prefix = f.prefix;
+        } else if (f.tags.size() == 1) {
+          auto iter = f.tags.begin();
+          if (iter == f.tags.end()) {
+            /* should never happen */
+            return;
+          }
+          auto& t = *iter;
+          tag.emplace();
+          tag->key = t.key;
+          tag->value = t.value;
+          return;
+        }
+
+        if (f.tags.empty()) {
+          return;
+        }
+
+        if (!and_elements) {
+          and_elements.emplace();
+        }
+
+        for (auto& t : f.tags) {
+          auto& tag = and_elements->tags.emplace_back();
+          tag.key = t.key;
+          tag.value = t.value;
+        }
+      }
     };
 
     set<rgw_zone_id> get_zone_ids_from_names(rgw::sal::RGWRadosStore *store,
@@ -779,6 +854,20 @@ struct ReplicationConfiguration {
       }
 
       return std::move(ids);
+    }
+
+    vector<string> get_zone_names_from_ids(rgw::sal::RGWRadosStore *store,
+                                           const set<rgw_zone_id>& zone_ids) const {
+      vector<string> names;
+
+      for (auto& id : zone_ids) {
+        RGWZone *zone;
+        if (store->svc()->zone->find_zone(id, &zone)) {
+          names.emplace_back(zone->name);
+        }
+      }
+
+      return std::move(names);
     }
 
     std::optional<DeleteMarkerReplication> delete_marker_replication;
@@ -805,11 +894,24 @@ struct ReplicationConfiguration {
       if (!filter) {
         RGWXMLDecoder::decode_xml("Filter", filter, obj);
       } else {
+        /* don't want to have filter reset because it might have been initialized
+         * when decoding prefix
+         */
         RGWXMLDecoder::decode_xml("Filter", *filter, obj);
       }
 
       RGWXMLDecoder::decode_xml("Priority", priority, obj);
       RGWXMLDecoder::decode_xml("Status", status, obj);
+    }
+
+    void dump_xml(Formatter *f) const {
+      encode_xml("DeleteMarkerReplication", delete_marker_replication, f);
+      encode_xml("Source", source, f);
+      encode_xml("Destination", destination, f);
+      encode_xml("Filter", filter, f);
+      encode_xml("ID", id, f);
+      encode_xml("Priority", priority, f);
+      encode_xml("Status", status, f);
     }
 
     bool is_valid(CephContext *cct) const {
@@ -874,6 +976,46 @@ struct ReplicationConfiguration {
 
       return 0;
     }
+
+    void from_sync_policy_pipe(rgw::sal::RGWRadosStore *store,
+                              const rgw_sync_bucket_pipes& pipe,
+                              bool enabled) {
+      id = pipe.id;
+      status = (enabled ? "Enabled" : "Disabled");
+      priority = pipe.params.priority;
+
+      if (pipe.source.all_zones) {
+        source.reset();
+      } else if (pipe.source.zones) {
+        source.emplace();
+        source->zone_names = get_zone_names_from_ids(store, *pipe.source.zones);
+      }
+
+      if (!pipe.dest.all_zones &&
+          pipe.dest.zones) {
+        destination.zone_names = get_zone_names_from_ids(store, *pipe.dest.zones);
+      }
+
+      if (pipe.params.dest.acl_translation) {
+        destination.acl_translation.emplace();
+        destination.acl_translation->owner = pipe.params.dest.acl_translation->owner.to_str();
+      }
+
+      if (pipe.params.dest.storage_class) {
+        destination.storage_class = *pipe.params.dest.storage_class;
+      }
+
+      if (pipe.dest.bucket) {
+        destination.bucket = pipe.dest.bucket->get_key();
+      }
+
+      filter.emplace();
+      filter->from_sync_pipe_filter(pipe.params.source.filter);
+
+      if (filter->empty()) {
+        filter.reset();
+      }
+    }
   };
 
   std::vector<Rule> rules;
@@ -881,6 +1023,11 @@ struct ReplicationConfiguration {
   void decode_xml(XMLObj *obj) {
     RGWXMLDecoder::decode_xml("Role", role, obj);
     RGWXMLDecoder::decode_xml("Rule", rules, obj);
+  }
+
+  void dump_xml(Formatter *f) const {
+    encode_xml("Role", role, f);
+    encode_xml("Rule", rules, f);
   }
 
   int to_sync_policy_groups(req_state *s, rgw::sal::RGWRadosStore *store,
@@ -912,8 +1059,50 @@ struct ReplicationConfiguration {
     }
     return 0;
   }
+
+  void from_sync_policy_group(rgw::sal::RGWRadosStore *store,
+                              const rgw_sync_policy_group& group) {
+
+    bool enabled = (group.status == rgw_sync_policy_group::Status::ENABLED);
+
+    for (auto& pipe : group.pipes) {
+      auto& rule = rules.emplace_back();
+      rule.from_sync_policy_pipe(store, pipe, enabled);
+    }
+  }
 };
 
+}
+
+void RGWGetBucketReplication_ObjStore_S3::send_response_data()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  ReplicationConfiguration conf;
+
+  if (s->bucket_info.sync_policy) {
+    auto policy = s->bucket_info.sync_policy;
+
+    auto iter = policy->groups.find(enabled_group_id);
+    if (iter != policy->groups.end()) {
+      conf.from_sync_policy_group(store, iter->second);
+    }
+    iter = policy->groups.find(disabled_group_id);
+    if (iter != policy->groups.end()) {
+      conf.from_sync_policy_group(store, iter->second);
+    }
+  }
+
+  if (!op_ret) {
+  s->formatter->open_object_section_in_ns("ReplicationConfiguration", XMLNS_AWS_S3);
+  conf.dump_xml(s->formatter);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+  }
 }
 
 int RGWPutBucketReplication_ObjStore_S3::get_params()
@@ -4087,7 +4276,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
   } else if (is_notification_op()) {
     return RGWHandler_REST_PSNotifs_S3::create_get_op();
   } else if (is_replication_op()) {
-    return nullptr; // new RGWGetBucketReplication_ObjStore_S3;
+    return new RGWGetBucketReplication_ObjStore_S3;
   }
   return get_obj_op(true);
 }

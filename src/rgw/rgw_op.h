@@ -468,6 +468,18 @@ public:
 
 struct rgw_sync_policy_group;
 
+class RGWGetBucketReplication : public RGWOp {
+public:
+  int verify_permission() override;
+  void execute() override;
+  void pre_exec() override;
+
+  virtual void send_response_data() = 0;
+  const char* name() const override { return "get_bucket_replication"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_REPLICATION; }
+};
+
 class RGWPutBucketReplication : public RGWOp {
 protected:
   bufferlist in_data;
