@@ -409,7 +409,6 @@ void PeeringState::advance_map(
   vector<int>& newacting, int acting_primary,
   PeeringCtx &rctx)
 {
-  ceph_assert(lastmap->get_epoch() == osdmap_ref->get_epoch());
   ceph_assert(lastmap == osdmap_ref);
   psdout(10) << "handle_advance_map "
 	    << newup << "/" << newacting
