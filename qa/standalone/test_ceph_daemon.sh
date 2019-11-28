@@ -76,7 +76,7 @@ function expect_false()
 }
 
 ## version + --image
-$SUDO $CEPH_DAEMON --image $IMAGE_NAUTILUS version \
+$SUDO CEPH_DAEMON_IMAGE=$IMAGE_NAUTILUS $CEPH_DAEMON version \
     | grep 'ceph version 14'
 $SUDO $CEPH_DAEMON --image $IMAGE_MIMIC version \
     | grep 'ceph version 13'
