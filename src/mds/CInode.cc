@@ -393,6 +393,10 @@ pair<bool,bool> CInode::split_need_snapflush(CInode *cowin, CInode *in)
 
 void CInode::mark_dirty_rstat()
 {
+  const auto& pi = get_projected_inode();
+  if (pi->rstat.dirty_from.is_zero() && pi->rstat.same_sums(pi->accounted_rstat))
+    return;
+
   if (!state_test(STATE_DIRTYRSTAT)) {
     dout(10) << __func__ << dendl;
     state_set(STATE_DIRTYRSTAT);
@@ -2368,6 +2372,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 	break;
       case CEPH_LOCK_INEST:
 	pf->rstat.version = inode_version;
+	pf->rstat.dirty_from = utime_t();
 	pf->accounted_rstat = pf->rstat;
 	ename = "lock inest accounted scatter stat update";
 
@@ -2626,8 +2631,9 @@ void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
 	}
 	if (update) {
 	  auto _pf = const_cast<fnode_t*>(pf.get());
+	  _pf->rstat.version = pi->rstat.version;
+	  _pf->rstat.dirty_from = utime_t();
 	  _pf->accounted_rstat = pf->rstat;
-	  _pf->rstat.version = _pf->accounted_rstat.version = pi->rstat.version;
 	  _pf->version = dir->pre_dirty();
 	  dir->dirty_old_rstat.clear();
 	  dir->check_rstats();
@@ -2658,11 +2664,11 @@ void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
 	    ceph_assert(!"unmatched rstat" == g_conf()->mds_verify_scatter);
 	  }
 	  // trust the dirfrag for now
-	  version_t v = pi->rstat.version;
+	  rstat.version = pi->rstat.version;
+	  rstat.dirty_from = pi->rstat.dirty_from;
 	  if (pi->rstat.rctime > rstat.rctime)
 	    rstat.rctime = pi->rstat.rctime;
 	  pi->rstat = rstat;
-	  pi->rstat.version = v;
 	}
       }
 

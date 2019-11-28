@@ -1877,15 +1877,14 @@ void MDCache::_project_rstat_inode_to_frag(const CInode::mempool_inode* inode, s
   dout(20) << "  inode accounted_rstat " << inode->accounted_rstat << dendl;
   nest_info_t delta;
   if (linkunlink == 0) {
-    delta.add(inode->rstat);
+    delta = inode->rstat;
     delta.sub(inode->accounted_rstat);
   } else if (linkunlink < 0) {
     delta.sub(inode->accounted_rstat);
   } else {
-    delta.add(inode->rstat);
+    delta = inode->rstat;
   }
   dout(20) << "                  delta " << delta << dendl;
-
 
   while (last >= ofirst) {
     /*
@@ -1985,6 +1984,7 @@ void MDCache::_project_rstat_inode_to_frag(const CInode::mempool_inode* inode, s
 
   if (update_inode) {
     auto _inode = const_cast<CInode::mempool_inode*>(inode);
+    _inode->rstat.dirty_from = utime_t();
     _inode->accounted_rstat = _inode->rstat;
   }
 }
@@ -2229,7 +2229,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	dout(10) << "predirty_journal_parents bumping change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
 	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
-	  pf->rstat.rctime = pf->fragstat.mtime;
+	  pf->rstat.update_rctime(pf->fragstat.mtime, mut->get_mds_stamp());
 	} else {
 	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
 	}
@@ -2281,6 +2281,9 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
       // now push inode rstats into frag
       project_rstat_inode_to_frag(mut, cur, parent, first, linkunlink, prealm);
+      if (linkunlink)
+	pf->rstat.update_dirty_from(mut->get_mds_stamp());
+
       cur->clear_dirty_rstat();
     }
 
@@ -2360,11 +2363,9 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	  mds->clog->error() << "unmatched fragstat size on single dirfrag "
 	     << parent->dirfrag() << ", inode has " << pi.inode->dirstat
 	     << ", dirfrag has " << pf->fragstat;
-	  
+	  ceph_assert(!"unmatched fragstat size" == g_conf()->mds_verify_scatter);
 	  // trust the dirfrag for now
 	  pi.inode->dirstat = pf->fragstat;
-
-	  ceph_assert(!"unmatched fragstat size" == g_conf()->mds_verify_scatter);
 	}
       }
     }
@@ -2404,6 +2405,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     parent->dirty_old_rstat.clear();
     project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
 
+    pf->rstat.dirty_from = utime_t();
     pf->accounted_rstat = pf->rstat;
 
     if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
@@ -13064,6 +13066,8 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   }
 
   if (!good_rstat) {
+    nest_info.version = pf->rstat.version;
+    nest_info.dirty_from = pf->rstat.dirty_from;
     if (pf->rstat.rctime > nest_info.rctime)
       nest_info.rctime = pf->rstat.rctime;
     _pf->rstat = nest_info;

@@ -2791,6 +2791,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
+
+  utime_t now = ceph_clock_now();
     
   auto pi = in->project_inode(mut);
   pi.inode->version = in->pre_dirty();
@@ -2802,14 +2804,17 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 
   if (update_size) {
     dout(10) << "check_inode_max_size size " << pi.inode->size << " -> " << new_size << dendl;
-    pi.inode->size = new_size;
-    pi.inode->rstat.rbytes = new_size;
+    if (pi.inode->size != new_size) {
+      pi.inode->size = new_size;
+      pi.inode->rstat.rbytes = new_size;
+      pi.inode->rstat.update_dirty_from(now);
+    }
     dout(10) << "check_inode_max_size mtime " << pi.inode->mtime << " -> " << new_mtime << dendl;
     pi.inode->mtime = new_mtime;
     if (new_mtime > pi.inode->ctime) {
       pi.inode->ctime = new_mtime;
       if (new_mtime > pi.inode->rstat.rctime)
-	pi.inode->rstat.rctime = new_mtime;
+	pi.inode->rstat.update_rctime(new_mtime, now);
     }
   }
 
@@ -3592,6 +3597,8 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
   if (dirty == 0)
     return;
 
+  utime_t now = ceph_clock_now();
+
   /* m must be valid if there are dirty caps */
   ceph_assert(m);
   uint64_t features = m->get_connection()->get_features();
@@ -3601,7 +3608,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	    << " for " << *in << dendl;
     pi->ctime = m->get_ctime();
     if (m->get_ctime() > pi->rstat.rctime)
-      pi->rstat.rctime = m->get_ctime();
+      pi->rstat.update_rctime(pi->ctime, now);
   }
 
   if ((features & CEPH_FEATURE_FS_CHANGE_ATTR) &&
@@ -3624,7 +3631,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->mtime = mtime;
       if (mtime > pi->rstat.rctime)
-	pi->rstat.rctime = mtime;
+	pi->rstat.update_rctime(mtime, now);
     }
     if (in->is_file() &&   // ONLY if regular file
 	size > pi->size) {
@@ -3632,6 +3639,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
+      pi->rstat.update_dirty_from(now);
     }
     if (in->is_file() &&
         (dirty & CEPH_CAP_FILE_WR) &&

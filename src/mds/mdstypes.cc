@@ -94,7 +94,7 @@ ostream& operator<<(ostream &out, const frag_info_t &f)
 
 void nest_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   encode(version, bl);
   encode(rbytes, bl);
   encode(rfiles, bl);
@@ -106,12 +106,13 @@ void nest_info_t::encode(bufferlist &bl) const
   }
   encode(rsnaps, bl);
   encode(rctime, bl);
+  encode(dirty_from, bl);
   ENCODE_FINISH(bl);
 }
 
 void nest_info_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(version, bl);
   decode(rbytes, bl);
   decode(rfiles, bl);
@@ -122,6 +123,8 @@ void nest_info_t::decode(bufferlist::const_iterator &bl)
   }
   decode(rsnaps, bl);
   decode(rctime, bl);
+  if (struct_v >= 4)
+    decode(dirty_from, bl);
   DECODE_FINISH(bl);
 }
 
@@ -133,6 +136,7 @@ void nest_info_t::dump(Formatter *f) const
   f->dump_unsigned("rsubdirs", rsubdirs);
   f->dump_unsigned("rsnaps", rsnaps);
   f->dump_stream("rctime") << rctime;
+  f->dump_stream("dirty_from") << dirty_from;
 }
 
 void nest_info_t::decode_json(JSONObj *obj){
@@ -155,6 +159,7 @@ void nest_info_t::generate_test_instances(std::list<nest_info_t*>& ls)
   ls.back()->rsubdirs = 4;
   ls.back()->rsnaps = 6;
   ls.back()->rctime = utime_t(7, 8);
+  ls.back()->dirty_from = utime_t(9, 0);
 }
 
 ostream& operator<<(ostream &out, const nest_info_t &n)
@@ -170,6 +175,8 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
     out << " rs" << n.rsnaps;
   if (n.rfiles || n.rsubdirs)
     out << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs;
+  if (!n.dirty_from.is_zero())
+    out << " df " << n.dirty_from;
   out << ")";    
   return out;
 }

@@ -1014,8 +1014,10 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
 
   nest_info_t rstatdiff;
   frag_info_t fragstatdiff;
-  if (fnode->accounted_rstat.version == rstat_version)
+  if (fnode->accounted_rstat.version == rstat_version) {
+    rstatdiff.dirty_from = fnode->rstat.dirty_from;
     rstatdiff.add_delta(fnode->accounted_rstat, fnode->rstat);
+  }
   if (fnode->accounted_fragstat.version == dirstat_version)
     fragstatdiff.add_delta(fnode->accounted_fragstat, fnode->fragstat);
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
@@ -1131,8 +1133,11 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     ceph_assert(!dir->is_auth() || dir->is_complete() || replay);
 
-    if (dir->get_fnode()->accounted_rstat.version == rstat_version)
+    if (dir->get_fnode()->accounted_rstat.version == rstat_version) {
       rstatdiff.add_delta(dir->get_fnode()->accounted_rstat, dir->get_fnode()->rstat);
+      if (!dir->get_fnode()->rstat.dirty_from.is_zero())
+	rstatdiff.update_dirty_from(dir->get_fnode()->rstat.dirty_from);
+    }
     if (dir->get_fnode()->accounted_fragstat.version == dirstat_version)
       fragstatdiff.add_delta(dir->get_fnode()->accounted_fragstat, dir->get_fnode()->fragstat,
 			     &touched_mtime, &touched_chattr);
@@ -1218,6 +1223,7 @@ void CDir::resync_accounted_rstat()
   if (pf->accounted_rstat.version != pi->rstat.version) {
     pf->rstat.version = pi->rstat.version;
     dout(10) << __func__ << " " << pf->accounted_rstat << " -> " << pf->rstat << dendl;
+    pf->rstat.dirty_from = utime_t();
     pf->accounted_rstat = pf->rstat;
     dirty_old_rstat.clear();
   }
