@@ -1296,6 +1296,8 @@ class InventoryNode(object):
         # type: (str, inventory.Devices, List[str]) -> None
         if devices is None:
             devices = inventory.Devices([])
+        if labels is None:
+            labels = []
         assert isinstance(devices, inventory.Devices)
 
         self.name = name  # unique within cluster.  For example a hostname.
