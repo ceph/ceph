@@ -1,0 +1,45 @@
+<!-- button -->
+<div class="form-group row">
+  <label class="col-sm-3 col-form-label"
+         for="createDeleteButton">
+    <ng-container i18n>{{ name }} devices</ng-container>
+    <cd-helper>
+      <span i18n
+            *ngIf="type === 'data'">The primary storage devices. These devices contain all OSD data.</span>
+      <span i18n
+            *ngIf="type === 'wal'">Write-Ahead-Log devices. These devices are used for BlueStore’s internal journal. It is only useful to use a WAL device if the device is faster than the primary device (e.g. NVME devices or SSDs). If there is only a small amount of fast storage available (e.g., less than a gigabyte), we recommend using it as a WAL device.</span>
+      <span i18n
+            *ngIf="type === 'db'">DB devices can be used for storing BlueStore’s internal metadata.  It is only helpful to provision a DB device if it is faster than the primary device (e.g. NVME devices or SSD).</span>
+    </cd-helper>
+  </label>
+  <div class="col-sm-9">
+    <ng-container *ngIf="devices.length === 0; else blockClearDevices">
+      <button type="button"
+              class="btn btn-light"
+              (click)="showSelectionModal()"
+              [disabled]="availDevices.length === 0 || !canSelect">
+        <i [ngClass]="[icons.add]"></i>
+        <ng-container i18n>Add</ng-container>
+      </button>
+    </ng-container>
+    <ng-template #blockClearDevices>
+      <div class="pb-2 my-2 border-bottom">
+        <span *ngFor="let filter of appliedFilters">
+          <span class="badge badge-dark mr-2">{{ filter.label }}: {{ filter.formatValue }}</span>
+        </span>
+        <a class="tc_clearSelections"
+           href=""
+           (click)="clearDevices(); false">
+          <i [ngClass]="[icons.clearFilters]"></i>
+          <ng-container i18n>Clear</ng-container>
+        </a>
+      </div>
+      <div>
+        <cd-inventory-devices [devices]="devices"
+                              [hiddenColumns]="['available']"
+                              [filterColumns]="[]">
+        </cd-inventory-devices>
+      </div>
+    </ng-template>
+  </div>
+</div>

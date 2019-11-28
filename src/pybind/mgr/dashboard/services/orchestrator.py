@@ -86,6 +86,13 @@ class ServiceManager(ResourceManager):
             raise_if_exception(c)
 
 
+class OsdManager(ResourceManager):
+
+    @wait_api_result
+    def create(self, drive_group, all_hosts=None):
+        return self.api.create_osds(drive_group, all_hosts)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -102,6 +109,7 @@ class OrchClient(object):
         self.hosts = HostManger(self.api)
         self.inventory = InventoryManager(self.api)
         self.services = ServiceManager(self.api)
+        self.osds = OsdManager(self.api)
 
     def available(self):
         return self.status()['available']
