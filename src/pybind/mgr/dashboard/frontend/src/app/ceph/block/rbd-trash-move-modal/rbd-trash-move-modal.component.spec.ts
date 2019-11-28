@@ -36,7 +36,6 @@ describe('RbdTrashMoveModalComponent', () => {
     component = fixture.componentInstance;
     httpTesting = TestBed.get(HttpTestingController);
 
-    component.metaType = 'RBD';
     component.poolName = 'foo';
     component.imageName = 'bar';
 
