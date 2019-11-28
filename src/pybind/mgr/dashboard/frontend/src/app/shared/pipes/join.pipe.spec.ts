@@ -1,7 +1,7 @@
-import { ListPipe } from './list.pipe';
+import { JoinPipe } from './join.pipe';
 
 describe('ListPipe', () => {
-  const pipe = new ListPipe();
+  const pipe = new JoinPipe();
 
   it('create an instance', () => {
     expect(pipe).toBeTruthy();

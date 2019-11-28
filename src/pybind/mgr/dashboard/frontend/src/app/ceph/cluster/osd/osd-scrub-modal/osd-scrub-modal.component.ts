@@ -7,7 +7,7 @@ import { forkJoin } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { ListPipe } from '../../../../shared/pipes/list.pipe';
+import { JoinPipe } from '../../../../shared/pipes/join.pipe';
 import { NotificationService } from '../../../../shared/services/notification.service';
 
 @Component({
@@ -25,7 +25,7 @@ export class OsdScrubModalComponent implements OnInit {
     private osdService: OsdService,
     private notificationService: NotificationService,
     private i18n: I18n,
-    private listPipe: ListPipe
+    private joinPipe: JoinPipe
   ) {}
 
   ngOnInit() {
@@ -41,7 +41,7 @@ export class OsdScrubModalComponent implements OnInit {
           NotificationType.success,
           this.i18n('{{operation}} was initialized in the following OSD(s): {{id}}', {
             operation: operation,
-            id: this.listPipe.transform(this.selected)
+            id: this.joinPipe.transform(this.selected)
           })
         );
 
