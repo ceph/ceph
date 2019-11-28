@@ -521,17 +521,15 @@ private:
     // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail
     // to avoid SFINAE
     template <class ValueFunc,
-              class ErrorFuncOne,
-              class ErrorFuncTwo,
+              class ErrorFuncHead,
               class... ErrorFuncTail>
     auto safe_then(ValueFunc&& value_func,
-                   ErrorFuncOne&& error_func_one,
-                   ErrorFuncTwo&& error_func_two,
+                   ErrorFuncHead&& error_func_head,
                    ErrorFuncTail&&... error_func_tail) {
+      static_assert(sizeof...(ErrorFuncTail) > 0);
       return safe_then(
         std::forward<ValueFunc>(value_func),
-        composer(std::forward<ErrorFuncOne>(error_func_one),
-                 std::forward<ErrorFuncTwo>(error_func_two),
+        composer(std::forward<ErrorFuncHead>(error_func_head),
                  std::forward<ErrorFuncTail>(error_func_tail)...));
     }
 
