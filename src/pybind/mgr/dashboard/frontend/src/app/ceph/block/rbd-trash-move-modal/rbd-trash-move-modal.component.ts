@@ -18,7 +18,6 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   styleUrls: ['./rbd-trash-move-modal.component.scss']
 })
 export class RbdTrashMoveModalComponent implements OnInit {
-  metaType: string;
   poolName: string;
   namespace: string;
   imageName: string;
