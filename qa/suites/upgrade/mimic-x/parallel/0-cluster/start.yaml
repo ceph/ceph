@@ -13,11 +13,11 @@ roles:
   - mds.a
   - osd.0
   - osd.1
-- - mon.b
+  - mon.b
   - mgr.y
   - osd.2
   - osd.3
-- - mon.c
+  - mon.c
   - mds.b
   - osd.4
   - osd.5
