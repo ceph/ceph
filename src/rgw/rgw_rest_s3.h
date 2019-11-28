@@ -101,6 +101,12 @@ public:
   void send_response() override;
 };
 
+class RGWGetBucketReplication_ObjStore_S3 : public RGWGetBucketReplication_ObjStore
+{
+public:
+  void send_response_data() override;
+};
+
 class RGWPutBucketReplication_ObjStore_S3 : public RGWPutBucketReplication_ObjStore
 {
 public:

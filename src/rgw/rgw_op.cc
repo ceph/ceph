@@ -1249,8 +1249,27 @@ void RGWDeleteBucketTags::execute()
   });
 }
 
+int RGWGetBucketReplication::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetReplicationConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketReplication::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketReplication::execute()
+{
+  send_response_data();
+}
+
 int RGWPutBucketReplication::verify_permission() {
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
 }
 
 void RGWPutBucketReplication::execute() {
@@ -1294,7 +1313,7 @@ void RGWDeleteBucketReplication::pre_exec()
 
 int RGWDeleteBucketReplication::verify_permission()
 {
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
 }
 
 void RGWDeleteBucketReplication::execute()
