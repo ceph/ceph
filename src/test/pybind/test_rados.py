@@ -4,7 +4,7 @@ from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected, requires, opt,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
-                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
+                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO)
 from datetime import timedelta
 import time
 import threading
@@ -337,6 +337,11 @@ class TestIoctx(object):
         eq(self.ioctx.read('abc'), b'ab')
         size = self.ioctx.stat('abc')[0]
         eq(size, 2)
+
+    def test_cmpext(self):
+        self.ioctx.write('test_object', b'abcdefghi')
+        eq(0, self.ioctx.cmpext('test_object', b'abcdefghi', 0))
+        eq(-MAX_ERRNO - 4, self.ioctx.cmpext('test_object', b'abcdxxxxx', 0))
 
     def test_list_objects_empty(self):
         eq(list(self.ioctx.list_objects()), [])
@@ -998,13 +1003,13 @@ class TestIoctxEc(object):
         self.rados.connect()
         self.pool = 'test-ec'
         self.profile = 'testprofile-%s' % self.pool
-        cmd = {"prefix": "osd erasure-code-profile set", 
+        cmd = {"prefix": "osd erasure-code-profile set",
                "name": self.profile, "profile": ["k=2", "m=1", "crush-failure-domain=osd"]}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, 0, msg=out)
         # create ec pool with profile created above
         cmd = {'prefix': 'osd pool create', 'pg_num': 8, 'pgp_num': 8,
-               'pool': self.pool, 'pool_type': 'erasure', 
+               'pool': self.pool, 'pool_type': 'erasure',
                'erasure_code_profile': self.profile}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, 0, msg=out)
