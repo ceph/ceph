@@ -200,6 +200,12 @@ public:
   virtual ~RGWPutBucketReplication_ObjStore() = default; 
 };
 
+class RGWDeleteBucketReplication_ObjStore: public RGWDeleteBucketReplication {
+public:
+  RGWDeleteBucketReplication_ObjStore() = default;
+  virtual ~RGWDeleteBucketReplication_ObjStore() = default; 
+};
+
 class RGWListBuckets_ObjStore : public RGWListBuckets {
 public:
   RGWListBuckets_ObjStore() {}

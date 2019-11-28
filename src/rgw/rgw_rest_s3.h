@@ -108,6 +108,14 @@ public:
   void send_response() override;
 };
 
+class RGWDeleteBucketReplication_ObjStore_S3 : public RGWDeleteBucketReplication_ObjStore
+{
+protected:
+  void update_sync_policy(rgw_sync_policy_info *policy) override;
+public:
+  void send_response() override;
+};
+
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
 public:
   RGWListBuckets_ObjStore_S3() {}

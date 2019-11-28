@@ -593,6 +593,15 @@ void RGWPutBucketTags_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+void RGWDeleteBucketTags_ObjStore_S3::send_response() 
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+}
+
 namespace {
 
 bool is_valid_status(const string& s) {
@@ -960,7 +969,13 @@ void RGWPutBucketReplication_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-void RGWDeleteBucketTags_ObjStore_S3::send_response() 
+void RGWDeleteBucketReplication_ObjStore_S3::update_sync_policy(rgw_sync_policy_info *policy)
+{
+  policy->groups.erase(enabled_group_id);
+  policy->groups.erase(disabled_group_id);
+}
+
+void RGWDeleteBucketReplication_ObjStore_S3::send_response() 
 {
   if (op_ret)
     set_req_state_err(s, op_ret);
@@ -4135,7 +4150,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
   } else if (is_notification_op()) {
     return RGWHandler_REST_PSNotifs_S3::create_delete_op();
   } else if (is_replication_op()) {
-    return nullptr; // new RGWDeleteBucketReplication_ObjStore_S3;
+    return new RGWDeleteBucketReplication_ObjStore_S3;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
