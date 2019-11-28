@@ -4,6 +4,8 @@
   background-color: $color-whitesmoke-gray;
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: overlay;
 }
 
 ::ng-deep #toast-container {

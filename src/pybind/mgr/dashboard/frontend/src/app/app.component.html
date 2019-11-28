@@ -8,20 +8,26 @@
               position="end"
               mode="over"
               autoFocus="false"
-              closeOnClickOutside="true">
+              closeOnClickOutside="true"
+              [ngClass]="{'isPwdDisplayed': isPwdDisplayed}">
     <cd-notifications-sidebar *ngIf="!isLoginActive()"></cd-notifications-sidebar>
   </ng-sidebar>
 
   <!-- Page content -->
   <div ng-sidebar-content>
     <block-ui>
-      <cd-pwd-expiration-notification *ngIf="!isLoginActive()"></cd-pwd-expiration-notification>
-      <cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
-      <div class="container-fluid"
-           [ngClass]="{'full-height':isLoginActive(), 'dashboard':isDashboardPage()} ">
-        <cd-breadcrumbs></cd-breadcrumbs>
+      <div *ngIf="isLoginActive()"
+           class="container-fluid full-height">
         <router-outlet></router-outlet>
       </div>
+
+      <cd-navigation *ngIf="!isLoginActive()">
+        <div class="container-fluid"
+             [ngClass]="{'dashboard':isDashboardPage()} ">
+          <cd-breadcrumbs></cd-breadcrumbs>
+          <router-outlet></router-outlet>
+        </div>
+      </cd-navigation>
     </block-ui>
   </div>
 </ng-sidebar-container>

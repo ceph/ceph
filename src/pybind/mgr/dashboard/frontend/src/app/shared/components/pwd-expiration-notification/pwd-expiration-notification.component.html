@@ -1,7 +1,8 @@
 <alert class="no-margin-bottom"
        type="{{ alertType }}"
        *ngIf="expirationDays != null && expirationDays <= pwdExpirationSettings.pwdExpirationWarning1"
-       [dismissible]="true">
+       [dismissible]="true"
+       (onClose)="close($event)">
   <div *ngIf="expirationDays === 0"
        i18n>Your password will expire in <strong>less than 1</strong> day. Click
   <a routerLink="/user-profile/edit"
