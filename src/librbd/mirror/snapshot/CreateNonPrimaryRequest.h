@@ -97,8 +97,6 @@ private:
   void handle_write_image_state(int r);
 
   void finish(int r);
-
-  bool validate_snapshot();
 };
 
 } // namespace snapshot

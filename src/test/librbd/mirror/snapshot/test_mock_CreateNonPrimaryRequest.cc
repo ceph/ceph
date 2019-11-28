@@ -8,6 +8,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
+#include "librbd/mirror/snapshot/Utils.h"
 #include "librbd/mirror/snapshot/WriteImageStateRequest.h"
 
 namespace librbd {
@@ -23,6 +24,32 @@ struct MockTestImageCtx : public MockImageCtx {
 
 namespace mirror {
 namespace snapshot {
+namespace util {
+
+namespace {
+
+struct Mock {
+  static Mock* s_instance;
+
+  Mock() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD1(can_create_non_primary_snapshot,
+               bool(librbd::MockTestImageCtx *));
+};
+
+Mock *Mock::s_instance = nullptr;
+
+} // anonymous namespace
+
+template<> bool can_create_non_primary_snapshot(
+    librbd::MockTestImageCtx *image_ctx) {
+  return Mock::s_instance->can_create_non_primary_snapshot(image_ctx);
+}
+
+} // namespace util
+
 template <>
 struct WriteImageStateRequest<MockTestImageCtx> {
   uint64_t snap_id = CEPH_NOSNAP;
@@ -73,16 +100,7 @@ class TestMockMirrorSnapshotCreateNonPrimaryRequest : public TestMockFixture {
 public:
   typedef CreateNonPrimaryRequest<MockTestImageCtx> MockCreateNonPrimaryRequest;
   typedef WriteImageStateRequest<MockTestImageCtx> MockWriteImageStateRequest;
-
-  uint64_t m_snap_seq = 0;
-
-  void snap_create(MockTestImageCtx &mock_image_ctx,
-                   const cls::rbd::SnapshotNamespace &ns,
-                   const std::string& snap_name) {
-    ASSERT_TRUE(mock_image_ctx.snap_info.insert(
-                  {m_snap_seq++,
-                   SnapInfo{snap_name, ns, 0, {}, 0, 0, {}}}).second);
-  }
+  typedef util::Mock MockUtils;
 
   void expect_refresh_image(MockTestImageCtx &mock_image_ctx,
                             bool refresh_required, int r) {
@@ -106,6 +124,12 @@ public:
                      _, _, _))
       .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(bl)),
                       Return(r)));
+  }
+
+  void expect_can_create_non_primary_snapshot(MockUtils &mock_utils,
+                                              bool result) {
+    EXPECT_CALL(mock_utils, can_create_non_primary_snapshot(_))
+      .WillOnce(Return(result));
   }
 
   void expect_create_snapshot(MockTestImageCtx &mock_image_ctx, int r) {
@@ -141,6 +165,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, Success) {
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
+  MockUtils mock_utils;
+  expect_can_create_non_primary_snapshot(mock_utils, true);
   expect_create_snapshot(mock_image_ctx, 0);
   MockWriteImageStateRequest mock_write_image_state_request;
   expect_write_image_state(mock_image_ctx, mock_write_image_state_request, 0);
@@ -193,6 +219,30 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, GetMirrorImageError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
+TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, CanNotError) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  InSequence seq;
+
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_get_mirror_image(
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+                     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
+  MockUtils mock_utils;
+  expect_can_create_non_primary_snapshot(mock_utils, false);
+
+  C_SaferCond ctx;
+  auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, "mirror_uuid",
+                                             123, {}, nullptr, &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
 TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, CreateSnapshotError) {
   REQUIRE_FORMAT_V2();
 
@@ -207,6 +257,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, CreateSnapshotError) {
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
+  MockUtils mock_utils;
+  expect_can_create_non_primary_snapshot(mock_utils, true);
   expect_create_snapshot(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
@@ -230,6 +282,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, WriteImageStateError) {
   expect_get_mirror_image(
     mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
+  MockUtils mock_utils;
+  expect_can_create_non_primary_snapshot(mock_utils, true);
   expect_create_snapshot(mock_image_ctx, 0);
   MockWriteImageStateRequest mock_write_image_state_request;
   expect_write_image_state(mock_image_ctx, mock_write_image_state_request,
@@ -240,109 +294,6 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, WriteImageStateError) {
                                              123, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
-TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, ValidateErrorPrimary) {
-  REQUIRE_FORMAT_V2();
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{false, {"peer_uuid"}};
-  snap_create(mock_image_ctx, ns, "mirror_snap");
-
-  InSequence seq;
-
-  expect_refresh_image(mock_image_ctx, false, 0);
-  expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
-                     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, "mirror_uuid",
-                                             123, {}, nullptr, &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
-TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, ValidatePrimaryDemoted) {
-  REQUIRE_FORMAT_V2();
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorPrimarySnapshotNamespace ns{true, {"peer_uuid"}};
-  snap_create(mock_image_ctx, ns, "mirror_snap");
-
-  InSequence seq;
-
-  expect_refresh_image(mock_image_ctx, false, 0);
-  expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
-                     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
-  expect_create_snapshot(mock_image_ctx, 0);
-  MockWriteImageStateRequest mock_write_image_state_request;
-  expect_write_image_state(mock_image_ctx, mock_write_image_state_request, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, "mirror_uuid",
-                                             123, {}, nullptr, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-}
-
-TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, ValidateErrorNonPrimaryNotCopied) {
-  REQUIRE_FORMAT_V2();
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorNonPrimarySnapshotNamespace ns{"mirror_uuid", 111};
-  snap_create(mock_image_ctx, ns, "mirror_snap");
-
-  InSequence seq;
-
-  expect_refresh_image(mock_image_ctx, false, 0);
-  expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
-                     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, "mirror_uuid",
-                                             123, {}, nullptr, &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
-TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, ValidateNonPrimaryCopied) {
-  REQUIRE_FORMAT_V2();
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockTestImageCtx mock_image_ctx(*ictx);
-  cls::rbd::MirrorNonPrimarySnapshotNamespace ns{"mirror_uuid", 111};
-  ns.copied = true;
-  snap_create(mock_image_ctx, ns, "mirror_snap");
-
-  InSequence seq;
-
-  expect_refresh_image(mock_image_ctx, false, 0);
-  expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
-                     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
-  expect_create_snapshot(mock_image_ctx, 0);
-  MockWriteImageStateRequest mock_write_image_state_request;
-  expect_write_image_state(mock_image_ctx, mock_write_image_state_request, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, "mirror_uuid",
-                                             123, {}, nullptr, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
 }
 
 } // namespace snapshot

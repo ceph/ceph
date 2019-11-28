@@ -10,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
+#include "librbd/mirror/snapshot/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 
@@ -100,7 +101,8 @@ void CreatePrimaryRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  if (!validate_snapshot()) {
+  if (!util::can_create_primary_snapshot(m_image_ctx, m_demoted, m_force,
+                                         nullptr)) {
     finish(-EINVAL);
     return;
   }
@@ -281,59 +283,6 @@ void CreatePrimaryRequest<I>::finish(int r) {
 
   m_on_finish->complete(r);
   delete this;
-}
-
-template <typename I>
-bool CreatePrimaryRequest<I>::validate_snapshot() {
-  CephContext *cct = m_image_ctx->cct;
-
-  std::shared_lock image_locker{m_image_ctx->image_lock};
-
-  for (auto it = m_image_ctx->snap_info.rbegin();
-       it != m_image_ctx->snap_info.rend(); it++) {
-    auto non_primary = boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
-      &it->second.snap_namespace);
-    if (non_primary != nullptr) {
-      ldout(cct, 20) << "previous mirror snapshot snap_id=" << it->first << " "
-                     << *non_primary << dendl;
-      if (!m_force) {
-        lderr(cct) << "trying to create primary snapshot without force "
-                   << "when previous snapshot is non-primary"
-                   << dendl;
-        return false;
-      }
-      if (m_demoted) {
-        lderr(cct) << "trying to create primary demoted snapshot "
-                   << "when previous snapshot is non-primary"
-                   << dendl;
-        return false;
-      }
-      if (!non_primary->copied) {
-        lderr(cct) << "trying to create primary snapshot "
-                   << "when previous non-primary snapshot is not copied yet"
-                   << dendl;
-        return false;
-      }
-      return true;
-    }
-    auto primary = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
-      &it->second.snap_namespace);
-    if (primary == nullptr) {
-      continue;
-    }
-    ldout(cct, 20) << "previous snapshot snap_id=" << it->first << " "
-                   << *primary << dendl;
-    if (primary->demoted && !m_force) {
-      lderr(cct) << "trying to create primary snapshot without force "
-                 << "when previous primary snapshot is demoted"
-                 << dendl;
-      return false;
-    }
-    return true;
-  }
-
-  ldout(cct, 20) << "no previous mirror snapshots found" << dendl;
-  return true;
 }
 
 } // namespace snapshot

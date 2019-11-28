@@ -9,6 +9,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/mirror/snapshot/Utils.h"
 #include "librbd/mirror/snapshot/WriteImageStateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -99,7 +100,7 @@ void CreateNonPrimaryRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  if (!validate_snapshot()) {
+  if (!util::can_create_non_primary_snapshot(m_image_ctx)) {
     finish(-EINVAL);
     return;
   }
@@ -188,47 +189,6 @@ void CreateNonPrimaryRequest<I>::finish(int r) {
 
   m_on_finish->complete(r);
   delete this;
-}
-
-template <typename I>
-bool CreateNonPrimaryRequest<I>::validate_snapshot() {
-  CephContext *cct = m_image_ctx->cct;
-
-  std::shared_lock image_locker{m_image_ctx->image_lock};
-
-  for (auto it = m_image_ctx->snap_info.rbegin();
-       it != m_image_ctx->snap_info.rend(); it++) {
-    auto primary = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
-      &it->second.snap_namespace);
-    if (primary != nullptr) {
-      ldout(cct, 20) << "previous mirror snapshot snap_id=" << it->first << " "
-                     << *primary << dendl;
-      if (!primary->demoted) {
-        lderr(cct) << "trying to create non-primary snapshot "
-                   << "when previous primary snapshot is not in demoted state"
-                   << dendl;
-        return false;
-      }
-      return true;
-    }
-    auto non_primary = boost::get<cls::rbd::MirrorNonPrimarySnapshotNamespace>(
-      &it->second.snap_namespace);
-    if (non_primary == nullptr) {
-      continue;
-    }
-    ldout(cct, 20) << "previous snapshot snap_id=" << it->first << " "
-                   << *non_primary << dendl;
-    if (!non_primary->copied) {
-      lderr(cct) << "trying to create non-primary snapshot "
-                 << "when previous non-primary snapshot is not copied yet"
-                 << dendl;
-      return false;
-    }
-    return true;
-  }
-
-  ldout(cct, 20) << "no previous mirror snapshots found" << dendl;
-  return true;
 }
 
 } // namespace snapshot

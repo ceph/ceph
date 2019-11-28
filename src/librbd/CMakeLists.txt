@@ -113,6 +113,7 @@ set(librbd_internal_srcs
   mirror/snapshot/SetImageStateRequest.cc
   mirror/snapshot/Types.cc
   mirror/snapshot/UnlinkPeerRequest.cc
+  mirror/snapshot/Utils.cc
   mirror/snapshot/WriteImageStateRequest.cc
   object_map/CreateRequest.cc
   object_map/InvalidateRequest.cc
