@@ -60,6 +60,10 @@ cdef extern from "sys/time.h":
         suseconds_t tv_usec
 
 
+cdef extern from "err.h" nogil:
+    cdef int _MAX_ERRNO "MAX_ERRNO"
+
+
 cdef extern from "rados/rados_types.h" nogil:
     cdef char* _LIBRADOS_ALL_NSPACES "LIBRADOS_ALL_NSPACES"
 
@@ -225,6 +229,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off)
     int rados_remove(rados_ioctx_t io, const char *oid)
     int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size)
+    int rados_cmpext(rados_ioctx_t io, const char *o, const char *cmp_buf, size_t cmp_len, uint64_t off)
     int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len)
     int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char *buf, size_t len)
     int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name)
@@ -353,6 +358,8 @@ LIBRADOS_ALL_NSPACES = _LIBRADOS_ALL_NSPACES.decode('utf-8')
 
 LIBRADOS_CREATE_EXCLUSIVE = _LIBRADOS_CREATE_EXCLUSIVE
 LIBRADOS_CREATE_IDEMPOTENT = _LIBRADOS_CREATE_IDEMPOTENT
+
+MAX_ERRNO = _MAX_ERRNO
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -3352,6 +3359,34 @@ returned %d, but should return zero on success." % (self.name, ret))
             ret = rados_trunc(self.io, _key, _size)
         if ret < 0:
             raise make_ex(ret, "Ioctx.trunc(%s): failed to truncate %s" % (self.name, key))
+        return ret
+   
+    @requires(('key', str_type), ('cmp_buf', bytes), ('offset', int))
+    def cmpext(self, key, cmp_buf, offset=0):
+        '''
+        Compare an on-disk object range with a buffer
+        :param key: the name of the object
+        :type key: str
+        :param cmp_buf: buffer containing bytes to be compared with object contents
+        :type cmp_buf: bytes 
+        :param offset: object byte offset at which to start the comparison
+        :type offset: int
+        
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        :returns: 0 - on success, negative error code on failure,
+                 (-MAX_ERRNO - mismatch_off) on mismatch
+        '''
+        self.require_ioctx_open()
+        key = cstr(key, 'key')
+        cdef:
+             char *_key = key
+             char *_cmp_buf = cmp_buf
+             size_t _cmp_buf_len = len(cmp_buf)
+             uint64_t _offset = offset
+        with nogil:
+            ret = rados_cmpext(self.io, _key, _cmp_buf, _cmp_buf_len, _offset)
+        assert ret < -MAX_ERRNO or ret == 0, "Ioctx.cmpext(%s): failed to compare %s" % (self.name, key)        
         return ret
 
     @requires(('key', str_type))
