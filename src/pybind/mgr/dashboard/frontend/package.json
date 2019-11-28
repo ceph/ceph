@@ -56,10 +56,11 @@
       "<rootDir>/src/setupJest.ts"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!@ngrx|ngx-bootstrap|@progress)"
+      "node_modules/(?!@ngrx|ngx-bootstrap|@progress|simplebar)"
     ],
     "transform": {
-      "^.+\\.(ts|js|html)$": "ts-jest"
+      "^.+\\.(ts|html)$": "ts-jest",
+      "^.+\\.(js)$": "babel-jest"
     },
     "setupFiles": [
       "jest-canvas-mock"
@@ -105,6 +106,7 @@
     "ngx-toastr": "11.0.0",
     "rxjs": "6.5.3",
     "rxjs-compat": "6.5.3",
+    "simplebar-angular": "2.0.1",
     "swagger-ui-dist": "3.23.11",
     "tslib": "1.10.0",
     "zone.js": "0.9.1"

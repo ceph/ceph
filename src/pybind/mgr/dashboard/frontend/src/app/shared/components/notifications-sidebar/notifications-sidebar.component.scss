@@ -1,5 +1,13 @@
 @import 'defaults';
 
+::ng-deep .ng-sidebar__content {
+  overflow: hidden !important;
+}
+
+::ng-deep .isPwdDisplayed .ng-sidebar {
+  top: 92px !important;
+}
+
 // sidebar
 ::ng-deep .ng-sidebar {
   &.ng-sidebar--opened {
@@ -10,8 +18,8 @@
   max-width: 90vw;
   z-index: 9 !important;
 
-  top: 6vh !important;
-  height: 92vh;
+  top: 54px !important;
+  bottom: 10px !important;
 
   .card {
     height: 100%;
