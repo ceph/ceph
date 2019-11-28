@@ -3,6 +3,7 @@ import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core'
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { HostService } from '../../../shared/api/host.service';
 import { OsdService } from '../../../shared/api/osd.service';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdDevice } from '../../../shared/models/devices';
 
@@ -23,8 +24,6 @@ export class DeviceListComponent implements OnInit {
   lifeExpectancyTemplate: TemplateRef<any>;
   @ViewChild('lifeExpectancyTimestamp', { static: true })
   lifeExpectancyTimestampTemplate: TemplateRef<any>;
-  @ViewChild('state', { static: true })
-  stateTemplate: TemplateRef<any>;
 
   devices: CdDevice[] = null;
   columns: CdTableColumn[] = [];
@@ -52,7 +51,17 @@ export class DeviceListComponent implements OnInit {
       {
         prop: 'state',
         name: this.i18n('State of Health'),
-        cellTemplate: this.stateTemplate
+        flexGrow: 1,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            good: { value: this.i18n('Good'), class: 'badge-success' },
+            warning: { value: this.i18n('Warning'), class: 'badge-warning' },
+            bad: { value: this.i18n('Bad'), class: 'badge-danger' },
+            stale: { value: this.i18n('Stale'), class: 'badge-info' },
+            unknown: { value: this.i18n('Unknown'), class: 'badge-dark' }
+          }
+        }
       },
       {
         prop: 'life_expectancy_weeks',

@@ -431,3 +431,13 @@ bfv-messages {
     background: $color-green;
   }
 }
+
+// Custom badges.
+.badge-hdd {
+  color: $color-solid-white;
+  background-color: $color-blue-gray;
+}
+.badge-ssd {
+  color: $color-solid-white;
+  background-color: $color-blue;
+}
