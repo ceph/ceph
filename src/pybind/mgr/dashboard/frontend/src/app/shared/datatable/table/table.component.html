@@ -16,7 +16,8 @@
     <!-- end filters -->
 
     <!-- search -->
-    <div class="input-group search">
+    <div class="input-group search"
+         *ngIf="searchField">
       <span class="input-group-prepend">
         <span class="input-group-text">
         <i [ngClass]="[icons.search]"></i>

@@ -12,7 +12,9 @@
   <tab i18n-heading
        heading="Services"
        *ngIf="permissions.hosts.read">
-    <cd-services [hostname]="selection.first()['hostname']">
+    <cd-services
+      [hostname]="selection.first()['hostname']"
+      [hiddenColumns]="['nodename']">
     </cd-services>
   </tab>
   <tab i18n-heading
