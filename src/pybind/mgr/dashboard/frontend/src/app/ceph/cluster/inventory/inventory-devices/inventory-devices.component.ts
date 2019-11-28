@@ -1,18 +1,10 @@
-import {
-  Component,
-  EventEmitter,
-  Input,
-  OnChanges,
-  OnInit,
-  Output,
-  TemplateRef,
-  ViewChild
-} from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
 import * as _ from 'lodash';
 
+import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
@@ -26,9 +18,6 @@ import { InventoryDevice } from './inventory-device.model';
   styleUrls: ['./inventory-devices.component.scss']
 })
 export class InventoryDevicesComponent implements OnInit, OnChanges {
-  @ViewChild('osds', { static: true })
-  osds: TemplateRef<any>;
-
   // Devices
   @Input() devices: InventoryDevice[] = [];
 
@@ -74,7 +63,15 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
       {
         name: this.i18n('Type'),
         prop: 'human_readable_type',
-        flexGrow: 1
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            hdd: { value: 'HDD', class: 'badge-hdd' },
+            'ssd/nvme': { value: 'SSD', class: 'badge-ssd' }
+          }
+        }
       },
       {
         name: this.i18n('Available'),
@@ -101,7 +98,12 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
         name: this.i18n('OSDs'),
         prop: 'osd_ids',
         flexGrow: 1,
-        cellTemplate: this.osds
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          class: 'badge-dark',
+          prefix: 'osd.'
+        }
       }
     ];
 

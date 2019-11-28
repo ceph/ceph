@@ -34,11 +34,3 @@
     </div>
   </div>
 </cd-table>
-
-<ng-template #osds
-             let-value="value">
-  <span *ngFor="let osdId of value; last as last">
-    <span class="badge badge-dark">osd.{{ osdId }}</span>
-    <span *ngIf="!last">&nbsp;</span>
-  </span>
-</ng-template>

@@ -1,7 +1,9 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { ArrayPipe } from './array.pipe';
 import { BooleanTextPipe } from './boolean-text.pipe';
+import { BooleanPipe } from './boolean.pipe';
 import { CdDatePipe } from './cd-date.pipe';
 import { CephReleaseNamePipe } from './ceph-release-name.pipe';
 import { CephShortVersionPipe } from './ceph-short-version.pipe';
@@ -27,6 +29,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
 @NgModule({
   imports: [CommonModule],
   declarations: [
+    ArrayPipe,
+    BooleanPipe,
     BooleanTextPipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
@@ -51,6 +55,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe
   ],
   exports: [
+    ArrayPipe,
+    BooleanPipe,
     BooleanTextPipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
@@ -75,6 +81,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe
   ],
   providers: [
+    ArrayPipe,
+    BooleanPipe,
     BooleanTextPipe,
     DatePipe,
     CephShortVersionPipe,
