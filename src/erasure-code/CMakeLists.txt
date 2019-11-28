@@ -22,10 +22,10 @@ add_subdirectory(lrc)
 add_subdirectory(shec)
 add_subdirectory(clay)
 
-if (HAVE_BETTER_YASM_ELF64)
+if(HAVE_BETTER_YASM_ELF64 OR HAVE_ARMV8_SIMD)
   add_subdirectory(isa)
   set(EC_ISA_LIB ec_isa)
-endif (HAVE_BETTER_YASM_ELF64)
+endif()
 
 add_library(erasure_code STATIC ErasureCodePlugin.cc)
 target_link_libraries(erasure_code ${CMAKE_DL_LIBS})

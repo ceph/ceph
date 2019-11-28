@@ -79,7 +79,7 @@ target_link_libraries(unittest_erasure_code_plugin_jerasure
 add_dependencies(unittest_erasure_code_plugin_jerasure
   ec_jerasure)
 
-if(HAVE_BETTER_YASM_ELF64)
+if(HAVE_BETTER_YASM_ELF64 OR HAVE_ARMV8_SIMD)
 
 #unittest_erasure_code_isa
 add_executable(unittest_erasure_code_isa
@@ -110,7 +110,7 @@ target_link_libraries(unittest_erasure_code_plugin_isa
   )
 add_dependencies(unittest_erasure_code_plugin_isa
   ec_isa)
-endif(HAVE_BETTER_YASM_ELF64)
+endif(HAVE_BETTER_YASM_ELF64 OR HAVE_ARMV8_SIMD)
 
 # unittest_erasure_code_lrc
 add_executable(unittest_erasure_code_lrc
