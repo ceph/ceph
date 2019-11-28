@@ -7,18 +7,23 @@
 #include "include/stringify.h"
 
 namespace librbd {
+
+struct ImageCtx;
+
 namespace mirror {
 namespace snapshot {
 namespace util {
 
-const std::string IMAGE_STATE_OBJECT_PREFIX = "rbd_mirror_snapshot.";
+template <typename ImageCtxT = librbd::ImageCtx>
+bool can_create_primary_snapshot(ImageCtxT *image_ctx, bool demoted, bool force,
+                                 uint64_t *rollback_snap_id);
+
+template <typename ImageCtxT = librbd::ImageCtx>
+bool can_create_non_primary_snapshot(ImageCtxT *image_ctx);
 
 template <typename ImageCtxT = librbd::ImageCtx>
 std::string image_state_object_name(ImageCtxT *image_ctx, uint64_t snap_id,
-                                    uint64_t index) {
-  return IMAGE_STATE_OBJECT_PREFIX + image_ctx->id + "." +
-    stringify(snap_id) + "." + stringify(index);
-}
+                                    uint64_t index);
 
 } // namespace util
 } // namespace snapshot

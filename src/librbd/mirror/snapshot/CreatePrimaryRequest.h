@@ -91,8 +91,6 @@ private:
   void handle_unlink_peer(int r);
 
   void finish(int r);
-
-  bool validate_snapshot();
 };
 
 } // namespace snapshot
