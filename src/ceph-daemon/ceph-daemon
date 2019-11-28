@@ -61,7 +61,7 @@ import uuid
 
 from distutils.spawn import find_executable
 from functools import wraps
-from glob import glob
+from glob import iglob
 
 
 container_path = None
@@ -282,6 +282,47 @@ def make_log_dir(fsid, uid=None, gid=None):
     log_dir = get_log_dir(fsid)
     makedirs(log_dir, uid, gid, LOG_DIR_MODE)
     return log_dir
+
+def copy_file(src, dst, uid=None, gid=None):
+    # type: (str, str, int, int) -> str
+    """
+    Copy a file from src to dst
+    """
+    if not uid or not gid:
+        (uid, gid) = extract_uid_gid()
+
+    if os.path.isdir(dst):
+        dst = os.path.join(dst, os.path.basename(src))
+
+    logger.debug('Copy \'%s\' -> \'%s\'' % (src, dst))
+    shutil.copyfile(src, dst)
+    os.chown(dst, uid, gid)
+
+    return dst
+
+def move_file(src, dst, uid=None, gid=None):
+    # type: (str, str, int, int) -> str
+    """
+    Move a file from src to dst
+    """
+    if not uid or not gid:
+        (uid, gid) = extract_uid_gid()
+
+    if os.path.isdir(dst):
+        dst = os.path.join(dst, os.path.basename(src))
+
+    if os.path.islink(src):
+        # shutil.move() in python2 does not handle symlinks correctly
+        src_rl = os.readlink(src)
+        logger.debug('symlink \'%s\' -> \'%s\'' % (dst, src_rl))
+        os.symlink(src_rl, dst)
+        os.unlink(src)
+    else:
+        logger.debug('Move \'%s\' -> \'%s\'' % (src, dst))
+        shutil.move(src, dst)
+    os.chown(dst, uid, gid)
+
+    return dst
 
 def find_program(filename):
     # type: (str) -> str
@@ -1512,9 +1553,8 @@ def command_adopt():
                         (daemon_type, args.cluster, daemon_id))
         data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
         data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id)
-        for data_file in glob(os.path.join(data_dir_src, '*')):
-            logger.debug('Move \'%s\' -> \'%s\'' % (data_file, data_dir_dst))
-            shutil.move(data_file, data_dir_dst)
+        for data_file in iglob(os.path.join(data_dir_src, '*')):
+            move_file(data_file, data_dir_dst, uid=uid, gid=gid)
         logger.debug('Remove dir \'%s\'' % (data_dir_src))
         if os.path.ismount(data_dir_src):
             call_throws(['umount', data_dir_src])
@@ -1524,8 +1564,7 @@ def command_adopt():
         config_src = '/etc/ceph/%s.conf' % (args.cluster)
         config_src = os.path.abspath(args.legacy_dir + config_src)
         config_dst = os.path.join(data_dir_dst, 'config')
-        logger.debug('Copy \'%s\' -> \'%s\'' % (config_src, config_dst))
-        shutil.copy(config_src, config_dst)
+        copy_file(config_src, config_dst, uid=uid, gid=gid)
 
         # logs
         logger.info('Moving logs...')
@@ -1533,9 +1572,8 @@ def command_adopt():
                         (args.cluster, daemon_type, daemon_id))
         log_dir_src = os.path.abspath(args.legacy_dir + log_dir_src)
         log_dir_dst = make_log_dir(fsid, uid=uid, gid=gid)
-        for log_file in glob(log_dir_src):
-            logger.debug('Move \'%s\' -> \'%s\'' % (log_file, log_dir_dst))
-            shutil.move(log_file, log_dir_dst)
+        for log_file in iglob(log_dir_src):
+            move_file(log_file, log_dir_dst, uid=uid, gid=gid)
 
         logger.info('Creating new units...')
         c = get_container(fsid, daemon_type, daemon_id)
