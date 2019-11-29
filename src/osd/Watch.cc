@@ -308,8 +308,6 @@ Watch::~Watch() {
   ceph_assert(!conn);
 }
 
-bool Watch::connected() { return !!conn; }
-
 Context *Watch::get_delayed_cb()
 {
   ceph_assert(!cb);
@@ -460,7 +458,7 @@ void Watch::start_notify(NotifyRef notif)
   dout(10) << "start_notify " << notif->notify_id << dendl;
   in_progress_notifies[notif->notify_id] = notif;
   notif->start_watcher(self.lock());
-  if (connected())
+  if (is_connected())
     send_notify(notif);
 }
 
