@@ -1052,12 +1052,14 @@ public:
     TARGET_SIZE_RATIO,  // fraction of total cluster
     PG_AUTOSCALE_BIAS,
     READ_LEASE_INTERVAL,
+    OPTIMIZE_FOR_SIZE ,
   };
 
   enum type_t {
     STR,
     INT,
     DOUBLE,
+    BOOL,
   };
 
   struct opt_desc_t {

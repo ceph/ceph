@@ -5209,7 +5209,7 @@ namespace {
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
-    PG_AUTOSCALE_BIAS };
+    PG_AUTOSCALE_BIAS, OPTIMIZE_FOR_SIZE };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -5944,6 +5944,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
+      {"optimize_for_size", OPTIMIZE_FOR_SIZE},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6160,6 +6161,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
+          case OPTIMIZE_FOR_SIZE:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
               if(*it == CSUM_TYPE) {
@@ -6317,6 +6319,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
+          case OPTIMIZE_FOR_SIZE:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -8435,6 +8438,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	ss << "pg_autoscale_bias must be between 0 and 1000";
 	return -EINVAL;
       }
+    } else if (var == "optimize_for_size") {
     }
 
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
@@ -8466,6 +8470,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	p.opts.unset(desc.key);
       } else {
 	p.opts.set(desc.key, static_cast<double>(f));
+      }
+      break;
+    case pool_opts_t::BOOL:
+      if (val == "true" || (interr.empty() && n == 1)) {
+        p.opts.set(desc.key, static_cast<int64_t>(1));
+      } else if (val == "false" && (interr.empty() && n == 0)) {
+        p.opts.unset(desc.key);
+      } else {
+        ss << "expecting value 'true', 'false', '0', or '1'";
+        return -EINVAL;
       }
       break;
     default:
