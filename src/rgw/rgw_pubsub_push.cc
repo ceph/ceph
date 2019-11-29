@@ -26,7 +26,13 @@ template<typename EventType>
 std::string json_format_pubsub_event(const EventType& event) {
   std::stringstream ss;
   JSONFormatter f(false);
-  encode_json(EventType::json_type_single, event, &f);
+  {
+    Formatter::ObjectSection s(f, EventType::json_type_plural);
+    {
+      Formatter::ArraySection s(f, EventType::json_type_plural);
+      encode_json("", event, &f);
+    }
+  }
   f.flush(ss);
   return ss.str();
 }

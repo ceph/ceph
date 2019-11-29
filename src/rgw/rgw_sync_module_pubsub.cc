@@ -477,7 +477,7 @@ public:
   PSEvent(const EventRef<EventType>& _event) : event(_event) {}
 
   void format(bufferlist *bl) const {
-    bl->append(json_str(EventType::json_type_single, *event));
+    bl->append(json_str("", *event));
   }
 
   void encode_event(bufferlist& bl) const {
