@@ -12532,7 +12532,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         string name = i.decode_string();
         bufferptr bp;
         i.decode_bp(bp);
-	tracepoint(objectstore, setattr_enter, o->oid.hobj.oid.name.c_str());
+	tracepoint(objectstore, setattr_enter, o->oid.hobj.oid.name.c_str(), name.c_str());
 	r = _setattr(txc, c, o, name, bp);
 	tracepoint(objectstore, setattr_exit, r);
       }
@@ -12551,7 +12551,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_RMATTR:
       {
 	string name = i.decode_string();
-	tracepoint(objectstore, rmattr_enter, o->oid.hobj.oid.name.c_str());
+	tracepoint(objectstore, rmattr_enter, o->oid.hobj.oid.name.c_str(), name.c_str());
 	r = _rmattr(txc, c, o, name);
 	tracepoint(objectstore, rmattr_exit, r);
       }
@@ -12559,7 +12559,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_RMATTRS:
       {
-	tracepoint(objectstore, rmattrs_enter, o->oid.hobj.oid.name.c_str());
+	tracepoint(objectstore, rmattrs_enter, i.get_cid(op->cid).c_str(), o->oid.hobj.oid.name.c_str());
 	r = _rmattrs(txc, c, o);
 	tracepoint(objectstore, rmattrs_exit, r);
       }
@@ -12572,7 +12572,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
           const ghobject_t& noid = i.get_oid(op->dest_oid);
 	  no = c->get_onode(noid, true);
 	}
-	tracepoint(objectstore, clone_enter, o->oid.hobj.oid.name.c_str());
+	tracepoint(objectstore, clone_enter,
+		   o->oid.hobj.oid.name.c_str(), i.get_oid(op->dest_oid).hobj.oid.name.c_str());
 	r = _clone(txc, c, o, no);
 	tracepoint(objectstore, clone_exit, r);
       }
@@ -12592,7 +12593,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
-	tracepoint(objectstore, clone_range2_enter, o->oid.hobj.oid.name.c_str(), len);
+	tracepoint(objectstore, clone_range2_enter,
+		   o->oid.hobj.oid.name.c_str(), i.get_oid(op->dest_oid).hobj.oid.name.c_str(),
+		   srcoff, len, dstoff);
 	r = _clone_range(txc, c, o, no, srcoff, len, dstoff);
 	tracepoint(objectstore, clone_range2_exit, r);
       }
@@ -12615,13 +12618,15 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
 	ceph_assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
-	tracepoint(objectstore, coll_try_rename_enter);
+	tracepoint(objectstore, coll_move_rename_enter,
+		   i.get_cid(op->cid).c_str(), o->oid.hobj.oid.name.c_str(),
+		   i.get_cid(op->cid).c_str(), noid.hobj.oid.name.c_str());
 	OnodeRef& no = ovec[op->dest_oid];
 	if (!no) {
 	  no = c->get_onode(noid, false);
 	}
 	r = _rename(txc, c, o, no, noid);
-	tracepoint(objectstore, coll_try_rename_exit, r);
+	tracepoint(objectstore, coll_move_rename_exit, r);
       }
       break;
 
@@ -12653,9 +12658,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
         string first, last;
-	tracepoint(objectstore, omap_rmkeyrange_enter, o->oid.hobj.oid.name.c_str());
         first = i.decode_string();
         last = i.decode_string();
+	tracepoint(objectstore, omap_rmkeyrange_enter,
+		   o->oid.hobj.oid.name.c_str(), first.c_str(), last.c_str());
 	r = _omap_rmkey_range(txc, c, o, first, last);
 	tracepoint(objectstore, omap_rmkeyrange_exit, r);
       }
@@ -12672,7 +12678,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_SETALLOCHINT:
       {
-	tracepoint(objectstore, setallochint_enter, o->oid.hobj.oid.name.c_str());
+	tracepoint(objectstore, setallochint_enter,
+		   o->oid.hobj.oid.name.c_str(), op->expected_object_size, op->expected_write_size);
 	r = _set_alloc_hint(txc, c, o,
 			    op->expected_object_size,
 			    op->expected_write_size,

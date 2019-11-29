@@ -2,9 +2,9 @@
 
 TRACEPOINT_EVENT(objectstore, exists_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -18,9 +18,9 @@ TRACEPOINT_EVENT(objectstore, exists_exit,
 
 TRACEPOINT_EVENT(objectstore, stat_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -34,11 +34,11 @@ TRACEPOINT_EVENT(objectstore, stat_exit,
 
 TRACEPOINT_EVENT(objectstore, read_enter,
     TP_ARGS(
-        const char *, coll_name,
+        const char *, oid,
         uint64_t,     offset,
         size_t,     len),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
         ctf_integer(uint64_t, offset, offset)
         ctf_integer(size_t, len, len)
     )
@@ -54,11 +54,11 @@ TRACEPOINT_EVENT(objectstore, read_exit,
 
 TRACEPOINT_EVENT(objectstore, fiemap_enter,
     TP_ARGS(
-        const char *, coll_name,
+        const char *, oid,
         uint64_t,     offset,
         size_t,     len),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
         ctf_integer(uint64_t, offset, offset)
         ctf_integer(size_t, len, len)
     )
@@ -74,9 +74,9 @@ TRACEPOINT_EVENT(objectstore, fiemap_exit,
 
 TRACEPOINT_EVENT(objectstore, getattr_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -90,9 +90,9 @@ TRACEPOINT_EVENT(objectstore, getattr_exit,
 
 TRACEPOINT_EVENT(objectstore, getattrs_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -215,9 +215,9 @@ TRACEPOINT_EVENT(objectstore, collection_list_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_get_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -231,9 +231,9 @@ TRACEPOINT_EVENT(objectstore, omap_get_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_get_header_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -247,9 +247,9 @@ TRACEPOINT_EVENT(objectstore, omap_get_header_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_get_keys_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -263,9 +263,9 @@ TRACEPOINT_EVENT(objectstore, omap_get_keys_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_get_values_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -279,9 +279,9 @@ TRACEPOINT_EVENT(objectstore, omap_get_values_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_check_keys_enter,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -295,19 +295,19 @@ TRACEPOINT_EVENT(objectstore, omap_check_keys_exit,
 
 TRACEPOINT_EVENT(objectstore, get_omap_iterator,
     TP_ARGS(
-        const char *, coll_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(coll_name, coll_name)
+        ctf_string(oid, oid)
     )
 )
 
 TRACEPOINT_EVENT(objectstore, write_enter,
     TP_ARGS(
-        const char *, osr_name,
+        const char *, oid,
         uint64_t, offset,
         uint64_t, length),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
         ctf_integer(uint64_t, offset, offset)
         ctf_integer(uint64_t, length, length)
     )
@@ -323,9 +323,13 @@ TRACEPOINT_EVENT(objectstore, write_exit,
 
 TRACEPOINT_EVENT(objectstore, setallochint_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid,
+	uint64_t, object_size,
+	uint64_t, write_size),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, object_size, object_size)
+        ctf_integer(uint64_t, write_size, write_size)
     )
 )
 
@@ -337,15 +341,35 @@ TRACEPOINT_EVENT(objectstore, setallochint_exit,
     )
 )
 
-TRACEPOINT_EVENT(objectstore, split_coll_enter,
+TRACEPOINT_EVENT(objectstore, coll_hint_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid,
+	uint64_t, type),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
+        ctf_integer(uint64_t, type, type)
     )
 )
 
-TRACEPOINT_EVENT(objectstore, split_coll_exit,
+TRACEPOINT_EVENT(objectstore, coll_hint_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_set_bits_enter,
+    TP_ARGS(
+        const char *, cid,
+	uint64_t, bits),
+    TP_FIELDS(
+        ctf_string(cid, cid)
+        ctf_integer(uint64_t, bits, bits)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_set_bits_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(
@@ -355,9 +379,9 @@ TRACEPOINT_EVENT(objectstore, split_coll_exit,
 
 TRACEPOINT_EVENT(objectstore, split_coll2_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
     )
 )
 
@@ -371,9 +395,9 @@ TRACEPOINT_EVENT(objectstore, split_coll2_exit,
 
 TRACEPOINT_EVENT(objectstore, merge_coll_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
     )
 )
 
@@ -387,9 +411,9 @@ TRACEPOINT_EVENT(objectstore, merge_coll_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_setheader_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -401,11 +425,33 @@ TRACEPOINT_EVENT(objectstore, omap_setheader_exit,
     )
 )
 
+TRACEPOINT_EVENT(objectstore, split_collection2_enter,
+    TP_ARGS(
+        const char *, cid,
+	const char *, dstcid),
+    TP_FIELDS(
+        ctf_string(cid, cid)
+        ctf_string(dstcid, dstcid)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, split_collection2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(objectstore, omap_rmkeyrange_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid,
+	const char *, firstkey,
+	const char *, lastkey),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
+        ctf_string(firstkey, firstkey)
+        ctf_string(lastkey, lastkey)
     )
 )
 
@@ -419,9 +465,9 @@ TRACEPOINT_EVENT(objectstore, omap_rmkeyrange_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_rmkeys_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -435,9 +481,9 @@ TRACEPOINT_EVENT(objectstore, omap_rmkeys_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_setkeys_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -451,9 +497,9 @@ TRACEPOINT_EVENT(objectstore, omap_setkeys_exit,
 
 TRACEPOINT_EVENT(objectstore, omap_clear_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
     )
 )
 
@@ -467,9 +513,11 @@ TRACEPOINT_EVENT(objectstore, omap_clear_exit,
 
 TRACEPOINT_EVENT(objectstore, coll_rmattr_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid,
+	const char *, attr),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
+        ctf_string(attr, attr)
     )
 )
 
@@ -483,9 +531,11 @@ TRACEPOINT_EVENT(objectstore, coll_rmattr_exit,
 
 TRACEPOINT_EVENT(objectstore, coll_setattr_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid,
+	const char *, attr),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
+	ctf_string(attr, attr)
     )
 )
 
@@ -511,8 +561,18 @@ TRACEPOINT_EVENT(objectstore, coll_move_exit,
 )
 
 TRACEPOINT_EVENT(objectstore, coll_move_rename_enter,
-    TP_ARGS(),
-    TP_FIELDS()
+    TP_ARGS(
+        const char *, cid,
+	const char *, oid,
+	const char *, newcid,
+	const char *, newoid
+    ),
+    TP_FIELDS(
+        ctf_string(cid, cid)
+	ctf_string(oid, oid)
+	ctf_string(newcid, newcid)
+	ctf_string(newoid, newoid)
+    )
 )
 
 TRACEPOINT_EVENT(objectstore, coll_move_rename_exit,
@@ -538,9 +598,11 @@ TRACEPOINT_EVENT(objectstore, coll_try_rename_exit,
 
 TRACEPOINT_EVENT(objectstore, coll_remove_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid,
+	const char *, oid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
+        ctf_string(oid, oid)
     )
 )
 
@@ -553,8 +615,15 @@ TRACEPOINT_EVENT(objectstore, coll_remove_exit,
 )
 
 TRACEPOINT_EVENT(objectstore, coll_add_enter,
-    TP_ARGS(),
-    TP_FIELDS()
+    TP_ARGS(
+	const char *, cid,
+	const char *, oldcid,
+	const char *, oid),
+    TP_FIELDS(
+        ctf_string(cid, cid)
+        ctf_string(oldcid, oldcid)
+        ctf_string(oid, oid)
+    )
 )
 
 TRACEPOINT_EVENT(objectstore, coll_add_exit,
@@ -567,9 +636,9 @@ TRACEPOINT_EVENT(objectstore, coll_add_exit,
 
 TRACEPOINT_EVENT(objectstore, rmcoll_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
     )
 )
 
@@ -583,9 +652,9 @@ TRACEPOINT_EVENT(objectstore, rmcoll_exit,
 
 TRACEPOINT_EVENT(objectstore, mkcoll_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
     )
 )
 
@@ -599,11 +668,17 @@ TRACEPOINT_EVENT(objectstore, mkcoll_exit,
 
 TRACEPOINT_EVENT(objectstore, clone_range2_enter,
     TP_ARGS(
-        const char *, osr_name,
-        uint64_t, length),
+        const char *, oid,
+	const char *, newoid,
+	uint64_t, srcoff,
+        uint64_t, len,
+	uint64_t, dstoff),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
-        ctf_integer(uint64_t, length, length)
+        ctf_string(oid, oid)
+        ctf_string(newoid, newoid)
+        ctf_integer(uint64_t, srcoff, srcoff)
+        ctf_integer(uint64_t, len, len)
+        ctf_integer(uint64_t, dstoff, dstoff)
     )
 )
 
@@ -615,28 +690,12 @@ TRACEPOINT_EVENT(objectstore, clone_range2_exit,
     )
 )
 
-TRACEPOINT_EVENT(objectstore, move_ranges_destroy_src_enter,
-    TP_ARGS(
-        const char *, osr_name),
-    TP_FIELDS(
-        ctf_string(osr_name, osr_name)
-    )
-)
-
-TRACEPOINT_EVENT(objectstore, move_ranges_destroy_src_exit,
-    TP_ARGS(
-        int, retval),
-    TP_FIELDS(
-        ctf_integer(int, retval, retval)
-    )
-)
-
 TRACEPOINT_EVENT(objectstore, clone_range_enter,
     TP_ARGS(
-        const char *, osr_name,
+        const char *, oid,
         uint64_t, length),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
         ctf_integer(uint64_t, length, length)
     )
 )
@@ -651,9 +710,11 @@ TRACEPOINT_EVENT(objectstore, clone_range_exit,
 
 TRACEPOINT_EVENT(objectstore, clone_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid,
+	const char *, newoid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
+        ctf_string(newoid, newoid)
     )
 )
 
@@ -667,9 +728,11 @@ TRACEPOINT_EVENT(objectstore, clone_exit,
 
 TRACEPOINT_EVENT(objectstore, rmattrs_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, cid,
+	const char *, oid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(cid, cid)
+        ctf_string(oid, oid)
     )
 )
 
@@ -683,9 +746,11 @@ TRACEPOINT_EVENT(objectstore, rmattrs_exit,
 
 TRACEPOINT_EVENT(objectstore, rmattr_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid,
+	const char *, attr),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
+	ctf_string(attr, attr)	
     )
 )
 
@@ -699,9 +764,10 @@ TRACEPOINT_EVENT(objectstore, rmattr_exit,
 
 TRACEPOINT_EVENT(objectstore, setattrs_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid),
+	
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -715,9 +781,11 @@ TRACEPOINT_EVENT(objectstore, setattrs_exit,
 
 TRACEPOINT_EVENT(objectstore, setattr_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid,
+	const char *, attr),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
+	ctf_string(attr, attr)
     )
 )
 
@@ -731,9 +799,9 @@ TRACEPOINT_EVENT(objectstore, setattr_exit,
 
 TRACEPOINT_EVENT(objectstore, remove_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
     )
 )
 
@@ -747,10 +815,10 @@ TRACEPOINT_EVENT(objectstore, remove_exit,
 
 TRACEPOINT_EVENT(objectstore, truncate_enter,
     TP_ARGS(
-        const char *, osr_name,
+        const char *, oid,
         uint64_t, offset),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
         ctf_integer(uint64_t, offset, offset)
     )
 )
@@ -765,11 +833,11 @@ TRACEPOINT_EVENT(objectstore, truncate_exit,
 
 TRACEPOINT_EVENT(objectstore, zero_enter,
     TP_ARGS(
-        const char *, osr_name,
+        const char *, oid,
         uint64_t, offset,
         uint64_t, length),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
         ctf_integer(uint64_t, offset, offset)
         ctf_integer(uint64_t, length, length)
     )
@@ -785,9 +853,9 @@ TRACEPOINT_EVENT(objectstore, zero_exit,
 
 TRACEPOINT_EVENT(objectstore, touch_enter,
     TP_ARGS(
-        const char *, osr_name),
+        const char *, oid),
     TP_FIELDS(
-        ctf_string(osr_name, osr_name)
+        ctf_string(oid, oid)
     )
 )
 
