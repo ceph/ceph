@@ -194,9 +194,8 @@ struct rgw_pubsub_s3_notifications {
 }*/
 
 struct rgw_pubsub_s3_record {
-  constexpr static const char* const json_type_single = "Record";
   constexpr static const char* const json_type_plural = "Records";
-  // 2.1
+  // 2.2
   std::string eventVersion;
   // aws:s3
   std::string eventSource;
@@ -304,7 +303,6 @@ struct rgw_pubsub_s3_record {
 WRITE_CLASS_ENCODER(rgw_pubsub_s3_record)
 
 struct rgw_pubsub_event {
-  constexpr static const char* const json_type_single = "event";
   constexpr static const char* const json_type_plural = "events";
   std::string id;
   std::string event_name;

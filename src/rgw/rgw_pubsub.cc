@@ -732,7 +732,7 @@ void RGWUserPubSub::SubWithEvents<EventType>::list_events_result::dump(Formatter
 
   Formatter::ArraySection s(*f, EventType::json_type_plural);
   for (auto& event : events) {
-    encode_json(EventType::json_type_single, event, f);
+    encode_json("", event, f);
   }
 }
 
