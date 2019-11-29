@@ -24,12 +24,8 @@ seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
 {
   return store->read(coll,
                      osdmap_oid(e), 0, 0,
-                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).safe_then(
-    [] (auto&& bl) {
-      // TODO: introduce `::handle_error()` to errorated futures
-      // to avoid lambas like this one.
-      return bl;
-    }, crimson::ct_error::enoent::handle([e] {
+                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).handle_error(
+    crimson::ct_error::enoent::handle([e] {
       throw std::runtime_error(fmt::format("read gave enoent on {}",
                                            osdmap_oid(e)));
     }));
