@@ -25,4 +25,12 @@ export class CdTableSelection {
   first() {
     return this.hasSelection ? this.selected[0] : null;
   }
+
+  /**
+   * Clear the selection of the object
+   */
+  clear() {
+    this.selected = [];
+    this.update();
+  }
 }

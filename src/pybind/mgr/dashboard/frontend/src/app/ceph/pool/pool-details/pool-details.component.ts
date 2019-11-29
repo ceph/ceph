@@ -9,6 +9,7 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { RbdConfigurationEntry } from '../../../shared/models/configuration';
 import { Permissions } from '../../../shared/models/permissions';
+import { TableComponent } from "../../../shared/datatable/table/table.component";
 
 @Component({
   selector: 'cd-pool-details',
@@ -18,6 +19,8 @@ import { Permissions } from '../../../shared/models/permissions';
 export class PoolDetailsComponent implements OnChanges {
   cacheTierColumns: Array<CdTableColumn> = [];
 
+  @Input()
+  table: TableComponent;
   @Input()
   selection: CdTableSelection;
   @Input()
@@ -73,5 +76,10 @@ export class PoolDetailsComponent implements OnChanges {
 
   filterNonPoolData(pool: object): object {
     return _.omit(pool, ['cdExecuting', 'cdIsBinary']);
+  }
+
+  closeSheet() {
+    this.selection.clear(); // Clear local selection
+    this.table.selection.clear(); // Clear selection in table
   }
 }
