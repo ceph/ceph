@@ -62,10 +62,9 @@ describe('OrchestratorService', () => {
     const data = {
       drive_group: {
         host_pattern: '*'
-      },
-      all_hosts: ['a', 'b']
+      }
     };
-    service.osdCreate(data['drive_group'], data['all_hosts']).subscribe();
+    service.osdCreate(data['drive_group']).subscribe();
     const req = httpTesting.expectOne(service.osdURL);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(data);

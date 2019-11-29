@@ -102,9 +102,9 @@ class OrchestratorService(RESTController):
 class OrchestratorOsd(RESTController):
 
     @raise_if_no_orchestrator
-    def create(self, drive_group, all_hosts=None):
+    def create(self, drive_group):
         orch = OrchClient.instance()
         try:
-            orch.osds.create(DriveGroupSpec.from_json(drive_group), all_hosts)
+            orch.osds.create(DriveGroupSpec.from_json(drive_group))
         except (ValueError, TypeError, DriveGroupValidationError) as e:
             raise DashboardException(e, component='osd')

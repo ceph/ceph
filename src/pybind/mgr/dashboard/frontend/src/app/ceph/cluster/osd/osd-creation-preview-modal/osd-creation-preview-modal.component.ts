@@ -17,9 +17,6 @@ export class OsdCreationPreviewModalComponent implements OnInit {
   @Input()
   driveGroup: DriveGroup;
 
-  @Input()
-  allHosts: string[];
-
   @Output()
   submitAction = new EventEmitter();
 
@@ -43,7 +40,7 @@ export class OsdCreationPreviewModalComponent implements OnInit {
   }
 
   onSubmit() {
-    this.orchService.osdCreate(this.driveGroup.spec, this.allHosts).subscribe(
+    this.orchService.osdCreate(this.driveGroup.spec).subscribe(
       undefined,
       () => {
         this.formGroup.setErrors({ cdSubmitButton: true });
