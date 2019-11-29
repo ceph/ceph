@@ -224,6 +224,15 @@ namespace libradosstriper
     int aio_flush();
 
     /**
+     * sets allocation hints for the object
+     * (NOT IMPLEMENTED FOR NOW)
+     * @returns 0 on success, negative error code on failure
+     */
+    int set_alloc_hint2(const std::string& soid, uint64_t expected_obj_size,
+                       uint64_t expected_write_size, uint32_t flags);
+
+
+    /**
      * creation of multi aio completion objects
      */
     static MultiAioCompletion *multi_aio_create_completion();

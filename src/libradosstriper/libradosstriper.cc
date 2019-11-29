@@ -324,6 +324,13 @@ int libradosstriper::RadosStriper::aio_flush()
   return rados_striper_impl->aio_flush();
 }
 
+int libradosstriper::RadosStriper::set_alloc_hint2(const std::string& soid, uint64_t expected_obj_size,
+                                    uint64_t expected_write_size, uint32_t flags)
+{
+  //NOT IMPLEMENTED
+  return 0;
+}
+
 libradosstriper::MultiAioCompletion* libradosstriper::RadosStriper::multi_aio_create_completion()
 {
   MultiAioCompletionImpl *c = new MultiAioCompletionImpl;

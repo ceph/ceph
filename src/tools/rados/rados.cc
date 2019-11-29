@@ -274,6 +274,16 @@ int write([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, buffer::list& 
   return io_ctx.write(oid, indata, count, offset);
 }
 
+int set_alloc_hint2([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, uint64_t expected_obj_size, uint64_t expected_write_size, uint32_t flags, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().set_alloc_hint2(oid, expected_obj_size, expected_write_size, flags);
+#endif
+
+  return io_ctx.set_alloc_hint2(oid, expected_obj_size, expected_write_size, flags);
+}
+
 int write_full([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, bufferlist& indata, [[maybe_unused]] const bool use_striper)
 {
 #ifdef WITH_LIBRADOSSTRIPER
@@ -595,10 +605,15 @@ static int do_put(IoCtx& io_ctx,
      continue;
     }
 
-    if (0 == offset && create_object)
+    if (0 == offset && create_object) {
+      ret = detail::set_alloc_hint2(io_ctx, oid, indata.length(), indata.length(),
+        0, use_striper);
+      if (ret < 0)
+        goto out;
       ret = detail::write_full(io_ctx, oid, indata, use_striper);
-    else
+    } else {
       ret = detail::write(io_ctx, oid, indata, count, offset, use_striper);
+    }
 
     if (ret < 0) {
       goto out;
