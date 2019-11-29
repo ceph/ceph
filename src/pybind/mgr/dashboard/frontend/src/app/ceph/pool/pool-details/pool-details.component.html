@@ -1,3 +1,11 @@
+<div *ngIf="selection.hasSingleSelection"
+     class="bar">
+  <span>Details of <strong>{{ selection.first().pool_name }}</strong></span>
+  <button type="button" class="close" aria-label="Close" (click)="closeSheet()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+
 <tabset #tabsetChild
         cdTableDetail
         *ngIf="selection.hasSingleSelection">

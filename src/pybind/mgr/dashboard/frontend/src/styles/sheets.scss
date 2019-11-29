@@ -1,0 +1,37 @@
+@mixin left-right {
+  top: 0;
+  width: 80%;
+  padding: 1em 3em;
+  overflow-y: scroll;
+  height: 100%;
+  max-height: 100%;
+}
+
+.ng-sidebar__content {
+  overflow-x: hidden !important;
+}
+
+.sheets {
+  position: absolute;
+  background: white;
+  z-index: 100;
+
+  &.right {
+    @include left-right;
+    border-left: 1px solid $color-light-gray;
+    left: 100%;
+    transition: 0.5s ease-in-out;
+
+    &.active {
+      left: 20%;
+      transition: 0.5s ease-in-out;
+    }
+  }
+
+  .bar {
+    width: 100%;
+    border-bottom: 1px solid $color-light-gray;
+    padding-bottom: 1em;
+    margin-bottom: 1em;
+  }
+}

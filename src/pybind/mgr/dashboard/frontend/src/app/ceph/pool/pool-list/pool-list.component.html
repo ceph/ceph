@@ -19,6 +19,8 @@
       </cd-table-actions>
       <cd-pool-details cdTableDetail
                        id="pool-list-details"
+                       class="sheets right"
+                       [ngClass]="{'active': selection.hasSingleSelection}"
                        [table]="table"
                        [selection]="selection"
                        [permissions]="permissions"
