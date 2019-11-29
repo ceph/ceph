@@ -146,7 +146,7 @@ export class OsdFormComponent implements OnInit {
     this.orchService.inventoryDeviceList().subscribe(
       (devices: InventoryDevice[]) => {
         this.allDevices = _.filter(devices, 'available');
-        this.availDevices = [...devices];
+        this.availDevices = [...this.allDevices];
         this.loading = false;
       },
       () => {
