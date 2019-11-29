@@ -13739,26 +13739,29 @@ void BlueStore::_choose_write_options(
 
   wctx->alloc_size = optimal_alloc_size;
   auto alloc_size_order = optimal_alloc_size_order;
-  if (o->onode.use_small_alloc()) {
-    if (o->onode.size == 0) {
-      o->onode.clear_flag(bluestore_onode_t::FLAG_SMALL_ALLOC);
-    } else {
-      wctx->alloc_size = min_alloc_size;
-      alloc_size_order = min_alloc_size_order;
-    }
-  }
 
-  if (!o->onode.use_small_alloc() &&
-    min_alloc_size != optimal_alloc_size && o->onode.size == 0) {
-    // enable small allocations for tiny object which size is known beforehand
-    auto exp_size = o->onode.expected_object_size;
-    if (exp_size &&
-      exp_size < g_conf()->bluestore_use_min_alloc_threshold) {
-      o->onode.set_flag(bluestore_onode_t::FLAG_SMALL_ALLOC);
+  if (min_alloc_size != optimal_alloc_size) {
+    if (o->onode.size == 0) {
+      // consider changing to difference alloc size when object is empty only
+      int64_t opt_for_size = 0;
+      c->pool_opts.get(pool_opts_t::OPTIMIZE_FOR_SIZE, &opt_for_size);
+      if (opt_for_size) {
+        //enable small allocs if pool is configured as 'optimized for size'
+        o->onode.set_flag(bluestore_onode_t::FLAG_SMALL_ALLOC);
+      } else {
+        auto exp_size = o->onode.expected_object_size;
+        if (exp_size &&
+          exp_size < g_conf()->bluestore_use_min_alloc_threshold) {
+          o->onode.set_flag(bluestore_onode_t::FLAG_SMALL_ALLOC);
+        } else {
+          o->onode.clear_flag(bluestore_onode_t::FLAG_SMALL_ALLOC);
+        }
+      }
+    }
+    if (o->onode.use_small_alloc()) {
       wctx->alloc_size = min_alloc_size;
       alloc_size_order = min_alloc_size_order;
     }
-    // more cases to follow
   }
 
   wctx->compress = (cm != Compressor::COMP_NONE) &&
