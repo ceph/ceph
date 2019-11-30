@@ -511,7 +511,7 @@ int get_iface_numa_node(
   const std::string& iface,
   int *node)
 {
-  int ifatype = IFACE_DEFAULT;
+  enum { IFACE_PHY_PORT = 1, IFACE_BOND_PORT = 2} ifatype = IFACE_PHY_PORT;
   string ifa = iface;
   int pos = ifa.find(":");
   if (pos != string::npos) {
@@ -526,14 +526,11 @@ int get_iface_numa_node(
       return -errno;
     }
     ifatype = IFACE_BOND_PORT;
-  } else {
-    ifatype = IFACE_PHY_PORT;
   }
 
   int r = 0;
   char buf[1024];
   char *endptr = 0;
-  int bond_node = -1;
   r = safe_read(fd, &buf, sizeof(buf));
   if (r < 0) {
     goto out;
@@ -553,12 +550,10 @@ int get_iface_numa_node(
     r = 0;
     break;
   case IFACE_BOND_PORT:
+    int bond_node = -1;
     std::vector<std::string> sv;
-    char *q, *p = strtok_r(buf, " ", &q);
-    while (p != NULL) {
-      sv.push_back(p);
-      p = strtok_r(NULL, " ", &q);
-    }
+    std::string ifacestr = buf;
+    get_str_vec(ifacestr, " ", sv);
     for (auto& iter : sv) {
       int bn = -1;
       r = get_iface_numa_node(iter, &bn);
