@@ -1396,3 +1396,39 @@ TEST_F(TestMirroring, SnapshotImageState)
   ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
 }
+
+TEST_F(TestMirroring, SnapshotPromoteDemote)
+{
+  REQUIRE_FORMAT_V2();
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
+                                          RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                                          "cluster", "client"));
+
+  uint64_t features;
+  ASSERT_TRUE(get_features(&features));
+  features &= ~RBD_FEATURE_JOURNALING;
+  int order = 20;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
+                             &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
+  ASSERT_EQ(0, image.mirror_image_enable());
+  librbd::mirror_image_mode_t mode;
+  ASSERT_EQ(0, image.mirror_image_get_mode(&mode));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode);
+
+  ASSERT_EQ(-EINVAL, image.mirror_image_promote(false));
+  ASSERT_EQ(0, image.mirror_image_demote());
+  ASSERT_EQ(0, image.mirror_image_promote(false));
+  ASSERT_EQ(0, image.mirror_image_demote());
+  ASSERT_EQ(0, image.mirror_image_promote(false));
+
+  ASSERT_EQ(0, image.close());
+  ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+}
