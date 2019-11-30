@@ -27,6 +27,8 @@ namespace mirror {
 namespace snapshot {
 namespace util {
 
+namespace {
+
 struct Mock {
   static Mock* s_instance;
 
@@ -39,6 +41,8 @@ struct Mock {
 };
 
 Mock *Mock::s_instance = nullptr;
+
+} // anonymous namespace
 
 template<> bool can_create_primary_snapshot(librbd::MockTestImageCtx *image_ctx,
                                             bool demoted, bool force,

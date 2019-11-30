@@ -81,6 +81,10 @@ private:
 
   bufferlist m_out_bl;
 
+  bool is_orphan() const {
+    return m_primary_mirror_uuid.empty();
+  }
+
   void refresh_image();
   void handle_refresh_image(int r);
 

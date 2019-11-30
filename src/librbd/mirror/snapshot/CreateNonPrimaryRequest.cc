@@ -100,7 +100,7 @@ void CreateNonPrimaryRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  if (!util::can_create_non_primary_snapshot(m_image_ctx)) {
+  if (!is_orphan() && !util::can_create_non_primary_snapshot(m_image_ctx)) {
     finish(-EINVAL);
     return;
   }
@@ -143,9 +143,6 @@ void CreateNonPrimaryRequest<I>::handle_create_snapshot(int r) {
 
 template <typename I>
 void CreateNonPrimaryRequest<I>::write_image_state() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
   uint64_t snap_id;
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
@@ -157,6 +154,13 @@ void CreateNonPrimaryRequest<I>::write_image_state() {
   if (m_snap_id != nullptr) {
     *m_snap_id = snap_id;
   }
+
+  if (is_orphan()) {
+    finish(0);
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
 
   auto ctx = create_context_callback<
     CreateNonPrimaryRequest<I>,
