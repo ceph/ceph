@@ -91,6 +91,7 @@ setup(
                       # For bucket notification testing in multisite
                       'xmltodict',
                       'boto3',
+                      'cryptography >= 2.7',  # For RGW bucket MFA Delete TOTP.
                       ],
     extras_require = {
         'coverage': [ 'mysqlclient == 1.4.2'],
