@@ -19,15 +19,11 @@ void populate_record_from_request(const req_state *s,
         const std::string& etag, 
         EventType event_type,
         rgw_pubsub_s3_record& record) { 
-  record.eventVersion = "2.1";
-  record.eventSource = "aws:s3";
   record.eventTime = mtime;
   record.eventName = to_string(event_type);
   record.userIdentity = s->user->user_id.id;    // user that triggered the change
-  record.sourceIPAddress = "";                  // IP address of client that triggered the change: TODO
   record.x_amz_request_id = s->req_id;          // request ID of the original change
   record.x_amz_id_2 = s->host_id;               // RGW on which the change was made
-  record.s3SchemaVersion = "1.0";
   // configurationId is filled from subscription configuration
   record.bucket_name = s->bucket_name;
   record.bucket_ownerIdentity = s->bucket_owner.get_id().id;
@@ -40,10 +36,7 @@ void populate_record_from_request(const req_state *s,
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
           std::back_inserter(record.object_sequencer));
-  // event ID is rgw extension (not in the S3 spec), used for acking the event
-  // same format is used in both S3 compliant and Ceph specific events
-  // not used in case of push-only mode
-  record.id = "";
+  set_event_id(record.id, etag, ts);
   record.bucket_id = s->bucket.bucket_id;
   // pass meta data
   record.x_meta_map = s->info.x_meta_map;

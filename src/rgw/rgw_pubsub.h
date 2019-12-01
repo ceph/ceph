@@ -108,7 +108,7 @@ class rgw_pubsub_topic_filter;
           <Name></Name>
           <Value></Value>
         </FilterRule>
-      </s3Metadata>
+      </S3Metadata>
     </Filter>
     <Id>notification1</Id>
     <Topic>arn:aws:sns:<region>:<account>:<topic></Topic>
@@ -195,17 +195,16 @@ struct rgw_pubsub_s3_notifications {
 
 struct rgw_pubsub_s3_record {
   constexpr static const char* const json_type_plural = "Records";
-  // 2.2
-  std::string eventVersion;
+  std::string eventVersion = "2.2";
   // aws:s3
-  std::string eventSource;
+  std::string eventSource = "ceph:s3";
   // zonegroup
   std::string awsRegion;
   // time of the request
   ceph::real_time eventTime;
   // type of the event
   std::string eventName;
-  // user that sent the requet (not implemented)
+  // user that sent the request
   std::string userIdentity;
   // IP address of source of the request (not implemented)
   std::string sourceIPAddress;
@@ -213,20 +212,19 @@ struct rgw_pubsub_s3_record {
   std::string x_amz_request_id;
   // radosgw that received the request
   std::string x_amz_id_2;
-  // 1.0
-  std::string s3SchemaVersion;
+  std::string s3SchemaVersion = "1.0";
   // ID received in the notification request
   std::string configurationId;
   // bucket name
   std::string bucket_name;
-  // bucket owner (not implemented)
+  // bucket owner
   std::string bucket_ownerIdentity;
   // bucket ARN
   std::string bucket_arn;
   // object key
   std::string object_key;
-  // object size (not implemented)
-  uint64_t object_size;
+  // object size
+  uint64_t object_size = 0;
   // object etag
   std::string object_etag;
   // object version id bucket is versioned
@@ -235,7 +233,7 @@ struct rgw_pubsub_s3_record {
   std::string object_sequencer;
   // this is an rgw extension (not S3 standard)
   // used to store a globally unique identifier of the event
-  // that could be used for acking
+  // that could be used for acking or any other identification of the event
   std::string id;
   // this is an rgw extension holding the internal bucket id
   std::string bucket_id;
@@ -333,6 +331,9 @@ struct rgw_pubsub_event {
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_event)
+
+// settign a unique ID for an event/record based on object hash and timestamp
+void set_event_id(std::string& id, const std::string& hash, const utime_t& ts);
 
 struct rgw_pubsub_sub_dest {
   std::string bucket_name;

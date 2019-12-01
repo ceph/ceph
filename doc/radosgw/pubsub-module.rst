@@ -438,7 +438,7 @@ the events will have an S3-compatible record format (JSON):
                    "eTag":"",
                    "versionId":"",
                    "sequencer":"",
-                   "metadata":""
+                   "metadata":[]
                }
            },
            "eventId":"",
@@ -452,7 +452,6 @@ the events will have an S3-compatible record format (JSON):
 - requestParameters: not supported
 - responseElements: not supported
 - s3.configurationId: notification ID that created the subscription for the event
-- s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
 - s3.bucket.name: name of the bucket
 - s3.bucket.ownerIdentity.principalId: owner of the bucket
 - s3.bucket.arn: ARN of the bucket
