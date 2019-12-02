@@ -6,14 +6,18 @@
   marking all OSDs up and in
   writing upmap command output to: c
   checking for upmap cleanups
-  upmap, max-count 11, max deviation 0.01
+  upmap, max-count 11, max deviation 1
+  prepared 11 changes for pools(s) rbd 
+  prepared 11 changes in total
   $ cat c
   ceph osd pg-upmap-items 1.7 142 147
   ceph osd pg-upmap-items 1.8 219 223
-  ceph osd pg-upmap-items 1.17 171 173 201 202
+  ceph osd pg-upmap-items 1.17 201 202 171 173
   ceph osd pg-upmap-items 1.1a 201 202
-  ceph osd pg-upmap-items 1.1c 171 173 201 202
-  ceph osd pg-upmap-items 1.20 88 87 201 202
+  ceph osd pg-upmap-items 1.1c 201 202
+  ceph osd pg-upmap-items 1.20 201 202
+  ceph osd pg-upmap-items 1.24 232 233
   ceph osd pg-upmap-items 1.51 201 202
   ceph osd pg-upmap-items 1.62 219 223
+  ceph osd pg-upmap-items 1.6f 219 223
   $ rm -f om c
