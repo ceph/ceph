@@ -953,7 +953,7 @@ void ActivePyModules::get_health_checks(health_check_map_t *checks)
 {
   std::lock_guard l(lock);
   for (auto& [name, module] : modules) {
-    dout(15) << "getting health checks for" << name << dendl;
+    dout(15) << "getting health checks for " << name << dendl;
     module->get_health_checks(checks);
   }
 }
