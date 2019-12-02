@@ -240,10 +240,9 @@ def infer_fsid(func):
         return func()
     return _infer_fsid
 
-def write_tmp(s, uid, gid, mode=0o600):
+def write_tmp(s, uid, gid):
     tmp_f = tempfile.NamedTemporaryFile(mode='w',
                                         prefix='ceph-tmp')
-    os.fchmod(tmp_f.fileno(), mode)
     os.fchown(tmp_f.fileno(), uid, gid)
     tmp_f.write(s)
     tmp_f.flush()
@@ -1013,7 +1012,7 @@ def command_bootstrap():
 
     # create initial monmap, tmp monmap file
     logger.info('Creating initial monmap...')
-    tmp_monmap = write_tmp('', uid, gid, mode=0o644)
+    tmp_monmap = write_tmp('', uid, gid)
     out = CephContainer(
         image=args.image,
         entrypoint='/usr/bin/monmaptool',
