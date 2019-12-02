@@ -122,7 +122,11 @@ On CentOS / RHEL, execute::
 
 On Debian / Ubuntu, execute::
 
-	sudo apt install ntp
+	sudo apt install ntpsec 
+
+or::
+
+	sudo apt install chrony 
 
 Ensure that you enable the NTP service. Ensure that each Ceph Node uses the
 same NTP time server. See `NTP`_ for details.
