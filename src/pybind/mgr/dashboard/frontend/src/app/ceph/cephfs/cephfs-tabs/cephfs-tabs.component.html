@@ -5,9 +5,11 @@
     <cd-cephfs-detail [data]="details">
     </cd-cephfs-detail>
   </tab>
-  <tab i18n-heading
-       (selectTab)="softRefresh()"
-       heading="Clients: {{ clients.data.length }}">
+  <tab (selectTab)="softRefresh()">
+    <ng-template tabHeading>
+      <ng-container i18n>Clients</ng-container>
+      <span class="badge badge-pill badge-tab ml-1">{{ clients.data.length }}</span>
+    </ng-template>
     <cd-cephfs-clients [id]="id"
                        [clients]="clients"
                        (triggerApiUpdate)="refresh()">
