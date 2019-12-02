@@ -75,6 +75,12 @@ Options
 
    Set the object size for put/get ops and for write benchmarking
 
+.. option:: --lock-cookie locker-cookie
+
+   Will set the lock cookie for acquiring advisory lock (lock get command). 
+   If the cookie is not empty, this option must be passed to lock break command
+   to find the correct lock when releasing lock.
+
 
 Global commands
 ===============
