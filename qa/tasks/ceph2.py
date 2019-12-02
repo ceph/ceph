@@ -42,7 +42,7 @@ def _shell(ctx, cluster_name, remote, args, **kwargs):
     return remote.run(
         args=[
             'sudo',
-            '{}/ceph-daemon'.format(testdir),
+            ctx.ceph_daemon,
             '--image', ctx.ceph[cluster_name].image,
             'shell',
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
@@ -95,27 +95,28 @@ def download_ceph_daemon(ctx, config, ref):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
 
-    ref = config.get('ceph_daemon_branch', ref)
-    git_url = teuth_config.get_ceph_git_url()
-    log.info('Downloading ceph-daemon (repo %s ref %s)...' % (git_url, ref))
-    ctx.cluster.run(
-        args=[
-            'git', 'archive',
-            '--remote=' + git_url,
-            ref,
-            'src/ceph-daemon/ceph-daemon',
-            run.Raw('|'),
-            'tar', '-xO', 'src/ceph-daemon/ceph-daemon',
-            run.Raw('>'),
-            '{tdir}/ceph-daemon'.format(tdir=testdir),
-            run.Raw('&&'),
-            'test', '-s',
-            '{tdir}/ceph-daemon'.format(tdir=testdir),
-            run.Raw('&&'),
-            'chmod', '+x',
-            '{tdir}/ceph-daemon'.format(tdir=testdir),
-        ],
-    )
+    if config.get('ceph_daemon_mode') != 'packaged-ceph-daemon':
+        ref = config.get('ceph_daemon_branch', ref)
+        git_url = teuth_config.get_ceph_git_url()
+        log.info('Downloading ceph-daemon (repo %s ref %s)...' % (git_url, ref))
+        ctx.cluster.run(
+            args=[
+                'git', 'archive',
+                '--remote=' + git_url,
+                ref,
+                'src/ceph-daemon/ceph-daemon',
+                run.Raw('|'),
+                'tar', '-xO', 'src/ceph-daemon/ceph-daemon',
+                run.Raw('>'),
+                ctx.ceph_daemon,
+                run.Raw('&&'),
+                'test', '-s',
+                ctx.ceph_daemon,
+                run.Raw('&&'),
+                'chmod', '+x',
+                ctx.ceph_daemon,
+            ],
+        )
 
     try:
         yield
@@ -123,20 +124,21 @@ def download_ceph_daemon(ctx, config, ref):
         log.info('Removing cluster...')
         ctx.cluster.run(args=[
             'sudo',
-            '{}/ceph-daemon'.format(testdir),
+            ctx.ceph_daemon,
             'rm-cluster',
             '--fsid', ctx.ceph[cluster_name].fsid,
             '--force',
         ])
 
-        log.info('Removing ceph-daemon ...')
-        ctx.cluster.run(
-            args=[
-                'rm',
-                '-rf',
-                '{tdir}/ceph-daemon'.format(tdir=testdir),
-            ],
-        )
+        if config.get('ceph_daemon_mode') == 'root':
+            log.info('Removing ceph-daemon ...')
+            ctx.cluster.run(
+                args=[
+                    'rm',
+                    '-rf',
+                    ctx.ceph_daemon,
+                ],
+            )
 
 @contextlib.contextmanager
 def ceph_log(ctx, config):
@@ -261,7 +263,7 @@ def ceph_bootstrap(ctx, config):
         log.info('Bootstrapping...')
         cmd = [
             'sudo',
-            '{}/ceph-daemon'.format(testdir),
+            ctx.ceph_daemon,
             '--image', ctx.ceph[cluster_name].image,
             'bootstrap',
             '--fsid', fsid,
@@ -769,8 +771,6 @@ def task(ctx, config):
     first_ceph_cluster = False
     if not hasattr(ctx, 'daemons'):
         first_ceph_cluster = True
-        ctx.daemons = DaemonGroup(
-            use_ceph_daemon='{}/ceph-daemon'.format(testdir))
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
         ctx.managers = {}
@@ -779,7 +779,19 @@ def task(ctx, config):
     cluster_name = config['cluster']
     ctx.ceph[cluster_name] = argparse.Namespace()
 
-    #validate_config(ctx, config)
+    # ceph-daemon mode?
+    if 'ceph_daemon_mode' not in config:
+        config['ceph_daemon_mode'] = 'root'
+    assert config['ceph_daemon_mode'] in ['root', 'packaged-ceph-daemon']
+    if config['ceph_daemon_mode'] == 'root':
+        ctx.ceph_daemon = testdir + '/ceph-daemon'
+    else:
+        ctx.ceph_daemon = 'ceph-daemon'  # in the path
+
+    if first_ceph_cluster:
+        # FIXME: this is global for all clusters
+        ctx.daemons = DaemonGroup(
+            use_ceph_daemon=ctx.ceph_daemon)
 
     # image
     ctx.ceph[cluster_name].image = config.get('image')
