@@ -867,17 +867,13 @@ void rgw_sync_symmetric_group::decode_json(JSONObj *obj)
 
 void rgw_sync_bucket_entity::dump(Formatter *f) const
 {
-  if (bucket) {
-    rgw_bucket b = *bucket;
-    if (b.name.empty()) {
-      b.name = "*";
-    }
-
-    encode_json("bucket", b.get_key(), f);
-  } else {
-    encode_json("bucket", "*", f);
+  encode_json("bucket", rgw_sync_bucket_entity::bucket_key(bucket), f);
+  if (zones) {
+    encode_json("zones", zones, f);
+  } else if (all_zones) {
+    set<string> z = { "*" };
+    encode_json("zones", z, f);
   }
-  encode_json("zones", zones, f);
 }
 
 void rgw_sync_bucket_entity::decode_json(JSONObj *obj)

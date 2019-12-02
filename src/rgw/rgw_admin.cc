@@ -85,6 +85,23 @@ static const DoutPrefixProvider* dpp() {
   return &global_dpp;
 }
 
+#define CHECK_TRUE(x, msg, err) \
+  do { \
+    if (!x) { \
+      cerr << msg << std::endl; \
+      return err; \
+    } \
+  } while (0)
+
+#define CHECK_SUCCESS(x, msg) \
+  do { \
+    int _x_val = (x); \
+    if (_x_val < 0) { \
+      cerr << msg << ": " << cpp_strerror(-_x_val) << std::endl; \
+      return _x_val; \
+    } \
+  } while (0)
+
 void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
@@ -691,6 +708,7 @@ enum class OPT {
   GLOBAL_QUOTA_SET,
   GLOBAL_QUOTA_ENABLE,
   GLOBAL_QUOTA_DISABLE,
+  SYNC_INFO,
   SYNC_STATUS,
   ROLE_CREATE,
   ROLE_DELETE,
@@ -896,6 +914,7 @@ static SimpleCmd::Commands all_cmds = {
   { "global quota set", OPT::GLOBAL_QUOTA_SET },
   { "global quota enable", OPT::GLOBAL_QUOTA_ENABLE },
   { "global quota disable", OPT::GLOBAL_QUOTA_DISABLE },
+  { "sync info", OPT::SYNC_INFO },
   { "sync status", OPT::SYNC_STATUS },
   { "role create", OPT::ROLE_CREATE },
   { "role delete", OPT::ROLE_DELETE },
@@ -1073,6 +1092,15 @@ static int init_bucket(const string& tenant_name, const string& bucket_name, con
     bucket = bucket_info.bucket;
   }
   return 0;
+}
+
+static int init_bucket(const rgw_bucket& b,
+                       RGWBucketInfo& bucket_info,
+                       rgw_bucket& bucket,
+                       map<string, bufferlist> *pattrs = nullptr)
+{
+  return init_bucket(b.tenant, b.name, b.bucket_id,
+                     bucket_info, bucket, pattrs);
 }
 
 static int read_input(const string& infile, bufferlist& bl)
@@ -2292,6 +2320,77 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   return 0;
 }
 
+void encode_json(const char *name, const RGWBucketSyncFlowManager::flow_map_t& m, Formatter *f)
+{
+  Formatter::ObjectSection top_section(*f, name);
+  Formatter::ArraySection as(*f, "entries");
+
+  for (auto& entry : m) {
+    Formatter::ObjectSection os(*f, "entry");
+    auto& bucket = entry.first;
+    auto& pflow = entry.second;
+
+    encode_json("bucket", rgw_sync_bucket_entity::bucket_key(bucket), f);
+    {
+      Formatter::ArraySection fg(*f, "flow_groups");
+      for (auto& flow_group : pflow.flow_groups) {
+        encode_json("entry", *flow_group, f);
+      }
+    }
+    encode_json("pipes", pflow.pipe, f);
+  }
+}
+
+static int sync_info(std::optional<string> opt_target_zone, std::optional<rgw_bucket> opt_bucket, Formatter *formatter)
+{
+  const RGWRealm& realm = store->svc()->zone->get_realm();
+  const RGWZoneGroup& zonegroup = store->svc()->zone->get_zonegroup();
+  const RGWZone& zone = store->svc()->zone->get_zone();
+
+  string zone_name = opt_target_zone.value_or(store->svc()->zone->zone_name());
+
+  RGWBucketSyncFlowManager zone_flow(zone_name, nullopt, nullptr);
+
+  zone_flow.init(zonegroup.sync_policy);
+
+  RGWBucketSyncFlowManager *flow_mgr = &zone_flow;
+
+  std::optional<RGWBucketSyncFlowManager> bucket_flow;
+
+  if (opt_bucket) {
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+
+    int ret = init_bucket(*opt_bucket, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: init_bucket failed: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    if (ret >= 0 &&
+        bucket_info.sync_policy) {
+      bucket_flow.emplace(zone_name, opt_bucket, &zone_flow);
+
+      bucket_flow->init(*bucket_info.sync_policy);
+
+      flow_mgr = &(*bucket_flow);
+    }
+  }
+
+  auto& sources = flow_mgr->get_sources();
+  auto& dests = flow_mgr->get_dests();
+
+  {
+    Formatter::ObjectSection os(*formatter, "result");
+    encode_json("sources", sources, formatter);
+    encode_json("dests", dests, formatter);
+  }
+
+  formatter->flush(cout);
+
+  return 0;
+}
+
 static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& info,
                               std::ostream& out)
 {
@@ -2619,14 +2718,6 @@ static bool require_non_empty_opt(std::optional<T> opt, bool extra_check = true)
   return true;
 }
 
-#define CHECK_TRUE(x, msg, err) \
-  do { \
-    if (!x) { \
-      cerr << msg << std::endl; \
-      return err; \
-    } \
-  } while (0)
-
 template <class T>
 static void show_result(T& obj,
                         Formatter *formatter,
@@ -2684,7 +2775,7 @@ public:
       return 0;
     }
 
-    ret = init_bucket(bucket->tenant, bucket->name, bucket->bucket_id, bucket_info, *bucket, &bucket_attrs);
+    ret = init_bucket(*bucket, bucket_info, *bucket, &bucket_attrs);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -2926,6 +3017,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_dest_tenant;
   std::optional<string> opt_dest_bucket_name;
   std::optional<string> opt_dest_bucket_id;
+  std::optional<string> opt_effective_zone;
 
   rgw::notify::EventTypeList event_types;
 
@@ -3317,6 +3409,8 @@ int main(int argc, const char **argv)
       opt_dest_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-bucket-id", (char*)NULL)) {
       opt_dest_bucket_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--effective-zone", (char*)NULL)) {
+      opt_effective_zone = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -3515,6 +3609,7 @@ int main(int argc, const char **argv)
 			 OPT::PERIOD_GET_CURRENT,
 			 OPT::PERIOD_LIST,
 			 OPT::GLOBAL_QUOTA_GET,
+			 OPT::SYNC_INFO,
 			 OPT::SYNC_STATUS,
 			 OPT::ROLE_GET,
 			 OPT::ROLE_LIST,
@@ -7278,6 +7373,10 @@ next:
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT::SYNC_INFO) {
+    sync_info(opt_effective_zone, opt_bucket, formatter);
   }
 
   if (opt_cmd == OPT::SYNC_STATUS) {
