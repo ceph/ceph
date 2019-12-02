@@ -565,9 +565,11 @@ def extract_uid_gid():
 
 def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
                   config, keyring):
-    # type: (str, str, Union[int, str], CephContainer, int, int, str, str) -> None
-    if daemon_type == 'mon' and not os.path.exists(get_data_dir(fsid, 'mon',
-                                                                daemon_id)):
+    # type: (str, str, Union[int, str], CephContainer, int, int, Optional[str], Optional[str]) -> None
+    if daemon_type == 'mon' and not os.path.exists(
+            get_data_dir(fsid, 'mon', daemon_id)):
+        assert config
+        assert keyring
         # tmp keyring file
         tmp_keyring = tempfile.NamedTemporaryFile(mode='w')
         os.fchmod(tmp_keyring.fileno(), 0o600)
@@ -1112,8 +1114,8 @@ def command_bootstrap():
         f.write(config)
 
     mon_c = get_container(fsid, 'mon', mon_id)
-    deploy_daemon_units(fsid, uid, gid, 'mon', mon_id, mon_c)
-    update_firewalld(daemon_type)
+    deploy_daemon(fsid, 'mon', mon_id, mon_c, uid, gid,
+                  config=None, keyring=None)
 
     # client.admin key + config to issue various CLI commands
     tmp_admin_keyring = tempfile.NamedTemporaryFile(mode='w')
