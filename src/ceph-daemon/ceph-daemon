@@ -1666,8 +1666,9 @@ def _get_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '--image',
-        default=DEFAULT_IMAGE,
-        help='container image')
+        default=os.environ.get('CEPH_DAEMON_IMAGE', DEFAULT_IMAGE),
+        help='container image. Can also be set via the "CEPH_DAEMON_IMAGE" '
+        'env var')
     parser.add_argument(
         '--docker',
         action='store_true',
