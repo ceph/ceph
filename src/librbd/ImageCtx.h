@@ -51,7 +51,9 @@ namespace librbd {
   template <typename> class ObjectMap;
   template <typename> class Operations;
 
-  namespace cache { struct ImageCache; }
+  namespace cache {
+  template <typename> class ImageCache;
+  }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -147,7 +149,7 @@ namespace librbd {
 
     file_layout_t layout;
 
-    cache::ImageCache *image_cache = nullptr;
+    cache::ImageCache<ImageCtx> *image_cache = nullptr;
 
     Readahead readahead;
     std::atomic<uint64_t> total_bytes_read = {0};

@@ -7287,6 +7287,23 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_min(0)
     .set_description("maximum io delay (in milliseconds) for simple io scheduler (if set to 0 dalay is calculated based on latency stats)"),
+
+    Option("rbd_rwl_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("enable persistent write back cache for this volume"),
+
+    Option("rbd_rwl_log_periodic_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("emit periodic perf stats to debug log"),
+
+    Option("rbd_rwl_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1073741824)
+    .set_min(1073741824)
+    .set_description("size of the persistent write back cache for this volume"),
+
+    Option("rbd_rwl_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description("location of the persistent write back cache in a DAX-enabled filesystem on persistent memory"),
   });
 }
 
