@@ -31,15 +31,6 @@
       </cd-osd-details>
     </cd-table>
 
-    <ng-template #statusColor
-                 let-value="value">
-      <span *ngFor="let state of value; last as last">
-        <span class="badge"
-              [ngClass]="{'badge-success': ['in', 'up'].includes(state), 'badge-danger': ['down', 'out', 'destroyed'].includes(state)}">{{ state }}</span>
-        <span *ngIf="!last">&nbsp;</span>
-      </span>
-    </ng-template>
-
     <ng-template #osdUsageTpl
                  let-row="row">
       <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
