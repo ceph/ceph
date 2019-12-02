@@ -1008,12 +1008,22 @@ class Orchestrator(object):
         # type: (Optional[str], Optional[str]) -> Completion
         raise NotImplementedError()
 
-    @_hide_in_features
-    def upgrade_start(self, upgrade_spec):
-        # type: (UpgradeSpec) -> Completion
+    def upgrade_start(self, image, version):
+        # type: (Optional[str], Optional[str]) -> Completion
         raise NotImplementedError()
 
-    @_hide_in_features
+    def upgrade_pause(self):
+        # type: () -> Completion
+        raise NotImplementedError()
+
+    def upgrade_resume(self):
+        # type: () -> Completion
+        raise NotImplementedError()
+
+    def upgrade_stop(self):
+        # type: () -> Completion
+        raise NotImplementedError()
+
     def upgrade_status(self):
         # type: () -> Completion
         """
@@ -1035,17 +1045,11 @@ class Orchestrator(object):
         raise NotImplementedError()
 
 
-class UpgradeSpec(object):
-    # Request to orchestrator to initiate an upgrade to a particular
-    # version of Ceph
-    def __init__(self):
-        self.target_version = None
-
-
 class UpgradeStatusSpec(object):
     # Orchestrator's report on what's going on with any ongoing upgrade
     def __init__(self):
         self.in_progress = False  # Is an upgrade underway?
+        self.target_image = None
         self.services_complete = []  # Which daemon types are fully updated?
         self.message = ""  # Freeform description
 
