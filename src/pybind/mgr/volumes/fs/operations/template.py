@@ -116,3 +116,53 @@ class SubvolumeTemplate(object):
         :return: None
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
+    def is_snapshot_protected(self, snapname):
+        """
+        check if a snapshot is protected.
+
+        :param: snapname: snapshot to protect
+        :return: True if the snapshot is protected, False otherwise.
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
+    def protect_snapshot(self, snapname):
+        """
+        protect a subvolume snapshot. only a protected snapshot can be cloned.
+
+        :param: snapname: snapshot to protect
+        :return: None
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
+    def unprotect_snapshot(self, snapname):
+        """
+        unprotect a subvolume snapshot. fail to unprotect if there are pending
+        clone operations on the snapshot.
+
+        :param: snapname: snapshot to unprotect
+        :return: None
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
+    def attach_snapshot(self, snapname, tgt_subvolume):
+        """
+        attach a snapshot to a target cloned subvolume. the target subvolume
+        should be an empty subvolume (type "clone") in "pending" state.
+
+        :param: snapname: snapshot to attach to a clone
+        :param: tgt_subvolume: target clone subvolume
+        :return: None
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
+    def detach_snapshot(self, snapname, tgt_subvolume):
+        """
+        detach a snapshot from a target cloned subvolume. the target subvolume
+        should either be in "failed" or "completed" state.
+
+        :param: snapname: snapshot to detach from a clone
+        :param: tgt_subvolume: target clone subvolume
+        :return: None
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")

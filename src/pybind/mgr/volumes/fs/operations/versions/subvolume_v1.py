@@ -11,8 +11,10 @@ from .subvolume_base import SubvolumeBase
 from ..op_sm import OpSm
 from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
-from ...exception import OpSmException, VolumeException, MetadataMgrException
+from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException
 from ...fs_util import listdir
+
+from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
@@ -149,7 +151,29 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                                 snapname.encode('utf-8'))
         mksnap(self.fs, snappath)
 
+    def is_snapshot_protected(self, snapname):
+        try:
+            self.metadata_mgr.get_option('protected snaps', snapname)
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                return False
+            else:
+                log.warn("error checking protected snap {0} ({1})".format(snapname, me))
+                raise VolumeException(-errno.EINVAL, "snapshot protection check failed")
+        else:
+            return True
+
+    def has_pending_clones(self, snapname):
+        try:
+            return self.metadata_mgr.section_has_item('clone snaps', snapname)
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                return False
+            raise
+
     def remove_snapshot(self, snapname):
+        if self.is_snapshot_protected(snapname):
+            raise VolumeException(-errno.EINVAL, "snapshot '{0}' is protected".format(snapname))
         snappath = os.path.join(self.path,
                                 self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
                                 snapname.encode('utf-8'))
@@ -164,3 +188,70 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             if ve.errno == -errno.ENOENT:
                 return []
             raise
+
+    def _protect_snapshot(self, snapname):
+        try:
+            self.metadata_mgr.add_section("protected snaps")
+            self.metadata_mgr.update_section("protected snaps", snapname, "1")
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            log.warn("error updating protected snap list ({0})".format(me))
+            raise VolumeException(-errno.EINVAL, "error protecting snapshot")
+
+    def _unprotect_snapshot(self, snapname):
+        try:
+            self.metadata_mgr.remove_option("protected snaps", snapname)
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            log.warn("error updating protected snap list ({0})".format(me))
+            raise VolumeException(-errno.EINVAL, "error unprotecting snapshot")
+
+    def protect_snapshot(self, snapname):
+        if not snapname.encode('utf-8') in self.list_snapshots():
+            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+        if self.is_snapshot_protected(snapname):
+            raise VolumeException(-errno.EEXIST, "snapshot '{0}' is already protected".format(snapname))
+        self._protect_snapshot(snapname)
+
+    def unprotect_snapshot(self, snapname):
+        if not snapname.encode('utf-8') in self.list_snapshots():
+            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+        if not self.is_snapshot_protected(snapname):
+            raise VolumeException(-errno.EEXIST, "snapshot '{0}' is not protected".format(snapname))
+        if self.has_pending_clones(snapname):
+            raise VolumeException(-errno.EEXIST, "snapshot '{0}' has pending clones".format(snapname))
+        self._unprotect_snapshot(snapname)
+
+    def _add_snap_clone(self, track_id, snapname):
+        self.metadata_mgr.add_section("clone snaps")
+        self.metadata_mgr.update_section("clone snaps", track_id, snapname)
+        self.metadata_mgr.flush()
+
+    def _remove_snap_clone(self, track_id):
+        self.metadata_mgr.remove_option("clone snaps", track_id)
+        self.metadata_mgr.flush()
+
+    def attach_snapshot(self, snapname, tgt_subvolume):
+        if not snapname.encode('utf-8') in self.list_snapshots():
+            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+        if not self.is_snapshot_protected(snapname):
+            raise VolumeException(-errno.EINVAL, "snapshot '{0}' is not protected".format(snapname))
+        try:
+            create_clone_index(self.fs, self.vol_spec)
+            with open_clone_index(self.fs, self.vol_spec) as index:
+                track_idx = index.track(tgt_subvolume.base_path)
+                self._add_snap_clone(track_idx, snapname)
+        except (IndexException, MetadataMgrException) as e:
+            log.warn("error creating clone index: {0}".format(e))
+            raise VolumeException(-errno.EINVAL, "error cloning subvolume")
+
+    def detach_snapshot(self, snapname, track_id):
+        if not snapname.encode('utf-8') in self.list_snapshots():
+            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+        try:
+            with open_clone_index(self.fs, self.vol_spec) as index:
+                index.untrack(track_id)
+                self._remove_snap_clone(track_id)
+        except (IndexException, MetadataMgrException) as e:
+            log.warn("error delining snapshot from clone: {0}".format(e))
+            raise VolumeException(-errno.EINVAL, "error delinking snapshot from clone")
