@@ -3056,6 +3056,12 @@ int main(int argc, const char **argv)
           }
           cerr << "  " << exp << std::endl;
         }
+      } else {
+        cerr << "Command not found:";
+        for (auto& arg : args) {
+          cerr << " " << arg;
+        }
+        cerr << std::endl;
       }
       exit(1);
     }
