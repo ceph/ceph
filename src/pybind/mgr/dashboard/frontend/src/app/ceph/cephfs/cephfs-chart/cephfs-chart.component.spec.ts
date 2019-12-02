@@ -58,11 +58,11 @@ describe('CephfsChartComponent', () => {
       },
       {
         x: 10000,
-        y: 2
+        y: 10
       },
       {
         x: 15000,
-        y: 5
+        y: 25
       }
     ]);
   });
