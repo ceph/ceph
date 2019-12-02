@@ -1074,6 +1074,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                                    extra_args=extra_args)
 
     def update_mons(self, num, host_specs):
+        # type: (int, List[orchestrator.HostSpec]) -> orchestrator.Completion
         """
         Adjust the number of cluster monitors.
         """
@@ -1094,23 +1095,24 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             if not network:
                 raise RuntimeError("Host '{}' is missing a network spec".format(host))
 
-        daemons = self._get_services('mon')
-        for _, _, name in host_specs:
-            if name and len([d for d in daemons if d.service_instance == name]):
-                raise RuntimeError('name %s alrady exists', name)
+        def update_mons_with_daemons(daemons):
+            for _, _, name in host_specs:
+                if name and len([d for d in daemons if d.service_instance == name]):
+                    raise RuntimeError('name %s alrady exists', name)
 
-        # explicit placement: enough hosts provided?
-        num_new_mons = num - num_mons
-        if len(host_specs) < num_new_mons:
-            raise RuntimeError("Error: {} hosts provided, expected {}".format(
-                len(host_specs), num_new_mons))
+            # explicit placement: enough hosts provided?
+            num_new_mons = num - num_mons
+            if len(host_specs) < num_new_mons:
+                raise RuntimeError("Error: {} hosts provided, expected {}".format(
+                    len(host_specs), num_new_mons))
 
-        self.log.info("creating {} monitors on hosts: '{}'".format(
-            num_new_mons, ",".join(map(lambda h: ":".join(h), host_specs))))
+            self.log.info("creating {} monitors on hosts: '{}'".format(
+                num_new_mons, ",".join(map(lambda h: ":".join(h), host_specs))))
 
-        # TODO: we may want to chain the creation of the monitors so they join
-        # the quorum one at a time.
-        return self._create_mon(host_specs)
+            # TODO: we may want to chain the creation of the monitors so they join
+            # the quorum one at a time.
+            return self._create_mon(host_specs)
+        return self._get_services('mon').then(update_mons_with_daemons)
 
     @async_map_completion
     def _create_mgr(self, host, name):

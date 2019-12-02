@@ -85,8 +85,8 @@ class TestSSH(object):
     @mock.patch("ssh.module.SSHOrchestrator._get_connection")
     def test_mon_update(self, _send_command, _get_connection, ssh_module):
         with self._with_host(ssh_module, 'test'):
-            c = ssh_module.update_mons(1, [parse_host_specs('test:0.0.0.0')])
-            assert self._wait(ssh_module, c) == ["(Re)deployed mon.test on host 'test'"]
+            c = ssh_module.update_mons(1, [parse_host_specs('test:0.0.0.0=a')])
+            assert self._wait(ssh_module, c) == ["(Re)deployed mon.a on host 'test'"]
 
     @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon('[]'))
     @mock.patch("ssh.module.SSHOrchestrator.send_command")
