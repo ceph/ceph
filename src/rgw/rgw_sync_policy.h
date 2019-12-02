@@ -237,6 +237,7 @@ public:
     ENCODE_START(1, 1, bl);
     encode(bucket, bl);
     encode(zones, bl);
+    encode(all_zones, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -244,6 +245,7 @@ public:
     DECODE_START(1, bl);
     decode(bucket, bl);
     decode(zones, bl);
+    decode(all_zones, bl);
     DECODE_FINISH(bl);
   }
 
@@ -275,10 +277,8 @@ public:
 
   bool match_zone(const string& zone) const {
     if (all_zones) {
-      return  true;
-    }
-
-    if (!zones) { /* all zones */
+      return true;
+    } else if (!zones) {
       return false;
     }
 
@@ -288,6 +288,8 @@ public:
   rgw_bucket get_bucket() const {
     return bucket.value_or(rgw_bucket());
   }
+
+  static string bucket_key(std::optional<rgw_bucket> b);
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
 
@@ -327,6 +329,11 @@ public:
   }
   bool contains_zone(const string& zone) const {
     return (source.match_zone(zone) || dest.match_zone(zone));
+  }
+
+  bool contains_zone_bucket(const string& zone, std::optional<rgw_bucket> b) const {
+    return ((source.match_zone(zone) && source.match_bucket(b)) ||
+            (dest.match_zone(zone) && dest.match_bucket(b)));
   }
 
   void dump(ceph::Formatter *f) const;
