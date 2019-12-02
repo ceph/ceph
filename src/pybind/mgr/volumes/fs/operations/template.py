@@ -58,6 +58,18 @@ class SubvolumeTemplate(object):
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
+    def create_clone(self, pool, source_volname, source_subvolume, snapname):
+        """
+        prepare a subvolume to be cloned.
+
+        :param pool: the RADOS pool where the data objects of the cloned subvolume will be stored
+        :param source_volname: source volume of snapshot
+        :param source_subvolume: source subvolume of snapshot
+        :param snapname: snapshot name to be cloned from
+        :return: None
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
     def remove(self):
         """
         make a subvolume inaccessible to guests.

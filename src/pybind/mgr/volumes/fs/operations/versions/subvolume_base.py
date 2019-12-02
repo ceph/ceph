@@ -17,6 +17,7 @@ class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
 
     SUBVOLUME_TYPE_NORMAL = "subvolume"
+    SUBVOLUME_TYPE_CLONE  = "clone"
 
     def __init__(self, fs, vol_spec, group, subvolname, legacy=False):
         self.fs = fs
@@ -75,6 +76,14 @@ class SubvolumeBase(object):
     @property
     def namespace(self):
         return "{0}{1}".format(self.vol_spec.fs_namespace, self.subvolname)
+
+    @property
+    def group_name(self):
+        return self.group.group_name
+
+    @property
+    def subvol_name(self):
+        return self.subvolname
 
     @property
     def legacy_mode(self):

@@ -1,4 +1,5 @@
 import os
+import stat
 import uuid
 import errno
 import logging
@@ -59,12 +60,62 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
 
+    def add_clone_source(self, volname, subvolume, snapname, flush=False):
+        self.metadata_mgr.add_section("source")
+        self.metadata_mgr.update_section("source", "volume", volname)
+        if not subvolume.group.is_default_group():
+            self.metadata_mgr.update_section("source", "group", subvolume.group_name)
+        self.metadata_mgr.update_section("source", "subvolume", subvolume.subvol_name)
+        self.metadata_mgr.update_section("source", "snapshot", snapname)
+        if flush:
+            self.metadata_mgr.flush()
+
+    def remove_clone_source(self, flush=False):
+        self.metadata_mgr.remove_section("source")
+        if flush:
+            self.metadata_mgr.flush()
+
+    def create_clone(self, pool, source_volname, source_subvolume, snapname):
+        subvolume_type = SubvolumeBase.SUBVOLUME_TYPE_CLONE
+        try:
+            initial_state = OpSm.get_init_state(subvolume_type)
+        except OpSmException as oe:
+            raise VolumeException(-errno.EINVAL, "clone failed: internal error")
+
+        subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
+        try:
+            # create directory and set attributes
+            self.fs.mkdirs(subvol_path, source_subvolume.mode)
+            self._set_attrs(subvol_path, None, None, pool, source_subvolume.uid, source_subvolume.gid)
+
+            # persist subvolume metadata and clone source
+            qpath = subvol_path.decode('utf-8')
+            self.metadata_mgr.init(SubvolumeV1.VERSION, subvolume_type, qpath, initial_state)
+            self.add_clone_source(source_volname, source_subvolume, snapname)
+            self.metadata_mgr.flush()
+        except (VolumeException, MetadataMgrException, cephfs.Error) as e:
+            try:
+                log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
+                self.remove()
+            except VolumeException as ve:
+                log.info("failed to cleanup subvolume '{0}' ({1})".format(self.subvolname, ve))
+
+            if isinstance(e, MetadataMgrException):
+                log.error("metadata manager exception: {0}".format(e))
+                e = VolumeException(-errno.EINVAL, "exception in subvolume metadata")
+            elif isinstance(e, cephfs.Error):
+                e = VolumeException(-e.args[0], e.args[1])
+            raise e
+
     def open(self):
         try:
             self.metadata_mgr.refresh()
             subvol_path = self.path
             log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_path))
-            self.fs.stat(subvol_path)
+            st = self.fs.stat(subvol_path)
+            self.uid = int(st.st_uid)
+            self.gid = int(st.st_gid)
+            self.mode = int(st.st_mode & ~stat.S_IFMT(st.st_mode))
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT:
                 raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))

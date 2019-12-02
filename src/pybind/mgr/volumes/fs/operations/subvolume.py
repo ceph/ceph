@@ -28,6 +28,23 @@ def create_subvol(fs, vol_spec, group, subvolname, size, isolate_nspace, pool, m
     subvolume = loaded_subvolumes.get_subvolume_object_max(fs, vol_spec, group, subvolname)
     subvolume.create(size, isolate_nspace, pool, mode, uid, gid)
 
+def create_clone(fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname):
+    """
+    create a cloned subvolume.
+
+    :param fs: ceph filesystem handle
+    :param vol_spec: volume specification
+    :param group: group object for the clone
+    :param subvolname: clone subvolume nam
+    :param pool: the RADOS pool where the data objects of the cloned subvolume will be stored
+    :param source_volume: source subvolumes volume name
+    :param source_subvolume: source (parent) subvolume object
+    :param snapname: source subvolume snapshot
+    :return None
+    """
+    subvolume = loaded_subvolumes.get_subvolume_object_max(fs, vol_spec, group, subvolname)
+    subvolume.create_clone(pool, source_volume, source_subvolume, snapname)
+
 def remove_subvol(fs, vol_spec, group, subvolname):
     """
     remove a subvolume.
