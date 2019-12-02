@@ -135,7 +135,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     }
 
     std::vector<fragment> frags;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
+    auto pb = bl.buffers().begin();
     uint64_t left_pbrs = bl.buffers().size();
     uint64_t len = 0;
     uint64_t seglen = 0;
