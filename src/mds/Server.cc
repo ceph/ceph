@@ -7683,7 +7683,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (srcdnl->is_remote() && !srci->is_auth())
     witnesses.insert(srci->authority().first);
   destdn->list_replicas(witnesses);
-  if (destdnl->is_remote() && !oldin->is_auth())
+  if (destdnl->is_remote() && oldin && !oldin->is_auth())
     witnesses.insert(oldin->authority().first);
   dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
@@ -7733,7 +7733,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     // is traversed.
     if (srcdnl->is_remote())
       lov.add_xlock(&srci->get_projected_parent_dn()->lock);
-    if (destdnl->is_remote())
+    if (destdnl->is_remote() && oldin)
       lov.add_xlock(&oldin->get_projected_parent_dn()->lock);
   }
 
