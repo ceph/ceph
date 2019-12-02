@@ -38,7 +38,7 @@ class SubvolumeTemplate(object):
     def version():
         return SubvolumeTemplate.VERSION
 
-    def open(self):
+    def open(self, need_complete=True, expected_types=[]):
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
     def create(self, size, isolate_nspace, pool, mode, uid, gid):

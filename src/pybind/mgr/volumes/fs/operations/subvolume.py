@@ -61,7 +61,7 @@ def remove_subvol(fs, vol_spec, group, subvolname):
         subvolume.remove()
 
 @contextmanager
-def open_subvol(fs, vol_spec, group, subvolname):
+def open_subvol(fs, vol_spec, group, subvolname, need_complete=True, expected_types=[]):
     """
     open a subvolume. This API is to be used as a context manager.
 
@@ -69,8 +69,12 @@ def open_subvol(fs, vol_spec, group, subvolname):
     :param vol_spec: volume specification
     :param group: group object for the subvolume
     :param subvolname: subvolume name
+    :param need_complete: check if the subvolume is usable (since cloned subvolumes can
+                          be in transient state). defaults to True.
+    :param expected_types: check if the subvolume is one the provided types. defaults to
+                           all.
     :return: yields a subvolume object (subclass of SubvolumeTemplate)
     """
     subvolume = loaded_subvolumes.get_subvolume_object(fs, vol_spec, group, subvolname)
-    subvolume.open()
+    subvolume.open(need_complete, expected_types)
     yield subvolume
