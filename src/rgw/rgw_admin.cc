@@ -919,7 +919,8 @@ static SimpleCmd::Commands all_cmds = {
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
-  { "delete", "del", "rm", "remove"},
+  { "delete", "del" },
+  { "remove", "rm" },
   { "rename", "mv" },
 };
 
