@@ -745,3 +745,57 @@ Usage:
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
+        'upgrade status',
+        desc='Check service versions vs available and target containers')
+    def _upgrade_status(self):
+        completion = self.upgrade_status()
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        r = {
+            'target_image': completion.result.target_image,
+            'in_progress': completion.result.in_progress,
+            'services_complete': completion.result.services_complete,
+            'message': completion.result.message,
+        }
+        out = json.dumps(r, indent=4)
+        return HandleCommandResult(stdout=out)
+
+    @orchestrator._cli_write_command(
+        'upgrade start',
+        'name=image,type=CephString,req=false '
+        'name=ceph_version,type=CephString,req=false',
+        desc='Initiate upgrade')
+    def _upgrade_start(self, image=None, ceph_version=None):
+        completion = self.upgrade_start(image, ceph_version)
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
+        'upgrade pause',
+        desc='Pause an in-progress upgrade')
+    def _upgrade_pause(self):
+        completion = self.upgrade_pause()
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
+        'upgrade resume',
+        desc='Resume paused upgrade')
+    def _upgrade_resume(self):
+        completion = self.upgrade_resume()
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @orchestrator._cli_write_command(
+        'upgrade stop',
+        desc='Stop an in-progress upgrade')
+    def _upgrade_stop(self):
+        completion = self.upgrade_stop()
+        self._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())

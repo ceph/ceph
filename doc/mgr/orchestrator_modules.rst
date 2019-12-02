@@ -314,7 +314,6 @@ Upgrades
 .. automethod:: Orchestrator.upgrade_available
 .. automethod:: Orchestrator.upgrade_start
 .. automethod:: Orchestrator.upgrade_status
-.. autoclass:: UpgradeSpec
 .. autoclass:: UpgradeStatusSpec
 
 Utility
