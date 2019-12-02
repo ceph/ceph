@@ -111,6 +111,7 @@ BuildRequires:	python-numpy-devel
 %endif
 BuildRequires:  python-coverage
 BuildRequires:	python-pecan
+BuildRequires:	python-tox
 BuildRequires:	socat
 %endif
 BuildRequires:	bc
