@@ -6,6 +6,7 @@ import logging
 
 import cephfs
 
+from .metadata_manager import MetadataManager
 from .subvolume_base import SubvolumeBase
 from ..op_sm import OpSm
 from ..template import SubvolumeTemplate
@@ -107,12 +108,21 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
 
-    def open(self):
+    def open(self, need_complete=True, expected_types=[]):
         try:
             self.metadata_mgr.refresh()
             subvol_path = self.path
             log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_path))
             st = self.fs.stat(subvol_path)
+            etype = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE)
+            if len(expected_types) and not etype in expected_types:
+                raise VolumeException(-errno.ENOTSUP, "subvolume '{0}' is not {1}".format(
+                    self.subvolname, "a {0}".format(expected_types[0]) if len(expected_types) == 1 else \
+                    "one of types ({0})".format(",".join(expected_types))))
+            if need_complete:
+                estate = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE)
+                if not OpSm.is_final_state(estate):
+                    raise VolumeException(-errno.EAGAIN, "subvolume '{0}' is not ready for use".format(self.subvolname))
             self.uid = int(st.st_uid)
             self.gid = int(st.st_gid)
             self.mode = int(st.st_mode & ~stat.S_IFMT(st.st_mode))
