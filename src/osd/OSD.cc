@@ -740,7 +740,7 @@ OSDService::s_names OSDService::recalc_full_state(float ratio, float pratio, str
     return FULL;
   } else if (ratio > backfillfull_ratio) {
     return BACKFILLFULL;
-  } else if (ratio > nearfull_ratio) {
+  } else if (pratio > nearfull_ratio) {
     return NEARFULL;
   }
    return NONE;
