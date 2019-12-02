@@ -17,6 +17,8 @@ machine=$1
 shift
 arch=$1
 shift
+numa=$1
+shift
 
 setconf CONFIG_RTE_MACHINE "${machine}"
 setconf CONFIG_RTE_ARCH "${arch}"
@@ -52,4 +54,4 @@ setconf CONFIG_RTE_TEST_PMD n
 setconf CONFIG_RTE_MBUF_REFCNT_ATOMIC n
 
 # balanced allocation of hugepages
-setconf CONFIG_RTE_EAL_NUMA_AWARE_HUGEPAGES n
+setconf CONFIG_RTE_EAL_NUMA_AWARE_HUGEPAGES "${numa}"
