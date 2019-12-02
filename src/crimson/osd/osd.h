@@ -15,6 +15,8 @@
 
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/auth_handler.h"
+#include "crimson/admin/admin_socket.h"
+#include "crimson/admin/osd_admin.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
@@ -113,6 +115,8 @@ class OSD final : public ceph::net::Dispatcher,
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> heartbeat_timer;
 
+  std::unique_ptr<OsdAdmin>    osd_admin;
+
 public:
   OSD(int id, uint32_t nonce,
       ceph::net::Messenger& cluster_msgr,
@@ -171,7 +175,8 @@ private:
 					Ref<MOSDRepOpReply> m);
   seastar::future<> handle_peering_op(ceph::net::Connection* conn,
 				      Ref<MOSDPeeringOp> m);
-
+  seastar::future<> handle_admin_cmd(ceph::net::Connection* conn,
+				     Ref<MCommand> m);
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
@@ -206,6 +211,7 @@ public:
   seastar::future<> update_heartbeat_peers();
 
   friend class PGAdvanceMap;
+  friend class OsdAdminImp;
 };
 
 }

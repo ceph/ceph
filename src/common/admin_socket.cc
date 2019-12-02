@@ -401,7 +401,7 @@ int AdminSocket::execute_command(const std::string& cmd, ceph::bufferlist& out)
   }
   string args;
   if (match != cmd) {
-    args = cmd.substr(match.length() + 1);
+    args = cmd.substr(match.length() + 1); /// RRR don't understand this line
   }
 
   // Drop lock to avoid cycles in cases where the hook takes

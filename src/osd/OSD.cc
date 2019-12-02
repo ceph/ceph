@@ -285,9 +285,9 @@ OSDService::~OSDService()
 {
   delete objecter;
 
-  for (auto f : objecter_finishers) {
+  for (auto& f : objecter_finishers) {
     delete f;
-    f = NULL;
+    f = nullptr;
   }
 }
 
