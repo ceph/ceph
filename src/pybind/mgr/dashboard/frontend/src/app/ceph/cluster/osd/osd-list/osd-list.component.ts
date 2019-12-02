@@ -34,8 +34,6 @@ const BASE_URL = 'osd';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class OsdListComponent implements OnInit {
-  @ViewChild('statusColor', { static: true })
-  statusColor: TemplateRef<any>;
   @ViewChild('osdUsageTpl', { static: true })
   osdUsageTpl: TemplateRef<any>;
   @ViewChild('markOsdConfirmationTpl', { static: true })
@@ -207,7 +205,20 @@ export class OsdListComponent implements OnInit {
     this.columns = [
       { prop: 'host.name', name: this.i18n('Host') },
       { prop: 'id', name: this.i18n('ID'), cellTransformation: CellTemplate.bold },
-      { prop: 'collectedStates', name: this.i18n('Status'), cellTemplate: this.statusColor },
+      {
+        prop: 'collectedStates',
+        name: this.i18n('Status'),
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            in: { class: 'badge-success' },
+            up: { class: 'badge-success' },
+            down: { class: 'badge-danger' },
+            out: { class: 'badge-danger' },
+            destroyed: { class: 'badge-danger' }
+          }
+        }
+      },
       { prop: 'stats.numpg', name: this.i18n('PGs') },
       { prop: 'stats.stat_bytes', name: this.i18n('Size'), pipe: this.dimlessBinaryPipe },
       { prop: 'stats.usage', name: this.i18n('Usage'), cellTemplate: this.osdUsageTpl },

@@ -171,7 +171,7 @@
 <ng-template #checkIconTpl
              let-value="value">
   <i [ngClass]="[icons.check]"
-     [hidden]="!value"></i>
+     [hidden]="!(value | boolean)"></i>
 </ng-template>
 
 <ng-template #perSecondTpl
@@ -193,4 +193,16 @@
 <ng-template #classAddingTpl
              let-value="value">
   <span class="{{useCustomClass(value)}}">{{ value }}</span>
+</ng-template>
+
+<ng-template #badgeTpl
+             let-column="column"
+             let-value="value">
+  <span *ngFor="let item of (value | array); last as last">
+    <span class="badge"
+          [ngClass]="column?.customTemplateConfig?.map[item]?.class ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')">
+      {{ column?.customTemplateConfig?.map[item]?.value ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
+    </span>
+    <span *ngIf="!last">&nbsp;</span>
+  </span>
 </ng-template>

@@ -9,6 +9,7 @@ import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
+import { PipesModule } from '../../pipes/pipes.module';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -38,7 +39,8 @@ describe('TableComponent', () => {
       FormsModule,
       ComponentsModule,
       RouterTestingModule,
-      BsDropdownModule.forRoot()
+      BsDropdownModule.forRoot(),
+      PipesModule
     ]
   });
 

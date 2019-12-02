@@ -47,8 +47,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   rbdName: string;
   @ViewChild('nameTpl', { static: false })
   nameTpl: TemplateRef<any>;
-  @ViewChild('protectTpl', { static: true })
-  protectTpl: TemplateRef<any>;
   @ViewChild('rollbackTpl', { static: true })
   rollbackTpl: TemplateRef<any>;
 
@@ -113,7 +111,13 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         prop: 'is_protected',
         flexGrow: 1,
         cellClass: 'text-center',
-        cellTemplate: this.protectTpl
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            true: { value: this.i18n('PROTECTED'), class: 'badge-success' },
+            false: { value: this.i18n('UNPROTECTED'), class: 'badge-info' }
+          }
+        }
       },
       {
         name: this.i18n('Created'),
