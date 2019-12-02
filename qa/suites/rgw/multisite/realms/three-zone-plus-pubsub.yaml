@@ -1,5 +1,9 @@
 overrides:
   rgw-multisite:
+    config:
+      - checkpoint_retries: 60
+      - checkpoint_delay: 8
+      - reconfigure_delay: 60
     realm:
       name: test-realm
       is default: true
