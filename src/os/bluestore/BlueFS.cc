@@ -837,8 +837,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   if (cct->_conf->bluefs_log_replay_check_allocations) {
     for (size_t i = 0; i < MAX_BDEV; ++i) {
       if (alloc_size[i] != 0 && bdev[i] != nullptr) {
-        used_blocks[i].resize(bdev[i]->get_size() / alloc_size[i]);
-        owned_blocks[i].resize(bdev[i]->get_size() / alloc_size[i]);
+        used_blocks[i].resize(round_up_to(bdev[i]->get_size(), alloc_size[i]) / alloc_size[i]);
+        owned_blocks[i].resize(round_up_to(bdev[i]->get_size(), alloc_size[i]) / alloc_size[i]);
       }
     }
   }
