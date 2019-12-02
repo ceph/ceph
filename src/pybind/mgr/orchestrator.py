@@ -33,6 +33,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+HostSpec = namedtuple('HostSpec', ['hostname', 'network', 'name'])
+
 
 def parse_host_specs(host, require_network=True):
     """
@@ -55,8 +57,6 @@ def parse_host_specs(host, require_network=True):
     # Matches from = to end of string
     name_re = r'=(.*?)$'
 
-    from collections import namedtuple
-    HostSpec = namedtuple('HostSpec', ['hostname', 'network', 'name'])
     # assign defaults
     host_spec = HostSpec('', '', '')
 
@@ -899,7 +899,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mons(self, num, hosts):
-        # type: (int, List[Tuple[str,str,str]]) -> Completion
+        # type: (int, List[HostSpec]) -> Completion
         """
         Update the number of cluster monitors.
 
