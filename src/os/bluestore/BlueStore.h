@@ -1570,8 +1570,8 @@ public:
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
     uint64_t seq = 0;
-    utime_t start;
-    utime_t last_stamp;
+    mono_clock::time_point start;
+    mono_clock::time_point last_stamp;
 
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
@@ -1585,7 +1585,7 @@ public:
       : ch(c),
 	osr(o),
 	ioc(cct, this),
-	start(ceph_clock_now()) {
+	start(mono_clock::now()) {
       last_stamp = start;
       if (on_commits) {
 	oncommits.swap(*on_commits);
@@ -1697,7 +1697,7 @@ public:
     void complete(TransContext &txc) {}
 #endif
 
-    utime_t log_state_latency(
+    mono_clock::duration log_state_latency(
       TransContext &txc, PerfCounters *logger, int state);
     bool try_start_transaction(
       KeyValueDB &db,

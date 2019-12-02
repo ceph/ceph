@@ -10973,9 +10973,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_AIO_WAIT:
       {
-	utime_t lat = throttle.log_state_latency(
+	mono_clock::duration lat = throttle.log_state_latency(
 	  *txc, logger, l_bluestore_state_aio_wait_lat);
-	if (lat >= cct->_conf->bluestore_log_op_age) {
+	if (ceph::to_seconds<double>(lat) >= cct->_conf->bluestore_log_op_age) {
 	  dout(0) << __func__ << " slow aio_wait, txc = " << txc
 		  << ", latency = " << lat
 		  << dendl;
@@ -11261,7 +11261,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
   log_latency_fn(
     __func__,
     l_bluestore_commit_lat,
-    ceph::make_timespan(ceph_clock_now() - txc->start),
+    mono_clock::now() - txc->start,
     cct->_conf->bluestore_log_op_age,
     [&](auto lat) {
       return ", txc = " + stringify(txc);
@@ -11742,7 +11742,7 @@ void BlueStore::_kv_sync_thread()
       int deferred_size = deferred_stable.size();
 
 #if defined(WITH_LTTNG)
-      double sync_latency = ceph::to_seconds<double>(sync_start - mono_clock::now());
+      double sync_latency = ceph::to_seconds<double>(mono_clock::now() - sync_start);
       for (auto txc: kv_committing) {
 	if (txc->tracing) {
 	  tracepoint(
@@ -14895,11 +14895,11 @@ void BlueStore::BlueStoreThrottle::emit_initial_tracepoint(
 }
 #endif
 
-utime_t BlueStore::BlueStoreThrottle::log_state_latency(
+mono_clock::duration BlueStore::BlueStoreThrottle::log_state_latency(
   TransContext &txc, PerfCounters *logger, int state)
 {
-  utime_t now = ceph_clock_now();
-  utime_t lat = now - txc.last_stamp;
+  mono_clock::time_point now = mono_clock::now();
+  mono_clock::duration lat = now - txc.last_stamp;
   logger->tinc(state, lat);
 #if defined(WITH_LTTNG)
   if (txc.tracing &&
@@ -14912,7 +14912,7 @@ utime_t BlueStore::BlueStoreThrottle::log_state_latency(
       txc.osr->get_sequencer_id(),
       txc.seq,
       state,
-      (double)lat);
+      ceph::to_seconds<double>(lat));
   }
 #endif
   txc.last_stamp = now;
@@ -14955,7 +14955,7 @@ void BlueStore::BlueStoreThrottle::complete_kv(TransContext &txc)
       transaction_commit_latency,
       txc.osr->get_sequencer_id(),
       txc.seq,
-      ((double)ceph_clock_now()) - ((double)txc.start));
+      ceph::to_seconds<double>(mono_clock::now() - txc.start));
   }
 }
 #endif
@@ -14967,14 +14967,14 @@ void BlueStore::BlueStoreThrottle::complete(TransContext &txc)
     pending_deferred_ios -= 1;
   }
   if (txc.tracing) {
-    utime_t now = ceph_clock_now();
-    double usecs = ((double)(now.to_nsec()-txc.start.to_nsec()))/1000;
+    mono_clock::time_point now = mono_clock::now();
+    mono_clock::duration lat = now - txc.start;
     tracepoint(
       bluestore,
       transaction_total_duration,
       txc.osr->get_sequencer_id(),
       txc.seq,
-      usecs);
+      ceph::to_seconds<double>(lat));
   }
 }
 #endif
