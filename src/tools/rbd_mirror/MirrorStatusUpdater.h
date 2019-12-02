@@ -27,12 +27,13 @@ public:
 
   static MirrorStatusUpdater* create(librados::IoCtx& io_ctx,
                                      Threads<ImageCtxT> *threads,
-                                     const std::string& site_name) {
-    return new MirrorStatusUpdater(io_ctx, threads, site_name);
+                                     const std::string& site_name,
+                                     const std::string& fsid) {
+    return new MirrorStatusUpdater(io_ctx, threads, site_name, fsid);
   }
 
   MirrorStatusUpdater(librados::IoCtx& io_ctx, Threads<ImageCtxT> *threads,
-                      const std::string& site_name);
+                      const std::string& site_name, const std::string& fsid);
   ~MirrorStatusUpdater();
 
   void init(Context* on_finish);

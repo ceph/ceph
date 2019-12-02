@@ -262,7 +262,7 @@ void NamespaceReplayer<I>::init_local_status_updater() {
   ceph_assert(!m_local_status_updater);
 
   m_local_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_local_io_ctx, m_threads, ""));
+    m_local_io_ctx, m_threads, "", ""));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_local_status_updater>(this);
@@ -297,8 +297,18 @@ void NamespaceReplayer<I>::init_remote_status_updater() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!m_remote_status_updater);
 
+  librados::Rados rados(m_local_io_ctx);
+  std::string local_fsid;
+  int r = rados.cluster_fsid(&local_fsid);
+  if (r < 0) {
+    derr << "failed to retrieve local fsid: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    shut_down_local_status_updater();
+    return;
+  }
+
   m_remote_status_updater.reset(MirrorStatusUpdater<I>::create(
-    m_remote_io_ctx, m_threads, m_local_site_name));
+    m_remote_io_ctx, m_threads, m_local_site_name, local_fsid));
   auto ctx = create_context_callback<
     NamespaceReplayer<I>,
     &NamespaceReplayer<I>::handle_init_remote_status_updater>(this);
