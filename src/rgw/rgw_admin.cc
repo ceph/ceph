@@ -801,6 +801,7 @@ static SimpleCmd::Commands all_cmds = {
   { "zonegroup list", OPT::ZONEGROUP_LIST },
   { "zonegroups list", OPT::ZONEGROUP_LIST },
   { "zonegroup remove", OPT::ZONEGROUP_REMOVE },
+  { "zonegroup remove zone", OPT::ZONEGROUP_REMOVE },
   { "zonegroup rename", OPT::ZONEGROUP_RENAME },
   { "zonegroup placement add", OPT::ZONEGROUP_PLACEMENT_ADD },
   { "zonegroup placement modify", OPT::ZONEGROUP_PLACEMENT_MODIFY },
