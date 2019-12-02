@@ -19,7 +19,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "mon/health_check.h"
-#include <algorithm>
+#include <boost/range/algorithm.hpp>
 
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
@@ -434,7 +434,7 @@ int main(int argc, const char **argv)
     for (auto& r: pools_by_rule)
       rules.push_back(r.first);
     srand(time(0));
-    random_shuffle (rules.begin(), rules.end());
+    boost::range::random_shuffle (rules);
     if (debug) {
       for (auto& r: rules)
         cout << "rule: " << r << " " << pools_by_rule[r] << std::endl;
