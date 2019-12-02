@@ -2299,11 +2299,11 @@ int OSD::set_numa_affinity()
     cct,
     cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
   int r = get_iface_numa_node(front_iface, &front_node);
-  if (r >= 0) {
+  if (r >= 0 && front_node >= 0) {
     dout(1) << __func__ << " public network " << front_iface << " numa node "
-	      << front_node << dendl;
+            << front_node << dendl;
     r = get_iface_numa_node(back_iface, &back_node);
-    if (r >= 0) {
+    if (r >= 0 && back_node >= 0) {
       dout(1) << __func__ << " cluster network " << back_iface << " numa node "
 	      << back_node << dendl;
       if (front_node == back_node &&
@@ -2312,14 +2312,23 @@ int OSD::set_numa_affinity()
 	if (g_conf().get_val<bool>("osd_numa_auto_affinity")) {
 	  numa_node = front_node;
 	}
+      } else if (front_node != back_node) {
+        dout(1) << __func__ << " public and cluster network numa nodes do not match"
+                << dendl;
       } else {
 	dout(1) << __func__ << " objectstore and network numa nodes do not match"
 		<< dendl;
       }
+    } else if (back_node == -2) {
+      dout(1) << __func__ << " cluster network " << back_iface
+              << " ports numa nodes do not match" << dendl;
     } else {
       derr << __func__ << " unable to identify cluster interface '" << back_iface
            << "' numa node: " << cpp_strerror(r) << dendl;
     }
+  } else if (front_node == -2) {
+    dout(1) << __func__ << " public network " << front_iface
+            << " ports numa nodes do not match" << dendl;
   } else {
     derr << __func__ << " unable to identify public interface '" << front_iface
 	 << "' numa node: " << cpp_strerror(r) << dendl;
