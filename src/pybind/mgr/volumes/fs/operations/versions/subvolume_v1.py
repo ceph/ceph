@@ -40,7 +40,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, mode)
-            self._set_attrs(subvol_path, size, isolate_nspace, pool, mode, uid, gid)
+            self._set_attrs(subvol_path, size, isolate_nspace, pool, uid, gid)
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')

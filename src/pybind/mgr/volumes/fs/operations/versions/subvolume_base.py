@@ -63,7 +63,7 @@ class SubvolumeBase(object):
         else:
             self.metadata_mgr = MetadataManager(self.fs, self.config_path, 0o640)
 
-    def _set_attrs(self, path, size, isolate_namespace, pool, mode, uid, gid):
+    def _set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
         # set size
         if size is not None:
             try:
