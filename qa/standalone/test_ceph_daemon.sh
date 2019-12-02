@@ -61,9 +61,9 @@ fi
 $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID --force
 $SUDO $CEPH_DAEMON rm-cluster --fsid $FSID_LEGACY --force
 vgchange -an $OSD_VG_NAME || true
-loopdev=$(losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
+loopdev=$($SUDO losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print $1}')
 if ! [ "$loopdev" = "" ]; then
-    losetup -d $loopdev
+    $SUDO losetup -d $loopdev
 fi
 
 TMPDIR=`mktemp -d -p .`
@@ -172,7 +172,7 @@ $SUDO $CEPH_DAEMON shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
 
 # add osd.{1,2,..}
 dd if=/dev/zero of=$TMPDIR/$OSD_IMAGE_NAME bs=1 count=0 seek=$OSD_IMAGE_SIZE
-loop_dev=$(losetup -f)
+loop_dev=$($SUDO losetup -f)
 $SUDO vgremove -f $OSD_VG_NAME || true
 $SUDO losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
 $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
