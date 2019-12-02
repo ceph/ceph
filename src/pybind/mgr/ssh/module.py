@@ -971,11 +971,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self.get_hosts().then(lambda hosts: self._create_osd(hosts, drive_group))
 
     def remove_osds(self, name):
-        daemons = self._get_services('osd', service_id=name)
-        args = [('osd.%s' % d.service_instance, d.nodename) for d in daemons]
-        if not args:
-            raise OrchestratorError('Unable to find osd.%s' % name)
-        return self._remove_daemon(args)
+        def _search(daemons):
+            args = [('osd.%s' % d.service_instance, d.nodename) for d in daemons]
+            if not args:
+                raise OrchestratorError('Unable to find osd.%s' % name)
+            return self._remove_daemon(args)
+        return self._get_services('osd', service_id=name).then(_search)
 
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
                        extra_args=[]):
