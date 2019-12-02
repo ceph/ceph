@@ -1926,6 +1926,11 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("target max message payload for mon sync"),
 
+    Option("mon_sync_max_payload_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(2000)
+    .add_service("mon")
+    .set_description("target max keys in message payload for mon sync"),
+
     Option("mon_sync_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .add_service("mon")

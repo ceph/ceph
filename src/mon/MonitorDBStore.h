@@ -429,7 +429,8 @@ class MonitorDBStore
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
-    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) = 0;
+    virtual void get_chunk_tx(TransactionRef tx, uint64_t max_bytes,
+			      uint64_t max_keys) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
   typedef std::shared_ptr<StoreIteratorImpl> Synchronizer;
@@ -457,7 +458,8 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    void get_chunk_tx(TransactionRef tx, uint64_t max_bytes) override {
+    void get_chunk_tx(TransactionRef tx, uint64_t max_bytes,
+		      uint64_t max_keys) override {
       ceph_assert(done == false);
       ceph_assert(iter->valid() == true);
 
@@ -468,7 +470,8 @@ class MonitorDBStore
 	  bufferlist value = iter->value();
 	  if (tx->empty() ||
 	      (tx->get_bytes() + value.length() + key.size() +
-	       prefix.size() < max_bytes)) {
+	       prefix.size() < max_bytes &&
+	       tx->get_keys() < max_keys)) {
 	    // NOTE: putting every key in a separate transaction is
 	    // questionable as far as efficiency goes
 	    auto tmp(std::make_shared<Transaction>());

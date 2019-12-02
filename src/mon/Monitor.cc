@@ -1673,8 +1673,11 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
   MMonSync *reply = new MMonSync(MMonSync::OP_CHUNK, sp.cookie);
   auto tx(std::make_shared<MonitorDBStore::Transaction>());
 
-  int left = g_conf()->mon_sync_max_payload_size;
-  while (sp.last_committed < paxos->get_version() && left > 0) {
+  int bytes_left = g_conf()->mon_sync_max_payload_size;
+  int keys_left = g_conf()->mon_sync_max_payload_keys;
+  while (sp.last_committed < paxos->get_version() &&
+	 bytes_left > 0 &&
+	 keys_left > 0) {
     bufferlist bl;
     sp.last_committed++;
 
@@ -1682,14 +1685,15 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
     ceph_assert(err == 0);
 
     tx->put(paxos->get_name(), sp.last_committed, bl);
-    left -= bl.length();
+    bytes_left -= bl.length();
+    --keys_left;
     dout(20) << __func__ << " including paxos state " << sp.last_committed
 	     << dendl;
   }
   reply->last_committed = sp.last_committed;
 
-  if (sp.full && left > 0) {
-    sp.synchronizer->get_chunk_tx(tx, left);
+  if (sp.full && bytes_left > 0 && keys_left > 0) {
+    sp.synchronizer->get_chunk_tx(tx, bytes_left, keys_left);
     sp.last_key = sp.synchronizer->get_last_key();
     reply->last_key = sp.last_key;
   }
