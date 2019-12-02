@@ -1,3 +1,4 @@
 tasks:
 - install:
+    extra_packages: [ceph-daemon]
 - ceph2:

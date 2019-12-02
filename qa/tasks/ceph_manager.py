@@ -39,7 +39,7 @@ def shell(ctx, cluster_name, remote, args, **kwargs):
     return remote.run(
         args=[
             'sudo',
-            '{}/ceph-daemon'.format(testdir),
+            ctx.ceph_daemon,
             '--image', ctx.ceph[cluster_name].image,
             'shell',
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
