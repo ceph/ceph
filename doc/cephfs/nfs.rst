@@ -79,6 +79,8 @@ Current limitations
 
 - Per running ganesha daemon, FSAL_CEPH can only export one Ceph file system
   although multiple directories in a Ceph file system may be exported.
+- POSIX ACLs are not supported
+- NFSv4 ACLs are not supported
 
 Exporting over NFS clusters deployed using rook
 ===============================================
