@@ -284,6 +284,7 @@ OPTION(mon_scrub_inject_missing_keys, OPT_DOUBLE) // probability of injected mis
 OPTION(mon_config_key_max_entry_size, OPT_INT) // max num bytes per config-key entry
 OPTION(mon_sync_timeout, OPT_DOUBLE)
 OPTION(mon_sync_max_payload_size, OPT_U32) // max size for a sync chunk payload (say)
+OPTION(mon_sync_max_payload_keys, OPT_INT)
 OPTION(mon_sync_debug, OPT_BOOL) // enable sync-specific debug
 OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE)  // inject N second delay on each get_chunk request
 OPTION(mon_osd_force_trim_to, OPT_INT)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous)
