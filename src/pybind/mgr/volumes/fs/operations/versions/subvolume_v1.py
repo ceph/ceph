@@ -138,6 +138,36 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _get_clone_source(self):
+        try:
+            clone_source = {
+                'volume'   : self.metadata_mgr.get_option("source", "volume"),
+                'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
+                'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
+            }
+
+            try:
+                clone_source["group"] = self.metadata_mgr.get_option("source", "group")
+            except MetadataMgrException as me:
+                if me.errno == -errno.ENOENT:
+                    pass
+                else:
+                    raise
+        except MetadataMgrException as me:
+            raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
+        return clone_source
+
+    @property
+    def status(self):
+        state = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE)
+        subvolume_type = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE)
+        subvolume_status = {
+            'state' : state
+        }
+        if not OpSm.is_final_state(state) and subvolume_type == SubvolumeBase.SUBVOLUME_TYPE_CLONE:
+            subvolume_status["source"] = self._get_clone_source()
+        return subvolume_status
+
     def remove(self):
         self.trash_base_dir()
 
