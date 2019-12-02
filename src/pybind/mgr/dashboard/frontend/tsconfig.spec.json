@@ -1,8 +1,8 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "../out-tsc/spec",
-    "baseUrl": "./",
+    "outDir": "./out-tsc/spec",
+    "baseUrl": "./src/",
     "module": "commonjs",
     "target": "es5",
     "types": [
@@ -12,11 +12,11 @@
     "noEmit": true
   },
   "files": [
-    "polyfills.ts"
+    "src/polyfills.ts"
   ],
   "include": [
-    "**/*.spec.ts",
-    "**/*.d.ts",
-    "testing/*.ts"
+    "src/**/*.spec.ts",
+    "src/**/*.d.ts",
+    "src/testing/*.ts"
   ]
 }
