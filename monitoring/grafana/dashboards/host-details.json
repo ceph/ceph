@@ -38,17 +38,7 @@
   "graphTooltip": 0,
   "id": null,
   "iteration": 1557386759572,
-  "links": [
-    {
-      "asDropdown": true,
-      "icon": "external link",
-      "tags": [
-        "overview"
-      ],
-      "title": "Shortcuts",
-      "type": "dashboards"
-    }
-  ],
+  "links": [],
   "panels": [
     {
       "gridPos": {
@@ -1221,5 +1211,5 @@
   "timezone": "browser",
   "title": "Host Details",
   "uid": "rtOg0AiWz",
-  "version": 3
+  "version": 4
 }
