@@ -195,6 +195,7 @@ void Processor::accept()
 	accept_error_num = 0;
 	continue;
       } else {
+	--w->references;
 	if (r == -EINTR) {
 	  continue;
 	} else if (r == -EAGAIN) {
