@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 import json
+import logging
 
 import rados
 
@@ -16,12 +17,15 @@ except ImportError:
         next(b, None)
         return zip(a, b)
 
-from .. import logger, mgr
+from .. import mgr
 
 try:
     from typing import Dict, Any  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
+
+
+logger = logging.getLogger('ceph_service')
 
 
 class SendCommandError(rados.Error):
@@ -163,9 +167,8 @@ class CephService(object):
         mgr.send_command(result, srv_type, srv_spec, json.dumps(argdict), "")
         r, outb, outs = result.wait()
         if r != 0:
-            msg = "send_command '{}' failed. (r={}, outs=\"{}\", kwargs={})".format(prefix, r, outs,
-                                                                                    kwargs)
-            logger.error(msg)
+            logger.error("send_command '%s' failed. (r=%s, outs=\"%s\", kwargs=%s)", prefix, r,
+                         outs, kwargs)
             raise SendCommandError(outs, prefix, argdict, r)
 
         try:

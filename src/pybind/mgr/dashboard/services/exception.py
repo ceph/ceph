@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import json
 from contextlib import contextmanager
+import logging
 import six
 
 import cherrypy
@@ -10,16 +11,20 @@ import cherrypy
 import rbd
 import rados
 
-from .. import logger
 from ..services.ceph_service import SendCommandError
 from ..exceptions import ViewCacheNoDataException, DashboardException
 from ..tools import wraps
+
+
+logger = logging.getLogger('exception')
+
 
 if six.PY2:
     # Monkey-patch a __call__ method into @contextmanager to make
     # it compatible to Python 3
 
-    from contextlib import GeneratorContextManager  # pylint: disable=no-name-in-module
+    # pylint: disable=no-name-in-module,ungrouped-imports
+    from contextlib import GeneratorContextManager
 
     def init(self, *args):
         if len(args) == 1:
@@ -88,7 +93,7 @@ def dashboard_exception_handler(handler, *args, **kwargs):
             return handler(*args, **kwargs)
     # Don't catch cherrypy.* Exceptions.
     except (ViewCacheNoDataException, DashboardException) as e:
-        logger.exception('dashboard_exception_handler')
+        logger.exception('Dashboard Exception')
         cherrypy.response.headers['Content-Type'] = 'application/json'
         cherrypy.response.status = getattr(e, 'status', 400)
         return json.dumps(serialize_dashboard_exception(e)).encode('utf-8')

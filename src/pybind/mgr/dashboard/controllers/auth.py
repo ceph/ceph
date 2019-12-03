@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
 import cherrypy
 
 from . import ApiController, RESTController
-from .. import logger, mgr
+from .. import mgr
 from ..exceptions import DashboardException
 from ..services.auth import AuthManager, JwtManager
+
+
+logger = logging.getLogger('controllers.auth')
 
 
 @ApiController('/auth', secure=False)

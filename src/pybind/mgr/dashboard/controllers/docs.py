@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
 import cherrypy
 
 from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
-from .. import logger, mgr
+from .. import mgr
 
 from ..tools import str_to_bool
+
+
+logger = logging.getLogger('controllers.docs')
 
 
 @Controller('/docs', secure=False)
@@ -314,7 +318,7 @@ class Docs(BaseController):
 
         host = cherrypy.request.base
         host = host[host.index(':')+3:]
-        logger.debug("DOCS: Host: %s", host)
+        logger.debug("Host: %s", host)
 
         paths = self._gen_paths(all_endpoints, base_url)
 

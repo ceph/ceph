@@ -92,11 +92,11 @@ void PyModuleRunner::shutdown()
   dead = true;
 }
 
-void PyModuleRunner::log(int level, const std::string &record)
+void PyModuleRunner::log(const std::string &record)
 {
 #undef dout_prefix
-#define dout_prefix *_dout << "mgr[" << get_name() << "] "
-  dout(ceph::dout::need_dynamic(level)) << record << dendl;
+#define dout_prefix *_dout
+  dout(0) << record << dendl;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 }
