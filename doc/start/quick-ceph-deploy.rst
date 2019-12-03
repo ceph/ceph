@@ -62,6 +62,12 @@ configuration details, perform the following steps using ``ceph-deploy``.
    and a log file for the new cluster.  See `ceph-deploy new -h`_ for
    additional details.
 
+   Note for users of Ubuntu 18.04: Python 2 is a prerequisite of Ceph.
+   Install the ``python-minimal`` package on Ubuntu 18.04 to provide
+   Python 2::
+
+     [Ubuntu 18.04] $ sudo apt install python-minimal
+
 #. If you have more than one network interface, add the ``public network``
    setting under the ``[global]`` section of your Ceph configuration file.
    See the `Network Configuration Reference`_ for details. ::
