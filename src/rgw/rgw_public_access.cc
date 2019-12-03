@@ -10,11 +10,9 @@ void PublicAccessBlockConfiguration::decode_xml(XMLObj *obj) {
 
 void PublicAccessBlockConfiguration::dump_xml(Formatter *f) const {
   Formatter::ObjectSection os(*f, "BlockPublicAccessBlockConfiguration");
-  // AWS spec mentions the values to be ALL CAPs, but clients will not
-  // understand this or a mixed case like it is supposed to, hence the need to
-  // manually encode here
-  auto bool_val = [](bool b) -> auto { return b ? "true": "false"; };
-
+  // Note: AWS spec mentions the values to be ALL CAPs, but clients seem to
+  // require all small letters, and S3 itself doesn't seem to follow the API
+  // spec here
   f->dump_bool("BlockPublicAcls", BlockPublicAcls);
   f->dump_bool("IgnorePublicAcls", IgnorePublicAcls);
   f->dump_bool("BlockPublicPolicy", BlockPublicPolicy);
