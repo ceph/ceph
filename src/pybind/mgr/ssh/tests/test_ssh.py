@@ -128,9 +128,9 @@ class TestSSH(object):
     def test_rgw(self, _send_command, _get_connection, ssh_module):
         with self._with_host(ssh_module, 'test'):
             ps = PlacementSpec(nodes=['test'])
-            c = ssh_module.add_rgw(RGWSpec('name', ps))
+            c = ssh_module.add_rgw(RGWSpec('realm', 'zone', ps))
             [out] = self._wait(ssh_module, c)
-            assert "(Re)deployed rgw.name." in out
+            assert "(Re)deployed rgw.realm.zone." in out
             assert " on host 'test'" in out
 
     @mock.patch("ssh.module.SSHOrchestrator._run_ceph_daemon", _run_ceph_daemon(
