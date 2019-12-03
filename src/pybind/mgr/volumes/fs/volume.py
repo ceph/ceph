@@ -119,7 +119,7 @@ class ConnectionPool(object):
     def cleanup_connections(self):
         with self.lock:
             log.info("scanning for idle connections..")
-            idle_fs = [fs_name for fs_name,conn in self.connections.iteritems()
+            idle_fs = [fs_name for fs_name,conn in self.connections.items()
                        if conn.is_connection_idle(ConnectionPool.CONNECTION_IDLE_INTERVAL)]
             for fs_name in idle_fs:
                 log.info("cleaning up connection for '{}'".format(fs_name))
