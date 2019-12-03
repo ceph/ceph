@@ -37,13 +37,13 @@ CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
 log = logging.getLogger(__name__)
 
 
-def shell(ctx, cluster_name, remote, args, **kwargs):
+def _shell(ctx, cluster_name, remote, args, **kwargs):
     testdir = teuthology.get_testdir(ctx)
     return remote.run(
         args=[
             'sudo',
-            '{}/ceph-daemon'.format(testdir),
-            '--image', ctx.image,
+            ctx.ceph_daemon,
+            '--image', ctx.ceph[cluster_name].image,
             'shell',
             '-c', '{}/{}.conf'.format(testdir, cluster_name),
             '-k', '{}/{}.keyring'.format(testdir, cluster_name),
@@ -95,27 +95,28 @@ def download_ceph_daemon(ctx, config, ref):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
 
-    ref = config.get('ceph_daemon_branch', ref)
-    git_url = teuth_config.get_ceph_git_url()
-    log.info('Downloading ceph-daemon (repo %s ref %s)...' % (git_url, ref))
-    ctx.cluster.run(
-        args=[
-            'git', 'archive',
-            '--remote=' + git_url,
-            ref,
-            'src/ceph-daemon/ceph-daemon',
-            run.Raw('|'),
-            'tar', '-xO', 'src/ceph-daemon/ceph-daemon',
-            run.Raw('>'),
-            '{tdir}/ceph-daemon'.format(tdir=testdir),
-            run.Raw('&&'),
-            'test', '-s',
-            '{tdir}/ceph-daemon'.format(tdir=testdir),
-            run.Raw('&&'),
-            'chmod', '+x',
-            '{tdir}/ceph-daemon'.format(tdir=testdir),
-        ],
-    )
+    if config.get('ceph_daemon_mode') != 'packaged-ceph-daemon':
+        ref = config.get('ceph_daemon_branch', ref)
+        git_url = teuth_config.get_ceph_git_url()
+        log.info('Downloading ceph-daemon (repo %s ref %s)...' % (git_url, ref))
+        ctx.cluster.run(
+            args=[
+                'git', 'archive',
+                '--remote=' + git_url,
+                ref,
+                'src/ceph-daemon/ceph-daemon',
+                run.Raw('|'),
+                'tar', '-xO', 'src/ceph-daemon/ceph-daemon',
+                run.Raw('>'),
+                ctx.ceph_daemon,
+                run.Raw('&&'),
+                'test', '-s',
+                ctx.ceph_daemon,
+                run.Raw('&&'),
+                'chmod', '+x',
+                ctx.ceph_daemon,
+            ],
+        )
 
     try:
         yield
@@ -123,20 +124,21 @@ def download_ceph_daemon(ctx, config, ref):
         log.info('Removing cluster...')
         ctx.cluster.run(args=[
             'sudo',
-            '{}/ceph-daemon'.format(testdir),
+            ctx.ceph_daemon,
             'rm-cluster',
             '--fsid', ctx.ceph[cluster_name].fsid,
             '--force',
         ])
 
-        log.info('Removing ceph-daemon ...')
-        ctx.cluster.run(
-            args=[
-                'rm',
-                '-rf',
-                '{tdir}/ceph-daemon'.format(tdir=testdir),
-            ],
-        )
+        if config.get('ceph_daemon_mode') == 'root':
+            log.info('Removing ceph-daemon ...')
+            ctx.cluster.run(
+                args=[
+                    'rm',
+                    '-rf',
+                    ctx.ceph_daemon,
+                ],
+            )
 
 @contextlib.contextmanager
 def ceph_log(ctx, config):
@@ -261,8 +263,8 @@ def ceph_bootstrap(ctx, config):
         log.info('Bootstrapping...')
         cmd = [
             'sudo',
-            '{}/ceph-daemon'.format(testdir),
-            '--image', ctx.image,
+            ctx.ceph_daemon,
+            '--image', ctx.ceph[cluster_name].image,
             'bootstrap',
             '--fsid', fsid,
             '--mon-id', first_mon,
@@ -351,7 +353,7 @@ def ceph_bootstrap(ctx, config):
                 data=ctx.ceph[cluster_name].admin_keyring)
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'host', 'add',
                 remote.shortname
             ])
@@ -397,7 +399,7 @@ def ceph_mons(ctx, config):
                     continue
                 log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
-                shell(ctx, cluster_name, remote, [
+                _shell(ctx, cluster_name, remote, [
                     'ceph', 'orchestrator', 'mon', 'update',
                     str(num_mons),
                     remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
@@ -414,7 +416,7 @@ def ceph_mons(ctx, config):
                 with contextutil.safe_while(sleep=1, tries=180) as proceed:
                     while proceed():
                         log.info('Waiting for %d mons in monmap...' % (num_mons))
-                        r = shell(
+                        r = _shell(
                             ctx=ctx,
                             cluster_name=cluster_name,
                             remote=remote,
@@ -433,11 +435,11 @@ def ceph_mons(ctx, config):
             for mon in [r for r in roles
                         if teuthology.is_type('mon', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mon)
-                shell(ctx, cluster_name, remote, [
+                _shell(ctx, cluster_name, remote, [
                     'ceph', 'orchestrator', 'service', 'redeploy',
                     'mon', id_,
                 ])
-        shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
+        _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
             'ceph', 'orchestrator', 'service', 'redeploy',
             'mgr', ctx.ceph[cluster_name].first_mgr,
         ])
@@ -470,7 +472,7 @@ def ceph_mgrs(ctx, config):
                 nodes.append(remote.shortname + '=' + id_)
                 daemons[mgr] = (remote, id_)
         if nodes:
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'mgr', 'update',
                 str(len(nodes) + 1)] + nodes
             )
@@ -520,9 +522,9 @@ def ceph_osds(ctx, config):
             dev = devs.pop()
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
-            shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, remote, [
                 'ceph', 'orchestrator', 'osd', 'create',
                 remote.shortname + ':' + dev
             ])
@@ -559,7 +561,7 @@ def ceph_mdss(ctx, config):
             nodes.append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
     if nodes:
-        shell(ctx, cluster_name, remote, [
+        _shell(ctx, cluster_name, remote, [
             'ceph', 'orchestrator', 'mds', 'update',
             'all',
             str(len(nodes))] + nodes
@@ -621,6 +623,24 @@ def stop(ctx, config):
 #        ctx.ceph[cluster].watchdog.join()
 
     yield
+
+def shell(ctx, config):
+    """
+    Execute (shell) commands
+    """
+    testdir = teuthology.get_testdir(ctx)
+    cluster_name = config.get('cluster', 'ceph')
+
+    if 'all' in config and len(config) == 1:
+        a = config['all']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles)
+
+    for role, ls in config.items():
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        log.info('Running commands on role %s host %s', role, remote.name)
+        for c in ls:
+            _shell(ctx, cluster_name, remote, c.split(' '))
 
 @contextlib.contextmanager
 def tweaked_option(ctx, config):
@@ -751,8 +771,6 @@ def task(ctx, config):
     first_ceph_cluster = False
     if not hasattr(ctx, 'daemons'):
         first_ceph_cluster = True
-        ctx.daemons = DaemonGroup(
-            use_ceph_daemon='{}/ceph-daemon'.format(testdir))
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
         ctx.managers = {}
@@ -761,15 +779,27 @@ def task(ctx, config):
     cluster_name = config['cluster']
     ctx.ceph[cluster_name] = argparse.Namespace()
 
-    #validate_config(ctx, config)
+    # ceph-daemon mode?
+    if 'ceph_daemon_mode' not in config:
+        config['ceph_daemon_mode'] = 'root'
+    assert config['ceph_daemon_mode'] in ['root', 'packaged-ceph-daemon']
+    if config['ceph_daemon_mode'] == 'root':
+        ctx.ceph_daemon = testdir + '/ceph-daemon'
+    else:
+        ctx.ceph_daemon = 'ceph-daemon'  # in the path
+
+    if first_ceph_cluster:
+        # FIXME: this is global for all clusters
+        ctx.daemons = DaemonGroup(
+            use_ceph_daemon=ctx.ceph_daemon)
 
     # image
-    ctx.image = config.get('image')
+    ctx.ceph[cluster_name].image = config.get('image')
     ref = None
-    if not ctx.image:
+    if not ctx.ceph[cluster_name].image:
         sha1 = config.get('sha1')
         if sha1:
-            ctx.image = 'quay.io/ceph-ci/ceph:%s' % sha1
+            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % sha1
             ref = sha1
         else:
             # hmm, fall back to branch?
@@ -777,10 +807,10 @@ def task(ctx, config):
             ref = branch
             # FIXME when ceph-ci builds all branches
             if branch in ['master', 'nautilus']:
-                ctx.image = 'ceph/daemon-base:latest-%s-devel' % branch
+                ctx.ceph[cluster_name].image = 'ceph/daemon-base:latest-%s-devel' % branch
             else:
-                ctx.image = 'quay.io/ceph-ci/ceph:%s' % branch
-    log.info('Cluster image is %s' % ctx.image)
+                ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % branch
+    log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
     # uuid
     fsid = str(uuid.uuid1())
