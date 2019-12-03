@@ -309,6 +309,18 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
   }
 }
 
+static bool check_bool_str(const char *val, int *ret)
+{
+  if ((strcmp(val, "true") == 0) || (strcmp(val, "1") == 0)) {
+    *ret = 1;
+    return true;
+  } else if ((strcmp(val, "false") == 0) || (strcmp(val, "0") == 0)) {
+    *ret = 0;
+    return true;
+  }
+  return false;
+}
+
 static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
 	std::ostream *oss, va_list ap)
@@ -330,12 +342,7 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
       if (first[strlen_a] == '=') {
 	i = args.erase(i);
 	const char *val = first + strlen_a + 1;
-	if ((strcmp(val, "true") == 0) || (strcmp(val, "1") == 0)) {
-	  *ret = 1;
-	  return true;
-	}
-	else if ((strcmp(val, "false") == 0) || (strcmp(val, "0") == 0)) {
-	  *ret = 0;
+        if (check_bool_str(val, ret)) {
 	  return true;
 	}
 	if (oss) {
@@ -346,8 +353,18 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	return true;
       }
       else if (first[strlen_a] == '\0') {
-	i = args.erase(i);
-	*ret = 1;
+        auto next = i+1;
+        if (next != args.end() &&
+            *next &&
+            (*next)[0] != '-') {
+          if (check_bool_str(*next, ret)) {
+            i = args.erase(i);
+            i = args.erase(i);
+            return true;
+          }
+        }
+        i = args.erase(i);
+        *ret =  1;
 	return true;
       }
     }
