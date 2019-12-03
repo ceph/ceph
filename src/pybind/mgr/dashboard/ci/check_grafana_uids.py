@@ -85,6 +85,13 @@ def get_grafana_dashboards(base_dir):
         with open(json_file) as f:
             dashboard_config = json.load(f)
             uid = dashboard_config.get('uid')
+
+            # Grafana dashboard checks
+            title = dashboard_config['title']
+            assert len(title) > 0, \
+                "Title not found in '{}'".format(json_file)
+            assert len(dashboard_config.get('links', [])) == 0, \
+                "Links found in '{}'".format(json_file)
             if not uid:
                 continue
             if uid in dashboards:
@@ -92,9 +99,10 @@ def get_grafana_dashboards(base_dir):
                 error_msg = 'Duplicated UID {} found, already defined in {}'.\
                     format(uid, dashboards[uid]['file'])
                 exit(error_msg)
+
             dashboards[uid] = {
                 'file': json_file,
-                'title': dashboard_config['title']
+                'title': title
             }
     return dashboards
 
