@@ -524,6 +524,13 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       pending_map.available_modules = m->get_available_modules();
       updated = true;
     }
+    const auto& clients = m->get_clients();
+    if (pending_map.clients != clients) {
+      dout(4) << "active's RADOS clients " << clients
+	      << " (was " << pending_map.clients << ")" << dendl;
+      pending_map.clients = clients;
+      updated = true;
+    }
   } else if (pending_map.active_gid == 0) {
     // There is no currently active daemon, select this one.
     if (pending_map.standbys.count(m->get_gid())) {
@@ -834,6 +841,11 @@ void MgrMonitor::drop_active()
           << pending_map.active_gid << " ("
           << pending_map.active_addrs << ")" << dendl;
   auto blacklist_epoch = mon->osdmon()->blacklist(pending_map.active_addrs, until);
+
+  /* blacklist RADOS clients in use by the mgr */
+  for (const auto& a : pending_map.clients) {
+    mon->osdmon()->blacklist(a, until);
+  }
   request_proposal(mon->osdmon());
 
   pending_metadata_rm.insert(pending_map.active_name);
@@ -845,6 +857,7 @@ void MgrMonitor::drop_active()
   pending_map.available = false;
   pending_map.active_addrs = entity_addrvec_t();
   pending_map.services.clear();
+  pending_map.clients.clear();
   pending_map.last_failure_osd_epoch = blacklist_epoch;
 
   // So that when new active mgr subscribes to mgrdigest, it will

@@ -442,6 +442,15 @@ extern "C" int _rados_blacklist_add(rados_t cluster, char *client_address,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_blacklist_add);
 
+extern "C" int _rados_getaddrs(rados_t cluster, char** addrs)
+{
+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+  auto s = radosp->get_addrs();
+  *addrs = strdup(s.c_str());
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_getaddrs);
+
 extern "C" void _rados_set_osdmap_full_try(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;

@@ -1050,6 +1050,32 @@ ceph_is_authorized(BaseMgrModule *self, PyObject *args)
   Py_RETURN_FALSE;
 }
 
+static PyObject*
+ceph_register_client(BaseMgrModule *self, PyObject *args)
+{
+  char *addrs = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
+    return nullptr;
+  }
+
+  self->py_modules->register_client(self->this_module->get_name(), addrs);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_unregister_client(BaseMgrModule *self, PyObject *args)
+{
+  char *addrs = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
+    return nullptr;
+  }
+
+  self->py_modules->unregister_client(self->this_module->get_name(), addrs);
+
+  Py_RETURN_NONE;
+}
+
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
@@ -1145,6 +1171,12 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized,
     METH_VARARGS, "Verify the current session caps are valid"},
+
+  {"_ceph_register_client", (PyCFunction)ceph_register_client,
+    METH_VARARGS, "Register RADOS instance for potential blacklisting"},
+
+  {"_ceph_unregister_client", (PyCFunction)ceph_unregister_client,
+    METH_VARARGS, "Unregister RADOS instance for potential blacklisting"},
 
   {NULL, NULL, 0, NULL}
 };

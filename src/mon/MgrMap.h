@@ -238,6 +238,8 @@ public:
   /// features
   uint64_t active_mgr_features = 0;
 
+  std::vector<entity_addrvec_t> clients; // for blacklist
+
   std::map<uint64_t, StandbyInfo> standbys;
 
   // Modules which are enabled
@@ -381,7 +383,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(10, 6, bl);
+    ENCODE_START(11, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -395,13 +397,14 @@ public:
     encode(always_on_modules, bl);
     encode(active_mgr_features, bl);
     encode(last_failure_osd_epoch, bl);
+    encode(clients, bl, features);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(8, p);
+    DECODE_START(11, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -445,6 +448,9 @@ public:
     }
     if (struct_v >= 10) {
       decode(last_failure_osd_epoch, p);
+    }
+    if (struct_v >= 11) {
+      decode(clients, p);
     }
     DECODE_FINISH(p);
   }
@@ -498,6 +504,11 @@ public:
       f->close_section();
     }
     f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
+    f->open_array_section("active_clients");
+    for (const auto &c : clients) {
+      f->dump_object("client", c);
+    }
+    f->close_section();
     f->close_section();
   }
 
