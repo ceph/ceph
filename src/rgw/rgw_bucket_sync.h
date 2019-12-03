@@ -208,7 +208,7 @@ public:
 
   struct pipe_set {
     std::map<endpoints_pair, pipe_rules_ref> rules;
-    std::map<string, rgw_sync_bucket_pipe> pipe_map;
+    std::multimap<string, rgw_sync_bucket_pipe> pipe_map;
 
     std::set<pipe_handler> handlers;
 
