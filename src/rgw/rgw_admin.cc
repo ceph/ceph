@@ -3187,8 +3187,10 @@ int main(int argc, const char **argv)
   std::optional<vector<string> > opt_zone_names;
   std::optional<vector<rgw_zone_id> > opt_zone_ids;
   std::optional<string> opt_flow_id;
-  std::optional<string> opt_source_zone;
-  std::optional<string> opt_dest_zone;
+  std::optional<string> opt_source_zone_name;
+  std::optional<rgw_zone_id> opt_source_zone_id;
+  std::optional<string> opt_dest_zone_name;
+  std::optional<rgw_zone_id> opt_dest_zone_id;
   std::optional<vector<string> > opt_source_zone_names;
   std::optional<vector<rgw_zone_id> > opt_source_zone_ids;
   std::optional<vector<string> > opt_dest_zone_names;
@@ -3501,9 +3503,13 @@ int main(int argc, const char **argv)
       sync_from_all_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
       source_zone_name = val;
-      opt_source_zone = val;
+      opt_source_zone_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-zone-id", (char*)NULL)) {
+      opt_source_zone_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-zone", (char*)NULL)) {
-      opt_dest_zone = val;
+      opt_dest_zone_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-zone-id", (char*)NULL)) {
+      opt_dest_zone_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tier-type", (char*)NULL)) {
       tier_type = val;
       tier_type_specified = true;
@@ -5374,6 +5380,8 @@ int main(int argc, const char **argv)
   }
 
   resolve_zone_id_opt(opt_effective_zone_name, opt_effective_zone_id);
+  resolve_zone_id_opt(opt_source_zone_name, opt_source_zone_id);
+  resolve_zone_id_opt(opt_dest_zone_name, opt_dest_zone_id);
   resolve_zone_ids_opt(opt_zone_names, opt_zone_ids);
   resolve_zone_ids_opt(opt_source_zone_names, opt_source_zone_ids);
   resolve_zone_ids_opt(opt_dest_zone_names, opt_dest_zone_ids);
@@ -8197,12 +8205,12 @@ next:
         flow_group->zones.insert(z);
       }
     } else { /* directional */
-      CHECK_TRUE(require_non_empty_opt(opt_source_zone), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
-      CHECK_TRUE(require_non_empty_opt(opt_dest_zone), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_source_zone_id), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_dest_zone_id), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
 
       rgw_sync_directional_rule *flow_rule;
 
-      group.data_flow.find_directional(*opt_source_zone, *opt_dest_zone, true, &flow_rule);
+      group.data_flow.find_directional(*opt_source_zone_id, *opt_dest_zone_id, true, &flow_rule);
     }
 
     ret = sync_policy_ctx.write_policy();
@@ -8239,10 +8247,10 @@ next:
     if (symmetrical_flow_opt(*opt_flow_type)) {
       group.data_flow.remove_symmetrical(*opt_flow_id, opt_zone_ids);
     } else { /* directional */
-      CHECK_TRUE(require_non_empty_opt(opt_source_zone), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
-      CHECK_TRUE(require_non_empty_opt(opt_dest_zone), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_source_zone_id), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(opt_dest_zone_id), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
 
-      group.data_flow.remove_directional(*opt_source_zone, *opt_dest_zone);
+      group.data_flow.remove_directional(*opt_source_zone_id, *opt_dest_zone_id);
     }
     
     ret = sync_policy_ctx.write_policy();
