@@ -71,6 +71,20 @@ def listdir(fs, dirpath):
         raise VolumeException(-e.args[0], e.args[1])
     return dirs
 
+def list_one_entry_at_a_time(fs, dirpath):
+    """
+    Get a directory entry (one entry a time)
+    """
+    try:
+        with fs.opendir(dirpath) as dir_handle:
+            d = fs.readdir(dir_handle)
+            while d:
+                if d.d_name not in (b".", b".."):
+                    yield d
+                d = fs.readdir(dir_handle)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+
 def get_ancestor_xattr(fs, path, attr):
     """
     Helper for reading layout information: if this xattr is missing

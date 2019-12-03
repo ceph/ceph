@@ -9,11 +9,13 @@ import cephfs
 
 from .index import Index
 from ..exception import IndexException, VolumeException
+from ..fs_util import list_one_entry_at_a_time
 
 log = logging.getLogger(__name__)
 
 class CloneIndex(Index):
     SUB_GROUP_NAME = "clone"
+    PATH_MAX = 4096
 
     @property
     def path(self):
@@ -44,6 +46,26 @@ class CloneIndex(Index):
             self.fs.unlink(source_path)
         except cephfs.Error as e:
             raise IndexException(-e.args[0], e.args[1])
+
+    def get_oldest_clone_entry(self, exclude=[]):
+        min_ctime_entry = None
+        exclude_tracking_ids = [v[0] for v in exclude]
+        log.debug("excluded tracking ids: {0}".format(exclude_tracking_ids))
+        for entry in list_one_entry_at_a_time(self.fs, self.path):
+            dname = entry.d_name
+            dpath = os.path.join(self.path, dname)
+            st = self.fs.lstat(dpath)
+            if dname not in exclude_tracking_ids and stat.S_ISLNK(st.st_mode):
+                if min_ctime_entry is None or st.st_ctime < min_ctime_entry[1].st_ctime:
+                    min_ctime_entry = (dname, st)
+        if min_ctime_entry:
+            try:
+                linklen = min_ctime_entry[1].st_size
+                sink_path = self.fs.readlink(os.path.join(self.path, min_ctime_entry[0]), CloneIndex.PATH_MAX)
+                return (min_ctime_entry[0], sink_path[:linklen])
+            except cephfs.Error as e:
+                raise IndexException(-e.args[0], e.args[1])
+        return None
 
 def create_clone_index(fs, vol_spec):
     clone_index = CloneIndex(fs, vol_spec)
