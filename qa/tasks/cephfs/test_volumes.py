@@ -1073,3 +1073,20 @@ class TestVolumes(CephFSTestCase):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+    def test_mgr_eviction(self):
+        # unmount any cephfs mounts
+        self.mount_a.umount_wait()
+        sessions = self._session_list()
+        self.assertLessEqual(len(sessions), 1) # maybe mgr is already mounted
+
+        # Get the mgr to definitely mount cephfs
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        sessions = self._session_list()
+        self.assertEqual(len(sessions), 1)
+
+        # Now fail the mgr, check the session was evicted
+        mgr = self.mgr_cluster.get_active_id()
+        self.mgr_cluster.mgr_fail(mgr)
+        self.wait_until_evicted(sessions[0]['id'])
