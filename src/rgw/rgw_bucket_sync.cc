@@ -459,7 +459,7 @@ RGWBucketSyncFlowManager::pipe_rules::prefix_map_t::const_iterator RGWBucketSync
 }
 
 void RGWBucketSyncFlowManager::pipe_set::insert(const rgw_sync_bucket_pipe& pipe) {
-  pipe_map[pipe.id] = pipe;
+  pipe_map.insert(make_pair(pipe.id, pipe));
 
   auto& rules_ref = rules[endpoints_pair(pipe)];
 
