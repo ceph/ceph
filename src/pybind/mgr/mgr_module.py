@@ -414,7 +414,7 @@ class CPlusPlusHandler(logging.Handler):
 
 class FileHandler(logging.FileHandler):
     def __init__(self, module_inst):
-        path = module_inst._ceph_get_option("log_file")
+        path = module_inst.get_ceph_option("log_file")
         idx = path.rfind(".log")
         if idx != -1:
             self.path = "{}.{}.log".format(path[:idx], module_inst.module_name)
@@ -535,7 +535,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
 
-        mgr_level = self._ceph_get_option("debug_mgr")
+        mgr_level = self.get_ceph_option("debug_mgr")
         log_level = self.get_module_option("log_level")
         self._configure_logging(mgr_level, log_level, False)
 
@@ -641,7 +641,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        mgr_level = self._ceph_get_option("debug_mgr")
+        mgr_level = self.get_ceph_option("debug_mgr")
         log_level = self.get_module_option("log_level")
         self._configure_logging(mgr_level, log_level,
                                 self.get_module_option("log_to_file", False))
@@ -733,7 +733,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def _config_notify(self):
         # check logging options for changes
-        mgr_level = self._ceph_get_option("debug_mgr")
+        mgr_level = self.get_ceph_option("debug_mgr")
         module_level = self.get_module_option("log_level")
         log_to_file = self.get_module_option("log_to_file", False)
 
