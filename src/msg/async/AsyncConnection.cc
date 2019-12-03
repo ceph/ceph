@@ -289,7 +289,7 @@ ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
       goto again;
     } else {
       ldout(async_msgr->cct, 1) << __func__ << " reading from fd=" << cs.fd()
-                          << " : "<< strerror(nread) << dendl;
+                          << " : "<< nread << " " << strerror(nread) << dendl;
       return -1;
     }
   } else if (nread == 0) {

@@ -398,4 +398,63 @@ CEPH_CONSTRUCTOR(ceph_windows_init) {
   }
 }
 
+int win_socketpair(int socks[2])
+{
+    union {
+       struct sockaddr_in inaddr;
+       struct sockaddr addr;
+    } a;
+    int listener;
+    int e;
+    socklen_t addrlen = sizeof(a.inaddr);
+    int reuse = 1;
+
+    if (socks == 0) {
+      errno = -EINVAL;
+      return SOCKET_ERROR;
+    }
+
+    listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET)
+        return SOCKET_ERROR;
+
+    memset(&a, 0, sizeof(a));
+    a.inaddr.sin_family = AF_INET;
+    a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    a.inaddr.sin_port = 0;
+
+    socks[0] = socks[1] = INVALID_SOCKET;
+    do {
+        if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+               (char*) &reuse, (socklen_t) sizeof(reuse)) == -1)
+            break;
+        if  (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+            break;
+        if  (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
+            break;
+        if (listen(listener, 1) == SOCKET_ERROR)
+            break;
+        socks[0] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (socks[0] == INVALID_SOCKET)
+            break;
+        if (connect(socks[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+            break;
+        socks[1] = accept(listener, NULL, NULL);
+        if (socks[1] == INVALID_SOCKET)
+            break;
+
+        closesocket(listener);
+
+        return 0;
+
+    } while (0);
+
+    e = errno;
+    closesocket(listener);
+    closesocket(socks[0]);
+    closesocket(socks[1]);
+    errno = e;
+    return SOCKET_ERROR;
+}
+
 #endif /* _WIN32 */
