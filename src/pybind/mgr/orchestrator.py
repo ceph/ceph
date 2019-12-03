@@ -1192,6 +1192,7 @@ class RGWSpec(StatelessServiceSpec):
 
     """
     def __init__(self,
+                 rgw_realm, # type: str
                  rgw_zone,  # type: str
                  placement=None,
                  hosts=None,  # type: Optional[List[str]]
@@ -1202,7 +1203,6 @@ class RGWSpec(StatelessServiceSpec):
                  rgw_frontend_port=None,  # type: Optional[int]
                  rgw_zonegroup=None,  # type: Optional[str]
                  rgw_zone_user=None,  # type: Optional[str]
-                 rgw_realm=None,  # type: Optional[str]
                  system_access_key=None,  # type: Optional[str]
                  system_secret_key=None,  # type: Optional[str]
                  count=None  # type: Optional[int]
@@ -1211,7 +1211,8 @@ class RGWSpec(StatelessServiceSpec):
         # default values that makes sense for Ansible. Rook has default values implemented
         # in Rook itself. Thus we don't set any defaults here in this class.
 
-        super(RGWSpec, self).__init__(name=rgw_zone, count=count,
+        super(RGWSpec, self).__init__(name=rgw_realm + '.' + rgw_zone,
+                                      count=count,
                                       placement=placement)
 
         #: List of hosts where RGWs should run. Not for Rook.
@@ -1225,9 +1226,10 @@ class RGWSpec(StatelessServiceSpec):
         self.rgw_multisite_proto = rgw_multisite_proto
         self.rgw_frontend_port = rgw_frontend_port
 
+        self.rgw_realm = rgw_realm
+        self.rgw_zone = rgw_zone
         self.rgw_zonegroup = rgw_zonegroup
         self.rgw_zone_user = rgw_zone_user
-        self.rgw_realm = rgw_realm
 
         self.system_access_key = system_access_key
         self.system_secret_key = system_secret_key

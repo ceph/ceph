@@ -444,31 +444,29 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator rgw add',
-        'name=zone_name,type=CephString,req=false '
+        'name=realm_name,type=CephString '
+        'name=zone_name,type=CephString '
         'name=num,type=CephInt,req=false '
         "name=hosts,type=CephString,n=N,req=false",
         'Create an RGW service. A complete <rgw_spec> can be provided'\
         ' using <-i> to customize completelly the RGW service')
-    def _rgw_add(self, zone_name, num, hosts, inbuf=None):
+    def _rgw_add(self, realm_name, zone_name, num=1, hosts=None, inbuf=None):
         usage = """
 Usage:
   ceph orchestrator rgw add -i <json_file>
-  ceph orchestrator rgw add <zone_name>
+  ceph orchestrator rgw add <realm_name> <zone_name>
         """
-
         if inbuf:
             try:
                 rgw_spec = orchestrator.RGWSpec.from_json(json.loads(inbuf))
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        elif zone_name:
-            rgw_spec = orchestrator.RGWSpec(
-                rgw_zone=zone_name,
-                placement=orchestrator.PlacementSpec(nodes=hosts),
-                count=num or 1)
-        else:
-            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+        rgw_spec = orchestrator.RGWSpec(
+            rgw_realm=realm_name,
+            rgw_zone=zone_name,
+            placement=orchestrator.PlacementSpec(nodes=hosts),
+            count=num or 1)
 
         completion = self.add_rgw(rgw_spec)
         self._orchestrator_wait([completion])
@@ -477,12 +475,14 @@ Usage:
 
     @orchestrator._cli_write_command(
         'orchestrator rgw update',
-        "name=zone_name,type=CephString "
-        "name=num,type=CephInt "
+        'name=realm_name,type=CephString '
+        'name=zone_name,type=CephString '
+        "name=num,type=CephInt,req=False "
         "name=hosts,type=CephString,n=N,req=false",
         'Update the number of RGW instances for the given zone')
-    def _rgw_update(self, zone_name, num, hosts=None):
+    def _rgw_update(self, realm_name, zone_name, num, hosts=None):
         spec = orchestrator.RGWSpec(
+            rgw_realm=realm_name,
             rgw_zone=zone_name,
             placement=orchestrator.PlacementSpec(nodes=hosts),
             count=num or 1)
