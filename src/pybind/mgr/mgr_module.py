@@ -6,6 +6,7 @@ except ImportError:
     # just for type checking
     pass
 import logging
+import errno
 import json
 import six
 import threading
@@ -45,72 +46,6 @@ PG_STATES = [
     "snaptrim_error",
     "creating",
     "unknown"]
-
-
-class CPlusPlusHandler(logging.Handler):
-    def __init__(self, module_inst):
-        super(CPlusPlusHandler, self).__init__()
-        self._module = module_inst
-
-    def emit(self, record):
-        if record.levelno <= logging.DEBUG:
-            ceph_level = 20
-        elif record.levelno <= logging.INFO:
-            ceph_level = 4
-        elif record.levelno <= logging.WARNING:
-            ceph_level = 1
-        else:
-            ceph_level = 0
-
-        self._module._ceph_log(ceph_level, self.format(record))
-
-
-def configure_logger(module_inst, module_name):
-    """
-    Create and configure the logger with the specified module.
-
-    A handler will be added to the root logger which will redirect
-    the messages from all loggers (incl. 3rd party libraries) to the
-    Ceph log.
-
-    :param module_inst: The module instance.
-    :type module_inst: instance
-    :param module_name: The module name.
-    :type module_name: str
-    :return: Return the logger with the specified name.
-    """
-    logger = logging.getLogger(module_name)
-    # Don't filter any logs at the python level, leave it to C++.
-    # FIXME: We should learn the log level from C++ land, and then
-    #        avoid calling the C++ level log when we know a message
-    #        is of an insufficient level to be ultimately output.
-    logger.setLevel(logging.DEBUG)  # Don't use NOTSET
-
-    root_logger = logging.getLogger()
-    # Add handler to the root logger, thus this module and all
-    # 3rd party libraries will log their messages to the Ceph log.
-    root_logger.addHandler(CPlusPlusHandler(module_inst))
-    # Set the log level to ``ERROR`` to ensure that we only get
-    # those message from 3rd party libraries (only effective if
-    # they use the default log level ``NOTSET``).
-    # Check https://docs.python.org/3/library/logging.html#logging.Logger.setLevel
-    # for more information about how the effective log level is
-    # determined.
-    root_logger.setLevel(logging.ERROR)
-
-    return logger
-
-
-def unconfigure_logger(module_name=None):
-    """
-    :param module_name: The module name. Defaults to ``None``.
-    :type module_name: str or None
-    """
-    logger = logging.getLogger(module_name)
-    rm_handlers = [
-        h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
-    for h in rm_handlers:
-        logger.removeHandler(h)
 
 
 class CommandResult(object):
@@ -465,7 +400,125 @@ class Command(dict):
         )
 
 
-class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
+class CPlusPlusHandler(logging.Handler):
+    def __init__(self, module_inst):
+        super(CPlusPlusHandler, self).__init__()
+        self._module = module_inst
+        self.setFormatter(logging.Formatter("[{}] [%(levelname)-4s] [%(name)s] %(message)s"
+                          .format(module_inst.module_name)))
+
+    def emit(self, record):
+        if record.levelno >= self.level:
+            self._module._ceph_log(self.format(record))
+
+
+class FileHandler(logging.FileHandler):
+    def __init__(self, module_inst):
+        path = module_inst._ceph_get_option("log_file")
+        idx = path.rfind(".log")
+        if idx != -1:
+            self.path = "{}.{}.log".format(path[:idx], module_inst.module_name)
+        else:
+            self.path = "{}.{}".format(path, module_inst.module_name)
+        super(FileHandler, self).__init__(self.path, delay=True)
+        self.setFormatter(logging.Formatter("%(asctime)s [%(threadName)s] [%(levelname)-4s] [%(name)s] %(message)s"))
+
+
+class MgrModuleLoggingMixin(object):
+    def _configure_logging(self, mgr_level, module_level, log_to_file):
+        self._mgr_level = None
+        self._module_level = None
+        self._root_logger = logging.getLogger()
+
+        self._unconfigure_logging()
+
+        # the ceph log handler is initialized only once
+        self._ceph_log_handler = CPlusPlusHandler(self)
+        self._file_log_handler = FileHandler(self)
+
+        self.log_to_file = log_to_file
+        if log_to_file:
+            self._root_logger.addHandler(self._file_log_handler)
+        else:
+            self._root_logger.addHandler(self._ceph_log_handler)
+
+        self._root_logger.setLevel(logging.NOTSET)
+        self._set_log_level(mgr_level, module_level)
+
+    def _unconfigure_logging(self):
+        # remove existing handlers:
+        rm_handlers = [
+            h for h in self._root_logger.handlers if isinstance(h, CPlusPlusHandler) or isinstance(h, FileHandler)]
+        for h in rm_handlers:
+            self._root_logger.removeHandler(h)
+        self.log_to_file = False
+
+    def _set_log_level(self, mgr_level, module_level):
+        module_level = module_level.upper() if module_level else ''
+        if not self._module_level:
+            # using debug_mgr level
+            if not module_level and self._mgr_level == mgr_level:
+                # no change in module level neither in debug_mgr
+                return
+        else:
+            if self._module_level == module_level:
+                # no change in module level
+                return
+
+        if not self._module_level and not module_level:
+            level = self._ceph_log_level_to_python(mgr_level)
+            self.getLogger().warning("setting log level based on debug_mgr: %s (%s)", level, mgr_level)
+        elif self._module_level and not module_level:
+            level = self._ceph_log_level_to_python(mgr_level)
+            self.getLogger().warning("unsetting module log level, falling back to "
+                                     "debug_mgr level: %s (%s)", level, mgr_level)
+        elif module_level:
+            level = module_level
+            self.getLogger().warning("setting log level: %s", level)
+
+        self._module_level = module_level
+        self._mgr_level = mgr_level
+
+        self._ceph_log_handler.setLevel(level)
+        self._file_log_handler.setLevel(level)
+
+    def _enable_file_log(self):
+        # disable ceph log and enable file log
+        self.getLogger().warning("enabling logging to file")
+        self.log_to_file = True
+        self._root_logger.addHandler(self._file_log_handler)
+        self._root_logger.removeHandler(self._ceph_log_handler)
+
+    def _disable_file_log(self):
+        # disable file log and enable ceph log
+        self.getLogger().warning("disabling logging to file")
+        self.log_to_file = False
+        self._root_logger.addHandler(self._ceph_log_handler)
+        self._root_logger.removeHandler(self._file_log_handler)
+
+    def _ceph_log_level_to_python(self, ceph_log_level):
+        if ceph_log_level:
+            try:
+                ceph_log_level = int(ceph_log_level.split("/", 1)[0])
+            except ValueError:
+                ceph_log_level = 0
+        else:
+            ceph_log_level = 0
+
+        log_level = "DEBUG"
+        if ceph_log_level <= 0:
+            log_level = "CRITICAL"
+        elif ceph_log_level <= 1:
+            log_level = "WARNING"
+        elif ceph_log_level <= 4:
+            log_level = "INFO"
+        return log_level
+
+    def getLogger(self, name=None):
+        return logging.getLogger(name)
+
+
+class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     """
     Standby modules only implement a serve and shutdown method, they
     are not permitted to implement commands and they do not receive
@@ -481,7 +534,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def __init__(self, module_name, capsule):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
-        self._logger = configure_logger(self, module_name)
+
+        mgr_level = self._ceph_get_option("debug_mgr")
+        log_level = self.get_module_option("log_level")
+        self._configure_logging(mgr_level, log_level, False)
+
+        # for backwards compatibility
+        self._logger = self.getLogger()
+
         # see also MgrModule.__init__()
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
@@ -491,7 +551,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger()
+        self._unconfigure_logging()
 
     @property
     def log(self):
@@ -544,7 +604,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
             return r
 
 
-class MgrModule(ceph_module.BaseMgrModule):
+class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     COMMANDS = []
     MODULE_OPTIONS = []
     MODULE_OPTION_DEFAULTS = {}
@@ -579,13 +639,15 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def __init__(self, module_name, py_modules_ptr, this_ptr):
         self.module_name = module_name
-
-        # If we're taking over from a standby module, let's make sure
-        # its logger was unconfigured before we hook ours up
-        unconfigure_logger()
-        self._logger = configure_logger(self, module_name)
-
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
+
+        mgr_level = self._ceph_get_option("debug_mgr")
+        log_level = self.get_module_option("log_level")
+        self._configure_logging(mgr_level, log_level,
+                                self.get_module_option("log_to_file", False))
+
+        # for backwards compatibility
+        self._logger = self.getLogger()
 
         self._version = self._ceph_get_version()
 
@@ -607,10 +669,14 @@ class MgrModule(ceph_module.BaseMgrModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger()
+        self._unconfigure_logging()
 
     @classmethod
-    def _register_commands(cls):
+    def _register_commands(cls, module_name):
+        cls.MODULE_OPTIONS.append(Option(name='log_level', type='str', default="", runtime=True,
+                                         enum_allowed=['info', 'debug', 'critical', 'error', 'warning', '']))
+        cls.MODULE_OPTIONS.append(Option(name='log_to_file', type='bool', default=False, runtime=True))
+
         cls.COMMANDS.extend(CLICommand.dump_cmd_list())
 
     @property
@@ -664,6 +730,23 @@ class MgrModule(ceph_module.BaseMgrModule):
                             ``from send_command``.
         """
         pass
+
+    def _config_notify(self):
+        # check logging options for changes
+        mgr_level = self._ceph_get_option("debug_mgr")
+        module_level = self.get_module_option("log_level")
+        log_to_file = self.get_module_option("log_to_file", False)
+
+        self._set_log_level(mgr_level, module_level)
+
+        if log_to_file != self.log_to_file:
+            if log_to_file:
+                self._enable_file_log()
+            else:
+                self._disable_file_log()
+
+        # call module subclass implementations
+        self.config_notify()
 
     def config_notify(self):
         """
@@ -973,6 +1056,7 @@ class MgrModule(ceph_module.BaseMgrModule):
     def _handle_command(self, inbuf, cmd):
         if cmd['prefix'] not in CLICommand.COMMANDS:
             return self.handle_command(inbuf, cmd)
+
         return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
 
     def handle_command(self, inbuf, cmd):

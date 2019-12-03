@@ -2,19 +2,22 @@
 from __future__ import absolute_import
 
 from functools import partial
+import logging
 
 import cherrypy
 import cephfs
 
 from . import ApiController, RESTController, UiApiController, BaseController, \
               Endpoint, Task, ReadPermission, ControllerDoc, EndpointDoc
-from .. import logger
 from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.cephx import CephX
 from ..services.exception import serialize_dashboard_exception
 from ..services.ganesha import Ganesha, GaneshaConf, NFSException
 from ..services.rgw_client import RgwClient
+
+
+logger = logging.getLogger('controllers.ganesha')
 
 
 # documentation helpers
@@ -282,7 +285,7 @@ class NFSGaneshaUi(BaseController):
             root_dir = "/"
         depth = int(depth)
         if depth > 5:
-            logger.warning("[NFS] Limiting depth to maximum value of 5: "
+            logger.warning("Limiting depth to maximum value of 5: "
                            "input depth=%s", depth)
             depth = 5
         root_dir = '{}{}'.format(root_dir.rstrip('/'), '/')
