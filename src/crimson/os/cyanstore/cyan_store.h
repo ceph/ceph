@@ -54,8 +54,9 @@ public:
     CollectionRef c,
     const ghobject_t& oid,
     std::string_view name) const final;
-  seastar::future<attrs_t> get_attrs(CollectionRef c,
-                                     const ghobject_t& oid) final;
+  get_attrs_ertr::future<attrs_t> get_attrs(
+    CollectionRef c,
+    const ghobject_t& oid);
 
   seastar::future<omap_values_t> omap_get_values(
     CollectionRef c,

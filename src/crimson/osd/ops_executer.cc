@@ -63,7 +63,7 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   }
 
   const auto flags = method->get_flags();
-  if (!os->exists && (flags & CLS_METHOD_WR) == 0) {
+  if (!obc->obs.exists && (flags & CLS_METHOD_WR) == 0) {
     return crimson::ct_error::enoent::make();
   }
 
@@ -357,7 +357,10 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output
   // of each op.
-  logger().debug("handling op {}", ceph_osd_op_name(osd_op.op.op));
+  logger().debug(
+    "handling op {} on object {}",
+    ceph_osd_op_name(osd_op.op.op),
+    get_target());
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
