@@ -342,7 +342,7 @@ struct rgw_sync_pipe_params {
   rgw_user user;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(1, 1, bl);
     encode(source, bl);
     encode(dest, bl);
     encode(priority, bl);
@@ -359,9 +359,7 @@ struct rgw_sync_pipe_params {
     uint8_t m;
     decode(m, bl);
     mode = (Mode)m;
-    if (struct_v >= 2) {
-      decode(user, bl);
-    }
+    decode(user, bl);
     DECODE_FINISH(bl);
   }
 
