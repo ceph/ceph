@@ -129,6 +129,11 @@ public:
 
   void mark_updated_scatterlock(ScatterLock *lock);
 
+  void mark_dirty_rstat_dirfrag(CDir *dir);
+  void advance_dirty_rstats(utime_t stamp);
+  void flush_dirty_rstats();
+  void finish_flush_dirty_rstats(utime_t flushed_to);
+
   void handle_reqrdlock(SimpleLock *lock, const cref_t<MLock> &m);
 
   // caps
@@ -247,6 +252,15 @@ protected:
   std::map<client_t, xlist<Capability*> > revoking_caps_by_client;
 
   elist<CInode*> need_snapflush_inodes;
+
+  // Dirty rstats
+  struct dirty_rstat_state_t {
+    elist<CDir*> dirfrags;
+    dirty_rstat_state_t();
+    bool empty() const { return dirfrags.empty(); }
+  };
+  std::map<utime_t, dirty_rstat_state_t> dirty_rstat_states;
+  utime_t rstat_flushed_to = utime_t(0, 1); // smallest non-zero time
 
 private:
   friend class C_MDL_CheckMaxSize;

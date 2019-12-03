@@ -194,7 +194,7 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth) :
   mdcache(mdc), inode(in), frag(fg),
-  dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
+  dirty_rstat_inodes(member_offset(CInode, item_dirty_rstat)),
   dirty_dentries(member_offset(CDentry, item_dir_dirty)),
   item_dirty(this), item_new(this),
   lock_caches_with_auth_pins(member_offset(MDLockCache::DirItem, item_dir)),
@@ -792,6 +792,7 @@ void CDir::try_remove_dentries_for_stray()
 
   if (clear_dirty && is_dirty())
     mark_clean();
+  clear_dirty_rstat();
 }
 
 bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
@@ -885,7 +886,7 @@ void CDir::steal_dentry(CDentry *dn)
 
       // move dirty inode rstat to new dirfrag
       if (in->is_dirty_rstat())
-	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+	add_dirty_rstat_inode(in);
     } else if (dn->get_linkage()->is_remote()) {
       if (dn->get_linkage()->get_remote_d_type() == DT_DIR)
 	_fnode->fragstat.nsubdirs++;
@@ -897,7 +898,7 @@ void CDir::steal_dentry(CDentry *dn)
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
       if (in->is_dirty_rstat())
-	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+	add_dirty_rstat_inode(in);
     }
   }
 
@@ -969,6 +970,7 @@ void CDir::finish_old_fragment(MDSContext::vec& waiters, bool replay)
     clear_replica_map();
   if (is_dirty())
     mark_clean();
+  clear_dirty_rstat();
   if (state_test(STATE_IMPORTBOUND))
     put(PIN_IMPORTBOUND);
   if (state_test(STATE_EXPORTBOUND))
@@ -1269,15 +1271,60 @@ void CDir::assimilate_dirty_rstat_inodes_finish(EMetaBlob *blob)
     in->clear_dirty_rstat();
     blob->add_primary_dentry(dn, in, true);
   }
+}
 
-  if (!dirty_rstat_inodes.empty())
-    mdcache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
+void CDir::add_dirty_rstat_inode(CInode *in)
+{
+  dirty_rstat_inodes.push_back(&in->item_dirty_rstat);
+
+  const auto& pi = in->get_projected_inode();
+  if (pi->rstat.dirty_from.is_zero())
+    dout(1) << __func__ << " zero dirty_from " << *in << dendl;
+
+  if (rstat_dirty_from.is_zero() ||
+      rstat_dirty_from > pi->rstat.dirty_from) {
+    rstat_dirty_from = pi->rstat.dirty_from;
+    mdcache->mds->locker->mark_dirty_rstat_dirfrag(this);
+  }
+}
+
+void CDir::remove_dirty_rstat_inode(CInode *in)
+{
+  in->item_dirty_rstat.remove_myself();
+  if (dirty_rstat_inodes.empty() &&
+      (!is_auth() || get_projected_fnode()->rstat.dirty_from.is_zero())) {
+    item_dirty_rstat.remove_myself();
+    rstat_dirty_from = utime_t();
+  }
 }
 
 void CDir::mark_dirty_rstat(LogSegment *ls)
 {
   mdcache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
   ls->dirty_dirfrag_nest.push_back(&inode->item_dirty_dirfrag_nest);
+
+  const auto& pf = get_projected_fnode();
+  if (pf->rstat.dirty_from.is_zero() &&
+      (pf->rstat.same_sums(pf->accounted_rstat) ||
+       pf->rstat.version != inode->get_projected_inode()->rstat.version))
+    return;
+
+  if (pf->rstat.dirty_from.is_zero())
+    dout(1) << __func__ << " zero dirty_from " << *this << dendl;
+
+  if (rstat_dirty_from.is_zero() ||
+      rstat_dirty_from > pf->rstat.dirty_from) {
+    rstat_dirty_from = pf->rstat.dirty_from;
+    mdcache->mds->locker->mark_dirty_rstat_dirfrag(this);
+  }
+}
+
+void CDir::clear_dirty_rstat()
+{
+  if (dirty_rstat_inodes.empty()) {
+    item_dirty_rstat.remove_myself();
+    rstat_dirty_from = utime_t();
+  }
 }
 
 /****************************************
@@ -2631,6 +2678,7 @@ void CDir::abort_import()
   set_replica_nonce(CDir::EXPORT_NONCE);
   if (is_dirty())
     mark_clean();
+  clear_dirty_rstat();
 
   pop_nested.sub(pop_auth_subtree);
   pop_auth_subtree_nested.sub(pop_auth_subtree);

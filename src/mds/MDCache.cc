@@ -2407,6 +2407,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     pf->rstat.dirty_from = utime_t();
     pf->accounted_rstat = pf->rstat;
+    parent->clear_dirty_rstat();
 
     if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
       if (pi.inode->rstat.rbytes != pf->rstat.rbytes) {
@@ -3923,6 +3924,7 @@ void MDCache::recalc_auth_bits(bool replay)
 	  dir->state_clear(CDir::STATE_COMPLETE);
 	  if (dir->is_dirty())
 	    dir->mark_clean();
+	  dir->clear_dirty_rstat();
 	}
       }
 
@@ -11970,17 +11972,19 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
     mdr->add_updated_lock(&diri->dirfragtreelock);
   }
 
-  /*
-  // filelock
-  mds->locker->mark_updated_scatterlock(&diri->filelock);
-  mut->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);
-  mut->add_updated_lock(&diri->filelock);
+  // fragstat/rstat differentails were added to the first dirfrag
+  CDir* dir = info.resultfrags.front();
+  const auto& pf = dir->get_projected_fnode();
 
-  // dirlock
-  mds->locker->mark_updated_scatterlock(&diri->nestlock);
-  mut->ls->dirty_dirfrag_nest.push_back(&diri->item_dirty_dirfrag_nest);
-  mut->add_updated_lock(&diri->nestlock);
-  */
+  if (!(pf->fragstat == pf->accounted_fragstat)) {
+    dir->mark_dirty_fragstat(mdr->ls);
+    mdr->add_updated_lock(&diri->filelock);
+  }
+
+  if (!(pf->rstat == pf->accounted_rstat)) {
+    dir->mark_dirty_rstat(mdr->ls);
+    mdr->add_updated_lock(&diri->nestlock);
+  }
 
   add_uncommitted_fragment(basedirfrag, info.bits, le->orig_frags, mdr->ls);
   mds->server->submit_mdlog_entry(le, new C_MDC_FragmentPrep(this, mdr),

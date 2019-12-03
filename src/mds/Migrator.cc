@@ -1840,6 +1840,7 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
 
   if (dir->is_dirty())
     dir->mark_clean();
+  dir->clear_dirty_rstat();
 
   // suck up all waiters
   dir->take_waiting(CDir::WAIT_ANY_MASK, finished);    // all dir waiters

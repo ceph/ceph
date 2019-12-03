@@ -69,7 +69,10 @@ public:
 };
 
 Locker::Locker(MDSRank *m, MDCache *c) :
-  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
+  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c)
+{
+  dirty_rstat_states[utime_t(std::numeric_limits<time_t>::max(), 0)];
+}
 
 
 void Locker::dispatch(const cref_t<Message> &m)
@@ -104,6 +107,8 @@ void Locker::tick()
 {
   scatter_tick();
   caps_tick();
+
+  advance_dirty_rstats();
 }
 
 /*
@@ -4985,6 +4990,96 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
   }
 }
 
+Locker::dirty_rstat_state_t::dirty_rstat_state_t() :
+  dirfrags(member_offset(CDir, item_dirty_rstat)) {}
+
+void Locker::mark_dirty_rstat_dirfrag(CDir *dir)
+{
+  auto dirty_from = dir->get_rstat_dirty_from();
+  dout(10) << "mark_dirty_rstat_dirfrag " << *dir << " dirty_from " << dirty_from << dendl;
+  auto it = dirty_rstat_states.lower_bound(dir->get_rstat_dirty_from());
+  ceph_assert(it != dirty_rstat_states.end());
+  it->second.dirfrags.push_back(&dir->item_dirty_rstat);
+}
+
+void Locker::_advance_dirty_rstats(utime_t stamp)
+{
+  auto ret = dirty_rstat_states.emplace(std::piecewise_construct,
+					std::make_tuple(stamp), std::make_tuple());
+  if (!ret.second)
+    return;
+
+  dout(7) << __func__ << " " << stamp << dendl;
+
+  auto it = ret.first;
+  auto next = it;
+  ++next;
+  ceph_assert(next != dirty_rstat_states.end());
+
+  for (auto p = next->second.dirfrags.begin_use_current(); !p.end(); ) {
+    CDir *dir = *p;
+    ++p;
+    if (dir->get_rstat_dirty_from() <= stamp)
+      it->second.dirfrags.push_back(&dir->item_dirty_rstat);
+  }
+}
+
+void Locker::advance_dirty_rstats()
+{
+  if (mds->get_nodeid() == 0) {
+    if (dirty_rstat_states.size() > 1) {
+      auto last = dirty_rstat_states.end();
+      --last;
+
+      utime_t flushed_to;
+      for (auto it = dirty_rstat_states.begin(); it != last; ++it) {
+	if (!it->second.empty())
+	  break;
+	flushed_to = it->first;
+      }
+      if (flushed_to > rstat_flushed_to)
+	finish_flush_dirty_rstats(flushed_to);
+    }
+
+    if (dirty_rstat_states.size() == 1)
+      _advance_dirty_rstats(ceph_clock_now());
+  }
+
+  flush_dirty_rstats();
+}
+
+void Locker::flush_dirty_rstats()
+{
+  auto last = dirty_rstat_states.end();
+  ceph_assert(last != dirty_rstat_states.begin());
+  --last;
+  for (auto it = dirty_rstat_states.begin(); it != last; ++it) {
+    for (auto p = it->second.dirfrags.begin_use_current(); !p.end(); ++p) {
+      CInode *diri = (*p)->get_inode();
+      ScatterLock *lock = &diri->nestlock;
+      // let scatter_tick() do the job
+      if (!lock->get_updated_item()->is_on_list()) {
+	lock->mark_dirty();
+	updated_scatterlocks.push_front(lock->get_updated_item());
+      }
+    }
+  }
+}
+
+void Locker::finish_flush_dirty_rstats(utime_t flushed_to)
+{
+  dout(7) << __func__ << " " << rstat_flushed_to << "->" << flushed_to << dendl;
+
+  auto it = dirty_rstat_states.begin();
+  while (it->first <= flushed_to) {
+    if (it->second.empty()) {
+      dirty_rstat_states.erase(it++);
+    } else {
+      ++it;
+    }
+  }
+  rstat_flushed_to = flushed_to;
+}
 
 /*
  * mark a scatterlock to indicate that the dir fnode has some dirty data
