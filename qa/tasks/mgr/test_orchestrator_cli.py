@@ -144,8 +144,10 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("nfs", "rm", "service_name")
 
     def test_host_ls(self):
-        out = self._orch_cmd("host", "ls")
-        self.assertEqual(out, "localhost\n")
+        out = self._orch_cmd("host", "ls", "--format=json")
+        hosts = json.loads(out)
+        self.assertEqual(len(hosts), 1)
+        self.assertEqual(hosts[0]["host"], "localhost")
 
     def test_host_add(self):
         self._orch_cmd("host", "add", "hostname")
