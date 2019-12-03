@@ -82,11 +82,14 @@ class ConnectionPool(object):
             log.debug("CephFS mounting...")
             self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
             log.debug("Connection to cephfs '{0}' complete".format(self.fs_name))
+            self.mgr._ceph_register_client(self.fs.get_addrs())
 
         def disconnect(self):
             assert self.ops_in_progress == 0
             log.info("disconnecting from cephfs '{0}'".format(self.fs_name))
+            addrs = self.fs.get_addrs()
             self.fs.shutdown()
+            self.mgr._ceph_unregister_client(addrs)
             self.fs = None
 
         def abort(self):
