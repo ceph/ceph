@@ -306,6 +306,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
     void rados_write_op_zero(rados_write_op_t write_op, uint64_t offset, uint64_t len)
     void rados_write_op_exec(rados_write_op_t write_op, const char *cls, const char *method, const char *in_buf, size_t in_len, int *prval)
+    void rados_write_op_writesame(rados_write_op_t write_op, const char *buffer, size_t data_len, size_t write_len, uint64_t offset)
     void rados_read_op_omap_get_vals2(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_keys2(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)
@@ -2163,6 +2164,25 @@ cdef class WriteOp(object):
 
         with nogil:
             rados_write_op_exec(self.write_op, _cls, _method, _data, _data_len, NULL)
+
+    @requires(('to_write', bytes), ('write_len', int), ('offset', int))
+    def writesame(self, to_write, write_len, offset=0):
+        """
+        Write the same buffer multiple times
+        :param to_write: data to write
+        :type to_write: bytes
+        :param write_len: total number of bytes to write
+        :type len: int
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+        """
+        cdef:
+            char *_to_write = to_write
+            size_t _data_len = len(to_write)
+            size_t _write_len = write_len
+            uint64_t _offset = offset
+        with nogil:
+             rados_write_op_writesame(self.write_op, _to_write, _data_len, _write_len, _offset)
 
 class WriteOpCtx(WriteOp, OpCtx):
     """write operation context manager"""

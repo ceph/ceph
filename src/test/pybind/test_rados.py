@@ -538,6 +538,12 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op, "object")
         eq(self.ioctx.read('object'), b"Hello, ebs!")
 
+    def test_writesame_op(self):
+        with WriteOpCtx() as write_op:
+            write_op.writesame(b'rzx', 9)
+            self.ioctx.operate_write_op(write_op, 'abc')
+            eq(self.ioctx.read('abc'), b'rzxrzxrzx')
+
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
