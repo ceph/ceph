@@ -880,6 +880,9 @@ EOF
         if [ "$ceph_osd" == "crimson-osd" ]; then
             # designate a single CPU node $osd for osd.$osd
             extra_seastar_args="--smp 1 --cpuset $osd"
+            if [ "$debug" -ne 0 ]; then
+              extra_seastar_args+=" --debug"
+            fi
         fi
         run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
             $extra_seastar_args $extra_osd_args \

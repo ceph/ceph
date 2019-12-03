@@ -58,9 +58,13 @@ public:
     const ghobject_t& oid,
     std::string_view name) const = 0;
 
+  using get_attrs_ertr = crimson::errorator<
+    crimson::ct_error::enoent>;
   using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
-  virtual seastar::future<attrs_t> get_attrs(CollectionRef c,
-                                             const ghobject_t& oid) = 0;
+  virtual get_attrs_ertr::future<attrs_t> get_attrs(
+    CollectionRef c,
+    const ghobject_t& oid) = 0;
+
   using omap_values_t = std::map<std::string, bufferlist, std::less<>>;
   using omap_keys_t = std::set<std::string>;
   virtual seastar::future<omap_values_t> omap_get_values(

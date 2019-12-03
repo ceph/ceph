@@ -13,10 +13,12 @@
 
 #include "messages/MOSDOp.h"
 #include "os/Transaction.h"
+#include "common/Clock.h"
 
 #include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+#include "crimson/osd/osd_operation.h"
 #include "replicated_backend.h"
 #include "ec_backend.h"
 #include "exceptions.h"
@@ -59,110 +61,63 @@ PGBackend::PGBackend(shard_id_t shard,
     store{store}
 {}
 
-PGBackend::get_os_errorator::future<PGBackend::cached_os_t>
-PGBackend::get_object_state(const hobject_t& oid)
+PGBackend::load_metadata_ertr::future<PGBackend::loaded_object_md_t::ref>
+PGBackend::load_metadata(const hobject_t& oid)
 {
-  // want the head?
-  if (oid.snap == CEPH_NOSNAP) {
-    logger().trace("find_object: {}@HEAD", oid);
-    return _load_os(oid);
-  } else {
-    // we want a snap
-    return _load_ss(oid).safe_then(
-      [oid,this](cached_ss_t ss) -> get_os_errorator::future<cached_os_t> {
-        // head?
-        if (oid.snap > ss->seq) {
-          return _load_os(oid.get_head());
-        } else {
-          // which clone would it be?
-          auto clone = std::upper_bound(begin(ss->clones), end(ss->clones),
-                                        oid.snap);
-          if (clone == end(ss->clones)) {
-            return crimson::ct_error::enoent::make();
-          }
-          // clone
-          auto soid = oid;
-          soid.snap = *clone;
-          return _load_ss(soid).safe_then(
-            [soid,this](cached_ss_t ss) -> get_os_errorator::future<cached_os_t> {
-              auto clone_snap = ss->clone_snaps.find(soid.snap);
-              assert(clone_snap != end(ss->clone_snaps));
-              if (clone_snap->second.empty()) {
-                logger().trace("find_object: {}@[] -- DNE", soid);
-                return crimson::ct_error::enoent::make();
-              }
-              auto first = clone_snap->second.back();
-              auto last = clone_snap->second.front();
-              if (first > soid.snap) {
-                logger().trace("find_object: {}@[{},{}] -- DNE",
-                               soid, first, last);
-                return crimson::ct_error::enoent::make();
-              }
-              logger().trace("find_object: {}@[{},{}] -- HIT",
-                             soid, first, last);
-              return _load_os(soid);
-          });
-        }
-    });
-  }
-}
+  return store->get_attrs(
+    coll,
+    ghobject_t{oid, ghobject_t::NO_GEN, shard}).safe_then(
+      [oid, this](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
+	loaded_object_md_t::ref ret(new loaded_object_md_t());
+	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
+	  bufferlist bl;
+	  bl.push_back(std::move(oiiter->second));
+	  ret->os = ObjectState(
+	    object_info_t(bl),
+	    true);
+	} else {
+	  logger().error(
+	    "load_metadata: object {} present but missing object info",
+	    oid);
+	  return crimson::ct_error::object_corrupted::make();
+	}
+	
+	if (oid.is_head()) {
+	  if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
+	    bufferlist bl;
+	    bl.push_back(std::move(ssiter->second));
+	    ret->ss = SnapSet(bl);
+	  } else {
+	    /* TODO: add support for writing out snapsets
+	    logger().error(
+	      "load_metadata: object {} present but missing snapset",
+	      oid);
+	    //return crimson::ct_error::object_corrupted::make();
+	    */
+	    ret->ss = SnapSet();
+	  }
+	}
 
-PGBackend::get_os_errorator::future<PGBackend::cached_os_t>
-PGBackend::_load_os(const hobject_t& oid)
-{
-  if (auto found = os_cache.find(oid); found) {
-    return get_os_errorator::make_ready_future<cached_os_t>(std::move(found));
-  }
-  return store->get_attr(coll,
-                         ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         OI_ATTR)
-  .safe_then(
-    [oid, this] (ceph::bufferptr&& bp) {
-      // decode existing OI_ATTR's value
-      ceph::bufferlist bl;
-      bl.push_back(std::move(bp));
-      return get_os_errorator::make_ready_future<cached_os_t>(
-        os_cache.insert(oid,
-          std::make_unique<ObjectState>(object_info_t{bl}, true /* exists */)));
-    }, crimson::errorator<crimson::ct_error::enoent,
-                          crimson::ct_error::enodata>::all_same_way([oid, this] {
-      return get_os_errorator::make_ready_future<cached_os_t>(
-        os_cache.insert(oid,
-          std::make_unique<ObjectState>(object_info_t{oid}, false)));
-    }));
-}
-
-PGBackend::get_os_errorator::future<PGBackend::cached_ss_t>
-PGBackend::_load_ss(const hobject_t& oid)
-{
-  if (auto found = ss_cache.find(oid); found) {
-    return get_os_errorator::make_ready_future<cached_ss_t>(std::move(found));
-  }
-  return store->get_attr(coll,
-                         ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         SS_ATTR)
-  .safe_then(
-    [oid, this] (ceph::bufferptr&& bp) {
-      // decode existing SS_ATTR's value
-      ceph::bufferlist bl;
-      bl.push_back(std::move(bp));
-      return get_os_errorator::make_ready_future<cached_ss_t>(
-        ss_cache.insert(oid, std::make_unique<SnapSet>(bl)));
-    }, crimson::errorator<crimson::ct_error::enoent,
-                          crimson::ct_error::enodata>::all_same_way([oid, this] {
-      // NOTE: the errors could have been handled by writing just:
-      //   `get_attr_errorator::all_same_way(...)`.
-      // however, this way is more explicit and resilient to unexpected
-      // changes in the alias definition.
-      return get_os_errorator::make_ready_future<cached_ss_t>(
-        ss_cache.insert(oid, std::make_unique<SnapSet>()));
-    }));
+	return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+	  std::move(ret));
+      }, crimson::ct_error::enoent::handle([oid, this] {
+	logger().debug(
+	  "load_metadata: object {} doesn't exist, returning empty metadata",
+	  oid);
+	return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+	  new loaded_object_md_t{
+	    ObjectState(
+	      object_info_t(oid),
+	      false),
+	    oid.is_head() ? std::optional<SnapSet>(SnapSet()) : std::nullopt
+	  });
+      }));
 }
 
 seastar::future<crimson::osd::acked_peers_t>
 PGBackend::mutate_object(
   std::set<pg_shard_t> pg_shards,
-  cached_os_t&& os,
+  crimson::osd::ObjectContextRef &&obc,
   ceph::os::Transaction&& txn,
   const MOSDOp& m,
   epoch_t min_epoch,
@@ -170,36 +125,30 @@ PGBackend::mutate_object(
   eversion_t ver)
 {
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
-  if (os->exists) {
+  if (obc->obs.exists) {
 #if 0
-    os.oi.version = ctx->at_version;
-    os.oi.prior_version = ctx->obs->oi.version;
+    obc->obs.oi.version = ctx->at_version;
+    obc->obs.oi.prior_version = ctx->obs->oi.version;
 #endif
 
-    os->oi.last_reqid = m.get_reqid();
-    os->oi.mtime = m.get_mtime();
-    os->oi.local_mtime = ceph_clock_now();
+    obc->obs.oi.last_reqid = m.get_reqid();
+    obc->obs.oi.mtime = m.get_mtime();
+    obc->obs.oi.local_mtime = ceph_clock_now();
 
     // object_info_t
     {
       ceph::bufferlist osv;
-      encode(os->oi, osv, 0);
+      encode(obc->obs.oi, osv, 0);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      txn.setattr(coll->get_cid(), ghobject_t{os->oi.soid}, OI_ATTR, osv);
+      txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
     }
   } else {
     // reset cached ObjectState without enforcing eviction
-    os->oi = object_info_t(os->oi.soid);
+    obc->obs.oi = object_info_t(obc->obs.oi.soid);
   }
-  return _submit_transaction(std::move(pg_shards), os->oi.soid, std::move(txn),
-			     m.get_reqid(), min_epoch, map_epoch, ver);
-}
-
-seastar::future<>
-PGBackend::evict_object_state(const hobject_t& oid)
-{
-  os_cache.erase(oid);
-  return seastar::now();
+  return _submit_transaction(
+    std::move(pg_shards), obc->obs.oi.soid, std::move(txn),
+    m.get_reqid(), min_epoch, map_epoch, ver);
 }
 
 static inline bool _read_verify_data(

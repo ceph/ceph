@@ -5248,6 +5248,14 @@ std::vector<Option> get_global_options() {
     Option("debug_heartbeat_testing_span", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description("Override 60 second periods for testing only"),
+
+    // ----------------------------
+    // Crimson specific options
+
+    Option("crimson_osd_obc_lru_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("Number of obcs to cache")
+
   });
 }
 

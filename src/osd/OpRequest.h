@@ -14,6 +14,7 @@
 #ifndef OPREQUEST_H_
 #define OPREQUEST_H_
 
+#include "osd/osd_op_util.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 
@@ -24,53 +25,30 @@
 struct OpRequest : public TrackedOp {
   friend class OpTracker;
 
-  // rmw flags
-  int rmw_flags;
+private:
+  OpInfo op_info;
 
-  bool check_rmw(int flag) const ;
-  bool may_read() const;
-  bool may_write() const;
-  bool may_cache() const;
-  bool rwordered_forced() const;
-  bool rwordered() const;
-  bool includes_pg_op();
-  bool need_read_cap() const;
-  bool need_write_cap() const;
-  bool need_promote();
-  bool need_skip_handle_cache();
-  bool need_skip_promote();
-  bool allows_returnvec() const;
-  void set_read();
-  void set_write();
-  void set_cache();
-  void set_class_read();
-  void set_class_write();
-  void set_pg_op();
-  void set_promote();
-  void set_skip_handle_cache();
-  void set_skip_promote();
-  void set_force_rwordered();
-  void set_returnvec();
+public:
+  int maybe_init_op_info(const OSDMap &osdmap);
 
-  struct ClassInfo {
-    ClassInfo(std::string&& class_name, std::string&& method_name,
-              bool read, bool write, bool whitelisted) :
-      class_name(std::move(class_name)), method_name(std::move(method_name)),
-      read(read), write(write), whitelisted(whitelisted)
-    {}
-    const std::string class_name;
-    const std::string method_name;
-    const bool read, write, whitelisted;
-  };
+  auto get_flags() const { return op_info.get_flags(); }
+  bool op_info_needs_init() const { return op_info.get_flags() == 0; }
+  bool check_rmw(int flag) const { return op_info.check_rmw(flag); }
+  bool may_read() const { return op_info.may_read(); }
+  bool may_write() const { return op_info.may_write(); }
+  bool may_cache() const { return op_info.may_cache(); }
+  bool rwordered_forced() const { return op_info.rwordered_forced(); }
+  bool rwordered() const { return op_info.rwordered(); }
+  bool includes_pg_op() const { return op_info.includes_pg_op(); }
+  bool need_read_cap() const { return op_info.need_read_cap(); }
+  bool need_write_cap() const { return op_info.need_write_cap(); }
+  bool need_promote() const { return op_info.need_promote(); }
+  bool need_skip_handle_cache() const { return op_info.need_skip_handle_cache(); }
+  bool need_skip_promote() const { return op_info.need_skip_promote(); }
+  bool allows_returnvec() const { return op_info.allows_returnvec(); }
 
-  void add_class(std::string&& class_name, std::string&& method_name,
-                 bool read, bool write, bool whitelisted) {
-    classes_.emplace_back(std::move(class_name), std::move(method_name),
-                          read, write, whitelisted);
-  }
-
-  std::vector<ClassInfo> classes() const {
-    return classes_;
+  std::vector<OpInfo::ClassInfo> classes() const {
+    return op_info.get_classes();
   }
 
   void _dump(ceph::Formatter *f) const override;
@@ -92,8 +70,6 @@ private:
   static const uint8_t flag_started =     1 << 3;
   static const uint8_t flag_sub_op_sent = 1 << 4;
   static const uint8_t flag_commit_sent = 1 << 5;
-
-  std::vector<ClassInfo> classes_;
 
   OpRequest(Message *req, OpTracker *tracker);
 
@@ -173,13 +149,10 @@ public:
   typedef boost::intrusive_ptr<OpRequest> Ref;
 
 private:
-  void set_rmw_flags(int flags);
   void mark_flag_point(uint8_t flag, const char *s);
   void mark_flag_point_string(uint8_t flag, const std::string& s);
 };
 
 typedef OpRequest::Ref OpRequestRef;
-
-std::ostream& operator<<(std::ostream& out, const OpRequest::ClassInfo& i);
 
 #endif /* OPREQUEST_H_ */

@@ -518,6 +518,24 @@ private:
         });
     }
 
+    template <class FuncT>
+    auto finally(FuncT &&func) {
+      using func_result_t = std::invoke_result_t<FuncT>;
+      using func_errorator_t = get_errorator_t<func_result_t>;
+      using return_errorator_t = func_errorator_t;
+      using futurator_t =
+        typename return_errorator_t::template futurize<func_result_t>;
+
+      return this->then_wrapped(
+	[ func = std::forward<FuncT>(func)
+	] (auto&& future) mutable [[gnu::always_inline]] noexcept {
+	  return futurator_t::apply(std::forward<FuncT>(func)).safe_then(
+	    [future = std::forward<decltype(future)>(future)]() mutable {
+	      return std::move(future);
+	    });
+	});
+    }
+
     // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail
     // to avoid SFINAE
     template <class ValueFunc,
