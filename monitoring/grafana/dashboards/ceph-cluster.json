@@ -116,7 +116,7 @@
         }
       ],
       "thresholds": "1,2",
-      "timeFrom": "1m",
+      "timeFrom": null,
       "title": "Health Status",
       "transparent": false,
       "type": "singlestat",
