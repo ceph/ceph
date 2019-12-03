@@ -1,6 +1,6 @@
 
   $ get_field() {
-  >     rbd info --format=json $1 | python -c "import sys, json; print json.load(sys.stdin)['$2']"
+  >     rbd info --format=json $1 | python3 -c "import sys, json; print(json.load(sys.stdin)['$2'])"
   > }
 
 Write to first and last sectors and make sure we hit the right objects:
