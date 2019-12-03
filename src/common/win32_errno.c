@@ -311,6 +311,82 @@ __u32 hostos_to_ceph_errno_unsigned(__u32 r) {
  }
 }
 
+__s32 wsae_to_errno_unsigned(__s32 r)
+{
+  switch(r) {
+    case WSAEINTR: return EINTR;
+    case WSAEBADF: return EBADF;
+    case WSAEACCES: return EACCES;
+    case WSAEFAULT: return EFAULT;
+    case WSAEINVAL: return EINVAL;
+    case WSAEMFILE: return EMFILE;
+    // Linux defines WSAEWOULDBLOCK as EAGAIN, but not Windows headers.
+    // Since all ceph code uses EAGAIN instead of EWOULDBLOCK, we'll do
+    // the same here.
+    case WSAEWOULDBLOCK: return EAGAIN;
+    // Some functions (e.g. connect) can return WSAEWOULDBLOCK instead of
+    // EINPROGRESS.
+    case WSAEINPROGRESS: return EINPROGRESS;
+    case WSAEALREADY: return EALREADY;
+    case WSAENOTSOCK: return ENOTSOCK;
+    case WSAEDESTADDRREQ: return EDESTADDRREQ;
+    case WSAEMSGSIZE: return EMSGSIZE;
+    case WSAEPROTOTYPE: return EPROTOTYPE;
+    case WSAENOPROTOOPT: return ENOPROTOOPT;
+    case WSAEPROTONOSUPPORT: return EPROTONOSUPPORT;
+    case WSAESOCKTNOSUPPORT: return ESOCKTNOSUPPORT;
+    case WSAEOPNOTSUPP: return EOPNOTSUPP;
+    case WSAEPFNOSUPPORT: return EPFNOSUPPORT;
+    case WSAEAFNOSUPPORT: return EAFNOSUPPORT;
+    case WSAEADDRINUSE: return EADDRINUSE;
+    case WSAEADDRNOTAVAIL: return EADDRNOTAVAIL;
+    case WSAENETDOWN: return ENETDOWN;
+    case WSAENETUNREACH: return ENETUNREACH;
+    case WSAENETRESET: return ENETRESET;
+    case WSAECONNABORTED: return ECONNABORTED;
+    case WSAECONNRESET: return ECONNRESET;
+    case WSAENOBUFS: return ENOBUFS;
+    case WSAEISCONN: return EISCONN;
+    case WSAENOTCONN: return ENOTCONN;
+    case WSAESHUTDOWN: return ESHUTDOWN;
+    case WSAETOOMANYREFS: return ETOOMANYREFS;
+    case WSAETIMEDOUT: return ETIMEDOUT;
+    case WSAECONNREFUSED: return ECONNREFUSED;
+    case WSAELOOP: return ELOOP;
+    case WSAENAMETOOLONG: return ENAMETOOLONG;
+    case WSAEHOSTDOWN: return EHOSTDOWN;
+    case WSAEHOSTUNREACH: return EHOSTUNREACH;
+    case WSAENOTEMPTY: return ENOTEMPTY;
+    // case WSAEPROCLIM
+    case WSAEUSERS: return EUSERS;
+    case WSAEDQUOT: return EDQUOT;
+    case WSAESTALE: return ESTALE;
+    case WSAEREMOTE: return EREMOTE;
+    // case WSASYSNOTREADY
+    // case WSAVERNOTSUPPORTED
+    // case WSANOTINITIALISED
+    case WSAEDISCON: return ESHUTDOWN;
+    // case WSAENOMORE
+    case WSAECANCELLED: return ECANCELED;
+    // We might return EINVAL, but it's probably better if we propagate the
+    // original error code here.
+    // case WSAEINVALIDPROCTABLE
+    // case WSAEINVALIDPROVIDER
+    // case WSAEPROVIDERFAILEDINIT
+    // case WSASYSCALLFAILURE
+    // case WSASERVICE_NOT_FOUND:
+    // case WSATYPE_NOT_FOUND:
+    // case WSA_E_NO_MORE:
+    case WSA_E_CANCELLED: return ECANCELED;
+    case WSAEREFUSED: return ECONNREFUSED;
+    case WSAHOST_NOT_FOUND: return EHOSTUNREACH;
+    case WSATRY_AGAIN: return EAGAIN;
+    // case WSANO_RECOVERY
+    // case WSANO_DATA:
+    default: return r;
+  }
+}
+
 // converts from linux errno values to host values
 __s32 ceph_to_hostos_errno(__s32 r)
 {
@@ -323,4 +399,10 @@ __s32 hostos_to_ceph_errno(__s32 r)
 {
   int sign = (r < 0 ? -1 : 1);
   return hostos_to_ceph_errno_unsigned(abs(r)) * sign;
+}
+
+__s32 wsae_to_errno(__s32 r)
+{
+  int sign = (r < 0 ? -1 : 1);
+  return wsae_to_errno_unsigned(abs(r)) * sign;
 }

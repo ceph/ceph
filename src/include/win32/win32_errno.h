@@ -129,4 +129,14 @@
 
 #define ESHUTDOWN 312
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+__s32 wsae_to_errno(__s32 r);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif // WIN32_ERRNO_H
