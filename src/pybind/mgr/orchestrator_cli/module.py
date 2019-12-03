@@ -166,20 +166,27 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @orchestrator._cli_read_command(
         'orchestrator host ls',
-        desc='List hosts')
-    def _get_hosts(self):
+        'name=format,type=CephChoices,strings=json|plain,req=false',
+        'List hosts')
+    def _get_hosts(self, format='plain'):
         completion = self.get_hosts()
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        table = PrettyTable(
-            ['HOST', 'LABELS'],
-            border=False)
-        table.align = 'l'
-        table.left_padding_width = 0
-        table.right_padding_width = 1
-        for node in completion.result:
-            table.add_row((node.name, ' '.join(node.labels)))
-        return HandleCommandResult(stdout=table.get_string())
+        if format == 'json':
+            hosts = [dict(host=node.name, labels=node.labels)
+                     for node in completion.result]
+            output = json.dumps(hosts)
+        else:
+            table = PrettyTable(
+                ['HOST', 'LABELS'],
+                border=False)
+            table.align = 'l'
+            table.left_padding_width = 0
+            table.right_padding_width = 1
+            for node in completion.result:
+                table.add_row((node.name, ' '.join(node.labels)))
+            output = table.get_string()
+        return HandleCommandResult(stdout=output)
 
     @orchestrator._cli_write_command(
         'orchestrator host label add',
