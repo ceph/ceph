@@ -1,0 +1,5 @@
+overrides:
+  ceph2:
+    ceph_daemon_mode: packaged-ceph-daemon
+  install:
+    extra_packages: [ceph-daemon]
