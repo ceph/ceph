@@ -23,13 +23,17 @@ def get_store_prefix(self, prefix):
         if k.startswith(prefix)
     }
 
+def get_ceph_option(_, key):
+    return __file__
 
 @pytest.yield_fixture()
 def ssh_module():
-    with mock.patch("ssh.module.SSHOrchestrator.get_ceph_option", lambda _, key: __file__),\
+    with mock.patch("ssh.module.SSHOrchestrator.get_ceph_option", get_ceph_option),\
+            mock.patch("ssh.module.SSHOrchestrator._configure_logging", lambda *args: None),\
             mock.patch("ssh.module.SSHOrchestrator.set_store", set_store),\
             mock.patch("ssh.module.SSHOrchestrator.get_store", get_store),\
             mock.patch("ssh.module.SSHOrchestrator.get_store_prefix", get_store_prefix):
+        SSHOrchestrator._register_commands('')
         m = SSHOrchestrator.__new__ (SSHOrchestrator)
         m._store = {
             'ssh_config': '',
