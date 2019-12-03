@@ -95,10 +95,14 @@ class ConnectionPool(object):
         recurring timer variant of Timer
         """
         def run(self):
-            while not self.finished.is_set():
-                self.finished.wait(self.interval)
-                self.function(*self.args, **self.kwargs)
-            self.finished.set()
+            try:
+                while not self.finished.is_set():
+                    self.finished.wait(self.interval)
+                    self.function(*self.args, **self.kwargs)
+                self.finished.set()
+            except Exception as e:
+                log.error("ConnectionPool.RTimer: %s", e)
+                raise
 
     # TODO: make this configurable
     TIMER_TASK_RUN_INTERVAL = 30.0  # seconds
