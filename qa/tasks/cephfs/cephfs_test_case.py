@@ -229,6 +229,15 @@ class CephFSTestCase(CephTestCase):
     def _session_by_id(self, session_ls):
         return dict([(s['id'], s) for s in session_ls])
 
+    def wait_until_evicted(self, client_id, timeout=30):
+        def helper():
+            ls = self._session_list()
+            for s in ls:
+                if s['id'] == client_id:
+                    return False
+            return True
+        self.wait_until_true(lambda: helper(), timeout)
+
     def wait_for_daemon_start(self, daemon_ids=None):
         """
         Wait until all the daemons appear in the FSMap, either assigned
