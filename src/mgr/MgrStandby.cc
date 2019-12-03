@@ -192,7 +192,7 @@ void MgrStandby::send_beacon()
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
   dout(20) << state_str() << dendl;
 
-  std::list<PyModuleRef> modules = py_module_registry.get_modules();
+  auto modules = py_module_registry.get_modules();
 
   // Construct a list of the info about each loaded module
   // which we will transmit to the monitor.

@@ -69,10 +69,10 @@ public:
    * Get references to all modules (whether they have loaded and/or
    * errored) or not.
    */
-  std::list<PyModuleRef> get_modules() const
+  auto get_modules() const
   {
+    std::vector<PyModuleRef> modules_out;
     std::lock_guard l(lock);
-    std::list<PyModuleRef> modules_out;
     for (const auto &i : modules) {
       modules_out.push_back(i.second);
     }
