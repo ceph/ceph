@@ -693,7 +693,7 @@ class Module(MgrModule):
                     self.last_upload = now
                     self.set_store('last_upload', str(now))
                     success.append('Ceph report sent to {0}'.format(self.url))
-                    self.info('Sent report to {0}'.format(self.url))
+                    self.log.info('Sent report to {0}'.format(self.url))
             elif e == 'device':
                 if 'device' in self.get_active_channels():
                     self.log.info('hi')
