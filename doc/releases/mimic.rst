@@ -45,7 +45,7 @@ OSD:
   command "ceph daemon mgr.# dump_osd_network [threshold]" lists all connections
   with a ping time longer than the specified threshold or value determined by
   the config options, for the average for any of the 3 intervals.  A new admin
-  command ceph daemon osd.# dump_osd_network [threshold]" does the same but only
+  command "ceph daemon osd.# dump_osd_network [threshold]" does the same but only
   including heartbeats initiated by the specified OSD.
 
 * The default value of the "osd_deep_scrub_large_omap_object_key_threshold"
