@@ -7204,7 +7204,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   const ghobject_t& oid,
   const string& key,
   const bufferlist& value,
-  mempool::bluestore_fsck::list<string>& expecting_shards,
+  mempool::bluestore_fsck::list<string>* expecting_shards,
   map<BlobRef, bluestore_blob_t::unused_t>* referenced,
   const BlueStore::FSCK_ObjectCtx& ctx)
 {
@@ -7236,11 +7236,12 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   if (!o->extent_map.shards.empty()) {
     ++num_sharded_objects;
     if (depth != FSCK_SHALLOW) {
+      ceph_assert(expecting_shards);
       for (auto& s : o->extent_map.shards) {
         dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
-        expecting_shards.push_back(string());
+        expecting_shards->push_back(string());
         get_extent_shard_key(o->key, s.shard_info->offset,
-          &expecting_shards.back());
+          &expecting_shards->back());
         if (s.shard_info->offset >= o->onode.size) {
           derr << "fsck error: " << oid << " shard 0x" << std::hex
             << s.shard_info->offset << " past EOF at 0x" << o->onode.size
@@ -7432,7 +7433,6 @@ public:
     size_t batchCount;
     BlueStore* store = nullptr;
 
-    mempool::bluestore_fsck::list<string>* expecting_shards = nullptr;
     ceph::mutex* sb_info_lock = nullptr;
     BlueStore::sb_info_map_t* sb_info = nullptr;
     BlueStoreRepairer* repairer = nullptr;
@@ -7444,14 +7444,12 @@ public:
     FSCKWorkQueue(std::string n,
                   size_t _batchCount,
                   BlueStore* _store,
-                  mempool::bluestore_fsck::list<string>& _expecting_shards,
                   ceph::mutex* _sb_info_lock,
                   BlueStore::sb_info_map_t& _sb_info,
                   BlueStoreRepairer* _repairer) :
       WorkQueue_(n, time_t(), time_t()),
       batchCount(_batchCount),
       store(_store),
-      expecting_shards(&_expecting_shards),
       sb_info_lock(_sb_info_lock),
       sb_info(&_sb_info),
       repairer(_repairer)
@@ -7522,7 +7520,7 @@ public:
           entry.oid,
           entry.key,
           entry.value,
-          *expecting_shards,
+          nullptr, // expecting_shards - this will need a protection if passed
           nullptr, // referenced
           ctx);
       }
@@ -7660,7 +7658,6 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
         "FSCKWorkQueue",
         (thread_count ? : 1) * 32,
         this,
-        expecting_shards,
         sb_info_lock,
         sb_info,
         repairer));
@@ -7787,7 +7784,7 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
           oid,
           it->key(),
           it->value(),
-          expecting_shards,
+          &expecting_shards,
           &referenced,
           ctx);
       }

@@ -3286,7 +3286,7 @@ public:
     const ghobject_t& oid,
     const string& key,
     const bufferlist& value,
-    mempool::bluestore_fsck::list<string>& expecting_shards,
+    mempool::bluestore_fsck::list<string>* expecting_shards,
     map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     const BlueStore::FSCK_ObjectCtx& ctx);
 
