@@ -19,9 +19,9 @@ export class NavigationComponent implements OnInit {
   permissions: Permissions;
   summaryData: any;
   icons = Icons;
-
   isCollapsed = true;
-  prometheusConfigured = false;
+  isAlertmanagerConfigured = false;
+  isPrometheusConfigured = false;
   enabledFeature$: FeatureTogglesMap$;
 
   constructor(
@@ -42,7 +42,10 @@ export class NavigationComponent implements OnInit {
       this.summaryData = data;
     });
     this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusConfigured = true;
+      this.isAlertmanagerConfigured = true;
+    });
+    this.prometheusService.ifPrometheusConfigured(() => {
+      this.isPrometheusConfigured = true;
     });
   }
 
