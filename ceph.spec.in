@@ -31,12 +31,11 @@
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
 %bcond_without cephfs_java
-%endif
-%bcond_without amqp_endpoint
-%bcond_without kafka_endpoint
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
+%bcond_without amqp_endpoint
+%bcond_without kafka_endpoint
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}

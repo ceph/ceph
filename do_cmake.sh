@@ -7,7 +7,6 @@ if test -e build; then
 fi
 
 PYBUILD="2"
-<<<<<<< HEAD
 source /etc/os-release
 case "$ID" in
     fedora)
