@@ -765,23 +765,26 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             action, service_type, service_name, service_id))
         if action == 'reload':
             return trivial_result(["Reload is a no-op"])
-        daemons = self._get_services(
+
+        def _proc_daemons(daemons):
+            args = []
+            for d in daemons:
+                args.append((d.service_type, d.service_instance,
+                             d.nodename, action))
+            if not args:
+                if service_name:
+                    n = service_name + '-*'
+                else:
+                    n = service_id
+                raise orchestrator.OrchestratorError(
+                    'Unable to find %s.%s daemon(s)' % (
+                        service_type, n))
+            return self._service_action(args)
+
+        return self._get_services(
             service_type,
             service_name=service_name,
-            service_id=service_id)
-        args = []
-        for d in daemons:
-            args.append((d.service_type, d.service_instance,
-                                       d.nodename, action))
-        if not args:
-            if service_name:
-                n = service_name + '-*'
-            else:
-                n = service_id
-            raise orchestrator.OrchestratorError(
-                'Unable to find %s.%s daemon(s)' % (
-                    service_type, n))
-        return self._service_action(args)
+            service_id=service_id).then(_proc_daemons)
 
     @async_map_completion
     def _service_action(self, service_type, service_id, host, action):
@@ -814,7 +817,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
                 error_ok=True)
             self.service_cache.invalidate(host)
             self.log.debug('_service_action code %s out %s' % (code, out))
-        return "{} {} from host '{}'".format(action, name, host)
+        return trivial_result("{} {} from host '{}'".format(action, name, host))
 
     def get_inventory(self, node_filter=None, refresh=False):
         """
@@ -968,11 +971,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self.get_hosts().then(lambda hosts: self._create_osd(hosts, drive_group))
 
     def remove_osds(self, name):
-        daemons = self._get_services('osd', service_id=name)
-        args = [('osd.%s' % d.service_instance, d.nodename) for d in daemons]
-        if not args:
-            raise OrchestratorError('Unable to find osd.%s' % name)
-        return self._remove_daemon(args)
+        def _search(daemons):
+            args = [('osd.%s' % d.service_instance, d.nodename) for d in daemons]
+            if not args:
+                raise OrchestratorError('Unable to find osd.%s' % name)
+            return self._remove_daemon(args)
+        return self._get_services('osd', service_id=name).then(_search)
 
     def _create_daemon(self, daemon_type, daemon_id, host, keyring,
                        extra_args=[]):
