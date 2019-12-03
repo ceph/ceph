@@ -47,7 +47,7 @@ fi
 
 get_cmake_variable() {
     local variable=$1
-    grep "$variable" CMakeCache.txt | cut -d "=" -f 2
+    grep "${variable}:" CMakeCache.txt | cut -d "=" -f 2
 }
 
 # for running out of the CMake build directory
