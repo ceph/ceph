@@ -5268,7 +5268,7 @@ int main(int argc, const char **argv)
 	    return EINVAL;
 	  }
 
-	  string storage_class = rgw_placement_rule::get_canonical_storage_class(storage_class);
+	  string storage_class = rgw_placement_rule::get_canonical_storage_class(opt_storage_class.value_or(string()));
 	  if (ptiter->second.storage_classes.find(storage_class) == ptiter->second.storage_classes.end()) {
 	    cerr << "ERROR: storage class '" << storage_class << "' is not defined in zonegroup '" << placement_id << "' placement target" << std::endl;
 	    return EINVAL;
