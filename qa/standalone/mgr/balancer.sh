@@ -64,18 +64,6 @@ function TEST_balancer() {
     test "$EVAL" = "current cluster score 0.000000 (lower is better)"
     ceph balancer eval-verbose || return 1
 
-    ceph balancer pool add $TEST_POOL1 || return 1
-    ceph balancer pool add $TEST_POOL2 || return 1
-    ceph balancer pool ls || return 1
-    eval POOL=$(ceph balancer pool ls | jq '.[0]')
-    test "$POOL" = "$TEST_POOL1" || return 1
-    eval POOL=$(ceph balancer pool ls | jq '.[1]')
-    test "$POOL" = "$TEST_POOL2" || return 1
-    ceph balancer pool rm $TEST_POOL1 || return 1
-    ceph balancer pool rm $TEST_POOL2 || return 1
-    ceph balancer pool ls || return 1
-    ceph balancer pool add $TEST_POOL1 || return 1
-
     ceph balancer mode crush-compat || return 1
     ceph balancer status || return 1
     eval MODE=$(ceph balancer status | jq '.mode')
@@ -104,7 +92,7 @@ function TEST_balancer() {
     ! ceph balancer optimize plan_upmap $TEST_POOL || return 1
     ceph balancer status || return 1
     eval RESULT=$(ceph balancer status | jq '.optimize_result')
-    test "$RESULT" = "Unable to find further optimization, or pool(s)' pg_num is decreasing, or distribution is already perfect" || return 1
+    test "$RESULT" = "Unable to find further optimization, or distribution is already perfect" || return 1
 
     ceph balancer on || return 1
     ACTIVE=$(ceph balancer status | jq '.active')
@@ -130,7 +118,6 @@ function TEST_balancer2() {
     # Integer average of PGS per OSD (150)
     FINAL_PER_OSD2=$(expr \( \( $TEST_PGS1 + $TEST_PGS2 \) \* $DEFAULT_REPLICAS \) / $OSDS)
 
-    CEPH_ARGS+="--osd_pool_default_pg_autoscale_mode=off "
     CEPH_ARGS+="--debug_osd=20 "
     setup $dir || return 1
     run_mon $dir a || return 1
@@ -143,7 +130,7 @@ function TEST_balancer2() {
     ceph osd set-require-min-compat-client luminous
     ceph balancer mode upmap || return 1
     ceph balancer on || return 1
-    ceph config set mgr mgr/balancer/sleep_interval 5
+    ceph balancer sleep 5
 
     create_pool $TEST_POOL1 $TEST_PGS1
 
@@ -195,17 +182,20 @@ function TEST_balancer2() {
     sleep 30
     ceph osd df
 
-    # FINAL_PER_OSD2 should distribute evenly
+    # We should be with plue or minus 1 of FINAL_PER_OSD2
+    # This is because here each pool is balanced independently
+    MIN=$(expr $FINAL_PER_OSD2 - 1)
+    MAX=$(expr $FINAL_PER_OSD2 + 1)
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[0].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[1].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[2].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[3].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[4].pgs')
-    test $PGS -eq $FINAL_PER_OSD2 || return 1
+    test $PGS -ge $MIN -a $PGS -le $MAX || return 1
 
     teardown $dir || return 1
 }

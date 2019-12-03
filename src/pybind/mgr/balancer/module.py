@@ -269,6 +269,11 @@ class Module(MgrModule):
             "desc": "Execute an optimization plan",
             "perm": "rw",
         },
+        {
+            "cmd": "balancer sleep name=secs,type=CephString",
+            "desc": "Set balancer sleep interval",
+            "perm": "rw",
+        },
     ]
     active = False
     run = True
@@ -403,6 +408,9 @@ class Module(MgrModule):
             r, detail = self.execute(plan)
             self.plan_rm(command['plan'])
             return (r, '', detail)
+        elif command['prefix'] == 'balancer sleep':
+            self.set_config('sleep_interval', command['secs'])
+            return (0, "", '')
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -771,7 +779,7 @@ class Module(MgrModule):
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
         if total_did == 0:
-            return -errno.EALREADY, 'Unable to find further optimization,' \
+            return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or distribution is already perfect'
         return 0, ''
 
