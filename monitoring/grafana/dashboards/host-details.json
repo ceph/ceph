@@ -517,7 +517,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": "15m",
+      "timeFrom": null,
       "timeShift": null,
       "title": "Network drop rate",
       "tooltip": {
@@ -701,7 +701,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": "15m",
+      "timeFrom": null,
       "timeShift": null,
       "title": "Network error rate",
       "tooltip": {
