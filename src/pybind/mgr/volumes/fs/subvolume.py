@@ -109,13 +109,23 @@ class SubVolume(object):
             groupstat = self.fs.stat(spec.group_path)
             if uid is None:
                 uid = int(groupstat.st_uid)
-            elif uid < 0:
-                raise VolumeException(-errno.EINVAL, "Provide a valid uid")
+            else:
+                try:
+                    uid = int(uid)
+                    if uid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid uid")
 
             if gid is None:
                 gid = int(groupstat.st_gid)
-            elif gid < 0:
-                raise VolumeException(-errno.EINVAL, "Provide a valid gid")
+            else:
+                try:
+                    gid = int(gid)
+                    if gid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid gid")
 
             try:
                 self.fs.chown(subvolpath, uid, gid)
@@ -302,13 +312,23 @@ class SubVolume(object):
 
             if uid is None:
                 uid = 0
-            elif uid < 0:
-                raise VolumeException(-errno.EINVAL, "Provide a valid uid")
+            else:
+                try:
+                    uid = int(uid)
+                    if uid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid uid")
 
             if gid is None:
                 gid = 0
-            elif gid < 0:
-                raise VolumeException(-errno.EINVAL, "Provide a valid gid")
+            else:
+                try:
+                    gid = int(gid)
+                    if gid < 0:
+                        raise ValueError
+                except ValueError:
+                    raise VolumeException(-errno.EINVAL, "Invalid gid")
 
             try:
                 self.fs.chown(path, uid, gid)
