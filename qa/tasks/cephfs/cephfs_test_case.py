@@ -230,13 +230,13 @@ class CephFSTestCase(CephTestCase):
         return dict([(s['id'], s) for s in session_ls])
 
     def wait_until_evicted(self, client_id, timeout=30):
-        def helper():
+        def is_client_evicted():
             ls = self._session_list()
             for s in ls:
                 if s['id'] == client_id:
                     return False
             return True
-        self.wait_until_true(lambda: helper(), timeout)
+        self.wait_until_true(is_client_evicted, timeout)
 
     def wait_for_daemon_start(self, daemon_ids=None):
         """
