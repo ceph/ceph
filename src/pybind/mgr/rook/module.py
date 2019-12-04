@@ -337,13 +337,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             'NFS', name, lambda: self.rook_cluster.rm_service('cephnfses', name)
         )
 
-    def update_mons(self, num, hosts):
-        if hosts:
+    def update_mons(self, spec):
+        if spec.placement.nodes:
             raise RuntimeError("Host list is not supported by rook.")
 
         return write_completion(
-            lambda: self.rook_cluster.update_mon_count(num),
-            "Updating mon count to {0}".format(num),
+            lambda: self.rook_cluster.update_mon_count(spec.placement.count),
+            "Updating mon count to {0}".format(spec.placement.count),
             mgr=self
         )
 

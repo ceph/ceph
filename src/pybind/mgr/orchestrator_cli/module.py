@@ -434,10 +434,10 @@ Usage:
         'orchestrator mds update',
         "name=fs_name,type=CephString "
         "name=num,type=CephInt,req=false "
-        "name=hosts,type=CephString,n=N,req=false "
         "name=label,type=CephString,req=false",
+        "name=hosts,type=CephString,n=N,req=false "
         'Update the number of MDS instances for the given fs_name')
-    def _mds_update(self, fs_name, num=None, hosts=[], label=None):
+    def _mds_update(self, fs_name, num=None, label=None, hosts=[]):
         placement = orchestrator.PlacementSpec(label=label, count=num, nodes=hosts)
         placement.validate()
 
