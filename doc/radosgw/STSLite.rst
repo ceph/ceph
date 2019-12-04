@@ -3,25 +3,26 @@ STS Lite
 =========
 
 Ceph Object Gateway provides support for a subset of Amazon Secure Token Service
-(STS) APIs. STS Lite provides access to a set of temporary credentials for
-Identity and Access Management.
+(STS) APIs. STS Lite is an extension of STS and builds upon one of its APIs to
+decrease the load on external IDPs like Keystone and LDAP.
 
-STS authentication mechanism has been integrated with Keystone in Ceph Object
-Gateway. A set of temporary security credentials is returned after authenticating
-a set of AWS credentials with Keystone. These temporary credentials can be used
-to make subsequent S3 calls which will be authenticated by the STS engine,
-resulting in less load on the Keystone server.
+A set of temporary security credentials is returned after authenticating
+a set of AWS credentials with the external IDP. These temporary credentials can be used
+to make subsequent S3 calls which will be authenticated by the STS engine in Ceph,
+resulting in less load on the Keystone/ LDAP server.
+
+Temporary and limited privileged credentials can be obtained for a local user
+also using the STS Lite API.
 
 STS Lite REST APIs
 ==================
 
-The following STS Lite REST APIs have been implemented in Ceph Object Gateway:
+The following STS Lite REST API is part of STS Lite in Ceph Object Gateway:
 
 1. GetSessionToken: Returns a set of temporary credentials for a set of AWS
-credentials. This API can be used for initial authentication with Keystone 
-and the temporary credentials returned can be used to make subsequent S3
-calls. The temporary credentials will have the same permission as that of the 
-AWS credentials.
+credentials. After initial authentication with Keystone/ LDAP, the temporary
+credentials returned can be used to make subsequent S3 calls. The temporary
+credentials will have the same permission as that of the AWS credentials.
 
 Parameters:
     **DurationSeconds** (Integer/ Optional): The duration in seconds for which the
@@ -43,32 +44,6 @@ The following is an example of attaching the policy to a user 'TESTER1'::
 The user attaching the policy needs to have admin caps. For example::
 
     radosgw-admin caps add --uid="TESTER" --caps="user-policy=*"
-
-2. AssumeRole: Returns a set of temporary credentials that can be used for 
-cross-account access. The temporary credentials will have permissions that are
-allowed by both - permission policies attached with the Role and policy attached
-with the AssumeRole API.
-
-Parameters:
-    **RoleArn** (String/ Required): ARN of the Role to Assume.
-
-    **RoleSessionName** (String/ Required): An Identifier for the assumed role
-    session.
-
-    **Policy** (String/ Optional): An IAM Policy in JSON format.
-
-    **DurationSeconds** (Integer/ Optional): The duration in seconds of the session.
-    Its default value is 3600.
-
-    **ExternalId** (String/ Optional): A unique Id that might be used when a role is
-    assumed in another account.
-
-    **SerialNumber** (String/ Optional): The Id number of the MFA device associated
-    with the user making the AssumeRole call.
-
-    **TokenCode** (String/ Optional): The value provided by the MFA device, if the
-    trust policy of the role being assumed requires MFA.
-
 
 STS Lite Configuration
 ======================
@@ -98,6 +73,26 @@ configurable options will be::
   rgw keystone accepted roles = {accepted user roles}
   rgw keystone token cache size = {number of tokens to cache}
   rgw s3 auth use keystone = true
+
+The details of the integrating ldap with Ceph Object Gateway can be found here:
+:doc:`keystone`
+
+The complete set of configurables to use STS Lite with LDAP are::
+
+  [client.radosgw.gateway]
+  rgw sts key = {sts key for encrypting/ decrypting the session token}
+  rgw s3 auth use sts = true
+
+  rgw_s3_auth_use_ldap = true
+  rgw_ldap_uri = {LDAP server to use}
+  rgw_ldap_binddn = {Distinguished Name (DN) of the service account}
+  rgw_ldap_secret = {password for the service account}
+  rgw_ldap_searchdn = {base in the directory information tree for searching users}
+  rgw_ldap_dnattr = {attribute being used in the constructed search filter to match a username}
+  rgw_ldap_searchfilter = {search filter}
+
+The details of the integrating ldap with Ceph Object Gateway can be found here:
+:doc:`ldap-auth`
 
 Note: By default, STS and S3 APIs co-exist in the same namespace, and both S3
 and STS APIs can be accessed via the same endpoint in Ceph Object Gateway.
@@ -167,30 +162,7 @@ Keystone.
                     created = bucket['CreationDate'],
     )
 
-4. The following is an example of AssumeRole API call:
-
-.. code-block:: python
-
-    import boto3
-
-    access_key = <ec2 access key>
-    secret_key = <ec2 secret key>
-
-    client = boto3.client('sts',
-    aws_access_key_id=access_key,
-    aws_secret_access_key=secret_key,
-    endpoint_url=<STS URL>,
-    region_name='',
-    )
-
-    response = client.assume_role(
-    RoleArn='arn:aws:iam:::role/application_abc/component_xyz/S3Access',
-    RoleSessionName='Bob',
-    DurationSeconds=3600
-    )
-
-
-Note: A role 'S3Access', needs to be created before calling the AssumeRole API.
+Similar steps can be performed for using GetSessionToken with LDAP.
 
 Limitations and Workarounds
 ===========================
