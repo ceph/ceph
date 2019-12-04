@@ -107,24 +107,34 @@ class AsyncCompletion(orchestrator.Completion):
         def error_callback(e):
             self.fail(e)
 
+        if six.PY3:
+            _callback = self.__on_complete
+        else:
+            def _callback(*args, **kwargs):
+                # Py2 only: _worker_pool doesn't call error_callback
+                try:
+                    return self.__on_complete(*args, **kwargs)
+                except Exception as e:
+                    self.fail(e)
+
         def run(value):
             if self.many:
                 if not value:
                     logger.info('calling map_async without values')
                     callback([])
                 if six.PY3:
-                    SSHOrchestrator.instance._worker_pool.map_async(self.__on_complete, value,
+                    SSHOrchestrator.instance._worker_pool.map_async(_callback, value,
                                                                     callback=callback,
                                                                     error_callback=error_callback)
                 else:
-                    SSHOrchestrator.instance._worker_pool.map_async(self.__on_complete, value,
+                    SSHOrchestrator.instance._worker_pool.map_async(_callback, value,
                                                                     callback=callback)
             else:
                 if six.PY3:
-                    SSHOrchestrator.instance._worker_pool.apply_async(self.__on_complete, (value,),
+                    SSHOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
                                                                       callback=callback, error_callback=error_callback)
                 else:
-                    SSHOrchestrator.instance._worker_pool.apply_async(self.__on_complete, (value,),
+                    SSHOrchestrator.instance._worker_pool.apply_async(_callback, (value,),
                                                                       callback=callback)
             return self.ASYNC_RESULT
 
