@@ -980,6 +980,10 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def upgrade_check(self, image, version):
+        # type: (Optional[str], Optional[str]) -> Completion
+        raise NotImplementedError()
+
     @_hide_in_features
     def upgrade_start(self, upgrade_spec):
         # type: (UpgradeSpec) -> Completion

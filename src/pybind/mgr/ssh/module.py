@@ -260,6 +260,12 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
             'default': 'root',
             'desc': 'mode for remote execution of ceph-daemon',
         },
+        {
+            'name': 'container_image_base',
+            'default': 'ceph/ceph',
+            'desc': 'Container image name, without the tag',
+            'runtime': True,
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -564,20 +570,22 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _run_ceph_daemon(self, host, entity, command, args,
                          stdin=None,
                          no_fsid=False,
-                         error_ok=False):
+                         error_ok=False,
+                         image=None):
         """
         Run ceph-daemon on the remote host with the given command + args
         """
         conn = self._get_connection(host)
 
         try:
-            # get container image
-            ret, image, err = self.mon_command({
-                'prefix': 'config get',
-                'who': _name_to_entity_name(entity),
-                'key': 'container_image',
-            })
-            image = image.strip()
+            if not image:
+                # get container image
+                ret, image, err = self.mon_command({
+                    'prefix': 'config get',
+                    'who': _name_to_entity_name(entity),
+                    'key': 'container_image',
+                })
+                image = image.strip()
             self.log.debug('%s container image %s' % (entity, image))
 
             final_args = [
@@ -1400,3 +1408,47 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def update_rbd_mirror(self, spec):
         return self._update_service('rbd-mirror', self.add_rbd_mirror, spec)
+
+    def _get_container_image_id(self, image_name):
+        # pick a random host...
+        host = None
+        for host_name in self.inventory_cache:
+            host = host_name
+            break
+        if not host:
+            raise OrchestratorError('no hosts defined')
+        self.log.debug('using host %s' % host)
+        out, code = self._run_ceph_daemon(
+            host, None, 'pull', [],
+            image=image_name,
+            no_fsid=True)
+        return out[0]
+
+    def upgrade_check(self, image, version):
+        if version:
+            target = self.container_image_base + ':v' + version
+        elif image:
+            target = image
+        else:
+            raise OrchestratorError('must specify either image or version')
+        return self._get_services().then(lambda daemons: self._upgrade_check(target, daemons))
+
+    def _upgrade_check(self, target, services):
+        # get service state
+        target_id = self._get_container_image_id(target)
+        self.log.debug('Target image %s id %s' % (target, target_id))
+        r = {
+            'target_image_name': target,
+            'target_image_id': target_id,
+            'needs_update': dict(),
+            'up_to_date': list(),
+        }
+        for s in services:
+            if target_id == s.container_image_id:
+                r['up_to_date'].append(s.name())
+            else:
+                r['needs_update'][s.name()] = {
+                    'current_name': s.container_image_name,
+                    'current_id': s.container_image_id,
+                }
+        return trivial_result(json.dumps(r, indent=4))
