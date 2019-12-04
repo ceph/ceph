@@ -1511,6 +1511,9 @@ public:
   int get_cache_obj_count() {
     return object_contexts.get_count();
   }
+  unsigned get_pg_shard() const {
+    return info.pgid.hash_to_shard(osd->get_num_shards());
+  }
   void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;

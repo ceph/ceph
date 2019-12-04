@@ -515,6 +515,12 @@ public:
     promote_counter.finish(bytes);
   }
   void promote_throttle_recalibrate();
+  unsigned get_num_shards() const {
+    return m_objecter_finishers;
+  }
+  Finisher* get_objecter_finisher(int shard) {
+    return objecter_finishers[shard];
+  }
 
   // -- Objecter, for tiering reads/writes from/to other OSDs --
   Objecter *objecter;
