@@ -1,3 +1,6 @@
+[submodule "ceph-daemon-adoption-corpus"]
+	path = ceph-daemon-adoption-corpus
+	url = https://github.com/ceph/ceph-daemon-adoption-corpus.git
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
 	url = https://github.com/ceph/ceph-object-corpus.git
