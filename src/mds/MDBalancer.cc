@@ -1152,8 +1152,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
   // split/merge
   if (bal_fragment_dirs && bal_fragment_interval > 0 &&
       dir->is_auth() &&
-      !dir->inode->is_base() &&  // not root/mdsdir (for now at least)
-      !dir->inode->is_stray()) { // not straydir
+      !dir->inode->is_base()) {
 
     // split
     if (g_conf()->mds_bal_split_size > 0 && (dir->should_split() || hot)) {
@@ -1167,12 +1166,12 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
                    << *dir << dendl;
         }
       }
-    }
-
-    // merge?
-    if (dir->get_frag() != frag_t() && dir->should_merge() &&
-	merge_pending.count(dir->dirfrag()) == 0) {
-      queue_merge(dir);
+    } else {
+      // merge?
+      if (dir->get_frag() != frag_t() && dir->should_merge() &&
+          merge_pending.count(dir->dirfrag()) == 0) {
+        queue_merge(dir);
+      }
     }
   }
 }

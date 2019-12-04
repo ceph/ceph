@@ -967,3 +967,82 @@ class TestStrays(CephFSTestCase):
         duration = (end - begin).total_seconds()
         self.assertLess(duration, (file_count * tick_period) * 0.25)
 
+class TestStrayFragments(CephFSTestCase):
+    MDSS_REQUIRED = 1
+
+    def get_stat(self, subsys, name, mds_id=None):
+        return self.fs.mds_asok(['perf', 'dump', subsys, name],
+                                mds_id=mds_id)[subsys][name]
+
+    def get_mdc_stat(self, name, mds_id=None):
+        return self.get_stat("mds_cache", name, mds_id)
+
+    def _wait_for_counter(self, subsys, counter, expect_val, timeout=60,
+                          mds_id=None):
+        self.wait_until_equal(
+            lambda: self.get_stat(subsys, counter, mds_id),
+            expect_val=expect_val, timeout=timeout,
+            reject_fn=lambda x: x > expect_val
+        )
+
+    def test_stray_dirfrag_creation(self):
+        """
+        That the last file create beyond the fragment size fails as expected.
+
+        That file unlinks does not overwhelm stray directory management and
+        cause it to run out of space when fragmentation is turned on.
+        """
+
+        CREATE_LIMIT = 500
+        for mds in self.fs.get_daemon_names():
+            self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(CREATE_LIMIT)], mds)
+            self.fs.mds_asok(["config", "set", "mds_bal_fragment_dirs", "false"], mds)
+
+        # We are attemtpting to create 1 file more than the set limit.
+        # This should fail, but it is acceptable as we are expecting it.
+        try:
+            self.mount_a.run_python(dedent("""
+                import os
+                path = os.path.join("{path}", "subdir3")
+                os.mkdir(path)
+                for n in range({file_count}):
+                    fpath = os.path.join(path, "%s" % n)
+                    f = open(fpath, 'w')
+                    f.write("%s" % n)
+                    f.close()
+                """.format(
+            path=self.mount_a.mountpoint,
+            file_count=CREATE_LIMIT+1
+            )))
+        except CommandFailedError:
+            pass # ENOSPC
+
+        # Now we unlink files with a dropped limit while enabling frags.
+        # This should not throw any errors since the stray dirs will also be
+        # fragmented.
+        CREATE_LIMIT = 400
+        for mds in self.fs.get_daemon_names():
+            self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(CREATE_LIMIT)], mds)
+            self.fs.mds_asok(["config", "set", "mds_bal_fragment_dirs", "true"], mds)
+            self.fs.mds_asok(["config", "set", "mds_bal_split_size", "50"], mds)
+
+        strays_before = self.get_mdc_stat("strays_created")
+
+        # Remember that we had created 500 files earlier and not just 400.
+        self.mount_a.run_python(dedent("""
+            import os
+            path = os.path.join("{path}", "subdir3")
+            for n in range({file_count}):
+                fpath = os.path.join(path, "%s" % n)
+                os.unlink(fpath)
+            """.format(
+        path=self.mount_a.mountpoint,
+        file_count=CREATE_LIMIT+100
+        )))
+
+        strays_after = self.get_mdc_stat("strays_created")
+        self.assertGreaterEqual(strays_after-strays_before, CREATE_LIMIT+100)
+
+        self._wait_for_counter("mds_cache", "strays_enqueued", strays_after)
+        self._wait_for_counter("purge_queue", "pq_executed", strays_after)
+

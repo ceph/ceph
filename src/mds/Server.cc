@@ -3084,7 +3084,8 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
 bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
 {
   const auto size = in->get_frag_size();
-  if (size >= g_conf()->mds_bal_fragment_size_max) {
+  if (size >= g_conf()->mds_bal_fragment_size_max &&
+      !g_conf().get_val<bool>("mds_bal_fragment_dirs")) {
     dout(10) << "fragment " << *in << " size exceeds " << g_conf()->mds_bal_fragment_size_max << " (ENOSPC)" << dendl;
     respond_to_request(mdr, -ENOSPC);
     return false;
