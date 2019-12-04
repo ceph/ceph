@@ -796,6 +796,12 @@ void librados::RadosClient::blacklist_self(bool set) {
   objecter->blacklist_self(set);
 }
 
+std::string librados::RadosClient::get_addrs() const {
+  CachedStackStringStream cos;
+  *cos << messenger->get_myaddrs();
+  return std::string(cos->strv());
+}
+
 int librados::RadosClient::blacklist_add(const string& client_address,
 					 uint32_t expire_seconds)
 {

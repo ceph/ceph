@@ -134,6 +134,9 @@ public:
   void clear_all_progress_events();
   void get_progress_events(std::map<std::string,ProgressEvent>* events);
 
+  void register_client(std::string_view name, std::string addrs);
+  void unregister_client(std::string_view name, std::string addrs);
+
   void config_notify();
 
   void set_uri(const std::string& module_name, const std::string &uri);

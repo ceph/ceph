@@ -192,7 +192,7 @@ void MgrStandby::send_beacon()
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
   dout(20) << state_str() << dendl;
 
-  std::list<PyModuleRef> modules = py_module_registry.get_modules();
+  auto modules = py_module_registry.get_modules();
 
   // Construct a list of the info about each loaded module
   // which we will transmit to the monitor.
@@ -204,6 +204,11 @@ void MgrStandby::send_beacon()
     info.can_run = module->get_can_run();
     info.module_options = module->get_options();
     module_info.push_back(std::move(info));
+  }
+
+  auto clients = py_module_registry.get_clients();
+  for (const auto& client : clients) {
+    dout(15) << "noting RADOS client for blacklist: " << client << dendl;
   }
 
   // Whether I think I am available (request MgrMonitor to set me
@@ -225,6 +230,7 @@ void MgrStandby::send_beacon()
                                  available,
 				 std::move(module_info),
 				 std::move(metadata),
+                                 std::move(clients),
 				 CEPH_FEATURES_ALL);
 
   if (available) {

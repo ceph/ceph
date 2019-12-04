@@ -248,22 +248,6 @@ void Mgr::init()
   register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
-  // Start communicating with daemons to learn statistics etc
-  int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
-  if (r < 0) {
-    derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
-    // This is typically due to a bind() failure, so let's let
-    // systemd restart us.
-    exit(1);
-  }
-  dout(4) << "Initialized server at " << server.get_myaddrs() << dendl;
-
-  // Preload all daemon metadata (will subsequently keep this
-  // up to date by watching maps, so do the initial load before
-  // we subscribe to any maps)
-  dout(4) << "Loading daemon metadata..." << dendl;
-  load_all_metadata();
-
   // subscribe to all the maps
   monc->sub_want("log-info", 0, 0);
   monc->sub_want("mgrdigest", 0, 0);
@@ -281,8 +265,31 @@ void Mgr::init()
 
   // Start Objecter and wait for OSD map
   lock.unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
-  objecter->wait_for_osd_map();
+  epoch_t e;
+  cluster_state.with_mgrmap([&e](const MgrMap& m) {
+    e = m.last_failure_osd_epoch;
+  });
+  /* wait for any blacklists to be applied to previous mgr instance */
+  dout(4) << "Waiting for new OSDMap (e=" << e
+          << ") that may blacklist prior active." << dendl;
+  objecter->wait_for_osd_map(e);
   lock.lock();
+
+  // Start communicating with daemons to learn statistics etc
+  int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
+  if (r < 0) {
+    derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
+    // This is typically due to a bind() failure, so let's let
+    // systemd restart us.
+    exit(1);
+  }
+  dout(4) << "Initialized server at " << server.get_myaddrs() << dendl;
+
+  // Preload all daemon metadata (will subsequently keep this
+  // up to date by watching maps, so do the initial load before
+  // we subscribe to any maps)
+  dout(4) << "Loading daemon metadata..." << dendl;
+  load_all_metadata();
 
   // Populate PGs in ClusterState
   cluster_state.with_osdmap_and_pgmap([this](const OSDMap &osd_map,
