@@ -17,6 +17,7 @@ if tags.has('man'):
                          'cephfs/*',
                          'dev/*',
                          'governance.rst',
+                         'foundation.rst',
                          'bootstrap.rst',
                          'install/*',
                          'mon/*',
