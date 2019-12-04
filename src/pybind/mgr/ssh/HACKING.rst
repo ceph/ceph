@@ -1,5 +1,5 @@
 Development
------------
+===========
 
 
 There are multiple ways to set up a development environment for the SSH orchestrator.
@@ -88,3 +88,161 @@ Add the newly created host(s) to the inventory.
 
 
 You should see the hostname in the list.
+
+Understanding ``AsyncCompletion``
+=================================
+
+How can I store temporary variables?
+------------------------------------
+
+Let's imagine you want to write code similar to
+
+.. code:: python
+
+    hosts = self.get_hosts()
+    inventory = self.get_inventory(hosts)
+    return self._create_osd(hosts, drive_group, inventory)
+
+That won't work, as ``get_hosts`` and ``get_inventory`` return objects
+of type ``AsyncCompletion``.
+
+Now let's imaging a Python 3 world, where we can use ``async`` and
+``await``. Then we actually can write this like so:
+
+.. code:: python
+
+    hosts = await self.get_hosts()
+    inventory = await self.get_inventory(hosts)
+    return self._create_osd(hosts, drive_group, inventory)
+
+Let's use a simple example to make this clear:
+
+.. code:: python
+
+    val = await func_1()
+    return func_2(val)
+
+As we're not yet in Python 3, we need to do write ``await`` manually by
+calling ``orchestrator.Completion.then()``:
+
+.. code:: python
+
+    func_1().then(lambda val: func_2(val))
+
+    # or
+    func_1().then(func_2)
+
+Now let's desugar the original example:
+
+.. code:: python
+
+    hosts = await self.get_hosts()
+    inventory = await self.get_inventory(hosts)
+    return self._create_osd(hosts, drive_group, inventory)
+
+Now let's replace one ``async`` at a time:
+
+.. code:: python
+
+    hosts = await self.get_hosts()
+    return self.get_inventory(hosts).then(lambda inventory:
+        self._create_osd(hosts, drive_group, inventory))
+
+Then finally:
+
+.. code:: python
+
+    self.get_hosts().then(lambda hosts:
+        self.get_inventory(hosts).then(lambda inventory:
+         self._create_osd(hosts,
+                          drive_group, inventory)))
+
+This also works without lambdas:
+
+.. code:: python
+
+    def call_inventory(hosts):
+        def call_create(inventory)
+            return self._create_osd(hosts, drive_group, inventory)
+
+        return self.get_inventory(hosts).then(call_create)
+
+    self.get_hosts(call_inventory)
+
+We should add support for ``await`` as soon as we're on Python 3.
+
+I want to call my function for every host!
+------------------------------------------
+
+Imagine you have a function that looks like so:
+
+.. code:: python
+
+    @async_completion
+    def deploy_stuff(name, node):
+        ...
+
+And you want to call ``deploy_stuff`` like so:
+
+.. code:: python
+
+    return [deploy_stuff(name, node) for node in nodes]
+
+This won't work as expected. The number of ``AsyncCompletion`` objects
+created should be ``O(1)``. But there is a solution:
+``@async_map_completion``
+
+.. code:: python
+
+    @async_map_completion
+    def deploy_stuff(name, node):
+        ...
+
+    return deploy_stuff([(name, node) for node in nodes])
+
+This way, we're only creating one ``AsyncCompletion`` object. Note that
+you should not create new ``AsyncCompletion`` within ``deploy_stuff``, as
+we're then no longer have ``O(1)`` completions:
+
+.. code:: python
+
+    @async_completion
+    def other_async_function():
+        ...
+
+    @async_map_completion
+    def deploy_stuff(name, node):
+        return other_async_function() # wrong!
+
+Why do we need this?
+--------------------
+
+I've tried to look into making Completions composable by being able to
+call one completion from another completion. I.e. making them re-usable
+using Promises E.g.:
+
+.. code:: python
+
+    >>> return self.get_hosts().then(self._create_osd)
+
+where ``get_hosts`` returns a Completion of list of hosts and
+``_create_osd`` takes a list of hosts.
+
+The concept behind this is to store the computation steps explicit and
+then explicitly evaluate the chain:
+
+.. code:: python
+
+    p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
+    p.finalize(2)
+    assert p.result = "4"
+
+or graphically:
+
+::
+
+    +---------------+      +-----------------+
+    |               | then |                 |
+    | lambda x: x*x | +--> | lambda x: str(x)|
+    |               |      |                 |
+    +---------------+      +-----------------+

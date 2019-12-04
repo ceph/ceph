@@ -149,7 +149,7 @@ class AsyncCompletion(orchestrator.Completion):
 def ssh_completion(cls=AsyncCompletion, **c_kwargs):
     # type: (Type[orchestrator.Completion], Any) -> Callable
     """
-    run the given function through `apply_async()` or `map_asyc()`
+    See ./HACKING.rst for a how-to
     """
     def decorator(f):
         @wraps(f)
@@ -185,22 +185,26 @@ def ssh_completion(cls=AsyncCompletion, **c_kwargs):
 
 def async_completion(f):
     # type: (Callable) -> Callable[..., AsyncCompletion]
+    """
+    See ./HACKING.rst for a how-to
+
+    :param f: wrapped function
+    """
     return ssh_completion()(f)
 
 
 def async_map_completion(f):
     # type: (Callable) -> Callable[..., AsyncCompletion]
     """
+    See ./HACKING.rst for a how-to
+
+    :param f: wrapped function
+
     kind of similar to
 
     >>> def sync_map(f):
     ...     return lambda x: map(f, x)
 
-    Limitation: This does not work, as you cannot return completions form `f`
-
-    >>> @async_map_completion
-    ... def run(x):
-    ...     return async_completion(str)(x)
     """
     return ssh_completion(many=True)(f)
 
