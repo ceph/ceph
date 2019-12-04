@@ -121,6 +121,9 @@ class MetadataManager(object):
         for key,value in dct.items():
             self.config.set(section, key, str(value))
 
+    def update_global_section(self, key, value):
+        self.update_section(MetadataManager.GLOBAL_SECTION, key, str(value))
+
     def get_option(self, section, key):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))

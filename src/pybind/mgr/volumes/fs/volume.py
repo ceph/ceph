@@ -15,6 +15,7 @@ from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
 
 from .vol_spec import VolSpec
 from .exception import VolumeException
+from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ class VolumeClient(object):
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
         self.connection_pool = ConnectionPool(self.mgr)
         # TODO: make thread pool size configurable
+        self.cloner = Cloner(self, 4)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -50,6 +52,7 @@ class VolumeClient(object):
         # job list.
         fs_map = self.mgr.get('fs_map')
         for fs in fs_map['filesystems']:
+            self.cloner.queue_job(fs['mdsmap']['fs_name'])
             self.purge_queue.queue_job(fs['mdsmap']['fs_name'])
 
     def is_stopping(self):
@@ -308,6 +311,7 @@ class VolumeClient(object):
         with open_subvol(fs_handle, self.volspec, target_group, target_subvolname, need_complete=False) as target_subvolume:
             try:
                 subvolume.attach_snapshot(snapname, target_subvolume)
+                self.cloner.queue_job(volname)
             except VolumeException as ve:
                 try:
                     target_subvolume.remove()
