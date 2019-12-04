@@ -121,8 +121,8 @@ class OSDThrasher(Thrasher):
     """
     Object used to thrash Ceph
     """
-    def __init__(self, manager, config, logger):
-        Thrasher.__init__(self, "OSDThrasher")
+    def __init__(self, manager, config, name, logger):
+        super(OSDThrasher, self).__init__()
 
         self.ceph_manager = manager
         self.cluster = manager.cluster
@@ -135,6 +135,7 @@ class OSDThrasher(Thrasher):
         self.stopping = False
         self.logger = logger
         self.config = config
+        self.name = name
         self.revive_timeout = self.config.get("revive_timeout", 360)
         self.pools_to_fix_pgp_num = set()
         if self.config.get('powercycle'):
@@ -982,7 +983,7 @@ class OSDThrasher(Thrasher):
             self._do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
-            self.exception = e
+            self.set_thrasher_exception(e)
             self.logger.exception("exception:")
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.
