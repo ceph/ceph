@@ -2,6 +2,9 @@ tasks:
 - install:
 - ceph:
 - rgw: [client.0]
+- exec:
+    client.0:
+      - cpan install Amazon::S3
 - workunit:
     clients:
       client.0:

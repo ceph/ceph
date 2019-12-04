@@ -1,5 +1,8 @@
 # Amazon::S3 is not available on el7
 tasks:
+- exec:
+    client.0:
+      - cpan install Amazon::S3
 - workunit:
     clients:
       client.0:
