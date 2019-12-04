@@ -2548,9 +2548,8 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       skip_back = 0;
     }
 
-    Extent* ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+    Extent* ne = newo->extent_map.add(e.logical_offset + skip_front + dstoff - srcoff,
       e.blob_offset + skip_front, e.length - skip_front - skip_back, cb);
-    newo->extent_map.extent_map.insert(*ne);
     ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
     // fixme: we may leave parts of new blob unreferenced that could
     // be freed (relative to the shared_blob).
@@ -3202,6 +3201,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
     pos += prev_len;
     ++n;
     extent_map.insert(*le);
+    onode->get_buffer_cache()->add_extent();
   }
 
   ceph_assert(n == num);
@@ -3547,8 +3547,7 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
     punch_hole(c, logical_offset, length, old_extents);
   }
 
-  Extent *le = new Extent(logical_offset, blob_offset, length, b);
-  extent_map.insert(*le);
+  Extent* le = add(logical_offset, blob_offset, length, b);
   if (spans_shard(logical_offset, length)) {
     request_reshard(logical_offset, logical_offset + length);
   }
@@ -3576,8 +3575,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
     if (ep->logical_offset < pos) {
       // split extent
       size_t left = pos - ep->logical_offset;
-      Extent *ne = new Extent(pos, 0, ep->length - left, rb);
-      extent_map.insert(*ne);
+      Extent *ne = add(pos, 0, ep->length - left, rb);
       ep->length = left;
       dout(30) << __func__ << "  split " << *ep << dendl;
       dout(30) << __func__ << "     to " << *ne << dendl;

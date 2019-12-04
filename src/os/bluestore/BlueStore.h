@@ -782,18 +782,12 @@ public:
         logical_offset(lo), blob_offset(o), length(l) {
       assign_blob(b);
     }
-    ~Extent() {
-      if (blob) {
-	blob->buffer_space()->get_cache()->rm_extent();
-      }
-    }
 
     void dump(ceph::Formatter* f) const;
 
     void assign_blob(const BlobRef& b) {
       ceph_assert(!blob);
       blob = b;
-      blob->buffer_space()->get_cache()->add_extent();
     }
 
     // comparators for intrusive_set
@@ -893,15 +887,19 @@ public:
     }
 
     struct DeleteDisposer {
-      void operator()(Extent *e) { delete e; }
+      void operator()(Extent *e) {
+        delete e;
+      }
     };
 
     ExtentMap(Onode *o);
     ~ExtentMap() {
+      onode->get_buffer_cache()->rm_extent(extent_map.size());
       extent_map.clear_and_dispose(DeleteDisposer());
     }
 
     void clear() {
+      onode->get_buffer_cache()->rm_extent(extent_map.size());
       extent_map.clear_and_dispose(DeleteDisposer());
       shards.clear();
       inline_bl.clear();
@@ -988,12 +986,16 @@ public:
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
 
     /// add a new Extent
-    void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
-      extent_map.insert(*new Extent(lo, o, l, b));
+    Extent* add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
+      auto e = new Extent(lo, o, l, b);
+      extent_map.insert(*e);
+      onode->get_buffer_cache()->add_extent();
+      return e;
     }
 
     /// remove (and delete) an Extent
     void rm(extent_map_t::iterator p) {
+      onode->get_buffer_cache()->rm_extent();
       extent_map.erase_and_dispose(p, DeleteDisposer());
     }
 
@@ -1125,6 +1127,7 @@ public:
   };
 
   struct OnodeSpace;
+  struct BufferCacheShard;
   /// an in-memory object
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
@@ -1210,6 +1213,9 @@ public:
       ceph_assert(cached);
       cached = false;
       return !pinned;
+    }
+    BufferCacheShard* get_buffer_cache() {
+      return  c->cache;
     }
 
     const std::string& get_omap_prefix();
@@ -1341,8 +1347,9 @@ public:
     void add_extent() {
       ++num_extents;
     }
-    void rm_extent() {
-      --num_extents;
+    void rm_extent(size_t cnt = 1) {
+      ceph_assert(num_extents >= cnt);
+      num_extents -= cnt;
     }
 
     void add_blob() {
