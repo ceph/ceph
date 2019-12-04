@@ -1,0 +1,1 @@
+-e .[coverage,orchestra,test]
