@@ -248,7 +248,9 @@ OSDService::OSDService(OSD *osd) :
   last_recalibrate(ceph_clock_now()),
   promote_max_objects(0),
   promote_max_bytes(0),
-  objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
+  objecter(make_unique<Objecter>(osd->client_messenger->cct,
+				 osd->objecter_messenger,
+				 osd->monc, nullptr, 0, 0)),
   m_objecter_finishers(cct->_conf->osd_objecter_finishers),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
@@ -276,22 +278,10 @@ OSDService::OSDService(OSD *osd) :
   for (int i = 0; i < m_objecter_finishers; i++) {
     ostringstream str;
     str << "objecter-finisher-" << i;
-    Finisher *fin = new Finisher(osd->client_messenger->cct, str.str(), "finisher");
-    objecter_finishers.push_back(fin);
+    auto fin = make_unique<Finisher>(osd->client_messenger->cct, str.str(), "finisher");
+    objecter_finishers.push_back(std::move(fin));
   }
 }
-
-OSDService::~OSDService()
-{
-  delete objecter;
-
-  for (auto f : objecter_finishers) {
-    delete f;
-    f = NULL;
-  }
-}
-
-
 
 #ifdef PG_DEBUG_REFS
 void OSDService::add_pgid(spg_t pgid, PG *pg){
@@ -499,7 +489,7 @@ void OSDService::shutdown()
   }
 
   objecter->shutdown();
-  for (auto f : objecter_finishers) {
+  for (auto& f : objecter_finishers) {
     f->wait_for_empty();
     f->stop();
   }
@@ -511,7 +501,7 @@ void OSDService::shutdown()
 void OSDService::init()
 {
   reserver_finisher.start();
-  for (auto f : objecter_finishers) {
+  for (auto& f : objecter_finishers) {
     f->start();
   }
   objecter->set_client_incarnation(0);
@@ -3561,7 +3551,7 @@ int OSD::init()
   hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
-  objecter_messenger->add_dispatcher_head(service.objecter);
+  objecter_messenger->add_dispatcher_head(service.objecter.get());
 
   service.init();
   service.publish_map(osdmap);
