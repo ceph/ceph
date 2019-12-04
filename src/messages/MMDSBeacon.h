@@ -182,7 +182,7 @@ WRITE_CLASS_ENCODER(MDSHealth)
 class MMDSBeacon : public PaxosServiceMessage {
 private:
 
-  static constexpr int HEAD_VERSION = 7;
+  static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 6;
 
   uuid_d fsid;
@@ -199,6 +199,8 @@ private:
   map<string, string> sys_info;
 
   uint64_t mds_features = 0;
+
+  string fs;
 
 protected:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION)
@@ -229,12 +231,19 @@ public:
   MDSHealth const& get_health() const { return health; }
   void set_health(const MDSHealth &h) { health = h; }
 
+  const string& get_fs() const { return fs; }
+  void set_fs(std::string_view s) { fs = s; }
+
   const map<string, string>& get_sys_info() const { return sys_info; }
   void set_sys_info(const map<string, string>& i) { sys_info = i; }
 
   void print(ostream& out) const override {
-    out << "mdsbeacon(" << global_id << "/" << name << " " << ceph_mds_state_name(state) 
-	<< " seq " << seq << " v" << version << ")";
+    out << "mdsbeacon(" << global_id << "/" << name
+	<< " " << ceph_mds_state_name(state);
+    if (fs.size()) {
+      out << " fs=" << fs;
+    }
+    out << " seq=" << seq << " v" << version << ")";
   }
 
   void encode_payload(uint64_t features) override {
@@ -255,6 +264,7 @@ public:
     encode(mds_features, payload);
     encode(FS_CLUSTER_ID_NONE, payload);
     encode(false, payload);
+    encode(fs, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -292,6 +302,9 @@ public:
       // Old MDS daemons request the state, instead of explicitly
       // advertising that they are configured as a replay daemon.
       state = MDSMap::STATE_STANDBY;
+    }
+    if (header.version >= 8) {
+      decode(fs, p);
     }
   }
 private:
