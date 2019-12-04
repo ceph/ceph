@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 HostSpec = namedtuple('HostSpec', ['hostname', 'network', 'name'])
 
-
 def parse_host_specs(host, require_network=True):
     """
     Split host into host, network, and (optional) daemon name parts.  The network
@@ -1042,12 +1041,29 @@ class PlacementSpec(object):
     """
     For APIs that need to specify a node subset
     """
-    def __init__(self, label=None, nodes=None):
+    def __init__(self, label=None, nodes=None, count=None):
         self.label = label
         if nodes:
-            self.nodes = [parse_host_specs(x, require_network=False) for x in nodes]
+            self.nodes = [parse_host_specs(x, require_network=False) for x in nodes if x]
         else:
             self.nodes = []
+        self.count = count if count else 1
+
+    def set_nodes(self, nodes):
+        # To backpopulate the .nodes attribute when using labels or count
+        # in the orchestrator backend.
+        self.nodes = nodes
+
+    @classmethod
+    def from_yaml(cls, data):
+        return cls(**data)
+
+    def validate(self):
+        if self.nodes and self.label:
+            # TODO: a less generic Exception
+            raise Exception('Node and label are mutually exclusive')
+        if self.count <= 0:
+            raise Exception("num/count must be > 1")
 
 
 def handle_type_error(method):
@@ -1157,6 +1173,20 @@ class ServiceDescription(object):
         return cls(**data)
 
 
+class StatefulServiceSpec(object):
+    """ Such as mgrs/mons
+    """
+    # TODO: create base class for Stateless/Stateful service specs and propertly inherit
+    def __init__(self,
+                 name=None,
+                 placement=None,
+                 count=None,
+                 scheduler=None):
+        self.placement = PlacementSpec() if placement is None else placement
+        self.name = name
+        self.count = self.placement.count if self.placement else 1  # for backwards-compatibility
+
+
 class StatelessServiceSpec(object):
     # Request to orchestrator for a group of stateless services
     # such as MDS, RGW, nfs gateway, iscsi gateway
@@ -1169,7 +1199,8 @@ class StatelessServiceSpec(object):
     # This structure is supposed to be enough information to
     # start the services.
 
-    def __init__(self, name, placement=None, count=None):
+    def __init__(self, name,
+                 placement=None):
         self.placement = PlacementSpec() if placement is None else placement
 
         #: Give this set of statelss services a name: typically it would
@@ -1178,7 +1209,7 @@ class StatelessServiceSpec(object):
         self.name = name
 
         #: Count of service instances
-        self.count = 1 if count is None else count
+        self.count = self.placement.count if self.placement else 1  # for backwards-compatibility
 
     def validate_add(self):
         if not self.name:
@@ -1228,7 +1259,6 @@ class RGWSpec(StatelessServiceSpec):
         # in Rook itself. Thus we don't set any defaults here in this class.
 
         super(RGWSpec, self).__init__(name=rgw_realm + '.' + rgw_zone,
-                                      count=count,
                                       placement=placement)
 
         #: List of hosts where RGWs should run. Not for Rook.
