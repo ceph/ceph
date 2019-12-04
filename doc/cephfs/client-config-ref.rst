@@ -183,6 +183,12 @@
 :Type: Integer
 :Default: ``0``
 
+``fuse disable pagecache``
+
+:Description: If set to ``true``, kernel page cache is disabled for ceph-fuse mount. Because when multiple clients read/write to a file at the same time, reader may get stale data from page cache. (Due to limitation of fuse, ceph-fuse can't disable page cache dynamically)
+:Type: Boolean
+:Default: ``false``
+
 Developer Options
 #################
 
