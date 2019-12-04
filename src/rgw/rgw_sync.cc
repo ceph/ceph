@@ -447,8 +447,13 @@ public:
       entries(_entries), truncated(_truncated) {}
 
   ~RGWReadMDLogEntriesCR() override {
+    request_cleanup();
+  }
+
+  void request_cleanup() override {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -1117,8 +1122,13 @@ public:
   }
 
   ~RGWMetaStoreEntryCR() override {
+    request_cleanup();
+  }
+
+  void request_cleanup() override {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -1166,8 +1176,13 @@ public:
   }
 
   ~RGWMetaRemoveEntryCR() override {
+    request_cleanup();
+  }
+
+  void request_cleanup() override {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
