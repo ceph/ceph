@@ -35,6 +35,7 @@ def ssh_module():
             mock.patch("ssh.module.SSHOrchestrator.get_store_prefix", get_store_prefix):
         SSHOrchestrator._register_commands('')
         m = SSHOrchestrator.__new__ (SSHOrchestrator)
+        m._root_logger = mock.MagicMock()
         m._store = {
             'ssh_config': '',
             'ssh_identity_key': '',
