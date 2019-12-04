@@ -454,6 +454,12 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     dout(4) << "Active daemon restart (mgr." << m->get_name() << ")" << dendl;
     mon->clog->info() << "Active manager daemon " << m->get_name()
                       << " restarted";
+    if (!mon->osdmon()->is_writeable()) {
+      dout(1) << __func__ << ":  waiting for osdmon writeable to"
+                 " blacklist old instance." << dendl;
+      mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
     drop_active();
   }
 
@@ -516,6 +522,13 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       dout(4) << "available_modules " << m->get_available_modules()
 	      << " (was " << pending_map.available_modules << ")" << dendl;
       pending_map.available_modules = m->get_available_modules();
+      updated = true;
+    }
+    const auto& clients = m->get_clients();
+    if (pending_map.clients != clients) {
+      dout(4) << "active's RADOS clients " << clients
+	      << " (was " << pending_map.clients << ")" << dendl;
+      pending_map.clients = clients;
       updated = true;
     }
   } else if (pending_map.active_gid == 0) {
@@ -744,7 +757,8 @@ void MgrMonitor::tick()
   }
 
   if (pending_map.active_gid != 0
-      && last_beacon.at(pending_map.active_gid) < cutoff) {
+      && last_beacon.at(pending_map.active_gid) < cutoff
+      && mon->osdmon()->is_writeable()) {
     const std::string old_active_name = pending_map.active_name;
     drop_active();
     propose = true;
@@ -814,9 +828,25 @@ bool MgrMonitor::promote_standby()
 
 void MgrMonitor::drop_active()
 {
+  ceph_assert(mon->osdmon()->is_writeable());
+
   if (last_beacon.count(pending_map.active_gid) > 0) {
     last_beacon.erase(pending_map.active_gid);
   }
+
+  ceph_assert(pending_map.active_gid > 0);
+  auto until = ceph_clock_now();
+  until += g_conf().get_val<double>("mon_mgr_blacklist_interval");
+  dout(5) << "blacklisting previous mgr." << pending_map.active_name << "."
+          << pending_map.active_gid << " ("
+          << pending_map.active_addrs << ")" << dendl;
+  auto blacklist_epoch = mon->osdmon()->blacklist(pending_map.active_addrs, until);
+
+  /* blacklist RADOS clients in use by the mgr */
+  for (const auto& a : pending_map.clients) {
+    mon->osdmon()->blacklist(a, until);
+  }
+  request_proposal(mon->osdmon());
 
   pending_metadata_rm.insert(pending_map.active_name);
   pending_metadata.erase(pending_map.active_name);
@@ -827,6 +857,8 @@ void MgrMonitor::drop_active()
   pending_map.available = false;
   pending_map.active_addrs = entity_addrvec_t();
   pending_map.services.clear();
+  pending_map.clients.clear();
+  pending_map.last_failure_osd_epoch = blacklist_epoch;
 
   // So that when new active mgr subscribes to mgrdigest, it will
   // get an immediate response instead of waiting for next timer
@@ -1023,6 +1055,10 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     if (!err.empty()) {
       // Does not parse as a gid, treat it as a name
       if (pending_map.active_name == who) {
+        if (!mon->osdmon()->is_writeable()) {
+          mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+          return false;
+        }
         drop_active();
         changed = true;
       } else {
@@ -1042,6 +1078,10 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       }
     } else {
       if (pending_map.active_gid == gid) {
+        if (!mon->osdmon()->is_writeable()) {
+          mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+          return false;
+        }
         drop_active();
         changed = true;
       } else if (pending_map.standbys.count(gid) > 0) {

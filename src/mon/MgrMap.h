@@ -223,6 +223,7 @@ public:
   };
 
   epoch_t epoch = 0;
+  epoch_t last_failure_osd_epoch = 0;
 
   /// global_id of the ceph-mgr instance selected as a leader
   uint64_t active_gid = 0;
@@ -236,6 +237,8 @@ public:
   utime_t active_change;
   /// features
   uint64_t active_mgr_features = 0;
+
+  std::vector<entity_addrvec_t> clients; // for blacklist
 
   std::map<uint64_t, StandbyInfo> standbys;
 
@@ -255,6 +258,7 @@ public:
   std::map<std::string, std::string> services;
 
   epoch_t get_epoch() const { return epoch; }
+  epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
   entity_addrvec_t get_active_addrs() const { return active_addrs; }
   uint64_t get_active_gid() const { return active_gid; }
   bool get_available() const { return available; }
@@ -379,7 +383,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(9, 6, bl);
+    ENCODE_START(11, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -392,13 +396,15 @@ public:
     encode(active_change, bl);
     encode(always_on_modules, bl);
     encode(active_mgr_features, bl);
+    encode(last_failure_osd_epoch, bl);
+    encode(clients, bl, features);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(8, p);
+    DECODE_START(11, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -439,6 +445,12 @@ public:
     }
     if (struct_v >= 9) {
       decode(active_mgr_features, p);
+    }
+    if (struct_v >= 10) {
+      decode(last_failure_osd_epoch, p);
+    }
+    if (struct_v >= 11) {
+      decode(clients, p);
     }
     DECODE_FINISH(p);
   }
@@ -491,6 +503,12 @@ public:
       }
       f->close_section();
     }
+    f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
+    f->open_array_section("active_clients");
+    for (const auto &c : clients) {
+      f->dump_object("client", c);
+    }
+    f->close_section();
     f->close_section();
   }
 
