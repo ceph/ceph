@@ -68,6 +68,14 @@ function install_google_chrome {
     esac
 }
 
+# disable SSL
+sudo ceph config set mgr mgr/dashboard/ssl false
+sleep 5
+sudo ceph mgr module disable dashboard
+sleep 5
+sudo ceph mgr module enable dashboard
+sleep 5
+
 # get URL of the running Dashboard
 URL=$(sudo ceph mgr services 2>/dev/null | jq -r .dashboard)
 if [ -z "$URL" ]; then
