@@ -77,5 +77,5 @@ def which(executable):
             return executable_path
 
 if __name__ == '__channelexec__':
-    for item in channel:
-        channel.send(eval(item))
+    for item in channel:  # type: ignore
+        channel.send(eval(item))  # type: ignore
