@@ -77,6 +77,10 @@ cp /tmp/img1 /tmp/img1.trunc
 truncate -s 41943040 /tmp/img1.trunc
 cmp /tmp/img1.trunc /tmp/img1.small
 
+# rollback expects an unlocked image
+# (acquire and) release the lock as a side effect
+rbd bench --io-type read --io-size 1 --io-threads 1 --io-total 1 testimg1
+
 # rollback and check data again
 rbd snap rollback --snap=snap1 testimg1
 cat /sys/bus/rbd/devices/$DEV_ID1/size | grep 76800000
