@@ -177,7 +177,7 @@ class _Promise(object):
                  on_complete=None,    # type: Optional[Callable]
                  name=None,  # type: Optional[str]
                  ):
-        self._on_complete = on_complete
+        self._on_complete_ = on_complete
         self._name = name
         self._next_promise = None  # type: Optional[_Promise]
 
@@ -190,6 +190,18 @@ class _Promise(object):
         # _Promise is not a continuation monad, as `_result` is of type
         # T instead of (T -> r) -> r. Therefore we need to store the first promise here.
         self._first_promise = _first_promise or self  # type: '_Promise'
+
+    @property
+    def _on_complete(self):
+        # type: () -> Optional[Callable]
+        # https://github.com/python/mypy/issues/4125
+        return self._on_complete_
+
+    @_on_complete.setter
+    def _on_complete(self, val):
+        # type: (Optional[Callable]) -> None
+        self._on_complete_ = val
+
 
     def __repr__(self):
         name = self._name or getattr(self._on_complete, '__name__', '??') if self._on_complete else 'None'
