@@ -31,11 +31,12 @@ using librbd::util::create_rados_callback;
 template <typename I>
 MirrorStatusUpdater<I>::MirrorStatusUpdater(
     librados::IoCtx& io_ctx, Threads<I> *threads,
-    const std::string& site_name)
+    const std::string& site_name, const std::string& fsid)
   : m_io_ctx(io_ctx), m_threads(threads), m_site_name(site_name),
-    m_lock(ceph::make_mutex("rbd::mirror::MirrorStatusUpdater " +
-                            stringify(m_io_ctx.get_id()))) {
+    m_fsid(fsid), m_lock(ceph::make_mutex("rbd::mirror::MirrorStatusUpdater " +
+                                          stringify(m_io_ctx.get_id()))) {
   dout(10) << "site_name=" << site_name << ", "
+           << "fsid=" << fsid << ", "
            << "pool_id=" << m_io_ctx.get_id() << dendl;
 }
 
@@ -48,16 +49,6 @@ MirrorStatusUpdater<I>::~MirrorStatusUpdater() {
 template <typename I>
 void MirrorStatusUpdater<I>::init(Context* on_finish) {
   dout(10) << dendl;
-
-  if (!m_site_name.empty()) {
-    librados::Rados rados(m_io_ctx);
-    int r = rados.cluster_fsid(&m_fsid);
-    if (r < 0) {
-      derr << "failed to retrieve fsid: " << cpp_strerror(r) << dendl;
-      m_threads->work_queue->queue(on_finish, r);
-      return;
-    }
-  }
 
   ceph_assert(!m_initialized);
   m_initialized = true;

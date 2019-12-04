@@ -247,7 +247,7 @@ public:
 
 TEST_F(TestMockMirrorStatusUpdater, InitShutDown) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -261,7 +261,7 @@ TEST_F(TestMockMirrorStatusUpdater, InitShutDown) {
 
 TEST_F(TestMockMirrorStatusUpdater, InitStatusWatcherError) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -278,7 +278,7 @@ TEST_F(TestMockMirrorStatusUpdater, InitStatusWatcherError) {
 
 TEST_F(TestMockMirrorStatusUpdater, ShutDownStatusWatcherError) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -297,7 +297,7 @@ TEST_F(TestMockMirrorStatusUpdater, ShutDownStatusWatcherError) {
 
 TEST_F(TestMockMirrorStatusUpdater, SmallBatch) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -328,7 +328,7 @@ TEST_F(TestMockMirrorStatusUpdater, SmallBatch) {
 
 TEST_F(TestMockMirrorStatusUpdater, LargeBatch) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -369,7 +369,7 @@ TEST_F(TestMockMirrorStatusUpdater, LargeBatch) {
 
 TEST_F(TestMockMirrorStatusUpdater, OverwriteStatus) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -399,7 +399,7 @@ TEST_F(TestMockMirrorStatusUpdater, OverwriteStatus) {
 
 TEST_F(TestMockMirrorStatusUpdater, OverwriteStatusInFlight) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -440,7 +440,7 @@ TEST_F(TestMockMirrorStatusUpdater, OverwriteStatusInFlight) {
 
 TEST_F(TestMockMirrorStatusUpdater, ImmediateUpdate) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -461,7 +461,7 @@ TEST_F(TestMockMirrorStatusUpdater, ImmediateUpdate) {
 
 TEST_F(TestMockMirrorStatusUpdater, RemoveIdleStatus) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -484,7 +484,7 @@ TEST_F(TestMockMirrorStatusUpdater, RemoveIdleStatus) {
 
 TEST_F(TestMockMirrorStatusUpdater, RemoveInFlightStatus) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -518,7 +518,7 @@ TEST_F(TestMockMirrorStatusUpdater, RemoveInFlightStatus) {
 
 TEST_F(TestMockMirrorStatusUpdater, ShutDownWhileUpdating) {
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "");
+                                                     m_mock_threads, "", "");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -557,7 +557,8 @@ TEST_F(TestMockMirrorStatusUpdater, MirrorPeerSitePing) {
   ASSERT_EQ(0, _rados->cluster_fsid(&fsid));
 
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, "siteA");
+                                                     m_mock_threads, "siteA",
+                                                     fsid);
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
