@@ -32,3 +32,6 @@ class OpSmException(Exception):
 
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
+
+class NotImplementedException(Exception):
+    pass

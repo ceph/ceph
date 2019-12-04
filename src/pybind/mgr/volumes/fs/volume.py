@@ -50,7 +50,7 @@ class VolumeClient(object):
         # job list.
         fs_map = self.mgr.get('fs_map')
         for fs in fs_map['filesystems']:
-            self.purge_queue.queue_purge_job(fs['mdsmap']['fs_name'])
+            self.purge_queue.queue_job(fs['mdsmap']['fs_name'])
 
     def is_stopping(self):
         return self.stopping.isSet()
@@ -95,7 +95,7 @@ class VolumeClient(object):
                 "that is what you want, re-issue the command followed by " \
                 "--yes-i-really-mean-it.".format(volname)
 
-        self.purge_queue.cancel_purge_job(volname)
+        self.purge_queue.cancel_jobs(volname)
         self.connection_pool.del_fs_handle(volname, wait=True)
         return delete_volume(self.mgr, volname)
 
@@ -121,7 +121,7 @@ class VolumeClient(object):
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
-            self.purge_queue.queue_purge_job(volname)
+            self.purge_queue.queue_job(volname)
             raise ve
 
     def create_subvolume(self, **kwargs):
@@ -162,7 +162,7 @@ class VolumeClient(object):
                     # assumes that the subvolume is moved to trash can.
                     # TODO: make purge queue as singleton so that trash can kicks
                     # the purge threads on dump.
-                    self.purge_queue.queue_purge_job(volname)
+                    self.purge_queue.queue_job(volname)
         except VolumeException as ve:
             if not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
@@ -311,7 +311,7 @@ class VolumeClient(object):
             except VolumeException as ve:
                 try:
                     target_subvolume.remove()
-                    self.purge_queue.queue_purge_job(volname)
+                    self.purge_queue.queue_job(volname)
                 except Exception as e:
                     log.warn("failed to cleanup clone subvolume '{0}' ({1})".format(target_subvolname, e))
                 raise ve
