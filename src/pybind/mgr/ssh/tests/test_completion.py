@@ -160,7 +160,6 @@ class TestCompletion(object):
         self._wait(ssh_module, c)
         assert c.result == "['2', '3']"
 
-    @pytest.mark.skipif(sys.version_info < (3,0), reason="requires python3")
     def test_raise(self, ssh_module):
         @async_completion
         def run(x):
