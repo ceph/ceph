@@ -1201,6 +1201,12 @@ void CDir::resync_accounted_fragstat()
   }
 }
 
+void CDir::mark_dirty_fragstat(LogSegment *ls)
+{
+  mdcache->mds->locker->mark_updated_scatterlock(&inode->filelock);
+  ls->dirty_dirfrag_dir.push_back(&inode->item_dirty_dirfrag_dir);
+}
+
 /*
  * resync rstat and accounted_rstat with inode
  */
@@ -1262,8 +1268,11 @@ void CDir::assimilate_dirty_rstat_inodes_finish(EMetaBlob *blob)
     mdcache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
 }
 
-
-
+void CDir::mark_dirty_rstat(LogSegment *ls)
+{
+  mdcache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
+  ls->dirty_dirfrag_nest.push_back(&inode->item_dirty_dirfrag_nest);
+}
 
 /****************************************
  * WAITING
@@ -2589,12 +2598,10 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
   // did we import some dirty scatterlock data?
   if (dirty_old_rstat.size() ||
       !(fnode->rstat == fnode->accounted_rstat)) {
-    mdcache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
-    ls->dirty_dirfrag_nest.push_back(&inode->item_dirty_dirfrag_nest);
+    mark_dirty_rstat(ls);
   }
   if (!(fnode->fragstat == fnode->accounted_fragstat)) {
-    mdcache->mds->locker->mark_updated_scatterlock(&inode->filelock);
-    ls->dirty_dirfrag_dir.push_back(&inode->item_dirty_dirfrag_dir);
+    mark_dirty_fragstat(ls);
   }
   if (is_dirty_dft()) {
     if (inode->dirfragtreelock.get_state() != LOCK_MIX &&

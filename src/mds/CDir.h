@@ -227,7 +227,10 @@ public:
   }
 
   void resync_accounted_fragstat();
+  void mark_dirty_fragstat(LogSegment *ls);
+
   void resync_accounted_rstat();
+  void mark_dirty_rstat(LogSegment *ls);
   void assimilate_dirty_rstat_inodes(MutationRef& mut);
   void assimilate_dirty_rstat_inodes_finish(EMetaBlob *blob);
 
