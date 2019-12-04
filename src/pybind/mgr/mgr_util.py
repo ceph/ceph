@@ -108,10 +108,10 @@ def get_default_addr():
            return False
 
     try:
-        return get_default_addr.result
+        return get_default_addr.result  # type: ignore
     except AttributeError:
         result = '::' if is_ipv6_enabled() else '0.0.0.0'
-        get_default_addr.result = result
+        get_default_addr.result = result  # type: ignore
         return result
 
 
