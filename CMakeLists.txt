@@ -196,6 +196,8 @@ if(WITH_BLUESTORE_PMEM)
   set(HAVE_BLUESTORE_PMEM ON)
 endif()
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 CMAKE_DEPENDENT_OPTION(WITH_SPDK "Enable SPDK" OFF
   "CMAKE_SYSTEM_PROCESSOR MATCHES i386|i686|amd64|x86_64|AMD64|aarch64" OFF)
 if(WITH_SPDK)
@@ -236,7 +238,7 @@ if(WITH_KRBD AND NOT WITH_RBD)
 endif()
 if(LINUX)
   if(WITH_LIBCEPHFS OR WITH_KRBD)
-    # keyutils is only used when talking to the Linux Kernel key store 
+    # keyutils is only used when talking to the Linux Kernel key store
     find_package(keyutils REQUIRED)
     set(HAVE_KEYUTILS ${KEYUTILS_FOUND})
   endif()
@@ -338,14 +340,13 @@ endif(WITH_BLKIN)
 option(WITH_JAEGER "Use jaeger to create tracepoints and display it on Jaeger UI" ON)
 
 if(WITH_JAEGER)
-  add_definitions(-DWITH_JAEGER=1)
   #TODO: handle the case if libraries found locally, why be redundant?
-  #set(JAEGER_DIR "${CMAKE_CURRENT_LIST_DIR}/jaegertracing/jaeger-client-cpp")
-  find_package(OPENTRACE REQUIRED)
-  find_package(JAEGER REQUIRED)
-  find_package(YAMLCPP REQUIRED)
-  set(COMPLETE_JAEGER_LIBRARIES ${JAEGER_LIBRARIES} ${OPENTRACE_LIBRARIES} ${YAMLCPP_LIBRARIES})
-  include_directories(SYSTEM ${JAEGER_INCLUDE_DIRS} ${YAMLCPP_INCLUDE_DIRS} ${OPENTRACE_INCLUDE_DIRS})
+  #set(Jaeger_DIR "${CMAKE_CURRENT_LIST_DIR}/Jaegertracing/Jaeger-client-cpp")
+  find_package(OpenTracing REQUIRED)
+  find_package(Jaeger REQUIRED)
+  find_package(yaml-cpp REQUIRED)
+  set(COMPLETE_Jaeger_LIBRARIES ${Jaeger_LIBRARIES} ${OpenTracing_LIBRARIES} ${yaml-cpp_LIBRARIES})
+  include_directories(SYSTEM ${Jaeger_INCLUDE_DIRS} ${yaml-cpp_INCLUDE_DIRS} ${OpenTracing_INCLUDE_DIRS})
 endif(WITH_JAEGER)
 
 option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
@@ -359,6 +360,8 @@ option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF
 option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
 option(WITH_RADOSGW_BEAST_OPENSSL "Rados Gateway's Beast frontend uses OpenSSL" ON)
 option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push endpoint" ON)
+option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka
+push endpoint" OFF)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -492,7 +495,7 @@ option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 set(UNIT_TESTS_BUILT ${WITH_TESTS})
-set(CEPH_TEST_TIMEOUT 3600 CACHE STRING 
+set(CEPH_TEST_TIMEOUT 3600 CACHE STRING
   "Maximum time before a CTest gets killed" )
 
 # fio

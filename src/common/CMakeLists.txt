@@ -174,7 +174,7 @@ if(HAVE_ARMV8_CRC)
 endif()
 target_link_libraries(crc32
   arch
-  ${COMPLETE_JAEGER_LIBRARIES})
+  ${COMPLETE_Jaeger_LIBRARIES})
 
 add_library(common_utf8 STATIC utf8.c)
 

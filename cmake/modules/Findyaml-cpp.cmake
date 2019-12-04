@@ -20,35 +20,39 @@
 # Copyright (C) 2018 Scylladb, Ltd.
 #
 
-find_package (PkgConfig)
+find_package (PkgConfig REQUIRED)
 
-pkg_search_module (PC_yaml-cpp
-  REQUIRED
+pkg_search_module (yaml-cpp_PC
   QUIET
   yaml-cpp)
 
-find_path (yaml-cpp_INCLUDE_DIR
-  NAMES yaml-cpp/yaml.h
-  PATHS ${PC_yaml-cpp_INCLUDE_DIRS})
-
 find_library (yaml-cpp_LIBRARY
   NAMES yaml-cpp
-  PATHS ${PC_yaml-cpp_LIBRARY_DIRS})
+  HINTS
+    ${yaml-cpp_PC_LIBDIR}
+    ${yaml-cpp_PC_LIBRARY_DIRS})
 
-set (yaml-cpp_VERSION ${PC_yaml-cpp_VERSION})
+find_path (yaml-cpp_INCLUDE_DIR
+  NAMES yaml-cpp/yaml.h
+  PATH_SUFFIXES yaml-cpp
+  HINTS
+    ${yaml-cpp_PC_INCLUDEDIR}
+    ${yaml-cpp_PC_INCLUDE_DIRS})
+
+mark_as_advanced (
+  yaml-cpp_LIBRARY
+  yaml-cpp_INCLUDE_DIR)
 
 include (FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args (yaml-cpp
-  FOUND_VAR yaml-cpp_FOUND
   REQUIRED_VARS
-    yaml-cpp_INCLUDE_DIR
     yaml-cpp_LIBRARY
-  VERSION_VAR yaml-cpp_VERSION)
+    yaml-cpp_INCLUDE_DIR
+  VERSION_VAR yaml-cpp_PC_VERSION)
 
-if (yaml-cpp_FOUND)
-  set (yaml-cpp_INCLUDE_DIRS ${yaml-cpp_INCLUDE_DIR})
-endif ()
+set (yaml-cpp_LIBRARIES ${yaml-cpp_LIBRARY})
+set (yaml-cpp_INCLUDE_DIRS ${yaml-cpp_INCLUDE_DIR})
 
 if (yaml-cpp_FOUND AND NOT (TARGET yaml-cpp::yaml-cpp))
   add_library (yaml-cpp::yaml-cpp UNKNOWN IMPORTED)
@@ -56,11 +60,5 @@ if (yaml-cpp_FOUND AND NOT (TARGET yaml-cpp::yaml-cpp))
   set_target_properties (yaml-cpp::yaml-cpp
     PROPERTIES
       IMPORTED_LOCATION ${yaml-cpp_LIBRARY}
-      INTERFACE_COMPILE_OPTIONS "${PC_yaml-cpp_CFLAGS_OTHER}"
-      INTERFACE_INCLUDE_DIRECTORIES ${yaml-cpp_INCLUDE_DIR})
+      INTERFACE_INCLUDE_DIRECTORIES ${yaml-cpp_INCLUDE_DIRS})
 endif ()
-
-mark_as_advanced (
-  yaml-cpp_INCLUDE_DIR
-  yaml-cpp_LIBRARY)
-
